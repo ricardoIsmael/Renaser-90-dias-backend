@@ -13439,3 +13439,24 @@ La API quedó ~55 s sin responder (502 de CloudFront). Después: `free -m` → t
 
 **Para que no vuelva:** no mezclar `pkill -f` con otros comandos que repitan el patrón en la misma invocación; preferir siempre `kill` con los PID anotados al levantar cada proceso (los scripts `levantar-*.sh` imprimen `PID`).
 
+
+## E-534 · El barrido que expira registros usa la fecha UTC: al oeste de Lima expiraría lo de HOY una hora o más antes de la medianoche local (latente, SIN ARREGLAR, 05/10)
+
+**Síntoma:** no observado en uso (el padrón entero está en `America/Lima`: 73 de 73 filas de
+`participantes_programa` en `renaser_ui0210`). Encontrado leyendo el código al diseñar la racha de cada hábito
+(D-254). Lo que vería un participante con `timezone = 'America/Mexico_City'` (UTC−6): a las 23:00 de su día, sus
+hábitos todavía pendientes de HOY pasan a `EXPIRADO`.
+
+**Causa real:** `ExpirarRegistrosScheduler` corre a las 05:00 UTC y llama
+`expirarPendientesAnterioresA(clock.today())`; `SystemClock.today()` es `LocalDate.now(ZoneOffset.UTC)`. Para Lima
+(UTC−5) las 05:00 UTC son su medianoche y el corte cae justo; para cualquier zona más al oeste, la fecha UTC ya es
+la de mañana mientras localmente sigue siendo hoy. Es el caso que la regla 02 §1 describe como «mal por
+construcción» (un `@Scheduled` diario que depende del día local).
+
+**Solución aplicada:** ninguna en este cambio (regla 00: un segundo bug encontrado se reporta, no se arregla de
+paso). La racha de D-254 no depende de esto: un `EXPIRADO` de HOY no la corta (supuesto S-2, se puede completar
+tarde).
+
+**Para que no vuelva / cómo arreglarlo:** decidir el corte por participante en SU zona (`clock.now().atZone(zona)
+.toLocalDate()`), corriendo el barrido cada hora como pide la regla 02 §1, o filtrando por zona. Antes, confirmar
+con el dueño si habrá participantes fuera de Lima.

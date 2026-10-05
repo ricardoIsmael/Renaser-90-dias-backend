@@ -1183,3 +1183,50 @@ Pruebas: `MedicionDiariaTest`, `PoliticaKilometrosTest`, `RegistroServiceKilomet
 `MedicionesDelDiaTest` y `KilometrosDiariosIT` (Tomcat real + Postgres: completar con km, sin km/negativo/0/250 →
 400, número en otro hábito → 400, otro aprendiz → 403, agenda con el total, ranking desde el Día 1, opcional no resta,
 el barrido genera el track opcional).
+
+## 26. La racha de cada hábito (D-254) — 2026-10-05
+
+**Qué pidió el dueño.** Que el «🔥 N días» de cada tarjeta de Training sea real (la app lo fijaba en 0). Reglas
+suyas, literales: **1A** «solo cuentan los días en que al hábito le toca (días programados). Un día en que no le
+toca no corta la racha.» **2A** «si el hábito está en pausa, la racha se congela: los días en pausa no cortan ni
+suman, y sigue al reanudar.» Y como la racha general: hoy pendiente no corta; un día programado vencido sin
+cumplir la corta.
+
+**Por qué alcanza con `registros_habito`.** Que exista la fila de un hábito en una fecha ES que ese día le tocaba:
+el barrido no la genera en días no programados (días de la semana apagados, horario por fecha, desbloqueo que no
+llegó) ni en pausa, y pausar borra lo que quedaba pendiente (`RetirarObligacionesPausadasPort`). Por eso 1A y 2A no
+necesitan reconstruir la programación de cada día pasado, y cambiar los días de un hábito hoy no reescribe su
+racha de ayer.
+
+| Pieza | Qué hace |
+|---|---|
+| `domain.model.registro.RachaDelHabito` | La regla, pura. De hoy hacia atrás: `COMPLETADO` suma; hoy, lo que todavía se puede completar ni suma ni corta; cualquier otro día programado no cumplido corta. Ignora fechas futuras y anteriores al inicio. Devuelve además si es `definitiva` (encontró el corte) |
+| `domain.model.registro.DiaProgramado` | `(fecha, estado, opcional)` de una fila |
+| `application.services.RachasDeHabitos` | Pagina hacia atrás de a 35 días, UNA consulta por página para todos los hábitos todavía abiertos; para en `fecha_inicio` (o 90 días si no se conoce) |
+| `ConsultarDiasProgramadosPort` / `DiasProgramadosJdbcAdapter` | `JdbcClient`, cuatro columnas, `registros_dia_idx`. Sin migración |
+| `TracksDelDiaProyeccionService` | Una línea más: `rachasDeHabitos.de(participante, dia)` y `.conRacha(...)` en cada vista |
+| `RegistroHabitoConCatalogoResponse.rachaDias` | El campo nuevo, aditivo |
+
+`fecha_inicio` viaja en `ProgresoParticipanteHabits` → `RegistrosDelDia.inicioDelPrograma`, de la misma lectura de
+progreso que ya autorizaba el pedido (V-5): no suma consultas.
+
+**Supuestos (a confirmar con el dueño; se eligió lo más conservador).** S-1: un día opcional (intoxicación,
+opcional del catálogo) sin cumplir corta. S-2: hoy solo corta `FALLIDO`; `PENDIENTE`/`EN_CURSO`/`EXPIRADO` de hoy
+todavía se pueden completar. S-3: un día ya terminado sin `COMPLETADO` corta aunque siga `PENDIENTE` (barrido no
+pasado); si se completa tarde, la racha se recompone sola. S-4: nada antes de `fecha_inicio`; programa sin empezar
+→ 0. S-5: un día sin fila por falla del barrido no corta. Todos están en el javadoc de `RachaDelHabito` y fijados
+por una prueba cada uno.
+
+**Lo que no cubre.** El campo va en el track: un hábito sin track de hoy (no le toca hoy, o en pausa) no trae
+racha y la app no la dibuja. Si se quiere ver congelada durante la pausa, el lugar natural es `GET
+/habit-unlocks` (pendiente de decidir).
+
+**Costo.** Medido en una copia de `renaser_ui0210`: la consulta de la página, 0,10 ms (`EXPLAIN ANALYZE`, 159
+filas de 15 hábitos). Lo normal es una página por pedido; una racha más larga que 35 días (o una pausa así de
+larga) pide otra, solo para ese hábito.
+
+Pruebas: `RachaDelHabitoTest` (27 casos: 1A, 2A, hoy, días terminados, bordes, opcionales y el reloj a las 03:00
+UTC), `RachasDeHabitosTest` (paginación), `TracksDeHoyConsultasTest` (a las 01:50 UTC usa el hoy de Lima; una sola
+consulta para todos los hábitos) y `RachaDelHabitoIT` (Tomcat real + Postgres, reloj a las 03:00 UTC: la dueña ve
+sus rachas, otro aprendiz no ve lo ajeno y su racha del mismo hábito es la suya, sin sesión no hay nada, y la
+respuesta conserva todos los campos que lee el APK publicado).

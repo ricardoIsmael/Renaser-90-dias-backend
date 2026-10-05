@@ -14,6 +14,7 @@ import com.renaser.os.habits.application.ports.out.participante.ConsultarProgres
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.RolParticipante;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
+import com.renaser.os.habits.application.ports.out.registro.ConsultarDiasProgramadosPort;
 import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort;
 import com.renaser.os.habits.application.ports.out.registro.SaveRegistroHabitoPort;
 import com.renaser.os.habits.application.ports.out.renombre.LoadRenombreHabitoPort;
@@ -25,6 +26,8 @@ import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabitoId;
+import com.renaser.os.habits.domain.model.registro.DiaProgramado;
+import com.renaser.os.habits.domain.model.registro.EstadoRegistro;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.points.api.AjustarPuntosPort;
@@ -49,7 +52,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -104,6 +109,8 @@ class TracksDeHoyConsultasTest {
     private IdGenerator idGenerator;
     @Mock
     private PlatformTransactionManager transactionManager;
+    @Mock
+    private ConsultarDiasProgramadosPort diasProgramadosPort;
 
     private final UserId participante = UserId.of(UUID.randomUUID());
     private RegistroService registros;
@@ -119,7 +126,8 @@ class TracksDeHoyConsultasTest {
                 List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()),
                 transactionManager);
         proyeccion = new TracksDelDiaProyeccionService(registros, registros, loadHabitoPort, loadHorarioPort,
-                loadPreferenciaPort, loadGuiaPort, registrosConEvidenciaFinder, loadRenombrePort, new MedicionesDelDia(java.util.List.of(), (p, c, h) -> java.util.Map.of()), reloj,
+                loadPreferenciaPort, loadGuiaPort, registrosConEvidenciaFinder, loadRenombrePort, new MedicionesDelDia(java.util.List.of(), (p, c, h) -> java.util.Map.of()),
+                new RachasDeHabitos(diasProgramadosPort), reloj,
                 transactionManager);
         when(idGenerator.newId()).thenAnswer(inv -> UUID.randomUUID());
         when(saveRegistroPort.insertarSiNoExiste(any())).thenReturn(true);
@@ -231,6 +239,59 @@ class TracksDeHoyConsultasTest {
         assertThat(generados).extracting(RegistroHabito::habitoId)
                 .containsExactlyInAnyOrder(yaCerro.id(), alcanzable.id());
         verify(loadHorarioPort, never()).porHabito(any());
+    }
+
+    /**
+     * D-254 a las 01:50 UTC: la racha se pide con el HOY de Lima (el 9), no con la fecha del servidor
+     * (ya el 10). Con el 10 como hoy, el pendiente del 9 seria un dia terminado sin cumplir y la racha
+     * de todo el padron caeria a 0 cada noche desde las 19:00 de Lima (familia E-91/E-105).
+     */
+    @Test
+    @DisplayName("racha: a las 01:50 UTC se calcula con el hoy de Lima, y el pendiente de hoy no corta")
+    void laRachaUsaElHoyDeLima() {
+        Habito habito = habito("MEDITAR");
+        LocalDate inicio = HOY_EN_LIMA.minusDays(DIA_PROGRAMA - 1L); // Dia 5 el 9/09: arranco el 5/09 (regla 03)
+        conInicio(inicio);
+        when(loadRegistroPort.porParticipanteYFecha(participante, HOY_EN_LIMA)).thenReturn(List.of(deHoy(habito)));
+        when(loadHabitoPort.porIds(any())).thenReturn(List.of(habito));
+        when(diasProgramadosPort.deHabitosEntre(any(), any(), any(), any())).thenReturn(Map.of(habito.id(), List.of(
+                new DiaProgramado(HOY_EN_LIMA, EstadoRegistro.PENDIENTE, false),
+                new DiaProgramado(HOY_EN_LIMA.minusDays(1), EstadoRegistro.COMPLETADO, false),
+                new DiaProgramado(HOY_EN_LIMA.minusDays(2), EstadoRegistro.COMPLETADO, false))));
+
+        List<TrackDelDiaConCatalogo> vista = proyeccion.consultarHoyDe(participante);
+
+        assertThat(vista).extracting(TrackDelDiaConCatalogo::rachaDias).containsExactly(2);
+        verify(diasProgramadosPort).deHabitosEntre(participante, Set.of(habito.id()), inicio, HOY_EN_LIMA);
+        verify(progresoPort, times(1)).deParticipante(participante);
+    }
+
+    @Test
+    @DisplayName("racha: UNA consulta de lote para todos los habitos del dia, nunca una por habito")
+    void laRachaEsUnaConsultaDeLote() {
+        Habito meditar = habito("MEDITAR");
+        Habito leer = habito("LEER");
+        conInicio(HOY_EN_LIMA.minusDays(DIA_PROGRAMA - 1L));
+        when(loadRegistroPort.porParticipanteYFecha(participante, HOY_EN_LIMA))
+                .thenReturn(List.of(deHoy(meditar), deHoy(leer)));
+        when(loadHabitoPort.porIds(any())).thenReturn(List.of(meditar, leer));
+
+        List<TrackDelDiaConCatalogo> vista = proyeccion.consultarHoyDe(participante);
+
+        assertThat(vista).extracting(TrackDelDiaConCatalogo::rachaDias).containsExactly(0, 0);
+        verify(diasProgramadosPort, times(1)).deHabitosEntre(any(), any(), any(), any());
+        verify(diasProgramadosPort).deHabitosEntre(participante, Set.of(meditar.id(), leer.id()),
+                HOY_EN_LIMA.minusDays(DIA_PROGRAMA - 1L), HOY_EN_LIMA);
+    }
+
+    private void conInicio(LocalDate inicio) {
+        when(progresoPort.deParticipante(participante)).thenReturn(Optional.of(new ProgresoParticipanteHabits(
+                DIA_PROGRAMA, "America/Lima", RolParticipante.TRAINEE, false, true, inicio)));
+    }
+
+    private RegistroHabito deHoy(Habito habito) {
+        return RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), participante, habito.id(), HOY_EN_LIMA,
+                DIA_PROGRAMA, TipoDia.TODOS, false, NOCHE_EN_LIMA);
     }
 
     private Habito habito(String titulo) {

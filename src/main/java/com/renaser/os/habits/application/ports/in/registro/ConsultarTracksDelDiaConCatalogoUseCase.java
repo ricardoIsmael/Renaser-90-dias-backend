@@ -86,12 +86,25 @@ public interface ConsultarTracksDelDiaConCatalogoUseCase {
      *
      * <p>Corregido 2026-09-26. Aca decia "NO trae {@code claveSistema}, a proposito", con el
      * argumento de la app (que sigue valiendo para la respuesta HTTP y por eso no se toco).
+     *
+     * <p>{@code rachaDias} (2026-10-05, D-254): cuantos dias programados seguidos cumplio este habito,
+     * hasta hoy, con las reglas 1A/2A del dueño ({@code domain.model.registro.RachaDelHabito}).
+     * {@code null} solo si quien armo la vista no la calculo (los constructores cortos de abajo).
      */
     record TrackDelDiaConCatalogo(RegistroHabito registro, String tituloHabito, TipoHabito tipoHabito,
                                    GuiaResumen guia, LocalTime horaDisparo, LocalTime horaLimite,
                                    PuntosEnJuego puntosEnJuego, boolean tieneEvidencia,
                                    boolean exigeEvidencia, String claveSistema, String tituloDelPrograma,
-                                   MedicionDelTrack medicion) {
+                                   MedicionDelTrack medicion, Integer rachaDias) {
+
+        /** Sin racha calculada (anterior a D-254). */
+        public TrackDelDiaConCatalogo(RegistroHabito registro, String tituloHabito, TipoHabito tipoHabito,
+                                      GuiaResumen guia, LocalTime horaDisparo, LocalTime horaLimite,
+                                      PuntosEnJuego puntosEnJuego, boolean tieneEvidencia, boolean exigeEvidencia,
+                                      String claveSistema, String tituloDelPrograma, MedicionDelTrack medicion) {
+            this(registro, tituloHabito, tipoHabito, guia, horaDisparo, horaLimite, puntosEnJuego, tieneEvidencia,
+                    exigeEvidencia, claveSistema, tituloDelPrograma, medicion, null);
+        }
 
         /** Sin medicion (todo habito que no mide un numero, D-226). */
         public TrackDelDiaConCatalogo(RegistroHabito registro, String tituloHabito, TipoHabito tipoHabito,
@@ -105,7 +118,14 @@ public interface ConsultarTracksDelDiaConCatalogoUseCase {
         /** La misma vista con la medicion del habito (D-226). */
         public TrackDelDiaConCatalogo conMedicion(MedicionDelTrack medicionDelTrack) {
             return new TrackDelDiaConCatalogo(registro, tituloHabito, tipoHabito, guia, horaDisparo, horaLimite,
-                    puntosEnJuego, tieneEvidencia, exigeEvidencia, claveSistema, tituloDelPrograma, medicionDelTrack);
+                    puntosEnJuego, tieneEvidencia, exigeEvidencia, claveSistema, tituloDelPrograma, medicionDelTrack,
+                    rachaDias);
+        }
+
+        /** La misma vista con la racha del habito (D-254). */
+        public TrackDelDiaConCatalogo conRacha(Integer dias) {
+            return new TrackDelDiaConCatalogo(registro, tituloHabito, tipoHabito, guia, horaDisparo, horaLimite,
+                    puntosEnJuego, tieneEvidencia, exigeEvidencia, claveSistema, tituloDelPrograma, medicion, dias);
         }
 
         /** Sin renombre: {@code tituloHabito} ya es el del programa. */
