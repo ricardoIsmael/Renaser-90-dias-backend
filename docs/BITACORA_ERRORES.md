@@ -13542,3 +13542,13 @@ La API quedó ~55 s sin responder (502 de CloudFront). Después: `free -m` → t
 ## E-517 · (duplicado de E-511) cuota de `/tmp` agotada por copias web de los agentes (entorno, 05/10)
 
 > **Corregido 05/10, mismo día.** Esta entrada describía el mismo incidente que **E-511** (rama `responder-mensajes`): «`mvn verify` cae con "Se ha excedido la cuota de disco" al leer `Cinzel.ttf`», causado por dos copias web de 2,1 GB en el scratchpad de `/tmp`. Se registró dos veces porque el coordinador y el agente del backend lo anotaron en ramas distintas a la vez. **La entrada válida es E-511**, que además trae el síntoma literal de los dos procesos y la causa completa (cuota de 6.267 MB por usuario, `--reflink` que no aplica entre sistemas de archivos). Este número queda reservado para que no se reuse.
+
+## E-518 · El sticker «¡Muy bien!» se ve como una tarjeta blanca en el chat (app, producción desde el 30/09, RESUELTO 05/10)
+
+**Síntoma (05/10, el dueño en una captura del chat):** el búho con corona de «¡Muy bien!» aparece sobre un **rectángulo blanco** en vez de recortado sobre el fondo del chat; en modo oscuro, un rectángulo blanco sobre negro. Los otros 16 stickers se ven sin fondo.
+
+**Causa real:** el archivo `assets/stickers/renaser/muy-bien.webp` (front `6d899b7`, 30/09) trae el búho sobre un **recuadro blanco opaco** (x 85–427, todo el alto; 35 % de la imagen blanco con alfa 255). Solo los márgenes laterales eran transparentes. No es la burbuja: `burbujaSticker` ya es `transparent`. Medido con PIL: los demás tienen 0–3 % de blanco opaco.
+
+**Solución:** se quitó el blanco conectado al borde (relleno por inundación con tolerancia) y se des-mezcló el antialiasing del contorno (color-a-alfa sobre blanco en una banda de 3 px). Front `rediseno-junto` `37fdf0e`. Los mensajes viejos con ese sticker siguen mostrando la versión con fondo (la imagen ya está subida a S3); los nuevos salen sin fondo.
+
+**Cómo evitar que vuelva:** al agregar un sticker, medir el blanco opaco antes de commitear (un sticker sano tiene < 5 %): `python3 -c "from PIL import Image; im=Image.open('X.webp').convert('RGBA'); p=list(im.getdata()); print(sum(1 for r,g,b,a in p if a>240 and min(r,g,b)>240)/len(p))"`. No hay prueba de jest porque el entorno de pruebas no decodifica WebP.
