@@ -113,6 +113,17 @@ public enum Permission {
     MANAGE_WELCOME,
 
     /**
+     * Cambiar la imagen y el nombre del animal de cada fase del programa, y volver a la imagen incluida en
+     * la app (D-258, pedido del dueño del 2026-10-06). Guard:
+     * {@code GuardiaDeAnimalesDeFase.exigirQuePuedaCambiarlos} -> "Solo Administración y Alquimista pueden
+     * cambiar los animales de las fases" / "La cuenta esta suspendida".
+     *
+     * <p>Roles que lo satisfacen: ADMIN y ALCHEMIST activos, y nadie mas (el mismo criterio que
+     * {@link #MANAGE_WELCOME}). Leer los animales es {@link #USE_APP}.
+     */
+    MANAGE_PHASE_ANIMALS,
+
+    /**
      * Ver la lista paginada de TODOS los chats de soporte, con búsqueda por el nombre o el correo del
      * aprendiz (D-249, sección «Soporte» de Tribu). Guard: {@code SoportesPaginadosService} -> "Solo
      * Administración y Alquimista ven todos los chats de soporte" / "La cuenta esta suspendida".
