@@ -29,7 +29,7 @@ interface SpringDataCelulaRepository extends JpaRepository<CelulaJpaEntity, UUID
      * esconderla en la semantica de SQL de los nulos la vuelve invisible para quien lea esto.
      */
     @Query("""
-            SELECT c.id AS celulaId, c.nombre AS nombre,
+            SELECT c.id AS celulaId, c.cohorteId AS cohorteId, c.nombre AS nombre,
                    c.periodoInicio AS inicioDelPeriodo, c.periodoFin AS finDelPeriodo
             FROM CelulaJpaEntity c
             WHERE c.periodoFin IS NOT NULL AND c.periodoFin BETWEEN :desde AND :hasta
@@ -40,6 +40,8 @@ interface SpringDataCelulaRepository extends JpaRepository<CelulaJpaEntity, UUID
 
     interface GrupoQueVenceProjection {
         UUID getCelulaId();
+
+        UUID getCohorteId();
 
         String getNombre();
 

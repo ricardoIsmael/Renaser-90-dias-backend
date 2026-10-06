@@ -19,7 +19,7 @@ class GruposPorVencerPersistenceAdapter implements ConsultarGruposPorVencerPort 
     @Override
     public List<GrupoQueVence> conCierreEntre(LocalDate desde, LocalDate hasta) {
         return repository.conCierreEntre(desde, hasta).stream()
-                .map(fila -> new GrupoQueVence(fila.getCelulaId(), fila.getNombre(),
+                .map(fila -> new GrupoQueVence(fila.getCelulaId(), fila.getCohorteId(), fila.getNombre(),
                         fila.getInicioDelPeriodo(), fila.getFinDelPeriodo()))
                 .toList();
     }
