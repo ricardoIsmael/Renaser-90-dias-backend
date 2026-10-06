@@ -13,4 +13,6 @@ interface SpringDataConfirmacionRepository extends JpaRepository<ConfirmacionEve
     List<ConfirmacionEventoJpaEntity> findByEventoIdAndInicioOcurrenciaInAndEstado(UUID eventoId,
                                                                                      List<Instant> ocurrencias,
                                                                                      EstadoConfirmacionJpa estado);
+
+    List<ConfirmacionEventoJpaEntity> findByEventoIdAndInicioOcurrencia(UUID eventoId, Instant inicioOcurrencia);
 }

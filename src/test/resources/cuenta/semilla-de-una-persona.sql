@@ -38,6 +38,12 @@ INSERT INTO renaser.confirmaciones_evento (evento_id, inicio_ocurrencia, usuario
 VALUES (md5('{{P}}-ev')::uuid, now() + interval '1 day', '{{P}}', 'ASISTE');
 INSERT INTO renaser.recordatorios_evento (evento_id, inicio_ocurrencia, usuario_id, enviar_en)
 VALUES (md5('{{P}}-ev')::uuid, now() + interval '1 day', '{{P}}', now());
+INSERT INTO renaser.historial_confirmaciones_evento (evento_id, inicio_ocurrencia, usuario_id, estado, registrado_en)
+VALUES (md5('{{P}}-ev')::uuid, now() + interval '1 day', '{{P}}', 'ASISTE', now());
+INSERT INTO renaser.asistencias_evento (evento_id, inicio_ocurrencia, usuario_id, estado, marcado_por, marcado_en)
+VALUES (md5('{{P}}-ev')::uuid, now() + interval '1 day', '{{P}}', 'A_TIEMPO', '{{P}}', now());
+INSERT INTO renaser.listas_asistencia_evento (evento_id, inicio_ocurrencia, cerrada_en, cerrada_por)
+VALUES (md5('{{P}}-ev')::uuid, now() + interval '1 day', now(), '{{P}}');
 
 -- notifications
 INSERT INTO renaser.notificaciones (usuario_id, tipo, titulo, cuerpo) VALUES ('{{P}}', 'ANUNCIO_SISTEMA', 'T', 'C');

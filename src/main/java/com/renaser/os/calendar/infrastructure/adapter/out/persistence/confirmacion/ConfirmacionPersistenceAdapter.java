@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -48,6 +49,21 @@ class ConfirmacionPersistenceAdapter implements LoadConfirmacionPort, SaveConfir
             resultado.add(fila.getInicioOcurrencia() + "|" + fila.getUsuarioId());
         }
         return resultado;
+    }
+
+    @Override
+    public Optional<EstadoConfirmacion> estadoDe(EventoId eventoId, Instant inicioOcurrencia, UserId usuarioId) {
+        return repository.findById(new ConfirmacionEventoId(eventoId.value(), inicioOcurrencia, usuarioId.value()))
+                .map(fila -> toDomain(fila.getEstado()));
+    }
+
+    @Override
+    public List<Confirmacion> deOcurrencia(EventoId eventoId, Instant inicioOcurrencia) {
+        return repository.findByEventoIdAndInicioOcurrencia(eventoId.value(), inicioOcurrencia).stream()
+                .map(fila -> new Confirmacion(EventoId.of(fila.getEventoId()), fila.getInicioOcurrencia(),
+                        UserId.of(fila.getUsuarioId()), toDomain(fila.getEstado()), fila.getCreadoEn(),
+                        fila.getActualizadoEn()))
+                .toList();
     }
 
     @Override

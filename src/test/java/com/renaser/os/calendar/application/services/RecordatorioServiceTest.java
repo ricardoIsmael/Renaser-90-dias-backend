@@ -76,8 +76,9 @@ class RecordatorioServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new RecordatorioService(loadEventoPort, loadExcepcionPort, saveRecordatorioPort, nivelPort,
-                progresoPort, audienciaMasivaPort, celulaPort, cursoPort, elegibilidadPort, CLOCK);
+        var audiencia = new AudienciaDelEventoService(nivelPort, progresoPort, audienciaMasivaPort, celulaPort,
+                cursoPort, elegibilidadPort);
+        service = new RecordatorioService(loadEventoPort, loadExcepcionPort, saveRecordatorioPort, audiencia, CLOCK);
     }
 
     /**

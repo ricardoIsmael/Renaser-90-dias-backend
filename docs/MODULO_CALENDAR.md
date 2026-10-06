@@ -148,6 +148,12 @@ Rutas iguales a `/api/v1/calendar/events*` del repo viejo (misma app móvil ya p
 | POST | `/api/v1/calendar/events/{id}/cancel-occurrence` | `CancelarOcurrenciaUseCase` | solo eventos recurrentes |
 | POST | `/api/v1/calendar/events/{id}/portada/upload-url` | `SolicitarUrlPortadaUseCase` | CL-3 |
 | POST | `/api/v1/calendar/events/{id}/portada/confirm` | `ConfirmarPortadaUseCase` | CL-3 |
+| GET | `/api/v1/calendar/events/{id}/responses?occurrenceStart=` | `VerRespuestasDelEventoUseCase` | D-256: quién respondió; creador, ADMIN, ALCHEMIST, MENTOR_LEAD |
+| GET | `/api/v1/calendar/events/{id}/attendance?occurrenceStart=` | `PasarListaUseCase.ver` | D-256: la lista |
+| PUT | `/api/v1/calendar/events/{id}/attendance/{userId}` | `PasarListaUseCase.marcar` | D-256: `{occurrenceStart, estado: A_TIEMPO\|TARDE\|null}`, idempotente |
+| POST | `/api/v1/calendar/events/{id}/attendance/close` · `/reopen` | `PasarListaUseCase.cerrar/reabrir` | D-256: `{occurrenceStart}` |
+
+**Asistencia (D-256, 2026-10-06).** Las cuatro rutas de arriba con «D-256» son nuevas; contrato completo en `docs/api/CONTRATO_ASISTENCIA_EVENTOS.md`. Las autoriza `AccesoALaListaService` con la regla del dueño (`QuienLlevaLaLista`: quien creó el evento + ADMIN, ALCHEMIST y MENTOR_LEAD), no `MANAGE_CALENDAR`: un mentor que creó un evento antes de D-186 lo sigue siguiendo. «Sin respuesta» es la audiencia de los recordatorios, que salió de `RecordatorioService` a `AudienciaDelEventoService` para que los dos usen la misma. Solo seguimiento: no da puntos.
 
 Autenticación: header `X-Actor-Id` (sin JWT todavía, per encargo). Autorización como guard clause en el servicio — `NotAuthorizedException` → 403 vía `GlobalExceptionHandler`.
 

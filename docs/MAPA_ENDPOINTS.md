@@ -225,6 +225,10 @@ cerrados que terminan ayer). Un `semanaHasta` que no es viernes responde 400.
 | PUT | `/api/v1/calendar/events/{id}/rsvp` |
 | POST | `/api/v1/calendar/events/{id}/cancel-occurrence` |
 | POST | `/api/v1/calendar/events/{id}/portada/upload-url` · `/portada/confirm` |
+| GET | `/api/v1/calendar/events/{id}/responses` (D-256) |
+| GET | `/api/v1/calendar/events/{id}/attendance` (D-256) |
+| PUT | `/api/v1/calendar/events/{id}/attendance/{userId}` (D-256) |
+| POST | `/api/v1/calendar/events/{id}/attendance/close` · `/attendance/reopen` (D-256) |
 
 ### `chat`
 

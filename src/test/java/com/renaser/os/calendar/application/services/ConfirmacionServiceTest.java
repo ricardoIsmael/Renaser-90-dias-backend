@@ -1,10 +1,13 @@
 package com.renaser.os.calendar.application.services;
 
+import com.renaser.os.calendar.application.ports.out.confirmacion.HistorialDeRespuestasPort;
+import com.renaser.os.calendar.application.ports.out.confirmacion.LoadConfirmacionPort;
 import com.renaser.os.calendar.application.ports.out.confirmacion.SaveConfirmacionPort;
 import com.renaser.os.calendar.application.ports.out.evento.LoadEventoPort;
 import com.renaser.os.calendar.application.ports.out.nivelmembresia.LoadNivelMembresiaPort;
 import com.renaser.os.calendar.application.ports.out.participante.ConsultarProgresoParticipanteCalendarPort;
 import com.renaser.os.calendar.application.ports.out.participante.ConsultarProgresoParticipanteCalendarPort.ProgresoParticipanteCalendar;
+import com.renaser.os.calendar.domain.model.confirmacion.Confirmacion;
 import com.renaser.os.calendar.domain.model.confirmacion.EstadoConfirmacion;
 import com.renaser.os.calendar.domain.model.evento.Evento;
 import com.renaser.os.calendar.domain.model.evento.EventoId;
@@ -31,6 +34,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -44,6 +48,10 @@ class ConfirmacionServiceTest {
     private LoadEventoPort loadEventoPort;
     @Mock
     private SaveConfirmacionPort saveConfirmacionPort;
+    @Mock
+    private LoadConfirmacionPort loadConfirmacionPort;
+    @Mock
+    private HistorialDeRespuestasPort historialPort;
     @Mock
     private ConsultarProgresoParticipanteCalendarPort progresoPort;
     @Mock
@@ -67,7 +75,8 @@ class ConfirmacionServiceTest {
                         return Set.of();
                     }
                 }, (u, t) -> false, (celula, usuario) -> false);
-        service = new ConfirmacionService(loadEventoPort, saveConfirmacionPort, accesoEventoService, CLOCK);
+        service = new ConfirmacionService(loadEventoPort, saveConfirmacionPort, loadConfirmacionPort, historialPort,
+                accesoEventoService, CLOCK);
     }
 
     private Evento eventoTodos(UserId creador) {
@@ -92,6 +101,49 @@ class ConfirmacionServiceTest {
         service.confirmar(actorId, eventoId, INICIA_EN, EstadoConfirmacion.ASISTE);
 
         verify(saveConfirmacionPort).upsert(any());
+    }
+
+    @Test
+    @DisplayName("D-256: cambiar la respuesta deja una fila en el historial, con el estado nuevo y la hora del reloj")
+    void cambiarLaRespuestaQuedaEnElHistorial() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(
+                new ProgresoParticipanteCalendar(10, ZoneId.of("America/Lima"), RolUsuario.TRAINEE, false, null)));
+        when(loadEventoPort.byId(eventoId)).thenReturn(Optional.of(eventoTodos(actorId)));
+        when(loadConfirmacionPort.estadoDe(eventoId, INICIA_EN, actorId)).thenReturn(Optional.of(EstadoConfirmacion.NO_ASISTE));
+
+        service.confirmar(actorId, eventoId, INICIA_EN, EstadoConfirmacion.ASISTE);
+
+        var captor = org.mockito.ArgumentCaptor.forClass(Confirmacion.class);
+        verify(historialPort).registrar(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().estado()).isEqualTo(EstadoConfirmacion.ASISTE);
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().actualizadoEn()).isEqualTo(CLOCK.now());
+    }
+
+    @Test
+    @DisplayName("D-256: la primera respuesta también queda en el historial")
+    void laPrimeraRespuestaQuedaEnElHistorial() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(
+                new ProgresoParticipanteCalendar(10, ZoneId.of("America/Lima"), RolUsuario.TRAINEE, false, null)));
+        when(loadEventoPort.byId(eventoId)).thenReturn(Optional.of(eventoTodos(actorId)));
+        when(loadConfirmacionPort.estadoDe(eventoId, INICIA_EN, actorId)).thenReturn(Optional.empty());
+
+        service.confirmar(actorId, eventoId, INICIA_EN, EstadoConfirmacion.NO_ASISTE);
+
+        verify(historialPort).registrar(any());
+    }
+
+    @Test
+    @DisplayName("D-256: repetir la misma respuesta (doble toque, reintento) no agrega fila al historial")
+    void repetirLaMismaRespuestaNoEnsuciaElHistorial() {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(
+                new ProgresoParticipanteCalendar(10, ZoneId.of("America/Lima"), RolUsuario.TRAINEE, false, null)));
+        when(loadEventoPort.byId(eventoId)).thenReturn(Optional.of(eventoTodos(actorId)));
+        when(loadConfirmacionPort.estadoDe(eventoId, INICIA_EN, actorId)).thenReturn(Optional.of(EstadoConfirmacion.ASISTE));
+
+        service.confirmar(actorId, eventoId, INICIA_EN, EstadoConfirmacion.ASISTE);
+
+        verify(saveConfirmacionPort).upsert(any());
+        verify(historialPort, never()).registrar(any());
     }
 
     @Test
