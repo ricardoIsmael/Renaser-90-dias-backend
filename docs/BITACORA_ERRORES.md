@@ -14484,3 +14484,21 @@ prefijo se lista a mano en `SecurityConfig`. Las pruebas unitarias del controlad
 
 **Prevención:** ya es ejecutable (`RutasCubiertasPorElFiltroTest`). Al crear un controlador con un prefijo nuevo, agregar el
 prefijo a `SecurityConfig` en el mismo cambio y correr esa prueba sola antes del `verify` completo.
+
+## E-570 · CI del front en rojo con todas las pruebas en verde: «You are trying to `import` a file after the Jest environment has been torn down» (2026-10-06)
+
+**Síntoma (literal):** en GitHub, `Test Suites: 312 passed, 312 total` / `Tests: 2502 passed, 2502 total` y aun así
+`##[error]Process completed with exit code 1.`, precedido de
+`ReferenceError: You are trying to \`import\` a file after the Jest environment has been torn down. From src/features/eventos/components/__tests__/logoDelServicioEnEventos.test.ts.`
+y `Cannot log after tests are done. Did you forget to wait for something async in your test?` con
+`An error occurred in the <DetalleDelEvento> component.` Venía desde el merge de `eventos-asistencia` (web 6ab60e2), no
+lo trajo el cambio de imágenes de fase.
+
+**Causa real:** `DetalleDelEvento` usa `useAhora`, un `setInterval` de 30 s. La prueba dibujaba con
+`react-test-renderer` y nunca desmontaba: el reloj seguía vivo, volvía a dibujar con el entorno de Jest ya cerrado y
+Jest terminaba con código 1. En local no se notó porque se miraban solo las líneas de resumen, no el código de salida.
+
+**Arreglo:** la prueba guarda lo que dibuja y lo desmonta en `afterEach` (el `clearInterval` del efecto corre).
+
+**Prevención:** toda prueba con `TestRenderer.create` desmonta en `afterEach`. Al verificar el front, mirar el
+**código de salida** de `npx jest --ci` (lo que mira el CI), no solo `Tests: N passed`.
