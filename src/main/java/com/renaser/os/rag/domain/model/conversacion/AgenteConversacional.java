@@ -22,8 +22,24 @@ package com.renaser.os.rag.domain.model.conversacion;
  * valores). Los nombres van en ingles y en SCREAMING_SNAKE porque viajan tal cual por el wire
  * ({@code PreguntarRenasiaRequest.agent}, {@code GET ...?agent=}), mismo criterio que
  * {@code MensajeRenasiaResponse.role}.
+ *
+ * <p><b>D-255 (2026-10-06): Sparkie se retiro y responde SER.</b> Pedido del dueño, textual: «Me
+ * dijeron que quites a Sparkie, porque los usuarios se confunden, y que SER haga lo mismo». Los dos
+ * valores siguen existiendo porque viajan por el wire y estan en la base: la app no se actualiza
+ * por aire y el APK instalado sigue abriendo el chat del curso con {@code COURSE_TUTOR}. Lo que
+ * cambia es quien contesta: {@link #queResponde()}.
  */
 public enum AgenteConversacional {
     COMPANION,
-    COURSE_TUTOR
+    COURSE_TUTOR;
+
+    /**
+     * El agente que de verdad atiende un turno pedido a este (D-255): siempre SER, el acompanante.
+     * Un cliente viejo que pregunta o pagina el historial como {@code COURSE_TUTOR} habla con SER,
+     * con su prompt, sus herramientas, su memoria y su historial; el curso desde donde pregunta
+     * sigue acotando el material que se recupera.
+     */
+    public AgenteConversacional queResponde() {
+        return COMPANION;
+    }
 }

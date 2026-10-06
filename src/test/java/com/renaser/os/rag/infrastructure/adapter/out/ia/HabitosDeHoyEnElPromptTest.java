@@ -134,7 +134,8 @@ class HabitosDeHoyEnElPromptTest {
     @DisplayName("el prompt real del acompanante lleva la lista y como usarla")
     void enElPromptReal() {
         String prompt = new PromptTemplate(new ClassPathResource(GoogleGenAiRenasiaChatAdapter.RECURSO_PROMPT_ACOMPANANTE))
-                .render(Map.of("contexto", "(vacio)", "situacion", GoogleGenAiRenasiaChatAdapter.formatearSituacion(
+                .render(Map.of("contexto", "(vacio)", "ambito", GoogleGenAiRenasiaChatAdapter.SIN_AMBITO,
+                        "situacion", GoogleGenAiRenasiaChatAdapter.formatearSituacion(
                         new SituacionDelAprendiz(12, 2, SABADO, DE_LA_BATERIA))));
 
         assertThat(prompt).contains("Ya hechos hoy (no le propongas hacerlos, saltarlos ni registrarlos otra vez): "

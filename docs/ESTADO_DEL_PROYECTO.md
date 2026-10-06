@@ -101,7 +101,7 @@ sobre los esperados del día, acumulada o ventana móvil? ¿Expirar penaliza pun
 ### 3.2 La IA: el acompañante ya usa Gemini; lo demás sigue en `NoOp`
 
 > **Corregido 2026-09-27.** El título decía «La IA nunca se llamó» y lo que sigue describe el 2026-09-04. Hoy el
-> acompañante (chat de Renasia y Sparkie, embeddings, voz, voz en vivo y resumen de la conversación) llama a Gemini
+> acompañante (chat de SER —Sparkie se retiró en D-255—, embeddings, voz, voz en vivo y resumen de la conversación) llama a Gemini
 > y está prendido en producción: los modelos se arman en `GoogleGenAiClientesConfig` con `IA_PROVEEDOR=google`
 > (`docs/DESPLIEGUE_Y_CI.md` §6.4). Siguen en `NoOp` la validación de evidencia y la del V90, la recomendación de
 > clase, el Espejo de la Sombra y los clasificadores de intención y de riesgo; para ellos vale todavía la

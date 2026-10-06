@@ -24,17 +24,18 @@ public interface PreguntarRenasiaUseCase {
     Flux<EventoRenasia> preguntar(PreguntarRenasiaCommand command);
 
     /**
-     * {@code agente}: cual de los dos asistentes responde (obligatorio). {@code ambito} y
-     * {@code cursoId} solo tienen sentido para {@link AgenteConversacional#COURSE_TUTOR}:
-     * {@code ambito} es el texto "el curso X, leccion Y" que va al prompt de sistema (nunca se
-     * guarda como parte de la pregunta, D-100) y {@code cursoId} acota el contexto recuperado a
-     * las lecciones de ese curso. Para el acompanante se descartan aca mismo: un cliente viejo
-     * (anterior a D-102) que mande {@code scope} sin {@code agent} cae en el acompanante y no
-     * arrastra el ambito a un prompt que ya no lo tiene.
+     * {@code agente}: a cual de los dos asistentes le habla el cliente (obligatorio). Desde D-255
+     * (2026-10-06) responde SER en los dos casos ({@link #paraQuienResponde()}).
+     *
+     * <p>{@code ambito} y {@code cursoId}: desde donde pregunta la persona cuando abre el chat
+     * dentro de un curso de Classroom. {@code ambito} es el texto "el curso X, leccion Y" que va al
+     * prompt de sistema (nunca se guarda como parte de la pregunta, D-100) y {@code cursoId} acota
+     * el material recuperado a las lecciones visibles de ese curso — la misma busqueda que tenia
+     * Sparkie. Hasta D-255 se descartaban para el acompanante, porque solo el tutor los usaba; ahora
+     * SER atiende tambien el chat del curso y los necesita.
      *
      * <p>{@code canal} (2026-09-23): si la respuesta se va a leer o a escuchar. Nulo es
-     * {@link CanalConversacion#TEXTO}, el comportamiento de siempre. No se descarta segun el
-     * agente: pedir la respuesta en forma hablada tiene sentido para cualquiera de los dos.
+     * {@link CanalConversacion#TEXTO}, el comportamiento de siempre.
      */
     record PreguntarRenasiaCommand(@NotNull UserId actorId, @NotNull AgenteConversacional agente,
                                    @NotBlank String pregunta, String ambito, String cursoId,
@@ -42,13 +43,14 @@ public interface PreguntarRenasiaUseCase {
         public PreguntarRenasiaCommand {
             SelfValidating.validateConstructorArgs(PreguntarRenasiaCommand.class, actorId, agente, pregunta,
                     ambito, cursoId, canal);
-            if (agente != AgenteConversacional.COURSE_TUTOR) {
-                ambito = null;
-                cursoId = null;
-            }
             if (canal == null) {
                 canal = CanalConversacion.TEXTO;
             }
+        }
+
+        /** El mismo turno, dirigido a quien de verdad responde (D-255: {@link AgenteConversacional#queResponde()}). */
+        public PreguntarRenasiaCommand paraQuienResponde() {
+            return new PreguntarRenasiaCommand(actorId, agente.queResponde(), pregunta, ambito, cursoId, canal);
         }
     }
 }

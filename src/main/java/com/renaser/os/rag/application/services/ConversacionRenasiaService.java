@@ -70,6 +70,11 @@ import java.util.Set;
  * y (3) el prompt de sistema, que elige el adaptador de {@link ChatIAPort} segun el agente. La
  * cuota diaria es una sola por persona: es proteccion de abuso, no una cuenta por asistente.
  *
+ * <p><b>D-255 (2026-10-06): Sparkie se retiro.</b> Todo turno lo atiende SER
+ * ({@link AgenteConversacional#queResponde()}): un APK viejo que pregunta como {@code COURSE_TUTOR}
+ * habla con SER y el historial que pagina es el de SER. Lo que queda del tutor es su busqueda: si
+ * el cliente manda {@code cursoId}, el material se acota a ese curso.
+ *
  * <p><b>Sin transaccion envolvente, a proposito (C-1/C-4).</b> {@link #preguntar} tenia
  * {@code @Transactional}, y adentro llamaba a {@code buscarSimilares}, que a su vez llama al
  * puerto de embeddings. Con un proveedor real eso significa retener una conexion de Hikari
@@ -229,7 +234,9 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
     }
 
     @Override
-    public Flux<EventoRenasia> preguntar(PreguntarRenasiaCommand command) {
+    public Flux<EventoRenasia> preguntar(PreguntarRenasiaCommand pedido) {
+        // D-255: Sparkie se retiro; un cliente que todavia le habla al tutor de cursos lo atiende SER.
+        PreguntarRenasiaCommand command = pedido.paraQuienResponde();
         requireActivo(command.actorId());
         requireCuotaDisponible(command);
         // Antes de cualquier otra cosa del turno: toda propuesta de este turno nace despues.
@@ -301,14 +308,13 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
     }
 
     /**
-     * D-102: el acompanante cita cualquier leccion visible hoy; el tutor de cursos, si el cliente
-     * dijo en que curso esta, solo las de ese curso (siempre dentro de lo visible: el gate de
-     * {@code academy} no se relaja, se acota). Un tutor sin {@code cursoId} se comporta como el
-     * acompanante en cuanto a contexto — es mejor que quedarse sin material.
+     * D-102: sin curso, cualquier leccion visible hoy; si el cliente dijo en que curso esta, solo
+     * las de ese curso (siempre dentro de lo visible: el gate de {@code academy} no se relaja, se
+     * acota). Era la busqueda de Sparkie; desde D-255 es la de SER cuando lo abren desde un curso.
+     * Para el resto del programa SER tiene {@code buscar_en_los_cursos}, que busca en todo lo visible.
      */
     private FiltroLecciones filtroDeContexto(PreguntarRenasiaCommand command) {
-        boolean acotadoAlCurso = command.agente() == AgenteConversacional.COURSE_TUTOR
-                && command.cursoId() != null && !command.cursoId().isBlank();
+        boolean acotadoAlCurso = command.cursoId() != null && !command.cursoId().isBlank();
         Set<String> visibles = acotadoAlCurso
                 ? consultarLeccionesVisiblesPort.visiblesParaActorEnCurso(command.actorId(), command.cursoId())
                 : consultarLeccionesVisiblesPort.visiblesParaActor(command.actorId());
@@ -476,7 +482,10 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         requireActivo(actorId);
 
         int limiteEfectivo = limite <= 0 ? LIMITE_POR_DEFECTO : Math.min(limite, LIMITE_MAXIMO);
-        List<MensajeRenasia> pagina = loadMensajeRenasiaPort.pagina(actorId, agente, cursor, limiteEfectivo + 1);
+        // D-255: el chat del curso de un APK viejo muestra la conversacion con SER, que es quien le
+        // responde ahora; si mostrara la de Sparkie, lo que pregunta ahi desapareceria al reabrirlo.
+        List<MensajeRenasia> pagina = loadMensajeRenasiaPort.pagina(actorId, agente.queResponde(), cursor,
+                limiteEfectivo + 1);
         boolean hayMas = pagina.size() > limiteEfectivo;
         List<MensajeRenasia> resultado = hayMas ? pagina.subList(0, limiteEfectivo) : pagina;
         Instant siguienteCursor = hayMas ? resultado.get(resultado.size() - 1).creadoEn() : null;

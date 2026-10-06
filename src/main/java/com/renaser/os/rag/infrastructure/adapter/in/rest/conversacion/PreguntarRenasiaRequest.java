@@ -24,8 +24,9 @@ import jakarta.validation.constraints.Size;
  *   ver {@link #canalConversacion()} para el porque de no rechazar un valor desconocido.</li>
  * </ul>
  *
- * <p>Para {@code COMPANION}, {@code courseId} y {@code scope} se ignoran (los descarta el
- * comando): el acompanante no tiene seccion de ambito en su prompt.
+ * <p>D-255 (2026-10-06): Sparkie se retiro y los dos valores de {@code agent} los responde SER.
+ * {@code courseId} y {@code scope} ya no son solo del tutor: SER abierto desde un curso los usa
+ * (material acotado al curso y la seccion "Desde donde te escribe" de su prompt).
  */
 public record PreguntarRenasiaRequest(
         // Acotada (auditoria NFR 2026-09-06): sin tope, un cliente podia mandar un prompt de

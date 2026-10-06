@@ -1,7 +1,7 @@
 {! ============================================================================
    Bloque MODO VOZ (2026-09-23). No es un prompt completo: el adaptador lo agrega
-   AL FINAL del prompt de sistema del agente (renasia-sistema.st o
-   sparkie-cursos.st) solo cuando el pedido llega con canal=VOZ, es decir,
+   AL FINAL del prompt de sistema del agente (renasia-sistema.st; el de
+   Sparkie, sparkie-cursos.st, se borro con D-255) solo cuando el pedido llega con canal=VOZ, es decir,
    cuando la persona le hablo al orbe de la pantalla Hoy y la respuesta se va a
    escuchar. Con canal=TEXTO (o sin canal) este archivo no se usa y el chat
    escrito queda exactamente como estaba.
