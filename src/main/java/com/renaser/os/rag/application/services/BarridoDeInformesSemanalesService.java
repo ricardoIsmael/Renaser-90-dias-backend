@@ -19,7 +19,7 @@ import java.util.Map;
 
 /**
  * Barrido horario del Espejo Sombra (E-560). Antes corría una vez por semana, el lunes 03:00 UTC con la fecha del
- * servidor; ahora corre cada hora y {@link SemanaDelInforme} decide, con la zona de cada participante, a quién ya
+ * servidor (domingo 22:00 en Lima); ahora corre cada hora y {@link SemanaDelInforme} decide, con la zona de cada participante, a quién ya
  * le toca (regla 02 §1 y §2).
  *
  * <p>Sin {@code @Transactional} (regla 02 §4): {@code generar} llama a la IA y no puede retener una conexión (C-1);

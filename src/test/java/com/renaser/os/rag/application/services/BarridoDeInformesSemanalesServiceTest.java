@@ -20,15 +20,15 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * E-560. El reloj se fija en la madrugada UTC (regla 03): el lunes 03:00 UTC es el domingo 22:00 de Lima, el
- * instante exacto en que corria el cron semanal viejo.
+ * E-560. El reloj se fija en la madrugada UTC (regla 03): el lunes 05:00 UTC es la medianoche del domingo de Lima,
+ * el corte que fijo el dueño el 2026-10-06 (antes era el lunes 03:00 UTC = domingo 22:00 de Lima).
  */
 class BarridoDeInformesSemanalesServiceTest {
 
     private static final ZoneId LIMA = ZoneId.of("America/Lima");
     private static final ZoneId LOS_ANGELES = ZoneId.of("America/Los_Angeles");
     private static final LocalDate SEMANA_DEL_28_SEP = LocalDate.of(2026, 9, 28);
-    private static final Instant LUNES_0300_UTC = Instant.parse("2026-10-05T03:00:00Z");
+    private static final Instant LUNES_0500_UTC = Instant.parse("2026-10-05T05:00:00Z");
 
     private final List<Generado> generados = new ArrayList<>();
     private final List<UserId> aQuienesFalla = new ArrayList<>();
@@ -59,41 +59,41 @@ class BarridoDeInformesSemanalesServiceTest {
     }
 
     @Test
-    void limaElLunes0300UtcGeneraLaSemanaPasadaDeTodosLosInscritos() {
+    void limaElLunes0500UtcGeneraLaSemanaPasadaDeTodosLosInscritos() {
         UserId a = inscrito(LIMA);
         UserId b = inscrito(LIMA);
 
-        servicioA(LUNES_0300_UTC).generarLosQueTocan();
+        servicioA(LUNES_0500_UTC).generarLosQueTocan();
 
         assertThat(generados).containsExactly(new Generado(a, SEMANA_DEL_28_SEP),
                 new Generado(b, SEMANA_DEL_28_SEP));
     }
 
     @Test
-    void unMinutoAntesDelCorteDeLimaNoSeGeneraNada() {
+    void unMinutoAntesDeLaMedianocheDeLimaNoSeGeneraNada() {
         inscrito(LIMA);
 
-        servicioA(Instant.parse("2026-10-05T02:59:00Z")).generarLosQueTocan();
+        servicioA(Instant.parse("2026-10-05T04:59:00Z")).generarLosQueTocan();
 
         assertThat(generados).isEmpty();
     }
 
     @Test
-    void alLunes0300UtcSoloLimaYaCortoYLosAngelesTodaviaEsDomingoALas1900() {
+    void alLunes0500UtcSoloLimaYaCortoYLosAngelesTodaviaEsDomingoALas2100() {
         UserId lima = inscrito(LIMA);
         inscrito(LOS_ANGELES);
 
-        servicioA(LUNES_0300_UTC).generarLosQueTocan();
+        servicioA(LUNES_0500_UTC).generarLosQueTocan();
 
         assertThat(generados).containsExactly(new Generado(lima, SEMANA_DEL_28_SEP));
     }
 
     @Test
-    void alLunes0600UtcLeTocaAlDeLosAngelesYLimaSigueEnSuMargenDePuestaAlDia() {
+    void alLunes0700UtcLeTocaAlDeLosAngelesYLimaSigueEnSuMargenDePuestaAlDia() {
         UserId lima = inscrito(LIMA);
         UserId losAngeles = inscrito(LOS_ANGELES);
 
-        servicioA(Instant.parse("2026-10-05T06:00:00Z")).generarLosQueTocan();
+        servicioA(Instant.parse("2026-10-05T07:00:00Z")).generarLosQueTocan();
 
         assertThat(generados).containsExactlyInAnyOrder(new Generado(lima, SEMANA_DEL_28_SEP),
                 new Generado(losAngeles, SEMANA_DEL_28_SEP));
@@ -102,7 +102,7 @@ class BarridoDeInformesSemanalesServiceTest {
     @Test
     void correrloDosVecesPideLoMismoYElCasoDeUsoIdempotenteNoDuplica() {
         UserId a = inscrito(LIMA);
-        BarridoDeInformesSemanalesService servicio = servicioA(LUNES_0300_UTC);
+        BarridoDeInformesSemanalesService servicio = servicioA(LUNES_0500_UTC);
 
         servicio.generarLosQueTocan();
         servicio.generarLosQueTocan();
@@ -125,7 +125,7 @@ class BarridoDeInformesSemanalesServiceTest {
         UserId sano = inscrito(LIMA);
         aQuienesFalla.add(roto);
 
-        servicioA(LUNES_0300_UTC).generarLosQueTocan();
+        servicioA(LUNES_0500_UTC).generarLosQueTocan();
 
         assertThat(generados).containsExactly(new Generado(sano, SEMANA_DEL_28_SEP));
     }
@@ -134,7 +134,7 @@ class BarridoDeInformesSemanalesServiceTest {
     void quienNoActivoSuProgramaSeTrataComoDeLimaQueEsElDefaultDeSuColumna() {
         UserId sinActivar = inscrito(null);
 
-        servicioA(LUNES_0300_UTC).generarLosQueTocan();
+        servicioA(LUNES_0500_UTC).generarLosQueTocan();
 
         assertThat(generados).containsExactly(new Generado(sinActivar, SEMANA_DEL_28_SEP));
     }
@@ -145,7 +145,7 @@ class BarridoDeInformesSemanalesServiceTest {
             inscrito(LIMA);
         }
 
-        servicioA(LUNES_0300_UTC).generarLosQueTocan();
+        servicioA(LUNES_0500_UTC).generarLosQueTocan();
 
         assertThat(generados).hasSize(BarridoDeInformesSemanalesService.TAMANO_LOTE * 2 + 1);
         assertThat(tamanosDeLote).containsExactly(BarridoDeInformesSemanalesService.TAMANO_LOTE,

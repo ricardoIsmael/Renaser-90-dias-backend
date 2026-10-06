@@ -14029,25 +14029,28 @@ cron `0 0 3 * * MON` (UTC) con `clock.today()` generaba la «semana pasada» a e
 
 **Causa real:** una hora UTC fija elegida razonando sobre Lima, más `clock.today()` (fecha del servidor, regla 02 §1).
 Nota de producto: el javadoc viejo decía que corría «después de que ya cerró por completo la semana anterior»; en Lima
-no era cierto, cerraba a las 22:00 del domingo. **Se conservó** (los últimos 120 minutos del domingo de Lima quedan
-fuera del informe, como antes) porque el pedido era dejar Lima idéntica; si el negocio quiere el informe con la semana
-entera, es mover `SemanaDelInforme.HORA_DE_CORTE` y nada más. **Pendiente de decisión del dueño.**
+no era cierto, cerraba a las 22:00 del domingo y dejaba fuera las últimas dos horas.
+
+> **Decisión del dueño, 2026-10-06 (cambia Lima a propósito).** Este texto decía: «Se conservó el corte del domingo
+> 22:00 de Lima (lunes 03:00 UTC) porque el pedido era dejar Lima idéntica; pendiente de decisión». El dueño decidió que
+> el informe se corta a la **medianoche del domingo en la zona de cada participante** (lunes 00:00 local), con la semana
+> completa. Para Lima el corte pasa de lunes 03:00 UTC a lunes 05:00 UTC; la semana informada es la misma, ahora con
+> las últimas dos horas del domingo. No «arreglar» de vuelta a las 22:00.
 
 **Solución aplicada:** el cron corre **cada hora** (`renaser.scheduling.informes-semanales.cron`, mismo
 `@SchedulerLock` `rag-generar-informes-semanales`) y el dominio decide por participante: `SemanaDelInforme` (puro, sin
-Spring) da la semana cuyo corte —domingo 22:00 **en su zona**— ya pasó hace menos de 24 h. Orquesta
+Spring) da la semana cuyo corte —lunes 00:00 **en su zona**— ya pasó hace menos de 24 h. Orquesta
 `BarridoDeInformesSemanalesService` (caso de uso `GenerarInformesSemanalesUseCase`; el scheduler quedó tonto): lotes de
 200, la zona en UNA consulta por lote (`ProgramasActivadosFinder.deVarios`), `try/catch` por participante, sin
 `@Transactional` único (la IA no puede retener conexión, C-1). Quien aún no activó su programa se trata como Lima (el
-default de su columna). **Para Lima el resultado es idéntico:** lunes 03:00 UTC = domingo 22:00 de Lima, misma semana
-(`hoy − 7`), mismo instante.
+default de su columna). Con el corte original (domingo 22:00 local) Lima era idéntica a lo anterior; con la decisión del dueño cambia solo la hora del corte.
 
 **Decisión que conviene mirar:** el margen de puesta al día es de 24 h (`MARGEN_PARA_PONERSE_AL_DIA`). Dentro de él, una
 semana sin entradas o con la IA caída se re-evalúa en cada barrido horario (hasta 24 intentos por participante): hoy la
 IA es NoOp y no cuesta; con un proveedor real que falle, son hasta 24 llamadas por persona y semana. Acortar el margen
 es cambiar una constante.
 
-**Prevención:** `SemanaDelInformeTest` (Lima idéntico, Los Ángeles, Tokio, Madrid con el cambio de horario, relojes en
+**Prevención:** `SemanaDelInformeTest` (corte del lunes 00:00 local en Lima, Los Ángeles, Tokio, Madrid con el cambio de horario, relojes en
 la madrugada UTC) y `BarridoDeInformesSemanalesServiceTest` (dos corridas, corrida tardía, fallo aislado, lotes). Los
 casos de Los Ángeles/Tokio fallan contra el cron viejo (que generaba a la misma hora para todos).
 
@@ -14084,7 +14087,7 @@ escritura es `RegistrarEventoVerdugoUseCase`, que exige un `resultado` del clien
 disparador no se construyó. El barrido es hoy un no-op. (3) El resultado para Lima es el mismo con cualquier
 arreglo, porque no hay filas.
 
-**Solución aplicada:** ninguna. **No hay regla de negocio confirmada** de qué es «sin resultado ese día» (¿al terminar
+**Decisión del dueño, 2026-10-06: el Verdugo se queda dormido como está** (sin cambiar). Contexto: **No hay regla de negocio confirmada** de qué es «sin resultado ese día» (¿al terminar
 el día de la persona?, ¿a las 18:55 de Lima?, ¿vencimiento por plazo de la roca?) y la regla 00 prohíbe inventarla; con
 el barrido sin datos, cambiarlo sería código sin comportamiento. Si el dueño confirma «al terminar su día», el arreglo
 es el de E-534 (cron horario, `CorteDeExpiracion`-style por zona, paginado). Se agrega `VerdugoIgnoradoSchedulerTest`

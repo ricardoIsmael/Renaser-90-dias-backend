@@ -6,10 +6,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * Barrido del Espejo Sombra. Corre CADA HORA y no un lunes a una hora UTC fija (E-560): el corte semanal es el
- * domingo 22:00 en la zona de cada participante, y esa hora cae en un instante UTC distinto según la zona (regla
- * 02 §1, la familia de E-91). El dominio ({@code SemanaDelInforme}) decide a quién le toca; para Lima el instante
- * es el mismo de antes (lunes 03:00 UTC = domingo 22:00 en Lima).
+ * Barrido del Espejo Sombra. Corre CADA HORA y no un lunes a una hora UTC fija (E-560): el corte semanal es la
+ * medianoche del domingo (lunes 00:00) en la zona de cada participante, decisión del dueño del 2026-10-06, y esa
+ * hora cae en un instante UTC distinto según la zona (regla 02 §1, la familia de E-91). El dominio
+ * ({@code SemanaDelInforme}) decide a quién le toca. Antes corría el lunes 03:00 UTC (domingo 22:00 en Lima).
  *
  * <p>Cadencia semanal, no por aniversario (docs/MODULO_RAG.md §6, punto 4): la opción más simple. Si el negocio
  * pide aniversario, el cambio queda en esta regla.
