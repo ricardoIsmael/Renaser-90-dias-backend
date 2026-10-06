@@ -23,6 +23,6 @@ interface SpringDataCambioHorarioPendienteRepository
 
     @Modifying
     @Query("DELETE FROM CambioHorarioPendienteJpaEntity c WHERE c.participanteId = :participanteId AND c.habitoId = :habitoId")
-    void deleteByParticipanteIdAndHabitoId(@Param("participanteId") UUID participanteId,
-                                            @Param("habitoId") UUID habitoId);
+    int deleteByParticipanteIdAndHabitoId(@Param("participanteId") UUID participanteId,
+                                           @Param("habitoId") UUID habitoId);
 }

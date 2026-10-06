@@ -3,6 +3,7 @@ package com.renaser.os.habits.application.services;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.habits.application.politica.PoliticaPostDiarioComunidad;
 import com.renaser.os.habits.application.ports.in.registro.CerrarPostDiarioComunidadUseCase;
+import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -47,6 +48,9 @@ class PostDiarioSinRegistroPrevioIT {
     private JdbcTemplate jdbcTemplate;
     @Autowired
     private TransactionTemplate transactionTemplate;
+    /** El mismo reloj que usa el servidor: el "hoy" sale de aqui, en la zona del participante (Lima). */
+    @Autowired
+    private Clock reloj;
 
     private UUID participanteId;
 
@@ -60,7 +64,7 @@ class PostDiarioSinRegistroPrevioIT {
     @ParameterizedTest(name = "rol {0}")
     @ValueSource(strings = {"APRENDIZ", "ADMIN"})
     void publicarSinRegistroDelDiaGeneraLaJornadaYCierraElHabito(String rol) {
-        Instant ahora = Instant.now();
+        Instant ahora = reloj.now();
         LocalDate hoyEnLima = ahora.atZone(LIMA).toLocalDate();
         sembrarParticipanteEnSuDiaCinco(rol, hoyEnLima);
         jdbcTemplate.update("""

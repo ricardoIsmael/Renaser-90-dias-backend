@@ -13839,7 +13839,14 @@ que la vence); E-534 no la agranda: para Lima sigue siendo la corrida de las 05:
 'PENDIENTE'` (si no actualiza nada, alguien la completó: no hacer nada), o leer cada fila con el cerrojo de
 `byIdParaEscritura` dentro de su transacción.
 
-## E-536 · Otros `@Scheduled` diarios a hora UTC fija asumen que todo el padrón está en Lima (latente, SIN ARREGLAR, 05/10)
+## E-536 · Otros `@Scheduled` diarios a hora UTC fija asumen que todo el padrón está en Lima (latente, PARCIALMENTE ARREGLADO: habits cerrado, 06/10)
+
+> **Actualizado 2026-10-06 (etapa 1 de zonas).** Esta entrada decía «SIN ARREGLAR» y la lista de abajo incluía
+> `habits.GenerarTracksDelDiaScheduler` (05:02) y `habits.PromoverCambiosHorarioScheduler` (04:40, `clock.today()`).
+> Esos dos quedaron cerrados en **E-556** y **E-557** (cada hora, el dominio decide por el día local de cada
+> participante). Siguen latentes los de otros módulos de la lista: `points.SnapshotRankingScheduler`,
+> `rocks.VerdugoIgnoradoScheduler` y `rag.GenerarInformesSemanalesScheduler` (los cierran otros agentes de esta etapa;
+> mirar sus entradas).
 
 **Síntoma:** no observado (todo el padrón está en `America/Lima`). Revisión pedida por la lección de E-91 («un
 hallazgo de zona horaria en un módulo es un hallazgo del sistema: revisar TODOS los `@Scheduled`»), al cerrar E-534.
@@ -14180,6 +14187,114 @@ una tanda de la app.
 > de fondo propuesto en E-489 sigue sin aplicar) y E-342 (`Invalid variable access: apiFetch` en un `jest.mock`,
 > resuelto llamando a la variable `mockApiFetch`).
 
+
+## E-556 · La generación del día corría una sola vez, a las 05:02 UTC: a Los Ángeles le armaba «hoy» a las 21:02 de la víspera y a Tokio a las 14:02 del día mismo (backend, latente → RESUELTO, 06/10)
+
+**Síntoma:** no observado (todo el padrón está en `America/Lima`); era la mitad de E-536 y el «límite conocido» de D-72.
+No hay mensaje de error: con `Instant` fijo en `2026-11-09T08:30:00Z`, una participante en `America/Los_Angeles`
+(00:30 del 9/11 suyas) **no tenía registros del 9/11** —el barrido de las 05:02 UTC le había generado el 8/11 (su
+víspera)— y hasta las 05:02 UTC del día siguiente (21:02 del 9/11 suyas) no los tenía. Para `Asia/Tokyo` el 9/11 se le
+generaba a las 14:02 de ese mismo día, 14 horas tarde.
+
+**Causa real:** `GenerarTracksDelDiaScheduler` tenía `@Scheduled(cron = "0 2 5 * * *", zone = "UTC")`. 05:02 UTC es la
+medianoche de Lima y de nadie más (regla 02 §1, la familia de E-91). El javadoc lo reconocía («el resto del público es de
+Perú»), y recorría el padrón completo en una lista, sin pagina, llamando a `generarDiaCompletoEnSuZona` para cada
+persona sin preguntar si ya tenía su día.
+
+**Solución aplicada:** el mismo método que E-534.
+- Dominio: `habits.domain.model.registro.JornadaDelDia` (pura, sin Spring): el `hoy` y la hora local de una persona en un
+  instante (`JornadaDelDia.de(zona, ahora)`), y `acabaDeEmpezar()` (primeras dos horas del día local).
+- Caso de uso: `GenerarJornadasDelDiaUseCase` / `GeneracionDeJornadasService`. Corre **cada hora (minuto 2)**, pagina el
+  padrón de a 200, lee las zonas en lote (`ZonasDelPadron`), agrupa por fecha local y pregunta en lote quién ya tiene
+  registros de su hoy (`ConsultarJornadasGeneradasPort`, nuevo puerto `out`, `JdbcClient`, `registros_dia_idx`). A quien
+  no los tiene: si el día acaba de empezar para él, genera la jornada **completa**; si el barrido llega tarde (backend
+  caído), genera lo que **todavía puede completar** (`generarDisponiblesAhora`, igual que cuando abre la app, decisión del
+  dueño del 2026-09-02). `try/catch` por participante, sin `@Transactional` único.
+- Idempotente: quien ya tiene su día no se toca, y generar ya saltaba los hábitos con registro (`UNIQUE`).
+- El cron es una propiedad (`renaser.scheduling.generar-tracks-del-dia.cron`, `"-"` en la suite) con el mismo
+  `@SchedulerLock` (`habits-generar-tracks-del-dia`).
+
+**Para Lima nada cambia:** su día se arma a las 05:02 UTC (00:02 suyas), jornada completa, igual que antes; las otras 23
+corridas no encuentran nada. Verificado hora por hora con `GeneracionYPromocionPorZonaIT.limaGeneraSuDiaAlEmpezar`
+(pasa contra el código viejo y el nuevo). Lo único distinto: si el backend estaba caído a las 05:02 UTC, antes el día no se
+armaba hasta que la persona abría la app; ahora el primer barrido al volver se lo arma.
+
+**Tests que fallan contra el código viejo (verificado, antes de tocar el código):**
+`GeneracionYPromocionPorZonaIT.generaElDiaDeCadaUnoEnSuZona` (Los Ángeles, Madrid, Tokio; reloj minuto a minuto desde
+03:30 UTC, que es el día local anterior en toda América) y los unitarios `GeneracionDeJornadasServiceTest` y
+`JornadaDelDiaTest`. `GenerarTracksDelDiaSchedulerTest` se reescribió: el scheduler ahora solo delega y fija que el cron
+corre cada hora.
+
+**Verificación:** `TZ=UTC ./mvnw clean verify` (como el CI, E-541): `Tests run: 6061, Failures: 0, Errors: 0, Skipped: 0`
+(surefire) y `Tests run: 313, Failures: 0, Errors: 0, Skipped: 0` (failsafe), `BUILD SUCCESS`. `GeneracionYPromocionPorZonaIT`
+(7 casos) también en verde con `TZ=America/Lima`.
+
+**Para que no vuelva:** regla 02 ya lo dice; lo que se agrega es el patrón de prueba: **simular el planificador** —avanzar
+el reloj minuto a minuto y disparar los `@Scheduled` cuyo cron de producción cae en ese minuto— describe el barrido viejo y
+el nuevo con la misma prueba, y no depende de cómo esté escrito. Un `@Scheduled` diario nuevo que dependa del día local
+debe traer su versión de `GeneracionYPromocionPorZonaIT`.
+
+## E-557 · Los cambios de horario programados regían a las 04:40 UTC por la fecha del servidor: 3 h antes de su día en Los Ángeles, 14 h después en Tokio (backend, latente → RESUELTO, 06/10)
+
+**Síntoma:** no observado. Con `fecha_efectiva = 25/8` (una fecha **en la zona de la persona**), el cambio de una
+participante en Los Ángeles pasaba a regir a las 04:40 UTC del 25/8 = **21:40 del 24/8 suyas**, antes de que su día 25
+empezara; el de Tokio, a las 13:40 del 25/8, **14 horas después** de empezar su día. Para Lima, a las 23:40 del día
+anterior (el javadoc lo llamaba «contrapartida asumida y acotada», ~20 minutos).
+
+**Causa real:** `PromoverCambiosHorarioScheduler` (`cron = "0 40 4 * * *"`) llamaba
+`promoverLosQueRigenEn(clock.today())`: comparaba una fecha local contra la fecha UTC del servidor. Además dependía, para el
+orden «primero rige el horario nuevo, después se arma el día», de **20 minutos de margen entre dos crons** (04:40 vs
+05:02): exactamente el tipo de margen que causó E-91.
+
+**Solución aplicada:**
+- El barrido corre **cada hora (minuto 0)** y `PromocionCambioHorarioService.promoverLosQueYaRigen()` trae los pendientes
+  que podrían regir en alguna zona (`CorteDeExpiracion.fechaMasTardiaPosible`, un superconjunto chico) y decide por
+  persona contra SU hoy (`JornadaDelDia`). `promoverLosQueRigenEn(LocalDate)` ya no existe.
+- **El orden con la generación del día es por participante, no por cron:** `GeneracionDeJornadasService` llama a
+  `promoverLosDe(participante, hoyEnSuZona)` antes de generarle el día. Ninguno de los dos barridos espera al otro.
+- Como ahora hay **dos caminos** que promueven el mismo pendiente, `promover` **borra el pendiente primero** y solo quien lo
+  borró (`SaveCambioHorarioPendientePort.borrar` devuelve `boolean`) aplica el cambio y lo cobra en
+  `historial_cambios_horario`: dos promociones simultáneas se serializan en la fila y la segunda no cobra un cupo de más
+  (el riesgo que C-5 §2.2 describía, ahora cerrado a nivel de dato y no solo con `@SchedulerLock`).
+
+**Cambio para Lima (reportado, no es un cambio de comportamiento observable):** el cambio pasa a regir a las **05:00 UTC**
+(su medianoche) y no a las 04:40 (23:40 de la víspera). El único rastro distinto es el `creado_en` del historial; en esos
+20 minutos ninguna ventana de hábito está viva (lo decía el propio javadoc viejo).
+
+**Tests que fallan contra el código viejo (verificado):** `GeneracionYPromocionPorZonaIT.promueveElCambioCuandoEmpiezaElDiaDeCadaUno`
+(Los Ángeles, Madrid, Tokio: pendiente aún a una hora de su día, ya rigió una hora después), y en
+`PromocionCambioHorarioServiceTest`: `limaNoPromueveAntesDeSuMedianoche`, `losAngelesPromueveEnSuMedianoche`,
+`tokioPromueveEnSuMedianoche`, `quienNoBorroElPendienteNoLoCobra`, `promoverLosDeUnParticipante`.
+La de Lima (`limaPromueveElCambioAlLlegarSuDia`) pasa antes y después.
+
+**Para que no vuelva:** un barrido que compara una fecha guardada «en la zona de la persona» contra `clock.today()` está
+mal por construcción (regla 02 §1). Y un orden entre dos procesos no se resuelve con la hora de dos crons: se resuelve
+llamando uno desde el otro por participante.
+
+## E-558 · Dos ITs de `habits` sembraban «hoy» con el reloj de pared y no con el `Clock` de la aplicación (pruebas, RESUELTO, 06/10)
+
+**Síntoma:** ninguno todavía. `KilometrosDiariosIT` (`hoy = LocalDate.now(LIMA)`) y `PostDiarioSinRegistroPrevioIT`
+(`Instant ahora = Instant.now()`) calculaban el día de Lima con el reloj de pared de la JVM mientras el servidor usa el
+bean `Clock`: son el mismo reloj hoy, pero si el bean se reemplaza o la prueba cruza la medianoche de Lima, el fixture y el
+servidor discrepan sobre qué día es (la familia de E-541).
+
+**Solución aplicada:** las dos usan el bean `Clock` y derivan el día con `reloj.now().atZone(LIMA).toLocalDate()`.
+`git grep -n "CURRENT_DATE" -- src/test` no encuentra ninguno en `habits` (los de E-541 estaban en otros módulos).
+
+**Lo que NO se tocó, a propósito:** `programa_activado_en now()` y `completado_en now()` en esas semillas son *instantes*,
+no días (ninguna aserción depende de su fecha), y `PostDiarioComunidadCerrojoIT.DIA = LocalDate.now(LIMA).plusDays(1)` es
+una constante de clase con el instante de publicación explícito (`PUBLICADO_EN`), así que no hay un día del servidor con el
+cual discrepar.
+
+## E-559 · `GeneracionYPromocionPorZonaIT` y el barrido real: la IT llama a los `@Scheduled` sin el proxy de ShedLock (pruebas, nota de método, 06/10)
+
+**Síntoma:** al escribir el IT de la etapa 1, `AopTestUtils.getUltimateTargetObject(...)` es necesario: si se invoca el bean
+con proxy, `@SchedulerLock(lockAtLeastFor = "PT30S")` hace que **la segunda llamada dentro de 30 s reales se saltee en
+silencio** y una simulación que avanza horas en milisegundos «pasa» sin haber corrido el barrido.
+
+**Solución aplicada / patrón:** igual que `ExpiracionPorZonaIT` (E-534): invocar el objeto real por reflexión y los crons se
+leen de la anotación (con su valor por defecto si es `${clave:valor}`). **Para que no vuelva:** si una IT de scheduler
+«pasa» sin que cambie nada en la base, sospechar primero del lock.
 
 ## E-560 · El informe semanal del Espejo Sombra se generaba el lunes 03:00 UTC con la fecha del servidor: solo para Lima coincidía con «el domingo por la noche» (backend, latente, RESUELTO, 06/10)
 

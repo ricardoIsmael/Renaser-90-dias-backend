@@ -1,114 +1,65 @@
 package com.renaser.os.habits.infrastructure.adapter.in.scheduler;
 
-import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUseCase;
-import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
-import com.renaser.os.shared.domain.UserId;
-import org.junit.jupiter.api.BeforeEach;
+import com.renaser.os.habits.application.ports.in.registro.GenerarJornadasDelDiaUseCase;
+import com.renaser.os.habits.application.ports.in.registro.GenerarJornadasDelDiaUseCase.ResultadoDelBarrido;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InOrder;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.support.CronExpression;
 
-import java.util.List;
-import java.util.UUID;
+import java.time.ZonedDateTime;
+import java.time.ZoneOffset;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.inOrder;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Pruebas unitarias del barrido nocturno (docs/informes/habits-barrido-nocturno.md).
- * NO se corrieron ({@code ./mvnw} queda prohibido en este encargo porque el backend esta
- * corriendo con devtools) — quedan sin verificar hasta que alguien con permiso de build
- * las ejecute.
+ * El barrido solo delega: la decision de a quien le toca y como se aisla cada participante vive en
+ * {@code GeneracionDeJornadasServiceTest}. Aca se fija lo que es del adaptador: que corra CADA HORA (E-556) y con lock.
  */
-@ExtendWith(MockitoExtension.class)
 class GenerarTracksDelDiaSchedulerTest {
 
-    @Mock
-    private GenerarTracksDelDiaUseCase generarTracksUseCase;
-    @Mock
-    private ConsultarProgresoParticipanteHabitsPort progresoPort;
+    @Test
+    @DisplayName("ejecutar(): delega en el caso de uso, una vez por corrida")
+    void delegaEnElCasoDeUso() {
+        GenerarJornadasDelDiaUseCase casoDeUso = mock(GenerarJornadasDelDiaUseCase.class);
+        when(casoDeUso.generarLasQueYaEmpezaron()).thenReturn(new ResultadoDelBarrido(3, 1, 0));
 
-    private GenerarTracksDelDiaScheduler scheduler;
+        new GenerarTracksDelDiaScheduler(casoDeUso).ejecutar();
 
-    @BeforeEach
-    void setUp() {
-        scheduler = new GenerarTracksDelDiaScheduler(generarTracksUseCase, progresoPort);
-    }
-
-    private static UserId participante() {
-        return UserId.of(UUID.randomUUID());
+        verify(casoDeUso).generarLasQueYaEmpezaron();
     }
 
     @Test
-    @DisplayName("ejecutar(): llama a generarDiaCompletoEnSuZona exactamente una vez por participante activo")
-    void llamaAlCasoDeUsoUnaVezPorParticipante() {
-        UserId p1 = participante();
-        UserId p2 = participante();
-        UserId p3 = participante();
-        when(progresoPort.participantesInscritosActivos()).thenReturn(List.of(p1, p2, p3));
-        when(generarTracksUseCase.generarDiaCompletoEnSuZona(any())).thenReturn(List.of());
+    @DisplayName("el cron por defecto corre cada hora, en el minuto 2 (E-556): a las 05:02 UTC, que es Lima, y a las otras 23")
+    void correCadaHora() throws NoSuchMethodException {
+        Scheduled programado = GenerarTracksDelDiaScheduler.class.getDeclaredMethod("ejecutar")
+                .getAnnotation(Scheduled.class);
+        String porDefecto = programado.cron().substring(programado.cron().indexOf(':') + 1,
+                programado.cron().length() - 1);
+        CronExpression cron = CronExpression.parse(porDefecto);
 
-        scheduler.ejecutar();
-
-        verify(generarTracksUseCase, times(1)).generarDiaCompletoEnSuZona(p1);
-        verify(generarTracksUseCase, times(1)).generarDiaCompletoEnSuZona(p2);
-        verify(generarTracksUseCase, times(1)).generarDiaCompletoEnSuZona(p3);
-        verify(generarTracksUseCase, times(3)).generarDiaCompletoEnSuZona(any());
+        ZonedDateTime disparo = ZonedDateTime.of(2026, 11, 9, 0, 0, 0, 0, ZoneOffset.UTC);
+        for (int hora = 0; hora < 24; hora++) {
+            disparo = cron.next(disparo);
+            assertThat(disparo).as("la corrida %d del dia", hora)
+                    .isEqualTo(ZonedDateTime.of(2026, 11, 9, hora, 2, 0, 0, ZoneOffset.UTC));
+        }
+        assertThat(cron.next(ZonedDateTime.of(2026, 11, 9, 5, 0, 0, 0, ZoneOffset.UTC)))
+                .isEqualTo(ZonedDateTime.of(2026, 11, 9, 5, 2, 0, 0, ZoneOffset.UTC));
+        assertThat(cron.next(ZonedDateTime.of(2026, 11, 9, 5, 2, 0, 0, ZoneOffset.UTC)))
+                .isEqualTo(ZonedDateTime.of(2026, 11, 9, 6, 2, 0, 0, ZoneOffset.UTC));
     }
 
     @Test
-    @DisplayName("ejecutar(): un participante que falla no impide que se procesen los demas")
-    void unParticipanteQueFallaNoDetieneElBarrido() {
-        UserId falla = participante();
-        UserId ok1 = participante();
-        UserId ok2 = participante();
-        // Orden deliberado: la falla va en el medio, para probar que el barrido sigue
-        // despues de una excepcion y no corta el resto de la lista.
-        when(progresoPort.participantesInscritosActivos()).thenReturn(List.of(ok1, falla, ok2));
-        when(generarTracksUseCase.generarDiaCompletoEnSuZona(eq(falla)))
-                .thenThrow(new IllegalStateException("zona horaria invalida"));
-        when(generarTracksUseCase.generarDiaCompletoEnSuZona(eq(ok1))).thenReturn(List.of());
-        when(generarTracksUseCase.generarDiaCompletoEnSuZona(eq(ok2)))
-                .thenReturn(List.of());
+    @DisplayName("sigue con su @SchedulerLock (C-5), con el mismo nombre de siempre")
+    void conservaElLock() throws NoSuchMethodException {
+        SchedulerLock lock = GenerarTracksDelDiaScheduler.class.getDeclaredMethod("ejecutar")
+                .getAnnotation(SchedulerLock.class);
 
-        scheduler.ejecutar();
-
-        verify(generarTracksUseCase, times(1)).generarDiaCompletoEnSuZona(ok1);
-        verify(generarTracksUseCase, times(1)).generarDiaCompletoEnSuZona(falla);
-        verify(generarTracksUseCase, times(1)).generarDiaCompletoEnSuZona(ok2);
-    }
-
-    @Test
-    @DisplayName("ejecutar(): con el padron vacio no llama al caso de uso ni revienta")
-    void padronVacioNoLlamaAlCasoDeUso() {
-        when(progresoPort.participantesInscritosActivos()).thenReturn(List.of());
-
-        scheduler.ejecutar();
-
-        verify(generarTracksUseCase, never()).generarDiaCompletoEnSuZona(any());
-    }
-
-    @Test
-    @DisplayName("ejecutar(): recorre el padron completo aunque TODOS los participantes fallen")
-    void todosFallanIgualSeIntentanTodos() {
-        UserId p1 = participante();
-        UserId p2 = participante();
-        when(progresoPort.participantesInscritosActivos()).thenReturn(List.of(p1, p2));
-        when(generarTracksUseCase.generarDiaCompletoEnSuZona(any()))
-                .thenThrow(new RuntimeException("boom"));
-
-        scheduler.ejecutar();
-
-        InOrder orden = inOrder(generarTracksUseCase);
-        orden.verify(generarTracksUseCase).generarDiaCompletoEnSuZona(p1);
-        orden.verify(generarTracksUseCase).generarDiaCompletoEnSuZona(p2);
+        assertThat(lock.name()).isEqualTo("habits-generar-tracks-del-dia");
     }
 }

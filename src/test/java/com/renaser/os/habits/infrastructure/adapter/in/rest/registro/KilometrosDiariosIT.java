@@ -7,6 +7,7 @@ import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUs
 import com.renaser.os.points.api.PorcentajeHabitosFinder;
 import com.renaser.os.points.application.ports.in.ranking.GenerarSnapshotRankingUseCase;
 import com.renaser.os.points.domain.model.ranking.TipoRanking;
+import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -70,6 +71,9 @@ class KilometrosDiariosIT {
     private GenerarTracksDelDiaUseCase generarTracks;
     @Autowired
     private PorcentajeHabitosFinder porcentajeHabitos;
+    /** El mismo reloj que usa el servidor: el "hoy" de la semilla sale de aqui, en la zona del participante. */
+    @Autowired
+    private Clock reloj;
 
     private final HttpClient http = HttpClient.newHttpClient();
     private final ObjectMapper json = new ObjectMapper();
@@ -85,7 +89,7 @@ class KilometrosDiariosIT {
 
     @BeforeEach
     void seed() {
-        hoy = LocalDate.now(LIMA);
+        hoy = reloj.now().atZone(LIMA).toLocalDate();
         ana = aprendiz("Ana Corredora");
         beto = aprendiz("Beto Caminante");
         // Ana ya registró 3,50 km anteayer y 2,25 ayer: el total arranca en 5,75.
