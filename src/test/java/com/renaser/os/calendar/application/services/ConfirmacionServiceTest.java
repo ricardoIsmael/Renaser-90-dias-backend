@@ -29,6 +29,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
@@ -67,7 +68,23 @@ class ConfirmacionServiceTest {
                         return Set.of();
                     }
                 }, (u, t) -> false, (celula, usuario) -> false);
-        service = new ConfirmacionService(loadEventoPort, saveConfirmacionPort, accesoEventoService, CLOCK);
+        service = servicioConReloj(CLOCK);
+    }
+
+    private ConfirmacionService servicioConReloj(FixedClock reloj) {
+        var accesoEventoService = new AccesoEventoService(progresoPort, nivelPort,
+                new com.renaser.os.calendar.application.ports.out.curso.ResolverAudienciaCursoPort() {
+                    @Override
+                    public boolean tieneAcceso(UserId usuarioId, String cursoId) {
+                        return false;
+                    }
+
+                    @Override
+                    public Set<UserId> filtrarConAcceso(String cursoId, Set<UserId> candidatos) {
+                        return Set.of();
+                    }
+                }, (u, t) -> false, (celula, usuario) -> false);
+        return new ConfirmacionService(loadEventoPort, saveConfirmacionPort, accesoEventoService, reloj);
     }
 
     private Evento eventoTodos(UserId creador) {
@@ -147,5 +164,57 @@ class ConfirmacionServiceTest {
         return Evento.crear(eventoId, "Mentoria", null, INICIA_EN, 60, ZoneId.of("America/Lima"),
                 TipoUbicacion.MEET, "https://meet.google.com/abc", TipoAudiencia.TODOS, null, null, null,
                 TipoEvento.MENTORIA_ALQUIMISTA, false, false, false, null, Set.of(), List.of(), actorId, CLOCK);
+    }
+
+    // ---- E-550: «ocurrencia de días pasados» se decide en la zona del evento, no en UTC ----
+
+    private void participanteConEvento(Instant iniciaEn, ZoneId zonaDelEvento) {
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(
+                new ProgresoParticipanteCalendar(10, ZoneId.of("America/Lima"), RolUsuario.TRAINEE, false, null)));
+        when(loadEventoPort.byId(eventoId)).thenReturn(Optional.of(
+                Evento.crear(eventoId, "Sesion", null, iniciaEn, 60, zonaDelEvento, TipoUbicacion.MEET,
+                        "https://meet.google.com/abc", TipoAudiencia.TODOS, null, null, null, TipoEvento.ESPONTANEO,
+                        false, false, false, null, Set.of(), List.of(), actorId, CLOCK)));
+    }
+
+    private boolean seAcepta(String relojUtc, Instant iniciaEn, ZoneId zonaDelEvento) {
+        participanteConEvento(iniciaEn, zonaDelEvento);
+        try {
+            servicioConReloj(FixedClock.at(Instant.parse(relojUtc)))
+                    .confirmar(actorId, eventoId, iniciaEn, EstadoConfirmacion.ASISTE);
+            return true;
+        } catch (IllegalStateException e) {
+            return false;
+        }
+    }
+
+    @Test
+    @DisplayName("E-550 caracterización (Lima, 10:00 locales): hoy y ayer por la tarde se aceptan; hace dos días no")
+    void limaDeDiaAceptaHoyYAyerYRechazaAnteayer() {
+        ZoneId lima = ZoneId.of("America/Lima");
+        assertThat(seAcepta("2026-09-10T15:00:00Z", Instant.parse("2026-09-10T11:00:00Z"), lima)).isTrue();
+        assertThat(seAcepta("2026-09-10T15:00:00Z", Instant.parse("2026-09-10T00:00:00Z"), lima)).isTrue();
+        assertThat(seAcepta("2026-09-10T15:00:00Z", Instant.parse("2026-09-08T15:00:00Z"), lima)).isFalse();
+    }
+
+    @Test
+    @DisplayName("E-550: Lima a las 21:00 (ya es mañana en UTC) sigue aceptando un evento de las 05:00 de hoy")
+    void limaDeNocheNoPierdeLosEventosDeHoy() {
+        assertThat(seAcepta("2026-09-11T02:00:00Z", Instant.parse("2026-09-10T10:00:00Z"), ZoneId.of("America/Lima")))
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("E-550: evento en Los Ángeles a las 20:00 locales (03:00 UTC del día siguiente) acepta el de su día")
+    void losAngelesDeNoche() {
+        assertThat(seAcepta("2026-09-10T03:00:00Z", Instant.parse("2026-09-09T08:00:00Z"),
+                ZoneId.of("America/Los_Angeles"))).isTrue();
+    }
+
+    @Test
+    @DisplayName("E-550: evento en Tokio a las 05:00 locales (20:00 UTC del día anterior) rechaza el de su ayer")
+    void tokioDeMadrugadaRechazaElDeAyer() {
+        assertThat(seAcepta("2026-09-10T20:00:00Z", Instant.parse("2026-09-10T00:00:00Z"), ZoneId.of("Asia/Tokyo")))
+                .isFalse();
     }
 }

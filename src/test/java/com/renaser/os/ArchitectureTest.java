@@ -125,4 +125,42 @@ class ArchitectureTest {
                         + "estan alineados a proposito con la medianoche de Lima y lo documentan")
                 .check(CLASSES);
     }
+
+    /**
+     * Lista blanca del candado de tiempo: clases de {@code domain/} o {@code application/} que todavia
+     * llaman a {@code clock.today()}. Cada entrada se saca de aqui al arreglarla; no se agregan nuevas.
+     * <ul>
+     *   <li>{@code points.RegeneracionRankingService}: usa {@code clock.today()} como fecha por defecto
+     *       de la regeneracion manual del ranking. Es del modulo {@code points} (etapa 1 de zonas, otro
+     *       agente); al migrarlo se borra esta linea.</li>
+     * </ul>
+     */
+    private static final String[] LISTA_BLANCA_DEL_RELOJ_DEL_SERVIDOR = {
+            "com.renaser.os.points.application.services.RegeneracionRankingService"
+    };
+
+    @Test
+    @DisplayName("domain/ y application/ no leen el reloj ni la fecha del servidor: el dia es el de la zona de quien lo vive")
+    void dominioYAplicacionNoUsanLaFechaDelServidor() {
+        noClasses()
+                .that().resideInAnyPackage("..domain..", "..application..")
+                .and().doNotHaveFullyQualifiedName(LISTA_BLANCA_DEL_RELOJ_DEL_SERVIDOR[0])
+                .should().callMethod(LocalDate.class, "now")
+                .orShould().callMethod(LocalDate.class, "now", java.time.ZoneId.class)
+                .orShould().callMethod(LocalDate.class, "now", java.time.Clock.class)
+                .orShould().callMethod(java.time.Instant.class, "now")
+                .orShould().callMethod(java.time.Instant.class, "now", java.time.Clock.class)
+                .orShould().callMethod(java.time.LocalDateTime.class, "now")
+                .orShould().callMethod(java.time.ZonedDateTime.class, "now")
+                .orShould().callMethod(java.time.OffsetDateTime.class, "now")
+                .orShould().callMethod(System.class, "currentTimeMillis")
+                .orShould().callMethod(com.renaser.os.shared.domain.Clock.class, "today")
+                .because("es la familia de E-91, E-534 y E-550: `LocalDate.now()` y `clock.today()` son la "
+                        + "fecha del PROCESO (UTC), no la de nadie; con el padron en America/Lima, entre las "
+                        + "19:00 y la medianoche locales 'hoy' ya es manana. El dia de una persona o de un "
+                        + "evento sale de clock.now().atZone(su zona).toLocalDate() (.claude/rules/02). "
+                        + "El instante exacto entra por Clock.now(), nunca por Instant.now(). Excepcion "
+                        + "conocida y documentada: LISTA_BLANCA_DEL_RELOJ_DEL_SERVIDOR")
+                .check(CLASSES);
+    }
 }

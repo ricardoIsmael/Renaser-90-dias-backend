@@ -15,7 +15,11 @@ import java.util.UUID;
 public interface ConsultarGruposPorVencerPort {
 
     /**
-     * Grupos con {@code periodo_fin} entre {@code hoy} y {@code hoy + dias}, ambos inclusive.
+     * Grupos con {@code periodo_fin} entre {@code desde} y {@code hasta}, ambos inclusive.
+     *
+     * <p>El rango es una COTA GRUESA, no el dia de nadie: cada grupo vive en la zona de su cohorte
+     * y el dia local difiere hasta en uno del dia UTC. Quien llama ensancha el rango en un dia por
+     * lado y la regla de dominio decide por grupo, en su zona (E-565).
      *
      * <p>El filtro por fecha va en la CONSULTA. Traer todas las celulas y descartarlas en Java
      * funcionaria hoy con cinco grupos y dejaria de funcionar sin avisar el dia que sean mil.
@@ -30,6 +34,6 @@ public interface ConsultarGruposPorVencerPort {
      * {@code inicio == fin} responde que el grupo es FUTURO mientras siga vivo -- con lo que no se
      * avisaria nunca. Devolver media fecha invita justo a ese error.
      */
-    record GrupoQueVence(UUID celulaId, String nombre, LocalDate inicioDelPeriodo, LocalDate finDelPeriodo) {
+    record GrupoQueVence(UUID celulaId, UUID cohorteId, String nombre, LocalDate inicioDelPeriodo, LocalDate finDelPeriodo) {
     }
 }

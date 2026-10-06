@@ -6,6 +6,7 @@ import com.renaser.os.calendar.application.ports.out.evento.LoadEventoPort;
 import com.renaser.os.calendar.application.ports.out.participante.ConsultarProgresoParticipanteCalendarPort.ProgresoParticipanteCalendar;
 import com.renaser.os.calendar.domain.model.confirmacion.Confirmacion;
 import com.renaser.os.calendar.domain.model.confirmacion.EstadoConfirmacion;
+import com.renaser.os.calendar.domain.model.confirmacion.PlazoParaResponder;
 import com.renaser.os.calendar.domain.model.evento.Evento;
 import com.renaser.os.calendar.domain.model.evento.EventoId;
 import com.renaser.os.calendar.domain.model.evento.ExpansorOcurrencias;
@@ -25,8 +26,6 @@ public class ConfirmacionService implements ConfirmarAsistenciaUseCase {
 
     /** Mismo margen que isRealOccurrence()/setRsvp() del repo viejo. */
     private static final long TOLERANCIA_OCURRENCIA_MS = 180_000;
-    /** "No puedes confirmar asistencia a una ocurrencia de dias pasados" — mismo margen (12h) que setRsvp(). */
-    private static final long MARGEN_OCURRENCIA_PASADA_HORAS = 12;
 
     private final LoadEventoPort loadEventoPort;
     private final SaveConfirmacionPort saveConfirmacionPort;
@@ -56,12 +55,11 @@ public class ConfirmacionService implements ConfirmarAsistenciaUseCase {
             throw new IllegalArgumentException("inicioOcurrencia no corresponde a una ocurrencia real de este evento");
         }
 
-        Instant inicioHoy = clock.today().atStartOfDay(java.time.ZoneOffset.UTC).toInstant();
-        if (inicioOcurrencia.isBefore(inicioHoy.minusSeconds(MARGEN_OCURRENCIA_PASADA_HORAS * 3600))) {
+        Instant ahora = clock.now();
+        if (PlazoParaResponder.yaVencio(inicioOcurrencia, ahora, evento.timezone())) {
             throw new IllegalStateException("No puedes confirmar asistencia a una ocurrencia de dias pasados");
         }
 
-        Instant ahora = clock.now();
         saveConfirmacionPort.upsert(new Confirmacion(eventoId, inicioOcurrencia, actorId, estado, ahora, ahora));
         // D-189 (2026-09-26): aca se apagaban, con ASISTE, los recordatorios pendientes de esta
         // persona para esta ocurrencia (en transaccion propia, C-15). Se quito: la alarma local

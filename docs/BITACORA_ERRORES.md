@@ -14014,3 +14014,76 @@ en el dominio de `onboarding`, llamado desde `RespuestaService.guardar` para la 
 días → no; 18 justos → sí; el «hoy» de Lima a las 02:00 UTC), `RespuestaServiceTest.guardarFechaDeNacimientoDeMenorSeRechaza`
 y `FechaDeNacimientoMayorDeEdadIT`. La regla de negocio vive en el servidor; la app solo la anticipa. **Lección:** una
 regla que un documento público promete (la política) no puede vivir solo en el cliente — se valida donde se guarda.
+
+## E-564 · `PUT /rsvp` decidía «ocurrencia de días pasados» con el día UTC del servidor, no el de la zona del evento (backend, calendario, RESUELTO, 06/10 — era E-550)
+
+**Síntoma (mensaje literal):** `No puedes confirmar asistencia a una ocurrencia de dias pasados`
+(`IllegalStateException` de `ConfirmacionService.confirmar`). Sin reporte de usuarios; hallado leyendo el código (E-550).
+
+**Causa real:** `clock.today().atStartOfDay(ZoneOffset.UTC)` menos 12 h. La medianoche UTC cae a las 19:00 de Lima:
+el corte saltaba 24 h a las 19:00 y a las 18:59 se aceptaba un evento de las 06:00 que a las 19:00 ya se rechazaba.
+Para un evento en otra zona (Los Ángeles, Tokio) el «día del evento» ni siquiera era el suyo.
+
+**Arreglo:** la regla vive en el dominio, `calendar.domain.model.confirmacion.PlazoParaResponder.yaVencio(inicio,
+ahora, zonaDelEvento)`: corte = comienzo del día **en la zona del evento** − 12 h (mismo margen). El servicio pasa
+`clock.now()` y `evento.timezone()`. Sin `clock.today()`.
+
+**Qué cambia para Lima (a revisar con el dueño):** el margen de 12 h ahora cuenta desde la medianoche de Lima y no desde
+la UTC, así que el corte se mueve 5 h: antes (UTC) rechazaba lo anterior a las 07:00 de Lima del día anterior (y
+de 19:00 a 24:00 locales, lo anterior a las 07:00 de hoy); ahora rechaza lo anterior a las 12:00 de Lima del día
+anterior, todo el día. Quedan igual: hoy y la tarde de ayer se aceptan, anteayer se rechaza (`limaDeDiaAceptaHoy…`).
+La banda ayer 07:00–12:00 pasa de «se acepta hasta las 19:00 de hoy» a «se rechaza», y de 19:00 a 24:00 locales hoy se
+acepta lo de hoy 00:00–07:00. La app no ofrece «Voy» a fechas pasadas, así que no hay efecto visible esperado.
+
+**Prevención / pruebas:** `PlazoParaResponderTest` y los casos `E-550` de `ConfirmacionServiceTest` con el reloj entre
+00:00 y 05:00 UTC en Lima, Los Ángeles y Tokio; los de Lima de noche, Los Ángeles y Tokio **fallan contra el código
+viejo** (verificado). Candado general en E-567. Al fusionar con `eventos-asistencia` (donde E-550 está ABIERTO):
+marcarlo RESUELTO por E-564 y dejar a la vista que decía «Arreglo: ninguno todavía».
+
+## E-565 · `AvisarGruposPorVencerScheduler`: el «hoy» del grupo se fijaba en Lima en vez de la zona de su cohorte (backend, comunidad, RESUELTO, 06/10)
+
+**Síntoma:** ninguno (todas las cohortes son de Lima). Revisión de la etapa 1 de zonas: el cron `0 10 11 * * *` UTC es
+seguro (la ventana de aviso es de 7 días y la clave de deduplicación va por grupo y fecha de cierre: una corrida
+perdida se recupera, dos dejan un solo aviso), pero `AvisosDeVencimientoService` decidía el día con una constante
+`ZONA_DEL_PROGRAMA = America/Lima`, mientras que el cierre real del grupo (`VigenciaDeGrupos`) usa la zona de la
+política de **su cohorte** (`PoliticaMentoria.zona()`, editable). Con una cohorte en otra zona el aviso saldría
+un día antes o después de lo que el grupo vive.
+
+**Arreglo:** el servicio consulta con una cota gruesa (UTC ± 1 día; la consulta devuelve ahora `cohorteId`) y
+decide por grupo con `VigenciaDeGrupos.zonaDe(cohorte)` y `ReglasDeVencimientoDeGrupo.tocaAvisar`. Cron, lock y
+deduplicación intactos. Para Lima (zona por defecto) el resultado es idéntico (`limaDeMadrugadaUtc…`, las pruebas
+previas sin cambio de expectativas). Pruebas nuevas con cohortes en Tokio y Los Ángeles que fallan contra lo viejo.
+Fila 17 añadida a `docs/informes/auditoria-fixes/C-5.md`.
+
+## E-566 · Las 22 clases que siembran con `CURRENT_DATE` fuera de habits/points/rocks/rag: revisadas, ninguna se rompe por la zona (pruebas, VERIFICADO, 06/10)
+
+Lista de E-541 («otras 19 IT») = `git grep -n "CURRENT_DATE\|now()::date" src/test` sin esos módulos: 22 clases
+(`EventosDeGrupoYMentoriaIT`, `BienvenidaEnGrupoIT`, `ChatsDeAprendicesAntiguosIT`, `AdminVeTodosLosGruposIT`,
+`ChatDeGrupoTerminadoIT`, `FotosDelChatIT`, `ParticipantesDelChatIT`, `AprendizEnVariosGruposIT`,
+`AvisoDeGrupoPorVencerIT`, `ComposicionDeCelulaIT`, `GruposEnCursoIT`, `MentorEnVariosGruposIT`, `MisCelulasIT`,
+`FotoDelGrupoIT`, `RecepcionVigenteIT`, `EvidenciaAnularConcurrenciaTest`, `EvidenciaProcesarLoteTransaccionIT`,
+`FotosDeEvidenciaIT`, `EvidenciaPersistenceAdapterTest`, `MensajeDeChatAvisoIT`, `CajaRenaserIT`,
+`CuentaSuspendidaConSesionVivaIT`).
+
+**Método:** `CURRENT_DATE` toma la zona de la JVM (E-541), así que correr con `TZ=Asia/Tokyo` deja `CURRENT_DATE` un
+día **por delante** del día de Lima, igual que a las 00:00–05:00 UTC con `TZ=UTC`. Resultado:
+`TZ=Asia/Tokyo ./mvnw verify` sobre las 22: `Tests run: 124, Failures: 0` (surefire) y todas las `*IT` en verde (failsafe).
+
+**Por qué son inocuas:** los periodos de grupo se siembran con ≥ 2 días de margen (−5/+20, −20/−2, −60/−30; ya
+documentado en `ChatDeGrupoTerminadoIT`), las evidencias usan `CURRENT_DATE` solo como etiqueta de fecha sin
+compararla con el día de nadie, y las filas de `participantes_programa` con `fecha_inicio = CURRENT_DATE - 5/9` y
+`dia_programa` fijo (algo incoherentes, regla 03) están en tests que no leen el día derivado. **No se tocó ninguna.**
+`AvisoDeGrupoPorVencerIT` ya usa el día de Lima. Si una de estas pasa a leer el día derivado, hay que sembrarla con
+el `Clock` de la prueba como `GruposEnCursoIT` (E-541). Pendiente fuera de alcance: `src/test/resources/cuenta/
+semilla-de-una-persona.sql` (`BorradoDeCuentaEnLosModulosIT`, `ClavesCompartidasAlBorrarCuentaIT`) también usa
+`CURRENT_DATE`; es borrado de cuenta y no compara días, no se corrió con `TZ=Asia/Tokyo`.
+
+## E-567 · Candado: `ArchitectureTest` falla si `domain/` o `application/` leen la fecha o el reloj del servidor (pruebas, nuevo, 06/10)
+
+`dominioYAplicacionNoUsanLaFechaDelServidor` prohíbe en `..domain..` y `..application..`: `LocalDate.now()` (todas las
+sobrecargas), `Instant.now()`, `LocalDateTime/ZonedDateTime/OffsetDateTime.now()`, `System.currentTimeMillis()` y
+`Clock.today()` (`shared.domain.Clock`). El día de alguien sale de `clock.now().atZone(su zona)`.
+**Lista blanca documentada** (`LISTA_BLANCA_DEL_RELOJ_DEL_SERVIDOR`): `points.application.services.RegeneracionRankingService`
+(usa `clock.today()` como fecha por defecto de la regeneración manual; es del módulo `points`, de otro agente: al
+migrarlo se borra la línea). Comprobado que muerde: con la lista vacía el test falla señalando esa línea.
+Antes de este candado solo se vigilaba `adapter.in` (`adaptersDeEntradaNoUsanLaFechaDelServidor`).
