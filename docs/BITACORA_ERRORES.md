@@ -14517,3 +14517,22 @@ ese aviso de acceso restringido como fallo. No es el código.
 
 **Prevención:** backend con JDK 25, builds Android locales con JDK 21. Hacer el build en una copia aparte
 (`~/.cache/renaser-e2e/build-*`, `git archive` + `node_modules`), nunca en el worktree.
+
+## E-572 · El fénix se veía como foto fija en Android aunque el .riv cargaba: `RiveReactNativeView.configureDataBinding` → `handleRiveException` (2026-10-06)
+
+**Síntoma (literal):** en el emulador (build local de `fenix-animado`) el fénix del centro de Hoy era la imagen PNG, sin
+movimiento. En `logcat`: `librive-android.so ... ok`, y luego
+`at com.rivereactnative.RiveReactNativeView.configureDataBinding(RiveReactNativeView.kt:539)` →
+`handleRiveException(RiveReactNativeView.kt:948)` → `sendErrorToRN`, más
+`getJSModule(RCTEventEmitter) is not recommended in the new architecture` (`Unhandled SoftException`).
+
+**Causa real:** `rive-react-native` 9.8.5 llama a `file.defaultViewModelForArtboard` aunque el binding sea
+`AutoBind(false)`; el `.riv` v3.3 no trae ViewModel y eso se reporta como `DataBindingError` por `onError`.
+`PhoenixMascot` trataba CUALQUIER `onError` como «el .riv no carga» y cambiaba el fénix vivo por la foto.
+
+**Arreglo:** `PhoenixMascot` solo pasa a la imagen con errores que impiden dibujar (`FileNotFound`, `MalformedFile`,
+`UnsupportedRuntimeVersion`, `IncorrectRiveFileUrl`, `IncorrectArtboardName`, `IncorrectStateMachineName`).
+Prueba nueva en `phoenixMascot.test.ts` (falla contra el código anterior).
+
+**Prevención:** un respaldo por error tiene que filtrar por tipo; y el fénix nativo se valida en emulador con build
+local (E-571) antes de dar por buena la integración: en Jest el doble de Rive nunca emite ese aviso.
