@@ -13853,6 +13853,11 @@ pregenerar hasta que la persona abre la app; D-72 ya lo dejó anotado como lími
 
 **Solución aplicada:** ninguna (fuera del pedido; regla 00). Para Lima son correctos.
 
+> **Actualizado 2026-10-06 (etapa 1 de zonas).** Esta entrada decía arriba que los cinco seguían sin arreglar. De
+> los cinco, tres son de `points`, `rocks` y `rag` y quedan así: `rag.GenerarInformesSemanalesScheduler` **arreglado**
+> (E-560); `points.SnapshotRankingScheduler` **revisado, es global y correcto** (E-561); `rocks.VerdugoIgnoradoScheduler`
+> **revisado, no cambia** y la duda de negocio queda planteada (E-562). `habits.*` los cierran otros cambios de esta etapa.
+
 **Cómo arreglarlo, si llega a haber participantes fuera de Lima:** el mismo patrón de E-534 y del reloj del programa
 (D-67/E-91): correr cada hora y que el dominio decida con el día local de cada participante.
 
@@ -14175,6 +14180,93 @@ una tanda de la app.
 > de fondo propuesto en E-489 sigue sin aplicar) y E-342 (`Invalid variable access: apiFetch` en un `jest.mock`,
 > resuelto llamando a la variable `mockApiFetch`).
 
+
+## E-560 · El informe semanal del Espejo Sombra se generaba el lunes 03:00 UTC con la fecha del servidor: solo para Lima coincidía con «el domingo por la noche» (backend, latente, RESUELTO, 06/10)
+
+**Síntoma:** no observado (todo el padrón está en `America/Lima`). Salió de la revisión de E-536. Lo que pasaría: el
+cron `0 0 3 * * MON` (UTC) con `clock.today()` generaba la «semana pasada» a esa hora para todos. Para Lima son las
+22:00 del domingo (los informes se calculaban con la semana casi cerrada); para Los Ángeles son las 19:00 del domingo
+(faltaban 5 horas de semana) y para Tokio ya era lunes a mediodía.
+
+**Causa real:** una hora UTC fija elegida razonando sobre Lima, más `clock.today()` (fecha del servidor, regla 02 §1).
+Nota de producto: el javadoc viejo decía que corría «después de que ya cerró por completo la semana anterior»; en Lima
+no era cierto, cerraba a las 22:00 del domingo y dejaba fuera las últimas dos horas.
+
+> **Decisión del dueño, 2026-10-06 (cambia Lima a propósito).** Este texto decía: «Se conservó el corte del domingo
+> 22:00 de Lima (lunes 03:00 UTC) porque el pedido era dejar Lima idéntica; pendiente de decisión». El dueño decidió que
+> el informe se corta a la **medianoche del domingo en la zona de cada participante** (lunes 00:00 local), con la semana
+> completa. Para Lima el corte pasa de lunes 03:00 UTC a lunes 05:00 UTC; la semana informada es la misma, ahora con
+> las últimas dos horas del domingo. No «arreglar» de vuelta a las 22:00.
+
+**Solución aplicada:** el cron corre **cada hora** (`renaser.scheduling.informes-semanales.cron`, mismo
+`@SchedulerLock` `rag-generar-informes-semanales`) y el dominio decide por participante: `SemanaDelInforme` (puro, sin
+Spring) da la semana cuyo corte —lunes 00:00 **en su zona**— ya pasó hace menos de 24 h. Orquesta
+`BarridoDeInformesSemanalesService` (caso de uso `GenerarInformesSemanalesUseCase`; el scheduler quedó tonto): lotes de
+200, la zona en UNA consulta por lote (`ProgramasActivadosFinder.deVarios`), `try/catch` por participante, sin
+`@Transactional` único (la IA no puede retener conexión, C-1). Quien aún no activó su programa se trata como Lima (el
+default de su columna). Con el corte original (domingo 22:00 local) Lima era idéntica a lo anterior; con la decisión del dueño cambia solo la hora del corte.
+
+**Decisión que conviene mirar:** el margen de puesta al día es de 24 h (`MARGEN_PARA_PONERSE_AL_DIA`). Dentro de él, una
+semana sin entradas o con la IA caída se re-evalúa en cada barrido horario (hasta 24 intentos por participante): hoy la
+IA es NoOp y no cuesta; con un proveedor real que falle, son hasta 24 llamadas por persona y semana. Acortar el margen
+es cambiar una constante.
+
+**Prevención:** `SemanaDelInformeTest` (corte del lunes 00:00 local en Lima, Los Ángeles, Tokio, Madrid con el cambio de horario, relojes en
+la madrugada UTC) y `BarridoDeInformesSemanalesServiceTest` (dos corridas, corrida tardía, fallo aislado, lotes). Los
+casos de Los Ángeles/Tokio fallan contra el cron viejo (que generaba a la misma hora para todos).
+
+## E-561 · `SnapshotRankingScheduler` a las 05:05 UTC con `clock.today()`: revisado, es una foto global y es correcto (backend, revisión, 06/10)
+
+**Síntoma:** ninguno. Hallazgo latente de E-536 revisado con evidencia.
+
+**Causa de la duda:** `@Scheduled` diario a hora UTC fija con la fecha del servidor, el patrón de E-91.
+
+**Veredicto: no depende del día local de cada participante.** Genera UNA tabla común (`ranking_aprendices`, PK
+`(fecha, tipo, participante_id)`) con UNA fecha para todo el padrón, y la lectura ya lo asume:
+`RankingController.hoyDelPadron()` pide el ranking con el día de **Lima**, «porque el ranking es una tabla común: si cada
+uno lo pidiera en su huso, dos personas de la misma célula verían rankings de días distintos». A las 05:05 UTC la fecha
+UTC y la de Lima son la misma (00:05 de Lima), así que la etiqueta coincide con lo que se consulta. Un participante de
+otra zona ve el mismo ranking, con el día de Lima, igual que los demás.
+
+**Solución aplicada:** ninguna en el código (regla: global y correcto, se documenta). Se agrega
+`SnapshotRankingSchedulerTest`, que fija con el reloj a las 05:05 UTC que la fecha del corte es el día de Lima.
+
+**Cómo evitar que se rompa:** si algún día el padrón deja de tener a Lima como «día del ranking», cambian a la vez
+`RankingController.hoyDelPadron()` y este cron; el test de arriba es el que avisa. Una variante por zona exigiría un
+ranking por zona, que es producto, no un arreglo de reloj.
+
+## E-562 · `VerdugoIgnoradoScheduler` (23:55 UTC = 18:55 de Lima) barre un día UTC y no el día de cada participante; hoy no tiene nada que barrer (backend, latente, SIN CAMBIAR, 06/10)
+
+**Síntoma:** ninguno observable.
+
+**Hechos verificados:** (1) `VerdugoService.resolverPendientesDe(clock.today())` pasa a `IGNORADO` los
+`eventos_verdugo` con `resultado IS NULL` y `disparado_en` dentro del día **UTC** (`EventoVerdugoPersistenceAdapter`);
+a las 23:55 UTC son las 18:55 de Lima, no su medianoche. (2) **Nada crea eventos pendientes:** el único camino de
+escritura es `RegistrarEventoVerdugoUseCase`, que exige un `resultado` del cliente distinto de `IGNORADO`
+(`@NotBlank` en el request y `requireResultadoDeCliente` en el dominio); el barrido existe desde el 2026-08-25 (commit
+`77d2c9d9`, «Modulo rocks») «para cuando haya un disparador server-side» (`docs/MODULO_ROCKS.md` RK-6) y ese
+disparador no se construyó. El barrido es hoy un no-op. (3) El resultado para Lima es el mismo con cualquier
+arreglo, porque no hay filas.
+
+**Decisión del dueño, 2026-10-06: el Verdugo se queda dormido como está** (sin cambiar). Contexto: **No hay regla de negocio confirmada** de qué es «sin resultado ese día» (¿al terminar
+el día de la persona?, ¿a las 18:55 de Lima?, ¿vencimiento por plazo de la roca?) y la regla 00 prohíbe inventarla; con
+el barrido sin datos, cambiarlo sería código sin comportamiento. Si el dueño confirma «al terminar su día», el arreglo
+es el de E-534 (cron horario, `CorteDeExpiracion`-style por zona, paginado). Se agrega `VerdugoIgnoradoSchedulerTest`
+que fija lo que hace hoy.
+
+**Latente a tener presente:** el día UTC va de las 19:00 de Lima del día anterior a las 19:00 de Lima, y el barrido
+corre a las 18:55: un evento pendiente disparado entre las 18:55 y las 19:00 de Lima no entraría en ninguna corrida.
+Es solo teórico mientras no existan pendientes.
+
+## E-563 · Revisión de las pruebas de integración de `points`, `rocks` y `rag` por semillas con `CURRENT_DATE`/`now()` (pruebas, revisión, 06/10)
+
+**Hallazgo:** ninguna `*IT` de estos tres módulos siembra una fecha de calendario con `CURRENT_DATE` ni con la fecha del
+servidor. Los `now()` e `Instant.now()` que hay son marcas de tiempo (`creada_en`, `creado_en`, hora de un mensaje) cuyo
+día no se compara con nada: `MemoriaDeRenasiaPersistenceAdapterIT`, `PropuestaAccionPersistenceAdapterIT`,
+`RenombrarHabitoPorPropuestaIT`, `CompuertaDeRocasIT` (ya deriva su «hoy» del `Clock` en Lima) y `SuspensionEnElSemaforoIT`
+(compara con `LocalDate.now(America/Lima)` explícito, y V72 usa la zona de cada fila). Los `LocalDate.now()` de
+`RachaRocasTest`/`RocaDiariaTest`/`RegistrarCoherenciaDiariaCommandTest` son unitarios y relativos (hoy−1, hoy).
+**Sin cambios.** Verificado además corriendo estas pruebas con `TZ=UTC` y con `TZ=America/Lima` (ver informe de la etapa).
 
 ## E-564 · `PUT /rsvp` decidía «ocurrencia de días pasados» con el día UTC del servidor, no el de la zona del evento (backend, calendario, RESUELTO, 06/10 — era E-550)
 
