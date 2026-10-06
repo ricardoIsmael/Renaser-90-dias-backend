@@ -80,3 +80,10 @@ día calendario en Lima. El código estaba mal; el fixture lo tapaba.
 Un fixture tiene que ser **internamente coherente**. Una fila con `dia_programa = 10` y
 `fecha_inicio = hoy − 10` es contradictoria (son 11 días transcurridos): en cuanto el modelo pase de
 incremental a derivado, ese test miente sobre lo que verifica.
+
+Un fixture tiene que usar **la misma zona que el código que lo lee** (E-189, E-541). `CURRENT_DATE` (o `now()::date`) en una
+semilla SQL se evalúa en la zona de la sesión de Postgres, que pgjdbc toma de la JVM: en GitHub es UTC y en esta
+laptop es `America/Lima`. Con eso, un `clean verify` local **nunca** ve el desfase que el CI ve entre las 00:00 y las
+05:00 UTC. Toda fecha que el dominio compara con el día local del participante (`fecha_inicio`, periodos) se calcula
+en Java desde el `Clock` de la prueba en la zona del participante, con ese reloj en la madrugada UTC. Para reproducir
+lo que ve el CI: `TZ=UTC ./mvnw ...`.

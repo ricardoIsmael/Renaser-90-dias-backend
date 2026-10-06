@@ -13865,3 +13865,74 @@ pregenerar hasta que la persona abre la app; D-72 ya lo dejó anotado como lími
 **Solución:** los tres rótulos de Hoy con algo a la derecha («Hábitos de hoy», «Acciones y objetivos», «Última evidencia del muro») van en un contenedor que ocupa el ancho sobrante (`rotuloDeLaFila`, `flex: 1`). Front `rediseno-junto` `9bddb9f`, test `hoyRotulosDeFila.test.ts` (falla 2 de 2 contra lo viejo).
 
 **Cómo evitar que vuelva:** un texto en una fila con otro elemento a la derecha va dentro de un contenedor con `flex: 1` (o `flexShrink`), nunca suelto con su ancho justo. Los cambios de tipografía (tamaño, espaciado) se verifican en Android nativo.
+
+## E-541 · `GruposEnCursoIT` falla en el CD de GitHub a las 01:25 UTC y pasa en la laptop: la semilla usa `CURRENT_DATE` y el dominio, el día de Lima (pruebas, RESUELTO, 06/10)
+
+**Síntoma (CD de `master` con `backend-del-dia` en `bbb3ec08`, run 37398113061, 2026-10-06 01:25 UTC = 20:25 del
+5/10 en Lima; falló antes de desplegar, producción quedó con la versión anterior):**
+
+```
+[ERROR] Tests run: 4, Failures: 1 ... <<< FAILURE! -- in com.renaser.os.community.application.services.GruposEnCursoIT
+[ERROR] com.renaser.os.community.application.services.GruposEnCursoIT.trasladoSoloAGruposEnCurso -- Time elapsed: 0.037 s <<< FAILURE!
+[ERROR]   GruposEnCursoIT.trasladoSoloAGruposEnCurso:173
+[ERROR] Tests run: 301, Failures: 1, Errors: 0, Skipped: 0
+```
+
+Reproducido en la laptop a las 01:34 y a las 01:37 UTC, con la clase sola y `TZ=UTC` (como el runner de GitHub):
+
+```
+expected: "SIN_GRUPO_EN_CURSO"
+ but was: "SIN_CAMBIO"
+	at com.renaser.os.community.application.services.GruposEnCursoIT.trasladoSoloAGruposEnCurso(GruposEnCursoIT.java:173)
+```
+
+El mismo código a la misma hora sin `TZ=UTC` (la JVM en `America/Lima`, la zona de la laptop): 4 de 4 en verde. Por
+eso los dos `clean verify` locales del día pasaron.
+
+**Causa real: el fixture, no el código.** `nuevoAprendizInscrito("Recien llegado", 8)` sembraba
+`fecha_inicio = CURRENT_DATE - 7`. `CURRENT_DATE` se evalúa en la zona de la **sesión** de Postgres, y pgjdbc la fija
+al conectar con la zona de la **JVM**: en GitHub (UTC) da la fecha UTC; en la laptop, la de Lima. El día de programa
+que lee el traslado lo deriva `ConsultarResumenParticipacionPersistenceAdapter.diaVigente` con `clock.now()` en la
+zona del participante (`America/Lima`), como pide la regla 02. A las 01:25 UTC del 6/10 la semilla puso
+`fecha_inicio = 2026-10-06 − 7 = 2026-09-29`, y para el dominio hoy es el 5/10: **día 7**. Con `dia_traslado = 8`,
+`PoliticaMentoria.correspondeTraslado(7)` es falso y al aprendiz, que ya está en la recepción, le toca `SIN_CAMBIO`
+(«Ya esta en la recepcion de su cohorte»). Los periodos de los grupos («Cerrado» hasta −5, «Programado» desde +5)
+tenían cinco días de margen; el día del aprendiz, ninguno.
+
+**Descartadas, con evidencia:**
+- *Datos de otras IT u orden de las clases:* falla con la clase sola, sin ninguna otra IT antes. Además los candidatos
+  salen de `loadCelulaPort.porCohorte(...)` con la cohorte de la recepción, que es aleatoria en cada prueba.
+- *Un `@Scheduled` durante la prueba:* `TrasladarAprendicesScheduler` no existe como bean en la suite
+  (`@ConditionalOnProperty(... traslado-aprendices.enabled, matchIfMissing = false)`, apagado desde el 11/09), y el
+  barrido de expiración de E-534 está en `"-"`. El resultado es determinista y se explica entero por el día 7.
+- *La zona del periodo de los grupos:* no encontró ningún grupo en curso; el resultado fue `SIN_CAMBIO`, no
+  `GRUPO_ESTABLE`.
+
+**¿Existía en producción?** No. El traslado deriva el día en la zona del participante y la vigencia del grupo en la
+de su cohorte; en producción `fecha_inicio` la escribe la activación con el día que eligió la persona en su zona.
+Es la misma familia de E-189 (`AvisoDeGrupoPorVencerIT`, 16/09), en otra clase.
+
+**Solución aplicada (rama `backend-del-dia`):** `GruposEnCursoIT` usa un reloj de prueba `@Primary` fijado en
+**2026-10-06T01:25:00Z**, la hora exacta del run, y siembra todas las fechas (cohorte, periodos, `fecha_inicio`,
+`programa_activado_en`) desde `HOY` = ese instante en Lima (5/10), con la zona del participante explícita. Ninguna
+fecha sale de `CURRENT_DATE` ni de `now()` de la base. El reloj es fijable y no congelado: el aprendiz entra a la
+bienvenida en su Día 1 (reloj −7 días) y el traslado corre en la madrugada UTC de su Día 8. Con un reloj congelado
+del todo, el traslado fallaba con `Un periodo de asignacion no puede terminar antes de empezar ni durar cero:
+2026-10-06T01:25:00Z → 2026-10-06T01:25:00Z`, que es correcto: en la vida real la asignación a la bienvenida no se
+abre y se cierra en el mismo instante.
+- **Contra la semilla vieja:** si `fecha_inicio` se calcula con la fecha UTC de ese instante (lo que daba
+  `CURRENT_DATE` en GitHub), la prueba falla con `expected: "SIN_GRUPO_EN_CURSO" but was: "SIN_CAMBIO"` **también
+  con la JVM en Lima**. Ya no depende de la zona del runner ni de la hora a la que corra el CI.
+- Verificado: la clase sola con `TZ=UTC` a las 01:42 UTC y tres veces seguidas en zona local, 4 de 4 cada vez; y
+  `clean verify` completo con `TZ=UTC` de 01:46 a 01:54 UTC, dentro de la franja: `Tests run: 6029, Failures: 0,
+  Errors: 0, Skipped: 0` (surefire) y `Tests run: 301, Failures: 0, Errors: 0, Skipped: 0` (failsafe), `BUILD SUCCESS`.
+
+**Para que no vuelva:**
+1. **Un `clean verify` local verde no cubre lo que ve GitHub.** La laptop corre la JVM en `America/Lima`, así que en
+   ella `CURRENT_DATE` coincide con el día de Lima a toda hora y esta familia de errores no se puede ver nunca. Para
+   ver lo que ve el CI: `TZ=UTC ./mvnw ...`, entre las 00:00 y las 05:00 UTC.
+2. Quedó escrito en `.claude/rules/03-pruebas.md` (Fixtures): una semilla no usa `CURRENT_DATE` ni `now()::date` para
+   fechas que el dominio compara con el día local; las calcula desde el mismo `Clock` que lee el código, en la zona
+   del participante, con el reloj de la prueba en la madrugada UTC.
+3. Sin auditar: otras 19 clases `*IT` siembran con `CURRENT_DATE`. Ninguna falló en el run de GitHub de las 01:25 UTC
+   ni en el `verify` local con `TZ=UTC` dentro de la franja, pero una con margen cero puede fallar a otra hora.
