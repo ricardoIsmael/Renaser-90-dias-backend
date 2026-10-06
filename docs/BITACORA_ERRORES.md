@@ -13936,3 +13936,59 @@ abre y se cierra en el mismo instante.
    del participante, con el reloj de la prueba en la madrugada UTC.
 3. Sin auditar: otras 19 clases `*IT` siembran con `CURRENT_DATE`. Ninguna falló en el run de GitHub de las 01:25 UTC
    ni en el `verify` local con `TZ=UTC` dentro de la franja, pero una con margen cero puede fallar a otra hora.
+
+## E-542 · Un admin ve en «Mis evidencias» las evidencias de TODOS los participantes, con su foto (backend, seguridad, RESUELTO, 06/10)
+
+**Síntoma (producción, `master` `c4733203`, reportado por el dueño el 06/10):** «como admin puedo ver la evidencia de
+todo, se está cruzando; no quiero que el rol de usuario pueda ver las evidencias de los demás». En Yo → Mis evidencias,
+una cuenta ADMIN (o ALQUIMISTA) ve mezcladas las evidencias de todo el padrón, cada foto con su URL firmada. Aprendiz y
+MENTOR sin filtro veían solo lo suyo.
+
+Reproducido con `FotosDeEvidenciaIT.adminYAlquimistaSinFiltroNoVenLoAjeno` contra el código viejo:
+
+```
+[ERROR] com.renaser.os.evidence.infrastructure.adapter.in.rest.FotosDeEvidenciaIT.adminYAlquimistaSinFiltroNoVenLoAjeno -- Time elapsed: 0.050 s <<< FAILURE!
+java.lang.AssertionError:
+[ni la ruta de la foto ni el id del dueño de otra persona]
+Expecting actual:
+  "{"evidencias":[{"id":"fc212a04-...","participanteId":"b2a682e3-...", ... "tipo":"TEXTO","contenidoTexto":"Caminé 30 minutos", ...
+not to contain:
+  "evidencia-rocas/b2a682e3-.../0276a00f-.../a5fcf750-..."
+```
+
+**Causa real:** `EvidenciaService.resolverFiltroSegunRol` pasaba el filtro tal cual para ADMIN/ALCHEMIST, así que sin
+`participanteId` el filtro era «sin dueño» = toda la tabla. La app (`src/features/evidence/api/evidenceApi.ts`) pide
+`GET /api/v1/evidence` **sin** filtro para «Mis evidencias», asumiendo que sin filtro significa «lo mío» — que era cierto
+para todos los roles menos dos. La regla venía del listado original (hueco #19, `af093f45`, 26/08), cuando ese endpoint
+no tenía consumidor de autoservicio; la vista de plataforma «todas» ya existía aparte en `GET /api/v1/admin/evidence`.
+
+**Desde cuándo:** la fuga de datos (qué evidencia y de quién) existe desde el 26/08. Con la foto, desde D-252
+(`06f2d4f5`, 05/10, en producción desde la noche del 05/10): cada fila con foto viaja con `fotoUrl` firmada, así que el
+admin además recibía la foto de cada participante. El mismo listado sin filtro lo usa
+`trainingApi.obtenerEvidenciasDeRocas` (`?tipoDestino=ROCA_DIARIA`): a un admin que cursa el programa, las rocas de
+otros podían ocupar la página de 20 filas.
+
+**Solución aplicada (rama `evidencias-propias`):** sin `participanteId`, **todos** los roles ven solo lo propio
+(`deQuien = participanteId != null ? participanteId : actor.id()` para ADMIN/ALCHEMIST). Con `participanteId`
+explícito, ADMIN/ALCHEMIST siguen viendo el de cualquiera, MENTOR solo de sus asignados, el resto solo el suyo (sin
+cambios). Actualizados el `scope` de `@RequiresPermission` en `EvidenciaController.listar`, el javadoc de
+`ListarEvidenciaUseCase` y `docs/MODULO_EVIDENCE.md` §12.2 (con el «Corregido» a la vista). `GET /admin/evidence` no se
+tocó. Front verificado (master `244401c`): los dos consumidores sin `participanteId` (`evidenceApi.listarEvidencias`,
+`trainingApi.obtenerEvidenciasDeRocas`) quieren «lo mío»; ninguna pantalla dependía de «admin sin filtro = todos»
+(la ficha del aprendiz y la del alumno solo usan `urlDeEvidencia`). No hace falta APK.
+
+**Tests que lo atrapan (los dos fallan contra el código viejo, verificado):**
+- `EvidenciaServiceTest.adminYAlquimistaSinFiltroVenSoloLoPropio` (ADMIN y ALCHEMIST) y
+  `adminYAlquimistaConFiltroVenElDeEseParticipante`.
+- `FotosDeEvidenciaIT.adminYAlquimistaSinFiltroNoVenLoAjeno` (sesión real, Postgres real: ni la ruta de la foto ni el id
+  de Ana en el cuerpo) y `adminConFiltroVeLaDeEseParticipante`.
+- Verificado: `TZ=UTC ./mvnw clean verify` (como el CI, E-541): `Tests run: 6033, Failures: 0, Errors: 0, Skipped: 0`
+  (surefire) y `Tests run: 303, Failures: 0, Errors: 0, Skipped: 0` (failsafe), `BUILD SUCCESS`.
+
+**Para que no vuelva:**
+1. En un listado de autoservicio, **la ausencia de filtro significa «lo mío» para todos los roles**. «Ver lo de
+   cualquiera» exige nombrar a quién (`participanteId`), y «todo» vive en un endpoint `/admin/...` aparte. Un rol con
+   más permisos no cambia el significado del default.
+2. Al agregar datos sensibles a una respuesta existente (D-252, la foto firmada), revisar quién recibe ese listado en
+   cada rol, no solo en el del aprendiz: las pruebas de D-252 cubrían dueño, otro aprendiz, mentor y panel, y ninguna
+   pedía el listado como admin sin filtro.

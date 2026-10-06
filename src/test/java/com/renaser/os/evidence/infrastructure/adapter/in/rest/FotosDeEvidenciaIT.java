@@ -154,6 +154,30 @@ class FotosDeEvidenciaIT {
     }
 
     @Test
+    @DisplayName("E-542: ADMIN y ALQUIMISTA sin filtro reciben SOLO lo propio — ni la evidencia ni la foto de Ana")
+    void adminYAlquimistaSinFiltroNoVenLoAjeno() throws Exception {
+        UUID merly = usuario("ALQUIMISTA", "Merly Quispe");
+
+        for (UUID actor : List.of(kelin, merly)) {
+            HttpResponse<String> respuesta = pedir("/api/v1/evidence", sesionDe(actor));
+
+            assertThat(respuesta.statusCode()).isEqualTo(200);
+            assertThat(respuesta.body()).as("ni la ruta de la foto ni el id del dueño de otra persona")
+                    .doesNotContain(rutaDeLaFoto).doesNotContain(ana.toString());
+            assertThat(json.readTree(respuesta.body()).get("evidencias")).isEmpty();
+        }
+    }
+
+    @Test
+    @DisplayName("E-542: con participanteId explícito, el admin sigue viendo la evidencia de ese participante, con su foto")
+    void adminConFiltroVeLaDeEseParticipante() throws Exception {
+        JsonNode deAna = listar("/api/v1/evidence?participanteId=" + ana, sesionDe(kelin));
+
+        assertThat(deAna).hasSize(2);
+        assertThat(evidencia(deAna, fotoDeAna).get("fotoUrl").asText()).endsWith(rutaDeLaFoto);
+    }
+
+    @Test
     @DisplayName("solo el listado de la app firma: el detalle y el listado del panel admin traen fotoUrl null")
     void elDetalleYElPanelNoFirman() throws Exception {
         HttpResponse<String> detalle = pedir("/api/v1/evidence/" + fotoDeAna, sesionDe(ana));

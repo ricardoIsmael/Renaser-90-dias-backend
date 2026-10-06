@@ -7,6 +7,7 @@ import com.renaser.os.evidence.api.TipoEvidencia;
 import com.renaser.os.evidence.application.ports.in.evidencia.AnularVeredictoUseCase.AnularVeredictoCommand;
 import com.renaser.os.evidence.application.ports.in.evidencia.ListarEvidenciaAdminUseCase.ListarEvidenciaAdminComando;
 import com.renaser.os.evidence.application.ports.in.evidencia.ListarEvidenciaUseCase.ListarEvidenciaComando;
+import com.renaser.os.evidence.application.ports.in.evidencia.ListarEvidenciaUseCase.TipoDestino;
 import com.renaser.os.evidence.application.ports.in.evidencia.ListarEvidenciaUseCase.PaginaEvidencias;
 import com.renaser.os.evidence.application.ports.in.evidencia.RevisarManualmenteUseCase.RevisarManualmenteCommand;
 import com.renaser.os.evidence.application.ports.out.evidencia.LoadEvidenciaPort;
@@ -32,6 +33,8 @@ import com.renaser.os.users.api.UserSummaryFinder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -443,6 +446,33 @@ class EvidenciaServiceTest {
 
         assertThatThrownBy(() -> service.listar(new ListarEvidenciaComando(actor, otro, null, null, null, null, null)))
                 .isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = UserRole.class, names = {"ADMIN", "ALCHEMIST"})
+    @DisplayName("E-542: sin participanteId, ADMIN y ALCHEMIST ven solo lo propio, no la evidencia de todo el padron")
+    void adminYAlquimistaSinFiltroVenSoloLoPropio(UserRole rol) {
+        UserId actor = UserId.of(UUID.randomUUID());
+        when(userSummaryFinder.findById(actor)).thenReturn(Optional.of(activo(actor, rol)));
+        when(loadEvidenciaPort.buscar(any(), any(), org.mockito.ArgumentMatchers.eq(20))).thenReturn(List.of());
+
+        service.listar(new ListarEvidenciaComando(actor, null, null, TipoDestino.ROCA_DIARIA, null, null, null));
+
+        verify(loadEvidenciaPort).buscar(new FiltroEvidencia(actor, null, TipoDestino.ROCA_DIARIA, null, null), null, 20);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = UserRole.class, names = {"ADMIN", "ALCHEMIST"})
+    @DisplayName("E-542: con participanteId explicito, ADMIN y ALCHEMIST siguen viendo el de ese participante")
+    void adminYAlquimistaConFiltroVenElDeEseParticipante(UserRole rol) {
+        UserId actor = UserId.of(UUID.randomUUID());
+        UserId otro = UserId.of(UUID.randomUUID());
+        when(userSummaryFinder.findById(actor)).thenReturn(Optional.of(activo(actor, rol)));
+        when(loadEvidenciaPort.buscar(any(), any(), org.mockito.ArgumentMatchers.eq(20))).thenReturn(List.of());
+
+        service.listar(new ListarEvidenciaComando(actor, otro, null, null, null, null, null));
+
+        verify(loadEvidenciaPort).buscar(new FiltroEvidencia(otro, null, null, null, null), null, 20);
     }
 
     @Test

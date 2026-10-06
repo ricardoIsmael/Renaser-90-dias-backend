@@ -51,7 +51,7 @@ evidence/
 | Método | Ruta | Caso de uso | Restricción |
 |---|---|---|---|
 | GET | `/api/v1/evidence/{id}` | `ConsultarEvidenciaUseCase` | dueño, o ADMIN/ALCHEMIST |
-| GET | `/api/v1/evidence` | `ListarEvidenciaUseCase` | dueño (propia), MENTOR asignado (con `participanteId`), o ADMIN/ALCHEMIST — hueco #19, ver §12. Desde D-252 cada `FOTO`/`CAPTURA` trae `fotoUrl` firmada (15 min), después de autorizar |
+| GET | `/api/v1/evidence` | `ListarEvidenciaUseCase` | sin `participanteId`, solo la propia (todos los roles, E-542); con `participanteId`: MENTOR asignado, o ADMIN/ALCHEMIST — hueco #19, ver §12. Desde D-252 cada `FOTO`/`CAPTURA` trae `fotoUrl` firmada (15 min), después de autorizar |
 | GET | `/api/v1/admin/evidence` | `ListarEvidenciaAdminUseCase` | ADMIN/ALCHEMIST, sin scoping — hueco #20, ver §12 |
 | POST | `/api/v1/admin/evidence/{id}/review` | `RevisarManualmenteUseCase` | ADMIN/ALCHEMIST, evidencia en `REVISION_MANUAL` |
 | POST | `/api/v1/admin/evidence/{id}/void` | `AnularVeredictoUseCase` | ADMIN/ALCHEMIST, evidencia `VALIDA`/`RECHAZADA` |
@@ -186,7 +186,8 @@ Filtros expuestos por query param en ambos endpoints: `participanteId`, `estado`
 
 `ListarEvidenciaUseCase` (`GET /api/v1/evidence`) resuelve el filtro según el rol del actor, dentro de `EvidenciaService.resolverFiltroSegunRol`:
 
-- **ADMIN/ALCHEMIST**: el filtro pasa tal cual, `participanteId` opcional — puede ver cualquier evidencia.
+- **ADMIN/ALCHEMIST**: sin `participanteId`, **solo la propia**, igual que cualquier rol; con `participanteId`, la de cualquier participante. «Todas» es `GET /api/v1/admin/evidence` (ver más abajo en esta sección, sin foto).
+  > **Corregido 2026-10-06 (E-542).** Decía: «el filtro pasa tal cual, `participanteId` opcional — puede ver cualquier evidencia». Sin filtro eso era la evidencia de todo el padrón, y la app pide este listado sin filtro para «Mis evidencias» de Yo: a un admin se le mezclaban las de todos, con la foto firmada de cada una desde D-252.
 - **MENTOR**: `participanteId` es **obligatorio** (403 si viene vacío) y tiene que ser el mentor asignado a ese aprendiz — verificado contra `users.api.ParticipacionProgramaFinder.deParticipante(participanteId).mentorId()`, exactamente el mismo puerto y el mismo criterio que ya usa `support.TicketMentorService.requireMentorAsignado` para el mismo problema (evitar la reincidencia de **E-38**: "rol MENTOR correcto" no es lo mismo que "asignado a este aprendiz"). **No existe una forma de que un MENTOR pida "todos mis aprendices" en una sola llamada** — ver pregunta abierta #4: eso requeriría un método de búsqueda inversa en `ParticipacionProgramaFinder` (p. ej. `aprendicesDeMentor(UserId)`) que hoy no existe y que no se agregó porque `users` es responsabilidad de otro agente en esta tarea.
 - **Cualquier otro rol** (TRAINEE, MENTOR_LEAD): solo puede listar la propia — si no manda `participanteId` se fuerza a `actorId`; si manda uno distinto, 403.
 - Actor inexistente o `SUSPENDIDO`: 403 en cualquier caso, antes de resolver el filtro (mismo patrón fail-closed que el resto del módulo).

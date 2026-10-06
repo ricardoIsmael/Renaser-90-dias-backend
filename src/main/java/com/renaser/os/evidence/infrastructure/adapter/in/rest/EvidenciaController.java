@@ -55,7 +55,7 @@ public class EvidenciaController {
      * {@code cursor} — mismo contrato que {@code GET /api/v1/wall}. La autorización
      * (dueño / mentor asignado / admin) vive en {@code EvidenciaService}, no acá.
      */
-    @RequiresPermission(value = Permission.USE_APP, scope = "el listado se acota por rol: ADMIN/ALCHEMIST sin filtro, MENTOR solo sus asignados, el resto solo lo propio")
+    @RequiresPermission(value = Permission.USE_APP, scope = "sin participanteId, solo lo propio (todos los roles); con participanteId: ADMIN/ALCHEMIST cualquiera, MENTOR solo sus asignados, el resto solo el suyo")
     @GetMapping
     public EvidenciaPageResponse listar(@ActorAutenticado UserId actor,
                                          @RequestParam(required = false) UUID participanteId,

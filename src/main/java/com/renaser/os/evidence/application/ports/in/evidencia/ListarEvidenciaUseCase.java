@@ -13,7 +13,12 @@ import java.util.Objects;
  * "un listado tiene que estar correctamente autorizado":
  *
  * <ul>
- *   <li>ADMIN/ALCHEMIST: cualquier evidencia, {@code participanteId} opcional.</li>
+ *   <li>Sin {@code participanteId}, cualquier rol: SOLO la propia (E-542).</li>
+ *   <li>ADMIN/ALCHEMIST: con {@code participanteId}, la de cualquier participante.
+ *       <b>Corregido 2026-10-06 (E-542).</b> Decía «cualquier evidencia, {@code participanteId}
+ *       opcional»: sin filtro devolvía la de todo el padrón, con foto firmada (D-252), y la app
+ *       lo usa sin filtro para «Mis evidencias». El listado de todas es
+ *       {@code GET /admin/evidence} ({@link ListarEvidenciaAdminUseCase}, sin foto).</li>
  *   <li>MENTOR: sin {@code participanteId} (o con el suyo), su propia evidencia — un mentor
  *       también puede cursar el programa (D-07). Para la de un aprendiz tiene que nombrarlo
  *       ({@code participanteId}; no hay forma pública de listar "todos mis aprendices" — ver

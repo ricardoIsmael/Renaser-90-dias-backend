@@ -300,16 +300,23 @@ public class EvidenciaService implements RegistrarEvidenciaPort, ConsultarEviden
     }
 
     /**
-     * ADMIN/ALCHEMIST: filtro tal cual, cualquier participante. MENTOR: {@code participanteId}
-     * obligatorio y debe ser el mentor asignado (E-38 de {@code docs/BITACORA_ERRORES.md}
-     * es el mismo bug que esta verificación evita: "rol correcto" no es "asignado a este
-     * aprendiz"). Cualquier otro rol: fuerza el filtro a la propia evidencia, y rechaza si
-     * pidieron explícitamente la de otro participante.
+     * Sin {@code participanteId}, TODOS los roles ven solo lo propio (E-542). Con
+     * {@code participanteId}: ADMIN/ALCHEMIST, el de cualquiera; MENTOR, solo si es el mentor
+     * asignado (E-38 de {@code docs/BITACORA_ERRORES.md} es el mismo bug que esta verificación
+     * evita: "rol correcto" no es "asignado a este aprendiz"); cualquier otro rol, 403 si no es
+     * el suyo.
+     *
+     * <p><b>Corregido 2026-10-06 (E-542).</b> Decía «ADMIN/ALCHEMIST: filtro tal cual, cualquier
+     * participante», y sin filtro eso era TODA la evidencia del padrón. La app pide este listado
+     * sin filtro para «Mis evidencias» de Yo, así que a un admin se le mezclaban las de todos —
+     * y desde D-252 con la foto firmada de cada una. «Todas» para el panel es
+     * {@code GET /admin/evidence} ({@link #listar(ListarEvidenciaAdminComando)}, sin foto).
      */
     private FiltroEvidencia resolverFiltroSegunRol(UserSummary actor, UserId participanteId, EstadoValidacion estado,
                                                     TipoDestino tipoDestino, Instant desde, Instant hasta) {
         if (actor.role() == UserRole.ADMIN || actor.role() == UserRole.ALCHEMIST) {
-            return new FiltroEvidencia(participanteId, estado, tipoDestino, desde, hasta);
+            UserId deQuien = participanteId != null ? participanteId : actor.id();
+            return new FiltroEvidencia(deQuien, estado, tipoDestino, desde, hasta);
         }
         if (actor.role() == UserRole.MENTOR) {
             /*
