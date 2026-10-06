@@ -102,6 +102,11 @@ Los schedulers existentes del "tramo nocturno":
 | 05:00 | `habits.ExpirarRegistrosScheduler` | expira `PENDIENTE` de días anteriores |
 | 05:05 | `points.SnapshotRankingScheduler` | snapshot de ranking |
 
+> **Corregido 2026-10-05 (E-534).** La fila de las 05:00 ya no es así: `ExpirarRegistrosScheduler` vence los registros
+> **cada hora, en el minuto 0**, según el día local de cada participante (para Lima sigue siendo la corrida de las
+> 05:00), y las rachas sin celular siguen a las 05:00 en un método propio. El resto de este informe es el análisis de
+> la época y se deja como estaba.
+
 Dos restricciones, no una:
 
 1. **Tiene que correr después de que `dia_programa` ya esté avanzado.** El catálogo del día

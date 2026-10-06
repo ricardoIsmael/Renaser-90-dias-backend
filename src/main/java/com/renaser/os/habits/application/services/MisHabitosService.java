@@ -27,6 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
@@ -55,12 +57,14 @@ public class MisHabitosService implements ConsultarMisHabitosUseCase, CrearHabit
     private final LoadRegistroHabitoPort loadRegistroPort;
     private final Clock clock;
     private final IdGenerator idGenerator;
+    /** D-254, decision 2 del dueño: la racha de cada habito, tambien la del que hoy no tiene track. */
+    private final RachasDeHabitos rachasDeHabitos;
 
     public MisHabitosService(LoadHabitoPort loadPort, SaveHabitoPort savePort,
                               SaveHorarioHabitoPort saveHorarioPort, LoadHorarioHabitoPort loadHorarioPort,
                               ConsultarProgresoParticipanteHabitsPort progresoPort,
                               SavePreferenciaHorarioPort savePreferenciaPort, LoadRegistroHabitoPort loadRegistroPort,
-                              Clock clock, IdGenerator idGenerator) {
+                              Clock clock, IdGenerator idGenerator, RachasDeHabitos rachasDeHabitos) {
         this.loadPort = loadPort;
         this.savePort = savePort;
         this.saveHorarioPort = saveHorarioPort;
@@ -70,14 +74,35 @@ public class MisHabitosService implements ConsultarMisHabitosUseCase, CrearHabit
         this.loadRegistroPort = loadRegistroPort;
         this.clock = clock;
         this.idGenerator = idGenerator;
+        this.rachasDeHabitos = rachasDeHabitos;
+    }
+
+    @Override
+    public List<HabitoConDias> consultar(UserId actor) {
+        return vistas(actor, requireProgreso(actor));
+    }
+
+    /**
+     * La racha congelada de un habito que hoy no tiene track (decision 2 del dueño, 2026-10-05) sale de la MISMA
+     * regla y la MISMA lectura que la del track ({@link RachasDeHabitos}): una consulta por pagina de fechas para
+     * todos los habitos a la vez, nunca una por habito. "Hoy" es el del participante en SU zona (regla 02 §1), del
+     * mismo progreso que ya se leyo para el candado.
+     */
+    @Override
+    public List<HabitoConDias> consultarConRachas(UserId actor) {
+        ProgresoParticipanteHabits progreso = requireProgreso(actor);
+        List<HabitoConDias> vistas = vistas(actor, progreso);
+        LocalDate hoyEnSuZona = clock.now().atZone(ZoneId.of(progreso.timezone())).toLocalDate();
+        Map<HabitoId, Integer> rachas = rachasDeHabitos.de(actor,
+                vistas.stream().map(v -> v.habito().id()).toList(), hoyEnSuZona, progreso.fechaInicio());
+        return vistas.stream().map(v -> v.conRacha(rachas.get(v.habito().id()))).toList();
     }
 
     /**
      * El catalogo llega ya ordenado por {@code habitos.orden} desde el adaptador (V28); los
      * PERSONAL se concatenan detras. El orden de esta lista ES el orden en que el movil los pinta.
      */
-    @Override
-    public List<HabitoConDias> consultar(UserId actor) {
+    private List<HabitoConDias> vistas(UserId actor, ProgresoParticipanteHabits progreso) {
         List<Habito> habitos = new ArrayList<>(loadPort.catalogoActivo());
         habitos.addAll(loadPort.personalesActivosDe(actor));
 
@@ -96,7 +121,7 @@ public class MisHabitosService implements ConsultarMisHabitosUseCase, CrearHabit
         // D-216: con el habito al lado, porque el primer dia de uno PERSONAL ya esta alcanzado.
         Map<HabitoId, HorariosDelHabito> horariosPorHabito = HorariosDelHabito.porHabito(habitos, horarios);
 
-        int diaDelAprendiz = primerDiaPlanificable(requireProgreso(actor).diaPrograma());
+        int diaDelAprendiz = primerDiaPlanificable(progreso.diaPrograma());
         Map<HabitoId, Integer> yaGenerados = diasMasAltosYaGenerados(actor, diaDelAprendiz, horariosPorHabito);
 
         return habitos.stream()

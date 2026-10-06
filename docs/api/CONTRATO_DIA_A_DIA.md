@@ -106,7 +106,12 @@ Hábitos (tracks) del día del propio actor.
   seguidos en que se cumplió. Un día en que el hábito no le toca, o en pausa, no corta ni suma (no tiene
   registro); lo pendiente de hoy no corta; un día ya terminado sin cumplir corta. No cuenta días anteriores a
   `fecha_inicio`. Es el «🔥 N días» de Training. Aditivo: un cliente que no lo conoce lo ignora; la app lo
-  trata como «sin dato» (no muestra racha) cuando no viene. Ver supuestos S-1..S-5 en D-254.
+  trata como «sin dato» (no muestra racha) cuando no viene. Ver supuestos S-1..S-5 en D-254. Un día opcional sin
+  cumplir no corta ni suma (decisión 1 del dueño, 2026-10-05; antes el supuesto S-1 lo hacía cortar).
+
+  **La misma racha en `GET /api/v1/habits`** (decisión 2 del dueño, 2026-10-05): cada hábito del listado trae
+  `rachaDias` (entero ≥ 0), también el que hoy no tiene track (no le toca o está en pausa: queda congelada). Mismo
+  cálculo; aditivo, sin quitar ni renombrar nada. Solo `null` en la respuesta del alta de un hábito personal.
 
 - **Quién puede llamarlo**: cualquier actor, sobre sí mismo (`actorId == participanteId`, siempre, porque el
   endpoint no toma un id de otro en la URL — ambos son el mismo header).

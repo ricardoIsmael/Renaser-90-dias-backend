@@ -123,8 +123,7 @@ class TracksDeHoyConsultasTest {
                 loadPreferenciaPort, progresoPort, org.mockito.Mockito.mock(AjustarPuntosPort.class),
                 org.mockito.Mockito.mock(PublicacionMuroFinder.class), loadDesbloqueoPort,
                 org.mockito.Mockito.mock(ApplicationEventPublisher.class), reloj, idGenerator,
-                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()),
-                transactionManager);
+                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()));
         proyeccion = new TracksDelDiaProyeccionService(registros, registros, loadHabitoPort, loadHorarioPort,
                 loadPreferenciaPort, loadGuiaPort, registrosConEvidenciaFinder, loadRenombrePort, new MedicionesDelDia(java.util.List.of(), (p, c, h) -> java.util.Map.of()),
                 new RachasDeHabitos(diasProgramadosPort), reloj,

@@ -5,7 +5,6 @@ import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPo
 import com.renaser.os.habits.application.ports.out.registro.RetirarObligacionesPausadasPort;
 import com.renaser.os.habits.application.ports.out.registro.SaveRegistroHabitoPort;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
-import com.renaser.os.habits.domain.model.registro.EstadoRegistro;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.shared.domain.UserId;
@@ -79,10 +78,9 @@ class RegistroHabitoPersistenceAdapter implements LoadRegistroHabitoPort, SaveRe
     }
 
     @Override
-    public List<RegistroHabito> enEstadoConFechaAnteriorA(EstadoRegistro estado, LocalDate fecha) {
-        EstadoRegistroJpa estadoJpa = EstadoRegistroJpa.valueOf(estado.name());
-        return repository.findByEstadoAndFechaEjecucionLessThan(estadoJpa, fecha).stream().map(mapper::toDomain)
-                .toList();
+    public List<RegistroHabito> pendientesDeParticipanteAnterioresA(UserId participanteId, LocalDate fecha) {
+        return repository.findByParticipanteIdAndEstadoAndFechaEjecucionLessThan(participanteId.value(),
+                EstadoRegistroJpa.PENDIENTE, fecha).stream().map(mapper::toDomain).toList();
     }
 
     @Override

@@ -35,7 +35,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.transaction.PlatformTransactionManager;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -85,8 +84,6 @@ class RegistroServiceKilometrosTest {
     private ApplicationEventPublisher events;
     @Mock
     private IdGenerator idGenerator;
-    @Mock
-    private PlatformTransactionManager transactionManager;
 
     private RegistroService service;
     private UserId dueno;
@@ -96,8 +93,7 @@ class RegistroServiceKilometrosTest {
         service = new RegistroService(loadRegistroPort, saveRegistroPort, loadHabitoPort, loadHorarioPort,
                 loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder, loadDesbloqueoPort, events,
                 CLOCK, idGenerator, List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(),
-                        new PoliticaClaseDiaria(), new PoliticaKilometros()),
-                transactionManager);
+                        new PoliticaClaseDiaria(), new PoliticaKilometros()));
         dueno = UserId.of(UUID.randomUUID());
         lenient().when(saveRegistroPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(loadHorarioPort.porHabito(any())).thenReturn(List.of());

@@ -69,6 +69,8 @@ class MisHabitosServiceTest {
     private IdGenerator idGenerator;
     @Mock
     private com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort loadRegistroPort;
+    @Mock
+    private RachasDeHabitos rachasDeHabitos;
 
     private final UserId actor = UserId.of(UUID.randomUUID());
 
@@ -77,7 +79,7 @@ class MisHabitosServiceTest {
     @BeforeEach
     void setUp() {
         service = new MisHabitosService(loadPort, savePort, saveHorarioPort, loadHorarioPort, progresoPort,
-                savePreferenciaPort, loadRegistroPort, CLOCK, idGenerator);
+                savePreferenciaPort, loadRegistroPort, CLOCK, idGenerator, rachasDeHabitos);
         lenient().when(loadHorarioPort.porHabitos(any())).thenReturn(List.of());
         // `consultar` necesita el dia de programa desde que calcula el desbloqueo de cada habito
         // (dia 2: el mismo escenario en el que el dueño reporto ver habitos que aun no le tocaban).
@@ -518,7 +520,7 @@ class MisHabitosServiceTest {
     void enDia0ElHabitoPersonalSeCreaIgualConElRelojEnLaMadrugadaUtc() {
         MisHabitosService servicioDeMadrugada = new MisHabitosService(loadPort, savePort, saveHorarioPort,
                 loadHorarioPort, progresoPort, savePreferenciaPort, loadRegistroPort,
-                FixedClock.at(Instant.parse("2026-09-07T02:00:00Z")), idGenerator);
+                FixedClock.at(Instant.parse("2026-09-07T02:00:00Z")), idGenerator, rachasDeHabitos);
         when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(enDia(0)));
         when(idGenerator.newId()).thenReturn(UUID.randomUUID(), UUID.randomUUID());
 
@@ -569,5 +571,47 @@ class MisHabitosServiceTest {
 
         assertThat(vista.diasParaDesbloqueo()).as("dia 8 contado desde el primer dia planificable").isEqualTo(7);
         assertThat(vista.bloqueado()).isTrue();
+    }
+
+    // ---- consultarConRachas: la racha congelada del habito sin track de hoy (D-254, decision 2) ----
+
+    /**
+     * Regla 02 §3: a las 02:00 UTC del 7/09 en Lima todavia es el 6. La racha se pide con el hoy de Lima y la
+     * fecha de inicio del programa, para TODOS los habitos en una sola llamada (sin N+1), y cada vista lleva la
+     * suya; el que no tiene racha calculada no inventa un numero.
+     */
+    @Test
+    void consultarConRachasPideLaRachaConElHoyDeSuZonaYUnaSolaVez() {
+        java.time.LocalDate inicio = java.time.LocalDate.of(2026, 8, 30);
+        MisHabitosService deMadrugada = new MisHabitosService(loadPort, savePort, saveHorarioPort, loadHorarioPort,
+                progresoPort, savePreferenciaPort, loadRegistroPort,
+                FixedClock.at(Instant.parse("2026-09-07T02:00:00Z")), idGenerator, rachasDeHabitos);
+        Habito leer = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "LEER", TipoHabito.CHECKBOX,
+                new DetallesHabito("desc", "MENTE", ExigenciaEvidencia.OPCIONAL, false, false), CLOCK.now());
+        Habito correr = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "CORRER", TipoHabito.CHECKBOX,
+                new DetallesHabito("desc", "CUERPO", ExigenciaEvidencia.OPCIONAL, false, false), CLOCK.now());
+        when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(
+                new ProgresoParticipanteHabits(8, "America/Lima", RolParticipante.TRAINEE, false, true, inicio)));
+        when(loadPort.catalogoActivo()).thenReturn(List.of(leer, correr));
+        when(loadPort.personalesActivosDe(actor)).thenReturn(List.of());
+        when(rachasDeHabitos.de(actor, List.of(leer.id(), correr.id()), java.time.LocalDate.of(2026, 9, 6), inicio))
+                .thenReturn(java.util.Map.of(leer.id(), 4));
+
+        List<HabitoConDias> vistas = deMadrugada.consultarConRachas(actor);
+
+        assertThat(vistas).extracting(HabitoConDias::rachaDias).containsExactly(4, null);
+        org.mockito.Mockito.verify(rachasDeHabitos, org.mockito.Mockito.times(1))
+                .de(any(), any(java.util.Collection.class), any(), any());
+    }
+
+    /** {@code consultar} sigue igual para los llamadores de adentro (PlanDeHabitosService): no paga la racha. */
+    @Test
+    void consultarSinRachaNoLaCalcula() {
+        when(loadPort.catalogoActivo()).thenReturn(List.of());
+        when(loadPort.personalesActivosDe(actor)).thenReturn(List.of());
+
+        service.consultar(actor);
+
+        verifyNoInteractions(rachasDeHabitos);
     }
 }

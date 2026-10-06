@@ -18,6 +18,9 @@ import java.util.TreeMap;
  *   <li>Igual que la racha general ({@code points.Racha}): <b>hoy pendiente no corta</b> — la racha
  *   cuenta hasta el ultimo dia programado ya vencido o cumplido —; un dia programado vencido sin
  *   cumplir la corta.</li>
+ *   <li><b>Decision 1 (2026-10-05)</b> — «Un dia opcional sin cumplir NO corta la racha (ciclos de
+ *   intoxicacion 8–10/17–19/26–28, Dia sin celular, Km…): no suma ni corta, igual que un dia no
+ *   programado.» Un dia opcional cumplido suma, como cualquier dia cumplido.</li>
  * </ul>
  *
  * <p>1A y 2A salen solas de la entrada: un dia no programado y un dia en pausa son el MISMO dato, una
@@ -25,9 +28,12 @@ import java.util.TreeMap;
  *
  * <h2>Supuestos de D-254 (casos que las reglas no resuelven; se eligio lo mas conservador)</h2>
  * <ul>
- *   <li><b>S-1, dias opcionales:</b> un dia opcional (ciclo de intoxicacion, habito opcional del
- *   catalogo) que no se cumple corta igual: tiene registro, asi que le tocaba. Pregunta abierta al
- *   dueño; si decide que congela, el cambio es una linea en {@link #veredictoDe}.</li>
+ *   <li><b>S-1, dias opcionales: lo decidio el dueño (decision 1, arriba).</b> Un dia opcional sin
+ *   cumplir no suma ni corta, cualquiera sea su estado y sea hoy o un dia terminado.
+ *   <blockquote><b>Corregido 2026-10-05.</b> Decia: «un dia opcional (ciclo de intoxicacion, habito
+ *   opcional del catalogo) que no se cumple corta igual: tiene registro, asi que le tocaba. Pregunta
+ *   abierta al dueño». Era el supuesto conservador mientras no habia respuesta; el dueño decidio lo
+ *   contrario.</blockquote></li>
  *   <li><b>S-2, el dia de hoy:</b> hoy solo corta un {@code FALLIDO} (Santuario roto: es un
  *   veredicto y no se puede completar). Un {@code PENDIENTE}, {@code EN_CURSO} o {@code EXPIRADO}
  *   de hoy todavia se puede completar ({@link EstadoRegistro#puedeCompletarse()}), asi que no corta.</li>
@@ -97,10 +103,13 @@ public record RachaDelHabito(int dias, boolean definitiva) {
         return porFecha.descendingMap().values();
     }
 
-    /** La regla del dia. S-1: {@code opcional} no se mira a proposito. */
+    /** La regla del dia. Decision 1: un dia opcional sin cumplir es como un dia no programado. */
     private static Veredicto veredictoDe(DiaProgramado dia, LocalDate hoy) {
         if (dia.estado() == EstadoRegistro.COMPLETADO) {
             return Veredicto.CUMPLIDO;
+        }
+        if (dia.opcional()) {
+            return Veredicto.NO_CUENTA;
         }
         if (dia.fecha().equals(hoy) && dia.estado().puedeCompletarse()) {
             return Veredicto.ABIERTO;
@@ -114,6 +123,8 @@ public record RachaDelHabito(int dias, boolean definitiva) {
         CUMPLIDO,
         /** Hoy, todavia se puede cumplir: ni suma ni corta. */
         ABIERTO,
+        /** Un dia opcional que no se cumplio (decision 1): ni suma ni corta, como un dia sin registro. */
+        NO_CUENTA,
         /** Corta la racha. */
         INCUMPLIDO;
 

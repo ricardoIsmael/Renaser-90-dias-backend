@@ -93,6 +93,8 @@ class RachaDelHabitoIT {
     private UUID leer;
     private UUID caminar;
     private UUID diario;
+    private UUID enPausa;
+    private UUID conOpcional;
 
     @BeforeEach
     void seed() {
@@ -128,6 +130,22 @@ class RachaDelHabitoIT {
         for (int i = 0; i < 5; i++) {
             registro(beto, meditar, HOY.minusDays(i), "COMPLETADO");
         }
+
+        // Decision 2 del dueño: sin track de hoy. En pausa desde hoy (sin fila hoy): cumplido los 3 dias anteriores.
+        // Racha congelada = 3.
+        enPausa = habito("En pausa");
+        for (int i = 1; i <= 3; i++) {
+            registro(ana, enPausa, HOY.minusDays(i), "COMPLETADO");
+        }
+        registro(ana, enPausa, HOY.minusDays(4), "EXPIRADO");
+        // Decision 1 del dueño: un dia opcional sin cumplir (ciclo de intoxicacion) no corta ni suma, y hoy no le
+        // toca. Cumplido ayer, opcional vencido anteayer, cumplido los dos de antes: 3 (antes de la decision, 1).
+        conOpcional = habito("Con opcional");
+        registro(ana, conOpcional, HOY.minusDays(1), "COMPLETADO");
+        registro(ana, conOpcional, HOY.minusDays(2), "EXPIRADO", true);
+        registro(ana, conOpcional, HOY.minusDays(3), "COMPLETADO");
+        registro(ana, conOpcional, HOY.minusDays(4), "COMPLETADO");
+        registro(ana, conOpcional, HOY.minusDays(5), "EXPIRADO");
     }
 
     @AfterEach
@@ -190,6 +208,65 @@ class RachaDelHabitoIT {
         assertThat(track.get("rachaDias").isInt()).isTrue();
     }
 
+    // ---- GET /api/v1/habits: la racha congelada del habito sin track de hoy (D-254, decision 2) ----
+
+    /** Los campos que el APK publicado lee de cada habito de {@code GET /api/v1/habits} (`habitoCatalogoSchema`). */
+    private static final List<String> CAMPOS_DEL_CATALOGO = List.of("id", "title", "description", "habitType",
+            "category", "evidenceRequirement", "isOptional", "isSystemHabit", "isDeactivatable", "systemKey",
+            "iconKey", "activeWeekdays", "unlockDay", "daysUntilUnlock", "locked");
+
+    @Test
+    @DisplayName("GET /habits: la racha congelada del que hoy no tiene track (pausa, opcional) y la misma del track")
+    void elCatalogoTraeLaRachaCongelada() throws Exception {
+        Map<UUID, JsonNode> deAna = misHabitos(ana);
+
+        assertThat(deAna.get(enPausa).get("rachaDias").asInt()).as("en pausa: congelada").isEqualTo(3);
+        assertThat(deAna.get(conOpcional).get("rachaDias").asInt()).as("el opcional sin cumplir no corta").isEqualTo(3);
+        assertThat(deAna.get(meditar).get("rachaDias").asInt())
+                .isEqualTo(tracksDeHoy(ana).get(meditar).get("rachaDias").asInt()).isEqualTo(2);
+        assertThat(deAna.get(diario).get("rachaDias").asInt()).isEqualTo(9);
+    }
+
+    @Test
+    @DisplayName("GET /habits: la racha de cada uno es la suya, aunque el habito sea el mismo")
+    void cadaUnoVeLaSuya() throws Exception {
+        Map<UUID, JsonNode> deBeto = misHabitos(beto);
+
+        assertThat(deBeto.get(meditar).get("rachaDias").asInt()).isEqualTo(5);
+        assertThat(deBeto.get(enPausa).get("rachaDias").asInt()).as("Beto no tiene historia de este").isZero();
+    }
+
+    @Test
+    @DisplayName("GET /habits: la app vieja sigue funcionando, todos los campos de antes y rachaDias es solo uno mas")
+    void elCatalogoEsCompatible() throws Exception {
+        JsonNode habito = misHabitos(ana).get(enPausa);
+
+        List<String> campos = new ArrayList<>();
+        habito.fieldNames().forEachRemaining(campos::add);
+        assertThat(campos).containsAll(CAMPOS_DEL_CATALOGO);
+        assertThat(campos).hasSize(CAMPOS_DEL_CATALOGO.size() + 1).contains("rachaDias");
+    }
+
+    @Test
+    @DisplayName("GET /habits sin sesion: nada")
+    void elCatalogoSinSesion() throws Exception {
+        HttpResponse<byte[]> respuesta = http.send(HttpRequest.newBuilder(
+                        URI.create("http://localhost:" + puerto + "/api/v1/habits")).GET().build(),
+                HttpResponse.BodyHandlers.ofByteArray());
+
+        assertThat(respuesta.statusCode()).isIn(401, 403);
+    }
+
+    private Map<UUID, JsonNode> misHabitos(UUID quien) throws Exception {
+        HttpResponse<byte[]> respuesta = http.send(HttpRequest.newBuilder(
+                        URI.create("http://localhost:" + puerto + "/api/v1/habits"))
+                .header("X-Auth-Token", sesionDe(quien)).GET().build(), HttpResponse.BodyHandlers.ofByteArray());
+        assertThat(respuesta.statusCode()).isEqualTo(200);
+        Map<UUID, JsonNode> porHabito = new HashMap<>();
+        json.readTree(respuesta.body()).forEach(h -> porHabito.put(UUID.fromString(h.get("id").asText()), h));
+        return porHabito;
+    }
+
     private Map<UUID, JsonNode> tracksDeHoy(UUID quien) throws Exception {
         HttpResponse<byte[]> respuesta = http.send(HttpRequest.newBuilder(
                         URI.create("http://localhost:" + puerto + "/api/v1/habit-tracks/today"))
@@ -239,12 +316,16 @@ class RachaDelHabitoIT {
 
     /** {@code dia_programa} coherente con la fecha: el inicio es el Dia 1, y antes del inicio es el 0. */
     private void registro(UUID quien, UUID habito, LocalDate fecha, String estado) {
+        registro(quien, habito, fecha, estado, false);
+    }
+
+    private void registro(UUID quien, UUID habito, LocalDate fecha, String estado, boolean opcional) {
         int dia = Math.max(0, (int) (fecha.toEpochDay() - INICIO.toEpochDay()) + 1);
         jdbc.update("""
                 INSERT INTO renaser.registros_habito (id, participante_id, habito_id, fecha_ejecucion, dia_programa,
                                                       tipo_dia, es_opcional, estado, completado_en)
-                VALUES (?, ?, ?, ?, ?, 'TODOS', false, CAST(? AS renaser.estado_registro),
+                VALUES (?, ?, ?, ?, ?, 'TODOS', ?, CAST(? AS renaser.estado_registro),
                         CASE WHEN ? = 'COMPLETADO' THEN now() END)
-                """, UUID.randomUUID(), quien, habito, fecha, dia, estado, estado);
+                """, UUID.randomUUID(), quien, habito, fecha, dia, opcional, estado, estado);
     }
 }
