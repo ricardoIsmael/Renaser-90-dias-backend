@@ -14065,6 +14065,14 @@ sección crece hasta abajo y el aviso baja con ella; SER no.
 **Prevención:** todo elemento flotante nuevo dentro de una sección se mira en captura con la lista DESPLAZADA (barra
 escondida), no solo en reposo.
 
+> **Ampliado 2026-10-06 (revisión del coordinador).** No era solo el aviso: con la barra escondida, la burbuja «✳ SER»
+> (`SparkieOverlay`, arranque guiado, visible mientras la cuenta no firmó el Pacto, en todas las plataformas) quedaba
+> montada sobre «Cerrar la lista», y lo mismo podía pasar con «Corregir» y «Cancelar evento». El relleno de Comunidad
+> (`ESPACIO_PARA_LANZADOR`, 88) está pensado con la barra a la vista; sin ella, los flotantes ocupan hasta
+> `ALTO_TAB_BAR + SEPARACION + DIAMETRO` (130) del borde de la pantalla. Arreglo (front `eventos-asistencia`):
+> `EspacioSobreFlotantes` al final de las tres pantallas completa la diferencia (+ 12 y el borde seguro);
+> `pieSobreLosFlotantes.test.ts` falla contra lo anterior (3 de 4).
+
 ## E-553 · La barra de la tarjeta «Asistencia» no se ve en modo oscuro (app, D-256, RESUELTO, 06/10)
 
 **Síntoma:** en la captura oscura del detalle, la barra Van / No van / Sin respuesta mostraba solo el verde y el rojo;
