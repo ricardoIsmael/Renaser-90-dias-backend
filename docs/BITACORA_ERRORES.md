@@ -13992,3 +13992,60 @@ tocó. Front verificado (master `244401c`): los dos consumidores sin `participan
 2. Al agregar datos sensibles a una respuesta existente (D-252, la foto firmada), revisar quién recibe ese listado en
    cada rol, no solo en el del aprendiz: las pruebas de D-252 cubrían dueño, otro aprendiz, mentor y panel, y ninguna
    pedía el listado como admin sin filtro.
+
+## E-543 · SER no explica cómo se hace un hábito ni una lección y manda a Sparkie, que «tiene todo» (backend, IA, RESUELTO con D-255, 06/10)
+
+**Síntoma (dueño, 06/10, literal):** «SER explicando hábitos: ¿no hay información de las transcripciones de los videos
+que fueron subidos a la base vectorial? … ¿Estás seguro? Sparkie tiene todo.» A preguntas de contenido de un curso SER
+respondía corto y sugería abrir el curso y preguntarle a Sparkie; a «¿cómo lo hago?» después de hablar de un hábito,
+decía que no tenía los pasos.
+
+**Causa real (no era la fuente).** Sparkie y SER leían la **misma** tabla `base_conocimiento`, con el **mismo** filtro de
+lecciones visibles y los mismos 5 fragmentos (`ConversacionRenasiaService.materialDelPrograma`). Lo que cambiaba:
+1. El prompt de SER lo mandaba afuera, literal: «Las dudas sobre el CONTENIDO de un curso concreto (que dice una
+   leccion, como aplicar lo que ensena) las atiende otro asistente, Sparkie, dentro de cada curso en Classroom (en
+   Comunidad). Si te preguntan eso, responde breve con lo que sepas y sugiere abrir el curso y preguntarle ahi a
+   Sparkie».
+2. Sparkie buscaba **solo en el curso abierto** (`cursoId`), así que sus 5 fragmentos eran de esa clase; SER busca en
+   todo lo visible.
+3. SER busca **una vez, con el texto literal de la pregunta**, antes de hablar con el modelo: «el que me toca a las 6»
+   o «¿y cómo lo hago?» no nombran el hábito, y el material que llega es de otra cosa. No tenía cómo volver a buscar.
+4. Aparte, la base puede estar incompleta: el 26-09 producción tenía 47 de 124 lecciones (`TRANSCRIPCION_CLASE`). Eso
+   afecta a los dos por igual. Local (`renaser_ui0210`, y todas las copias de 5433) tiene **35 fragmentos de 4
+   lecciones**: no sirve para medir cobertura.
+
+**Arreglo (D-255):** un solo agente que responde (`AgenteConversacional.queResponde()` = SER, también para el
+`COURSE_TUTOR` del APK instalado), SER usa `cursoId`/`scope` cuando lo abren desde un curso, herramienta
+`buscar_en_los_cursos` para buscar con las palabras del tema, y el prompt ya no deriva a Sparkie. Ver
+`docs/MODULO_RAG.md` §3 D-255.
+
+**Prueba real (06/10, Gemini, backend propio en 8094 sobre `renaser_ser`, cuenta `e2e-ap-emu`, día 15):** «¿Cómo se
+hace el ritual de tierra, agua y fuego?» respondió las tres respiraciones según la clase «01. TIERRA, AGUA Y FUEGO»
+(indexada solo en esa copia); por el chat del curso del APK viejo (`COURSE_TUTOR`) respondió «Soy SER…» con la clase
+de la Fase II; «¿Qué enseñan los cursos sobre el baño de hielo de Wim Hof?» respondió que no lo encontró, sin inventar.
+
+**Para que no vuelva:**
+1. `PromptSistemaRenasiaTest.serRespondeLosCursosSinSparkie` falla si el prompt vuelve a nombrar a Sparkie o pierde
+   la regla de buscar antes de decir que no lo tiene; `SerConElMaterialDeLosCursosIT` falla si SER deja de recibir la
+   lección del curso o si el tutor vuelve a tener otro motor.
+2. Antes de afirmar que «el otro asistente tiene más información», comparar **qué busca** cada uno (tabla, filtro,
+   consulta, top-k) y **qué le dice su prompt** que haga con lo que encuentra: acá la fuente era la misma.
+3. La cobertura de producción se mira con `scripts/sparkie-indexacion/consulta-indexados.sh` (solo lectura, la corre
+   el dueño). No hay endpoint de admin que la muestre.
+
+## E-544 · El script que levanta un backend mata su propia terminal: `pgrep -f` encuentra la línea del propio comando (entorno, RESUELTO, 06/10)
+
+**Síntoma:** al crear y correr en el mismo comando `~/.cache/renaser-e2e/levantar-backend-ser-cursos.sh` (copia de
+`levantar-backend-ui.sh`), la herramienta devolvió `Exit code 144` sin ninguna salida, no quedó ningún backend en 8094 y
+no se creó el log.
+
+**Causa real:** la primera línea del script hace `kill $(pgrep -f 'backend-se[r].jar')` para matar un backend anterior.
+El truco de los corchetes evita que `pgrep` se encuentre a sí mismo, pero no a la `bash -c` que lo lanzó: esa línea de
+comando traía el texto del script entero (heredoc), incluido `backend-ser.jar`. `pgrep` devolvió el PID de esa shell y
+el script la mató. Es la misma raíz que E-422 (allí `pgrep` esperaba para siempre; acá mata).
+
+**Arreglo:** el patrón exige el proceso de Java (`pgrep -f 'java.*backend-se[r].jar'`) y el script se corre en un
+comando aparte, sin el texto del script en la línea de comando. Levantó en 24 s.
+
+**Para que no vuelva:** en los `levantar-backend-*.sh`, buscar el proceso a matar por `java.*<jar>` (o guardar el PID en
+un archivo al arrancar y matar ese), y nunca escribir y ejecutar el script en el mismo comando de la herramienta.

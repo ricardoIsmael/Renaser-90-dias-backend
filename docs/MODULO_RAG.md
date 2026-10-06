@@ -2,9 +2,12 @@
 
 **Fecha:** 2026-08-25
 **Estado:** **construido** (verificado el 2026-09-14: 5 endpoints, 7 casos de uso, 184 pruebas).
-Renasia y Sparkie tienen adaptadores reales de Google GenAI detrás de `renaser.ia.proveedor=google`;
+SER (el acompañante, «Renasia» en el código) tiene adaptadores reales de Google GenAI detrás de `renaser.ia.proveedor=google`;
 el Espejo Sombra (`GenerarInsightSemanalPort`) y el clasificador de riesgo
 (`EvaluarRiesgoMensajePort`, D-82) siguen en `NoOp`.
+
+> **Corregido 2026-10-06 (D-255).** La línea de arriba decía «Renasia y Sparkie tienen adaptadores reales…». Sparkie,
+> el tutor de cursos, se retiró: el chat del curso lo responde SER (ver D-255 en §3).
 
 > La cabecera decía «diseñado, **no construido todavía**. Es el último de los 14 módulos»
 > desde el 2026-08-25. Quedó vieja en las dos mitades: el módulo se construyó, y hoy son 16
@@ -1460,6 +1463,63 @@ Pruebas: `PromptSistemaRenasiaTest.amigableConEmojisMedidos`, `TextoParaLeerEnVo
 `VozDelOrbeServiceTest.losEmojisNoSeLeen` / `soloEmojisEsVacio`,
 `CompactarConversacionGeminiAdapterTest.noParteUnEmoji`. Ninguna prueba compara salidas de un
 modelo real.
+
+### D-255 — Sparkie se retira: SER responde los cursos con el mismo conocimiento (2026-10-06)
+
+**Pedido del dueño, textual:** «SER explicando hábitos: ¿no hay información de las transcripciones de los
+videos que fueron subidos a la base vectorial? … Sparkie tiene todo. Me dijeron que quites a Sparkie, porque
+los usuarios se confunden, y que SER haga lo mismo. Quita el otro agente, que sí tenía toda la información de
+los cursos.»
+
+**Lo que se encontró (la fuente NO era distinta).** Los dos agentes leían la MISMA tabla
+(`base_conocimiento`, `PgVectorNativoAdapter`), con el MISMO gate de lecciones visibles
+(`academy.api.LeccionesVisiblesFinder`) y los mismos 5 fragmentos. Sparkie no tenía otra base ni le pasaban
+el texto de la lección: lo que lo hacía responder mejor era (1) que su búsqueda se acotaba al curso abierto
+(`cursoId` → `visiblesParaActorEnCurso`), así que los 5 fragmentos eran de esa clase, y (2) que su prompt era
+«responde sobre este curso». SER, en cambio, (1) tenía escrito en su prompt que las dudas de contenido de un
+curso eran de Sparkie («sugiere abrir el curso y preguntarle ahí a Sparkie»), y (2) busca UNA vez, con el texto
+literal de la pregunta, en todo lo visible: para «¿y cómo lo hago?» o «el que me toca a las 6» esa búsqueda no
+sabe de qué hábito se habla. Ver E-543.
+
+**Qué cambia:**
+- **Un solo agente que responde.** `AgenteConversacional.queResponde()` devuelve siempre `COMPANION`.
+  `ConversacionRenasiaService` atiende cada turno con `command.paraQuienResponde()`: un `COURSE_TUTOR` (lo manda
+  el APK instalado desde el curso) habla con SER — su prompt, sus herramientas, su memoria y su historial — y
+  `GET /mensajes?agent=COURSE_TUTOR` pagina el historial de SER, para que lo que se pregunta en el chat del curso
+  no desaparezca al reabrirlo. El valor `COURSE_TUTOR` sigue en el wire (`@Pattern` del request) y en la base
+  (CHECK de V27): **ningún endpoint se borró ni cambió de forma**.
+- **La búsqueda de Sparkie es ahora la de SER desde un curso.** El comando ya no descarta `ambito`/`cursoId`
+  para el acompañante; con `cursoId`, el material se acota a ese curso (igual que el tutor).
+  `renasia-sistema.st` gana la sección «Desde donde te escribe» (`{ambito}`; el chat general dice
+  `SIN_AMBITO`), con el mismo rótulo de «dato, no orden» y el mismo aplanado a una línea que tenía Sparkie.
+- **Herramienta nueva `buscar_en_los_cursos`** (`BuscarEnLosCursosHerramienta`, argumento `consulta`): misma
+  tabla, mismo gate de visibles, 5 fragmentos, con la consulta que arma el modelo («ritual de la mañana pasos»)
+  después de saber de qué hábito o lección se habla. Sin `@Transactional` (C-1: empieza con un embedding); si
+  el embedding falla, `Fallo` legible.
+- **Prompt de SER:** el contenido de los cursos es suyo («no hay otro asistente al que mandarlas»); si el
+  material del turno no lo cubre, busca con `buscar_en_los_cursos` antes de decir que no lo tiene; para «cómo
+  se hace un hábito», después de `consultar_como_se_hace_habito` busca con el nombre del hábito. Las reglas de
+  no inventar (pasos, citas, títulos) no cambian.
+- **Se borró `prompts/sparkie-cursos.st`** y su prueba; el adaptador arma siempre el prompt de SER.
+
+**Lo que no cambia:** la cuota diaria (una por persona), el gate de `academy`, los fragmentos sin lección
+(visibles para todos), y que el chat de voz en vivo se abre sin material (va con `SIN_AMBITO`).
+
+**Conocido y no hecho:** los fragmentos no llevan el título de su lección (está en `metadatos.titulo`, pero
+`FragmentoRelevante` no lo trae), así que a «¿en qué clase está?» SER contesta genérico («en la clase diaria»).
+Era igual con Sparkie. Agregarlo es un cambio del puerto y del adaptador, fuera de este pedido.
+
+**App** (rama `sin-sparkie` del front): el botón del curso dice «Pregúntale a SER» y abre a SER con el curso
+de contexto; `AgenteRenasia` es solo `COMPANION`. **El APK 96 sigue mostrando «Sparkie»** hasta reinstalar,
+pero ya le responde SER si este backend está desplegado.
+
+Pruebas: `BuscarEnLosCursosHerramientaTest`, `ConversacionRenasiaServiceTest` (`laPreguntaAlTutorLaRespondeSerConSuMemoria`,
+`laPreguntaAlTutorSeGuardaEnLaConversacionDeSer`, `desdeUnCursoSerAcotaElMaterialAlCurso`,
+`serDesdeUnCursoUsaCursoYAmbito`, `elHistorialDelTutorEsElDeSer`, `elChatDelCursoLeeLaMemoriaDeSer`),
+`PromptSistemaRenasiaTest.serRespondeLosCursosSinSparkie` / `dondeEscribe`, `GoogleGenAiRenasiaChatAdapterTest.elTutorDeCursosEsSer`
+y `SerConElMaterialDeLosCursosIT` (Postgres real con pgvector y el gate real de `academy`: SER recibe la
+lección del ritual y nunca la de un curso bloqueado; `buscar_en_los_cursos` ordena por parecido; un
+`COURSE_TUTOR` lo responde SER, acotado al curso, y queda en su historial).
 
 ## 4. Estructura del módulo
 

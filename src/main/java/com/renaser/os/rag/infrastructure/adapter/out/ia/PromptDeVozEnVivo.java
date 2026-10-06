@@ -39,7 +39,9 @@ final class PromptDeVozEnVivo {
     String para(SituacionDelAprendiz situacion, MemoriaDeRenasia memoria) {
         String delAgente = acompanante.render(Map.of(
                 "contexto", GoogleGenAiRenasiaChatAdapter.formatearContexto(List.of()),
-                "situacion", GoogleGenAiRenasiaChatAdapter.formatearSituacion(situacion)));
+                "situacion", GoogleGenAiRenasiaChatAdapter.formatearSituacion(situacion),
+                // D-255: la voz en vivo se abre desde el orbe de Hoy, nunca desde un curso.
+                "ambito", GoogleGenAiRenasiaChatAdapter.SIN_AMBITO));
         if (memoria != null) {
             delAgente += "\n\n" + seccionDeMemoria.render(Map.of("recuerdos", memoria.paraElModelo()));
         }

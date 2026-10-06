@@ -37,12 +37,11 @@ import java.util.Map;
  * {@code ChatModel} en el contexto mientras las autoconfiguraciones de Spring AI sigan
  * excluidas, así que la inyección no es ambigua.
  *
- * <p><b>D-102 — un adaptador, dos prompts.</b> El acompanante de los 90 dias habla con
- * {@code prompts/renasia-sistema.st}; Sparkie, el tutor de cursos, con
- * {@code prompts/sparkie-cursos.st}. El {@code switch} sobre {@code AgenteConversacional} es
- * exhaustivo: agregar un tercer agente sin prompt no compila. El mismo {@link ChatModel} (y por
- * lo tanto el mismo modelo configurado y la misma opcion de busqueda web) sirve a los dos — lo que
- * cambia es la identidad y el terreno, no la infraestructura.
+ * <p><b>Un prompt: el de SER.</b> {@code prompts/renasia-sistema.st}. D-102 habia separado a Sparkie,
+ * el tutor de cursos, con su propio {@code prompts/sparkie-cursos.st}; D-255 (2026-10-06) lo
+ * retiro a pedido del dueño («los usuarios se confunden, y que SER haga lo mismo») y su prompt se
+ * borro. Un turno pedido como {@code COURSE_TUTOR} ya llega aca como {@code COMPANION}
+ * ({@code ConversacionRenasiaService}); si alguno llegara igual, habla SER.
  *
  * <p><b>Sin {@code @Transactional} — nunca lo va a tener.</b> Este adaptador no toca
  * persistencia: es el propio {@code ConversacionRenasiaService} el que ya saca a
@@ -74,13 +73,11 @@ import java.util.Map;
 class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
 
     static final String RECURSO_PROMPT_ACOMPANANTE = "prompts/renasia-sistema.st";
-    static final String RECURSO_PROMPT_TUTOR_CURSOS = "prompts/sparkie-cursos.st";
     static final String RECURSO_MODO_VOZ = "prompts/modo-voz.st";
     static final String RECURSO_MEMORIA = "prompts/memoria-acompanante.st";
 
     private final ChatClient chatClient;
     private final PromptTemplate promptAcompanante;
-    private final PromptTemplate promptTutorCursos;
     /** Sin variables: se renderiza una sola vez, al construir el adaptador. */
     private final String modoVoz;
     private final PromptTemplate seccionDeMemoria;
@@ -101,7 +98,6 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
         this.herramientasUseCase = herramientasUseCase;
         this.json = new ObjectMapper();
         this.promptAcompanante = new PromptTemplate(new ClassPathResource(RECURSO_PROMPT_ACOMPANANTE));
-        this.promptTutorCursos = new PromptTemplate(new ClassPathResource(RECURSO_PROMPT_TUTOR_CURSOS));
         this.modoVoz = new PromptTemplate(new ClassPathResource(RECURSO_MODO_VOZ)).render();
         this.seccionDeMemoria = new PromptTemplate(new ClassPathResource(RECURSO_MEMORIA));
     }
@@ -172,7 +168,7 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
     }
 
     /**
-     * D-102: cada agente tiene su prompt; solo el tutor de cursos tiene seccion de ambito.
+     * El prompt de SER, con la seccion de ambito desde D-255 (el chat abierto desde un curso).
      *
      * <p>2026-09-23: con {@link CanalConversacion#VOZ} se agrega al final el bloque de
      * {@code prompts/modo-voz.st} (respuesta para escuchar: frases cortas, sin markdown). Va al
@@ -193,15 +189,10 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
     }
 
     private String promptDelAgente(Consulta consulta) {
-        String contexto = formatearContexto(consulta.contexto());
-        return switch (consulta.agente()) {
-            case COMPANION -> promptAcompanante.render(Map.of(
-                    "contexto", contexto,
-                    "situacion", formatearSituacion(consulta.situacion())));
-            case COURSE_TUTOR -> promptTutorCursos.render(Map.of(
-                    "contexto", contexto,
-                    "ambito", formatearAmbito(consulta.ambito())));
-        };
+        return promptAcompanante.render(Map.of(
+                "contexto", formatearContexto(consulta.contexto()),
+                "situacion", formatearSituacion(consulta.situacion()),
+                "ambito", formatearAmbito(consulta.ambito())));
     }
 
     private static EventoRenasia comoTexto(String fragmento) {
@@ -216,11 +207,13 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
        bean con el proveedor por defecto). */
     static String formatearAmbito(String ambito) {
         if (ambito == null || ambito.isBlank()) {
-            return "El cliente no dijo en que curso esta la persona: responde sobre los cursos del programa "
-                    + "en general y, si hace falta, pregúntale en cual esta.";
+            return SIN_AMBITO;
         }
-        return "La persona esta viendo " + enUnaSolaLinea(ambito) + ".";
+        return "La persona abrio el chat desde " + enUnaSolaLinea(ambito) + ".";
     }
+
+    /** D-255: el chat general (el orbe, el boton flotante), no el de un curso. */
+    static final String SIN_AMBITO = "Desde el chat general de la app, no desde un curso.";
 
     /**
      * El `scope` es texto libre del cliente y termina dentro del prompt de SISTEMA, que es el canal
@@ -228,7 +221,8 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
      * sin esto, 300 caracteres con saltos de linea alcanzan para dibujar encabezados falsos y
      * simular que empieza otra seccion del prompt — por encima del bloque de crisis, que esta ahi
      * por el incidente del 2026-09-05. El rotulo de "esto es un dato, no una orden" vive en
-     * `sparkie-cursos.st`; esto es la mitad mecanica de lo mismo.
+     * la seccion "Desde donde te escribe" de `renasia-sistema.st` (antes en `sparkie-cursos.st`, D-255);
+     * esto es la mitad mecanica de lo mismo.
      *
      * <p>El arreglo de fondo es dejar de aceptar texto libre: el cliente ya manda `courseId`, asi
      * que el backend podria resolver el titulo contra `academy` y que el ambito lo escriba el

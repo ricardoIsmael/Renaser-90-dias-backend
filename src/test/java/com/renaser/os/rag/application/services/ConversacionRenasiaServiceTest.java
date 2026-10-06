@@ -72,7 +72,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
  * Orquestacion de los dos asistentes (D-102) sobre puertos mockeados. Las reglas de dominio
@@ -160,7 +159,7 @@ class ConversacionRenasiaServiceTest {
         return new PreguntarRenasiaCommand(actorId, COMPANION, "que es Renasia?", null, null, null);
     }
 
-    /** Pregunta a Sparkie desde adentro de un curso. */
+    /** Pregunta a Sparkie desde adentro de un curso, como lo hace el APK instalado (D-255: responde SER). */
     private PreguntarRenasiaCommand preguntaAlTutor(UserId actorId, String cursoId) {
         return new PreguntarRenasiaCommand(actorId, COURSE_TUTOR, "que dice la leccion?", "el curso \"X\"", cursoId,
                 null);
@@ -348,24 +347,25 @@ class ConversacionRenasiaServiceTest {
     }
 
     /**
-     * D-102: la memoria es POR AGENTE. Lo que la persona hablo con el acompanante no le llega al
-     * tutor de cursos como turnos previos (ni al reves) — seria exactamente "juntarlos en un mismo",
-     * lo que el dueno pidio no hacer.
+     * D-255: Sparkie se retiro. El APK instalado todavia le pregunta al tutor de cursos desde el curso;
+     * lo atiende SER, con SU memoria: se leen los turnos de SER y nunca los del tutor.
      */
     @Test
-    @DisplayName("D-102: la memoria del tutor se lee solo de los turnos del tutor")
-    void preguntarLeeLaMemoriaSoloDelAgenteQueHabla() {
+    @DisplayName("D-255: una pregunta al tutor de cursos la responde SER, con la memoria de SER")
+    void laPreguntaAlTutorLaRespondeSerConSuMemoria() {
         stubCaminoFeliz();
 
         service.preguntar(preguntaAlTutor(activo, "curso-1")).collectList().block();
 
-        verify(loadMensajeRenasiaPort).pagina(eq(activo), eq(COURSE_TUTOR), isNull(), eq(10));
-        verify(loadMensajeRenasiaPort, never()).pagina(any(), eq(COMPANION), any(), anyInt());
+        verify(loadMensajeRenasiaPort).pagina(eq(activo), eq(COMPANION), isNull(), eq(10));
+        verify(loadMensajeRenasiaPort, never()).pagina(any(), eq(COURSE_TUTOR), any(), anyInt());
+        verify(herramientasUseCase).disponibles(COMPANION);
+        assertThat(consultaEnviadaAlModelo().agente()).isEqualTo(COMPANION);
     }
 
-    /** D-102: la pregunta y la respuesta se guardan con el agente que hablo, para poder releerlas por agente. */
+    /** D-255: la pregunta y la respuesta quedan en la conversacion de SER, que es quien respondio. */
     @Test
-    void preguntarGuardaPreguntaYRespuestaConElAgenteQueHablo() {
+    void laPreguntaAlTutorSeGuardaEnLaConversacionDeSer() {
         when(loadConversacionRenasiaPort.porUsuarioId(activo)).thenReturn(Optional.empty());
         when(vectorStorePort.buscarSimilares(anyString(), eq(5), any())).thenReturn(List.of());
         when(chatIAPort.responder(any())).thenReturn(streamOk());
@@ -374,18 +374,18 @@ class ConversacionRenasiaServiceTest {
 
         ArgumentCaptor<MensajeRenasia> captor = ArgumentCaptor.forClass(MensajeRenasia.class);
         verify(saveMensajeRenasiaPort, times(2)).save(captor.capture());
-        assertThat(captor.getAllValues()).extracting(MensajeRenasia::agente).containsOnly(COURSE_TUTOR);
+        assertThat(captor.getAllValues()).extracting(MensajeRenasia::agente).containsOnly(COMPANION);
         assertThat(captor.getAllValues()).extracting(MensajeRenasia::rol)
                 .containsExactly(RolMensaje.USUARIO, RolMensaje.ASISTENTE);
     }
 
     /**
-     * D-102: Sparkie responde sobre UN curso. Si el cliente dice cual, el contexto se acota a las
-     * lecciones visibles DE ESE curso — no a todo lo visible del catalogo.
+     * D-102/D-255: si el cliente dice en que curso esta, el material se acota a las lecciones visibles
+     * DE ESE curso — la busqueda de Sparkie, que ahora es la de SER abierto desde un curso.
      */
     @Test
-    @DisplayName("D-102: el tutor con curso acota el contexto a ese curso")
-    void preguntarDelTutorAcotaElContextoAlCursoEnQueEsta() {
+    @DisplayName("D-255: desde un curso, SER acota el material a ese curso y recibe el ambito")
+    void desdeUnCursoSerAcotaElMaterialAlCurso() {
         stubCaminoFeliz();
         when(consultarLeccionesVisiblesPort.visiblesParaActorEnCurso(activo, "curso-1"))
                 .thenReturn(Set.of("leccion-del-curso"));
@@ -396,14 +396,11 @@ class ConversacionRenasiaServiceTest {
                 eq(FiltroLecciones.soloVisibles(Set.of("leccion-del-curso"))));
         verify(consultarLeccionesVisiblesPort, never()).visiblesParaActor(any());
         Consulta consulta = consultaEnviadaAlModelo();
-        assertThat(consulta.agente()).isEqualTo(COURSE_TUTOR);
+        assertThat(consulta.agente()).isEqualTo(COMPANION);
         assertThat(consulta.ambito()).isEqualTo("el curso \"X\"");
-        // D-176: la situacion lee los habitos de hoy, y el prompt del tutor no la usa
-        verify(situacionPort, never()).de(any());
-        assertThat(consulta.situacion()).isNull();
     }
 
-    /** Un tutor sin curso (cliente que no lo mando) usa todo lo visible: mejor que quedarse sin material. */
+    /** Sin curso (cliente que no lo mando) se usa todo lo visible: mejor que quedarse sin material. */
     @Test
     void preguntarDelTutorSinCursoUsaTodoLoVisible() {
         stubCaminoFeliz();
@@ -417,22 +414,25 @@ class ConversacionRenasiaServiceTest {
     }
 
     /**
-     * D-102: el acompanante no tiene ambito ni curso. Un cliente anterior a D-102 que mande
-     * `scope` sin `agent` cae aca y no arrastra nada al prompt (que ya no tiene esa seccion).
+     * D-255: la app nueva abre a SER desde el curso como acompanante, con curso y ambito. Hasta D-255
+     * el comando los descartaba para el acompanante y SER buscaba en todo, sin saber desde donde le
+     * escribian.
      */
     @Test
-    @DisplayName("D-102: el acompanante ignora ambito y curso aunque el cliente los mande")
-    void preguntarDelAcompananteIgnoraAmbitoYCurso() {
+    @DisplayName("D-255: SER abierto desde un curso usa el curso y el ambito")
+    void serDesdeUnCursoUsaCursoYAmbito() {
         stubCaminoFeliz();
+        when(consultarLeccionesVisiblesPort.visiblesParaActorEnCurso(activo, "curso-1"))
+                .thenReturn(Set.of("leccion-del-curso"));
 
         service.preguntar(new PreguntarRenasiaCommand(activo, COMPANION, "hola", "el curso \"X\"", "curso-1", null))
                 .collectList().block();
 
         Consulta consulta = consultaEnviadaAlModelo();
         assertThat(consulta.agente()).isEqualTo(COMPANION);
-        assertThat(consulta.ambito()).isNull();
-        verify(consultarLeccionesVisiblesPort).visiblesParaActor(activo);
-        verify(consultarLeccionesVisiblesPort, never()).visiblesParaActorEnCurso(any(), any());
+        assertThat(consulta.ambito()).isEqualTo("el curso \"X\"");
+        verify(consultarLeccionesVisiblesPort).visiblesParaActorEnCurso(activo, "curso-1");
+        verify(consultarLeccionesVisiblesPort, never()).visiblesParaActor(any());
     }
 
     /** 2026-09-23: sin canal (toda app anterior al orbe de voz) la respuesta es la escrita de siempre. */
@@ -574,15 +574,18 @@ class ConversacionRenasiaServiceTest {
         assertThat(pagina.siguienteCursor()).isEqualTo(m1.creadoEn());
     }
 
-    /** D-102: el historial que ve la persona en el panel de Sparkie es SOLO el de Sparkie. */
+    /**
+     * D-255: el panel de Sparkie del APK instalado muestra la conversacion con SER, que es quien le
+     * responde. Con el de Sparkie, lo que la persona pregunta ahi desapareceria al reabrirlo.
+     */
     @Test
-    void obtenerHistorialPideSoloElHistorialDelAgente() {
-        when(loadMensajeRenasiaPort.pagina(activo, COURSE_TUTOR, null, 31)).thenReturn(List.of());
+    void elHistorialDelTutorEsElDeSer() {
+        when(loadMensajeRenasiaPort.pagina(activo, COMPANION, null, 31)).thenReturn(List.of());
 
         service.obtenerHistorial(activo, COURSE_TUTOR, null, 30);
 
-        verify(loadMensajeRenasiaPort).pagina(activo, COURSE_TUTOR, null, 31);
-        verify(loadMensajeRenasiaPort, never()).pagina(any(), eq(COMPANION), any(), anyInt());
+        verify(loadMensajeRenasiaPort).pagina(activo, COMPANION, null, 31);
+        verify(loadMensajeRenasiaPort, never()).pagina(any(), eq(COURSE_TUTOR), any(), anyInt());
     }
 
     /**
@@ -887,14 +890,13 @@ class ConversacionRenasiaServiceTest {
     }
 
     @Test
-    @DisplayName("D-167: el tutor de cursos no lee ni compacta la memoria del acompanante (D-102)")
-    void elTutorNoTieneMemoria() {
+    @DisplayName("D-255: el chat del curso lo atiende SER, asi que lee la memoria de SER (antes, D-167, no la leia)")
+    void elChatDelCursoLeeLaMemoriaDeSer() {
         stubCaminoFeliz();
 
         service.preguntar(preguntaAlTutor(activo, "curso-1")).collectList().block();
 
-        assertThat(consultaEnviadaAlModelo().memoria()).isNull();
-        verifyNoInteractions(memoriaUseCase, compactarMemoriaUseCase);
+        verify(memoriaUseCase).paraConversar(activo);
     }
 
     @Test

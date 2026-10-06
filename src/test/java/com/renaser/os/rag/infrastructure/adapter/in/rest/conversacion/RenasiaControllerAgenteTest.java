@@ -91,7 +91,7 @@ class RenasiaControllerAgenteTest {
     }
 
     @Test
-    @DisplayName("sin `agent` (cliente anterior a D-102) se habla con el acompanante, y el scope no se arrastra")
+    @DisplayName("sin `agent` (cliente anterior a D-102) se habla con el acompanante; desde D-255 el scope viaja")
     void sinAgentEsElAcompanante() throws Exception {
         mockMvc.perform(post(RUTA)
                         .header(HEADER_ACTOR_ID, actorId.toString())
@@ -102,7 +102,8 @@ class RenasiaControllerAgenteTest {
         PreguntarRenasiaCommand comando = comandoRecibido();
         assertThat(comando.agente()).isEqualTo(COMPANION);
         assertThat(comando.pregunta()).isEqualTo("hola");
-        assertThat(comando.ambito()).isNull();
+        // D-255: SER atiende tambien el chat abierto desde un curso, y necesita saber desde cual.
+        assertThat(comando.ambito()).isEqualTo("el curso X");
         assertThat(comando.cursoId()).isNull();
     }
 

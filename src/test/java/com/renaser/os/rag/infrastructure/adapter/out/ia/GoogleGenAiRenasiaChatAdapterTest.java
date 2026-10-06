@@ -181,13 +181,17 @@ class GoogleGenAiRenasiaChatAdapterTest {
                 .doesNotContain("a las ocho y media");
     }
 
-    /** El bloque no depende del agente: Sparkie tambien lo recibe si el cliente pide VOZ. */
+    /**
+     * D-255: el prompt de Sparkie se borro. Si un turno llegara igual como tutor de cursos (el servicio
+     * ya lo pasa a SER), habla SER, con las pautas de voz si las pidio.
+     */
     @Test
-    @DisplayName("con canal VOZ, el tutor de cursos tambien recibe las pautas habladas")
-    void conVozElTutorTambienLasRecibe() {
+    @DisplayName("D-255: un turno del tutor de cursos lo responde SER, tambien por voz")
+    void elTutorDeCursosEsSer() {
         String sistema = promptDeSistemaCon(AgenteConversacional.COURSE_TUTOR, null, CanalConversacion.VOZ);
 
-        assertThat(sistema).contains("Eres Sparkie").contains("Esta respuesta se va a escuchar");
+        assertThat(sistema).contains("Eres SER").doesNotContain("Eres Sparkie")
+                .contains("Esta respuesta se va a escuchar");
     }
 
     private static final MemoriaDeRenasia MEMORIA = new MemoriaDeRenasia(List.of(new Recuerdo(UUID.randomUUID(),
@@ -217,13 +221,16 @@ class GoogleGenAiRenasiaChatAdapterTest {
         assertThat(sistema).doesNotContain("Lo que sabes de esta persona").doesNotContain("Todavia no sabes nada");
     }
 
-    /** D-102: la memoria es del acompanante; Sparkie no la recibe aunque llegue. */
+    /**
+     * D-102: la memoria es del acompanante. Un turno que llegara rotulado como tutor de cursos no la
+     * recibe (el servicio lo rotula como SER antes, y ahi si la recibe).
+     */
     @Test
-    @DisplayName("el tutor de cursos no recibe la memoria del acompanante")
+    @DisplayName("un turno rotulado como tutor de cursos no recibe la memoria")
     void elTutorNoRecibeLaMemoria() {
         String sistema = promptDeSistemaCon(AgenteConversacional.COURSE_TUTOR, null, CanalConversacion.TEXTO, MEMORIA);
 
-        assertThat(sistema).contains("Eres Sparkie").doesNotContain("Trabaja de noche");
+        assertThat(sistema).contains("Eres SER").doesNotContain("Trabaja de noche");
     }
 
     private String promptDeSistemaCon(SituacionDelAprendiz situacion) {
