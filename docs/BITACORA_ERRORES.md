@@ -13992,3 +13992,25 @@ tocó. Front verificado (master `244401c`): los dos consumidores sin `participan
 2. Al agregar datos sensibles a una respuesta existente (D-252, la foto firmada), revisar quién recibe ese listado en
    cada rol, no solo en el del aprendiz: las pruebas de D-252 cubrían dueño, otro aprendiz, mentor y panel, y ninguna
    pedía el listado como admin sin filtro.
+
+## E-549 · La Ficha Inicial deja elegir fecha de nacimiento desde los 14 años, y la Política de Privacidad dice «solo mayores de edad» (app + backend, producto, RESUELTO, 06/10)
+
+**Síntoma:** en la Ficha Inicial → «Sobre ti», la rueda de años llega hasta el año de quien cumple **14** (en 2026,
+hasta 2012), y el servidor guarda `POST /api/v1/onboarding/answers` con `birth_date = "2012-06-15"` con **200**. La
+Política de Privacidad publicada (D-245) dice que el programa es solo para mayores de edad.
+
+**Causa real:** `src/components/fechaEnRuedas/logicaDeFecha.ts` heredó `EDAD_MINIMA = 14` del selector anterior
+(`currentYear - 14 - i`), y D-80 llevaba desde el 2026-09-03 como «PENDIENTE, hay que hacerlo en el servidor»: la
+única barrera era el cliente, y esa barrera decía 14. Además la rueda cortaba por **año**, no por fecha: aun con 18,
+en el año tope dejaba elegir meses y días posteriores a hoy (alguien con 17 años y meses).
+
+**Arreglo (decisión del dueño: 18):** app — `EDAD_MINIMA = 18`, «hoy» = día de Lima (`hoyEnLima`), las ruedas no pasan
+de la fecha de quien cumple 18 hoy (en el año y mes tope se recortan meses y días) y el paso «Sobre ti» frena una fecha
+vieja con «Renaser es solo para mayores de 18 años» (front `4146bfb`). Backend — `FechaDeNacimiento.requireMayorDeEdad`
+en el dominio de `onboarding`, llamado desde `RespuestaService.guardar` para la clave `birth_date`: **400
+`Renaser es solo para mayores de 18 años`**, sin pisar la fecha guardada.
+
+**Prevención:** las pruebas fallan contra lo viejo: `logicaDeFecha.test.ts` y `pasosFicha.test.ts` (17 años y 364
+días → no; 18 justos → sí; el «hoy» de Lima a las 02:00 UTC), `RespuestaServiceTest.guardarFechaDeNacimientoDeMenorSeRechaza`
+y `FechaDeNacimientoMayorDeEdadIT`. La regla de negocio vive en el servidor; la app solo la anticipa. **Lección:** una
+regla que un documento público promete (la política) no puede vivir solo en el cliente — se valida donde se guarda.

@@ -10,6 +10,7 @@ import com.renaser.os.onboarding.application.ports.out.respuesta.SaveRespuestaPo
 import com.renaser.os.onboarding.domain.model.caja.CajaRenaser;
 import com.renaser.os.onboarding.domain.model.cuestionario.Pregunta;
 import com.renaser.os.onboarding.domain.model.cuestionario.Seccion;
+import com.renaser.os.onboarding.domain.model.respuesta.FechaDeNacimiento;
 import com.renaser.os.onboarding.domain.model.respuesta.Respuesta;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -58,6 +59,7 @@ public class RespuestaService implements GuardarRespuestaUseCase, ObtenerRespues
         Pregunta pregunta = loadCuestionarioPort.porId(command.preguntaId())
                 .orElseThrow(() -> new NoSuchElementException("Pregunta no encontrada: " + command.preguntaId()));
         requireNoEsDeLaCaja(pregunta);
+        requireMayorDeEdadSiEsLaFechaDeNacimiento(pregunta, command.valorTexto());
         requireMediaPropia(command.mediaId(), command.usuarioId());
 
         Optional<Respuesta> existente = loadRespuestaPort.porUsuarioYPregunta(command.usuarioId(),
@@ -106,6 +108,16 @@ public class RespuestaService implements GuardarRespuestaUseCase, ObtenerRespues
                 .anyMatch(seccion -> seccion.id() == pregunta.seccionId());
         if (deLaCaja) {
             throw new NotAuthorizedException("Las preguntas de la Caja Renaser no se responden por acá");
+        }
+    }
+
+    /**
+     * D-80 (2026-10-06): la fecha de nacimiento tiene que ser de alguien con 18 años cumplidos en el día de Lima.
+     * Antes de construir nada: una fecha rechazada no pisa la que ya estuviera guardada.
+     */
+    private void requireMayorDeEdadSiEsLaFechaDeNacimiento(Pregunta pregunta, String valorTexto) {
+        if (FechaDeNacimiento.CLAVE_PREGUNTA.equals(pregunta.clavePregunta())) {
+            FechaDeNacimiento.requireMayorDeEdad(valorTexto, clock.now());
         }
     }
 

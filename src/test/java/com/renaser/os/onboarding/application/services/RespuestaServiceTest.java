@@ -342,4 +342,55 @@ class RespuestaServiceTest {
         verify(loadRespuestaPort).todasDeUsuario(usuarioId);
         verify(loadRespuestaPort, never()).todasDeUsuario(org.mockito.ArgumentMatchers.argThat(id -> !id.equals(usuarioId)));
     }
+
+    // ── D-80 (2026-10-06): solo mayores de 18, con el día de Lima ───────────
+
+    private Pregunta preguntaFechaDeNacimiento() {
+        return new Pregunta(52, (short) 1, "birth_date", "Fecha de nacimiento", TipoPreguntaOnboarding.FECHA, null,
+                true, (short) 0, null, null, Instant.now());
+    }
+
+    @Test
+    @DisplayName("guardar(): birth_date de 17 años y 364 días -> 400 «Renaser es solo para mayores de 18 años», no guarda ni pisa")
+    void guardarFechaDeNacimientoDeMenorSeRechaza() {
+        actorActivo();
+        when(loadCuestionarioPort.porId(52)).thenReturn(Optional.of(preguntaFechaDeNacimiento()));
+
+        // El reloj del test es el 24/08/2026 (Lima): quien nació el 25/08/2008 cumple 18 mañana.
+        var comando = new GuardarRespuestaCommand(usuarioId, 52, "2008-08-25", null, null, null, null, null);
+
+        assertThatThrownBy(() -> service.guardar(comando))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Renaser es solo para mayores de 18 años");
+        verify(loadRespuestaPort, never()).porUsuarioYPregunta(any(), org.mockito.ArgumentMatchers.anyInt());
+        verify(saveRespuestaPort, never()).guardar(any());
+    }
+
+    @Test
+    @DisplayName("guardar(): birth_date de 18 justos hoy -> se guarda")
+    void guardarFechaDeNacimientoDeDieciochoJustos() {
+        actorActivo();
+        when(loadCuestionarioPort.porId(52)).thenReturn(Optional.of(preguntaFechaDeNacimiento()));
+        when(loadRespuestaPort.porUsuarioYPregunta(usuarioId, 52)).thenReturn(Optional.empty());
+        when(saveRespuestaPort.guardar(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var comando = new GuardarRespuestaCommand(usuarioId, 52, "2008-08-24", null, null, null, null, null);
+
+        assertThat(service.guardar(comando).valorTexto()).isEqualTo("2008-08-24");
+    }
+
+    @Test
+    @DisplayName("guardar(): la regla de edad es solo para birth_date — otra pregunta FECHA con una fecha reciente se guarda")
+    void otraPreguntaFechaNoMiraLaEdad() {
+        actorActivo();
+        Pregunta otraFecha = new Pregunta(60, (short) 1, "fecha_inicio_negocio", "Inicio", TipoPreguntaOnboarding.FECHA,
+                null, false, (short) 0, null, null, Instant.now());
+        when(loadCuestionarioPort.porId(60)).thenReturn(Optional.of(otraFecha));
+        when(loadRespuestaPort.porUsuarioYPregunta(usuarioId, 60)).thenReturn(Optional.empty());
+        when(saveRespuestaPort.guardar(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var comando = new GuardarRespuestaCommand(usuarioId, 60, "2026-01-10", null, null, null, null, null);
+
+        assertThat(service.guardar(comando).valorTexto()).isEqualTo("2026-01-10");
+    }
 }
