@@ -269,7 +269,7 @@ public class SecurityConfig {
                         // ---------------------------------------------------------------------
                         .requestMatchers("/api/v1/journal/**", "/api/v1/espejo-sombra/**",
                                 "/api/v1/radar/**", "/api/v1/profile/**").authenticated()
-                        .requestMatchers("/api/v1/phase-contracts/**", "/api/v1/points/**",
+                        .requestMatchers("/api/v1/phase-contracts/**", "/api/v1/phase-animals/**", "/api/v1/points/**",
                                 "/api/v1/weekly-habit-days/**").authenticated()
                         .requestMatchers("/api/v1/notifications/**", "/api/v1/notification-preferences/**",
                                 "/api/v1/push-tokens/**").authenticated()

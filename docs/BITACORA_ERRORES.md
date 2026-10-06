@@ -14455,3 +14455,32 @@ sobrecargas), `Instant.now()`, `LocalDateTime/ZonedDateTime/OffsetDateTime.now()
 (usa `clock.today()` como fecha por defecto de la regeneración manual; es del módulo `points`, de otro agente: al
 migrarlo se borra la línea). Comprobado que muerde: con la lista vacía el test falla señalando esa línea.
 Antes de este candado solo se vigilaba `adapter.in` (`adaptersDeEntradaNoUsanLaFechaDelServidor`).
+
+## E-568 · `No value at JSON path "0.personalizada"` en una prueba escrita con un heredoc de bash sin comillas (entorno, D-258, RESUELTO, 06/10)
+
+**Síntoma (literal):** `java.lang.AssertionError: No value at JSON path "0.personalizada"` /
+`PathNotFoundException: Expected to find an object with property ['0'] in path $ but found 'net.minidev.json.JSONArray'`.
+La respuesta real era correcta (`[{"fase":1,...}]`).
+
+**Causa real:** el archivo de prueba se generó con `cat > X <<EOF` (sin comillas en `EOF`) para interpolar el paquete, y
+bash expandió `$[0]` como aritmética: `jsonPath("$[0].personalizada")` quedó como `jsonPath("0.personalizada")`.
+
+**Arreglo:** corregir las rutas JSON a mano.
+
+**Prevención:** al generar código Java desde bash, usar `<<'EOF'` (con comillas) y sustituir el paquete después, o
+revisar con `grep -n 'jsonPath("' ` lo generado: cualquier `$` seguido de `[`, `(` o un dígito se pierde sin aviso.
+
+## E-569 · `RutasCubiertasPorElFiltroTest`: «Estas rutas no las alcanza ningun matcher .authenticated() de SecurityConfig» (D-258, RESUELTO, 06/10)
+
+**Síntoma (literal):** `Estas rutas no las alcanza ningun matcher .authenticated() de SecurityConfig y tampoco declaran
+@PublicEndpoint. Como la cadena termina en anyRequest().permitAll(), quedan accesibles SIN sesion` — con
+`/api/v1/phase-animals`, `/api/v1/phase-animals/{fase}/image` y las otras rutas del controlador nuevo.
+
+**Causa real:** un controlador con prefijo nuevo (`/api/v1/phase-animals`) no entra solo en la cadena de seguridad: cada
+prefijo se lista a mano en `SecurityConfig`. Las pruebas unitarias del controlador (filtros apagados) no lo ven; lo vio
+`clean verify` completo.
+
+**Arreglo:** agregar `"/api/v1/phase-animals/**"` al matcher `.authenticated()` junto a `phase-contracts`.
+
+**Prevención:** ya es ejecutable (`RutasCubiertasPorElFiltroTest`). Al crear un controlador con un prefijo nuevo, agregar el
+prefijo a `SecurityConfig` en el mismo cambio y correr esa prueba sola antes del `verify` completo.

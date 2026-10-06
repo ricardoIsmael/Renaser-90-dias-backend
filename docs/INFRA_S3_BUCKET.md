@@ -43,6 +43,7 @@ Verificado sobre los 12 lugares que llaman a `firmarSubida`:
 | `calendar/` | Portadas de evento | `EventoService` |
 | `soporte/` | Adjuntos de ticket | `TicketSoporteService` |
 | `bienvenida/portadas/` | Portada de la tarjeta de bienvenida que sube Administración (D-210). Es el único prefijo que el servidor también **baja** (`AlmacenamientoPort.leer`, `s3:GetObject`): la revisa y dibuja encima | `PortadaDeBienvenidaAdminService` |
+| `fases/animales/` | Imagen del animal de cada fase que sube Administración (D-258). Como `bienvenida/portadas/`, el servidor también la **baja** (`AlmacenamientoPort.leer`, `s3:GetObject`) para revisar formato, peso y medidas. Se lee con URL firmada | `CambiarImagenDeAnimalService` |
 
 Dentro de cada prefijo la ruta lleva el id del usuario y el de la entidad; por ejemplo
 `evidencia-habitos/{actorId}/{registroId}/{idGenerado}`. Eso ya está bien: **particiona por
