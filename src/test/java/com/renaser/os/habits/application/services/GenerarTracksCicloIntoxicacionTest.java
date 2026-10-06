@@ -33,7 +33,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -88,8 +87,6 @@ class GenerarTracksCicloIntoxicacionTest {
     private ApplicationEventPublisher events;
     @Mock
     private IdGenerator idGenerator;
-    @Mock
-    private PlatformTransactionManager transactionManager;
 
     private RegistroService service;
     private final UserId participante = UserId.of(UUID.randomUUID());
@@ -102,8 +99,7 @@ class GenerarTracksCicloIntoxicacionTest {
         service = new RegistroService(loadRegistroPort, saveRegistroPort, loadHabitoPort, loadHorarioPort,
                 loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder, loadDesbloqueoPort, events,
                 TRES_AM_UTC, idGenerator,
-                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()),
-                transactionManager);
+                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()));
         lenient().when(idGenerator.newId()).thenAnswer(inv -> UUID.randomUUID());
         lenient().when(saveRegistroPort.insertarSiNoExiste(any())).thenReturn(true);
         when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(jugoVerde, postDiario, diaSinCelular));

@@ -13758,12 +13758,23 @@ pasar por la API pública del paquete, que resuelve la plataforma sola.
 
 **Para que no vuelva:** una imagen con fondo propio dentro de un marco con otro fondo se mide con la proporción real de la imagen, no con una supuesta; y se mira en los dos temas antes de dar por buena una captura.
 
-## E-534 · El barrido que expira registros usa la fecha UTC: al oeste de Lima expiraría lo de HOY una hora o más antes de la medianoche local (latente, SIN ARREGLAR, 05/10)
+## E-534 · El barrido que expira registros usa la fecha UTC: al oeste de Lima expiraba lo de HOY una hora o más antes de la medianoche local (backend, RESUELTO, 05/10)
+
+> **Corregido 2026-10-05 (mismo día).** El título decía «(latente, SIN ARREGLAR, 05/10)» y la solución decía «ninguna
+> en este cambio (regla 00: un segundo bug encontrado se reporta, no se arregla de paso)». El dueño pidió arreglarlo
+> («verifica con cuidado esta parte, ya tuve muchos problemas antes; la mejor opción») y está resuelto abajo.
 
 **Síntoma:** no observado en uso (el padrón entero está en `America/Lima`: 73 de 73 filas de
 `participantes_programa` en `renaser_ui0210`). Encontrado leyendo el código al diseñar la racha de cada hábito
 (D-254). Lo que vería un participante con `timezone = 'America/Mexico_City'` (UTC−6): a las 23:00 de su día, sus
-hábitos todavía pendientes de HOY pasan a `EXPIRADO`.
+hábitos todavía pendientes de HOY pasan a `EXPIRADO`. Y con eso, lo que ve en la app: el track sale «vencido», sin
+`plazoEvidencia` ni puntos en juego (`puntosEnJuego` es `null` en un estado terminal), aunque completarlo en esa hora
+todavía pagaba el puntaje completo, y no le llega el aviso «por vencer». Al este (UTC+1) era al revés: lo de ayer
+vencía recién a las 06:00 de su día siguiente. La prueba que lo reproduce, contra el código de antes
+(`ExpiracionPorZonaIT`, 5 de 7 en rojo, las 2 de Lima en verde), dice literal:
+`[America/Los_Angeles del 2026-11-08 a las 2026-11-09T05:00:00Z UTC (2026-11-08T21:00 en su zona)]` (vencido a las
+21:00 de su propio día) y `[Africa/Lagos del 2026-11-09 a las 2026-11-09T23:00:00Z UTC (2026-11-10T00:00 en su zona)]`
+(sin vencer a su medianoche).
 
 **Causa real:** `ExpirarRegistrosScheduler` corre a las 05:00 UTC y llama
 `expirarPendientesAnterioresA(clock.today())`; `SystemClock.today()` es `LocalDate.now(ZoneOffset.UTC)`. Para Lima
@@ -13771,10 +13782,76 @@ hábitos todavía pendientes de HOY pasan a `EXPIRADO`.
 la de mañana mientras localmente sigue siendo hoy. Es el caso que la regla 02 §1 describe como «mal por
 construcción» (un `@Scheduled` diario que depende del día local).
 
-**Solución aplicada:** ninguna en este cambio (regla 00: un segundo bug encontrado se reporta, no se arregla de
-paso). La racha de D-254 no depende de esto: un `EXPIRADO` de HOY no la corta (supuesto S-2, se puede completar
-tarde).
+**Solución aplicada (rama `racha-y-cierre`):**
+- **Primero se caracterizó lo de antes** con `ExpiracionPorZonaIT` (Postgres real): el reloj avanza hora por hora y
+  en cada hora se disparan los `@Scheduled` de `ExpirarRegistrosScheduler` cuyo cron **de producción** cae ahí, así la
+  misma prueba describe el barrido viejo y el nuevo. Las dos de Lima (hora por hora durante 48 h: vence justo a las
+  05:00 UTC, lo no `PENDIENTE` no se toca ni en `actualizado_en`; DORMIR de noche con `plazoEvidencia` = 05:00 UTC,
+  DESPERTAR registrado a las 23:55 con su hora, DORMIR ya vencido registrado a las 00:30 con su hora y 0 puntos)
+  **pasaron con el código de antes y pasan con el nuevo**.
+- **Cada registro vence según el día local de SU participante**: `domain.model.registro.CorteDeExpiracion`
+  (`ahora.atZone(zona).toLocalDate()`), la misma frontera que ya usa `VentanaEntrega` para recortar la extensión
+  contra la medianoche local, así que el barrido queda coherente con `plazoEvidencia` en cualquier zona.
+- **Cada hora, minuto 0** (`renaser.scheduling.expirar-registros.cron`, por defecto `0 0 * * * *` UTC), con el mismo
+  `@SchedulerLock` `habits-expirar-registros`. Para Lima la corrida de las 05:00 es la que vence, igual que antes; las
+  otras 23 no escriben nada. Las **rachas sin celular** se separaron a su propio método y siguen a las **05:00 UTC**
+  (`habits-expirar-rachas-sin-celular`): vencen por un instante, no por un día local, y moverlas cambiaría cuándo se
+  liberan para todo el padrón.
+- **Regla 02 §4:** `ExpiracionDeRegistrosService` (sale de `RegistroService`) pagina de a 200 participantes por keyset
+  (una consulta agrupada por página, `registros_estado_idx`; solo lee las filas de quien tiene algo vencido), resuelve
+  las zonas de la página en una consulta (`users.api.ProgramasActivadosFinder.deVarios`; si el lote falla, de a uno),
+  sin `@Transactional` sobre el barrido, cada fila en su transacción (C-6) y `try/catch` por participante y por fila.
+  Sin migración.
+- **Prueba real (5–6/10, copias de `renaser_ui0210`: 2065 registros, todos de `America/Lima`):** el barrido viejo
+  (código de `6284a1b1`) y el nuevo, cada uno en su copia y con el reloj fijado hora por hora desde las 05:00 UTC del 5
+  hasta las 06:00 UTC del 6 (el viejo disparó 2 veces, el nuevo 26): las dos copias quedan **idénticas fila por fila**
+  (id, estado, `actualizado_en`, `completado_en`, puntos), con los 1230 vencidos a las 05:00 UTC exactas. De 00:00 a
+  04:00 UTC del 6 el nuevo no venció nada: los 30 `PENDIENTE` del 5 (el hoy de Lima) siguieron abiertos.
+  Y con el reloj real, el jar nuevo en el puerto 8093 sobre otra copia: la corrida horaria de las 01:00 UTC del 6 (20:00
+  del 5 en Lima) dejó en el log `barrido de expiracion: 1200 registro(s) expirado(s), 0 fallido(s), 49 participante(s)
+  con pendientes` (los atrasados de antes del 5, que esa base tenía sin vencer) y los 29 `PENDIENTE` del 5 siguieron
+  abiertos; el barrido viejo, si hubiera corrido a esa hora, los habría vencido (la fecha UTC ya era el 6).
+- **La única diferencia posible para Lima:** si una noche el barrido no corrió (backend caído a las 05:00 UTC), el
+  viejo recién se ponía al día a las 05:00 UTC siguientes; el nuevo lo hace en la primera hora que corre. El estado al
+  que se llega es el mismo (es lo que pide la regla 02 §2: correrlo tarde se pone al día).
 
-**Para que no vuelva / cómo arreglarlo:** decidir el corte por participante en SU zona (`clock.now().atZone(zona)
-.toLocalDate()`), corriendo el barrido cada hora como pide la regla 02 §1, o filtrando por zona. Antes, confirmar
-con el dueño si habrá participantes fuera de Lima.
+**Para que no vuelva:** `ExpiracionPorZonaIT` (Los Ángeles UTC−8, Lagos UTC+1, correr dos veces, correr tarde, un
+participante con la zona rota) y `CorteDeExpiracionTest` (relojes entre 00:00 y 05:00 UTC) fallan si el corte vuelve a
+ser una fecha única para todo el padrón. En la suite el cron horario está apagado (`"-"` en el `application.yaml` de
+pruebas) para que no expire a la hora en punto lo que otra prueba sembró; se prueba llamándolo directo. Quedan otros
+`@Scheduled` diarios a hora UTC fija que asumen Lima: ver E-536.
+
+## E-535 · El barrido de expiración puede pisar un hábito que se completa en el mismo instante (latente, SIN ARREGLAR, 05/10)
+
+**Síntoma:** no observado. Encontrado al rehacer el barrido de E-534. Lo que pasaría: alguien completa un hábito de
+ayer justo cuando el barrido lo está expirando; los puntos quedan acreditados en `points`, pero la fila queda
+`EXPIRADO` con `completado_en` nulo y `puntos_otorgados = 0`.
+
+**Causa real:** el barrido lee las filas `PENDIENTE` sin cerrojo y después guarda cada una con
+`saveAndFlush(merge(...))` de la entidad entera (`RegistroHabitoPersistenceAdapter.save`). `registros_habito` no tiene
+`@Version`. Si `completar` (que sí bloquea la fila, `byIdParaEscritura`) confirma entre la lectura y el guardado, el
+`merge` copia encima el estado viejo con `EXPIRADO`. La ventana es de milisegundos y una sola vez por fila (la corrida
+que la vence); E-534 no la agranda: para Lima sigue siendo la corrida de las 05:00 UTC, como antes.
+
+**Solución aplicada:** ninguna en este cambio (regla 00: se reporta, no se arregla de paso).
+
+**Cómo arreglarlo:** guardar la expiración con un `UPDATE … SET estado = 'EXPIRADO' … WHERE id = ? AND estado =
+'PENDIENTE'` (si no actualiza nada, alguien la completó: no hacer nada), o leer cada fila con el cerrojo de
+`byIdParaEscritura` dentro de su transacción.
+
+## E-536 · Otros `@Scheduled` diarios a hora UTC fija asumen que todo el padrón está en Lima (latente, SIN ARREGLAR, 05/10)
+
+**Síntoma:** no observado (todo el padrón está en `America/Lima`). Revisión pedida por la lección de E-91 («un
+hallazgo de zona horaria en un módulo es un hallazgo del sistema: revisar TODOS los `@Scheduled`»), al cerrar E-534.
+
+**Causa real:** siguen diarios a una hora UTC elegida para la medianoche de Lima: `habits.GenerarTracksDelDiaScheduler`
+(05:02, genera «hoy en su zona»: al oeste de Lima, a las 05:02 UTC todavía es ayer y el día nuevo queda sin
+pregenerar hasta que la persona abre la app; D-72 ya lo dejó anotado como límite conocido),
+`habits.PromoverCambiosHorarioScheduler` (04:40, `clock.today()`), `points.SnapshotRankingScheduler` (05:05,
+`clock.today()`), `rocks.VerdugoIgnoradoScheduler` (23:55, `clock.today()`) y
+`rag.GenerarInformesSemanalesScheduler` (lunes 03:00, `clock.today()`).
+
+**Solución aplicada:** ninguna (fuera del pedido; regla 00). Para Lima son correctos.
+
+**Cómo arreglarlo, si llega a haber participantes fuera de Lima:** el mismo patrón de E-534 y del reloj del programa
+(D-67/E-91): correr cada hora y que el dominio decida con el día local de cada participante.

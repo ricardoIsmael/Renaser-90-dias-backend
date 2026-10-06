@@ -804,7 +804,9 @@ registra en `historial_cambios_horario` y borra el pendiente.
   anterior y abrir la configuración del día nuevo son responsabilidades distintas (SRP, §5.4.8) — juntas,
   un fallo de una arrastra a la otra.
 - **Hora: `0 40 4 * * *` UTC.** El barrido de `habits` corre a las 05:00 UTC (~00:00 Lima, hora heredada
-  del cron viejo) y la promoción tiene que correr **antes** — el orden conceptual del amanecer es
+  del cron viejo) y la promoción tiene que correr **antes**
+  (**corregido 2026-10-05, E-534:** el barrido de registros ya corre cada hora en el minuto 0 y vence según el día
+  local de cada participante; para Lima sigue venciendo a las 05:00 UTC, así que este orden se mantiene) — el orden conceptual del amanecer es
   "primero queda vigente el horario nuevo, después se cierra lo vencido". Dos `@Scheduled` con el mismo
   cron no garantizan orden (el pool de Spring puede correrlos en paralelo), así que la separación es
   explícita en la hora; 04:40 además no pisa las 04:30 de la purga de `notifications`.
@@ -1210,16 +1212,28 @@ racha de ayer.
 `fecha_inicio` viaja en `ProgresoParticipanteHabits` → `RegistrosDelDia.inicioDelPrograma`, de la misma lectura de
 progreso que ya autorizaba el pedido (V-5): no suma consultas.
 
-**Supuestos (a confirmar con el dueño; se eligió lo más conservador).** S-1: un día opcional (intoxicación,
-opcional del catálogo) sin cumplir corta. S-2: hoy solo corta `FALLIDO`; `PENDIENTE`/`EN_CURSO`/`EXPIRADO` de hoy
+**Decisiones del dueño (2026-10-05, literales).** (1) «Un día opcional sin cumplir NO corta la racha (ciclos de
+intoxicación 8–10/17–19/26–28, Día sin celular, Km…): no suma ni corta, igual que un día no programado.» Un opcional
+cumplido suma. (2) «Mostrar la racha congelada de un hábito que hoy no tiene track (no le toca hoy o está en pausa)»:
+va en `rachaDias` de cada hábito de `GET /api/v1/habits` (ver abajo).
+
+**Supuestos (a confirmar con el dueño; se eligió lo más conservador).** S-1: ~~un día opcional (intoxicación,
+opcional del catálogo) sin cumplir corta~~ — **corregido 2026-10-05**, lo decidió el dueño al revés: (1). S-2: hoy solo corta `FALLIDO`; `PENDIENTE`/`EN_CURSO`/`EXPIRADO` de hoy
 todavía se pueden completar. S-3: un día ya terminado sin `COMPLETADO` corta aunque siga `PENDIENTE` (barrido no
 pasado); si se completa tarde, la racha se recompone sola. S-4: nada antes de `fecha_inicio`; programa sin empezar
 → 0. S-5: un día sin fila por falla del barrido no corta. Todos están en el javadoc de `RachaDelHabito` y fijados
 por una prueba cada uno.
 
-**Lo que no cubre.** El campo va en el track: un hábito sin track de hoy (no le toca hoy, o en pausa) no trae
-racha y la app no la dibuja. Si se quiere ver congelada durante la pausa, el lugar natural es `GET
-/habit-unlocks` (pendiente de decidir).
+**La racha congelada (decisión 2).** `GET /api/v1/habits` trae `rachaDias` en cada hábito
+(`ConsultarMisHabitosUseCase.consultarConRachas` → `RachasDeHabitos.de(participante, hábitos, hoy, inicio)`): la
+misma regla y la misma lectura por páginas, para todos los hábitos del catálogo y los personales a la vez. Training
+arma las tarjetas sin track de ese listado, así que ahí la toma. No va en `GET /habit-unlocks`: ese listado solo tiene
+fila de los hábitos elegidos o pausados, y un hábito que hoy no toca por día de la semana no aparece.
+`consultar` (sin racha) sigue igual para `PlanDeHabitosService`, que no la usa.
+
+> **Corregido 2026-10-05 (mismo día).** Este párrafo se llamaba «Lo que no cubre» y decía: «El campo va en el track:
+> un hábito sin track de hoy (no le toca hoy, o en pausa) no trae racha y la app no la dibuja. Si se quiere ver
+> congelada durante la pausa, el lugar natural es `GET /habit-unlocks` (pendiente de decidir).» El dueño lo decidió.
 
 **Costo.** Medido en una copia de `renaser_ui0210`: la consulta de la página, 0,10 ms (`EXPLAIN ANALYZE`, 159
 filas de 15 hábitos). Lo normal es una página por pedido; una racha más larga que 35 días (o una pausa así de
@@ -1230,3 +1244,28 @@ UTC), `RachasDeHabitosTest` (paginación), `TracksDeHoyConsultasTest` (a las 01:
 consulta para todos los hábitos) y `RachaDelHabitoIT` (Tomcat real + Postgres, reloj a las 03:00 UTC: la dueña ve
 sus rachas, otro aprendiz no ve lo ajeno y su racha del mismo hábito es la suya, sin sesión no hay nada, y la
 respuesta conserva todos los campos que lee el APK publicado).
+
+## 27. El barrido de expiración, por el día local de cada participante (E-534) — 2026-10-05
+
+**Qué estaba mal.** `ExpirarRegistrosScheduler` corría a las 05:00 UTC y vencía todo lo `PENDIENTE` con fecha
+anterior a la fecha **UTC**: la medianoche de Lima y de nadie más (regla 02 §1). Al oeste vencía lo de HOY antes de
+tiempo (el track salía «vencido» y sin plazo aunque todavía pagaba); al este, lo de ayer horas tarde.
+
+**Qué hace ahora.** Cada registro vence cuando termina el día de SU participante, en su zona:
+
+| Pieza | Qué hace |
+|---|---|
+| `domain.model.registro.CorteDeExpiracion` | La regla, pura: `hoyEnSuZona = ahora.atZone(zona).toLocalDate()`; vence un `PENDIENTE` de una fecha anterior. Es la misma frontera con la que `VentanaEntrega` recorta la extensión, así que el barrido queda coherente con `plazoEvidencia` |
+| `application.services.ExpiracionDeRegistrosService` | El barrido (sale de `RegistroService`): páginas de 200 participantes por keyset, zonas de la página en una consulta, solo lee filas de quien tiene algo vencido, cada fila en su transacción (C-6), `try/catch` por participante y por fila |
+| `ConsultarPendientesVencidosPort` / `PendientesVencidosJdbcAdapter` | Una consulta agrupada por página (`registros_estado_idx`): participante y su fecha pendiente más vieja |
+| `ConsultarZonasDeParticipantesPort` / `ZonasDeParticipantesAdapter` | `users.api.ProgramasActivadosFinder.deVarios` (D-41); quien no activó su programa se lee solo |
+| `ExpirarRegistrosScheduler` | Registros: **cada hora, minuto 0** (`renaser.scheduling.expirar-registros.cron`), lock `habits-expirar-registros`. Rachas sin celular: **05:00 UTC como siempre**, lock propio `habits-expirar-rachas-sin-celular` (vencen por instante, no por día local) |
+
+**Para Lima no cambia nada:** su día termina a las 05:00 UTC, que es la corrida que vence; las otras 23 no escriben.
+Lo prueba `ExpiracionPorZonaIT` hora por hora, con el mismo archivo contra el código de antes y el de ahora (las dos
+de Lima pasan en ambos; las de Los Ángeles, Lagos, correr tarde y zona rota fallaban antes). Sin migración. En la
+suite el cron horario está apagado (`"-"`) y el barrido se llama directo.
+
+Pruebas: `CorteDeExpiracionTest`, `ExpiracionDeRegistrosServiceTest` (zonas, paginación, quien falla no frena),
+`ExpirarRegistrosSchedulerTest` (crons y cerrojos), `ExpiracionPorZonaIT`.
+

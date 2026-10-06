@@ -254,17 +254,57 @@ class RachaDelHabitoTest {
         }
     }
 
+    /**
+     * Decision 1 del dueño (2026-10-05): «Un dia opcional sin cumplir NO corta la racha (ciclos de intoxicacion
+     * 8–10/17–19/26–28, Dia sin celular, Km…): no suma ni corta, igual que un dia no programado.» Antes era el
+     * supuesto S-1 al reves (cortaba): {@code opcionalSinCumplirNoCorta} falla contra ese codigo.
+     */
     @Nested
-    @DisplayName("S-1: dias opcionales")
+    @DisplayName("decision 1: dias opcionales")
     class Opcionales {
 
-        @Test
-        @DisplayName("un dia opcional (ciclo de intoxicacion) que no se cumplio corta igual: tenia registro, le tocaba")
-        void opcionalSinCumplirCorta() {
-            List<DiaProgramado> dias = List.of(new DiaProgramado(HOY.minusDays(1), EXPIRADO, true),
-                    hace(2, COMPLETADO));
+        private DiaProgramado opcional(int haceDias, EstadoRegistro estado) {
+            return new DiaProgramado(HOY.minusDays(haceDias), estado, true);
+        }
 
-            assertThat(racha(dias).dias()).isZero();
+        @Test
+        @DisplayName("un dia opcional (ciclo de intoxicacion) vencido sin cumplir no corta ni suma: 1, como sin registro")
+        void opcionalSinCumplirNoCorta() {
+            List<DiaProgramado> dias = List.of(opcional(1, EXPIRADO), hace(2, COMPLETADO));
+
+            assertThat(racha(dias).dias()).isEqualTo(1);
+            assertThat(racha(dias)).isEqualTo(racha(List.of(hace(2, COMPLETADO))));
+        }
+
+        @Test
+        @DisplayName("un ciclo de intoxicacion entero sin cumplir (dias 8-10) no corta lo de antes ni lo de despues")
+        void cicloDeIntoxicacionEntero() {
+            List<DiaProgramado> dias = List.of(hace(0, COMPLETADO), opcional(1, EXPIRADO), opcional(2, PENDIENTE),
+                    opcional(3, EXPIRADO), hace(4, COMPLETADO), hace(5, COMPLETADO));
+
+            assertThat(racha(dias).dias()).isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("un opcional sin cumplir en cualquier estado no corta: EN_CURSO de ayer, FALLIDO de hoy")
+        void opcionalEnCualquierEstadoNoCorta() {
+            assertThat(racha(List.of(opcional(1, EN_CURSO), hace(2, COMPLETADO))).dias()).isEqualTo(1);
+            assertThat(racha(List.of(opcional(0, FALLIDO), hace(1, COMPLETADO))).dias()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("un dia obligatorio vencido sigue cortando aunque haya opcionales alrededor")
+        void elObligatorioSigueCortando() {
+            List<DiaProgramado> dias = List.of(opcional(1, EXPIRADO), hace(2, EXPIRADO), hace(3, COMPLETADO));
+
+            assertThat(racha(dias)).isEqualTo(new RachaDelHabito(0, true));
+        }
+
+        @Test
+        @DisplayName("solo opcionales sin cumplir: 0, y dias mas viejos todavia podrian traer racha")
+        void soloOpcionalesSinCumplir() {
+            assertThat(racha(List.of(opcional(1, EXPIRADO), opcional(2, EXPIRADO))))
+                    .isEqualTo(new RachaDelHabito(0, false));
         }
 
         @Test

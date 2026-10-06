@@ -40,12 +40,17 @@ import java.util.List;
  * los pintaba a todos iguales: los seis de CUERPO con el mismo simbolo. Es una clave, no un emoji:
  * el cliente decide como dibujarla, y el dia que cambie el diseno no hay que migrar la base.
  * {@code null} en los habitos PERSONAL, que no traen icono propio.
+ *
+ * <p>{@code rachaDias} (D-254, decision 2 del dueño del 2026-10-05: «mostrar la racha congelada de un habito que hoy
+ * no tiene track (no le toca hoy o esta en pausa)»): la racha de ESTE habito hasta hoy, con la misma regla y el
+ * mismo calculo que {@code rachaDias} de {@code GET /habit-tracks/today}. Aditivo: el APK publicado lo ignora.
+ * {@code null} en la respuesta del alta de un habito PERSONAL, que no la calcula (recien creado no tiene historia).
  */
 public record MiHabitoResponse(String id, String title, String description, HabitTypeDto habitType,
                                 HabitCategoryDto category, HabitEvidenceRequirementDto evidenceRequirement,
                                 boolean isOptional, boolean isSystemHabit, boolean isDeactivatable,
                                 String systemKey, String iconKey, List<String> activeWeekdays,
-                                int unlockDay, int daysUntilUnlock, boolean locked) {
+                                int unlockDay, int daysUntilUnlock, boolean locked, Integer rachaDias) {
 
     public static MiHabitoResponse from(HabitoConDias vista) {
         return new MiHabitoResponse(vista.habito().id().value().toString(), vista.habito().titulo(),
@@ -55,7 +60,7 @@ public record MiHabitoResponse(String id, String title, String description, Habi
                 vista.habito().esOpcional(), vista.habito().esDeSistema(), vista.habito().desactivable(),
                 vista.habito().claveSistema(), vista.habito().iconoClave(),
                 diasOrdenados(vista.diasSemana()), vista.diaDesbloqueo(),
-                vista.diasParaDesbloqueo(), vista.bloqueado());
+                vista.diasParaDesbloqueo(), vista.bloqueado(), vista.rachaDias());
     }
 
     private static List<String> diasOrdenados(java.util.Set<DayOfWeek> dias) {
@@ -75,6 +80,6 @@ public record MiHabitoResponse(String id, String title, String description, Habi
                 HabitTypeDto.from(habito.tipo()), HabitCategoryDto.fromClave(habito.categoriaClave()),
                 HabitEvidenceRequirementDto.from(habito.exigenciaEvidencia()), habito.esOpcional(),
                 habito.esDeSistema(), habito.desactivable(), habito.claveSistema(), habito.iconoClave(),
-                diasOrdenados(diasSemana), PRIMER_DIA, 0, false);
+                diasOrdenados(diasSemana), PRIMER_DIA, 0, false, null);
     }
 }

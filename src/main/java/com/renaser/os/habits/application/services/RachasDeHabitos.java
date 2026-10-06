@@ -11,12 +11,12 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * D-254 — la racha de cada habito de un dia, para la agenda ({@code GET /habit-tracks/today}). La
@@ -47,12 +47,23 @@ public class RachasDeHabitos {
 
     /** @return por cada habito con registro en {@code dia}, su racha en dias (0 si no tiene). */
     public Map<HabitoId, Integer> de(UserId participanteId, RegistrosDelDia dia) {
-        LocalDate hoy = dia.fecha();
-        LocalDate inicio = dia.inicioDelPrograma() != null ? dia.inicioDelPrograma()
-                : hoy.minusDays(DIAS_SIN_INICIO_CONOCIDO);
-        Set<HabitoId> abiertos = dia.registros().stream().map(RegistroHabito::habitoId)
-                .collect(Collectors.toCollection(HashSet::new));
-        Lectura lectura = new Lectura(hoy, dia.inicioDelPrograma(), abiertos);
+        return de(participanteId, dia.registros().stream().map(RegistroHabito::habitoId).toList(), dia.fecha(),
+                dia.inicioDelPrograma());
+    }
+
+    /**
+     * La racha de estos habitos hasta {@code hoy}, tengan o no registro hoy: la de un habito que hoy no le toca o
+     * esta en pausa queda congelada en lo que tenia (decision 2 del dueño, 2026-10-05, {@code GET /api/v1/habits}).
+     *
+     * @param hoy               la fecha de hoy en la zona del PARTICIPANTE (E-91)
+     * @param inicioDelPrograma {@code fecha_inicio}, o {@code null} si no se conoce (ventana de 90 dias)
+     * @return por cada habito pedido, su racha en dias (0 si no tiene)
+     */
+    public Map<HabitoId, Integer> de(UserId participanteId, Collection<HabitoId> habitos, LocalDate hoy,
+                                     LocalDate inicioDelPrograma) {
+        LocalDate inicio = inicioDelPrograma != null ? inicioDelPrograma : hoy.minusDays(DIAS_SIN_INICIO_CONOCIDO);
+        Set<HabitoId> abiertos = new HashSet<>(habitos);
+        Lectura lectura = new Lectura(hoy, inicioDelPrograma, abiertos);
         LocalDate hasta = hoy;
         while (!abiertos.isEmpty() && !hasta.isBefore(inicio)) {
             LocalDate desde = masTarde(inicio, hasta.minusDays(DIAS_POR_PAGINA - 1L));

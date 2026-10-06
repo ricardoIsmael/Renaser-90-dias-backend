@@ -42,7 +42,7 @@ public class MisHabitosController {
     // cumplir, y no es cierto. Ver EndpointAuthorizationDeclarationTest.HANDLERS_SIN_CLASIFICAR.
     @GetMapping
     public List<MiHabitoResponse> listar(@ActorAutenticado UserId actor) {
-        return consultarUseCase.consultar(actor).stream().map(MiHabitoResponse::from).toList();
+        return consultarUseCase.consultarConRachas(actor).stream().map(MiHabitoResponse::from).toList();
     }
 
     @RequiresPermission(Permission.USE_APP)

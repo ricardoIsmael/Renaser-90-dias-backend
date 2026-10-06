@@ -74,7 +74,10 @@ interface SpringDataRegistroHabitoRepository extends JpaRepository<RegistroHabit
     List<Object[]> diaProgramaMasAltoPorHabito(@Param("participanteId") UUID participanteId,
                                                @Param("habitos") Collection<UUID> habitos);
 
-    List<RegistroHabitoJpaEntity> findByEstadoAndFechaEjecucionLessThan(EstadoRegistroJpa estado, LocalDate fecha);
+    /** E-534: lo de UN participante en un estado, antes de su hoy. Usa {@code registros_dia_idx}. */
+    List<RegistroHabitoJpaEntity> findByParticipanteIdAndEstadoAndFechaEjecucionLessThan(UUID participanteId,
+                                                                                         EstadoRegistroJpa estado,
+                                                                                         LocalDate fecha);
 
     /**
      * D-43 (docs/MODULOS_A_AVANZAR.md §8): UNA sola consulta para TODOS los participantes

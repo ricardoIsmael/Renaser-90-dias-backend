@@ -1,7 +1,6 @@
 package com.renaser.os.habits.application.ports.out.registro;
 
 import com.renaser.os.habits.domain.model.habito.HabitoId;
-import com.renaser.os.habits.domain.model.registro.EstadoRegistro;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.shared.domain.UserId;
@@ -48,6 +47,10 @@ public interface LoadRegistroHabitoPort {
      */
     Map<HabitoId, Integer> diaProgramaMasAltoGeneradoPorHabito(UserId participanteId, Collection<HabitoId> habitos);
 
-    /** Para el scheduler nocturno: todos los registros en ese estado con fecha anterior a la dada (blind expire, mismo criterio que `expirePendingTracksForTrainees`). */
-    List<RegistroHabito> enEstadoConFechaAnteriorA(EstadoRegistro estado, LocalDate fecha);
+    /**
+     * Para el barrido de expiracion (E-534): lo {@code PENDIENTE} de UN participante con fecha anterior a su hoy.
+     * Reemplaza a {@code enEstadoConFechaAnteriorA(estado, fecha)}, que traia lo de TODO el padron con una sola fecha
+     * (la UTC) y es justamente el error: el dia de cada persona termina a su medianoche.
+     */
+    List<RegistroHabito> pendientesDeParticipanteAnterioresA(UserId participanteId, LocalDate fecha);
 }

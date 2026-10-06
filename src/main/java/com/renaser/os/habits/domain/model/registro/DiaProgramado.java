@@ -16,9 +16,9 @@ import java.util.Objects;
  * en que exista o no la fila, aunque hoy el habito tenga otros dias.
  *
  * @param opcional {@code registros_habito.es_opcional}: el dia no era exigible (ciclo de intoxicacion
- *                 o habito opcional del catalogo). Hoy NO cambia la racha — ver
- *                 {@link RachaDelHabito}, supuesto S-1 de D-254. Viaja igual para que esa decision
- *                 quede a la vista y una prueba la fije.
+ *                 o habito opcional del catalogo). Sin cumplir, no suma ni corta la racha (decision 1
+ *                 del dueño, 2026-10-05, en {@link RachaDelHabito}); cumplido, suma.
+ *                 <b>Corregido 2026-10-05:</b> decia «Hoy NO cambia la racha — supuesto S-1».
  */
 public record DiaProgramado(LocalDate fecha, EstadoRegistro estado, boolean opcional) {
 

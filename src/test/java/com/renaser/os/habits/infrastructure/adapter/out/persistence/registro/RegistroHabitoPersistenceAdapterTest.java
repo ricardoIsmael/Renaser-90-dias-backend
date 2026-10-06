@@ -115,17 +115,39 @@ class RegistroHabitoPersistenceAdapterTest {
         assertThat(recuperado.calificacionProductividad()).isEqualTo(7);
     }
 
+    /** E-534: el barrido lee lo de UNA persona, antes de SU hoy; nada de otra persona, nada que no este PENDIENTE. */
     @Test
-    void enEstadoConFechaAnteriorATraeSoloLoAnteriorYEnEseEstado() {
-        adapter.save(nuevoPendiente(LocalDate.of(2026, 8, 20))); // anterior, PENDIENTE
-        RegistroHabito hoy = adapter.save(nuevoPendiente(LocalDate.of(2026, 8, 24))); // no anterior
+    void pendientesDeParticipanteAnterioresATraeSoloLoSuyoAnteriorYPendiente() {
+        RegistroHabito vencido = adapter.save(nuevoPendiente(LocalDate.of(2026, 8, 20))); // anterior, PENDIENTE
+        adapter.save(nuevoPendiente(LocalDate.of(2026, 8, 24))); // su hoy: no anterior
+        RegistroHabito cumplido = adapter.save(nuevoPendiente(LocalDate.of(2026, 8, 21)));
+        cumplido.completar(5, null, null, null, CLOCK.now());
+        adapter.save(cumplido); // anterior pero COMPLETADO
+        UserId otro = participanteFixture();
+        adapter.save(RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), otro, habitoId,
+                LocalDate.of(2026, 8, 20), 5, TipoDia.DISCIPLINA, false, CLOCK.now())); // de otra persona
 
-        List<RegistroHabito> vencidos = adapter.enEstadoConFechaAnteriorA(EstadoRegistro.PENDIENTE,
+        List<RegistroHabito> vencidos = adapter.pendientesDeParticipanteAnterioresA(participanteId,
                 LocalDate.of(2026, 8, 24));
 
-        assertThat(vencidos).hasSize(1);
-        assertThat(vencidos.get(0).fechaEjecucion()).isEqualTo(LocalDate.of(2026, 8, 20));
-        assertThat(vencidos).noneMatch(r -> r.id().equals(hoy.id()));
+        assertThat(vencidos).extracting(RegistroHabito::id).containsExactly(vencido.id());
+    }
+
+    private UserId participanteFixture() {
+        UserId id = UserId.of(UUID.randomUUID());
+        entityManager.createNativeQuery("""
+                        INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado)
+                        VALUES (:id, :email, 'Otro', 'APRENDIZ', 'ACTIVO')
+                        """)
+                .setParameter("id", id.value())
+                .setParameter("email", id + "@renaser.test")
+                .executeUpdate();
+        entityManager.createNativeQuery("""
+                        INSERT INTO renaser.participantes_programa (usuario_id, dia_programa) VALUES (:id, 5)
+                        """)
+                .setParameter("id", id.value())
+                .executeUpdate();
+        return id;
     }
 
     @Test

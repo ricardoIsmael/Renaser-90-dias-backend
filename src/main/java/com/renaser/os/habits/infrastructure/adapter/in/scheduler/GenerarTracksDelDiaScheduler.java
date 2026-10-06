@@ -48,7 +48,7 @@ import java.util.List;
  * {@code evidence.ProcesarColaValidacionScheduler} y {@code users.AvanzarDiaProgramaScheduler}.
  *
  * <p>Aislamiento por participante (mismo espiritu que C-6, ver
- * {@code RegistroService.expirarPendientesAnterioresA}): un participante con datos
+ * {@code ExpiracionDeRegistrosService}): un participante con datos
  * corruptos (p.ej. zona horaria invalida) no puede tumbar el barrido de los demas. Cada
  * llamada al caso de uso corre en su propia transaccion (el metodo de la interfaz es
  * {@code @Transactional} por participante), asi que un fallo aislado no revierte lo ya
