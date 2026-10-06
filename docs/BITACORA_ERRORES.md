@@ -14502,3 +14502,18 @@ Jest terminaba con código 1. En local no se notó porque se miraban solo las l�
 
 **Prevención:** toda prueba con `TestRenderer.create` desmonta en `afterEach`. Al verificar el front, mirar el
 **código de salida** de `npx jest --ci` (lo que mira el CI), no solo `Tests: N passed`.
+
+## E-571 · Build Android local falla con JDK 25: «Execution failed for task ':shopify_react-native-skia:configureCMakeRelWithDebInfo[x86_64]'. > WARNING: A restricted method in java.lang.System has been called» (entorno, 2026-10-06)
+
+**Síntoma (literal):** `./gradlew assembleRelease` del front (prebuild de Expo) termina en `FAILURE: Build completed with 3 failures`,
+las tres `configureCMakeRelWithDebInfo[x86_64]` (`shopify_react-native-skia`, `react-native-screens`, `react-native-worklets`) con
+`> WARNING: A restricted method in java.lang.System has been called`.
+
+**Causa real:** el `JAVA_HOME` de la laptop es el JDK 25 (el que pide el backend). Con JDK 25 la tarea CMake de Gradle trata
+ese aviso de acceso restringido como fallo. No es el código.
+
+**Arreglo:** compilar el Android con el JDK 21 de sdkman:
+`JAVA_HOME=~/.sdkman/candidates/java/21.0.12+1.1-tem PATH=$JAVA_HOME/bin:$PATH ./gradlew assembleRelease -PreactNativeArchitectures=x86_64`.
+
+**Prevención:** backend con JDK 25, builds Android locales con JDK 21. Hacer el build en una copia aparte
+(`~/.cache/renaser-e2e/build-*`, `git archive` + `node_modules`), nunca en el worktree.
