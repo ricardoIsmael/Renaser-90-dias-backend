@@ -13582,3 +13582,13 @@ La API quedó ~55 s sin responder (502 de CloudFront). Después: `free -m` → t
 **Solución:** `paddingRight: 1` en el texto. Front `085ccb6`, con test.
 
 **Cómo evitar que vuelva:** un texto corto en una fila con ícono que se ve truncado sin «…» en Android es casi siempre este redondeo: darle 1 px de aire o `flexShrink: 0`.
+
+## E-540 · En Hoy (Android) la tarjeta dice «Acciones y» en vez de «Acciones y objetivos» (app, desarrollo, RESUELTO 05/10)
+
+**Síntoma (05/10, prueba final nativa en el emulador `Pixel_6`):** el rótulo de la tarjeta de acciones se lee «Acciones y»; el lector de pantalla sí lee «Acciones y objetivos», en un TextView de 334×50 (el alto de una sola línea). En web no pasa.
+
+**Causa real:** el rótulo iba suelto en una fila que reparte el espacio entre el rótulo y la cifra, y medía justo el ancho de su texto. Android lo partía en dos líneas por una fracción de píxel y «objetivos» quedaba fuera del alto de una línea. Apareció al quitar el espaciado de letras del `MicroLabel` (front `088f91d`): es el mismo redondeo de Yoga que E-527.
+
+**Solución:** los tres rótulos de Hoy con algo a la derecha («Hábitos de hoy», «Acciones y objetivos», «Última evidencia del muro») van en un contenedor que ocupa el ancho sobrante (`rotuloDeLaFila`, `flex: 1`). Front `rediseno-junto` `9bddb9f`, test `hoyRotulosDeFila.test.ts` (falla 2 de 2 contra lo viejo).
+
+**Cómo evitar que vuelva:** un texto en una fila con otro elemento a la derecha va dentro de un contenedor con `flex: 1` (o `flexShrink`), nunca suelto con su ancho justo. Los cambios de tipografía (tamaño, espaciado) se verifican en Android nativo.
