@@ -13855,3 +13855,13 @@ pregenerar hasta que la persona abre la app; D-72 ya lo dejó anotado como lími
 
 **Cómo arreglarlo, si llega a haber participantes fuera de Lima:** el mismo patrón de E-534 y del reloj del programa
 (D-67/E-91): correr cada hora y que el dominio decida con el día local de cada participante.
+
+## E-540 · En Hoy (Android) la tarjeta dice «Acciones y» en vez de «Acciones y objetivos» (app, desarrollo, RESUELTO 05/10)
+
+**Síntoma (05/10, prueba final nativa en el emulador `Pixel_6`):** el rótulo de la tarjeta de acciones se lee «Acciones y»; el lector de pantalla sí lee «Acciones y objetivos», en un TextView de 334×50 (el alto de una sola línea). En web no pasa.
+
+**Causa real:** el rótulo iba suelto en una fila que reparte el espacio entre el rótulo y la cifra, y medía justo el ancho de su texto. Android lo partía en dos líneas por una fracción de píxel y «objetivos» quedaba fuera del alto de una línea. Apareció al quitar el espaciado de letras del `MicroLabel` (front `088f91d`): es el mismo redondeo de Yoga que E-527.
+
+**Solución:** los tres rótulos de Hoy con algo a la derecha («Hábitos de hoy», «Acciones y objetivos», «Última evidencia del muro») van en un contenedor que ocupa el ancho sobrante (`rotuloDeLaFila`, `flex: 1`). Front `rediseno-junto` `9bddb9f`, test `hoyRotulosDeFila.test.ts` (falla 2 de 2 contra lo viejo).
+
+**Cómo evitar que vuelva:** un texto en una fila con otro elemento a la derecha va dentro de un contenedor con `flex: 1` (o `flexShrink`), nunca suelto con su ancho justo. Los cambios de tipografía (tamaño, espaciado) se verifican en Android nativo.
