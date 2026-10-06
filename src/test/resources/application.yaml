@@ -94,6 +94,9 @@ renaser:
     # (ExpiracionPorZonaIT). "-" es el cron desactivado de Spring.
     expirar-registros:
       cron: "-"
+    # E-560: el barrido de informes semanales tambien corre cada hora en produccion; en la suite se prueba directo.
+    informes-semanales:
+      cron: "-"
   # E-360: espeja el default de main (application.yaml): cuantos listeners de eventos corren a la vez.
   eventos:
     concurrencia: 4
