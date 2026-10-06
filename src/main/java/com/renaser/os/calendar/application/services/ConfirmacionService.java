@@ -1,6 +1,8 @@
 package com.renaser.os.calendar.application.services;
 
 import com.renaser.os.calendar.application.ports.in.confirmacion.ConfirmarAsistenciaUseCase;
+import com.renaser.os.calendar.application.ports.out.confirmacion.HistorialDeRespuestasPort;
+import com.renaser.os.calendar.application.ports.out.confirmacion.LoadConfirmacionPort;
 import com.renaser.os.calendar.application.ports.out.confirmacion.SaveConfirmacionPort;
 import com.renaser.os.calendar.application.ports.out.evento.LoadEventoPort;
 import com.renaser.os.calendar.application.ports.out.participante.ConsultarProgresoParticipanteCalendarPort.ProgresoParticipanteCalendar;
@@ -30,13 +32,18 @@ public class ConfirmacionService implements ConfirmarAsistenciaUseCase {
 
     private final LoadEventoPort loadEventoPort;
     private final SaveConfirmacionPort saveConfirmacionPort;
+    private final LoadConfirmacionPort loadConfirmacionPort;
+    private final HistorialDeRespuestasPort historialPort;
     private final AccesoEventoService accesoEventoService;
     private final Clock clock;
 
     public ConfirmacionService(LoadEventoPort loadEventoPort, SaveConfirmacionPort saveConfirmacionPort,
+                                LoadConfirmacionPort loadConfirmacionPort, HistorialDeRespuestasPort historialPort,
                                 AccesoEventoService accesoEventoService, Clock clock) {
         this.loadEventoPort = loadEventoPort;
         this.saveConfirmacionPort = saveConfirmacionPort;
+        this.loadConfirmacionPort = loadConfirmacionPort;
+        this.historialPort = historialPort;
         this.accesoEventoService = accesoEventoService;
         this.clock = clock;
     }
@@ -62,7 +69,15 @@ public class ConfirmacionService implements ConfirmarAsistenciaUseCase {
         }
 
         Instant ahora = clock.now();
-        saveConfirmacionPort.upsert(new Confirmacion(eventoId, inicioOcurrencia, actorId, estado, ahora, ahora));
+        boolean cambia = loadConfirmacionPort.estadoDe(eventoId, inicioOcurrencia, actorId)
+                .map(anterior -> anterior != estado).orElse(true);
+        Confirmacion respuesta = new Confirmacion(eventoId, inicioOcurrencia, actorId, estado, ahora, ahora);
+        saveConfirmacionPort.upsert(respuesta);
+        // D-256: el historial guarda cada CAMBIO de respuesta, desde la V93 (las anteriores no tienen
+        // historia). Repetir la misma respuesta (doble toque, reintento) no agrega fila.
+        if (cambia) {
+            historialPort.registrar(respuesta);
+        }
         // D-189 (2026-09-26): aca se apagaban, con ASISTE, los recordatorios pendientes de esta
         // persona para esta ocurrencia (en transaccion propia, C-15). Se quito: la alarma local
         // existe solo en la app del telefono, y quien respondia "Voy" desde la web se quedaba sin

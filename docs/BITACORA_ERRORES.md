@@ -14070,3 +14070,104 @@ comando aparte, sin el texto del script en la línea de comando. Levantó en 24 
 
 **Para que no vuelva:** en los `levantar-backend-*.sh`, buscar el proceso a matar por `java.*<jar>` (o guardar el PID en
 un archivo al arrancar y matar ese), y nunca escribir y ejecutar el script en el mismo comando de la herramienta.
+
+## E-550 · `PUT /rsvp` decide «día pasado» con la fecha UTC del servidor, no con la del evento (backend, calendario, ABIERTO — anotado, 06/10)
+
+**Síntoma:** ninguno reportado. Encontrado leyendo `ConfirmacionService.confirmar` al construir D-256:
+`Instant inicioHoy = clock.today().atStartOfDay(java.time.ZoneOffset.UTC).toInstant();` y rechazo con
+`No puedes confirmar asistencia a una ocurrencia de dias pasados` si el inicio es anterior a `inicioHoy − 12 h`.
+
+**Causa real:** `clock.today()` es la fecha del servidor en UTC (regla 02 §1). Entre las 19:00 y las 24:00 de
+Lima el «hoy» UTC ya es mañana, y el corte salta 24 h de golpe: a las 18:59 de Lima se acepta responder a un
+evento de esa mañana a las 06:00; a las 19:00, ya no. El corte depende de la hora del día, no del evento.
+
+**Arreglo:** ninguno todavía, a propósito: D-256 no lo necesita (pasar lista tiene su propia ventana,
+`VentanaDePasarLista`, en duraciones desde instantes) y cambiar cuándo se puede responder «Voy» es una regla de
+la app instalada. Queda a decidir con el dueño: o una duración desde el fin de la ocurrencia (como la ventana
+de D-256), o la fecha en la zona del evento (`clock.now().atZone(evento.timezone())`).
+
+**Prevención:** `ArchitectureTest.adaptersDeEntradaNoUsanLaFechaDelServidor` solo mira `adapter.in`; esta
+llamada está en `application/`. Al arreglarlo, el test debe fijar el reloj entre las 00:00 y las 05:00 UTC.
+
+## E-551 · Se puede responder «Voy» a una fecha cancelada de un evento que se repite (backend, calendario, ABIERTO — anotado, 06/10)
+
+**Síntoma:** ninguno reportado (la app no muestra fechas canceladas, así que no ofrece el botón). Encontrado
+leyendo el código al construir D-256: `ConfirmacionService.esOcurrenciaReal` (y la copia en
+`EventoService.esOcurrenciaReal`) expanden la serie con `List.of()` como excepciones, así que
+`PUT /rsvp` con el `occurrenceStart` de una fecha cancelada responde 200 y guarda la respuesta.
+
+**Causa real:** las dos copias de `isRealOccurrence()` del repo viejo validan contra la serie sin sus
+excepciones. Verificado leyendo el código; no se reprodujo con un pedido.
+
+**Arreglo:** ninguno en este cambio (fuera de alcance; no se amplía sin avisar). Lo nuevo de D-256 NO repite el
+problema: `AccesoALaListaService.ocurrenciaReal` expande CON las excepciones (fecha cancelada → 400) y usa el
+inicio efectivo si se reprogramó.
+
+**Prevención:** al arreglarlo, unificar las tres búsquedas de ocurrencia en una sola (las dos de arriba y la de
+`AccesoALaListaService`), con un test de fecha cancelada.
+
+## E-552 · El aviso «Deshacer» de «Pasar lista» queda debajo del botón de SER (app, D-256, RESUELTO, 06/10)
+
+**Síntoma:** en la captura web 412×915 de «Pasar lista», con la lista desplazada, la píldora «SER» tapaba el
+principio del aviso: se leía «Tiempo E2E: tarde» en vez de «Diaocho Tiempo E2E: tarde».
+
+**Causa real:** el aviso se ubicaba a `ESPACIO_PARA_LANZADOR − 8` del borde de abajo de la SECCIÓN, pero los
+botones flotantes de SER se ubican contra el borde de la PANTALLA. Al desplazar, la barra de pestañas se esconde, la
+sección crece hasta abajo y el aviso baja con ella; SER no.
+
+**Arreglo:** `PantallaDeAsistencia` lo pone a `ALTO_TAB_BAR + DIAMETRO + SEPARACION` (constantes de
+`lugarDelLanzador`), que libra a SER con la barra a la vista o escondida.
+
+**Prevención:** todo elemento flotante nuevo dentro de una sección se mira en captura con la lista DESPLAZADA (barra
+escondida), no solo en reposo.
+
+> **Ampliado 2026-10-06 (revisión del coordinador).** No era solo el aviso: con la barra escondida, la burbuja «✳ SER»
+> (`SparkieOverlay`, arranque guiado, visible mientras la cuenta no firmó el Pacto, en todas las plataformas) quedaba
+> montada sobre «Cerrar la lista», y lo mismo podía pasar con «Corregir» y «Cancelar evento». El relleno de Comunidad
+> (`ESPACIO_PARA_LANZADOR`, 88) está pensado con la barra a la vista; sin ella, los flotantes ocupan hasta
+> `ALTO_TAB_BAR + SEPARACION + DIAMETRO` (130) del borde de la pantalla. Arreglo (front `eventos-asistencia`):
+> `EspacioSobreFlotantes` al final de las tres pantallas completa la diferencia (+ 12 y el borde seguro);
+> `pieSobreLosFlotantes.test.ts` falla contra lo anterior (3 de 4).
+
+## E-553 · La barra de la tarjeta «Asistencia» no se ve en modo oscuro (app, D-256, RESUELTO, 06/10)
+
+**Síntoma:** en la captura oscura del detalle, la barra Van / No van / Sin respuesta mostraba solo el verde y el rojo;
+la parte de «sin respuesta» (la pista) era invisible.
+
+**Causa real:** la pista usaba `c.placeholderA`, que en oscuro es `#14130F` sobre una tarjeta `c.cardBg` `#161513`:
+dos tonos casi iguales. En claro se veía porque ahí `placeholderA` (`#EFEAE1`) contrasta con `#FDFCFA`.
+
+**Arreglo:** la pista usa `c.divider` (`#EDE7DC` / `rgba(255,255,255,0.08)`), visible en los dos temas.
+
+**Prevención:** cada captura se mira en claro Y en oscuro antes de dar algo por terminado (lo pide el preámbulo del
+rediseño); `placeholderA` es un fondo de relleno, no un color de pista sobre una tarjeta.
+
+## E-554 · La lista cerrada decía «por E2E · 11:03» (app, D-256, RESUELTO, 06/10)
+
+**Síntoma:** en la captura de la lista cerrada, quién la cerró figuraba como «por E2E», no «por E2E Admin».
+
+**Causa real:** para parecerse a la maqueta («por Ricardo») se mostraba solo la primera palabra del nombre
+(`split(' ')[0]`), y hay nombres cuya primera palabra no identifica a nadie.
+
+**Arreglo:** se muestra el nombre completo, en una línea con recorte por el final si no entra.
+
+**Prevención:** no recortar nombres de personas por palabras; si no entra, que lo corte el `numberOfLines`.
+
+## E-555 · `tsc` falla con `TS2593: Cannot find name 'describe'` en pruebas nuevas de la app (app, entorno, RESUELTO, 06/10)
+
+**Síntoma (literal):** `src/features/eventos/api/__tests__/asistenciaSchemas.test.ts(3,1): error TS2593: Cannot find
+name 'describe'. Do you need to install type definitions for a test runner?` (y lo mismo para `it` y `expect`). Jest
+las corría en verde; el que fallaba era `npx tsc --noEmit`.
+
+**Causa real:** `tsconfig.json` del front extiende `expo/tsconfig.base` sin `types: ["jest"]`, así que los globales
+de Jest no existen para `tsc`. Las pruebas del repo los importan explícitamente de `@jest/globals`; las nuevas no.
+
+**Arreglo:** `import { describe, expect, it } from '@jest/globals';` en cada archivo de prueba nuevo.
+
+**Prevención:** copiar la cabecera de una prueba vecina al crear una nueva; `tsc` va siempre antes de dar por buena
+una tanda de la app.
+
+> **Se repitieron en D-256 (2026-10-06):** E-489 (`No tests found, exiting with code 1` dentro de
+> `.claude/worktrees/eventos-asistencia`, resuelto con `--testPathIgnorePatterns '/node_modules/' '/e2e/'`; el arreglo
+> de fondo propuesto en E-489 sigue sin aplicar) y E-342 (`Invalid variable access: apiFetch` en un `jest.mock`,
+> resuelto llamando a la variable `mockApiFetch`).

@@ -45,7 +45,9 @@ class BorradoDeCuentaEnLosModulosIT {
     /** Filas sembradas para la persona que sobreviven a propósito (son del grupo, del calendario, del
      * catálogo o de {@code users}); en las demás tablas no puede quedar ni una. */
     private static final Set<String> SOBREVIVEN = Set.of("usuarios", "participantes_programa", "perfiles_mentor",
-            "cohortes", "celulas", "eventos", "cambios_bienvenida", "grupos");
+            "cohortes", "celulas", "eventos", "cambios_bienvenida", "grupos",
+            // V93 (D-256): la lista que la persona cerró es del evento, que sobrevive; pierde el autor.
+            "listas_asistencia_evento");
 
     @Autowired
     private List<BorradoDeDatosDeCuenta> borrados;
@@ -106,6 +108,7 @@ class BorradoDeCuentaEnLosModulosIT {
         jdbc.update("UPDATE renaser.etapas_onboarding_completadas SET marcada_por = ? WHERE usuario_id = ?",
                 persona, otra);
         jdbc.update("UPDATE renaser.celulas SET mentor_id = ? WHERE mentor_id = ?", persona, otra);
+        jdbc.update("UPDATE renaser.asistencias_evento SET marcado_por = ? WHERE usuario_id = ?", persona, otra);
 
         borrarEnUnaTransaccion(persona);
 
@@ -114,7 +117,8 @@ class BorradoDeCuentaEnLosModulosIT {
                      + (SELECT count(*) FROM renaser.asignaciones_curso WHERE usuario_id = ?1 AND asignada_por IS NULL)
                      + (SELECT count(*) FROM renaser.tickets_mentor WHERE participante_id = ?1 AND respondido_por IS NULL)
                      + (SELECT count(*) FROM renaser.etapas_onboarding_completadas WHERE usuario_id = ?1 AND marcada_por IS NULL)
-                """.replace("?1", "'" + otra + "'"), Long.class)).isEqualTo(4);
+                     + (SELECT count(*) FROM renaser.asistencias_evento WHERE usuario_id = ?1 AND marcado_por IS NULL)
+                """.replace("?1", "'" + otra + "'"), Long.class)).isEqualTo(5);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM renaser.celulas WHERE mentor_id = ?", Long.class, persona))
                 .isZero();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM renaser.eventos WHERE creado_por = ?", Long.class, persona))

@@ -1,24 +1,14 @@
 package com.renaser.os.calendar.application.services;
 
 import com.renaser.os.calendar.application.ports.in.recordatorio.GenerarRecordatoriosUseCase;
-import com.renaser.os.calendar.application.ports.out.celula.ConsultarMiembrosCelulaPort;
-import com.renaser.os.calendar.application.ports.out.curso.ResolverAudienciaCursoPort;
-import com.renaser.os.calendar.application.ports.out.elegibilidad.ConsultarElegibilidadEventoPort;
 import com.renaser.os.calendar.application.ports.out.evento.LoadEventoPort;
 import com.renaser.os.calendar.application.ports.out.evento.LoadExcepcionPort;
-import com.renaser.os.calendar.application.ports.out.nivelmembresia.LoadNivelMembresiaPort;
-import com.renaser.os.calendar.application.ports.out.participante.ConsultarProgresoParticipanteCalendarPort;
-import com.renaser.os.calendar.application.ports.out.participante.ResolverAudienciaMasivaPort;
 import com.renaser.os.calendar.application.ports.out.recordatorio.SaveRecordatorioPort;
 import com.renaser.os.calendar.domain.model.evento.Evento;
 import com.renaser.os.calendar.domain.model.evento.Excepcion;
 import com.renaser.os.calendar.domain.model.evento.ExpansorOcurrencias;
 import com.renaser.os.calendar.domain.model.evento.Ocurrencia;
 import com.renaser.os.calendar.domain.model.evento.ReglaRecordatorio;
-import com.renaser.os.calendar.domain.model.evento.ReglasPorTipoEvento;
-import com.renaser.os.calendar.domain.model.evento.RolUsuario;
-import com.renaser.os.calendar.domain.model.nivelmembresia.NivelMembresia;
-import com.renaser.os.calendar.domain.model.nivelmembresia.ProgresoNivel;
 import com.renaser.os.calendar.domain.model.recordatorio.CalculadoraRecordatorios;
 import com.renaser.os.calendar.domain.model.recordatorio.InstanteRecordatorio;
 import com.renaser.os.calendar.domain.model.recordatorio.RecordatorioEvento;
@@ -30,8 +20,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * Puerto directo de {@code generar()} de {@code reminderService.ts} (repo viejo): deja en la cola los
@@ -40,6 +28,9 @@ import java.util.stream.Collectors;
  * <p><b>Corregido 2026-09-27 (E-360).</b> Esta clase implementaba tambien {@code despachar()}, en una
  * sola transaccion de hasta 500 filas. Paso a su propia clase al partirlo en lotes: con los dos casos de
  * uso juntos la clase pasaba el techo de 300 lineas.
+ *
+ * <p>La audiencia (a quien le llegan los avisos) vive desde el 2026-10-06 en {@link AudienciaDelEventoService}:
+ * la comparte con la hoja «Quien respondio» (D-256).
  */
 @Service
 public class RecordatorioService implements GenerarRecordatoriosUseCase {
@@ -52,29 +43,16 @@ public class RecordatorioService implements GenerarRecordatoriosUseCase {
     private final LoadEventoPort loadEventoPort;
     private final LoadExcepcionPort loadExcepcionPort;
     private final SaveRecordatorioPort saveRecordatorioPort;
-    private final LoadNivelMembresiaPort nivelPort;
-    private final ConsultarProgresoParticipanteCalendarPort progresoPort;
-    private final ResolverAudienciaMasivaPort audienciaMasivaPort;
-    private final ConsultarMiembrosCelulaPort celulaPort;
-    private final ResolverAudienciaCursoPort cursoPort;
-    private final ConsultarElegibilidadEventoPort elegibilidadPort;
+    private final AudienciaDelEventoService audiencia;
     private final Clock clock;
 
     public RecordatorioService(LoadEventoPort loadEventoPort, LoadExcepcionPort loadExcepcionPort,
-                                SaveRecordatorioPort saveRecordatorioPort, LoadNivelMembresiaPort nivelPort,
-                                ConsultarProgresoParticipanteCalendarPort progresoPort,
-                                ResolverAudienciaMasivaPort audienciaMasivaPort, ConsultarMiembrosCelulaPort celulaPort,
-                                ResolverAudienciaCursoPort cursoPort, ConsultarElegibilidadEventoPort elegibilidadPort,
+                                SaveRecordatorioPort saveRecordatorioPort, AudienciaDelEventoService audiencia,
                                 Clock clock) {
         this.loadEventoPort = loadEventoPort;
         this.loadExcepcionPort = loadExcepcionPort;
         this.saveRecordatorioPort = saveRecordatorioPort;
-        this.nivelPort = nivelPort;
-        this.progresoPort = progresoPort;
-        this.audienciaMasivaPort = audienciaMasivaPort;
-        this.celulaPort = celulaPort;
-        this.cursoPort = cursoPort;
-        this.elegibilidadPort = elegibilidadPort;
+        this.audiencia = audiencia;
         this.clock = clock;
     }
 
@@ -104,7 +82,7 @@ public class RecordatorioService implements GenerarRecordatoriosUseCase {
         if (ocurrencias.isEmpty() && !evento.notificarAlCrear()) {
             return 0;
         }
-        List<UserId> usuarios = resolveRecipients(evento);
+        List<UserId> usuarios = audiencia.destinatarios(evento);
         if (usuarios.isEmpty()) {
             return 0;
         }
@@ -151,64 +129,5 @@ public class RecordatorioService implements GenerarRecordatoriosUseCase {
                 .map(u -> RecordatorioEvento.programar(evento.id(), evento.creadoEn(), u, evento.creadoEn(), clock))
                 .toList();
         return saveRecordatorioPort.encolarSiFalta(filas);
-    }
-
-    /** resolveRecipients() del repo viejo: primero audiencia (barata, en lote), despues
-     * elegibilidad (cara, por persona — solo si el TIPO de evento la exige). */
-    private List<UserId> resolveRecipients(Evento evento) {
-        List<UserId> candidatos = resolveAudience(evento);
-        if (candidatos.isEmpty() || !ReglasPorTipoEvento.requiereElegibilidad(evento.tipoEvento())) {
-            return candidatos;
-        }
-        List<UserId> elegibles = new ArrayList<>();
-        for (UserId candidato : candidatos) {
-            var progreso = progresoPort.deParticipante(candidato);
-            if (progreso.isEmpty()) {
-                continue;
-            }
-            // rol_privilegiado del repo viejo: ADMIN/ALCHEMIST/MENTOR siempre elegibles.
-            if (progreso.get().rol() != RolUsuario.TRAINEE
-                    || elegibilidadPort.esElegible(candidato, evento.tipoEvento())) {
-                elegibles.add(candidato);
-            }
-        }
-        return elegibles;
-    }
-
-    private List<UserId> resolveAudience(Evento evento) {
-        return switch (evento.tipoAudiencia()) {
-            case TODOS -> audienciaMasivaPort.traineesActivos();
-            case ROLES -> audienciaMasivaPort.activosConRoles(evento.rolesDestino());
-            case CELULA -> evento.celulaDestinoId() == null ? List.of() : celulaPort.miembrosActivos(evento.celulaDestinoId());
-            case NIVEL_MINIMO -> resolveAudienceNivelMinimo(evento);
-            case CURSO -> resolveAudienceCurso(evento);
-        };
-    }
-
-    private List<UserId> resolveAudienceNivelMinimo(Evento evento) {
-        if (evento.nivelMinimoId() == null) {
-            return List.of();
-        }
-        List<NivelMembresia> niveles = nivelPort.listar();
-        Integer minRango = niveles.stream().filter(n -> n.id() == evento.nivelMinimoId())
-                .findFirst().map(NivelMembresia::rango).orElse(null);
-        if (minRango == null) {
-            return List.of();
-        }
-        return audienciaMasivaPort.traineesActivosConDiaPrograma().stream()
-                .filter(c -> c.diaPrograma() != null
-                        && ProgresoNivel.resolverRango(ProgresoNivel.porcentajeDeProgreso(c.diaPrograma()), niveles) >= minRango)
-                .map(ResolverAudienciaMasivaPort.ParticipanteConDia::id)
-                .toList();
-    }
-
-    private List<UserId> resolveAudienceCurso(Evento evento) {
-        if (evento.cursoId() == null) {
-            return List.of();
-        }
-        Set<UserId> candidatos = audienciaMasivaPort.traineesActivosConDiaPrograma().stream()
-                .map(ResolverAudienciaMasivaPort.ParticipanteConDia::id)
-                .collect(Collectors.toSet());
-        return List.copyOf(cursoPort.filtrarConAcceso(evento.cursoId(), candidatos));
     }
 }
