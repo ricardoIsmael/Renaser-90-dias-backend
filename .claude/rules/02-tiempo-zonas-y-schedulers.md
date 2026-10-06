@@ -48,3 +48,9 @@ una noche con el backend caído deja al aprendiz un día atrasado el resto del p
 - Un barrido masivo **no** va dentro de un `@Transactional` único: cada `save()` en su transacción
   implícita, para que un fallo a mitad no tire lo ya hecho.
 - Un participante que falla no puede detener el barrido: `try/catch` por participante.
+
+## 5. Etapa 1 y candado
+
+La decisión y el patrón (barrido cada hora, dominio por zona, orden por participante) están en **D-257**
+(`docs/MODULOS_A_AVANZAR.md` §8). `ArchitectureTest` rompe el build si `domain/` o `application/` leen la fecha o
+el reloj del servidor sin zona (E-567); la única excepción es `points.application.services.RegeneracionRankingService`.
