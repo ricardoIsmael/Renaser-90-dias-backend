@@ -8,6 +8,12 @@ public interface SaveCambioHorarioPendientePort {
 
     CambioHorarioPendiente save(CambioHorarioPendiente cambio);
 
-    /** Idempotente: borrar lo inexistente no falla — se llama siempre que un cambio se aplica de inmediato. */
-    void borrar(UserId participanteId, HabitoId habitoId);
+    /**
+     * Idempotente: borrar lo inexistente no falla — se llama siempre que un cambio se aplica de inmediato.
+     *
+     * @return {@code true} si habia un pendiente y esta llamada lo borro. Es lo que deja a UNA sola de dos promociones
+     * simultaneas del mismo pendiente cobrarlo en el historial (E-557): la segunda espera el bloqueo de la fila y
+     * encuentra que ya no esta.
+     */
+    boolean borrar(UserId participanteId, HabitoId habitoId);
 }

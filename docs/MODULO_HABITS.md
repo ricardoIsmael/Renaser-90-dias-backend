@@ -810,7 +810,12 @@ registra en `historial_cambios_horario` y borra el pendiente.
   "primero queda vigente el horario nuevo, después se cierra lo vencido". Dos `@Scheduled` con el mismo
   cron no garantizan orden (el pool de Spring puede correrlos en paralelo), así que la separación es
   explícita en la hora; 04:40 además no pisa las 04:30 de la purga de `notifications`.
-  Contrapartida asumida: `fecha_efectiva` se calcula en la zona del participante y el barrido compara
+  > **Corregido 2026-10-06 (E-557).** Todo este punto (la hora 04:40 UTC, el orden por margen entre crons y la
+  > contrapartida de abajo) quedó superado: el barrido corre **cada hora** (minuto 0) y compara cada `fecha_efectiva`
+  > contra el día local de SU participante; el orden con la generación del día es por participante
+  > (`GeneracionDeJornadasService` promueve los cambios de esa persona antes de generarle el día), no por la hora de
+  > dos crons. Para Lima el cambio rige a las 05:00 UTC, no a las 04:40.
+  Contrapartida asumida (ya no aplica): `fecha_efectiva` se calcula en la zona del participante y el barrido compara
   contra la fecha UTC del reloj — para Lima eso adelanta el cambio ~20 minutos (23:40 local), una franja
   donde ninguna ventana de hábito está viva.
 - **Idempotencia:** borrar el pendiente en la misma transacción en que se escribe el historial es lo que

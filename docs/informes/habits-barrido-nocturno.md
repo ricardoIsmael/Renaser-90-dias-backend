@@ -90,6 +90,13 @@ parecido en forma (recorre todo el padrón activo, una operación por participan
 
 ## 2. Horario elegido: 05:02 UTC, y por qué
 
+> **Corregido 2026-10-06 (E-556).** Esta sección y la §zonas horarias describen el cron DIARIO a las 05:02 UTC, que es la
+> medianoche de Lima y de nadie más: para Los Angeles generaba el día a las 21:02 de la víspera y para Tokio a las
+> 14:02 del día mismo (el «límite conocido» que aquí se aceptaba). Hoy el barrido corre **cada hora, en el minuto 2**, y
+> `GeneracionDeJornadasService` + `JornadaDelDia` deciden por participante, en su zona, a quién le toca. Para Lima la
+> corrida de las 05:02 UTC sigue siendo la que arma su día. El análisis de abajo se deja como historia; lo que dice del
+> orden entre crons (04:40 / 04:50 / 05:00 / 05:02) ya no rige (E-91, E-557).
+
 Los schedulers existentes del "tramo nocturno":
 
 | Hora UTC | Scheduler | Qué hace |

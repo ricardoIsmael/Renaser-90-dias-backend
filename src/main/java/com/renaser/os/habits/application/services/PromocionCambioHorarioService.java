@@ -8,7 +8,10 @@ import com.renaser.os.habits.application.ports.out.preferencia.SaveCambioHorario
 import com.renaser.os.habits.application.ports.out.preferencia.SavePreferenciaHorarioPort;
 import com.renaser.os.habits.domain.model.preferencia.CambioHorarioPendiente;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
+import com.renaser.os.habits.domain.model.registro.CorteDeExpiracion;
+import com.renaser.os.habits.domain.model.registro.JornadaDelDia;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.UserId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -18,7 +21,12 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Cierra E-53: hasta ahora {@link CambioHorarioPendiente} se escribia y no lo leia nadie, asi
@@ -40,11 +48,15 @@ public class PromocionCambioHorarioService implements PromoverCambiosHorarioProg
 
     private static final Logger log = LoggerFactory.getLogger(PromocionCambioHorarioService.class);
 
+    /** Participantes por consulta de zonas. */
+    static final int TAMANO_LOTE = 200;
+
     private final LoadCambioHorarioPendientePort loadCambioPendientePort;
     private final SaveCambioHorarioPendientePort saveCambioPendientePort;
     private final LoadPreferenciaHorarioPort loadPreferenciaPort;
     private final SavePreferenciaHorarioPort savePreferenciaPort;
     private final HistorialCambioHorarioPort historialPort;
+    private final ZonasDelPadron zonas;
     private final Clock clock;
     /**
      * Transaccion PROPIA (REQUIRES_NEW) para el barrido nocturno: cada pendiente se promueve
@@ -58,50 +70,135 @@ public class PromocionCambioHorarioService implements PromoverCambiosHorarioProg
                                           SaveCambioHorarioPendientePort saveCambioPendientePort,
                                           LoadPreferenciaHorarioPort loadPreferenciaPort,
                                           SavePreferenciaHorarioPort savePreferenciaPort,
-                                          HistorialCambioHorarioPort historialPort, Clock clock,
-                                          PlatformTransactionManager transactionManager) {
+                                          HistorialCambioHorarioPort historialPort, ZonasDelPadron zonas,
+                                          Clock clock, PlatformTransactionManager transactionManager) {
         this.loadCambioPendientePort = loadCambioPendientePort;
         this.saveCambioPendientePort = saveCambioPendientePort;
         this.loadPreferenciaPort = loadPreferenciaPort;
         this.savePreferenciaPort = savePreferenciaPort;
         this.historialPort = historialPort;
+        this.zonas = zonas;
         this.clock = clock;
         this.transaccionPropia = new TransactionTemplate(transactionManager);
         this.transaccionPropia.setPropagationBehavior(Propagation.REQUIRES_NEW.value());
     }
 
+    /**
+     * E-557: el pendiente rige cuando llega su {@code fecha_efectiva} EN LA ZONA de su participante. Se piden primero
+     * todos los que podrian regir en alguna zona ({@link CorteDeExpiracion#fechaMasTardiaPosible}, un superconjunto
+     * pequeno: lo programado con dias de antelacion) y el dominio decide por persona. Sin {@code @Transactional} sobre
+     * el barrido: cada pendiente en SU transaccion, y el que falla queda para la proxima hora.
+     */
     @Override
-    public int promoverLosQueRigenEn(LocalDate fecha) {
-        List<CambioHorarioPendiente> vencidos = loadCambioPendientePort.queYaRigenEn(fecha);
+    public int promoverLosQueYaRigen() {
         Instant ahora = clock.now();
+        List<CambioHorarioPendiente> candidatos = loadCambioPendientePort
+                .queYaRigenEn(CorteDeExpiracion.fechaMasTardiaPosible(ahora));
         int promovidos = 0;
         int fallidos = 0;
-        for (CambioHorarioPendiente pendiente : vencidos) {
-            try {
-                transaccionPropia.executeWithoutResult(status -> promover(pendiente, ahora));
-                promovidos++;
-            } catch (RuntimeException ex) {
-                fallidos++;
-                log.warn("[habits] no se pudo promover el cambio de horario pendiente de {} para el habito {}: {}",
-                        pendiente.participanteId(), pendiente.habitoId(), ex.toString());
+        int sinSuDiaTodavia = 0;
+        for (List<CambioHorarioPendiente> lote : enLotes(candidatos)) {
+            Map<UserId, ZoneId> zonasDelLote = zonas.leerLote(participantesDe(lote));
+            for (CambioHorarioPendiente pendiente : lote) {
+                ResultadoDeLaPromocion resultado = promoverSiLeToca(pendiente, zonasDelLote, ahora);
+                promovidos += resultado.promovidos();
+                fallidos += resultado.fallidos();
+                sinSuDiaTodavia += resultado.sinSuDiaTodavia();
             }
         }
-        if (!vencidos.isEmpty()) {
-            log.info(
-                    "[habits] promocion de cambios de horario con fecha efectiva <= {}: {} promovido(s), {} fallido(s) de {} candidato(s)",
-                    fecha, promovidos, fallidos, vencidos.size());
+        registrarElBarrido(promovidos, fallidos, candidatos.size() - sinSuDiaTodavia);
+        return promovidos;
+    }
+
+    @Override
+    public int promoverLosDe(UserId participanteId, LocalDate hoyEnSuZona) {
+        Instant ahora = clock.now();
+        int promovidos = 0;
+        for (CambioHorarioPendiente pendiente : loadCambioPendientePort.deParticipante(participanteId)) {
+            if (pendiente.rigeEn(hoyEnSuZona) && promoverEnTransaccionPropia(pendiente, ahora)) {
+                promovidos++;
+            }
         }
         return promovidos;
     }
 
-    private void promover(CambioHorarioPendiente pendiente, Instant ahora) {
+    /** Un pendiente que falla (zona rota, fila corrupta) queda para la proxima hora; los demas siguen. */
+    private ResultadoDeLaPromocion promoverSiLeToca(CambioHorarioPendiente pendiente,
+                                                    Map<UserId, ZoneId> zonasDelLote, Instant ahora) {
+        try {
+            LocalDate hoyEnSuZona = JornadaDelDia.de(zonas.de(pendiente.participanteId(), zonasDelLote), ahora).hoy();
+            if (!pendiente.rigeEn(hoyEnSuZona)) {
+                return ResultadoDeLaPromocion.TODAVIA_NO;
+            }
+            return promoverEnTransaccionPropia(pendiente, ahora) ? ResultadoDeLaPromocion.PROMOVIDO
+                    : ResultadoDeLaPromocion.YA_PROMOVIDO_POR_OTRO;
+        } catch (RuntimeException ex) {
+            log.warn("[habits] no se pudo promover el cambio de horario pendiente de {} para el habito {}: {}",
+                    pendiente.participanteId(), pendiente.habitoId(), ex.toString());
+            return ResultadoDeLaPromocion.FALLIDO;
+        }
+    }
+
+    /**
+     * C-6: cada pendiente en su transaccion. {@code false} si otro lo promovio antes (dos instancias, o este barrido y
+     * el que arma el dia): no se cobra dos veces.
+     */
+    private boolean promoverEnTransaccionPropia(CambioHorarioPendiente pendiente, Instant ahora) {
+        return Boolean.TRUE.equals(transaccionPropia.execute(status -> promover(pendiente, ahora)));
+    }
+
+    private void registrarElBarrido(int promovidos, int fallidos, int candidatos) {
+        if (candidatos > 0) {
+            log.info("[habits] promocion de cambios de horario: {} promovido(s), {} fallido(s) de {} candidato(s)",
+                    promovidos, fallidos, candidatos);
+        }
+    }
+
+    private static List<List<CambioHorarioPendiente>> enLotes(List<CambioHorarioPendiente> pendientes) {
+        List<List<CambioHorarioPendiente>> lotes = new ArrayList<>();
+        for (int desde = 0; desde < pendientes.size(); desde += TAMANO_LOTE) {
+            lotes.add(pendientes.subList(desde, Math.min(desde + TAMANO_LOTE, pendientes.size())));
+        }
+        return lotes;
+    }
+
+    private static Set<UserId> participantesDe(List<CambioHorarioPendiente> lote) {
+        return lote.stream().map(CambioHorarioPendiente::participanteId).collect(Collectors.toSet());
+    }
+
+    /** Que paso con un pendiente en este barrido. */
+    private enum ResultadoDeLaPromocion {
+        PROMOVIDO, YA_PROMOVIDO_POR_OTRO, TODAVIA_NO, FALLIDO;
+
+        int promovidos() {
+            return this == PROMOVIDO ? 1 : 0;
+        }
+
+        int fallidos() {
+            return this == FALLIDO ? 1 : 0;
+        }
+
+        int sinSuDiaTodavia() {
+            return this == TODAVIA_NO ? 1 : 0;
+        }
+    }
+
+    /**
+     * Primero se borra el pendiente y solo quien lo borro de verdad lo cobra: dos promociones simultaneas del mismo
+     * pendiente (E-557: ahora hay dos caminos, el barrido y la generacion del dia) se serializan en la fila y la
+     * segunda sale sin hacer nada, en vez de aplicar dos veces el cambio y cobrar dos cupos.
+     */
+    private boolean promover(CambioHorarioPendiente pendiente, Instant ahora) {
+        if (!saveCambioPendientePort.borrar(pendiente.participanteId(), pendiente.habitoId())) {
+            return false;
+        }
         PreferenciaHorario preferencia = preferenciaDestino(pendiente, ahora);
         preferencia.aplicarAhora(pendiente.horaDisparo(), pendiente.horaLimite(), ahora);
         aplicarRecordatorioSiVino(preferencia, pendiente, ahora);
         savePreferenciaPort.save(preferencia);
         historialPort.registrar(pendiente.participanteId(), pendiente.habitoId(), pendiente.fechaEfectiva(),
                 pendiente.horaDisparo(), pendiente.horaLimite(), ahora);
-        saveCambioPendientePort.borrar(pendiente.participanteId(), pendiente.habitoId());
+        return true;
     }
 
     /**

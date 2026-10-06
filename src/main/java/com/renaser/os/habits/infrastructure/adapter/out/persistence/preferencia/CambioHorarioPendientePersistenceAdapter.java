@@ -47,7 +47,7 @@ class CambioHorarioPendientePersistenceAdapter
     }
 
     @Override
-    public void borrar(UserId participanteId, HabitoId habitoId) {
-        repository.deleteByParticipanteIdAndHabitoId(participanteId.value(), habitoId.value());
+    public boolean borrar(UserId participanteId, HabitoId habitoId) {
+        return repository.deleteByParticipanteIdAndHabitoId(participanteId.value(), habitoId.value()) > 0;
     }
 }

@@ -1,94 +1,66 @@
 package com.renaser.os.habits.infrastructure.adapter.in.scheduler;
 
-import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUseCase;
-import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
-import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.habits.application.ports.in.registro.GenerarJornadasDelDiaUseCase;
+import com.renaser.os.habits.application.ports.in.registro.GenerarJornadasDelDiaUseCase.ResultadoDelBarrido;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
-
 /**
- * El barrido que faltaba: hasta este cambio, los tracks del dia SOLO se generaban al
- * consultar {@code GET /api/v1/habit-tracks/today} (v&iacute;a
- * {@code TracksDelDiaProyeccionService.consultar} &rarr;
- * {@code GenerarTracksDelDiaUseCase.generarDisponiblesAhora}). Un participante que nunca
- * abre la app nunca tendr&iacute;a tracks; sin tracks no hay nada que
- * {@code ExpirarRegistrosScheduler} pueda marcar vencido; sin expiraci&oacute;n, su
- * coherencia queda intacta en 100 &mdash; no abrir la app ser&iacute;a la mejor estrategia
- * para no perder puntos. Este scheduler pre-genera la jornada completa de todos los
- * participantes activos antes de que el dia empiece para ellos, para que ese hueco no
- * exista.
+ * El barrido que arma el dia de cada participante antes de que lo abra: hasta que existio, los tracks del dia SOLO se
+ * generaban al consultar {@code GET /api/v1/habit-tracks/today}, asi que quien nunca abria la app nunca tenia tracks;
+ * sin tracks no hay nada que {@code ExpirarRegistrosScheduler} pueda marcar vencido, y no abrir la app seria la mejor
+ * estrategia para no perder puntos. Este barrido pre-genera la jornada completa de todos los participantes activos
+ * cuando empieza SU dia.
  *
- * <p><b>Horario elegido: 05:02 UTC.</b> Corre despues de
- * {@code users.AvanzarDiaProgramaScheduler} (04:50 UTC) porque necesita el
- * {@code dia_programa} ya avanzado &mdash; el catalogo del dia se resuelve con
- * {@code HorarioHabito.aplicaEnDia(diaPrograma, tipoDia)} (desde D-200, via
- * {@code HorariosDelHabito}, que mantiene lo que ya corrio tras un retroceso), y generar con el dia de programa
- * de AYER generaria el catalogo equivocado. El resto del publico de este programa es de
- * Peru (America/Lima, UTC-5 fijo, sin horario de verano) &mdash; con el cron a las 05:02 UTC,
- * la hora local en Lima es las 00:02, es decir DESPUES de la medianoche local: cuando
- * {@link GenerarTracksDelDiaUseCase#generarDiaCompletoEnSuZona} resuelve
- * {@code LocalDate.now(zonaDelParticipante)}, ya devuelve la fecha del dia que arranca, no
- * la de ayer. Correrlo antes de las 05:00 UTC (medianoche en Lima) haria que esa fecha
- * calculada en la zona del participante siguiera siendo AYER (ver el analisis completo en
- * {@code docs/informes/habits-barrido-nocturno.md} &sect; zonas horarias).
+ * <p><b>E-556 (2026-10-06): cada hora, no una vez a las 05:02 UTC.</b> Esa hora es la medianoche de Lima y de nadie
+ * mas (regla 02 §1, la familia de E-91): alguien en Los Angeles recibia su dia a las 21:02 de la vispera y alguien en
+ * Tokio a las 14:02 del dia mismo. Ahora el cron corre cada hora, en el minuto 2, y
+ * {@code GeneracionDeJornadasService} decide por participante, en su zona, a quien ya le empezo el dia y todavia no lo
+ * tiene armado. Para Lima la corrida de las 05:02 UTC es la que arma su dia, igual que antes; las otras 23 no
+ * encuentran nada que hacer. El minuto 2 se conserva: en una zona de hora entera el dia se arma dos minutos despues de
+ * su medianoche, con lo de ayer ya vencido por {@code ExpirarRegistrosScheduler} (minuto 0).
  *
- * <p><b>{@code @SchedulerLock} (C-5, docs/informes/auditoria-fixes/C-5.md), y no es
- * opcional.</b> Aunque {@code registros_habito} tiene {@code UNIQUE (participante_id,
- * habito_id, fecha_ejecucion)} (V1) &mdash; asi que dos instancias generando al mismo
- * participante en paralelo NO pueden duplicar una fila, la segunda choca contra el
- * constraint y esa fila individual queda para el proximo barrido &mdash;, sin lock las DOS
- * instancias igual recorren el padron completo y llaman al caso de uso para CADA
- * participante, duplicando el trabajo (y, el dia que haya IA real en el camino de generacion,
- * duplicando tambien ese costo). Mismo patron de nombre de propiedad y de javadoc que
- * {@code evidence.ProcesarColaValidacionScheduler} y {@code users.AvanzarDiaProgramaScheduler}.
+ * <p><b>Ya no hay dependencia de orden entre crons.</b> El {@code dia_programa} lo deriva {@code users} de las fechas
+ * (quien lo lea tarde lo lee bien) y los cambios de horario que rigen hoy los promueve el propio caso de uso, por
+ * participante, antes de generarle el dia.
  *
- * <p>Aislamiento por participante (mismo espiritu que C-6, ver
- * {@code ExpiracionDeRegistrosService}): un participante con datos
- * corruptos (p.ej. zona horaria invalida) no puede tumbar el barrido de los demas. Cada
- * llamada al caso de uso corre en su propia transaccion (el metodo de la interfaz es
- * {@code @Transactional} por participante), asi que un fallo aislado no revierte lo ya
- * generado para otros.
+ * <p><b>{@code @SchedulerLock} (C-5, docs/informes/auditoria-fixes/C-5.md), y no es opcional.</b> Aunque
+ * {@code registros_habito} tiene {@code UNIQUE (participante_id, habito_id, fecha_ejecucion)} (V1) y dos instancias no
+ * pueden duplicar una fila, sin lock las DOS recorren el padron completo cada hora, duplicando el trabajo (y, el dia que
+ * haya IA real en el camino de generacion, ese costo). Mismo patron de nombre de propiedad que
+ * {@code evidence.ProcesarColaValidacionScheduler} y {@code users.AvanzarDiaProgramaScheduler}. La suite lo apaga con
+ * {@code renaser.scheduling.generar-tracks-del-dia.cron: "-"} y lo prueba llamandolo directo.
+ *
+ * <p>Aislamiento por participante (C-6): quien tiene datos corruptos (p.ej. zona horaria invalida) no puede tumbar el
+ * barrido de los demas.
  */
 @Component
 class GenerarTracksDelDiaScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(GenerarTracksDelDiaScheduler.class);
 
-    private final GenerarTracksDelDiaUseCase generarTracksUseCase;
-    private final ConsultarProgresoParticipanteHabitsPort progresoPort;
+    private final GenerarJornadasDelDiaUseCase generarJornadasUseCase;
 
-    GenerarTracksDelDiaScheduler(GenerarTracksDelDiaUseCase generarTracksUseCase,
-                                  ConsultarProgresoParticipanteHabitsPort progresoPort) {
-        this.generarTracksUseCase = generarTracksUseCase;
-        this.progresoPort = progresoPort;
+    GenerarTracksDelDiaScheduler(GenerarJornadasDelDiaUseCase generarJornadasUseCase) {
+        this.generarJornadasUseCase = generarJornadasUseCase;
     }
 
-    @Scheduled(cron = "0 2 5 * * *", zone = "UTC")
+    @Scheduled(cron = "${renaser.scheduling.generar-tracks-del-dia.cron:0 2 * * * *}", zone = "UTC")
     @SchedulerLock(name = "habits-generar-tracks-del-dia",
             lockAtMostFor = "${renaser.scheduling.shedlock.habits-generar-tracks-del-dia.lock-at-most-for:PT30M}",
             lockAtLeastFor = "${renaser.scheduling.shedlock.habits-generar-tracks-del-dia.lock-at-least-for:PT30S}")
     public void ejecutar() {
-        List<UserId> participantes = progresoPort.participantesInscritosActivos();
-        int procesados = 0;
-        int fallidos = 0;
-        for (UserId participanteId : participantes) {
-            try {
-                generarTracksUseCase.generarDiaCompletoEnSuZona(participanteId);
-                procesados++;
-            } catch (RuntimeException ex) {
-                fallidos++;
-                log.warn("[habits.GenerarTracksDelDiaScheduler] no se pudieron generar los tracks de {}: {}",
-                        participanteId, ex.toString());
-            }
+        ResultadoDelBarrido resultado = generarJornadasUseCase.generarLasQueYaEmpezaron();
+        if (resultado.generados() > 0 || resultado.fallidos() > 0) {
+            log.info("[habits.GenerarTracksDelDiaScheduler] barrido horario: {} participante(s) con el dia recien "
+                    + "armado, {} fallido(s) de {} revisado(s)", resultado.generados(), resultado.fallidos(),
+                    resultado.participantes());
+        } else {
+            log.debug("[habits.GenerarTracksDelDiaScheduler] barrido horario: nadie con el dia por armar ({} revisados)",
+                    resultado.participantes());
         }
-        log.info(
-                "[habits.GenerarTracksDelDiaScheduler] barrido nocturno: {} participante(s) procesado(s), "
-                        + "{} fallido(s) de {} candidato(s)",
-                procesados, fallidos, participantes.size());
     }
 }

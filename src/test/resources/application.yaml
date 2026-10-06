@@ -94,6 +94,13 @@ renaser:
     # (ExpiracionPorZonaIT). "-" es el cron desactivado de Spring.
     expirar-registros:
       cron: "-"
+    # E-556 y E-557: la generacion del dia y la promocion de cambios de horario tambien corren cada hora en
+    # produccion; en la suite no corren solas (generarian dias y promoverian cambios de datos que otra prueba sembro a
+    # proposito). Se prueban llamandolas directo (GeneracionYPromocionPorZonaIT).
+    generar-tracks-del-dia:
+      cron: "-"
+    promover-cambios-horario:
+      cron: "-"
   # E-360: espeja el default de main (application.yaml): cuantos listeners de eventos corren a la vez.
   eventos:
     concurrencia: 4
