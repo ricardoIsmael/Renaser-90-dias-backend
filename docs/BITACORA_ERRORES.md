@@ -14683,3 +14683,31 @@ dibuja, va en `useLayoutEffect`. Y se verifica grabando el emulador (cuadros a 3
 *De paso (entorno):* en la build de depuración, `adb shell input text` con una «r» cuando el campo no tiene el foco
 recarga la app (atajo de recarga de React Native); escribir primero con el campo enfocado (verificarlo con
 `mobile_list_elements_on_screen`, `focused`) o usar texto sin «r».
+
+## E-583 — El fénix del centro de Hoy no se movía al escuchar, pensar ni hablar («probé y nada»)
+
+- **Fecha:** 2026-10-07
+- **Dónde:** frontend, `src/features/fenix/components/FenixDeSer.tsx` y `utils/conversacionDeSer.ts` (rama `fenix-voz`)
+- **Síntoma:** queja del dueño, literal: «No se está usando el movimiento cuando te escucha, cuando razona/piensa y
+  cuando habla. Probé y nada.» La fase de la voz SÍ llegaba al fénix (las pruebas lo verificaban: `emotion` 4,
+  `trgThinking`, `isTalking` true), pero a la vista era el reposo.
+- **Causa real:** cada fase se aplicaba UNA vez al entrar y con capas que casi no se ven. Medido sobre el `.riv`
+  v3.3 con el runtime web 2.19.8 (diferencia media por píxel, de 255, contra el reposo): `isTalking` 0,5 (el pico es
+  chico; `mouth` 3 fijo, 0,2); escuchando = solo cara `curious` (4–5, quieta, sin movimiento agregado); pensando = un
+  `trgThinking` de 2,7 s (`PHOENIX_ACTION_COMPLETE` a los 2,72 s) y después quieto. Lo que sí se ve es cabeza, cuerpo y
+  alas (`bodyLean`/`headPitch`/`headRoll` 14–17, `wingL/R` 0.3 → 10). Además la vida autónoma (`alive`) seguía
+  haciendo sus micro-conductas (mirar a un costado) en plena fase. Descartado: `isSpeaking=false` no pisa a
+  `isTalking` (en el `.riv` son equivalentes: mismo resultado píxel a píxel), «reducir movimiento» estaba apagado en el
+  emulador, y el `mood` va en otra capa. En la voz en vivo «pensando» además dura poco o no ocurre (si el audio de la
+  respuesta llega antes que la transcripción, pasa de escuchando a hablando).
+- **Solución:** `ActuacionDeVoz` sostiene la fase mientras dura con timers propios: postura (inclinarse, mirar
+  arriba), vaivén (ladeo de cabeza, mirada a cada lado, alas alternadas), `trgThinking` cada 2,8 s, `trgExplain` cada
+  6,5 s, boca con visemas sintéticos (`director.speak`, tandas de 0,9 s) además de `isTalking`, parpadeos, `lifeGaze`
+  bajo y `alive` apagado; escuchando, el volumen del micrófono (aviso `nivelDelMicrofono` de la voz en vivo) estira el
+  pecho. Al volver a reposo, todo vuelve suave y `alive` se enciende. En el emulador (ciclo de fases forzado temporal,
+  mismas fases de la app): movimiento por cuadro en hablando 3,6 → 6,2; distancia al reposo en escuchando 13,6 → 17,6.
+- **Cómo evitarlo:** un cambio de fase del fénix se prueba **en el tiempo**, no solo al entrar: `actuacionDeVoz.test.ts`
+  y `fenixDeSer.test.ts` («cada fase se sostiene mientras dura») avanzan el reloj 4–6 s y exigen `trgThinking`
+  repetido, `gazeX` a los dos lados, boca de 0 a 3 y `headRoll` que sigue cambiando a los 3 s. Y antes de elegir una
+  capa del `.riv` para «que se note», medir cuánto cambia el dibujo (el arnés con `@rive-app/canvas-advanced` 2.19.8
+  que renderiza el `.riv` fuera del teléfono): `isTalking`, `mouth` y `gaze` solos son casi invisibles a 170 px.
