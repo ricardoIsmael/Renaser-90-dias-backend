@@ -14329,6 +14329,7 @@ es cambiar una constante.
 la madrugada UTC) y `BarridoDeInformesSemanalesServiceTest` (dos corridas, corrida tardía, fallo aislado, lotes). Los
 casos de Los Ángeles/Tokio fallan contra el cron viejo (que generaba a la misma hora para todos).
 
+
 ## E-561 · `SnapshotRankingScheduler` a las 05:05 UTC con `clock.today()`: revisado, es una foto global y es correcto (backend, revisión, 06/10)
 
 **Síntoma:** ninguno. Hallazgo latente de E-536 revisado con evidencia.
@@ -14348,6 +14349,7 @@ otra zona ve el mismo ranking, con el día de Lima, igual que los demás.
 **Cómo evitar que se rompa:** si algún día el padrón deja de tener a Lima como «día del ranking», cambian a la vez
 `RankingController.hoyDelPadron()` y este cron; el test de arriba es el que avisa. Una variante por zona exigiría un
 ranking por zona, que es producto, no un arreglo de reloj.
+
 
 ## E-562 · `VerdugoIgnoradoScheduler` (23:55 UTC = 18:55 de Lima) barre un día UTC y no el día de cada participante; hoy no tiene nada que barrer (backend, latente, SIN CAMBIAR, 06/10)
 
@@ -14372,6 +14374,7 @@ que fija lo que hace hoy.
 corre a las 18:55: un evento pendiente disparado entre las 18:55 y las 19:00 de Lima no entraría en ninguna corrida.
 Es solo teórico mientras no existan pendientes.
 
+
 ## E-563 · Revisión de las pruebas de integración de `points`, `rocks` y `rag` por semillas con `CURRENT_DATE`/`now()` (pruebas, revisión, 06/10)
 
 **Hallazgo:** ninguna `*IT` de estos tres módulos siembra una fecha de calendario con `CURRENT_DATE` ni con la fecha del
@@ -14381,6 +14384,7 @@ día no se compara con nada: `MemoriaDeRenasiaPersistenceAdapterIT`, `PropuestaA
 (compara con `LocalDate.now(America/Lima)` explícito, y V72 usa la zona de cada fila). Los `LocalDate.now()` de
 `RachaRocasTest`/`RocaDiariaTest`/`RegistrarCoherenciaDiariaCommandTest` son unitarios y relativos (hoy−1, hoy).
 **Sin cambios.** Verificado además corriendo estas pruebas con `TZ=UTC` y con `TZ=America/Lima` (ver informe de la etapa).
+
 
 ## E-564 · `PUT /rsvp` decidía «ocurrencia de días pasados» con el día UTC del servidor, no el de la zona del evento (backend, calendario, RESUELTO, 06/10 — era E-550)
 
@@ -14407,6 +14411,7 @@ acepta lo de hoy 00:00–07:00. La app no ofrece «Voy» a fechas pasadas, así 
 viejo** (verificado). Candado general en E-567. Al fusionar con `eventos-asistencia` (donde E-550 está ABIERTO):
 marcarlo RESUELTO por E-564 y dejar a la vista que decía «Arreglo: ninguno todavía».
 
+
 ## E-565 · `AvisarGruposPorVencerScheduler`: el «hoy» del grupo se fijaba en Lima en vez de la zona de su cohorte (backend, comunidad, RESUELTO, 06/10)
 
 **Síntoma:** ninguno (todas las cohortes son de Lima). Revisión de la etapa 1 de zonas: el cron `0 10 11 * * *` UTC es
@@ -14421,6 +14426,7 @@ decide por grupo con `VigenciaDeGrupos.zonaDe(cohorte)` y `ReglasDeVencimientoDe
 deduplicación intactos. Para Lima (zona por defecto) el resultado es idéntico (`limaDeMadrugadaUtc…`, las pruebas
 previas sin cambio de expectativas). Pruebas nuevas con cohortes en Tokio y Los Ángeles que fallan contra lo viejo.
 Fila 17 añadida a `docs/informes/auditoria-fixes/C-5.md`.
+
 
 ## E-566 · Las 22 clases que siembran con `CURRENT_DATE` fuera de habits/points/rocks/rag: revisadas, ninguna se rompe por la zona (pruebas, VERIFICADO, 06/10)
 
@@ -14445,6 +14451,7 @@ el `Clock` de la prueba como `GruposEnCursoIT` (E-541). Pendiente fuera de alcan
 semilla-de-una-persona.sql` (`BorradoDeCuentaEnLosModulosIT`, `ClavesCompartidasAlBorrarCuentaIT`) también usa
 `CURRENT_DATE`; es borrado de cuenta y no compara días, no se corrió con `TZ=Asia/Tokyo`.
 
+
 ## E-567 · Candado: `ArchitectureTest` falla si `domain/` o `application/` leen la fecha o el reloj del servidor (pruebas, nuevo, 06/10)
 
 `dominioYAplicacionNoUsanLaFechaDelServidor` prohíbe en `..domain..` y `..application..`: `LocalDate.now()` (todas las
@@ -14454,6 +14461,7 @@ sobrecargas), `Instant.now()`, `LocalDateTime/ZonedDateTime/OffsetDateTime.now()
 (usa `clock.today()` como fecha por defecto de la regeneración manual; es del módulo `points`, de otro agente: al
 migrarlo se borra la línea). Comprobado que muerde: con la lista vacía el test falla señalando esa línea.
 Antes de este candado solo se vigilaba `adapter.in` (`adaptersDeEntradaNoUsanLaFechaDelServidor`).
+
 
 ## E-568 · `No value at JSON path "0.personalizada"` en una prueba escrita con un heredoc de bash sin comillas (entorno, D-258, RESUELTO, 06/10)
 
@@ -14469,6 +14477,7 @@ bash expandió `$[0]` como aritmética: `jsonPath("$[0].personalizada")` quedó 
 **Prevención:** al generar código Java desde bash, usar `<<'EOF'` (con comillas) y sustituir el paquete después, o
 revisar con `grep -n 'jsonPath("' ` lo generado: cualquier `$` seguido de `[`, `(` o un dígito se pierde sin aviso.
 
+
 ## E-569 · `RutasCubiertasPorElFiltroTest`: «Estas rutas no las alcanza ningun matcher .authenticated() de SecurityConfig» (D-258, RESUELTO, 06/10)
 
 **Síntoma (literal):** `Estas rutas no las alcanza ningun matcher .authenticated() de SecurityConfig y tampoco declaran
@@ -14483,6 +14492,7 @@ prefijo se lista a mano en `SecurityConfig`. Las pruebas unitarias del controlad
 
 **Prevención:** ya es ejecutable (`RutasCubiertasPorElFiltroTest`). Al crear un controlador con un prefijo nuevo, agregar el
 prefijo a `SecurityConfig` en el mismo cambio y correr esa prueba sola antes del `verify` completo.
+
 
 ## E-570 · CI del front en rojo con todas las pruebas en verde: «You are trying to `import` a file after the Jest environment has been torn down» (2026-10-06)
 
@@ -14502,6 +14512,7 @@ Jest terminaba con código 1. En local no se notó porque se miraban solo las l�
 **Prevención:** toda prueba con `TestRenderer.create` desmonta en `afterEach`. Al verificar el front, mirar el
 **código de salida** de `npx jest --ci` (lo que mira el CI), no solo `Tests: N passed`.
 
+
 ## E-571 · Build Android local falla con JDK 25: «Execution failed for task ':shopify_react-native-skia:configureCMakeRelWithDebInfo[x86_64]'. > WARNING: A restricted method in java.lang.System has been called» (entorno, 2026-10-06)
 
 **Síntoma (literal):** `./gradlew assembleRelease` del front (prebuild de Expo) termina en `FAILURE: Build completed with 3 failures`,
@@ -14516,6 +14527,7 @@ ese aviso de acceso restringido como fallo. No es el código.
 
 **Prevención:** backend con JDK 25, builds Android locales con JDK 21. Hacer el build en una copia aparte
 (`~/.cache/renaser-e2e/build-*`, `git archive` + `node_modules`), nunca en el worktree.
+
 
 ## E-572 · El fénix se veía como foto fija en Android aunque el .riv cargaba: `RiveReactNativeView.configureDataBinding` → `handleRiveException` (2026-10-06)
 
@@ -14535,6 +14547,7 @@ Prueba nueva en `phoenixMascot.test.ts` (falla contra el código anterior).
 
 **Prevención:** un respaldo por error tiene que filtrar por tipo; y el fénix nativo se valida en emulador con build
 local (E-571) antes de dar por buena la integración: en Jest el doble de Rive nunca emite ese aviso.
+
 
 ## E-573 · El servidor registraba hábitos de días ya cerrados: `POST /habit-tracks/{id}/complete` sobre un `EXPIRADO` de ayer respondía 200 con 0 puntos (D-259, RESUELTO, 06/10)
 
@@ -14616,6 +14629,7 @@ con sesión (quien no tiene semáforo recibe `aplica: false` y queda neutral). P
 
 **Prevención.** No decidir por rol algo que depende de un dato (tener programa/semáforo): preguntar por el dato.
 
+
 ## E-577 · El personal con la fila del programa sin activar veía «Todavía no elegiste tu Día 1» y no tenía dónde elegirlo (D-260, RESUELTO, 07/10)
 
 **Síntoma.** Captura del dueño con una cuenta de ADMINISTRADOR: Training mostraba «🔒 Todavía no elegiste tu Día 1 —
@@ -14647,6 +14661,7 @@ que algún rol no recorre (el onboarding), ese rol necesita otra entrada. `Elegi
 agrega un guard de rol al endpoint, y `elegirDiaUnoDelPersonal.test.ts` (front) si la tarjeta de Training pierde el botón
 o vuelve a mostrar el error crudo sin fila.
 
+
 ## E-578 · `StyleSheet.absoluteFillObject` ya no existe en los tipos de React Native de este SDK (front, 07/10)
 
 **Síntoma.** `npx tsc --noEmit`: `error TS2551: Property 'absoluteFillObject' does not exist on type 'typeof StyleSheet'. Did you mean 'absoluteFill'?`
@@ -14656,6 +14671,7 @@ o vuelve a mostrar el error crudo sin fila.
 **Arreglo.** `position: 'absolute'` con `top`, `left`, `right` y `bottom` en 0, escrito a mano en el estilo.
 
 **Prevención.** No usar `absoluteFillObject`; `tsc` lo detecta.
+
 
 ## E-579 · «No veo nada»: el momento de cumplir un hábito esperaba al servidor y lo que animaba no se percibía (front, RESUELTO, 07/10)
 
@@ -14683,86 +14699,7 @@ dibuja, va en `useLayoutEffect`. Y se verifica grabando el emulador (cuadros a 3
 recarga la app (atajo de recarga de React Native); escribir primero con el campo enfocado (verificarlo con
 `mobile_list_elements_on_screen`, `focused`) o usar texto sin «r».
 
-<<<<<<< HEAD
-## E-584 · La foto diaria del ranking (00:05 de Lima) podría contar el día que recién empieza (backend, ABIERTO, 07/10)
 
-**Síntoma.** Ninguno visto todavía: hallazgo de la evaluación del podio semanal (D-262). `SnapshotRankingScheduler`
-corre a las 05:05 UTC (00:05 de Lima) y genera la foto del día con `hasta = clock.today()`, que a esa hora ya es el día
-NUEVO en Lima. La ventana de hábitos de `PorcentajeHabitosService` (7 días hasta `hasta`, inclusive) incluye entonces
-un día que lleva cinco minutos: si ya tiene registros generados y calificables, todavía sin hacer, el puntaje de la
-pestaña General puede bajar a primera hora.
-
-**Causa (hipótesis, sin verificar).** E-561 revisó la foto como «global y correcta» en cuanto a la zona, pero no si
-el corte debería ser el día que cerró (`hoy − 1`) en vez del que empieza. Depende de si a las 00:05 ya hay registros
-del día nuevo (la generación corre cada hora, minuto 2, E-556) y de cómo cuentan los PENDIENTE en
-`ConteoDiarioHabitos.calificables()`.
-
-**Qué se hizo.** Nada en la foto diaria (fuera de alcance, pedido explícito). El podio semanal NO reusa la foto del
-lunes: calcula con `hasta = domingo` (`RankingGeneralFinder.alCorte`), así que no lo afecta.
-
-**Para cerrarlo.** Verificar con datos de producción qué devuelve la foto de las 00:05 contra la de `hoy − 1`, y
-decidir el corte con el dueño. Si cambia, es un cambio de regla del ranking: decisión nueva.
-
-## E-585 · La pestaña General dice «Hábitos, acciones y lecciones» y las acciones no cuentan desde el 22-sep (front + backend, ABIERTO, 07/10)
-
-**Síntoma.** Hallazgo de la evaluación del podio semanal (D-262): la pestaña General del ranking explica su puntaje
-como «Hábitos, acciones y lecciones», pero desde el 2026-09-22 la fórmula es **75 % hábitos + 25 % cursos**: las
-acciones (rocas, hoy OBJETIVOS) salieron del ranking general (`PuntajeGeneral`, decisión del dueño de ese día).
-
-**Causa.** El texto de la app quedó del modelo anterior (50 % hábitos + 35 % rocas + 15 % cursos).
-
-**Qué se hizo.** Nada (el front no se toca en este cambio). El podio semanal y su texto no mencionan acciones.
-
-**Para cerrarlo.** Cambiar el texto de la pestaña a «Hábitos y lecciones» (o lo que el dueño elija); como no hay
-actualización por aire, llega con el próximo APK.
-
-## E-586 · `La semana del podio empieza un lunes, no un TUESDAY`: la maqueta aprobada tenía una fecha imposible (backend, RESUELTO, 07/10)
-
-**Síntoma.** `PodioJava2dAdapterTest` no cargaba: `ExceptionInInitializerError: Exception
-java.lang.IllegalArgumentException: La semana del podio empieza un lunes, no un TUESDAY`.
-
-**Causa real.** La prueba copiaba la fecha de la maqueta «propuesta A» («Del lunes 29 de septiembre al domingo 5 de
-octubre»), y el 29/09/2026 fue martes. `SemanaDelRanking` rechaza una semana que no empieza en lunes.
-
-**Arreglo.** La prueba usa la semana real del 28 de septiembre al 4 de octubre. La imagen del servidor arma el rango
-desde el lunes verdadero, así que nunca puede repetir el error de la maqueta.
-
-**Prevención.** Una fecha copiada de un texto de ejemplo se verifica contra el calendario; el invariante del dominio
-(la semana empieza en lunes) lo atrapó al primer intento.
-
-## E-587 · `NoSuchElement No value present` en `PodioDeLaSemanaIT`: la base de pruebas no tiene grupo general (backend, RESUELTO, 07/10)
-
-**Síntoma.** `PodioDeLaSemanaIT`: `publicaUnaVez` con `expected: PUBLICADO` (salía `SIN_GRUPO_GENERAL`),
-`sinPuntajesNoPublica` con `expected: SIN_PUNTAJES`, y `sinEmisorSoloDelPrograma » NoSuchElement No value present`.
-
-**Causa real.** La conversación `GLOBAL` no la crea una migración en una base vacía: V47 solo la inserta si ya hay
-usuarios, y después la crea la primera persona que entra (`ConversacionService.unirse`). En el contenedor de las
-pruebas, corriendo esta IT sola, no existía.
-
-**Arreglo.** La IT crea el grupo general si falta y lo borra al terminar solo si lo creó ella.
-
-**Prevención.** Toda IT que escriba en el grupo general se asegura de que exista; no supone el estado de producción.
-
-## E-588 · El 403 de un ADMIN suspendido lo da el interceptor («Cuenta suspendida»), no el servicio (backend, RESUELTO, 07/10)
-
-**Síntoma.** `PodioDeLaSemanaAdminControllerTest.rechazoDelServicio`: `JSON path "$.message" expected:<La cuenta esta
-suspendida> but was:<Cuenta suspendida>`.
-
-**Causa real.** La prueba suponía, copiando el javadoc de `BienvenidaAdminControllerTest`, que el interceptor de
-`@RequiresPermission` deja pasar a un ADMIN suspendido y que el 403 sale del servicio. El interceptor ya rechaza a
-cualquier cuenta suspendida con «Cuenta suspendida»; lo que todavía deja pasar (A-1) es al MENTOR activo.
-
-**Arreglo.** Dos pruebas: el ADMIN suspendido recibe 403 del interceptor sin tocar ningún caso de uso; el MENTOR
-activo recibe el 403 del servicio. El servicio igual exige cuenta activa (`PodioDeLaSemanaServiceTest`).
-
-**Abierto (no se tocó).** El javadoc de `BienvenidaAdminControllerTest` y el de `Permission.MANAGE_WELCOME` dicen que
-el 403 de un ADMIN suspendido lo da el servicio; por lo visto acá lo da antes el interceptor. No cambia ningún
-comportamiento, pero conviene corregir esos dos textos en un cambio aparte.
-
-**Prevención.** Las pruebas de autorización negativa afirman quién da el 403 mirando qué pasa, no el comentario de
-otra prueba.
-
-> E-580 queda reservado para el agente del Día 1 del personal (trabajo en paralelo del 07/10); estas dos siguen en E-581.
 
 ## E-581 · Android cortaba la última palabra de una línea centrada en la pantalla de celebración (front, RESUELTO, 07/10)
 
@@ -14796,3 +14733,117 @@ AsyncStorage sin su doble. (2) `jest.mock('…/tacto', () => ({ tacto: mockTacto
 
 **Prevención.** Lo que leen componentes compartidos (un estado global) no importa almacenamiento ni red: eso va en un
 módulo aparte. En los dobles de Jest que usan una variable `mock…`, devolverla por getter.
+
+
+## E-583 — El fénix del centro de Hoy no se movía al escuchar, pensar ni hablar («probé y nada»)
+
+- **Fecha:** 2026-10-07
+- **Dónde:** frontend, `src/features/fenix/components/FenixDeSer.tsx` y `utils/conversacionDeSer.ts` (rama `fenix-voz`)
+- **Síntoma:** queja del dueño, literal: «No se está usando el movimiento cuando te escucha, cuando razona/piensa y
+  cuando habla. Probé y nada.» La fase de la voz SÍ llegaba al fénix (las pruebas lo verificaban: `emotion` 4,
+  `trgThinking`, `isTalking` true), pero a la vista era el reposo.
+- **Causa real:** cada fase se aplicaba UNA vez al entrar y con capas que casi no se ven. Medido sobre el `.riv`
+  v3.3 con el runtime web 2.19.8 (diferencia media por píxel, de 255, contra el reposo): `isTalking` 0,5 (el pico es
+  chico; `mouth` 3 fijo, 0,2); escuchando = solo cara `curious` (4–5, quieta, sin movimiento agregado); pensando = un
+  `trgThinking` de 2,7 s (`PHOENIX_ACTION_COMPLETE` a los 2,72 s) y después quieto. Lo que sí se ve es cabeza, cuerpo y
+  alas (`bodyLean`/`headPitch`/`headRoll` 14–17, `wingL/R` 0.3 → 10). Además la vida autónoma (`alive`) seguía
+  haciendo sus micro-conductas (mirar a un costado) en plena fase. Descartado: `isSpeaking=false` no pisa a
+  `isTalking` (en el `.riv` son equivalentes: mismo resultado píxel a píxel), «reducir movimiento» estaba apagado en el
+  emulador, y el `mood` va en otra capa. En la voz en vivo «pensando» además dura poco o no ocurre (si el audio de la
+  respuesta llega antes que la transcripción, pasa de escuchando a hablando).
+- **Solución:** `ActuacionDeVoz` sostiene la fase mientras dura con timers propios: postura (inclinarse, mirar
+  arriba), vaivén (ladeo de cabeza, mirada a cada lado, alas alternadas), `trgThinking` cada 2,8 s, `trgExplain` cada
+  6,5 s, boca con visemas sintéticos (`director.speak`, tandas de 0,9 s) además de `isTalking`, parpadeos, `lifeGaze`
+  bajo y `alive` apagado; escuchando, el volumen del micrófono (aviso `nivelDelMicrofono` de la voz en vivo) estira el
+  pecho. Al volver a reposo, todo vuelve suave y `alive` se enciende. En el emulador (ciclo de fases forzado temporal,
+  mismas fases de la app): movimiento por cuadro en hablando 3,6 → 6,2; distancia al reposo en escuchando 13,6 → 17,6.
+- **Cómo evitarlo:** un cambio de fase del fénix se prueba **en el tiempo**, no solo al entrar: `actuacionDeVoz.test.ts`
+  y `fenixDeSer.test.ts` («cada fase se sostiene mientras dura») avanzan el reloj 4–6 s y exigen `trgThinking`
+  repetido, `gazeX` a los dos lados, boca de 0 a 3 y `headRoll` que sigue cambiando a los 3 s. Y antes de elegir una
+  capa del `.riv` para «que se note», medir cuánto cambia el dibujo (el arnés con `@rive-app/canvas-advanced` 2.19.8
+  que renderiza el `.riv` fuera del teléfono): `isTalking`, `mouth` y `gaze` solos son casi invisibles a 170 px.
+
+
+## E-584 · La foto diaria del ranking (00:05 de Lima) podría contar el día que recién empieza (backend, ABIERTO, 07/10)
+
+**Síntoma.** Ninguno visto todavía: hallazgo de la evaluación del podio semanal (D-262). `SnapshotRankingScheduler`
+corre a las 05:05 UTC (00:05 de Lima) y genera la foto del día con `hasta = clock.today()`, que a esa hora ya es el día
+NUEVO en Lima. La ventana de hábitos de `PorcentajeHabitosService` (7 días hasta `hasta`, inclusive) incluye entonces
+un día que lleva cinco minutos: si ya tiene registros generados y calificables, todavía sin hacer, el puntaje de la
+pestaña General puede bajar a primera hora.
+
+**Causa (hipótesis, sin verificar).** E-561 revisó la foto como «global y correcta» en cuanto a la zona, pero no si
+el corte debería ser el día que cerró (`hoy − 1`) en vez del que empieza. Depende de si a las 00:05 ya hay registros
+del día nuevo (la generación corre cada hora, minuto 2, E-556) y de cómo cuentan los PENDIENTE en
+`ConteoDiarioHabitos.calificables()`.
+
+**Qué se hizo.** Nada en la foto diaria (fuera de alcance, pedido explícito). El podio semanal NO reusa la foto del
+lunes: calcula con `hasta = domingo` (`RankingGeneralFinder.alCorte`), así que no lo afecta.
+
+**Para cerrarlo.** Verificar con datos de producción qué devuelve la foto de las 00:05 contra la de `hoy − 1`, y
+decidir el corte con el dueño. Si cambia, es un cambio de regla del ranking: decisión nueva.
+
+
+## E-585 · La pestaña General dice «Hábitos, acciones y lecciones» y las acciones no cuentan desde el 22-sep (front + backend, ABIERTO, 07/10)
+
+**Síntoma.** Hallazgo de la evaluación del podio semanal (D-262): la pestaña General del ranking explica su puntaje
+como «Hábitos, acciones y lecciones», pero desde el 2026-09-22 la fórmula es **75 % hábitos + 25 % cursos**: las
+acciones (rocas, hoy OBJETIVOS) salieron del ranking general (`PuntajeGeneral`, decisión del dueño de ese día).
+
+**Causa.** El texto de la app quedó del modelo anterior (50 % hábitos + 35 % rocas + 15 % cursos).
+
+**Qué se hizo.** Nada (el front no se toca en este cambio). El podio semanal y su texto no mencionan acciones.
+
+**Para cerrarlo.** Cambiar el texto de la pestaña a «Hábitos y lecciones» (o lo que el dueño elija); como no hay
+actualización por aire, llega con el próximo APK.
+
+
+## E-586 · `La semana del podio empieza un lunes, no un TUESDAY`: la maqueta aprobada tenía una fecha imposible (backend, RESUELTO, 07/10)
+
+**Síntoma.** `PodioJava2dAdapterTest` no cargaba: `ExceptionInInitializerError: Exception
+java.lang.IllegalArgumentException: La semana del podio empieza un lunes, no un TUESDAY`.
+
+**Causa real.** La prueba copiaba la fecha de la maqueta «propuesta A» («Del lunes 29 de septiembre al domingo 5 de
+octubre»), y el 29/09/2026 fue martes. `SemanaDelRanking` rechaza una semana que no empieza en lunes.
+
+**Arreglo.** La prueba usa la semana real del 28 de septiembre al 4 de octubre. La imagen del servidor arma el rango
+desde el lunes verdadero, así que nunca puede repetir el error de la maqueta.
+
+**Prevención.** Una fecha copiada de un texto de ejemplo se verifica contra el calendario; el invariante del dominio
+(la semana empieza en lunes) lo atrapó al primer intento.
+
+
+## E-587 · `NoSuchElement No value present` en `PodioDeLaSemanaIT`: la base de pruebas no tiene grupo general (backend, RESUELTO, 07/10)
+
+**Síntoma.** `PodioDeLaSemanaIT`: `publicaUnaVez` con `expected: PUBLICADO` (salía `SIN_GRUPO_GENERAL`),
+`sinPuntajesNoPublica` con `expected: SIN_PUNTAJES`, y `sinEmisorSoloDelPrograma » NoSuchElement No value present`.
+
+**Causa real.** La conversación `GLOBAL` no la crea una migración en una base vacía: V47 solo la inserta si ya hay
+usuarios, y después la crea la primera persona que entra (`ConversacionService.unirse`). En el contenedor de las
+pruebas, corriendo esta IT sola, no existía.
+
+**Arreglo.** La IT crea el grupo general si falta y lo borra al terminar solo si lo creó ella.
+
+**Prevención.** Toda IT que escriba en el grupo general se asegura de que exista; no supone el estado de producción.
+
+
+## E-588 · El 403 de un ADMIN suspendido lo da el interceptor («Cuenta suspendida»), no el servicio (backend, RESUELTO, 07/10)
+
+**Síntoma.** `PodioDeLaSemanaAdminControllerTest.rechazoDelServicio`: `JSON path "$.message" expected:<La cuenta esta
+suspendida> but was:<Cuenta suspendida>`.
+
+**Causa real.** La prueba suponía, copiando el javadoc de `BienvenidaAdminControllerTest`, que el interceptor de
+`@RequiresPermission` deja pasar a un ADMIN suspendido y que el 403 sale del servicio. El interceptor ya rechaza a
+cualquier cuenta suspendida con «Cuenta suspendida»; lo que todavía deja pasar (A-1) es al MENTOR activo.
+
+**Arreglo.** Dos pruebas: el ADMIN suspendido recibe 403 del interceptor sin tocar ningún caso de uso; el MENTOR
+activo recibe el 403 del servicio. El servicio igual exige cuenta activa (`PodioDeLaSemanaServiceTest`).
+
+**Abierto (no se tocó).** El javadoc de `BienvenidaAdminControllerTest` y el de `Permission.MANAGE_WELCOME` dicen que
+el 403 de un ADMIN suspendido lo da el servicio; por lo visto acá lo da antes el interceptor. No cambia ningún
+comportamiento, pero conviene corregir esos dos textos en un cambio aparte.
+
+**Prevención.** Las pruebas de autorización negativa afirman quién da el 403 mirando qué pasa, no el comentario de
+otra prueba.
+
+> E-580 queda reservado para el agente del Día 1 del personal (trabajo en paralelo del 07/10); estas dos siguen en E-581.
