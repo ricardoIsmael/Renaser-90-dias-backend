@@ -14848,17 +14848,47 @@ otra prueba.
 
 > E-580 queda reservado para el agente del Día 1 del personal (trabajo en paralelo del 07/10); estas dos siguen en E-581.
 
-## E-589 · El botón «Seguir» de la celebración a pantalla completa no aparece para `uiautomator` (front, ABIERTO, 07/10)
+## E-589 · El botón «Seguir» de la celebración a pantalla completa no aparece para `uiautomator` (front, RESUELTO — no era un bug de la app, 07/10)
 
 **Síntoma.** En la prueba de punta a punta del APK 99 (Maestro, emulador, base local), con «¡Día completo!» en
-pantalla, `tapOn: "Seguir"` no encuentra el elemento, y en la jerarquía de `uiautomator` el botón no figura. El modal
-se cerró tocando fuera, que también lo cierra.
+pantalla, `tapOn: "Seguir"` no encuentra el elemento, y en la jerarquía de `uiautomator` el botón no figura (sí la
+pantalla de atrás). El modal se cerró tocando fuera.
 
-**Causa probable (sin confirmar).** `PantallaDeCelebracion` (`src/features/fenix/components/PantallaDeCelebracion.tsx`)
-monta el `GoldButton` dentro de un `Modal` cuya capa tocable de fondo envuelve todo; esa capa probablemente agrupa a
-los hijos en un solo nodo accesible y oculta el botón. Si es así, TalkBack tampoco lo anuncia.
+**Causa real.** La herramienta, no la app. `uiautomator dump` (y Maestro) esperan a que la interfaz quede quieta antes
+de leer la jerarquía; con el fénix, las brasas y los contadores animándose, cada lectura tardó ~3 s, y la pantalla se
+cierra sola a los 3,8 s (`PANTALLA_MS.autocierre`). Cuando la lectura llega, ya no está. Comprobado el 07/10 alargando
+el cierre a 60 s solo en la copia del Metro: el árbol trae «¡Día completo!», el texto, «Seguir» como botón y la capa
+«…Tocar para cerrar»; tocar «Seguir» la cierra. Con lector de pantalla la app **ya** no la cierra sola
+(`useAparicion` en `PantallaDeCelebracion.tsx`, `isScreenReaderEnabled`), así que TalkBack la puede recorrer entera.
 
-**Arreglo.** Pendiente (`docs/informes/pendientes-2026-10-07.md` §B.1). Revisar `accessible`/`importantForAccessibility`
-de la capa de fondo y comprobar con `uiautomator dump` y TalkBack que «Seguir» aparece como botón.
+> **Corregido 2026-10-07.** Decía «ABIERTO» y «Causa probable (sin confirmar): la capa tocable de fondo agrupa a los
+> hijos y oculta el botón; si es así, TalkBack tampoco lo anuncia». No era eso.
 
-**Prevención.** Que el flujo de Maestro de la celebración cierre con `tapOn: "Seguir"` y no tocando fuera.
+**Arreglo.** Ninguno en la app.
+
+**Prevención.** En un flujo de Maestro que llega a la celebración, no buscar «Seguir» con `tapOn` por texto, porque la
+espera de quietud se come los 3,8 s. Tocar fuera, o verificar la pantalla con capturas o con un video. Para leer su
+jerarquía hay que alargar `autocierre` en una copia de prueba, nunca en el repo.
+
+## E-590 · La imagen del podio semanal tardaba en aparecer en el chat y salía recortada (backend + front, RESUELTO, 07/10)
+
+**Síntoma.** Prueba en el emulador del podio de D-262 (local, almacenamiento S3 falso): el texto llega al instante y la
+imagen queda unos instantes como un recuadro gris antes de aparecer. El dueño: «se demora la imagen… quiero que sea
+rápido». Además, en la burbuja se veía recortada arriba y abajo (sin el encabezado ni la frase final).
+
+**Causa real.** (1) `PodioJava2dAdapter` la sacaba en PNG: con el fondo y los bloques en degradado pesaba ~216 KB, y el
+teléfono la baja de S3 por URL firmada la primera vez (después sale de la caché por `mediaPath`). (2) La burbuja de
+foto es siempre de 240 × 240 con `cover`, y el podio es 4:5 (1080 × 1350).
+
+**Arreglo.** (1) JPEG de calidad 0,90 (`CALIDAD_JPEG`), ruta `ranking-semanal/<lunes>-v1.jpg`, `image/jpeg`: ~120 KB,
+casi la mitad. Con zoom ×3 las letras no se distinguen del PNG. (2) En la app, `altoDeLaFotoDelChat`: la foto con ruta
+`ranking-semanal/` va de 240 × 300, así que la burbuja ya tiene su tamaño final y no salta. Las demás siguen cuadradas.
+Medido en el emulador (local, caché de imágenes vacía): de la llegada del mensaje a la imagen completa, ~0,25 s
+incluida la transición de 150 ms.
+
+**Prevención.** `PodioJava2dAdapterTest` exige un JPEG de menos de 160 KB, y `altoDeLaFotoDelChat.test.ts` la
+proporción 4:5. **Para probar imágenes del servidor en local:** con `STORAGE_PROVEEDOR=noop` no sale ninguna imagen
+(G-5). Hay que usar S3Mock (`docker run -p 127.0.0.1:9000:9090 -e COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS=s3-renaser90dias adobe/s3mock`)
+con `STORAGE_PROVEEDOR=s3 AWS_ENDPOINT_URL_S3=http://127.0.0.1:9000` y credenciales falsas, y `adb reverse tcp:9000`
+**antes** de publicar. Si el puerto se abre después, la imagen queda gris hasta volver a entrar al chat. Las imágenes
+`minio/minio` (Docker Hub) y `quay.io/minio/minio` ya no se pueden bajar.

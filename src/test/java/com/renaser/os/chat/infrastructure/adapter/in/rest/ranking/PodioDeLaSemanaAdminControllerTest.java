@@ -65,7 +65,7 @@ class PodioDeLaSemanaAdminControllerTest {
         UUID actor = cuenta(UserRole.ADMIN, UserStatus.ACTIVE);
         when(verUseCase.vistaPrevia(UserId.of(actor))).thenReturn(new VistaPreviaDelPodio(LUNES, DOMINGO,
                 List.of(new Puesto(1, "Liz M.", new BigDecimal("96.4"))), "🏆 ¡Cerramos la semana!",
-                new byte[]{1, 2, 3}, "image/png", "A", false));
+                new byte[]{1, 2, 3}, "image/jpeg", "A", false));
 
         mockMvc.perform(get(BASE + "/vista-previa").header("X-Actor-Id", actor.toString()))
                 .andExpect(status().isOk())
@@ -77,7 +77,7 @@ class PodioDeLaSemanaAdminControllerTest {
                 .andExpect(jsonPath("$.entries[0].name").value("Liz M."))
                 .andExpect(jsonPath("$.entries[0].score").value(96.4))
                 .andExpect(jsonPath("$.text").value("🏆 ¡Cerramos la semana!"))
-                .andExpect(jsonPath("$.image").value("data:image/png;base64,AQID"));
+                .andExpect(jsonPath("$.image").value("data:image/jpeg;base64,AQID"));
         verifyNoInteractions(publicarUseCase);
     }
 

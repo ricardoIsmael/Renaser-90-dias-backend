@@ -6,7 +6,11 @@ import com.renaser.os.chat.domain.model.ranking.PodioDeLaSemana.Puesto;
 import com.renaser.os.chat.domain.model.ranking.SemanaDelRanking;
 import org.springframework.stereotype.Component;
 
+import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageOutputStream;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics2D;
@@ -35,13 +39,19 @@ import java.util.List;
  * empatados son dos bloques de oro; el centro es siempre el primero de la lista. Las columnas que faltan (menos de
  * tres personas) no se dibujan.
  *
- * <p>Sale en PNG: son colores planos y letras, que en JPEG se ensucian alrededor de los bordes.
+ * <p>Sale en JPEG de calidad 0,90 (E-590): pesa la mitad que el PNG (≈110 KB contra ≈216 KB) y en el chat aparece
+ * antes con datos móviles; a calidad 0,90 las letras no se ven sucias ni con zoom ×3.
+ *
+ * <blockquote><b>Corregido 2026-10-07.</b> Decía <i>«Sale en PNG: son colores planos y letras, que en JPEG se ensucian
+ * alrededor de los bordes»</i>. El fondo y los bloques llevan degradados, el PNG pesaba 216 KB y la imagen tardaba en
+ * aparecer en el chat; la comparación con zoom ×3 no mostró bordes sucios a calidad 0,90.</blockquote>
  */
 @Component
 class PodioJava2dAdapter implements DibujarPodioPort {
 
     static final int ANCHO = 1080;
     static final int ALTO = 1350;
+    static final float CALIDAD_JPEG = 0.90f;
     static final Color FONDO = new Color(0xFC, 0xFB, 0xF9);
     static final Color DORADO = new Color(0xB2, 0x92, 0x4F);
     static final Color TINTA = new Color(0x85, 0x6C, 0x35);
@@ -70,7 +80,7 @@ class PodioJava2dAdapter implements DibujarPodioPort {
         } finally {
             g.dispose();
         }
-        return comoPng(lienzo);
+        return comoJpeg(lienzo);
     }
 
     private static void suavizar(Graphics2D g) {
@@ -169,13 +179,24 @@ class PodioJava2dAdapter implements DibujarPodioPort {
         TiposDelPodio.escribir(g, texto, fuente, x, lineaBase, separacion);
     }
 
-    private static byte[] comoPng(BufferedImage imagen) {
+    private static byte[] comoJpeg(BufferedImage imagen) {
         ByteArrayOutputStream salida = new ByteArrayOutputStream();
-        try {
-            ImageIO.write(imagen, "png", salida);
+        ImageWriter escritor = ImageIO.getImageWritersByFormatName("jpeg").next();
+        try (ImageOutputStream destino = ImageIO.createImageOutputStream(salida)) {
+            escritor.setOutput(destino);
+            escritor.write(null, new IIOImage(imagen, null, null), conCalidad(escritor));
         } catch (IOException e) {
             throw new UncheckedIOException("No se pudo codificar la imagen del podio", e);
+        } finally {
+            escritor.dispose();
         }
         return salida.toByteArray();
+    }
+
+    private static ImageWriteParam conCalidad(ImageWriter escritor) {
+        ImageWriteParam parametros = escritor.getDefaultWriteParam();
+        parametros.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+        parametros.setCompressionQuality(CALIDAD_JPEG);
+        return parametros;
     }
 }

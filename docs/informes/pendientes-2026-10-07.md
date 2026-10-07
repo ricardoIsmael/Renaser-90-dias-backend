@@ -22,8 +22,7 @@ verde. AAB de la Play Store: sigue el 1.5.0 (versionCode 97), sin nada de esto.
 
 ## B. Arreglos conocidos (sin empezar)
 
-1. **E-589:** el botón «Seguir» de la celebración a pantalla completa no lo ve `uiautomator` ni, probablemente, el
-   lector de pantalla.
+1. ~~**E-589:** «Seguir» invisible para `uiautomator`~~ — **resuelto 07/10**: era la herramienta (espera de quietud más larga que el cierre automático de 3,8 s), no la app; con lector de pantalla no se cierra sola.
 2. La **pastilla** y la **clase diaria** no disparan la celebración a pantalla completa (solo los hábitos). Falta
    confirmar con el dueño si deben.
 3. La celebración de **graduación** necesita un dato del servidor que hoy no llega.
@@ -37,7 +36,7 @@ el texto, G-5). Publicado con `POST /api/v1/admin/ranking-semanal/publicar` como
 vivo al grupo «Formación Renaser Global» del aprendiz, firmados «Formación Renaser»; la imagen abre en grande completa;
 publicar otra vez responde `YA_ESTABA` sin duplicar; un aprendiz recibe 403 en publicar y en vista previa. Videos en
 `~/Imágenes/e2e-2026-10-07/podio/`. **Observado:** en la burbuja del chat la imagen (4:5) se recorta arriba y abajo
-(no se ve el encabezado ni la frase final); en grande se ve entera. No se tocó.
+(no se ve el encabezado ni la frase final); en grande se ve entera. **Arreglado el mismo día (E-590):** JPEG de ~120 KB y burbuja 4:5.
 
 ## C. Del lado del dueño
 

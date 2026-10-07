@@ -75,7 +75,7 @@ public record SemanaDelRanking(LocalDate lunes) {
 
     /** Fuera de {@code chat/<conversación>/}, como las tarjetas del semáforo: la imagen no es de ningún chat. */
     public String rutaDeLaImagen() {
-        return "ranking-semanal/" + lunes + "-" + VERSION_DE_LA_IMAGEN + ".png";
+        return "ranking-semanal/" + lunes + "-" + VERSION_DE_LA_IMAGEN + ".jpg";
     }
 
     private MensajeId idDe(String pieza) {

@@ -99,14 +99,14 @@ class PodioDeLaSemanaServiceTest {
 
         assertThat(resultado).isEqualTo(new ResultadoDelPodio(SEMANA.lunes(), DOMINGO, Estado.PUBLICADO, 2));
         verify(ranking).alCorte(DOMINGO);
-        verify(almacenamiento).subir("ranking-semanal/2026-09-28-v1.png", PNG, "image/png");
+        verify(almacenamiento).subir("ranking-semanal/2026-09-28-v1.jpg", PNG, "image/jpeg");
         EntregaDelPrograma entrega = entregada();
         assertThat(entrega.conversacionId()).isEqualTo(GLOBAL);
         assertThat(entrega.sobreQuien()).as("sin persona: no cae con la cuenta de nadie").isNull();
         assertThat(entrega.piezas()).hasSize(2);
         assertThat(entrega.piezas().get(0).id()).isEqualTo(SEMANA.idDeLaImagen());
         assertThat(entrega.piezas().get(0).aviso()).isEqualTo(AvisoDeLaPieza.SIN_AVISO);
-        assertThat(entrega.piezas().get(0).contenido().mediaRuta()).isEqualTo("ranking-semanal/2026-09-28-v1.png");
+        assertThat(entrega.piezas().get(0).contenido().mediaRuta()).isEqualTo("ranking-semanal/2026-09-28-v1.jpg");
         assertThat(entrega.piezas().get(1).id()).isEqualTo(SEMANA.idDelTexto());
         assertThat(entrega.piezas().get(1).aviso()).isEqualTo(AvisoDeLaPieza.A_TODOS);
         assertThat(entrega.piezas().get(1).contenido().texto()).contains("Liz M.").contains("Jorge P.");

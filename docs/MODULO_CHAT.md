@@ -1289,8 +1289,11 @@ app 1.5.0 ya muestra imágenes de `SYSTEM`: no hace falta APK.
   pestaña General) calculado con `hasta = domingo`; solo puntaje > 0, los tres primeros en el podio y el 4.º y el 5.º
   debajo; empates comparten puesto (`PodioDeLaSemana`); nombres «Liz M.» (`NombreCorto`).
 - **El texto:** plantillas A, B y C del dueño, una por semana (`TextoDelPodio`).
-- **La imagen:** `PodioJava2dAdapter` (PNG 1080×1350, ~220 KB) en `ranking-semanal/<lunes>-v1.png` del almacenamiento,
-  fuera del prefijo de cualquier chat (como las tarjetas del semáforo).
+- **La imagen:** `PodioJava2dAdapter` (JPEG 1080×1350 calidad 0,90, ~120 KB) en `ranking-semanal/<lunes>-v1.jpg` del
+  almacenamiento, fuera del prefijo de cualquier chat (como las tarjetas del semáforo). En la app la burbuja la muestra
+  en 4:5 (`altoDeLaFotoDelChat`), sin recorte.
+  > **Corregido 2026-10-07 (E-590).** Decía «PNG 1080×1350, ~220 KB» en `ranking-semanal/<lunes>-v1.png`: tardaba en
+  > aparecer en el chat con datos móviles.
 - **Sin persona** (V95): `EntregaDelPrograma.sinPersona`, `emisor_id` NULL. Ninguna cuenta eliminada se lleva el
   podio; hacia afuera es «Formación Renaser» como cualquier mensaje del programa.
 - **Idempotente:** ids derivados de la semana; si el texto ya está, nada más. El cron corre cada hora del lunes de

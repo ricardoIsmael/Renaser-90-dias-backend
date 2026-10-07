@@ -57,7 +57,7 @@ class SemanaDelRankingTest {
         assertThat(semana.idDelTexto()).isEqualTo(new SemanaDelRanking(LUNES_28).idDelTexto());
         assertThat(semana.idDelTexto()).isNotEqualTo(semana.idDeLaImagen());
         assertThat(semana.idDelTexto()).isNotEqualTo(siguiente.idDelTexto());
-        assertThat(semana.rutaDeLaImagen()).isEqualTo("ranking-semanal/2026-09-28-v1.png");
+        assertThat(semana.rutaDeLaImagen()).isEqualTo("ranking-semanal/2026-09-28-v1.jpg");
     }
 
     @Test
