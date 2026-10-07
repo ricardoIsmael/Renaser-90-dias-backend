@@ -161,4 +161,26 @@ class MensajeDelProgramaServiceTest {
 
         assertThat(publicados).containsExactly(new MensajeDeChatGuardadoEvent(TEXTO.value(), SOPORTE.value()));
     }
+
+    @Test
+    @DisplayName("D-262: sin persona (el podio semanal) se guarda sin emisor, firmado por el programa, y avisa a todos")
+    void sinPersona() {
+        when(loadConversacionPort.porId(SOPORTE)).thenReturn(Optional.of(Conversacion.crearGlobal(SOPORTE, AHORA)));
+
+        servicio().enviarUnaVez(EntregaDelPrograma.sinPersona(SOPORTE,
+                List.of(new PiezaDelPrograma(TEXTO, ContenidoDelPrograma.texto("podio"), AvisoDeLaPieza.A_TODOS))));
+
+        assertThat(guardadosUnaVez.get(TEXTO).emisorId()).isNull();
+        assertThat(guardadosUnaVez.get(TEXTO).remitentePublico()).isEqualTo(Mensaje.ID_PUBLICO_DEL_PROGRAMA);
+        assertThat(guardadosUnaVez.get(TEXTO).escritoPor(ANA)).isFalse();
+        assertThat(publicados).containsExactly(new MensajeDeChatGuardadoEvent(TEXTO.value(), SOPORTE.value()));
+    }
+
+    @Test
+    @DisplayName("D-262: sin persona no se puede avisar «solo a quien se refiere»")
+    void sinPersonaNoHayAQuienAvisarleSolo() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> EntregaDelPrograma.sinPersona(SOPORTE,
+                        List.of(new PiezaDelPrograma(TEXTO, ContenidoDelPrograma.texto("x"), AvisoDeLaPieza.SOLO_A_QUIEN_SE_REFIERE))))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

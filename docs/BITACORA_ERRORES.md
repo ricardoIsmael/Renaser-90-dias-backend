@@ -14683,3 +14683,81 @@ dibuja, va en `useLayoutEffect`. Y se verifica grabando el emulador (cuadros a 3
 *De paso (entorno):* en la build de depuración, `adb shell input text` con una «r» cuando el campo no tiene el foco
 recarga la app (atajo de recarga de React Native); escribir primero con el campo enfocado (verificarlo con
 `mobile_list_elements_on_screen`, `focused`) o usar texto sin «r».
+
+## E-584 · La foto diaria del ranking (00:05 de Lima) podría contar el día que recién empieza (backend, ABIERTO, 07/10)
+
+**Síntoma.** Ninguno visto todavía: hallazgo de la evaluación del podio semanal (D-262). `SnapshotRankingScheduler`
+corre a las 05:05 UTC (00:05 de Lima) y genera la foto del día con `hasta = clock.today()`, que a esa hora ya es el día
+NUEVO en Lima. La ventana de hábitos de `PorcentajeHabitosService` (7 días hasta `hasta`, inclusive) incluye entonces
+un día que lleva cinco minutos: si ya tiene registros generados y calificables, todavía sin hacer, el puntaje de la
+pestaña General puede bajar a primera hora.
+
+**Causa (hipótesis, sin verificar).** E-561 revisó la foto como «global y correcta» en cuanto a la zona, pero no si
+el corte debería ser el día que cerró (`hoy − 1`) en vez del que empieza. Depende de si a las 00:05 ya hay registros
+del día nuevo (la generación corre cada hora, minuto 2, E-556) y de cómo cuentan los PENDIENTE en
+`ConteoDiarioHabitos.calificables()`.
+
+**Qué se hizo.** Nada en la foto diaria (fuera de alcance, pedido explícito). El podio semanal NO reusa la foto del
+lunes: calcula con `hasta = domingo` (`RankingGeneralFinder.alCorte`), así que no lo afecta.
+
+**Para cerrarlo.** Verificar con datos de producción qué devuelve la foto de las 00:05 contra la de `hoy − 1`, y
+decidir el corte con el dueño. Si cambia, es un cambio de regla del ranking: decisión nueva.
+
+## E-585 · La pestaña General dice «Hábitos, acciones y lecciones» y las acciones no cuentan desde el 22-sep (front + backend, ABIERTO, 07/10)
+
+**Síntoma.** Hallazgo de la evaluación del podio semanal (D-262): la pestaña General del ranking explica su puntaje
+como «Hábitos, acciones y lecciones», pero desde el 2026-09-22 la fórmula es **75 % hábitos + 25 % cursos**: las
+acciones (rocas, hoy OBJETIVOS) salieron del ranking general (`PuntajeGeneral`, decisión del dueño de ese día).
+
+**Causa.** El texto de la app quedó del modelo anterior (50 % hábitos + 35 % rocas + 15 % cursos).
+
+**Qué se hizo.** Nada (el front no se toca en este cambio). El podio semanal y su texto no mencionan acciones.
+
+**Para cerrarlo.** Cambiar el texto de la pestaña a «Hábitos y lecciones» (o lo que el dueño elija); como no hay
+actualización por aire, llega con el próximo APK.
+
+## E-586 · `La semana del podio empieza un lunes, no un TUESDAY`: la maqueta aprobada tenía una fecha imposible (backend, RESUELTO, 07/10)
+
+**Síntoma.** `PodioJava2dAdapterTest` no cargaba: `ExceptionInInitializerError: Exception
+java.lang.IllegalArgumentException: La semana del podio empieza un lunes, no un TUESDAY`.
+
+**Causa real.** La prueba copiaba la fecha de la maqueta «propuesta A» («Del lunes 29 de septiembre al domingo 5 de
+octubre»), y el 29/09/2026 fue martes. `SemanaDelRanking` rechaza una semana que no empieza en lunes.
+
+**Arreglo.** La prueba usa la semana real del 28 de septiembre al 4 de octubre. La imagen del servidor arma el rango
+desde el lunes verdadero, así que nunca puede repetir el error de la maqueta.
+
+**Prevención.** Una fecha copiada de un texto de ejemplo se verifica contra el calendario; el invariante del dominio
+(la semana empieza en lunes) lo atrapó al primer intento.
+
+## E-587 · `NoSuchElement No value present` en `PodioDeLaSemanaIT`: la base de pruebas no tiene grupo general (backend, RESUELTO, 07/10)
+
+**Síntoma.** `PodioDeLaSemanaIT`: `publicaUnaVez` con `expected: PUBLICADO` (salía `SIN_GRUPO_GENERAL`),
+`sinPuntajesNoPublica` con `expected: SIN_PUNTAJES`, y `sinEmisorSoloDelPrograma » NoSuchElement No value present`.
+
+**Causa real.** La conversación `GLOBAL` no la crea una migración en una base vacía: V47 solo la inserta si ya hay
+usuarios, y después la crea la primera persona que entra (`ConversacionService.unirse`). En el contenedor de las
+pruebas, corriendo esta IT sola, no existía.
+
+**Arreglo.** La IT crea el grupo general si falta y lo borra al terminar solo si lo creó ella.
+
+**Prevención.** Toda IT que escriba en el grupo general se asegura de que exista; no supone el estado de producción.
+
+## E-588 · El 403 de un ADMIN suspendido lo da el interceptor («Cuenta suspendida»), no el servicio (backend, RESUELTO, 07/10)
+
+**Síntoma.** `PodioDeLaSemanaAdminControllerTest.rechazoDelServicio`: `JSON path "$.message" expected:<La cuenta esta
+suspendida> but was:<Cuenta suspendida>`.
+
+**Causa real.** La prueba suponía, copiando el javadoc de `BienvenidaAdminControllerTest`, que el interceptor de
+`@RequiresPermission` deja pasar a un ADMIN suspendido y que el 403 sale del servicio. El interceptor ya rechaza a
+cualquier cuenta suspendida con «Cuenta suspendida»; lo que todavía deja pasar (A-1) es al MENTOR activo.
+
+**Arreglo.** Dos pruebas: el ADMIN suspendido recibe 403 del interceptor sin tocar ningún caso de uso; el MENTOR
+activo recibe el 403 del servicio. El servicio igual exige cuenta activa (`PodioDeLaSemanaServiceTest`).
+
+**Abierto (no se tocó).** El javadoc de `BienvenidaAdminControllerTest` y el de `Permission.MANAGE_WELCOME` dicen que
+el 403 de un ADMIN suspendido lo da el servicio; por lo visto acá lo da antes el interceptor. No cambia ningún
+comportamiento, pero conviene corregir esos dos textos en un cambio aparte.
+
+**Prevención.** Las pruebas de autorización negativa afirman quién da el 403 mirando qué pasa, no el comentario de
+otra prueba.

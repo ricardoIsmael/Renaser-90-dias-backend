@@ -562,6 +562,14 @@ renaser:
     # dice el modo que tomó: `[chat.fotos] foto de los integrantes…`). Un valor que no es ninguno de los
     # dos queda en TARJETA, con un aviso en el log.
     foto-de-integrantes: ${CHAT_FOTO_DE_INTEGRANTES:TARJETA}
+    # D-262 (2026-10-07): el podio semanal del ranking general en el grupo «Formación Renaser Global», los
+    # lunes a las 09:00 de Lima (imagen sin aviso + texto con aviso a todos, firmados por el programa).
+    # APAGADO por defecto, como la bienvenida: prenderlo en producción con
+    # /renaser/prod/RANKING_SEMANAL_ACTIVO=true y reiniciar. Prenderlo no publica semanas atrasadas. Para
+    # probarlo sin esperar al lunes: GET /api/v1/admin/ranking-semanal/vista-previa (no publica) y
+    # POST /api/v1/admin/ranking-semanal/publicar (publica la última semana cerrada aunque esté apagado).
+    ranking-semanal:
+      activo: ${RANKING_SEMANAL_ACTIVO:false}
   # D-223 (2026-09-29): la tarjeta diaria del semáforo en el chat de soporte (a las 23:50 de cada aprendiz,
   # imagen del color de su día + «Hoy llevas N % de tus hábitos.»). PRENDIDA por defecto: la pidió el dueño
   # con las imágenes de Operaciones y el texto ya decididos. En el código el default es false, así las

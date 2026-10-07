@@ -13,7 +13,8 @@ import java.sql.Timestamp;
  * de dejarlo quieto. Lo que dice cuántas filas entraron es la base, así que dos instancias a la vez tampoco
  * duplican.
  *
- * <p>Solo lo usan mensajes del programa (sin respuesta ni duración): esas dos columnas quedan en null.
+ * <p>Solo lo usan mensajes del programa (sin respuesta ni duración): esas dos columnas quedan en null, y
+ * {@code emisor_id} también cuando el mensaje no se refiere a nadie (V95, D-262).
  */
 @Component
 class MensajeUnicoJdbcAdapter implements GuardarMensajeUnicoPort {
@@ -29,13 +30,13 @@ class MensajeUnicoJdbcAdapter implements GuardarMensajeUnicoPort {
         return jdbcClient.sql("""
                         INSERT INTO renaser.mensajes (id, conversacion_id, emisor_id, tipo, texto, media_bucket,
                                                       media_ruta, media_mime, media_bytes, creado_en)
-                        VALUES (:id, :conversacion, :emisor, CAST(:tipo AS renaser.tipo_mensaje), :texto, :bucket,
+                        VALUES (:id, :conversacion, CAST(:emisor AS uuid), CAST(:tipo AS renaser.tipo_mensaje), :texto, :bucket,
                                 :ruta, :mime, :bytes, :creado)
                         ON CONFLICT (id) DO NOTHING
                         """)
                 .param("id", mensaje.id().value())
                 .param("conversacion", mensaje.conversacionId().value())
-                .param("emisor", mensaje.emisorId().value())
+                .param("emisor", mensaje.emisorId() != null ? mensaje.emisorId().value() : null)
                 .param("tipo", mensaje.tipo().name())
                 .param("texto", mensaje.texto())
                 .param("bucket", mensaje.mediaBucket())

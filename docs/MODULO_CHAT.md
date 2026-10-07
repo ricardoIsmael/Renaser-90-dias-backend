@@ -595,6 +595,9 @@ programa.
   sin purgarse con ninguna cuenta (`ClavesDeCuenta` las deja afuera a propósito), igual que antes; y quien
   cuente «lo que escribió» alguien leyendo `emisor_id` directo tiene que excluir `tipo = 'SISTEMA'` (hoy
   nadie lo hace; `users` lee `emisor_id` solo para la purga, y ahí el resultado es el correcto).
+  > **Actualizado 2026-10-07 (D-262, V95).** Desde V95 `emisor_id` admite NULL, solo en un mensaje de
+  > `SISTEMA` que no se refiere a nadie: el podio semanal del grupo general (§20). Lo de arriba sigue valiendo
+  > para todos los demás mensajes del programa, que siguen guardando a quien se refieren.
 - **Hacia afuera nunca es de esa persona:** `Mensaje.remitentePublico()` es el UUID nulo, y el nombre,
   «Formación Renaser» (el mismo sufijo de cada chat de soporte).
 - **Alternativas descartadas.** (a) Una migración (V72: `emisor_id` nullable con `CHECK (emisor_id IS NOT
@@ -1275,3 +1278,23 @@ una cuenta suspendida, 403.
 | `AccesoAChatsDeGrupoTest` (10) | Admin ve grupo ajeno en curso; no el vencido; suspendido no; mentor, líder, aprendiz y alquimista ajenos no; la pertenencia alcanza sin mirar el rol; usuario inexistente, no |
 | `ConversacionServiceTest` (+3) | La lista del Admin suma los grupos en curso sin repetir y con 0 no leídos; la del mentor no; el Admin marca leído un grupo ajeno |
 | `AdminVeTodosLosGruposIT` (6) | Postgres + Tomcat + sesión real: lista con «Ricardo y sus aprendices» y sin el vencido; lee, escribe, marca leído y ve integrantes sin figurar ni quedar como participante; sin push para el Admin; mentor ajeno, aprendiz ajeno, alquimista y admin suspendido, 403; sesión viva que pasa a suspendida, 403 |
+
+## 20. El podio semanal del ranking general en el grupo general (2026-10-07, D-262)
+
+Los lunes a las 09:00 de Lima, en la conversación `GLOBAL` («Formación Renaser Global»), el programa publica el podio de
+la semana que cerró el domingo: **la imagen** (sin aviso) y, un milisegundo después, **el texto** (aviso a todos). La
+app 1.5.0 ya muestra imágenes de `SYSTEM`: no hace falta APK.
+
+- **Quién sale:** el ranking GENERAL (`points.api.RankingGeneralFinder`, las mismas personas y la misma fórmula que la
+  pestaña General) calculado con `hasta = domingo`; solo puntaje > 0, los tres primeros en el podio y el 4.º y el 5.º
+  debajo; empates comparten puesto (`PodioDeLaSemana`); nombres «Liz M.» (`NombreCorto`).
+- **El texto:** plantillas A, B y C del dueño, una por semana (`TextoDelPodio`).
+- **La imagen:** `PodioJava2dAdapter` (PNG 1080×1350, ~220 KB) en `ranking-semanal/<lunes>-v1.png` del almacenamiento,
+  fuera del prefijo de cualquier chat (como las tarjetas del semáforo).
+- **Sin persona** (V95): `EntregaDelPrograma.sinPersona`, `emisor_id` NULL. Ninguna cuenta eliminada se lleva el
+  podio; hacia afuera es «Formación Renaser» como cualquier mensaje del programa.
+- **Idempotente:** ids derivados de la semana; si el texto ya está, nada más. El cron corre cada hora del lunes de
+  09:00 a 23:00 de Lima: las corridas después de la primera son el reintento.
+- **Interruptor** `RANKING_SEMANAL_ACTIVO` (apagado por defecto). Administración: `GET
+  /api/v1/admin/ranking-semanal/vista-previa` y `POST /api/v1/admin/ranking-semanal/publicar` (ADMIN/ALCHEMIST
+  activos; publicar no mira el interruptor).

@@ -57,12 +57,22 @@ public interface EnviarMensajeDelProgramaUseCase {
         }
     }
 
-    /** @param sobreQuien la persona a quien se refieren las piezas; queda en {@code emisor_id} */
+    /**
+     * @param sobreQuien la persona a quien se refieren las piezas; queda en {@code emisor_id}. {@code null} solo
+     *                   con {@link #sinPersona}: piezas que no se refieren a nadie (D-262, el podio semanal)
+     */
     record EntregaDelPrograma(ConversacionId conversacionId, UserId sobreQuien, List<PiezaDelPrograma> piezas) {
         public EntregaDelPrograma {
             Objects.requireNonNull(conversacionId, "conversacionId es obligatorio");
-            Objects.requireNonNull(sobreQuien, "sobreQuien es obligatorio");
             piezas = List.copyOf(piezas);
+            if (sobreQuien == null && piezas.stream().anyMatch(p -> p.aviso() == AvisoDeLaPieza.SOLO_A_QUIEN_SE_REFIERE)) {
+                throw new IllegalArgumentException("Sin persona a quien se refiera, no hay a quién avisarle solo a ella");
+            }
+        }
+
+        /** Piezas del programa que no se refieren a nadie: se guardan sin {@code emisor_id} (V95, D-262). */
+        public static EntregaDelPrograma sinPersona(ConversacionId conversacionId, List<PiezaDelPrograma> piezas) {
+            return new EntregaDelPrograma(conversacionId, null, piezas);
         }
     }
 }

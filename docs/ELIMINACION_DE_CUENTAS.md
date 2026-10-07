@@ -122,6 +122,9 @@ de los grupos, no se anonimizan:
   > **Corregido 2026-10-05 (D-251).** Decía «su respuesta queda sin la cita (`respuesta_a_id` pasa a
   > NULL por la FK)»: así la respuesta se veía como un mensaje suelto, sin saber a qué contestaba.
 - Borrar es además lo que la persona pidió: que sus datos desaparezcan.
+- **El podio semanal del grupo general (D-262) no se borra con ninguna cuenta.** Lo escribe el programa, sin
+  persona (`emisor_id` NULL, V95), y nombra a hasta cinco aprendices («Liz M.»). Si una de ellas elimina su
+  cuenta, su nombre corto sigue en ese podio. Abierto para el dueño (D-262).
 
 ## 4. Supuestos a confirmar con el dueño
 

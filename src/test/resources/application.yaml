@@ -104,6 +104,10 @@ renaser:
       cron: "-"
     promover-cambios-horario:
       cron: "-"
+    # D-262: el podio semanal corre cada hora del lunes en produccion; en la suite no corre solo (con el
+    # interruptor apagado no haria nada, pero tampoco tiene por que despertarse). Se prueba directo (PodioDeLaSemanaIT).
+    chat-podio-de-la-semana:
+      cron: "-"
   # E-360: espeja el default de main (application.yaml): cuantos listeners de eventos corren a la vez.
   eventos:
     concurrencia: 4

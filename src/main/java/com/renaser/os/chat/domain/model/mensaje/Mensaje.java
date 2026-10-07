@@ -29,6 +29,10 @@ import java.util.UUID;
  *   <li>{@code mensajes.emisor_id} es NOT NULL (V1) y no se inventa un usuario técnico, así que en
  *   un mensaje del programa {@link #emisorId} guarda a QUIÉN se refiere: la persona a quien se le da
  *   la bienvenida. Así la cascada de {@code emisor_id} lo borra con su cuenta, junto con lo suyo.</li>
+ *   <li>Desde V95 (D-262) un mensaje del programa puede no referirse a NADIE ({@link #delProgramaSinPersona}):
+ *   el podio semanal del grupo general nombra a varios aprendices y no puede desaparecer porque uno cierre
+ *   su cuenta. Ahí {@link #emisorId} es {@code null}; la base solo lo admite en {@code SISTEMA}. Por eso
+ *   nadie lee {@code emisorId} de un mensaje del programa: se pregunta antes {@link #esDelPrograma}.</li>
  *   <li>Hacia afuera nunca se atribuye a esa persona: {@link #remitentePublico} devuelve
  *   {@link #ID_PUBLICO_DEL_PROGRAMA}.</li>
  * </ul>
@@ -74,6 +78,7 @@ public final class Mensaje {
 
     private final MensajeId id;
     private final ConversacionId conversacionId;
+    /** {@code null} solo en un mensaje del programa que no se refiere a nadie ({@link #delProgramaSinPersona}). */
     private final UserId emisorId;
     private final TipoMensaje tipo;
     private final String texto;
@@ -118,12 +123,27 @@ public final class Mensaje {
      */
     public static Mensaje delPrograma(MensajeId id, ConversacionId conversacionId, UserId sobreQuien,
                                       ContenidoDelPrograma contenido, Instant ahora) {
-        Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(sobreQuien, "un mensaje del programa se guarda a nombre de la persona a quien se refiere");
+        return delProgramaGuardadoComo(id, conversacionId, sobreQuien, contenido, ahora);
+    }
+
+    /**
+     * Un mensaje del programa que no se refiere a una persona (D-262, el podio semanal del grupo general): se
+     * guarda sin {@code emisor_id}, así no cae con la cuenta de nadie. Hacia afuera es igual a cualquier otro
+     * mensaje del programa ({@link #remitentePublico}).
+     */
+    public static Mensaje delProgramaSinPersona(MensajeId id, ConversacionId conversacionId,
+                                                ContenidoDelPrograma contenido, Instant ahora) {
+        return delProgramaGuardadoComo(id, conversacionId, null, contenido, ahora);
+    }
+
+    private static Mensaje delProgramaGuardadoComo(MensajeId id, ConversacionId conversacionId, UserId emisorId,
+                                                   ContenidoDelPrograma contenido, Instant ahora) {
+        Objects.requireNonNull(id, "id es obligatorio");
         requireConContenido(contenido.texto(), contenido.mediaRuta());
         requireMediaCompleta(contenido.mediaBucket(), contenido.mediaRuta());
         requirePositivosSiVienen(contenido.mediaBytes(), null);
-        return new Mensaje(id, conversacionId, sobreQuien, TipoMensaje.SISTEMA, contenido.texto(),
+        return new Mensaje(id, conversacionId, emisorId, TipoMensaje.SISTEMA, contenido.texto(),
                 contenido.mediaBucket(), contenido.mediaRuta(), contenido.mediaMime(), contenido.mediaBytes(), null,
                 false, null, null, ahora);
     }

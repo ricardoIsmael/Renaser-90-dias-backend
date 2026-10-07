@@ -84,8 +84,7 @@ public class MensajeDelProgramaService implements EnviarMensajeDelProgramaUseCas
         int enviadas = 0;
         for (int i = 0; i < entrega.piezas().size(); i++) {
             PiezaDelPrograma pieza = entrega.piezas().get(i);
-            Mensaje mensaje = Mensaje.delPrograma(pieza.id(), conversacionId, entrega.sobreQuien(), pieza.contenido(),
-                    ahora.plusMillis(i));
+            Mensaje mensaje = mensajeDe(entrega, pieza, ahora.plusMillis(i));
             if (guardarUnicoPort.guardarSiNoExiste(mensaje)) {
                 publicarDespuesDelCommit(mensaje);
                 avisar(mensaje, pieza.aviso(), entrega.sobreQuien());
@@ -93,6 +92,15 @@ public class MensajeDelProgramaService implements EnviarMensajeDelProgramaUseCas
             }
         }
         return enviadas;
+    }
+
+    /** Sin persona a quien se refiera (D-262), el mensaje se guarda sin {@code emisor_id}. */
+    private static Mensaje mensajeDe(EntregaDelPrograma entrega, PiezaDelPrograma pieza, Instant creadoEn) {
+        if (entrega.sobreQuien() == null) {
+            return Mensaje.delProgramaSinPersona(pieza.id(), entrega.conversacionId(), pieza.contenido(), creadoEn);
+        }
+        return Mensaje.delPrograma(pieza.id(), entrega.conversacionId(), entrega.sobreQuien(), pieza.contenido(),
+                creadoEn);
     }
 
     /** Dentro de la transacción, como {@link #enviarDelPrograma}: va al outbox junto con el mensaje. */
