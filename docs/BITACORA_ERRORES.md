@@ -14847,3 +14847,18 @@ comportamiento, pero conviene corregir esos dos textos en un cambio aparte.
 otra prueba.
 
 > E-580 queda reservado para el agente del Día 1 del personal (trabajo en paralelo del 07/10); estas dos siguen en E-581.
+
+## E-589 · El botón «Seguir» de la celebración a pantalla completa no aparece para `uiautomator` (front, ABIERTO, 07/10)
+
+**Síntoma.** En la prueba de punta a punta del APK 99 (Maestro, emulador, base local), con «¡Día completo!» en
+pantalla, `tapOn: "Seguir"` no encuentra el elemento, y en la jerarquía de `uiautomator` el botón no figura. El modal
+se cerró tocando fuera, que también lo cierra.
+
+**Causa probable (sin confirmar).** `PantallaDeCelebracion` (`src/features/fenix/components/PantallaDeCelebracion.tsx`)
+monta el `GoldButton` dentro de un `Modal` cuya capa tocable de fondo envuelve todo; esa capa probablemente agrupa a
+los hijos en un solo nodo accesible y oculta el botón. Si es así, TalkBack tampoco lo anuncia.
+
+**Arreglo.** Pendiente (`docs/informes/pendientes-2026-10-07.md` §B.1). Revisar `accessible`/`importantForAccessibility`
+de la capa de fondo y comprobar con `uiautomator dump` y TalkBack que «Seguir» aparece como botón.
+
+**Prevención.** Que el flujo de Maestro de la celebración cierre con `tapOn: "Seguir"` y no tocando fuera.
