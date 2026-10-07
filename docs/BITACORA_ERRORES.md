@@ -14683,3 +14683,37 @@ dibuja, va en `useLayoutEffect`. Y se verifica grabando el emulador (cuadros a 3
 *De paso (entorno):* en la build de depuración, `adb shell input text` con una «r» cuando el campo no tiene el foco
 recarga la app (atajo de recarga de React Native); escribir primero con el campo enfocado (verificarlo con
 `mobile_list_elements_on_screen`, `focused`) o usar texto sin «r».
+
+> E-580 queda reservado para el agente del Día 1 del personal (trabajo en paralelo del 07/10); estas dos siguen en E-581.
+
+## E-581 · Android cortaba la última palabra de una línea centrada en la pantalla de celebración (front, RESUELTO, 07/10)
+
+**Síntoma.** Grabación del emulador de la pantalla «7 días seguidos»: la línea decía «Y cumpliste todos tus hábitos de»
+y faltaba «hoy». Sin error en consola.
+
+**Causa real.** El `Text` iba en un contenedor con `alignItems: 'center'` y `maxWidth`, sin ancho propio, con
+`t.body` (Jost_400Regular) pisado por `fontFamily: 'Jost_500Medium'`. Android midió el texto con un ancho que no le
+alcanzó a la fuente más ancha y recortó la última palabra en vez de pasarla a otra línea.
+
+**Arreglo.** El bloque de textos estira a todo el ancho (`alignSelf: 'stretch'`) y cada texto se centra con
+`textAlign: 'center'` (`fenix/components/PantallaDeCelebracion.tsx`). Grabación nueva: la línea entra entera.
+
+**Prevención.** Un texto que puede ocupar más de una línea no va en un contenedor centrado por `alignItems` sin ancho:
+se estira el contenedor y se centra el texto. Se verifica grabando el emulador; Jest no mide texto.
+
+## E-582 · Jest: «NativeModule: AsyncStorage is null» en pruebas que antes pasaban, y `tacto` `undefined` en un doble (front, RESUELTO, 07/10)
+
+**Síntoma.** Al sumar la pantalla completa de celebración, `orbeConFenix.test.ts` y `momentoDelHabito.test.ts`
+cayeron con `[@RNC/AsyncStorage]: NativeModule: AsyncStorage is null.` (Test suite failed to run), y la prueba nueva
+con `TypeError: Cannot read properties of undefined (reading 'hito')` en `tacto.hito()`.
+
+**Causa real.** (1) El estado de la pantalla (`fenix/estado/momentoGrande`), que lee el fénix del centro de Hoy,
+importaba también la decisión (`celebracionDelDia` → AsyncStorage, API): cualquier prueba que montara el orbe arrastraba
+AsyncStorage sin su doble. (2) `jest.mock('…/tacto', () => ({ tacto: mockTacto }))`: la fábrica se iza por encima de
+`const mockTacto`, y al importarse el módulo la constante todavía no existía.
+
+**Arreglo.** (1) El estado quedó solo (`momentoGrande.ts`, sin almacenamiento ni red) y la decisión en
+`revisarHitosDelDia.ts`. (2) La fábrica devuelve un getter (`get tacto() { return mockTacto; }`).
+
+**Prevención.** Lo que leen componentes compartidos (un estado global) no importa almacenamiento ni red: eso va en un
+módulo aparte. En los dobles de Jest que usan una variable `mock…`, devolverla por getter.
