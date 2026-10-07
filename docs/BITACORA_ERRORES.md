@@ -14647,3 +14647,39 @@ ADMIN, ALQUIMISTA eligen; los cuatro y APRENDIZ suspendidos, 403; aprendiz igual
 que algún rol no recorre (el onboarding), ese rol necesita otra entrada. `ElegirDiaUnoDelPersonalIT` rompe si alguien
 agrega un guard de rol al endpoint, y `elegirDiaUnoDelPersonal.test.ts` (front) si la tarjeta de Training pierde el botón
 o vuelve a mostrar el error crudo sin fila.
+
+## E-578 · `StyleSheet.absoluteFillObject` ya no existe en los tipos de React Native de este SDK (front, 07/10)
+
+**Síntoma.** `npx tsc --noEmit`: `error TS2551: Property 'absoluteFillObject' does not exist on type 'typeof StyleSheet'. Did you mean 'absoluteFill'?`
+
+**Causa real.** Los tipos de React Native que trae este SDK de Expo ya no declaran `StyleSheet.absoluteFillObject`.
+
+**Arreglo.** `position: 'absolute'` con `top`, `left`, `right` y `bottom` en 0, escrito a mano en el estilo.
+
+**Prevención.** No usar `absoluteFillObject`; `tsc` lo detecta.
+
+## E-579 · «No veo nada»: el momento de cumplir un hábito esperaba al servidor y lo que animaba no se percibía (front, RESUELTO, 07/10)
+
+**Síntoma.** El dueño, con la primera versión de la animación (commit `d008840` del front): «No veo nada, mejora esos
+aspectos. Lo quiero lo más fluido posible.» En el emulador (Pixel 6, build de depuración): tras tocar el check pasaban
+~1–2 s sin ningún cambio y después aparecían de golpe el check, el borde y el tachado; el «+N» (13 px, subía 22 px en
+600 ms) y el salto del fénix (7 px) no se percibían.
+
+**Causa real.** Dos cosas. (1) Toda la animación colgaba de `cumplido`, que se vuelve true recién con la respuesta del
+servidor: no había ninguna respuesta al toque, y los valores eran de «te vi», demasiado chicos para un teléfono. (2) Al
+corregirlo, una grabación mostró la tarjeta ya marcada («Ver», borde verde) con el check ~230 ms a medio llenar: la
+celebración se disparaba en un `useEffect` (pasivo), que en la build de depuración corría después de pintar, con el hilo
+de JS ocupado en la recarga que va detrás del cierre; el `estaRegistrando` llegaba `false` y aplicaba la espera de la hoja.
+Con `useLayoutEffect` el log dio `confirmado … true 0` y todo apareció en el mismo cuadro.
+
+**Arreglo.** Respuesta en el mismo toque (`Presionable` a 0.92 al apoyar; medio llenado que respira al soltar, por
+`momentoEnLaTarjeta.cerrarConRespuestaInmediata`, sin marcar `done` hasta la respuesta), reversión si falla, celebración
+completa al confirmar (pop, ✓, tachado que se dibuja, brillo del borde, «+N pts» de 16 px que sube 32 px, fénix 11 px) en
+`useLayoutEffect`. Pruebas en `momentoEnLaTarjeta.test.ts`.
+
+**Prevención.** Una animación de respuesta a un toque no puede depender de la red: la parte que responde al dedo va en el
+mismo toque y la confirmación completa lo que ya empezó. Lo que tiene que arrancar en el mismo cuadro en que algo se
+dibuja, va en `useLayoutEffect`. Y se verifica grabando el emulador (cuadros a 30 fps), no leyendo el código.
+*De paso (entorno):* en la build de depuración, `adb shell input text` con una «r» cuando el campo no tiene el foco
+recarga la app (atajo de recarga de React Native); escribir primero con el campo enfocado (verificarlo con
+`mobile_list_elements_on_screen`, `focused`) o usar texto sin «r».
