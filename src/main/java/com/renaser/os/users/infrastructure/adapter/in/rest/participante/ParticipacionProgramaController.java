@@ -143,6 +143,12 @@ public class ParticipacionProgramaController {
      * el dominio, {@code ParticipacionPrograma.activarPrograma}) y con 400 si la fecha
      * cae fuera de la ventana — el rango exacto lo devuelve el mensaje, la app no tiene
      * que adivinarlo (aunque deberia haberlo consultado antes via el GET de arriba).
+     *
+     * <p><b>D-260: sin guard de rol, a proposito.</b> El personal (MENTOR, MENTOR_LEAD, ADMIN,
+     * ALCHEMIST) con la fila sin activar elige su Dia 1 por aca, con la misma regla que el aprendiz
+     * (la app lo abre desde «Elegir mi Dia 1»). Un guard de rol lo dejaria sin salida: no pasa por
+     * el onboarding y {@code POST /mentor/activate-tracking} responde 409 a quien ya tiene fila.
+     * Lo cuida {@code ElegirDiaUnoDelPersonalIT}.
      */
     @RequiresPermission(value = Permission.USE_APP, scope = "self por construccion: el endpoint no recibe traineeId")
     @PostMapping("/api/v1/onboarding/activate-program")

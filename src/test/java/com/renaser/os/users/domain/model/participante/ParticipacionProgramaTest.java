@@ -296,6 +296,31 @@ class ParticipacionProgramaTest {
         assertThat(p.diaProgramaAvanzadoEl()).isNull();
     }
 
+    /**
+     * D-260 (pedido del dueño del 2026-10-07: «ese mismo día comienza, no debe descontar nada»), con el
+     * reloj en la madrugada UTC (regla 02): 03:00 UTC del 7 son las 22:00 del 6 en Lima. Las opciones
+     * se cuentan desde el 6 de Lima, y la elegida (el 7) es el Día 1 ese mismo día, sin ajuste: la
+     * víspera sigue en 0 y el día elegido entero (00:00 a 23:59 de Lima) es el 1. Vale igual para el
+     * personal, que llega a esta fila sin pasar por el onboarding.
+     */
+    @Test
+    void elDiaElegidoEnLaMadrugadaUtcEsElDiaUnoEnLimaSinDescontarNada() {
+        FixedClock madrugadaUtc = FixedClock.at(Instant.parse("2026-10-07T03:00:00Z"));
+        ParticipacionPrograma p = ParticipacionPrograma.inscribirTraineeAprobado(UserId.of(UUID.randomUUID()),
+                madrugadaUtc);
+        LocalDate maniana = LocalDate.parse("2026-10-07");
+
+        assertThat(p.opcionesDeActivacion(madrugadaUtc)).first().isEqualTo(maniana);
+        p.activarPrograma(maniana, madrugadaUtc);
+
+        assertThat(p.fechaInicio()).isEqualTo(maniana);
+        assertThat(p.diasAjuste()).isZero();
+        assertThat(p.diaProgramaDerivado(LocalDate.parse("2026-10-06"))).isZero();
+        assertThat(p.diaVigente(FixedClock.at(Instant.parse("2026-10-07T05:00:00Z")))).isEqualTo(1);
+        assertThat(p.diaVigente(FixedClock.at(Instant.parse("2026-10-08T04:59:00Z")))).isEqualTo(1);
+        assertThat(p.diaVigente(FixedClock.at(Instant.parse("2026-10-08T05:00:00Z")))).isEqualTo(2);
+    }
+
     @Test
     void activarProgramaAceptaElBordeDeTresDias() {
         ParticipacionPrograma p = traineePausado();

@@ -18,6 +18,8 @@ import com.renaser.os.users.domain.model.user.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -103,6 +105,47 @@ class RelojProgramaServiceTest {
 
         assertThatThrownBy(() -> service.activarPrograma(new ActivateProgramCommand(actorId, CLOCK.today().plusDays(1))))
                 .isInstanceOf(NotAuthorizedException.class);
+    }
+
+    /**
+     * D-260: el personal con la fila sin activar elige su Día 1 por este mismo caso de uso, con la
+     * misma regla que el aprendiz. Reloj en la madrugada UTC (regla 02): 03:00 UTC del 7 = 22:00 del 6
+     * en Lima, así que «mañana» es el 7 de Lima y no el 8 del servidor.
+     */
+    @ParameterizedTest(name = "{0} con la fila sin activar elige su Día 1")
+    @EnumSource(value = UserRole.class, names = {"MENTOR", "MENTOR_LEAD", "ADMIN", "ALCHEMIST"})
+    void elPersonalConLaFilaSinActivarEligeSuDiaUnoEnLaMadrugadaUtc(UserRole rol) {
+        FixedClock madrugadaUtc = FixedClock.at(Instant.parse("2026-10-07T03:00:00Z"));
+        RelojProgramaService enLaMadrugada = new RelojProgramaService(new RequireActiveUserGuard(loadUserPort),
+                loadParticipacionProgramaPort, saveParticipacionProgramaPort, listarParticipantesConProgramaActivoPort,
+                guardarAvanceDelRelojPort, madrugadaUtc);
+        UserId actorId = UserId.of(UUID.randomUUID());
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(User.rehydrate(actorId,
+                new Email(actorId + "@renaser.com"), rol, UserStatus.ACTIVE, "Fixture", null, null, null, null)));
+        ParticipacionPrograma sinActivar = ParticipacionPrograma.inscribirTraineeAprobado(actorId, madrugadaUtc);
+        when(loadParticipacionProgramaPort.byParticipanteId(actorId)).thenReturn(Optional.of(sinActivar));
+        when(saveParticipacionProgramaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var estado = enLaMadrugada.consultarEstado(new ConsultarActivacionProgramaQuery(actorId));
+        ParticipacionPrograma activada = enLaMadrugada.activarPrograma(
+                new ActivateProgramCommand(actorId, estado.fechasValidas().get(0)));
+
+        assertThat(estado.fechasValidas()).first().isEqualTo(java.time.LocalDate.parse("2026-10-07"));
+        assertThat(activada.estaActivado()).isTrue();
+        assertThat(activada.fechaInicio()).isEqualTo(java.time.LocalDate.parse("2026-10-07"));
+        assertThat(activada.diasAjuste()).isZero();
+    }
+
+    @ParameterizedTest(name = "{0} suspendido no elige su Día 1")
+    @EnumSource(value = UserRole.class, names = {"MENTOR", "MENTOR_LEAD", "ADMIN", "ALCHEMIST"})
+    void elPersonalSuspendidoNoEligeSuDiaUno(UserRole rol) {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(User.rehydrate(actorId,
+                new Email(actorId + "@renaser.com"), rol, UserStatus.SUSPENDED, "Fixture", null, null, null, null)));
+
+        assertThatThrownBy(() -> service.activarPrograma(new ActivateProgramCommand(actorId, CLOCK.today().plusDays(1))))
+                .isInstanceOf(NotAuthorizedException.class);
+        verify(saveParticipacionProgramaPort, never()).save(any());
     }
 
     /** El fixture de staff ({@code activarSeguimientoPersonal}) activa con fecha=hoy;

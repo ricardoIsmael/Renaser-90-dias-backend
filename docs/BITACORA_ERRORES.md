@@ -14616,3 +14616,34 @@ con sesión (quien no tiene semáforo recibe `aplica: false` y queda neutral). P
 `mood` 3 (triste) y foto triste; el personal también refresca tras cumplir un hábito.
 
 **Prevención.** No decidir por rol algo que depende de un dato (tener programa/semáforo): preguntar por el dato.
+
+## E-577 · El personal con la fila del programa sin activar veía «Todavía no elegiste tu Día 1» y no tenía dónde elegirlo (D-260, RESUELTO, 07/10)
+
+**Síntoma.** Captura del dueño con una cuenta de ADMINISTRADOR: Training mostraba «🔒 Todavía no elegiste tu Día 1 —
+Elige en qué día quieres empezar tus 90 días. Hasta entonces no hay evidencia que entregar.», las cinco dimensiones en
+«0 de N hoy», y ningún botón. En Hoy no había invitación. Dos trampas del mismo flujo: sin fila, Training decía «No
+pudimos cargar tu entrenamiento» con «Participante no encontrado: <uuid>» (404); y «Ahora no» en la invitación de Hoy
+la escondía para siempre (se guarda en el teléfono), sin otra entrada.
+
+**Causa real (app, no servidor).**
+1. *Fila sin activar:* el único selector del Día 1 (`ActivarProgramaScreen`) vive en `OnboardingFlow`, y el personal no
+   hace el onboarding (`AuthContext` lo exime con `programRequired=false`, `AcompanamientoService` línea 124). La
+   invitación de Hoy depende de `canStartProgram = esStaff && !participa`: con fila es falsa y no se muestra; y su
+   `POST /mentor/activate-tracking` respondería «Ya activaste tu seguimiento personal…» (409) a quien ya tiene fila.
+   Training pregunta `GET /onboarding/activate-program`, recibe `activated:false` y dibuja `PENDIENTE_ELEGIR` sin acción.
+   El endpoint `POST /onboarding/activate-program` **nunca** filtró por rol: el personal podía elegir; la app no lo llamaba.
+2. *Sin fila:* `useTraining` pide hábitos y rocas del participante, el servidor responde 404 «Participante no encontrado:
+   <uuid>» y la pantalla muestra el mensaje crudo.
+3. *«Ahora no»:* `useProgramaPersonal` guarda `…pospuesto.v2.<usuario>` y la tarjeta de Hoy era la única entrada.
+
+**Arreglo.** Botón «Elegir mi Día 1» que abre el mismo `ActivarProgramaScreen` (con flecha para volver fuera del
+onboarding) en la tarjeta de Training y en una tarjeta de Hoy y Yo para cualquier rol con la fila sin activar; sin fila,
+Training muestra la invitación de Hoy (extraída a `InvitacionProgramaPropio`) en vez del error; Yo ofrece empezar aunque se
+haya dicho «Ahora no». Servidor: solo javadoc y pruebas (`ElegirDiaUnoDelPersonalIT` por rol: MENTOR, LIDER_MENTORES,
+ADMIN, ALQUIMISTA eligen; los cuatro y APRENDIZ suspendidos, 403; aprendiz igual que antes; `RelojProgramaServiceTest` y
+`ParticipacionProgramaTest` con el reloj a las 03:00 UTC).
+
+**Prevención.** Un aviso que pide una acción tiene que traer la acción en la misma tarjeta; si la acción vive en un flujo
+que algún rol no recorre (el onboarding), ese rol necesita otra entrada. `ElegirDiaUnoDelPersonalIT` rompe si alguien
+agrega un guard de rol al endpoint, y `elegirDiaUnoDelPersonal.test.ts` (front) si la tarjeta de Training pierde el botón
+o vuelve a mostrar el error crudo sin fila.
