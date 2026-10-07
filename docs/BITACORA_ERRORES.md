@@ -14554,3 +14554,17 @@ de Administración; Plan lee `/home` con `useResumenHome`; la tarjeta de Yo mues
 **Prevención.** `faseEnCurso.test.ts` (día 1 a 90 contra el tramo en curso de Plan) y `faseIgualEnYoYPlan.test.ts` (Plan no
 vuelve a `useProgramaDia`; ninguna pantalla hace su propia cuenta). Una pestaña que muestra el día o la fase relee `/home` al
 volver al foco.
+
+## E-576 · El fénix se veía alegre con el semáforo en rojo «Con problemas · 10.6 %» (rama `fenix-animado`, 2026-10-06)
+
+**Síntoma.** El dueño (cuenta de administración con programa personal) veía en Hoy «Tu semáforo · Con problemas 10.6 %» y
+el fénix del centro y del botón de SER con cara alegre.
+
+**Causa real.** `useAnimoDeSer` y `useMantenerSemaforoVigente` decidían por ROL: solo TRAINEE/APRENDIZ tenía «semáforo
+propio» y el resto quedaba en neutral (que se ve alegre). El personal que hace su programa personal sí tiene semáforo.
+
+**Arreglo.** El ánimo sale del color vigente de quien mira, sin mirar el rol; el almacén se mantiene para cualquier cuenta
+con sesión (quien no tiene semáforo recibe `aplica: false` y queda neutral). Pruebas: ADMIN/MENTOR/MENTOR_LEAD en rojo →
+`mood` 3 (triste) y foto triste; el personal también refresca tras cumplir un hábito.
+
+**Prevención.** No decidir por rol algo que depende de un dato (tener programa/semáforo): preguntar por el dato.
