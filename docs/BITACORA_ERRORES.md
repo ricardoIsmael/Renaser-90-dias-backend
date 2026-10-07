@@ -14485,6 +14485,58 @@ prefijo se lista a mano en `SecurityConfig`. Las pruebas unitarias del controlad
 **Prevención:** ya es ejecutable (`RutasCubiertasPorElFiltroTest`). Al crear un controlador con un prefijo nuevo, agregar el
 prefijo a `SecurityConfig` en el mismo cambio y correr esa prueba sola antes del `verify` completo.
 
+## E-570 · CI del front en rojo con todas las pruebas en verde: «You are trying to `import` a file after the Jest environment has been torn down» (2026-10-06)
+
+**Síntoma (literal):** en GitHub, `Test Suites: 312 passed, 312 total` / `Tests: 2502 passed, 2502 total` y aun así
+`##[error]Process completed with exit code 1.`, precedido de
+`ReferenceError: You are trying to \`import\` a file after the Jest environment has been torn down. From src/features/eventos/components/__tests__/logoDelServicioEnEventos.test.ts.`
+y `Cannot log after tests are done. Did you forget to wait for something async in your test?` con
+`An error occurred in the <DetalleDelEvento> component.` Venía desde el merge de `eventos-asistencia` (web 6ab60e2), no
+lo trajo el cambio de imágenes de fase.
+
+**Causa real:** `DetalleDelEvento` usa `useAhora`, un `setInterval` de 30 s. La prueba dibujaba con
+`react-test-renderer` y nunca desmontaba: el reloj seguía vivo, volvía a dibujar con el entorno de Jest ya cerrado y
+Jest terminaba con código 1. En local no se notó porque se miraban solo las líneas de resumen, no el código de salida.
+
+**Arreglo:** la prueba guarda lo que dibuja y lo desmonta en `afterEach` (el `clearInterval` del efecto corre).
+
+**Prevención:** toda prueba con `TestRenderer.create` desmonta en `afterEach`. Al verificar el front, mirar el
+**código de salida** de `npx jest --ci` (lo que mira el CI), no solo `Tests: N passed`.
+
+## E-571 · Build Android local falla con JDK 25: «Execution failed for task ':shopify_react-native-skia:configureCMakeRelWithDebInfo[x86_64]'. > WARNING: A restricted method in java.lang.System has been called» (entorno, 2026-10-06)
+
+**Síntoma (literal):** `./gradlew assembleRelease` del front (prebuild de Expo) termina en `FAILURE: Build completed with 3 failures`,
+las tres `configureCMakeRelWithDebInfo[x86_64]` (`shopify_react-native-skia`, `react-native-screens`, `react-native-worklets`) con
+`> WARNING: A restricted method in java.lang.System has been called`.
+
+**Causa real:** el `JAVA_HOME` de la laptop es el JDK 25 (el que pide el backend). Con JDK 25 la tarea CMake de Gradle trata
+ese aviso de acceso restringido como fallo. No es el código.
+
+**Arreglo:** compilar el Android con el JDK 21 de sdkman:
+`JAVA_HOME=~/.sdkman/candidates/java/21.0.12+1.1-tem PATH=$JAVA_HOME/bin:$PATH ./gradlew assembleRelease -PreactNativeArchitectures=x86_64`.
+
+**Prevención:** backend con JDK 25, builds Android locales con JDK 21. Hacer el build en una copia aparte
+(`~/.cache/renaser-e2e/build-*`, `git archive` + `node_modules`), nunca en el worktree.
+
+## E-572 · El fénix se veía como foto fija en Android aunque el .riv cargaba: `RiveReactNativeView.configureDataBinding` → `handleRiveException` (2026-10-06)
+
+**Síntoma (literal):** en el emulador (build local de `fenix-animado`) el fénix del centro de Hoy era la imagen PNG, sin
+movimiento. En `logcat`: `librive-android.so ... ok`, y luego
+`at com.rivereactnative.RiveReactNativeView.configureDataBinding(RiveReactNativeView.kt:539)` →
+`handleRiveException(RiveReactNativeView.kt:948)` → `sendErrorToRN`, más
+`getJSModule(RCTEventEmitter) is not recommended in the new architecture` (`Unhandled SoftException`).
+
+**Causa real:** `rive-react-native` 9.8.5 llama a `file.defaultViewModelForArtboard` aunque el binding sea
+`AutoBind(false)`; el `.riv` v3.3 no trae ViewModel y eso se reporta como `DataBindingError` por `onError`.
+`PhoenixMascot` trataba CUALQUIER `onError` como «el .riv no carga» y cambiaba el fénix vivo por la foto.
+
+**Arreglo:** `PhoenixMascot` solo pasa a la imagen con errores que impiden dibujar (`FileNotFound`, `MalformedFile`,
+`UnsupportedRuntimeVersion`, `IncorrectRiveFileUrl`, `IncorrectArtboardName`, `IncorrectStateMachineName`).
+Prueba nueva en `phoenixMascot.test.ts` (falla contra el código anterior).
+
+**Prevención:** un respaldo por error tiene que filtrar por tipo; y el fénix nativo se valida en emulador con build
+local (E-571) antes de dar por buena la integración: en Jest el doble de Rive nunca emite ese aviso.
+
 ## E-573 · El servidor registraba hábitos de días ya cerrados: `POST /habit-tracks/{id}/complete` sobre un `EXPIRADO` de ayer respondía 200 con 0 puntos (D-259, RESUELTO, 06/10)
 
 **Síntoma:** al revisar el caso de una líder de mentores que «no puede subir evidencias», un registro `EXPIRADO` del día
@@ -14513,6 +14565,7 @@ Pruebas que afirmaban la regla vieja, corregidas con nota «Corregido 2026-10-06
 `RegistroHabitoCompletarConcurrenciaTest` (registro fijo del 24-ago con el reloj real; falló en `clean verify` con
 «Este hábito era del 24 de agosto; ese día ya cerró y no se puede registrar.») y `TracksDeHoyConsultasTest` (E-574).
 
+
 ## E-574 · Un día armado tarde perdía los hábitos cuya hora ya había pasado (`generarDisponiblesAhora`) (D-259, RESUELTO, 06/10)
 
 **Síntoma:** si el día de una persona se armaba tarde —la red de seguridad de `GET /habit-tracks/today` o el barrido
@@ -14530,3 +14583,36 @@ falla contra el código anterior) y `elPrimerDiaDelProgramaSigueSinLosDeHoraCerr
 de solo lectura `consulta-olga-habitos.sh` muestra a qué hora se crearon los registros de cada día (sección E): si se
 crearon tarde, este fue el motivo de los «pocos hábitos»; si no, son los de su plan (desbloqueos, pausas, horarios).
 
+
+## E-575 · Plan decía «02 · El Ciclo Alquímico» mientras Yo ya decía «Fase 3 · El Maestro Interno» (front, 2026-10-06)
+
+**Síntoma.** Con la app abierta al cambiar el día (del 34 al 35), Yo mostraba «FASE 3 DE 4 · El Maestro Interno · Día 1 de 30»
+y Plan seguía en «DÍA 34 · Fase actual 02 Días 8–34 · El Ciclo Alquímico». El dueño lo reportó como «En Yo las fases están con
+bug: deben ser iguales que en Plan».
+
+**Causa real.** Plan leía `/home` con `useProgramaDia` una sola vez al montar la pestaña; Yo con `useResumenHome`, que relee al
+volver al foco. Además cada pantalla hacía su propia cuenta de la fase (`descripcionDeFase`/`arquitecturaDeTiempo` en Plan,
+`diasDeLaFase` en Yo). Los cortes (1/8/35/65) y el backend estaban bien: en el día 30 las dos decían Fase 2 · El Ciclo
+Alquímico · Gorila.
+
+**Arreglo.** Front, rama `fase-en-yo`: una sola función `features/home/utils/faseEnCurso.ts` para Yo, Plan y la vista previa
+de Administración; Plan lee `/home` con `useResumenHome`; la tarjeta de Yo muestra el mismo rango de Plan («Días 8–34»).
+
+**Prevención.** `faseEnCurso.test.ts` (día 1 a 90 contra el tramo en curso de Plan) y `faseIgualEnYoYPlan.test.ts` (Plan no
+vuelve a `useProgramaDia`; ninguna pantalla hace su propia cuenta). Una pestaña que muestra el día o la fase relee `/home` al
+volver al foco.
+
+
+## E-576 · El fénix se veía alegre con el semáforo en rojo «Con problemas · 10.6 %» (rama `fenix-animado`, 2026-10-06)
+
+**Síntoma.** El dueño (cuenta de administración con programa personal) veía en Hoy «Tu semáforo · Con problemas 10.6 %» y
+el fénix del centro y del botón de SER con cara alegre.
+
+**Causa real.** `useAnimoDeSer` y `useMantenerSemaforoVigente` decidían por ROL: solo TRAINEE/APRENDIZ tenía «semáforo
+propio» y el resto quedaba en neutral (que se ve alegre). El personal que hace su programa personal sí tiene semáforo.
+
+**Arreglo.** El ánimo sale del color vigente de quien mira, sin mirar el rol; el almacén se mantiene para cualquier cuenta
+con sesión (quien no tiene semáforo recibe `aplica: false` y queda neutral). Pruebas: ADMIN/MENTOR/MENTOR_LEAD en rojo →
+`mood` 3 (triste) y foto triste; el personal también refresca tras cumplir un hábito.
+
+**Prevención.** No decidir por rol algo que depende de un dato (tener programa/semáforo): preguntar por el dato.
