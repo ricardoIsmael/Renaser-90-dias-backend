@@ -14537,7 +14537,7 @@ Prueba nueva en `phoenixMascot.test.ts` (falla contra el código anterior).
 **Prevención:** un respaldo por error tiene que filtrar por tipo; y el fénix nativo se valida en emulador con build
 local (E-571) antes de dar por buena la integración: en Jest el doble de Rive nunca emite ese aviso.
 
-## E-573 · Plan decía «02 · El Ciclo Alquímico» mientras Yo ya decía «Fase 3 · El Maestro Interno» (front, 2026-10-06)
+## E-575 · Plan decía «02 · El Ciclo Alquímico» mientras Yo ya decía «Fase 3 · El Maestro Interno» (front, 2026-10-06)
 
 **Síntoma.** Con la app abierta al cambiar el día (del 34 al 35), Yo mostraba «FASE 3 DE 4 · El Maestro Interno · Día 1 de 30»
 y Plan seguía en «DÍA 34 · Fase actual 02 Días 8–34 · El Ciclo Alquímico». El dueño lo reportó como «En Yo las fases están con
