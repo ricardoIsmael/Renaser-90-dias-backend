@@ -30,6 +30,15 @@ verde. AAB de la Play Store: sigue el 1.5.0 (versionCode 97), sin nada de esto.
 4. E-551 («Voy» a una cita cancelada), E-584 (la foto de las 00:05 puede contar el día de inicio), E-585 (la pestaña
    General dice «acciones»).
 
+## B.2 Prueba del podio semanal en el emulador (2026-10-07, local)
+
+Backend `53e7078c` en local con almacenamiento S3 falso (S3Mock en `127.0.0.1:9000`, nunca AWS; con `noop` solo sale
+el texto, G-5). Publicado con `POST /api/v1/admin/ranking-semanal/publicar` como ADMIN: los dos mensajes llegaron en
+vivo al grupo «Formación Renaser Global» del aprendiz, firmados «Formación Renaser»; la imagen abre en grande completa;
+publicar otra vez responde `YA_ESTABA` sin duplicar; un aprendiz recibe 403 en publicar y en vista previa. Videos en
+`~/Imágenes/e2e-2026-10-07/podio/`. **Observado:** en la burbuja del chat la imagen (4:5) se recorta arriba y abajo
+(no se ve el encabezado ni la frase final); en grande se ve entera. No se tocó.
+
 ## C. Del lado del dueño
 
 Datos de los hábitos para SER, inscripción en la ANPD, invitación a Grafana, actualización obligatoria (postergada).
