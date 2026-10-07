@@ -46,8 +46,12 @@ public record JornadaDelDia(LocalDate hoy, LocalTime horaLocal) {
 
     /**
      * {@code true} si el dia acaba de empezar para el participante: se le arma entero. Si no (un barrido atrasado, una
-     * noche con el backend caido), se le arma lo que todavia puede completar, igual que cuando abre la app: generarle
-     * ventanas que ya cerraron seria dejarlo con habitos perdidos que nunca tuvo forma de hacer.
+     * noche con el backend caido), se le arma como cuando abre la app ({@code generarDisponiblesAhora}): desde D-259
+     * (2026-10-06) tambien entero, salvo en su primer dia del programa.
+     *
+     * <p><b>Corregido 2026-10-06 (D-259).</b> Decia que en un barrido atrasado se armaba solo «lo que todavia puede
+     * completar: generarle ventanas que ya cerraron seria dejarlo con habitos perdidos». Con la regla del dueño un
+     * habito se registra durante su dia aunque se le haya pasado la hora, asi que no generarlo era lo que lo perdia.
      */
     public boolean acabaDeEmpezar() {
         return horaLocal.isBefore(FIN_DEL_AMANECER);

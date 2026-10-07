@@ -36,7 +36,8 @@ import java.util.stream.Collectors;
  * <p><b>Idempotente y atrasado-tolerante (regla 02 §2).</b> Es una funcion de "este participante, en su zona, a esta
  * hora, todavia no tiene su dia": correrlo dos veces o tarde da lo mismo. Si llega dentro de las dos primeras horas del
  * dia local arma la jornada completa, como el barrido de las 05:02 UTC para Lima; si llega mas tarde (backend caido),
- * arma lo que todavia se puede completar, como cuando la persona abre la app ({@code generarDisponiblesAhora}).
+ * la arma como cuando la persona abre la app ({@code generarDisponiblesAhora}): desde D-259 tambien completa, salvo en
+ * su primer dia del programa. <i>Corregido 2026-10-06: decia «arma lo que todavia se puede completar».</i>
  *
  * <p><b>El orden con la promocion de cambios de horario es por participante, no por cron.</b> Antes de generarle el dia
  * se hacen regir sus cambios de horario que le tocan hoy: esa pareja no depende de que un cron corra antes que otro

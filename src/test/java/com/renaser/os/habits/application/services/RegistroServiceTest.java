@@ -669,4 +669,104 @@ class RegistroServiceTest {
         assertThat(generados).isEmpty();
         verify(saveRegistroPort, never()).save(any());
     }
+    // ────────────────────────────────────────────────────────────────────────────────────
+    // D-259 (2026-10-06): «un habito se puede registrar durante su dia aunque se le haya pasado la
+    // hora; solo los del dia». El reloj va en la madrugada UTC (regla 02 §3): a las 04:30 UTC todavia
+    // es el dia anterior en Lima, y un corte por fecha UTC lo esconderia.
+    // ────────────────────────────────────────────────────────────────────────────────────
+
+    private RegistroService conReloj(String instante) {
+        return new RegistroService(loadRegistroPort, saveRegistroPort, loadHabitoPort, loadHorarioPort,
+                loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder, loadDesbloqueoPort, events,
+                FixedClock.at(Instant.parse(instante)), idGenerator,
+                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()));
+    }
+
+    private static HorarioHabito horarioDeSeisAOcho(HabitoId habitoId) {
+        return HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), habitoId, 1, null, TipoDia.TODOS,
+                LocalTime.of(6, 0), LocalTime.of(8, 0), CLOCK.now());
+    }
+
+    private void enLima(UserId participante, LocalDate fechaInicio) {
+        when(progresoPort.deParticipante(participante)).thenReturn(Optional.of(new ProgresoParticipanteHabits(5,
+                "America/Lima", RolParticipante.MENTOR_LEAD, false, true, fechaInicio)));
+    }
+
+    /** Falla contra el codigo anterior a D-259: completaba el registro de ayer con 0 puntos. */
+    @Test
+    @DisplayName("D-259: un registro de un dia que ya termino en Lima no se completa (00:30 de Lima)")
+    void unRegistroDeUnDiaTerminadoNoSeCompleta() {
+        UserId duena = participante();
+        Habito habito = habitoCheckbox();
+        RegistroHabito deAyer = registroPendiente(duena, habito.id()); // 24 de agosto
+        when(loadRegistroPort.byIdParaEscritura(deAyer.id())).thenReturn(Optional.of(deAyer));
+        enLima(duena, LocalDate.of(2026, 8, 1));
+
+        assertThatThrownBy(() -> conReloj("2026-08-25T05:30:00Z").completar(
+                new CompletarRegistroCommand(duena, deAyer.id(), null, null)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Este hábito era del 24 de agosto; ese día ya cerró y no se puede registrar.");
+        assertThat(deAyer.estado()).isEqualTo(EstadoRegistro.PENDIENTE);
+        verify(saveRegistroPort, never()).save(any());
+        verify(ajustarPuntosPort, never()).ajustar(any(), any(), anyInt(), any());
+    }
+
+    @Test
+    @DisplayName("D-259: pasada la hora y dentro de su dia (23:30 de Lima = 04:30 UTC del dia siguiente) se completa con 0 puntos")
+    void pasadaLaHoraDentroDelDiaSeCompletaSinPuntos() {
+        UserId duena = participante();
+        Habito habito = habitoCheckbox();
+        RegistroHabito deHoy = registroPendiente(duena, habito.id()); // 24 de agosto
+        when(loadRegistroPort.byIdParaEscritura(deHoy.id())).thenReturn(Optional.of(deHoy));
+        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
+        when(loadHorarioPort.porHabito(habito.id())).thenReturn(List.of(horarioDeSeisAOcho(habito.id())));
+        when(loadPreferenciaPort.porParticipanteHabitoYFecha(duena, habito.id(), deHoy.fechaEjecucion()))
+                .thenReturn(Optional.empty());
+        enLima(duena, LocalDate.of(2026, 8, 1));
+
+        RegistroHabito resultado = conReloj("2026-08-25T04:30:00Z").completar(
+                new CompletarRegistroCommand(duena, deHoy.id(), null, null));
+
+        assertThat(resultado.estado()).isEqualTo(EstadoRegistro.COMPLETADO);
+        assertThat(resultado.puntosOtorgados()).isZero();
+        verify(ajustarPuntosPort, never()).ajustar(any(), any(), anyInt(), any());
+    }
+
+    private void conUnHabitoDeSeisAOchoEnLima(UserId participante, Habito habito, LocalDate fechaInicio) {
+        enLima(participante, fechaInicio);
+        when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(habito));
+        when(loadHabitoPort.personalesActivosDe(participante)).thenReturn(List.of());
+        when(loadHorarioPort.porHabitos(List.of(habito.id()))).thenReturn(List.of(horarioDeSeisAOcho(habito.id())));
+    }
+
+    /**
+     * Falla contra el codigo anterior a D-259: un dia armado tarde (red de seguridad de {@code GET /today}, o el
+     * barrido horario despues de las 02:00 locales) no generaba los habitos de hora ya cerrada, y la persona no
+     * tenia como registrarlos aunque los hubiera hecho.
+     */
+    @Test
+    @DisplayName("D-259: un dia armado a las 23:30 de Lima (04:30 UTC) trae tambien los habitos cuya hora ya paso")
+    void unDiaArmadoTardeNoPierdeLosHabitosDeHoraPasada() {
+        UserId duena = participante();
+        Habito ducha = habitoCheckbox();
+        conUnHabitoDeSeisAOchoEnLima(duena, ducha, LocalDate.of(2026, 8, 20));
+
+        List<RegistroHabito> generados = conReloj("2026-08-25T04:30:00Z").generarDisponiblesAhora(duena);
+
+        assertThat(generados).singleElement()
+                .satisfies(r -> assertThat(r.fechaEjecucion()).isEqualTo(LocalDate.of(2026, 8, 24)));
+    }
+
+    /** La decision del dueño del 2026-09-02 sigue en pie para el primer dia del programa (dia activado a media tarde). */
+    @Test
+    @DisplayName("D-259: el primer dia del programa sigue sin generar los habitos cuya hora ya cerro (decision 2026-09-02)")
+    void elPrimerDiaDelProgramaSigueSinLosDeHoraCerrada() {
+        UserId duena = participante();
+        Habito ducha = habitoCheckbox();
+        conUnHabitoDeSeisAOchoEnLima(duena, ducha, LocalDate.of(2026, 8, 24));
+
+        List<RegistroHabito> generados = conReloj("2026-08-24T16:00:00Z").generarDisponiblesAhora(duena);
+
+        assertThat(generados).isEmpty();
+    }
 }

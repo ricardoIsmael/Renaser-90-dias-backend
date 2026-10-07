@@ -130,6 +130,14 @@ public class PostDiarioComunidadHabitoService implements CerrarPostDiarioComunid
         if (registro.get().estado().esTerminal()) {
             return; // ya cobrado (segunda publicacion del dia, reentrega del outbox o carrera), o expirado
         }
+        if (registro.get().suDiaYaTermino(zona, clock.now())) {
+            // D-259: un habito de un dia que ya termino no se registra, y el caso de uso lo rechazaria con 409. Sin
+            // esta guarda, una reentrega del outbox pasada la medianoche fallaria en cada reintento. Es el mismo
+            // final que cuando el barrido de expiracion llega primero (arriba, EXPIRADO es terminal).
+            log.info("[habits] post diario del {} de {} llego con ese dia ya cerrado: no se registra", diaDeLaPublicacion,
+                    autorId);
+            return;
+        }
 
         completarRegistroUseCase.completar(
                 new CompletarRegistroCommand(autorId, registro.get().id(), null, null));

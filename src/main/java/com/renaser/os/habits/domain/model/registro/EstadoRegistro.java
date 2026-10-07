@@ -9,7 +9,7 @@ package com.renaser.os.habits.domain.model.registro;
  *   PENDIENTE --iniciar()--&gt; EN_CURSO   (solo habitos BLOQUEO/racha sin celular)
  *   PENDIENTE --completar()--&gt; COMPLETADO
  *   EN_CURSO  --completar()--&gt; COMPLETADO
- *   PENDIENTE --expirar()--&gt; EXPIRADO   (vencio la ventana de entrega, sin penalizacion)
+ *   PENDIENTE --expirar()--&gt; EXPIRADO   (termino su dia local, E-534; sin penalizacion)
  *   EN_CURSO  --expirar()--&gt; EXPIRADO   (racha huerfana vencida)
  *   EN_CURSO  --marcarFallido()--&gt; FALLIDO (Santuario roto: SALIDA_TEMPRANA/VIOLACION_APP_USADA)
  *   EN_CURSO  --liberar()--&gt; PENDIENTE  (hito parcial de racha sin celular, mismo dia)
@@ -34,21 +34,22 @@ public enum EstadoRegistro {
     }
 
     /**
-     * EXPIRADO tambien se puede completar, y esa es la parte que sorprende.
+     * PENDIENTE y EN_CURSO se pueden completar; EXPIRADO, FALLIDO y COMPLETADO no.
      *
-     * <p>Antes no: pasada la ventana, el registro quedaba EXPIRADO y la app respondia
-     * {@code 409 El habito expiro -- no se puede completar}. El dueno del proyecto lo pidio al
-     * reves y tiene razon: registrar tarde es informacion, y perderla no ayuda a nadie. Alguien
-     * que se desperto a las 10 y lo anota a las 11 hizo el habito; lo unico que no hizo fue
-     * llegar a tiempo, y eso ya se cobra donde corresponde -- {@code ResultadoOtorgamiento}
-     * devuelve 0 puntos en fase EXPIRADO. Bloquear ademas el registro cobra dos veces.
+     * <p><b>Corregido 2026-10-06 (D-259, E-573).</b> Aca decia que EXPIRADO <i>tambien</i> se podia completar,
+     * con este argumento: «pasada la ventana, el registro quedaba EXPIRADO y la app respondia 409. Registrar tarde
+     * es informacion; {@code ResultadoOtorgamiento} ya devuelve 0 puntos en fase EXPIRADO, y bloquear ademas el
+     * registro cobra dos veces». El argumento sigue valiendo, pero para el MISMO dia: desde E-534 un registro solo
+     * pasa a EXPIRADO cuando su dia local ya termino (el barrido de {@link CorteDeExpiracion}, o
+     * {@link RegistroHabito#liberar} de una racha de un dia pasado). Pasada la hora y dentro del dia, el registro
+     * sigue PENDIENTE y se completa con menos puntos o ninguno. EXPIRADO quiere decir «era de un dia que ya
+     * cerro», y la regla confirmada por el dueño (2026-10-06) es que un habito de un dia que ya termino no se
+     * registra. Dejar EXPIRADO completable permitia anotar hoy los habitos de cualquier dia anterior.
      *
-     * <p>FALLIDO sigue fuera, y a proposito: lo marca el barrido nocturno cuando el dia CIERRA.
-     * Un dia cerrado es un veredicto, y dejar completarlo despues seria poder reescribir el
-     * pasado -- la misma linea que ya sostiene que una pausa no borra lo ya vencido.
+     * <p>FALLIDO sigue fuera por lo mismo: lo marca el Santuario roto, y un veredicto no se reescribe.
      */
     public boolean puedeCompletarse() {
-        return this == PENDIENTE || this == EN_CURSO || this == EXPIRADO;
+        return this == PENDIENTE || this == EN_CURSO;
     }
 
     public boolean puedeExpirar() {

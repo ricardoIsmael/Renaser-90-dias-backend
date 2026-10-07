@@ -8,6 +8,7 @@ import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
+import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import jakarta.persistence.EntityManager;
@@ -17,6 +18,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -24,38 +28,38 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneOffset;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Un habito fuera de plazo SE PUEDE REGISTRAR igual.
+ * Un habito fuera de plazo SE PUEDE REGISTRAR igual... durante SU dia (D-259).
  *
- * <p><b>Antes no.</b> Pasada la ventana, `completar()` marcaba EXPIRADO y respondia
- * {@code 409 El habito expiro -- no se puede completar}. El dueno del proyecto lo pidio al reves
- * y tiene razon: registrar tarde es informacion, y perderla no ayuda a nadie. Quien se desperto a
- * las 10 y lo anota a las 11 HIZO el habito; lo unico que no hizo fue llegar a tiempo, y eso ya
- * se cobra donde corresponde -- {@code ResultadoOtorgamiento} devuelve 0 puntos en fase EXPIRADO.
- * Bloquear ademas el registro cobraba dos veces por la misma tardanza.
+ * <p><b>Corregido 2026-10-06 (D-259, E-573).</b> Esta clase probaba que un registro del 2020-01-01 —y uno ya
+ * EXPIRADO— se completaba con 0 puntos. Lo primero sigue valiendo dentro del dia: pasada la hora, el registro sigue
+ * PENDIENTE y se completa con 0 puntos (la tardanza se cobra en puntos, no bloqueando). Lo segundo dejo de valer: la
+ * regla confirmada por el dueño el 2026-10-06 es «solo los del dia: un habito de un dia que ya termino no se
+ * registra», y desde E-534 EXPIRADO es justamente eso. Con el reloj real de la maquina no se podia probar «mismo dia
+ * pasada la hora», asi que la clase usa un reloj propio, puesto en la madrugada UTC (regla 02 §3): a las 04:30 UTC
+ * todavia es el dia anterior en Lima.
  *
- * <p><b>Que fue de C-9.</b> Esta clase nacio como regresion de C-9: "expirar y lanzar" revertia
- * la expiracion que `completar()` acababa de guardar, porque el `throw` corria dentro de la misma
- * transaccion que el `save`. Ese defecto ya no puede existir -- no queda ningun `throw` del que
- * salvar una escritura -- y con el se fue tambien el `noRollbackFor` que lo parcheaba. Se
- * conservan las pruebas contra Postgres real porque lo que ahora hay que demostrar es lo
- * contrario: que la fila queda COMPLETADA de verdad, y con cero puntos.
- *
- * <p>Requiere Postgres real: el defecto es un rollback real de una transaccion real
- * ({@code @Transactional} de Spring sobre un {@code PlatformTransactionManager} JPA
- * real) — con mocks (como en {@code RegistroServiceTest}) no hay ninguna transaccion
- * que revertir, asi que la prueba no significaria nada. Por eso se autowirea el caso
- * de uso por su interfaz publica (bean real, con el proxy de {@code @Transactional}
- * de Spring), igual que {@code ProcesarValidacionV90ServiceTransaccionIT}.
+ * <p><b>Que fue de C-9.</b> Esta clase nacio como regresion de C-9: "expirar y lanzar" revertia la expiracion que
+ * `completar()` acababa de guardar. Ese defecto ya no puede existir; lo que se prueba contra Postgres real es que la
+ * fila queda COMPLETADA de verdad con cero puntos, y que un rechazo no deja escrito nada.
  */
 @SpringBootTest
-@Import(TestcontainersConfiguration.class)
+@Import({TestcontainersConfiguration.class, CompletarRegistroExpiracionTransaccionIT.RelojConfig.class})
 class CompletarRegistroExpiracionTransaccionIT {
+
+    /** 04:30 UTC del 7 = 23:30 del 6 de octubre en Lima. */
+    private static final Instant ULTIMA_MEDIA_HORA_DEL_6_EN_LIMA = Instant.parse("2026-10-07T04:30:00Z");
+    /** 05:00:01 UTC del 7 = 00:00:01 del 7 en Lima: el 6 ya termino. */
+    private static final Instant RECIEN_EMPEZADO_EL_7_EN_LIMA = Instant.parse("2026-10-07T05:00:01Z");
+    private static final LocalDate EL_6 = LocalDate.of(2026, 10, 6);
+    private static final AtomicReference<Instant> AHORA = new AtomicReference<>(ULTIMA_MEDIA_HORA_DEL_6_EN_LIMA);
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"));
 
@@ -90,8 +94,8 @@ class CompletarRegistroExpiracionTransaccionIT {
                     .setParameter("email", participanteId + "@renaser.test")
                     .executeUpdate();
             entityManager.createNativeQuery("""
-                            INSERT INTO renaser.participantes_programa (usuario_id, dia_programa)
-                            VALUES (:usuarioId, 5)
+                            INSERT INTO renaser.participantes_programa (usuario_id, dia_programa, timezone)
+                            VALUES (:usuarioId, 5, 'America/Lima')
                             """)
                     .setParameter("usuarioId", participanteId.value())
                     .executeUpdate();
@@ -121,15 +125,11 @@ class CompletarRegistroExpiracionTransaccionIT {
         jdbcTemplate.update("DELETE FROM renaser.habitos WHERE id = ?", habitoId.value());
     }
 
-    /**
-     * {@code fecha_ejecucion} en el pasado lejano: {@code VentanaEntrega.calcular} acota
-     * {@code plazoEvidencia} a, como mucho, la medianoche siguiente a esa fecha — asi la
-     * ventana queda vencida sin importar el reloj real de la maquina que corre el test.
-     */
-    private RegistroHabitoId seedRegistroPendienteMuyVencido() {
+    /** Un registro PENDIENTE del 6 de octubre (Lima), con horario 06:00-08:00: a las 23:30 su plazo ya paso. */
+    private RegistroHabitoId seedRegistroDelSeis() {
         RegistroHabitoId id = RegistroHabitoId.of(UUID.randomUUID());
-        RegistroHabito registro = RegistroHabito.generar(id, participanteId, habitoId, LocalDate.of(2020, 1, 1), 5,
-                TipoDia.DISCIPLINA, false, CLOCK.now());
+        RegistroHabito registro = RegistroHabito.generar(id, participanteId, habitoId, EL_6, 5, TipoDia.DISCIPLINA,
+                false, CLOCK.now());
         saveRegistroPort.save(registro);
         return id;
     }
@@ -146,48 +146,60 @@ class CompletarRegistroExpiracionTransaccionIT {
     }
 
     @Test
-    @DisplayName("Un registro vencido SE COMPLETA, y paga cero: la tardanza se cobra en puntos, no bloqueando")
-    void unRegistroVencidoSeCompletaConCeroPuntos() {
-        RegistroHabitoId id = seedRegistroPendienteMuyVencido();
+    @DisplayName("D-259: pasada la hora y dentro de su dia (23:30 de Lima) SE COMPLETA, y paga cero")
+    void pasadaLaHoraDentroDelDiaSeCompletaConCeroPuntos() {
+        AHORA.set(ULTIMA_MEDIA_HORA_DEL_6_EN_LIMA);
+        RegistroHabitoId id = seedRegistroDelSeis();
 
         completarUseCase.completar(new CompletarRegistroCommand(participanteId, id, null, null));
 
-        assertThat(estadoEnBaseDe(id))
-                .as("la fila queda COMPLETADA: lo hizo, aunque tarde")
-                .isEqualTo("COMPLETADO");
-        assertThat(puntosEnBaseDe(id))
-                .as("y paga cero, que es donde SI corresponde cobrar la tardanza")
-                .isZero();
+        assertThat(estadoEnBaseDe(id)).as("lo hizo, aunque tarde").isEqualTo("COMPLETADO");
+        assertThat(puntosEnBaseDe(id)).as("la tardanza se cobra en puntos").isZero();
+    }
+
+    /** Falla contra el codigo anterior a D-259: completaba el registro de un dia ya cerrado con 0 puntos. */
+    @Test
+    @DisplayName("D-259: terminado su dia en Lima, un registro PENDIENTE (el barrido no paso) ya no se completa")
+    void terminadoSuDiaUnPendienteYaNoSeCompleta() {
+        AHORA.set(RECIEN_EMPEZADO_EL_7_EN_LIMA);
+        RegistroHabitoId id = seedRegistroDelSeis();
+
+        assertThatThrownBy(() -> completarUseCase.completar(
+                new CompletarRegistroCommand(participanteId, id, null, null)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Este hábito era del 6 de octubre; ese día ya cerró y no se puede registrar.");
+
+        assertThat(estadoEnBaseDe(id)).isEqualTo("PENDIENTE");
     }
 
     /**
-     * El caso que reporto el dueno del proyecto: DESPERTAR ya estaba en EXPIRADO --lo dejo asi un
-     * intento anterior o el barrido-- y no habia forma de registrarlo nunca mas.
+     * Falla contra el codigo anterior a D-259. Era el caso que habia reportado el dueño (DESPERTAR en EXPIRADO sin
+     * forma de registrarlo): pasada la hora del mismo dia ya no queda EXPIRADO (prueba de arriba), y un EXPIRADO es de
+     * un dia que termino.
      */
     @Test
-    @DisplayName("Un registro que YA estaba EXPIRADO tambien se puede completar")
-    void unRegistroYaExpiradoTambienSePuedeCompletar() {
-        RegistroHabitoId id = seedRegistroPendienteMuyVencido();
+    @DisplayName("D-259: un registro EXPIRADO (de un dia que ya termino) no se completa")
+    void unRegistroExpiradoNoSeCompleta() {
+        AHORA.set(RECIEN_EMPEZADO_EL_7_EN_LIMA);
+        RegistroHabitoId id = seedRegistroDelSeis();
         jdbcTemplate.update("""
                 UPDATE renaser.registros_habito SET estado = CAST('EXPIRADO' AS renaser.estado_registro)
                 WHERE id = ?
                 """, id.value());
 
-        completarUseCase.completar(new CompletarRegistroCommand(participanteId, id, null, null));
+        assertThatThrownBy(() -> completarUseCase.completar(
+                new CompletarRegistroCommand(participanteId, id, null, null)))
+                .isInstanceOf(IllegalStateException.class);
 
-        assertThat(estadoEnBaseDe(id)).isEqualTo("COMPLETADO");
-        assertThat(puntosEnBaseDe(id)).isZero();
+        assertThat(estadoEnBaseDe(id)).isEqualTo("EXPIRADO");
     }
 
-    /**
-     * FALLIDO sigue cerrado, y esa es la linea. Lo marca el barrido cuando el dia CIERRA: un dia
-     * cerrado es un veredicto, y dejar completarlo despues seria reescribir el pasado. Sin esta
-     * prueba, "dejar registrar tarde" se podria satisfacer abriendo tambien esa puerta.
-     */
+    /** FALLIDO sigue cerrado aun dentro de su dia: es el veredicto del Santuario roto. */
     @Test
-    @DisplayName("Un registro FALLIDO no se puede completar: el dia ya cerro")
+    @DisplayName("Un registro FALLIDO no se puede completar")
     void unRegistroFallidoSigueCerrado() {
-        RegistroHabitoId id = seedRegistroPendienteMuyVencido();
+        AHORA.set(ULTIMA_MEDIA_HORA_DEL_6_EN_LIMA);
+        RegistroHabitoId id = seedRegistroDelSeis();
         jdbcTemplate.update("""
                 UPDATE renaser.registros_habito SET estado = CAST('FALLIDO' AS renaser.estado_registro)
                 WHERE id = ?
@@ -198,5 +210,24 @@ class CompletarRegistroExpiracionTransaccionIT {
                 .isInstanceOf(IllegalStateException.class);
 
         assertThat(estadoEnBaseDe(id)).isEqualTo("FALLIDO");
+    }
+
+    @TestConfiguration
+    static class RelojConfig {
+        @Bean
+        @Primary
+        Clock relojDeEstaPrueba() {
+            return new Clock() {
+                @Override
+                public Instant now() {
+                    return AHORA.get();
+                }
+
+                @Override
+                public LocalDate today() {
+                    return AHORA.get().atOffset(ZoneOffset.UTC).toLocalDate();
+                }
+            };
+        }
     }
 }

@@ -72,6 +72,9 @@ class RegistroHabitoCompletarConcurrenciaTest {
 
     @Autowired
     private CompletarRegistroUseCase completarUseCase;
+    /** El reloj de la aplicacion: el registro tiene que ser de HOY en Lima (D-259: solo se registran los del dia). */
+    @Autowired
+    private com.renaser.os.shared.domain.Clock reloj;
     @Autowired
     private SaveRegistroHabitoPort saveRegistroPort;
     @Autowired
@@ -128,7 +131,10 @@ class RegistroHabitoCompletarConcurrenciaTest {
 
     private RegistroHabitoId seedRegistroPendiente() {
         RegistroHabitoId id = RegistroHabitoId.of(UUID.randomUUID());
-        RegistroHabito registro = RegistroHabito.generar(id, participanteId, habitoId, LocalDate.of(2026, 8, 24), 5,
+        // Corregido 2026-10-06 (D-259): era LocalDate.of(2026, 8, 24). Desde D-259 un registro de un dia que ya
+        // termino no se completa, asi que la fila es de hoy en la zona del participante (default America/Lima).
+        LocalDate hoyEnLima = reloj.now().atZone(java.time.ZoneId.of("America/Lima")).toLocalDate();
+        RegistroHabito registro = RegistroHabito.generar(id, participanteId, habitoId, hoyEnLima, 5,
                 TipoDia.DISCIPLINA, false, CLOCK.now());
         saveRegistroPort.save(registro);
         return id;

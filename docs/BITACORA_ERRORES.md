@@ -14484,3 +14484,49 @@ prefijo se lista a mano en `SecurityConfig`. Las pruebas unitarias del controlad
 
 **Prevención:** ya es ejecutable (`RutasCubiertasPorElFiltroTest`). Al crear un controlador con un prefijo nuevo, agregar el
 prefijo a `SecurityConfig` en el mismo cambio y correr esa prueba sola antes del `verify` completo.
+
+## E-573 · El servidor registraba hábitos de días ya cerrados: `POST /habit-tracks/{id}/complete` sobre un `EXPIRADO` de ayer respondía 200 con 0 puntos (D-259, RESUELTO, 06/10)
+
+**Síntoma:** al revisar el caso de una líder de mentores que «no puede subir evidencias», un registro `EXPIRADO` del día
+anterior (o `PENDIENTE` de ayer antes de que pasara el barrido) se completaba y aceptaba fotos. Contradice la regla
+confirmada por el dueño el 2026-10-06: «solo los del día: un hábito de un día que ya terminó no se registra».
+
+**Causa real:** al permitir registrar tarde (2026-09-11) se abrió `EstadoRegistro.puedeCompletarse()` a `EXPIRADO`
+para el caso «pasada la hora, mismo día». Desde E-534 un registro solo pasa a `EXPIRADO` cuando su **día local ya
+terminó**, así que esa puerta pasó a significar «cualquier día anterior». Ni `RegistroService.completar` ni
+`EvidenciaRegistroService` miraban la fecha del registro.
+
+**Arreglo:** `RegistroHabito.suDiaYaTermino(zona, ahora)` (frontera de `CorteDeExpiracion`); `RegistroService.completar`,
+`EvidenciaRegistroService.solicitarUrl` y `.subir` responden 409 «Este hábito era del 6 de octubre; ese día ya cerró y no
+se puede registrar.»; `puedeCompletarse()` sin `EXPIRADO`. El oyente del post diario no intenta registrar un día ya
+cerrado (si no, cada reintento del outbox caía en el 409). La racha sin celular y el Santuario no cambian: completan
+por su gesto aunque crucen la medianoche.
+
+**Prevención:** `RegistroServiceTest.unRegistroDeUnDiaTerminadoNoSeCompleta`,
+`EvidenciaRegistroServiceTest.noSeSubeEvidenciaDeUnDiaTerminado`,
+`PostDiarioComunidadHabitoServiceTest.unPostQueLlegaConSuDiaCerradoNoSeRegistra` y
+`CompletarRegistroExpiracionTransaccionIT` (Postgres real), todas con el reloj en la madrugada UTC (regla 02 §3).
+Fallan contra el código anterior. Lección: cuando cambia **cuándo** se escribe un estado (E-534), revisar quién
+**lee** ese estado con el significado viejo.
+Pruebas que afirmaban la regla vieja, corregidas con nota «Corregido 2026-10-06»: `ExpiracionPorZonaIT`
+(DORMIR del 9 registrado a las 00:30 del 10 — ver la pregunta abierta en `MODULO_HABITS.md` §D-259),
+`RegistroHabitoCompletarConcurrenciaTest` (registro fijo del 24-ago con el reloj real; falló en `clean verify` con
+«Este hábito era del 24 de agosto; ese día ya cerró y no se puede registrar.») y `TracksDeHoyConsultasTest` (E-574).
+
+## E-574 · Un día armado tarde perdía los hábitos cuya hora ya había pasado (`generarDisponiblesAhora`) (D-259, RESUELTO, 06/10)
+
+**Síntoma:** si el día de una persona se armaba tarde —la red de seguridad de `GET /habit-tracks/today` o el barrido
+horario después de las 02:00 locales (backend caído)— no se generaban los hábitos de hora ya cerrada: en Training se
+veían como «Aún sin registro de hoy», deshabilitados, y no había forma de registrarlos aunque se hubieran hecho.
+
+**Causa real:** `generarDisponiblesAhora` aplicaba a cualquier día el corte por hora de la decisión del 2026-09-02, que
+era para el primer día parcial (activar el programa a media mañana). Con la regla del 2026-10-06 un hábito se registra
+durante su día aunque se le haya pasado la hora, así que no generarlo es perderlo.
+
+**Arreglo:** día completo; el corte queda solo para el primer día del programa (`fecha_inicio`).
+
+**Prevención:** `RegistroServiceTest.unDiaArmadoTardeNoPierdeLosHabitosDeHoraPasada` (reloj 04:30 UTC = 23:30 de Lima;
+falla contra el código anterior) y `elPrimerDiaDelProgramaSigueSinLosDeHoraCerrada`. **Pendiente de datos:** el script
+de solo lectura `consulta-olga-habitos.sh` muestra a qué hora se crearon los registros de cada día (sección E): si se
+crearon tarde, este fue el motivo de los «pocos hábitos»; si no, son los de su plan (desbloqueos, pausas, horarios).
+

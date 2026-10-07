@@ -82,25 +82,37 @@ class RegistroHabitoTest {
     }
 
     /**
-     * <b>Cambiado 2026-09-11.</b> Esta prueba se llamaba {@code expiradoNuncaMasSeCompleta} y
-     * afirmaba lo contrario. La regla la cambio el dueno del proyecto: registrar tarde es
-     * informacion, y perderla no ayuda a nadie. Quien se desperto a las 10 y lo anota a las 11
-     * HIZO el habito; lo unico que no hizo fue llegar a tiempo, y eso se cobra en puntos --
-     * {@code ResultadoOtorgamiento} da 0 en fase EXPIRADO-- y no bloqueando el registro.
-     *
-     * <p>Los puntos los decide QUIEN LLAMA, no el agregado: aca se pasa 0 a proposito para no
-     * sugerir que completar tarde pague. La regla de cuanto paga vive en
-     * {@code ResultadoOtorgamientoTest}.
+     * <b>Cambiado 2026-10-06 (D-259).</b> Se llamo {@code expiradoNuncaMasSeCompleta} hasta el 2026-09-11, despues
+     * {@code expiradoTodaviaSePuedeCompletar} (registrar tarde). Desde E-534 EXPIRADO es solo de un dia que ya
+     * termino, y la regla del dueño del 2026-10-06 es que un habito de un dia terminado no se registra. Lo tarde
+     * dentro del dia sigue entrando: ese registro esta PENDIENTE (prueba de abajo).
      */
     @Test
-    void expiradoTodaviaSePuedeCompletar() {
+    void expiradoNoSeCompleta() {
         RegistroHabito r = nuevoPendiente();
         r.expirar(CLOCK.now());
 
-        r.completar(0, null, null, null, CLOCK.now());
+        assertThatThrownBy(() -> r.completar(0, null, null, null, CLOCK.now()))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(r.estado()).isEqualTo(EstadoRegistro.EXPIRADO);
+    }
 
-        assertThat(r.estado()).isEqualTo(EstadoRegistro.COMPLETADO);
-        assertThat(r.puntosOtorgados()).isZero();
+    @Test
+    @DisplayName("D-259: el dia del registro termina a la medianoche de SU zona, no a la de UTC")
+    void suDiaTerminaALaMedianocheDeSuZona() {
+        RegistroHabito delVeinticuatro = nuevoPendiente();
+        java.time.ZoneId lima = java.time.ZoneId.of("America/Lima");
+
+        // 04:30 UTC del 25 = 23:30 del 24 en Lima: el dia del registro sigue abierto.
+        assertThat(delVeinticuatro.suDiaYaTermino(lima, Instant.parse("2026-08-25T04:30:00Z"))).isFalse();
+        // 05:00 UTC del 25 = 00:00 del 25 en Lima: ya termino.
+        assertThat(delVeinticuatro.suDiaYaTermino(lima, Instant.parse("2026-08-25T05:00:00Z"))).isTrue();
+        // En Tokio (UTC+9) el 24 ya termino a las 15:00 UTC del 24.
+        assertThat(delVeinticuatro.suDiaYaTermino(java.time.ZoneId.of("Asia/Tokyo"),
+                Instant.parse("2026-08-24T15:00:00Z"))).isTrue();
+        // En Los Angeles (UTC-7 en agosto) sigue abierto a las 06:59 UTC del 25.
+        assertThat(delVeinticuatro.suDiaYaTermino(java.time.ZoneId.of("America/Los_Angeles"),
+                Instant.parse("2026-08-25T06:59:00Z"))).isFalse();
     }
 
     /** FALLIDO SIGUE cerrado: lo marca el barrido cuando el dia cierra, y un dia cerrado es un

@@ -40,6 +40,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -177,5 +178,41 @@ class EvidenciaRegistroServiceTest {
         var comando = new SolicitarUrlEvidenciaRegistroCommand(actorId, registro.id(), "image/jpeg");
 
         assertThatThrownBy(() -> service.solicitarUrl(comando)).isInstanceOf(NotAuthorizedException.class);
+    }
+    /**
+     * D-259: la evidencia es parte de registrar, y un habito de un dia que ya termino no se registra. Falla contra el
+     * codigo anterior: firmaba la URL y guardaba la evidencia de un registro de ayer, y el {@code /complete} de despues
+     * respondia 409 dejando la foto colgada. Reloj en la madrugada UTC (regla 02 §3).
+     */
+    @Test
+    @DisplayName("D-259: no se sube evidencia de un registro cuyo dia ya termino en Lima (00:10 de Lima)")
+    void noSeSubeEvidenciaDeUnDiaTerminado() {
+        var pasadaLaMedianoche = new EvidenciaRegistroService(loadRegistroPort, progresoPort, registrarEvidenciaPort,
+                almacenamientoPort, UUID::randomUUID, FixedClock.at(Instant.parse("2026-08-26T05:10:00Z")));
+        RegistroHabito delVeinticinco = registroDe(actorId);
+        when(loadRegistroPort.byId(delVeinticinco.id())).thenReturn(Optional.of(delVeinticinco));
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(false)));
+
+        assertThatThrownBy(() -> pasadaLaMedianoche.solicitarUrl(
+                new SolicitarUrlEvidenciaRegistroCommand(actorId, delVeinticinco.id(), "image/jpeg")))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("25 de agosto");
+        assertThatThrownBy(() -> pasadaLaMedianoche.subir(comandoTexto(actorId, delVeinticinco)))
+                .isInstanceOf(IllegalStateException.class);
+        verify(almacenamientoPort, never()).firmarSubida(any(), any(), any());
+        verify(registrarEvidenciaPort, never()).registrar(any());
+    }
+
+    @Test
+    @DisplayName("D-259: a las 23:50 de Lima (04:50 UTC del dia siguiente) la evidencia del dia todavia entra")
+    void laEvidenciaDelDiaEntraHastaSuMedianoche() {
+        var casiMedianoche = new EvidenciaRegistroService(loadRegistroPort, progresoPort, registrarEvidenciaPort,
+                almacenamientoPort, UUID::randomUUID, FixedClock.at(Instant.parse("2026-08-26T04:50:00Z")));
+        RegistroHabito delVeinticinco = registroDe(actorId);
+        when(loadRegistroPort.byId(delVeinticinco.id())).thenReturn(Optional.of(delVeinticinco));
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(false)));
+
+        casiMedianoche.subir(comandoTexto(actorId, delVeinticinco));
+
+        verify(registrarEvidenciaPort).registrar(any());
     }
 }

@@ -129,16 +129,12 @@ public final class RegistroHabito {
      */
     public void completar(int puntos, String respuestaTexto, Integer calificacionProductividad,
                            java.util.UUID entradaDiarioId, MedicionDiaria medicion, Instant ahora) {
-        /* Aca habia un `requireNoTerminal()`. Se quita porque EXPIRADO es terminal segun
-           `esTerminal()` --y lo sigue siendo para el resto del sistema, que usa esa pregunta para
-           "esto ya no se toca"-- pero SI se puede completar desde que registrar tarde dejo de
-           bloquearse. La comprobacion de abajo es la que manda para este gesto, y es mas estricta
-           que aquella para los otros dos estados terminales: COMPLETADO y FALLIDO siguen fuera.
-
-           No se toca `esTerminal()` en cambio: la usan `ClaseDiariaHabitoService`,
-           `PostDiarioComunidadHabitoService` y la agenda del dia con el sentido de "hecho, vencido
-           o fallido no tiene nada pendiente", y ahi EXPIRADO si pertenece. Ensanchar esa pregunta
-           para arreglar este gesto habria cambiado tres comportamientos que nadie pidio. */
+        /* No es `requireNoTerminal()` porque el mensaje de este gesto es otro, pero desde D-259 (2026-10-06) cubre
+           lo mismo: COMPLETADO, FALLIDO y EXPIRADO quedan fuera. Entre el 2026-09 y D-259 EXPIRADO se podia
+           completar (registrar tarde); desde E-534 EXPIRADO es solo de un dia que ya termino, y un habito de un dia
+           terminado no se registra. Lo tarde DENTRO del dia sigue entrando: el registro esta PENDIENTE. Que el dia
+           del registro no haya terminado lo comprueba el caso de uso ({@link #suDiaYaTermino}), porque la zona del
+           participante no vive en el agregado. */
         if (!estado.puedeCompletarse()) {
             throw new IllegalStateException("Este registro no puede completarse: " + estado);
         }
@@ -150,6 +146,15 @@ public final class RegistroHabito {
         this.medicion = medicion;
         this.completadoEn = ahora;
         this.actualizadoEn = ahora;
+    }
+
+    /**
+     * D-259 — {@code true} si el dia local de este registro ya termino para el participante (su zona, no la del
+     * servidor ni UTC; regla 02 §1). Es la misma frontera que el barrido de expiracion ({@link CorteDeExpiracion}):
+     * un habito se registra durante su dia, aunque se le haya pasado la hora, y no despues.
+     */
+    public boolean suDiaYaTermino(java.time.ZoneId zona, Instant ahora) {
+        return CorteDeExpiracion.para(zona, ahora).yaTermino(fechaEjecucion);
     }
 
     /** Vencio la ventana de entrega. Sin penalizacion — 0 puntos, ver docs/MODULO_HABITS.md paso 0. */

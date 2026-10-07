@@ -27,17 +27,19 @@ public interface GenerarTracksDelDiaUseCase {
     List<RegistroHabito> generar(UserId participanteId, LocalDate fecha);
 
     /**
-     * Variante para el dia en curso: genera SOLO los habitos que el aprendiz todavia puede
-     * completar, descartando aquellos cuya ventana de entrega ya se cerro a esta hora (en SU
-     * zona horaria, no la del servidor). Un habito sin {@code horaLimite} no vence en el dia,
-     * asi que siempre entra.
+     * Variante para el dia en curso (la red de seguridad de {@code GET /habit-tracks/today} y el barrido horario que
+     * llega tarde): genera el dia COMPLETO de hoy en SU zona, salvo en su primer dia del programa
+     * ({@code fecha_inicio}), en que descarta los habitos cuya ventana ya se cerro a esta hora. Un habito sin
+     * {@code horaLimite} no vence en el dia, asi que siempre entra.
      *
-     * <p>Por que existe, y por que el filtro es por hora y no solo por fecha: alguien que
-     * activa su programa a las 11 de la manana no puede hacer la ducha fria que cerraba a las
-     * 08:00. Generarsela igual la dejaria PENDIENTE hasta la noche, cuando el barrido la marca
-     * fallada — el aprendiz arrancaria su primer dia con hábitos perdidos que nunca tuvo forma
-     * de completar, y perdiendo coherencia por ello. Decision del dueno del proyecto
-     * (2026-09-02): esos habitos no se generan ese primer dia parcial.
+     * <p>Por que el primer dia es distinto: alguien que activa su programa a las 11 de la manana (hoy, el staff con
+     * {@code activarSeguimientoPersonal}) no hizo la ducha fria que cerraba a las 08:00 — no existia para el.
+     * Decision del dueno del proyecto (2026-09-02): esos habitos no se generan ese primer dia parcial.
+     *
+     * <p><b>Corregido 2026-10-06 (D-259).</b> Este javadoc decia que el corte por hora valia para cualquier dia. Con la
+     * regla del dueño del 2026-10-06 («un habito se puede registrar durante su dia aunque se le haya pasado la hora:
+     * vencer la hora solo afecta los puntos») un dia armado tarde no puede perder habitos: la persona que los hizo
+     * tiene que poder anotarlos, con 0 puntos.
      */
     List<RegistroHabito> generarDisponiblesAhora(UserId participanteId);
 

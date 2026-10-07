@@ -150,14 +150,34 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         return generarInterno(requireProgreso(participanteId), participanteId, fecha, null);
     }
 
-    /** Ver javadoc del puerto: descarta lo que ya no se puede completar a esta hora. */
+    /**
+     * Ver javadoc del puerto: el dia COMPLETO de hoy en su zona, salvo el primer dia del programa, en que se descarta
+     * lo que ya no se puede completar a esta hora (decision del dueño del 2026-09-02).
+     *
+     * <p><b>Corregido 2026-10-06 (D-259).</b> Antes descartaba por hora TODOS los dias. Con la regla del dueño
+     * («un habito se puede registrar durante su dia aunque se le haya pasado la hora») eso perdia habitos: un dia
+     * armado tarde —la red de seguridad de {@code GET /habit-tracks/today}, o el barrido horario que llega pasadas
+     * las 02:00 locales porque el backend estuvo caido— no generaba los de hora ya cerrada, y la persona no tenia
+     * como registrarlos aunque los hubiera hecho.
+     */
     @Override
     @Transactional
     public List<RegistroHabito> generarDisponiblesAhora(UserId participanteId) {
         ProgresoParticipanteHabits progreso = requireProgreso(participanteId);
         ZoneId zona = ZoneId.of(progreso.timezone());
         var ahoraEnSuZona = clock.now().atZone(zona);
-        return generarInterno(progreso, participanteId, ahoraEnSuZona.toLocalDate(), ahoraEnSuZona.toLocalTime());
+        LocalDate hoy = ahoraEnSuZona.toLocalDate();
+        LocalTime horaDeCorte = esSuPrimerDia(progreso, hoy) ? ahoraEnSuZona.toLocalTime() : null;
+        return generarInterno(progreso, participanteId, hoy, horaDeCorte);
+    }
+
+    /**
+     * El primer dia del programa ({@code fecha_inicio}): el unico en que la decision del 2026-09-02 sigue diciendo
+     * que no se generan los habitos cuya hora ya cerro. Es el dia del staff que activa su seguimiento a media tarde
+     * ({@code activarSeguimientoPersonal}: dia 1 = hoy). Sin fecha de inicio conocida no es primer dia.
+     */
+    private static boolean esSuPrimerDia(ProgresoParticipanteHabits progreso, LocalDate hoy) {
+        return hoy.equals(progreso.fechaInicio());
     }
 
     /** Ver javadoc del puerto: jornada completa (sin corte de hora) para HOY en la zona del participante. */
@@ -343,7 +363,8 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
     @Transactional
     public RegistroHabito completar(CompletarRegistroCommand command) {
         RegistroHabito registro = requireRegistro(command.registroId());
-        requireSelf(command.actorId(), registro.participanteId());
+        ProgresoParticipanteHabits progreso = requireSelf(command.actorId(), registro.participanteId());
+        requireDeUnDiaQueNoTermino(registro, ZoneId.of(progreso.timezone()));
         Habito habito = requireHabito(registro.habitoId());
         requireMedicionAdmitida(habito, command.medicion());
         // La politica gobierna el GESTO GENERICO y solo ese — es literalmente la pregunta que
@@ -365,7 +386,10 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
            registro cobraba dos veces por la misma tardanza.
 
            Con el throw desaparece tambien el motivo del `noRollbackFor` que tenia este metodo
-           (C-9): ya no hay una escritura que salvar de su propia excepcion. */
+           (C-9): ya no hay una escritura que salvar de su propia excepcion.
+
+           D-259 (2026-10-06): lo tarde vale DENTRO del dia del registro. Un registro de un dia que ya
+           termino se rechaza arriba, en `requireDeUnDiaQueNoTermino`, antes de tocar nada. */
 
         // D-97: un habito SIN horario (ni disparo ni cierre, ni de catalogo ni de preferencia —
         // hoy DESPERTAR) se evidencia con el solo hecho de registrarlo, y la hora de la accion es
@@ -399,6 +423,21 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         events.publishEvent(new HabitoCompletadoEvent(guardado.id().value(), guardado.participanteId(),
                 habito.id().value(), puntos, ahora));
         return guardado;
+    }
+
+    /**
+     * D-259 (regla del dueño, 2026-10-06): un habito se registra durante SU dia —aunque se le haya pasado la hora, con
+     * menos puntos o ninguno— y no despues. Antes este caso de uso completaba un registro de cualquier dia anterior,
+     * PENDIENTE (si el barrido todavia no lo habia vencido) o EXPIRADO, con 0 puntos.
+     *
+     * <p>Va aca y no en {@link RegistroHabito#completar}: la racha sin celular y el Santuario completan su registro
+     * por su propio gesto cuando el ciclo cruza la medianoche, y esos siguen valiendo. El dia es el de la zona del
+     * participante (regla 02 §1): a las 04:30 UTC todavia es el dia anterior en Lima.
+     */
+    private void requireDeUnDiaQueNoTermino(RegistroHabito registro, ZoneId zona) {
+        if (registro.suDiaYaTermino(zona, clock.now())) {
+            throw new RegistroDeUnDiaCerradoException(registro.fechaEjecucion());
+        }
     }
 
     /** La regla vive en {@link TipoDia#delDia(LocalDate)} — la comparte la lectura de horarios vigentes. */

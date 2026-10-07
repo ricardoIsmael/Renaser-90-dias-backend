@@ -299,4 +299,26 @@ class PostDiarioComunidadHabitoServiceTest {
         verify(progresoPort, never()).deParticipante(any());
         verify(completarRegistroUseCase, never()).completar(any());
     }
+    /**
+     * D-259: una reentrega del outbox que llega pasada la medianoche de Lima no intenta registrar el habito de un dia
+     * ya cerrado. Falla contra el codigo anterior: llamaba al caso de uso, que desde D-259 responde 409, y el evento
+     * fallaba en cada reintento. Reloj en la madrugada UTC (regla 02 §3).
+     */
+    @Test
+    @DisplayName("D-259: un post de ayer que llega a las 00:30 de Lima no registra el habito de un dia cerrado")
+    void unPostQueLlegaConSuDiaCerradoNoSeRegistra() {
+        UserId autor = participante();
+        Habito habito = habitoPostDiario();
+        RegistroHabito deAyer = registroDe(autor, habito.id(), LocalDate.of(2026, 8, 24));
+        mockParticipanteEnLima(autor);
+        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA))
+                .thenReturn(Optional.of(habito));
+        when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(autor, habito.id(), LocalDate.of(2026, 8, 24)))
+                .thenReturn(Optional.of(deAyer));
+
+        service(FixedClock.at(Instant.parse("2026-08-25T05:30:00Z")))
+                .alPublicarEnElMuro(autor, Instant.parse("2026-08-25T04:50:00Z"));
+
+        verify(completarRegistroUseCase, never()).completar(any());
+    }
 }

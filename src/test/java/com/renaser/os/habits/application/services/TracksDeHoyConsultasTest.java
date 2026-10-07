@@ -214,8 +214,10 @@ class TracksDeHoyConsultasTest {
 
         List<RegistroHabito> generados = registros.generarDisponiblesAhora(participante);
 
-        assertThat(generados).extracting(RegistroHabito::habitoId).containsExactly(alcanzable.id());
-        assertThat(generados.get(0).fechaEjecucion()).isEqualTo(HOY_EN_LIMA);
+        // Corregido 2026-10-06 (D-259): decia containsExactly(alcanzable). Fuera del primer dia del programa, el
+        // habito cuya hora ya cerro se genera igual: se registra durante su dia, con 0 puntos (E-574).
+        assertThat(generados).extracting(RegistroHabito::habitoId).containsExactly(yaCerro.id(), alcanzable.id());
+        assertThat(generados).allSatisfy(r -> assertThat(r.fechaEjecucion()).isEqualTo(HOY_EN_LIMA));
         verify(loadRegistroPort, times(1)).porParticipanteYFecha(participante, HOY_EN_LIMA);
         verify(loadHorarioPort, times(1)).porHabitos(any());
         verify(loadRegistroPort, never()).porParticipanteHabitoYFecha(any(), any(), any());

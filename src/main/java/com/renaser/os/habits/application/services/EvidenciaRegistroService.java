@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.net.URI;
 import java.time.Duration;
+import java.time.ZoneId;
 import java.util.NoSuchElementException;
 
 /**
@@ -72,7 +73,7 @@ public class EvidenciaRegistroService implements SubirEvidenciaRegistroUseCase,
     @Override
     public UrlEvidenciaRegistro solicitarUrl(SolicitarUrlEvidenciaRegistroCommand command) {
         RegistroHabito registro = requireRegistro(command.registroId());
-        requireSelf(command.actorId(), registro.participanteId());
+        requireDeUnDiaQueNoTermino(registro, requireSelf(command.actorId(), registro.participanteId()));
 
         String ruta = PREFIJO_RUTA + "/" + command.actorId() + "/" + registro.id() + "/" + idGenerator.newId();
         URI url = almacenamientoPort.firmarSubida(ruta, command.tipoContenido(), VALIDEZ_URL_SUBIDA);
@@ -83,7 +84,7 @@ public class EvidenciaRegistroService implements SubirEvidenciaRegistroUseCase,
     @Transactional
     public EvidenciaRegistrada subir(SubirEvidenciaRegistroCommand command) {
         RegistroHabito registro = requireRegistro(command.registroId());
-        requireSelf(command.actorId(), registro.participanteId());
+        requireDeUnDiaQueNoTermino(registro, requireSelf(command.actorId(), registro.participanteId()));
 
         var comando = new RegistrarEvidenciaComando(command.actorId(),
                 new DestinoEvidencia.RegistroHabito(registro.id().value()), command.tipo(), command.bucket(),
@@ -98,8 +99,19 @@ public class EvidenciaRegistroService implements SubirEvidenciaRegistroUseCase,
         return loadRegistroPort.byId(id).orElseThrow(() -> new NoSuchElementException("Registro no encontrado: " + id));
     }
 
-    /** Mismo criterio que {@code RegistroService.requireSelf}: pertenencia Y estado de cuenta. */
-    private void requireSelf(UserId actorId, UserId participanteId) {
+    /**
+     * D-259: la misma regla que {@code RegistroService.completar} — un habito se registra durante su dia, y la
+     * evidencia es parte de registrarlo. Sin esta guarda la app subia la foto de un registro de un dia ya cerrado, el
+     * {@code /complete} siguiente respondia 409, y la evidencia quedaba colgada de un registro que nunca se completo.
+     */
+    private void requireDeUnDiaQueNoTermino(RegistroHabito registro, ZoneId zona) {
+        if (registro.suDiaYaTermino(zona, clock.now())) {
+            throw new RegistroDeUnDiaCerradoException(registro.fechaEjecucion());
+        }
+    }
+
+    /** Mismo criterio que {@code RegistroService.requireSelf}: pertenencia Y estado de cuenta. Devuelve su zona. */
+    private ZoneId requireSelf(UserId actorId, UserId participanteId) {
         if (!actorId.equals(participanteId)) {
             throw new NotAuthorizedException("Solo el propio participante puede subir evidencia de sus habitos");
         }
@@ -108,6 +120,7 @@ public class EvidenciaRegistroService implements SubirEvidenciaRegistroUseCase,
         if (progreso.suspendido()) {
             throw new NotAuthorizedException("Cuenta suspendida");
         }
+        return ZoneId.of(progreso.timezone());
     }
 
     /**

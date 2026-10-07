@@ -42,6 +42,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * E-534 — el barrido que pasa a {@code EXPIRADO} lo {@code PENDIENTE} de los dias que ya terminaron, de punta a
@@ -183,7 +184,7 @@ class ExpiracionPorZonaIT {
     }
 
     @Test
-    @DisplayName("Lima de noche: DORMIR vence a las 05:00 UTC (su medianoche), DESPERTAR registrado a las 23:55 queda con su hora, y lo vencido se puede registrar a las 00:30")
+    @DisplayName("Lima de noche: DORMIR vence a las 05:00 UTC (su medianoche), DESPERTAR registrado a las 23:55 queda con su hora, y lo vencido ya no se registra a las 00:30 (D-259)")
     void limaDespertarYDormirDeNoche() {
         UUID bea = aprendiz("Bea Noctambula", LIMA);
         LocalDate nueve = LocalDate.of(2026, 11, 9);
@@ -219,17 +220,16 @@ class ExpiracionPorZonaIT {
             assertThat(f.puntos()).isEqualTo(10);
         });
 
-        // 00:30 del 10 en Lima: el DORMIR del 9 ya vencido se puede registrar igual; queda la hora real y paga 0
-        // (paso su plazo, ResultadoOtorgamiento). El barrido no lo vuelve a tocar.
-        Instant tarde = Instant.parse("2026-11-10T05:30:00Z");
-        reloj.fijar(tarde);
-        completar.completar(new CompletarRegistroCommand(UserId.of(bea), RegistroHabitoId.of(dormir), null, null));
+        // 00:30 del 10 en Lima: el DORMIR del 9 ya no se registra (D-259, regla del dueño del 2026-10-06: «solo los
+        // del dia»). Corregido 2026-10-06: aca se completaba con 0 puntos («el DORMIR del 9 ya vencido se puede
+        // registrar igual»). El barrido no lo vuelve a tocar.
+        reloj.fijar(Instant.parse("2026-11-10T05:30:00Z"));
+        assertThatThrownBy(() -> completar.completar(
+                new CompletarRegistroCommand(UserId.of(bea), RegistroHabitoId.of(dormir), null, null)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Este hábito era del 9 de noviembre; ese día ya cerró y no se puede registrar.");
         correrCadaHora(Instant.parse("2026-11-10T06:00:00Z"), Instant.parse("2026-11-11T06:00:00Z"), hora -> { });
-        assertThat(foto(dormir)).satisfies(f -> {
-            assertThat(f.estado()).isEqualTo("COMPLETADO");
-            assertThat(f.completadoEn().toInstant()).isEqualTo(tarde);
-            assertThat(f.puntos()).isZero();
-        });
+        assertThat(estado(dormir)).isEqualTo("EXPIRADO");
         assertThat(foto(despertar).completadoEn().toInstant()).isEqualTo(subida);
     }
 

@@ -36,7 +36,10 @@ import java.util.TreeMap;
  *   contrario.</blockquote></li>
  *   <li><b>S-2, el dia de hoy:</b> hoy solo corta un {@code FALLIDO} (Santuario roto: es un
  *   veredicto y no se puede completar). Un {@code PENDIENTE}, {@code EN_CURSO} o {@code EXPIRADO}
- *   de hoy todavia se puede completar ({@link EstadoRegistro#puedeCompletarse()}), asi que no corta.</li>
+ *   de hoy no corta. <i>Corregido 2026-10-06 (D-259): decia que no cortaba porque «todavia se puede
+ *   completar ({@link EstadoRegistro#puedeCompletarse()})»; desde D-259 EXPIRADO no se completa, pero
+ *   tampoco existe un EXPIRADO de hoy (solo vence un dia ya terminado, E-534). La regla se escribe ahora
+ *   como lo que dice: hoy solo corta FALLIDO.</i></li>
  *   <li><b>S-3, dias ya terminados:</b> todo dia anterior a hoy que no esta {@code COMPLETADO} corta,
  *   aunque el barrido nocturno todavia no lo haya pasado a {@code EXPIRADO}. Si despues se completa
  *   tarde, la racha se recompone sola: se deriva, no se guarda.</li>
@@ -111,7 +114,7 @@ public record RachaDelHabito(int dias, boolean definitiva) {
         if (dia.opcional()) {
             return Veredicto.NO_CUENTA;
         }
-        if (dia.fecha().equals(hoy) && dia.estado().puedeCompletarse()) {
+        if (dia.fecha().equals(hoy) && dia.estado() != EstadoRegistro.FALLIDO) {
             return Veredicto.ABIERTO;
         }
         return Veredicto.INCUMPLIDO;

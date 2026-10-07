@@ -23,6 +23,11 @@ Ya extraído literal en `docs/MODULO_POINTS.md` §2.1 — se implementó en `hab
 - `HABIT_FULL_POINTS=10` (points.ts:38), `GRACE_WINDOW_MINUTES=10` (points.ts:41), `GRACE_POINT_STEP_MINUTES=2` (points.ts:44), `GRACE_MIN_POINTS=5` (points.ts:47): `max(5, 10 − floor(minutosTarde/2))` (points.ts:112-117).
 - `EXTENSION_WINDOW_HOURS=3` DEFAULT, por-hábito via `evidenceExtensionHours` (points.ts:59), `EXTENSION_POINTS=3` fijos (points.ts:62).
 - Pasado gracia+extensión: EXPIRED, 0 puntos, bloqueado.
+  > **Corregido 2026-10-06 (D-259).** Esa línea es la regla del repo viejo y ya no rige. Hoy, pasada gracia+extensión,
+  > el registro **sigue PENDIENTE** y se completa con **0 puntos** (`LATE_HABIT`) hasta el fin de **su día local**;
+  > recién al terminar ese día el barrido lo pasa a `EXPIRADO` (E-534), y un `EXPIRADO` ya no se registra ni acepta
+  > evidencia (409 «Este hábito era del 5 de octubre; ese día ya cerró y no se puede registrar.»). Regla confirmada
+  > por el dueño: «un hábito se puede registrar durante su día aunque se le haya pasado la hora; solo los del día».
 - `resolveHabitAward(deadline, deliveredAt, extensionWindowMinutes)` (points.ts:100-125) → `ResultadoOtorgamiento.calcular(instanteAncla, entregadoEn, extension)`, 1:1.
 
 ### 0.2 Ventana de entrega (`service.ts:280-420`)
@@ -1069,7 +1074,8 @@ lectura que autoriza, y la proyección ya no tiene puerto de progreso propio. "H
 en la zona del participante (E-91, E-105), ahora dentro de `RegistroService.consultarHoy`.
 
 **La red de seguridad (día sin registros) no cambió de comportamiento:** sigue llamando a
-`generarDisponiblesAhora` solo para el propio aprendiz y relee. Cambian dos cosas:
+`generarDisponiblesAhora` solo para el propio aprendiz y relee. *(Desde D-259, 2026-10-06, `generarDisponiblesAhora`
+arma el día **completo**; solo el primer día del programa sigue sin los hábitos de hora ya cerrada.)* Cambian dos cosas:
 
 - La generación corre en **su** transacción de escritura, **fuera** de la de lectura. Anidarla con
   `REQUIRES_NEW` habría pedido una segunda conexión teniendo ya una; con el pool lleno eso se traba.
@@ -1273,4 +1279,34 @@ suite el cron horario está apagado (`"-"`) y el barrido se llama directo.
 
 Pruebas: `CorteDeExpiracionTest`, `ExpiracionDeRegistrosServiceTest` (zonas, paginación, quien falla no frena),
 `ExpirarRegistrosSchedulerTest` (crons y cerrojos), `ExpiracionPorZonaIT`.
+
+
+## D-259 — Un hábito se registra durante su día, y solo los del día (2026-10-06)
+
+Regla confirmada por el dueño: «La programación es por día. Un hábito se puede registrar durante su día aunque se le
+haya pasado la hora: vencer la hora solo afecta los puntos (menos o ninguno). Solo los del día: un hábito de un día que
+ya terminó no se registra.»
+
+| Caso | Servidor |
+|---|---|
+| PENDIENTE antes de su hora | Se completa, 10 puntos (`A_TIEMPO`). Santuario: no se inicia antes de `hora_disparo` (sesión, a propósito). |
+| PENDIENTE pasada la hora / el `plazoEvidencia`, mismo día local | Se completa y acepta evidencia: 10 en la extensión, 10→5 en la gracia, 0 después (`LATE_HABIT`). |
+| Registro de un día que ya terminó en su zona (PENDIENTE sin barrer o EXPIRADO) | `POST /complete`, `upload-url` y `POST /evidence`: 409 «Este hábito era del {d de mes}; ese día ya cerró y no se puede registrar.» |
+| Cerca de la medianoche | El día termina a la medianoche de **su** zona (Lima 05:00 UTC, Madrid 22:00/23:00 UTC, Tokio 15:00 UTC). |
+| Día armado tarde (red de seguridad de `GET /today`, barrido horario después de las 02:00 locales) | Día **completo**; solo el primer día del programa (`fecha_inicio`) descarta lo de hora cerrada (decisión 2026-09-02). |
+
+Dónde vive: `RegistroHabito.suDiaYaTermino(zona, ahora)` (misma frontera que `CorteDeExpiracion`), usada por
+`RegistroService.completar` y `EvidenciaRegistroService` (`solicitarUrl`, `subir`). `EstadoRegistro.puedeCompletarse()`
+ya no incluye `EXPIRADO`. **No** se aplica dentro de `RegistroHabito.completar`: la racha sin celular y el Santuario
+completan su registro por su gesto propio cuando el ciclo cruza la medianoche. El oyente del post diario
+(`PostDiarioComunidadHabitoService`) no intenta registrar un día ya cerrado (evita el 409 en cada reintento del outbox).
+`RachaDelHabito` S-2 se escribe ahora como «hoy solo corta `FALLIDO`» (mismo resultado).
+
+**Preguntas abiertas para el dueño (no se inventaron):**
+1. **DORMIR después de la medianoche.** Quien se acuesta a las 00:30 ya no puede registrar el DORMIR del día anterior
+   (antes se podía, con 0 puntos; `ExpiracionPorZonaIT.limaDespertarYDormirDeNoche` lo probaba). Con la regla «solo los
+   del día» lo registraría como el DORMIR del día nuevo, y esa noche ya lo tendría hecho. ¿DORMIR (y DESPERTAR) se
+   tratan como los demás, o su día se extiende hasta cierta hora de la madrugada?
+2. **Primer día del programa.** Se mantuvo la decisión del 2026-09-02 (no generar lo de hora cerrada ese día). Con la
+   regla nueva, ¿también ese día debería traer todos los hábitos para registrarlos tarde?
 
