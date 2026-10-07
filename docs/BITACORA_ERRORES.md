@@ -14536,3 +14536,21 @@ Prueba nueva en `phoenixMascot.test.ts` (falla contra el código anterior).
 
 **Prevención:** un respaldo por error tiene que filtrar por tipo; y el fénix nativo se valida en emulador con build
 local (E-571) antes de dar por buena la integración: en Jest el doble de Rive nunca emite ese aviso.
+
+## E-573 · Plan decía «02 · El Ciclo Alquímico» mientras Yo ya decía «Fase 3 · El Maestro Interno» (front, 2026-10-06)
+
+**Síntoma.** Con la app abierta al cambiar el día (del 34 al 35), Yo mostraba «FASE 3 DE 4 · El Maestro Interno · Día 1 de 30»
+y Plan seguía en «DÍA 34 · Fase actual 02 Días 8–34 · El Ciclo Alquímico». El dueño lo reportó como «En Yo las fases están con
+bug: deben ser iguales que en Plan».
+
+**Causa real.** Plan leía `/home` con `useProgramaDia` una sola vez al montar la pestaña; Yo con `useResumenHome`, que relee al
+volver al foco. Además cada pantalla hacía su propia cuenta de la fase (`descripcionDeFase`/`arquitecturaDeTiempo` en Plan,
+`diasDeLaFase` en Yo). Los cortes (1/8/35/65) y el backend estaban bien: en el día 30 las dos decían Fase 2 · El Ciclo
+Alquímico · Gorila.
+
+**Arreglo.** Front, rama `fase-en-yo`: una sola función `features/home/utils/faseEnCurso.ts` para Yo, Plan y la vista previa
+de Administración; Plan lee `/home` con `useResumenHome`; la tarjeta de Yo muestra el mismo rango de Plan («Días 8–34»).
+
+**Prevención.** `faseEnCurso.test.ts` (día 1 a 90 contra el tramo en curso de Plan) y `faseIgualEnYoYPlan.test.ts` (Plan no
+vuelve a `useProgramaDia`; ninguna pantalla hace su propia cuenta). Una pestaña que muestra el día o la fase relee `/home` al
+volver al foco.
