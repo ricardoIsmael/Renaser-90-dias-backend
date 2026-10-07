@@ -136,6 +136,51 @@ class RelojProgramaServiceTest {
         assertThat(activada.diasAjuste()).isZero();
     }
 
+    /**
+     * D-261 (decisión del dueño del 2026-10-07: «que elija el día como los demás»): el personal SIN
+     * fila ve las mismas fechas que el aprendiz y, al elegir, se le crea la fila ya activada con esa
+     * fecha. Consultar no guarda nada. Madrugada UTC (regla 02): las fechas se cuentan desde el 6 de Lima.
+     */
+    @ParameterizedTest(name = "{0} sin fila elige su Día 1 y se le crea la fila con esa fecha")
+    @EnumSource(value = UserRole.class, names = {"MENTOR", "MENTOR_LEAD", "ADMIN", "ALCHEMIST"})
+    void elPersonalSinFilaEligeSuDiaUnoYSeLeCreaLaFila(UserRole rol) {
+        FixedClock madrugadaUtc = FixedClock.at(Instant.parse("2026-10-07T03:00:00Z"));
+        RelojProgramaService enLaMadrugada = new RelojProgramaService(new RequireActiveUserGuard(loadUserPort),
+                loadParticipacionProgramaPort, saveParticipacionProgramaPort, listarParticipantesConProgramaActivoPort,
+                guardarAvanceDelRelojPort, madrugadaUtc);
+        UserId actorId = UserId.of(UUID.randomUUID());
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(User.rehydrate(actorId,
+                new Email(actorId + "@renaser.com"), rol, UserStatus.ACTIVE, "Fixture", null, null, null, null)));
+        when(loadParticipacionProgramaPort.byParticipanteId(actorId)).thenReturn(Optional.empty());
+        when(saveParticipacionProgramaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var estado = enLaMadrugada.consultarEstado(new ConsultarActivacionProgramaQuery(actorId));
+        verify(saveParticipacionProgramaPort, never()).save(any());
+        ParticipacionPrograma creada = enLaMadrugada.activarPrograma(
+                new ActivateProgramCommand(actorId, estado.fechasValidas().get(1)));
+
+        assertThat(estado.activado()).isFalse();
+        assertThat(estado.fechasValidas()).containsExactly(java.time.LocalDate.parse("2026-10-07"),
+                java.time.LocalDate.parse("2026-10-08"), java.time.LocalDate.parse("2026-10-09"));
+        assertThat(creada.participanteId()).isEqualTo(actorId);
+        assertThat(creada.estaActivado()).isTrue();
+        assertThat(creada.fechaInicio()).isEqualTo(java.time.LocalDate.parse("2026-10-08"));
+        assertThat(creada.diasAjuste()).isZero();
+        assertThat(creada.diaPrograma()).isZero();
+        verify(saveParticipacionProgramaPort).save(creada);
+    }
+
+    @Test
+    void elAprendizSinFilaSigueSinPoderConsultarNiActivar() {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(usuarioActivo(actorId)));
+        when(loadParticipacionProgramaPort.byParticipanteId(actorId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.consultarEstado(new ConsultarActivacionProgramaQuery(actorId)))
+                .isInstanceOf(NoSuchElementException.class);
+        verify(saveParticipacionProgramaPort, never()).save(any());
+    }
+
     @ParameterizedTest(name = "{0} suspendido no elige su Día 1")
     @EnumSource(value = UserRole.class, names = {"MENTOR", "MENTOR_LEAD", "ADMIN", "ALCHEMIST"})
     void elPersonalSuspendidoNoEligeSuDiaUno(UserRole rol) {

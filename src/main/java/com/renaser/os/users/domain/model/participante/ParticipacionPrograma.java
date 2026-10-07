@@ -139,6 +139,26 @@ public final class ParticipacionPrograma {
      * de inicio = manana (no hoy), fase inicial, sin mentor ni celula todavia.
      */
     public static ParticipacionPrograma inscribirTraineeAprobado(UserId participanteId, Clock clock) {
+        return pendienteDeElegirDiaUno(participanteId, clock);
+    }
+
+    /**
+     * D-261 (2026-10-07): el personal (MENTOR, MENTOR_LEAD, ADMIN, ALCHEMIST) que todavia no tiene
+     * fila elige su Dia 1 «como los demas» (decision del dueño). Arranca igual que el aprendiz
+     * aprobado —reloj pausado, zona 'America/Lima', fase inicial, sin mentor ni celula, sin
+     * ajuste— y la activa {@link #activarPrograma} con la fecha elegida, con la misma regla.
+     *
+     * <p>Factoria propia y no {@link #inscribirTraineeAprobado} a secas porque el nombre dice
+     * quien entra: el personal no pasa por la aprobacion de cuenta. La fila se arma en memoria
+     * para ofrecer las fechas y solo se guarda al elegir. {@link #activarSeguimientoPersonal}
+     * (inicio HOY, D-07) sigue existiendo para {@code POST /mentor/activate-tracking}, que
+     * llaman los APK 1.5.0 y anteriores.
+     */
+    public static ParticipacionPrograma inscribirPersonalSinActivar(UserId participanteId, Clock clock) {
+        return pendienteDeElegirDiaUno(participanteId, clock);
+    }
+
+    private static ParticipacionPrograma pendienteDeElegirDiaUno(UserId participanteId, Clock clock) {
         Objects.requireNonNull(participanteId, "participanteId es obligatorio");
         Instant now = clock.now();
         return new ParticipacionPrograma(participanteId, null, null, 0, FasePrograma.initial(),

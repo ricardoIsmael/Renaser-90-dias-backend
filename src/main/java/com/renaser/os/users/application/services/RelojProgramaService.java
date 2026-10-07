@@ -1,6 +1,7 @@
 package com.renaser.os.users.application.services;
 
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.application.ports.in.participante.ActivateProgramUseCase;
 import com.renaser.os.users.application.ports.in.participante.AvanzarDiaProgramaUseCase;
@@ -59,15 +60,18 @@ public class RelojProgramaService
     }
 
     /**
-     * Self-only (el comando no recibe un id ajeno). Requiere que la fila de
-     * `participantes_programa` ya exista — la crea {@code ApproveAccountRequestUseCase}
-     * al aprobar la cuenta (CLAUDE.MD §5.3.3), esto solo la activa.
+     * Self-only (el comando no recibe un id ajeno). Al aprendiz la fila de
+     * `participantes_programa` se la crea {@code ApproveAccountRequestUseCase} al aprobar la
+     * cuenta (CLAUDE.MD §5.3.3), y esto solo la activa.
+     *
+     * <p><b>D-261:</b> al personal sin fila se la crea aca, ya con la fecha elegida — ver
+     * {@link #participacionOFilaNuevaDelPersonal}.
      */
     @Override
     @Transactional
     public ParticipacionPrograma activarPrograma(ActivateProgramCommand command) {
         User actor = requireActiveUserGuard.of(command.actorId());
-        ParticipacionPrograma participacion = requireParticipacionDe(actor.id());
+        ParticipacionPrograma participacion = participacionOFilaNuevaDelPersonal(actor);
         participacion.activarPrograma(command.startDate(), clock);
         return saveParticipacionProgramaPort.save(participacion);
     }
@@ -75,7 +79,7 @@ public class RelojProgramaService
     @Override
     public EstadoActivacionPrograma consultarEstado(ConsultarActivacionProgramaQuery query) {
         User actor = requireActiveUserGuard.of(query.actorId());
-        ParticipacionPrograma participacion = requireParticipacionDe(actor.id());
+        ParticipacionPrograma participacion = participacionOFilaNuevaDelPersonal(actor);
         if (participacion.estaActivado()) {
             return new EstadoActivacionPrograma(true, List.of(), participacion.fechaInicio());
         }
@@ -186,9 +190,26 @@ public class RelojProgramaService
         return Avance.GUARDADO;
     }
 
-    private ParticipacionPrograma requireParticipacionDe(UserId usuarioId) {
-        return loadParticipacionProgramaPort.byParticipanteId(usuarioId)
+    /**
+     * La fila del actor, o —solo para el personal sin fila— una fila nueva sin activar, armada en
+     * memoria (D-261, decision del dueño 2026-10-07: «que elija el dia como los demas»). El GET la
+     * usa para ofrecer las mismas fechas que al aprendiz y no la guarda; el POST la guarda ya
+     * activada con la fecha elegida. Quien puede es quien tiene
+     * {@link Permission#TRACK_PROGRAM_AS_STAFF}, el mismo permiso que {@code POST
+     * /mentor/activate-tracking} (MENTOR, MENTOR_LEAD, ADMIN, ALCHEMIST). Al aprendiz sin fila no
+     * se le inventa una: sigue el 404 de siempre, porque su fila nace al aprobarse la cuenta.
+     */
+    private ParticipacionPrograma participacionOFilaNuevaDelPersonal(User actor) {
+        return loadParticipacionProgramaPort.byParticipanteId(actor.id())
+                .or(() -> filaNuevaSiEsDelPersonal(actor))
                 .orElseThrow(() -> new NoSuchElementException(
-                        "No tenes una inscripcion al programa de 90 dias: " + usuarioId));
+                        "No tenes una inscripcion al programa de 90 dias: " + actor.id()));
+    }
+
+    private Optional<ParticipacionPrograma> filaNuevaSiEsDelPersonal(User actor) {
+        if (!actor.role().can(Permission.TRACK_PROGRAM_AS_STAFF)) {
+            return Optional.empty();
+        }
+        return Optional.of(ParticipacionPrograma.inscribirPersonalSinActivar(actor.id(), clock));
     }
 }

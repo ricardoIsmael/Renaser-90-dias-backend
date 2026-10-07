@@ -149,6 +149,11 @@ public class ParticipacionProgramaController {
      * (la app lo abre desde «Elegir mi Dia 1»). Un guard de rol lo dejaria sin salida: no pasa por
      * el onboarding y {@code POST /mentor/activate-tracking} responde 409 a quien ya tiene fila.
      * Lo cuida {@code ElegirDiaUnoDelPersonalIT}.
+     *
+     * <p><b>D-261: tambien el personal SIN fila.</b> El GET le ofrece las mismas fechas y este POST
+     * le crea la fila ya activada con la fecha elegida (decision del dueño: «que elija el dia como
+     * los demas»). {@code POST /mentor/activate-tracking} (inicio hoy) queda igual para los APK
+     * 1.5.0 y anteriores. Lo cuida {@code ElegirDiaUnoDelPersonalSinFilaIT}.
      */
     @RequiresPermission(value = Permission.USE_APP, scope = "self por construccion: el endpoint no recibe traineeId")
     @PostMapping("/api/v1/onboarding/activate-program")

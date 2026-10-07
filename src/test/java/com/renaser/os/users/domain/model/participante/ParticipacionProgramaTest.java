@@ -321,6 +321,49 @@ class ParticipacionProgramaTest {
         assertThat(p.diaVigente(FixedClock.at(Instant.parse("2026-10-08T05:00:00Z")))).isEqualTo(2);
     }
 
+    /**
+     * D-261 (decisión del dueño del 2026-10-07: «que elija el día como los demás»): el personal sin
+     * fila arranca con el reloj pausado —no en el día 1 de hoy como {@code activarSeguimientoPersonal}—
+     * y elige con la misma regla. Madrugada UTC (regla 02): 03:00 UTC del 7 son las 22:00 del 6 en Lima,
+     * así que las fechas son 7, 8 y 9 de Lima, no 8, 9 y 10 del servidor.
+     */
+    @Test
+    void elPersonalSinFilaArrancaPausadoYEligeSuDiaUnoComoElAprendiz() {
+        FixedClock madrugadaUtc = FixedClock.at(Instant.parse("2026-10-07T03:00:00Z"));
+        ParticipacionPrograma p = ParticipacionPrograma.inscribirPersonalSinActivar(UserId.of(UUID.randomUUID()),
+                madrugadaUtc);
+
+        assertThat(p.estaActivado()).isFalse();
+        assertThat(p.diaPrograma()).isZero();
+        assertThat(p.timezone()).isEqualTo(ZoneId.of("America/Lima"));
+        assertThat(p.fase()).isEqualTo(FasePrograma.initial());
+        assertThat(p.mentorId()).isNull();
+        assertThat(p.celulaId()).isNull();
+        assertThat(p.opcionesDeActivacion(madrugadaUtc)).containsExactly(LocalDate.parse("2026-10-07"),
+                LocalDate.parse("2026-10-08"), LocalDate.parse("2026-10-09"));
+
+        p.activarPrograma(LocalDate.parse("2026-10-08"), madrugadaUtc);
+
+        assertThat(p.estaActivado()).isTrue();
+        assertThat(p.fechaInicio()).isEqualTo(LocalDate.parse("2026-10-08"));
+        assertThat(p.diasAjuste()).isZero();
+        assertThat(p.diaVigente(FixedClock.at(Instant.parse("2026-10-08T04:59:00Z")))).isZero();
+        assertThat(p.diaVigente(FixedClock.at(Instant.parse("2026-10-08T05:00:00Z")))).isEqualTo(1);
+    }
+
+    @Test
+    void elPersonalSinFilaNoPuedeEmpezarHoyNiDespuesDeTresDias() {
+        FixedClock madrugadaUtc = FixedClock.at(Instant.parse("2026-10-07T03:00:00Z"));
+        ParticipacionPrograma p = ParticipacionPrograma.inscribirPersonalSinActivar(UserId.of(UUID.randomUUID()),
+                madrugadaUtc);
+
+        assertThatThrownBy(() -> p.activarPrograma(LocalDate.parse("2026-10-06"), madrugadaUtc))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> p.activarPrograma(LocalDate.parse("2026-10-10"), madrugadaUtc))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(p.estaActivado()).isFalse();
+    }
+
     @Test
     void activarProgramaAceptaElBordeDeTresDias() {
         ParticipacionPrograma p = traineePausado();
