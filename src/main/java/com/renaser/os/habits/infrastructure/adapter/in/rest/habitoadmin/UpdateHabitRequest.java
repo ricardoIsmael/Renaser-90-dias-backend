@@ -1,7 +1,10 @@
 package com.renaser.os.habits.infrastructure.adapter.in.rest.habitoadmin;
 
+import com.renaser.os.habits.domain.model.audiencia.Audiencia;
 import com.renaser.os.habits.domain.model.habito.DetallesHabito;
 import jakarta.validation.constraints.NotNull;
+
+import java.util.List;
 
 /**
  * Espejo de {@code UpdateHabitInput} (`habitsAdmin.ts`) — con dos decisiones documentadas
@@ -29,7 +32,12 @@ import jakarta.validation.constraints.NotNull;
  */
 public record UpdateHabitRequest(String description, HabitTypeDto habitType, @NotNull HabitCategoryDto category,
                                   @NotNull HabitEvidenceRequirementDto evidenceRequirement, boolean isOptional,
-                                  Boolean mandatoryOnIntoxication) {
+                                  Boolean mandatoryOnIntoxication, List<String> targetRoles) {
+
+    /** Spec 001: {@code targetRoles} ausente o nulo = no se toca la audiencia (mismo criterio que E-263). */
+    public Audiencia toAudienciaOSinCambio() {
+        return TargetRolesDto.aAudiencia(targetRoles);
+    }
 
     /** Con la bandera ausente, el valor de acá no se usa: el servicio conserva la del hábito. */
     public DetallesHabito toDetalles() {

@@ -93,7 +93,7 @@ class RegistroServiceKilometrosTest {
         service = new RegistroService(loadRegistroPort, saveRegistroPort, loadHabitoPort, loadHorarioPort,
                 loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder, loadDesbloqueoPort, events,
                 CLOCK, idGenerator, List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(),
-                        new PoliticaClaseDiaria(), new PoliticaKilometros()));
+                        new PoliticaClaseDiaria(), new PoliticaKilometros()), CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort));
         dueno = UserId.of(UUID.randomUUID());
         lenient().when(saveRegistroPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(loadHorarioPort.porHabito(any())).thenReturn(List.of());

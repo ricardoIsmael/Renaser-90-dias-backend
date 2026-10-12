@@ -18,6 +18,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
 /**
  * Panel admin — hábitos de UN aprendiz. Solo lectura, cuatro consultas fijas en total
@@ -37,15 +38,19 @@ public class HabitosDeAprendizAdminService implements ConsultarHabitosDeAprendiz
     private final LeerHabitosPersonalizadosPort leerHabitosPort;
     private final HistorialCambioHorarioPort historialPort;
     private final Clock clock;
+    /** Spec 001 (D-264, FR-013): quien acompaña ve lo mismo que la persona. */
+    private final CatalogoAplicable catalogoAplicable;
 
     HabitosDeAprendizAdminService(HabitoAdminGuard guard, ConsultarProgresoParticipanteHabitsPort progresoPort,
                                    LeerHabitosPersonalizadosPort leerHabitosPort,
-                                   HistorialCambioHorarioPort historialPort, Clock clock) {
+                                   HistorialCambioHorarioPort historialPort, Clock clock,
+                                   CatalogoAplicable catalogoAplicable) {
         this.guard = guard;
         this.progresoPort = progresoPort;
         this.leerHabitosPort = leerHabitosPort;
         this.historialPort = historialPort;
         this.clock = clock;
+        this.catalogoAplicable = catalogoAplicable;
     }
 
     @Override
@@ -70,9 +75,12 @@ public class HabitosDeAprendizAdminService implements ConsultarHabitosDeAprendiz
         ZoneId zona = ZoneId.of(progreso.timezone());
         LocalDate hoy = clock.now().atZone(zona).toLocalDate();
 
+        Set<HabitoId> globalesQueNoLeTocan = catalogoAplicable.globalesQueNoLeTocan(aprendizId, progreso, hoy);
         List<HabitoDeAprendiz> habitos = leerHabitosPort
                 .deAprendiz(aprendizId, progreso.diaPrograma(), tipoDiaDe(hoy), lunesDe(hoy))
-                .stream().map(HabitosDeAprendizAdminService::aVista).toList();
+                .stream()
+                .filter(fila -> fila.esPersonal() || !globalesQueNoLeTocan.contains(fila.habitoId()))
+                .map(HabitosDeAprendizAdminService::aVista).toList();
 
         return new VistaHabitosDeAprendiz(aprendizId, progreso.diaPrograma(), hoy, progreso.timezone(),
                 cuotaDeLaSemana(aprendizId, progreso.diaPrograma(), hoy), habitos);

@@ -5,6 +5,8 @@ import com.renaser.os.habits.application.ports.in.habitoadmin.ActualizarHabitoUs
 import com.renaser.os.habits.application.ports.in.habitoadmin.CambiarActivoHabitoUseCase;
 import com.renaser.os.habits.application.ports.in.habitoadmin.CambiarActivoHabitoUseCase.CambiarActivoHabitoCommand;
 import com.renaser.os.habits.application.ports.in.habitoadmin.ConsultarCatalogoAdminUseCase;
+import com.renaser.os.habits.application.ports.in.habitoadmin.ConsultarRolesElegiblesUseCase;
+import com.renaser.os.habits.domain.model.audiencia.CodigoDeRol;
 import com.renaser.os.habits.application.ports.in.habitoadmin.CrearHabitoUseCase;
 import com.renaser.os.habits.application.ports.in.habitoadmin.CrearHabitoUseCase.CrearHabitoCommand;
 import com.renaser.os.habits.application.ports.in.habitoadmin.EliminarHabitoUseCase;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -45,22 +48,34 @@ public class HabitoAdminController {
     private final ActualizarHabitoUseCase actualizarUseCase;
     private final CambiarActivoHabitoUseCase cambiarActivoUseCase;
     private final EliminarHabitoUseCase eliminarUseCase;
+    private final ConsultarRolesElegiblesUseCase rolesUseCase;
 
     public HabitoAdminController(ConsultarCatalogoAdminUseCase consultarUseCase, CrearHabitoUseCase crearUseCase,
                                   ActualizarHabitoUseCase actualizarUseCase,
                                   CambiarActivoHabitoUseCase cambiarActivoUseCase,
-                                  EliminarHabitoUseCase eliminarUseCase) {
+                                  EliminarHabitoUseCase eliminarUseCase,
+                                  ConsultarRolesElegiblesUseCase rolesUseCase) {
         this.consultarUseCase = consultarUseCase;
         this.crearUseCase = crearUseCase;
         this.actualizarUseCase = actualizarUseCase;
         this.cambiarActivoUseCase = cambiarActivoUseCase;
         this.eliminarUseCase = eliminarUseCase;
+        this.rolesUseCase = rolesUseCase;
     }
 
     @RequiresPermission(Permission.MANAGE_HABIT_CATALOG)
     @GetMapping
-    public List<AdminHabitResponse> listar(@ActorAutenticado UserId actor) {
-        return consultarUseCase.listar(actor).stream().map(AdminHabitResponse::from).toList();
+    public List<AdminHabitResponse> listar(@ActorAutenticado UserId actor,
+                                           @RequestParam(name = "role", required = false) String role) {
+        CodigoDeRol rol = role == null || role.isBlank() ? null : CodigoDeRol.of(role);
+        return consultarUseCase.listar(actor, rol).stream().map(AdminHabitResponse::from).toList();
+    }
+
+    /** Spec 001: los roles elegibles como audiencia, con el nombre visible del servidor. */
+    @RequiresPermission(Permission.MANAGE_HABIT_CATALOG)
+    @GetMapping("/roles")
+    public List<RolElegibleResponse> roles(@ActorAutenticado UserId actor) {
+        return rolesUseCase.rolesElegibles(actor).stream().map(RolElegibleResponse::from).toList();
     }
 
     @RequiresPermission(Permission.MANAGE_HABIT_CATALOG)
@@ -68,7 +83,7 @@ public class HabitoAdminController {
     public ResponseEntity<AdminHabitResponse> crear(@ActorAutenticado UserId actor,
                                                       @RequestBody @Valid CreateHabitRequest request) {
         var habito = crearUseCase.crear(new CrearHabitoCommand(actor, request.title(),
-                request.habitType().toDomain(), request.toDetalles()));
+                request.habitType().toDomain(), request.toDetalles(), request.toAudiencia()));
         return ResponseEntity.status(HttpStatus.CREATED).body(AdminHabitResponse.from(habito));
     }
 
@@ -77,7 +92,7 @@ public class HabitoAdminController {
     public AdminHabitResponse actualizar(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                           @RequestBody @Valid UpdateHabitRequest request) {
         var habito = actualizarUseCase.actualizar(new ActualizarHabitoCommand(actor, HabitoId.of(id),
-                request.toDetalles(), request.conservaObligatorioEnIntoxicacion()));
+                request.toDetalles(), request.conservaObligatorioEnIntoxicacion(), request.toAudienciaOSinCambio()));
         return AdminHabitResponse.from(habito);
     }
 

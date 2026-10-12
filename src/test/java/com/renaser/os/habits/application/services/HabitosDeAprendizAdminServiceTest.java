@@ -69,7 +69,7 @@ class HabitosDeAprendizAdminServiceTest {
     @BeforeEach
     void setUp() {
         service = new HabitosDeAprendizAdminService(new HabitoAdminGuard(userSummaryFinder), progresoPort,
-                leerHabitosPort, historialPort, CLOCK);
+                leerHabitosPort, historialPort, CLOCK, CatalogoAplicableDePrueba.sinAudiencias());
         lenient().when(userSummaryFinder.findById(admin))
                 .thenReturn(Optional.of(new UserSummary(admin, "Admin", null, UserRole.ADMIN, UserStatus.ACTIVE)));
         lenient().when(userSummaryFinder.findById(mentor))

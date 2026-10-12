@@ -79,7 +79,7 @@ class MisHabitosServiceTest {
     @BeforeEach
     void setUp() {
         service = new MisHabitosService(loadPort, savePort, saveHorarioPort, loadHorarioPort, progresoPort,
-                savePreferenciaPort, loadRegistroPort, CLOCK, idGenerator, rachasDeHabitos);
+                savePreferenciaPort, loadRegistroPort, CLOCK, idGenerator, rachasDeHabitos, CatalogoAplicableDePrueba.sinAudiencias(loadPort));
         lenient().when(loadHorarioPort.porHabitos(any())).thenReturn(List.of());
         // `consultar` necesita el dia de programa desde que calcula el desbloqueo de cada habito
         // (dia 2: el mismo escenario en el que el dueño reporto ver habitos que aun no le tocaban).
@@ -520,7 +520,7 @@ class MisHabitosServiceTest {
     void enDia0ElHabitoPersonalSeCreaIgualConElRelojEnLaMadrugadaUtc() {
         MisHabitosService servicioDeMadrugada = new MisHabitosService(loadPort, savePort, saveHorarioPort,
                 loadHorarioPort, progresoPort, savePreferenciaPort, loadRegistroPort,
-                FixedClock.at(Instant.parse("2026-09-07T02:00:00Z")), idGenerator, rachasDeHabitos);
+                FixedClock.at(Instant.parse("2026-09-07T02:00:00Z")), idGenerator, rachasDeHabitos, CatalogoAplicableDePrueba.sinAudiencias(loadPort));
         when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(enDia(0)));
         when(idGenerator.newId()).thenReturn(UUID.randomUUID(), UUID.randomUUID());
 
@@ -585,7 +585,7 @@ class MisHabitosServiceTest {
         java.time.LocalDate inicio = java.time.LocalDate.of(2026, 8, 30);
         MisHabitosService deMadrugada = new MisHabitosService(loadPort, savePort, saveHorarioPort, loadHorarioPort,
                 progresoPort, savePreferenciaPort, loadRegistroPort,
-                FixedClock.at(Instant.parse("2026-09-07T02:00:00Z")), idGenerator, rachasDeHabitos);
+                FixedClock.at(Instant.parse("2026-09-07T02:00:00Z")), idGenerator, rachasDeHabitos, CatalogoAplicableDePrueba.sinAudiencias(loadPort));
         Habito leer = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "LEER", TipoHabito.CHECKBOX,
                 new DetallesHabito("desc", "MENTE", ExigenciaEvidencia.OPCIONAL, false, false), CLOCK.now());
         Habito correr = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "CORRER", TipoHabito.CHECKBOX,

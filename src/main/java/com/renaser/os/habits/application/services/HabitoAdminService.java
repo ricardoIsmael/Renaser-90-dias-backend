@@ -3,10 +3,15 @@ package com.renaser.os.habits.application.services;
 import com.renaser.os.habits.application.ports.in.habitoadmin.ActualizarHabitoUseCase;
 import com.renaser.os.habits.application.ports.in.habitoadmin.CambiarActivoHabitoUseCase;
 import com.renaser.os.habits.application.ports.in.habitoadmin.ConsultarCatalogoAdminUseCase;
+import com.renaser.os.habits.application.ports.in.habitoadmin.ConsultarRolesElegiblesUseCase;
 import com.renaser.os.habits.application.ports.in.habitoadmin.CrearHabitoUseCase;
 import com.renaser.os.habits.application.ports.in.habitoadmin.EliminarHabitoUseCase;
+import com.renaser.os.habits.application.ports.in.habitoadmin.HabitoDelCatalogo;
+import com.renaser.os.habits.application.ports.out.audiencia.ContarRegistrosDeHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.SaveHabitoPort;
+import com.renaser.os.habits.domain.model.audiencia.Audiencia;
+import com.renaser.os.habits.domain.model.audiencia.CodigoDeRol;
 import com.renaser.os.habits.domain.model.habito.DetallesHabito;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
@@ -18,50 +23,88 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
-/** Panel admin de catalogo (hueco #11): alta, edicion, activar/desactivar y borrado de habitos SISTEMA. */
+/**
+ * Panel admin de catalogo (hueco #11): alta, edicion, activar/desactivar y borrado de habitos SISTEMA.
+ *
+ * <p>Spec 001 (D-264): cada habito lleva su audiencia por rol. Lo que toca a la audiencia (validar, versionar,
+ * presentar) vive en {@link AudienciasDelCatalogo}; este servicio solo decide CUANDO.
+ */
 @Service
 public class HabitoAdminService implements ConsultarCatalogoAdminUseCase, CrearHabitoUseCase, ActualizarHabitoUseCase,
-        CambiarActivoHabitoUseCase, EliminarHabitoUseCase {
+        CambiarActivoHabitoUseCase, EliminarHabitoUseCase, ConsultarRolesElegiblesUseCase {
+
+    static final String CON_HISTORIA = "Este hábito ya tiene registros de personas. Desactívalo en lugar de eliminarlo.";
 
     private final LoadHabitoPort loadPort;
     private final SaveHabitoPort savePort;
     private final HabitoAdminGuard guard;
     private final Clock clock;
     private final IdGenerator idGenerator;
+    private final AudienciasDelCatalogo audiencias;
+    private final ContarRegistrosDeHabitoPort registrosPort;
 
     public HabitoAdminService(LoadHabitoPort loadPort, SaveHabitoPort savePort, HabitoAdminGuard guard, Clock clock,
-                               IdGenerator idGenerator) {
+                               IdGenerator idGenerator, AudienciasDelCatalogo audiencias,
+                               ContarRegistrosDeHabitoPort registrosPort) {
         this.loadPort = loadPort;
         this.savePort = savePort;
         this.guard = guard;
         this.clock = clock;
         this.idGenerator = idGenerator;
+        this.audiencias = audiencias;
+        this.registrosPort = registrosPort;
     }
 
     @Override
-    public List<Habito> listar(UserId actorId) {
+    public List<HabitoDelCatalogo> listar(UserId actorId) {
+        return listar(actorId, null);
+    }
+
+    @Override
+    public List<HabitoDelCatalogo> listar(UserId actorId, CodigoDeRol rol) {
         guard.requireAdmin(actorId);
-        return loadPort.catalogoCompleto();
+        if (rol != null) {
+            audiencias.validar(Audiencia.de(Set.of(rol)));
+        }
+        List<HabitoDelCatalogo> catalogo = audiencias.presentar(loadPort.catalogoCompleto());
+        return rol == null ? catalogo : catalogo.stream().filter(h -> h.audienciaGuardada().aplicaA(rol)).toList();
+    }
+
+    @Override
+    public List<RolElegible> rolesElegibles(UserId actorId) {
+        guard.requireAdmin(actorId);
+        return audiencias.rolesElegibles();
     }
 
     @Override
     @Transactional
-    public Habito crear(CrearHabitoCommand command) {
+    public HabitoDelCatalogo crear(CrearHabitoCommand command) {
         guard.requireAdmin(command.actorId());
+        audiencias.validar(command.audiencia());
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD 5.4.7).
-        Habito habito = Habito.crearDeSistema(HabitoId.of(idGenerator.newId()), command.titulo(), command.tipo(),
-                command.detalles(), clock.now());
-        return savePort.save(habito);
+        Habito habito = savePort.save(Habito.crearDeSistema(HabitoId.of(idGenerator.newId()), command.titulo(),
+                command.tipo(), command.detalles(), clock.now()));
+        audiencias.guardarAlCrear(habito.id(), command.audiencia(), command.actorId());
+        return audiencias.presentar(habito);
     }
 
     @Override
     @Transactional
-    public Habito actualizar(ActualizarHabitoCommand command) {
+    public HabitoDelCatalogo actualizar(ActualizarHabitoCommand command) {
         guard.requireAdmin(command.actorId());
         Habito habito = requireHabito(command.habitoId());
+        Audiencia audiencia = command.audiencia();
+        if (audiencia != null) {
+            audiencias.validar(audiencia);
+        }
         habito.actualizarDetalles(detallesPara(command, habito), clock.now());
-        return savePort.save(habito);
+        Habito guardado = savePort.save(habito);
+        if (audiencia != null) {
+            audiencias.guardarSiCambio(guardado.id(), audiencia, command.actorId());
+        }
+        return audiencias.presentar(guardado);
     }
 
     /** Un pedido que no informó la bandera de intoxicación la deja como estaba (E-263). */
@@ -73,7 +116,7 @@ public class HabitoAdminService implements ConsultarCatalogoAdminUseCase, CrearH
 
     @Override
     @Transactional
-    public Habito cambiarActivo(CambiarActivoHabitoCommand command) {
+    public HabitoDelCatalogo cambiarActivo(CambiarActivoHabitoCommand command) {
         guard.requireAdmin(command.actorId());
         Habito habito = requireHabito(command.habitoId());
         if (command.activo()) {
@@ -81,18 +124,27 @@ public class HabitoAdminService implements ConsultarCatalogoAdminUseCase, CrearH
         } else {
             habito.desactivar(clock.now());
         }
-        return savePort.save(habito);
+        return audiencias.presentar(savePort.save(habito));
     }
 
+    /**
+     * Con historia no se borra (FR-020): se avisa ANTES de tocar la base, con un motivo que la pantalla puede mostrar.
+     * Antes llegaba a la FK RESTRICT de {@code registros_habito} y volvía un 409 genérico.
+     */
     @Override
     @Transactional
     public void eliminar(EliminarHabitoCommand command) {
         guard.requireAdmin(command.actorId());
         requireHabito(command.habitoId());
+        if (registrosPort.tieneRegistros(command.habitoId())) {
+            throw new IllegalStateException(CON_HISTORIA);
+        }
         savePort.eliminar(command.habitoId());
     }
 
+    /** Un habito PERSONAL no es del catalogo: para este panel no existe (contrato admin-habits, 404). */
     private Habito requireHabito(HabitoId id) {
-        return loadPort.byId(id).orElseThrow(() -> new NoSuchElementException("Habito no encontrado: " + id));
+        return loadPort.byId(id).filter(Habito::esDeSistema)
+                .orElseThrow(() -> new NoSuchElementException("Habito no encontrado: " + id));
     }
 }

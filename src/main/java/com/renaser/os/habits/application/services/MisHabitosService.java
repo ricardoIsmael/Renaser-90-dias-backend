@@ -59,12 +59,15 @@ public class MisHabitosService implements ConsultarMisHabitosUseCase, CrearHabit
     private final IdGenerator idGenerator;
     /** D-254, decision 2 del dueño: la racha de cada habito, tambien la del que hoy no tiene track. */
     private final RachasDeHabitos rachasDeHabitos;
+    /** Spec 001 (D-264): el mismo filtro por rol que la generacion. */
+    private final CatalogoAplicable catalogoAplicable;
 
     public MisHabitosService(LoadHabitoPort loadPort, SaveHabitoPort savePort,
                               SaveHorarioHabitoPort saveHorarioPort, LoadHorarioHabitoPort loadHorarioPort,
                               ConsultarProgresoParticipanteHabitsPort progresoPort,
                               SavePreferenciaHorarioPort savePreferenciaPort, LoadRegistroHabitoPort loadRegistroPort,
-                              Clock clock, IdGenerator idGenerator, RachasDeHabitos rachasDeHabitos) {
+                              Clock clock, IdGenerator idGenerator, RachasDeHabitos rachasDeHabitos,
+                              CatalogoAplicable catalogoAplicable) {
         this.loadPort = loadPort;
         this.savePort = savePort;
         this.saveHorarioPort = saveHorarioPort;
@@ -75,6 +78,7 @@ public class MisHabitosService implements ConsultarMisHabitosUseCase, CrearHabit
         this.clock = clock;
         this.idGenerator = idGenerator;
         this.rachasDeHabitos = rachasDeHabitos;
+        this.catalogoAplicable = catalogoAplicable;
     }
 
     @Override
@@ -103,7 +107,8 @@ public class MisHabitosService implements ConsultarMisHabitosUseCase, CrearHabit
      * PERSONAL se concatenan detras. El orden de esta lista ES el orden en que el movil los pinta.
      */
     private List<HabitoConDias> vistas(UserId actor, ProgresoParticipanteHabits progreso) {
-        List<Habito> habitos = new ArrayList<>(loadPort.catalogoActivo());
+        LocalDate hoyEnSuZona = clock.now().atZone(ZoneId.of(progreso.timezone())).toLocalDate();
+        List<Habito> habitos = new ArrayList<>(catalogoAplicable.globalesPara(actor, progreso, hoyEnSuZona));
         habitos.addAll(loadPort.personalesActivosDe(actor));
 
         // Una sola consulta para los N habitos, nunca una por habito (el puerto existe justo para

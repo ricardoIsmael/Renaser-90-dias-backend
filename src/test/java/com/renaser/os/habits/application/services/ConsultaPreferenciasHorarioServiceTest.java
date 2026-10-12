@@ -69,7 +69,7 @@ class ConsultaPreferenciasHorarioServiceTest {
     @BeforeEach
     void setUp() {
         service = new ConsultaPreferenciasHorarioService(progresoPort, loadHabitoPort, loadHorarioPort,
-                loadPreferenciaPort, loadCambioPendientePort, historialPort, loadRegistroPort, CLOCK);
+                loadPreferenciaPort, loadCambioPendientePort, historialPort, loadRegistroPort, CLOCK, CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort));
         actor = UserId.of(UUID.randomUUID());
         lenient().when(loadHabitoPort.personalesActivosDe(any())).thenReturn(List.of());
     }

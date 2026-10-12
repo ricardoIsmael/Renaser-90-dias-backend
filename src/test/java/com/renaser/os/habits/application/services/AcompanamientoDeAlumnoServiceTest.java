@@ -71,7 +71,7 @@ class AcompanamientoDeAlumnoServiceTest {
         mentor = UserId.of(UUID.randomUUID());
         alumno = UserId.of(UUID.randomUUID());
         var habitosDeAprendiz = new HabitosDeAprendizAdminService(guardDeAdmin, progresoPort, leerHabitosPort,
-                historialPort, CLOCK);
+                historialPort, CLOCK, CatalogoAplicableDePrueba.sinAudiencias());
         service = new AcompanamientoDeAlumnoService(acompanamientoFinder, habitosDeAprendiz, loadRadarPort, CLOCK);
     }
 

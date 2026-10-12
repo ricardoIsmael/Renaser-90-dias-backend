@@ -14892,3 +14892,50 @@ proporción 4:5. **Para probar imágenes del servidor en local:** con `STORAGE_P
 con `STORAGE_PROVEEDOR=s3 AWS_ENDPOINT_URL_S3=http://127.0.0.1:9000` y credenciales falsas, y `adb reverse tcp:9000`
 **antes** de publicar. Si el puerto se abre después, la imagen queda gris hasta volver a entrar al chat. Las imágenes
 `minio/minio` (Docker Hub) y `quay.io/minio/minio` ya no se pueden bajar.
+
+## E-600 · Metro no encontraba `./index` desde un worktree del frontend (front, herramienta, CORREGIDO, 12/10)
+
+**Síntoma literal.** Con Metro levantado dentro de `.claude/worktrees/habitos-por-rol/` del frontend, la app
+mostraba `Unable to resolve module ./index` y no cargaba ninguna pantalla. Desde el checkout principal el mismo
+código arrancaba bien.
+
+**Causa real.** `metro.config.js` excluía `/\/\.claude\/.*/` sin anclar (puesto el 2026-09-30 para que Metro no
+vigilara los `node_modules` de los worktrees). Esa expresión casa con CUALQUIER ruta que contenga `/.claude/`, y la
+raíz de un worktree vive justamente ahí: Metro se bloqueaba su propio proyecto, `index.ts` incluido.
+
+**Solución y prevención.** Las dos exclusiones (`graphify-out/` y `.claude/`) se anclan a la raíz del proyecto que
+corre Metro (`__dirname` escapado). En el checkout principal bloquean lo mismo que antes; en un worktree, solo sus
+propios `graphify-out/` y `.claude/`. Verificado: el worktree empaquetó 2492 módulos y la app abrió en el emulador
+(spec 001, fase E2E).
+
+## E-601 · «Rige desde mañana» en un hábito recién creado (front + back, CORREGIDO, 12/10)
+
+**Síntoma literal.** En el E2E de la spec 001 (T042/T043), al crear «E2E Revisión del grupo» solo para Mentor,
+la lista de «Hábitos del programa» mostraba «Rige desde mañana» debajo del hábito nuevo, aunque la primera
+audiencia de un hábito rige desde que se crea (decisión del dueño, FR-010b) y el mentor ya lo recibía.
+
+**Causa real.** La app deducía el «pendiente» comparando `targetRolesEffectiveFrom` con la fecha de hoy. Esa fecha
+es la del último cambio, y la versión 1 también tiene fecha de hoy: la app no podía distinguir «se creó hoy» de
+«se cambiaron los roles hoy».
+
+**Solución y prevención.** El servidor decide y lo manda en un campo nuevo y aditivo, `targetRolesStartTomorrow`
+(`HistorialDeAudiencia.cambioPendienteHasta`: hay al menos dos versiones y la última es de hoy en America/Lima).
+La app solo lee ese campo (`rigeDesdeManana`); un backend anterior no lo manda y la app no muestra el rótulo.
+Pruebas: `HistorialDeAudienciaTest`, `HabitoAdminControllerTest` y `habitosPrograma.test.ts` del frontend.
+Verificado en el emulador: el hábito recién creado sale sin rótulo y con el rótulo tras cambiarle los roles.
+
+## E-602 · Formulario de hábito: aviso que no se iba, nombre fuera de la vista y chips que saltaban (front, CORREGIDO, 12/10)
+
+**Síntoma literal.** En el E2E de la spec 001 (T042), en «Nuevo hábito»: (1) «Escribe el nombre del hábito.»
+seguía en pantalla después de escribir el nombre; (2) al tocar «Guardar» sin nombre, el aviso salía abajo pero el
+campo «Nombre» quedaba arriba, fuera de la vista y sin foco; (3) al elegir una dimensión o la evidencia, el chip se
+ensanchaba y corría a los de al lado.
+
+**Causa real.** (1) El error se limpiaba solo al volver a guardar. (2) No se llevaba la vista al campo que faltaba.
+(3) `ChipDeOpcion` pasaba a negrita al activarse y la negrita es más ancha.
+
+**Solución y prevención.** Cualquier cambio del formulario limpia el aviso; si falta el nombre, la vista sube al
+inicio y el campo toma el foco; el chip usa el mismo peso (`Jost_500Medium`) activo o no y marca la elección con
+el borde, el fondo y el color. Verificado en el emulador, también con letra al 130 % y en modo oscuro.
+
+---

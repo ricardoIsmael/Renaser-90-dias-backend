@@ -99,6 +99,20 @@ public enum UserRole {
             Permission.FOLLOW_UP_MENTOR,
             Permission.SET_MENTOR_OPERATIONAL_STATUS);
 
+    /**
+     * Nombre para mostrar en español (spec 001 de hábitos por rol, D-264). Vive junto al enum para que un rol nuevo
+     * traiga su nombre en el mismo cambio, y una app ya publicada lo muestre sin otra versión.
+     */
+    public String nombreVisible() {
+        return switch (this) {
+            case ALCHEMIST -> "Alquimista";
+            case ADMIN -> "Administrador";
+            case MENTOR_LEAD -> "Líder de mentores";
+            case MENTOR -> "Mentor";
+            case TRAINEE -> "Aprendiz";
+        };
+    }
+
     public boolean canManageRoles() {
         return this == ADMIN || this == ALCHEMIST;
     }

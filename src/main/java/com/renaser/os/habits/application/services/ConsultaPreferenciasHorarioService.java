@@ -60,13 +60,16 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
     /** D-200: si un habito que quedo por debajo del inicio de su horario ya corrio. */
     private final LoadRegistroHabitoPort loadRegistroPort;
     private final Clock clock;
+    /** Spec 001 (D-264): el mismo filtro por rol que la generacion. */
+    private final CatalogoAplicable catalogoAplicable;
 
     public ConsultaPreferenciasHorarioService(ConsultarProgresoParticipanteHabitsPort progresoPort,
                                                LoadHabitoPort loadHabitoPort, LoadHorarioHabitoPort loadHorarioPort,
                                                LoadPreferenciaHorarioPort loadPreferenciaPort,
                                                LoadCambioHorarioPendientePort loadCambioPendientePort,
                                                HistorialCambioHorarioPort historialPort,
-                                               LoadRegistroHabitoPort loadRegistroPort, Clock clock) {
+                                               LoadRegistroHabitoPort loadRegistroPort, Clock clock,
+                                               CatalogoAplicable catalogoAplicable) {
         this.progresoPort = progresoPort;
         this.loadHabitoPort = loadHabitoPort;
         this.loadHorarioPort = loadHorarioPort;
@@ -75,6 +78,7 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
         this.historialPort = historialPort;
         this.loadRegistroPort = loadRegistroPort;
         this.clock = clock;
+        this.catalogoAplicable = catalogoAplicable;
     }
 
     @Override
@@ -90,14 +94,14 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
         LocalDate hoy = clock.now().atZone(ZoneId.of(progreso.timezone())).toLocalDate();
         LocalDate objetivo = fecha == null ? hoy : fecha;
         int diaObjetivo = Math.toIntExact(progreso.diaPrograma() + ChronoUnit.DAYS.between(hoy, objetivo));
-        List<Habito> habitos = habitosActivosDe(actorId);
+        List<Habito> habitos = habitosActivosDe(actorId, progreso, objetivo);
         return new ResumenPreferenciasHorario(horariosDe(actorId, habitos, objetivo, diaObjetivo),
                 cuotaDe(actorId, objetivo, diaObjetivo));
     }
 
-    /** Mismo criterio que {@code RegistroService.generar}: catalogo activo + personales del aprendiz. */
-    private List<Habito> habitosActivosDe(UserId actorId) {
-        List<Habito> habitos = new ArrayList<>(loadHabitoPort.catalogoActivo());
+    /** Mismo criterio que {@code RegistroService.generar}: catalogo aplicable ESE dia + personales del aprendiz. */
+    private List<Habito> habitosActivosDe(UserId actorId, ProgresoParticipanteHabits progreso, LocalDate dia) {
+        List<Habito> habitos = new ArrayList<>(catalogoAplicable.globalesPara(actorId, progreso, dia));
         habitos.addAll(loadHabitoPort.personalesActivosDe(actorId));
         return habitos;
     }

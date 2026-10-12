@@ -1310,3 +1310,22 @@ completan su registro por su gesto propio cuando el ciclo cruza la medianoche. E
 2. **Primer día del programa.** Se mantuvo la decisión del 2026-09-02 (no generar lo de hora cerrada ese día). Con la
    regla nueva, ¿también ese día debería traer todos los hábitos para registrarlos tarde?
 
+## 11. Hábitos globales por rol (D-264, 2026-10-12)
+
+Spec completa en [`specs/001-habitos-por-rol/`](../specs/001-habitos-por-rol/spec.md) (flujo spec-kit:
+spec, clarificaciones del dueño, plan, research, modelo de datos, contrato, tareas).
+
+- **Qué es:** cada hábito `SISTEMA` tiene una audiencia (roles). Vacía = para todos. Los `PERSONAL` no cambian.
+- **Dónde se decide:** `application/services/CatalogoAplicable` — el ÚNICO lector de `LoadHabitoPort.catalogoActivo()`.
+  Un servicio nuevo que necesite "los hábitos globales de una persona" lo usa a él, nunca el puerto
+  (`CatalogoSoloPorElFiltroTest` lo frena).
+- **Vigencia estricta:** `domain/model/audiencia/VigenciaPorDia` — algo guardado en el instante T rige para el día local
+  D si T cae en un día local anterior a D en la zona de la persona. Vale para la audiencia (`HistorialDeAudiencia`) y
+  para el rol (`HistorialDeRol`). Primera versión = rige desde la creación; primer cambio de un hábito sin versiones =
+  versión base «para todos» en epoch + la nueva (`AudienciasDelCatalogo.guardarSiCambio`).
+- **Tablas (V96):** `audiencias_habito` y `historial_rol_participante`, append-only.
+- **Rol de la persona:** `RolDeUsuarioCambiadoHabitsListener` anota cada cambio; sin historia rige el rol actual.
+- **Admin:** `HabitoAdminService` + `AudienciasDelCatalogo`; contrato en `specs/001-habitos-por-rol/contracts/admin-habits.md`.
+- **Límite conocido:** un rol nuevo exige una constante más en el espejo `RolParticipante` (y su `nombreVisible()` en
+  `UserRole`); nada más del módulo.
+

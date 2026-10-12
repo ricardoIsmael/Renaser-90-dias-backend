@@ -99,7 +99,7 @@ class GenerarTracksCicloIntoxicacionTest {
         service = new RegistroService(loadRegistroPort, saveRegistroPort, loadHabitoPort, loadHorarioPort,
                 loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder, loadDesbloqueoPort, events,
                 TRES_AM_UTC, idGenerator,
-                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()));
+                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()), CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort));
         lenient().when(idGenerator.newId()).thenAnswer(inv -> UUID.randomUUID());
         lenient().when(saveRegistroPort.insertarSiNoExiste(any())).thenReturn(true);
         when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(jugoVerde, postDiario, diaSinCelular));

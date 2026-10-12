@@ -98,7 +98,7 @@ class RegistroServiceTest {
         service = new RegistroService(loadRegistroPort, saveRegistroPort, loadHabitoPort, loadHorarioPort,
                 loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder, loadDesbloqueoPort, events,
                 CLOCK, idGenerator,
-                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()));
+                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()), CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort));
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(saveRegistroPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveRegistroPort.insertarSiNoExiste(any())).thenReturn(true);
@@ -572,7 +572,7 @@ class RegistroServiceTest {
         RegistroService deMadrugada = new RegistroService(loadRegistroPort, saveRegistroPort, loadHabitoPort,
                 loadHorarioPort, loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder,
                 loadDesbloqueoPort, events, FixedClock.at(Instant.parse("2026-09-28T03:00:00Z")), idGenerator,
-                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()));
+                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()), CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort));
         UserId participante = participante();
         Habito personal = habitoPersonalDe(participante);
         conUnHabitoPersonal(participante, personal, 25, horarioDesdeElDia(personal.id(), 30, TipoDia.TODOS));
@@ -611,7 +611,7 @@ class RegistroServiceTest {
         RegistroService deMadrugada = new RegistroService(loadRegistroPort, saveRegistroPort, loadHabitoPort,
                 loadHorarioPort, loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder,
                 loadDesbloqueoPort, events, FixedClock.at(Instant.parse("2026-08-31T04:30:00Z")), idGenerator,
-                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()));
+                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()), CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort));
         UserId participante = participante();
         Habito descanso = habitoCheckbox();
         when(progresoPort.deParticipante(participante)).thenReturn(Optional.of(
@@ -679,7 +679,7 @@ class RegistroServiceTest {
         return new RegistroService(loadRegistroPort, saveRegistroPort, loadHabitoPort, loadHorarioPort,
                 loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder, loadDesbloqueoPort, events,
                 FixedClock.at(Instant.parse(instante)), idGenerator,
-                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()));
+                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()), CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort));
     }
 
     private static HorarioHabito horarioDeSeisAOcho(HabitoId habitoId) {

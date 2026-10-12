@@ -1,7 +1,7 @@
 package com.renaser.os.habits.application.ports.in.habitoadmin;
 
 import com.renaser.os.habits.domain.model.habito.DetallesHabito;
-import com.renaser.os.habits.domain.model.habito.Habito;
+import com.renaser.os.habits.domain.model.audiencia.Audiencia;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.shared.application.SelfValidating;
 import com.renaser.os.shared.domain.UserId;
@@ -16,7 +16,7 @@ import jakarta.validation.constraints.NotNull;
  */
 public interface ActualizarHabitoUseCase {
 
-    Habito actualizar(ActualizarHabitoCommand command);
+    HabitoDelCatalogo actualizar(ActualizarHabitoCommand command);
 
     /**
      * @param conservaObligatorioEnIntoxicacion el pedido no informó la bandera: se conserva la del hábito
@@ -24,10 +24,17 @@ public interface ActualizarHabitoUseCase {
      *        y desde D-169 apagarla vuelve opcional el post de la comunidad en los días de intoxicación.
      */
     record ActualizarHabitoCommand(@NotNull UserId actorId, @NotNull HabitoId habitoId,
-                                    @NotNull DetallesHabito detalles, boolean conservaObligatorioEnIntoxicacion) {
+                                    @NotNull DetallesHabito detalles, boolean conservaObligatorioEnIntoxicacion,
+                                    Audiencia audiencia) {
+        /** Spec 001: {@code audiencia} nula = el pedido no la tocó y no se guarda versión (mismo criterio que E-263). */
         public ActualizarHabitoCommand {
             SelfValidating.validateConstructorArgs(ActualizarHabitoCommand.class, actorId, habitoId, detalles,
-                    conservaObligatorioEnIntoxicacion);
+                    conservaObligatorioEnIntoxicacion, audiencia);
+        }
+
+        public ActualizarHabitoCommand(UserId actorId, HabitoId habitoId, DetallesHabito detalles,
+                                       boolean conservaObligatorioEnIntoxicacion) {
+            this(actorId, habitoId, detalles, conservaObligatorioEnIntoxicacion, null);
         }
     }
 }

@@ -93,6 +93,8 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
     private final Clock clock;
     private final IdGenerator idGenerator;
     private final RegistroPoliticasHabito politicas;
+    /** Spec 001 (D-264): qué hábitos globales le tocan a la persona ese día, según su rol. */
+    private final CatalogoAplicable catalogoAplicable;
 
     public RegistroService(LoadRegistroHabitoPort loadRegistroPort, SaveRegistroHabitoPort saveRegistroPort,
                             LoadHabitoPort loadHabitoPort, LoadHorarioHabitoPort loadHorarioPort,
@@ -101,7 +103,7 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
                             PublicacionMuroFinder publicacionMuroFinder,
                             LoadDesbloqueoHabitoPort loadDesbloqueoPort,
                             ApplicationEventPublisher events, Clock clock, IdGenerator idGenerator,
-                            List<PoliticaHabito> politicas) {
+                            List<PoliticaHabito> politicas, CatalogoAplicable catalogoAplicable) {
         this.loadRegistroPort = loadRegistroPort;
         this.saveRegistroPort = saveRegistroPort;
         this.loadHabitoPort = loadHabitoPort;
@@ -117,6 +119,7 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         // Se indexa UNA vez, en el arranque: en `completar` la resolucion es un lookup de
         // mapa, sin streams ni asignaciones (CLAUDE.MD §5.4.7, hot path).
         this.politicas = new RegistroPoliticasHabito(politicas);
+        this.catalogoAplicable = catalogoAplicable;
     }
 
     @Override
@@ -203,7 +206,8 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         TipoDia tipoDia = resolverTipoDia(fecha);
         Instant ahora = clock.now();
 
-        List<Habito> catalogo = new ArrayList<>(loadHabitoPort.catalogoActivo());
+        // Spec 001 (D-264): solo los globales cuya audiencia incluye el rol de la persona ESE dia (vigencia estricta).
+        List<Habito> catalogo = new ArrayList<>(catalogoAplicable.globalesPara(participanteId, progreso, fecha));
         catalogo.addAll(loadHabitoPort.personalesActivosDe(participanteId));
         // V-5 (D-180): los horarios de todo el catalogo en UNA consulta de lote, no una por habito.
         Map<HabitoId, HorariosDelHabito> horariosPorHabito = horariosDe(catalogo);
