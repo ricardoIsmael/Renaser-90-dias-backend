@@ -8,6 +8,7 @@ import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.application.ports.in.participante.ActivateProgramUseCase.ActivateProgramCommand;
 import com.renaser.os.users.application.ports.in.participante.ConsultarActivacionProgramaUseCase.ConsultarActivacionProgramaQuery;
 import com.renaser.os.users.application.ports.out.participante.GuardarAvanceDelRelojPort;
+import com.renaser.os.users.application.ports.out.participante.BloquearActivacionProgramaPort;
 import com.renaser.os.users.application.ports.out.participante.ListarParticipantesConProgramaActivoPort;
 import com.renaser.os.users.application.ports.out.participante.LoadParticipacionProgramaPort;
 import com.renaser.os.users.application.ports.out.participante.SaveParticipacionProgramaPort;
@@ -54,13 +55,15 @@ class RelojProgramaServiceTest {
     private ListarParticipantesConProgramaActivoPort listarParticipantesConProgramaActivoPort;
     @Mock
     private GuardarAvanceDelRelojPort guardarAvanceDelRelojPort;
+    @Mock
+    private BloquearActivacionProgramaPort bloquearActivacionProgramaPort;
 
     private RelojProgramaService service;
 
     @BeforeEach
     void setUp() {
         service = new RelojProgramaService(new RequireActiveUserGuard(loadUserPort), loadParticipacionProgramaPort,
-                saveParticipacionProgramaPort, listarParticipantesConProgramaActivoPort, guardarAvanceDelRelojPort, CLOCK);
+                saveParticipacionProgramaPort, listarParticipantesConProgramaActivoPort, guardarAvanceDelRelojPort, CLOCK, bloquearActivacionProgramaPort);
     }
 
     private User usuarioActivo(UserId id) {
@@ -83,6 +86,9 @@ class RelojProgramaServiceTest {
 
         assertThat(resultado.estaActivado()).isTrue();
         assertThat(resultado.diaPrograma()).isZero(); // el cron nocturno lo sube cuando llegue la fecha
+        var orden = org.mockito.Mockito.inOrder(bloquearActivacionProgramaPort, loadParticipacionProgramaPort);
+        orden.verify(bloquearActivacionProgramaPort).porUsuario(actorId);
+        orden.verify(loadParticipacionProgramaPort).byParticipanteId(actorId);
         verify(saveParticipacionProgramaPort).save(participacion);
     }
 
@@ -118,7 +124,7 @@ class RelojProgramaServiceTest {
         FixedClock madrugadaUtc = FixedClock.at(Instant.parse("2026-10-07T03:00:00Z"));
         RelojProgramaService enLaMadrugada = new RelojProgramaService(new RequireActiveUserGuard(loadUserPort),
                 loadParticipacionProgramaPort, saveParticipacionProgramaPort, listarParticipantesConProgramaActivoPort,
-                guardarAvanceDelRelojPort, madrugadaUtc);
+                guardarAvanceDelRelojPort, madrugadaUtc, bloquearActivacionProgramaPort);
         UserId actorId = UserId.of(UUID.randomUUID());
         when(loadUserPort.byId(actorId)).thenReturn(Optional.of(User.rehydrate(actorId,
                 new Email(actorId + "@renaser.com"), rol, UserStatus.ACTIVE, "Fixture", null, null, null, null)));
@@ -147,7 +153,7 @@ class RelojProgramaServiceTest {
         FixedClock madrugadaUtc = FixedClock.at(Instant.parse("2026-10-07T03:00:00Z"));
         RelojProgramaService enLaMadrugada = new RelojProgramaService(new RequireActiveUserGuard(loadUserPort),
                 loadParticipacionProgramaPort, saveParticipacionProgramaPort, listarParticipantesConProgramaActivoPort,
-                guardarAvanceDelRelojPort, madrugadaUtc);
+                guardarAvanceDelRelojPort, madrugadaUtc, bloquearActivacionProgramaPort);
         UserId actorId = UserId.of(UUID.randomUUID());
         when(loadUserPort.byId(actorId)).thenReturn(Optional.of(User.rehydrate(actorId,
                 new Email(actorId + "@renaser.com"), rol, UserStatus.ACTIVE, "Fixture", null, null, null, null)));
@@ -354,7 +360,7 @@ class RelojProgramaServiceTest {
         var relojEnPlenoDiaUno = FixedClock.at(Instant.parse("2026-09-03T19:00:00Z"));
         var service = new RelojProgramaService(new RequireActiveUserGuard(loadUserPort),
                 loadParticipacionProgramaPort, saveParticipacionProgramaPort,
-                listarParticipantesConProgramaActivoPort, guardarAvanceDelRelojPort, relojEnPlenoDiaUno);
+                listarParticipantesConProgramaActivoPort, guardarAvanceDelRelojPort, relojEnPlenoDiaUno, bloquearActivacionProgramaPort);
         ParticipacionPrograma recienActivado = ParticipacionPrograma.rehydrate(UserId.of(UUID.randomUUID()), null,
                 null, 0, com.renaser.os.users.api.FasePrograma.PHASE_1_REBIRTH, inicio,
                 Instant.parse("2026-09-03T04:07:00Z"), lima, false, 0,
@@ -411,7 +417,7 @@ class RelojProgramaServiceTest {
      * necesitan posicionado en un instante concreto, no en el de la clase. */
     private RelojProgramaService servicioCon(FixedClock reloj) {
         return new RelojProgramaService(new RequireActiveUserGuard(loadUserPort), loadParticipacionProgramaPort,
-                saveParticipacionProgramaPort, listarParticipantesConProgramaActivoPort, guardarAvanceDelRelojPort, reloj);
+                saveParticipacionProgramaPort, listarParticipantesConProgramaActivoPort, guardarAvanceDelRelojPort, reloj, bloquearActivacionProgramaPort);
     }
 
     /** Verifica que el barrido SI pida una segunda pagina cuando la primera viene llena

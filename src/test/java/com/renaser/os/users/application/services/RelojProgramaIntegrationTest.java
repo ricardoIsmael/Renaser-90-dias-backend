@@ -8,6 +8,7 @@ import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.application.ports.in.participante.ActivateProgramUseCase.ActivateProgramCommand;
 import com.renaser.os.users.application.ports.out.participante.GuardarAvanceDelRelojPort;
+import com.renaser.os.users.application.ports.out.participante.BloquearActivacionProgramaPort;
 import com.renaser.os.users.application.ports.out.participante.ListarParticipantesConProgramaActivoPort;
 import com.renaser.os.users.application.ports.out.participante.LoadParticipacionProgramaPort;
 import com.renaser.os.users.application.ports.out.participante.SaveParticipacionProgramaPort;
@@ -51,6 +52,8 @@ class RelojProgramaIntegrationTest {
     private ListarParticipantesConProgramaActivoPort listarParticipantesConProgramaActivoPort;
     @Autowired
     private GuardarAvanceDelRelojPort guardarAvanceDelRelojPort;
+    @Autowired
+    private BloquearActivacionProgramaPort bloquearActivacionProgramaPort;
 
     private UserId crearTraineeConParticipacionPausada(FixedClock enElAlta) {
         UserId id = UserId.of(UUID.randomUUID());
@@ -64,7 +67,7 @@ class RelojProgramaIntegrationTest {
     private RelojProgramaService servicioEn(FixedClock clock) {
         return new RelojProgramaService(new RequireActiveUserGuard(loadUserPort), loadParticipacionProgramaPort,
                 saveParticipacionProgramaPort, listarParticipantesConProgramaActivoPort, guardarAvanceDelRelojPort,
-                clock);
+                clock, bloquearActivacionProgramaPort);
     }
 
     /** Corregido tras revision del dueño del proyecto: HOY no es una opcion valida (el

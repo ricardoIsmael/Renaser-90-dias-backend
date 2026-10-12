@@ -5609,6 +5609,13 @@ Todo lo que se probo antes de eso habia salido bien y no era el problema: la con
   hot restart de DevTools** mientras viva en el classloader base. El síntoma siempre es el mismo:
   `NoSuchMethodException` / `ClassCastException` sobre una clase que evidentemente existe y calza.
 
+**Volvió a pasar el 2026-10-12** (E2E de la spec 001): `PATCH /api/v1/users/{id}/role` respondió 204, pero
+`historial_rol_participante` quedó vacío y el log decía `Can't resolve method
+com.renaser.os.habits.infrastructure.adapter.in.event.RolDeUsuarioCambiadoHabitsListener.on(com.renaser.os.users.api.RolDeUsuarioCambiadoEvent)`
+(también el oyente de soporte del chat). DevTools había reiniciado el contexto tras una recompilación. Al reiniciar el
+proceso entero, Modulith reentregó el evento pendiente y el historial se escribió. Antes de probar algo que depende de
+un oyente, reiniciar el backend de cero si hubo una recarga de DevTools.
+
 ## E-163 — `No qualifying bean of type 'com.fasterxml.jackson.databind.ObjectMapper' available` al agregar Web Push (2026-09-08) — **RESUELTO**
 
 - **Dónde:** `notifications/infrastructure/adapter/out/push/WebPushAdapter` y arranque de Spring Boot.
@@ -14893,6 +14900,212 @@ con `STORAGE_PROVEEDOR=s3 AWS_ENDPOINT_URL_S3=http://127.0.0.1:9000` y credencia
 **antes** de publicar. Si el puerto se abre después, la imagen queda gris hasta volver a entrar al chat. Las imágenes
 `minio/minio` (Docker Hub) y `quay.io/minio/minio` ya no se pueden bajar.
 
+## E-591 · El nuevo recorrido de Playwright no encontraba la pestaña y trataba el compromiso como un input nativo (pruebas, RESUELTO, 10/10)
+
+**Síntomas literales.** `Error: No tests found` al seleccionar `--grep '^MENTOR:'`; después,
+`Timed out 20000ms waiting for expect(locator).toBeVisible()` con `getByRole('tab', { name: 'Hoy', exact: true })`;
+y `locator.check: Clicking the checkbox did not change its state` al marcar el compromiso del mapa.
+
+**Causa real.** El filtro de Playwright incluye el nombre del archivo antes del título del caso. La etiqueta
+accesible de `TabBar` es `HOY`, no `Hoy`. El compromiso es un `Pressable` con rol checkbox, no un input HTML:
+el toque sí marcaba el compromiso (se vio en la captura), pero `check()` no encontraba el estado nativo que esperaba.
+
+**Solución y prevención.** Seleccionar el título sin anclarlo al comienzo, usar `/^hoy$/i` y tocar el compromiso
+con `click()`, comprobando que desaparezca «Falta completar» y que su respuesta llegue al servidor. Son
+correcciones de la prueba; el ingreso y el formulario funcionaban. La suite final corre los cinco roles sin
+filtros ni reintentos (`playwright.mapa.config.ts`, frontend).
+
+## E-592 · Un mapa activo mostraba «0 acciones semanales» y «0 reemplazos» en otro navegador (front, CORREGIDO, 10/10)
+
+**Síntoma literal.** El E2E del mentor completó los diez pasos y confirmó tres acciones, un reemplazo, las
+respuestas, tres Rocas Maestras y tres hábitos por HTTP real. Al entrar desde un contexto limpio, el cierre
+decía «Tu mapa está activo.» pero también «0 acciones semanales» y «0 reemplazos». La aserción
+`getByText('3 acciones semanales', { exact: true })` agotó 20 segundos. La captura y el log de reproducción
+quedan en `artifacts/e2e-mapa/hallazgo-antes.*` del frontend.
+
+**Causa real.** `useMapaRenacimiento` consultaba `stageCompleted` y marcaba el borrador vacío como activo,
+sin usar las listas que la misma respuesta del servidor ya traía. `CierreScreen` calculaba las cantidades
+solo desde las listas locales. El cierre vacío se guardaba en el dispositivo y, al abrirlo otra vez, el
+retorno temprano de `base.estado === 'activo'` impedía volver a consultar esas cantidades.
+
+**Solución.** Al confirmar la etapa activa se recuperan los conteos de `actions` y `protocols`; el cierre los
+usa cuando falta la lista local. Se consulta también un cierre activo con listas vacías, para corregir lo
+que la versión anterior dejó guardado. No se fabrican objetivos, hábitos ni respuestas locales ni se envía
+un borrador vacío al servidor. El contenido de un dispositivo que conserva su mapa sigue siendo el mismo.
+
+**Prevención.** `mapaEnOtroDispositivo.test.ts` comprueba el cierre sin borrador y con el cierre vacío anterior,
+y que esa lectura no escriba respuestas o listas. `e2e/mapa-poder/mapa-por-rol.spec.ts` exige tres acciones
+y un reemplazo al abrir el mapa en otro navegador para cada rol, además de verificar lo persistido.
+
+**Verificación del 2026-10-10.** Las dos regresiones unitarias pasaron; el recorrido E2E pasó para MENTOR,
+ADMIN, ALCHEMIST, MENTOR_LEAD y TRAINEE (5/5, sin reintentos ni omitidos). En la base aislada se comprobaron
+37 respuestas por cuenta, compromiso verdadero y el mismo Día 1 elegido sin ajustes.
+
+
+## E-593 · Los fixtures de recuperación y navegación no representaban la app actual (pruebas, CORREGIDO, 10/10)
+
+**Síntomas literales.** `SyntaxError: Unexpected token` al usar JSX en `.test.ts`; Jest rechazó el
+mock por `Invalid variable access: status`; doce casos antiguos esperaban que la invitación siguiera
+visible después de elegir; Playwright encontró dos textos iguales (`strict mode violation`) y el
+último recorrido agotó `locator.click: Timeout 20000ms` buscando directamente «Cerrar sesión» en Yo.
+
+**Causas y solución.** Usar `React.createElement` en los tests `.ts` y asignar explícitamente la
+propiedad del error simulado, sin parameter property en la fábrica hoisted. El fixture de capacidades
+debe pasar a `canStartProgram=false` después de crear la participación; conservar `true` reofrecía
+empezar artificialmente. Las pestañas de React Navigation quedan montadas con `aria-hidden=true`:
+los textos se buscan dentro de la pantalla activa. Desde el 05/10, cerrar sesión se hace en
+Yo → Ajustes → Cerrar sesión; la prueba recorre esa entrada. Se actualizó además la aserción de código
+fuente del botón de planificar para incluir la nueva compuerta de consulta pendiente.
+
+**Prevención.** Mantener los estados del servidor coherentes antes y después de una confirmación,
+recorrer la navegación real y distinguir vistas montadas de vistas activas. Son errores del harness;
+no se quitaron casos ni se aumentaron reintentos para disimularlos.
+
+## E-594 · Un fallo al consultar Día 1 se interpretaba como programa iniciado y escondía cómo elegirlo (front, CORREGIDO, 10/10)
+
+**Síntoma.** La nueva batería de recuperación falló cinco casos contra el código anterior: al fallar
+`GET /onboarding/activate-program`, `useArranqueDelPrograma` devolvía `EN_CURSO`; al fallar la lista
+de fechas no había reintento. Una respuesta tardía de otra cuenta podía reemplazar el resultado,
+y las fechas rechazadas con 400 o confirmadas en otro dispositivo con 409 no se volvían a consultar.
+
+**Solución.** Un estado `ERROR` muestra «No pudimos comprobar tu Día 1» y «Reintentar Día 1».
+Cada consulta pertenece al usuario, versión e intento actuales; los resultados antiguos se descartan
+y el cambio de consulta devuelve `CARGANDO` desde ese mismo render. Las lecturas cortas de inicio,
+Home y capacidades y la confirmación tienen un límite de 15 s, incluido el cuerpo de la respuesta.
+Training espera a conocer ese estado antes de habilitar acciones. Otras dos regresiones detectaron
+que `useProgramaPersonal` mostraba una invitación vieja durante el primer render de una recarga o
+cambio de usuario; ahora expone sus datos solo cuando corresponden a la consulta actual.
+Un aviso de elección confirmada
+vuelve a leer Home, capacidades y Día 1 en las otras pestañas montadas. Un 400 refresca opciones;
+un 409 comprueba la fecha ya confirmada; un error de red conserva la selección para reintentar.
+
+**Prevención.** `diaUnoRecuperacion.test.ts` cubre respuestas tardías, errores, estados de fecha y
+reintentos; `limiteDeEspera.test.ts` comprueba el aborto antes de recibir headers y durante el cuerpo,
+así como la limpieza del temporizador. `playwright.dia-uno.config.ts` ejecuta la matriz de roles y
+cuentas anteriores contra Spring/Postgres/Redis reales, con fallos de transporte controlados.
+
+## E-595 · El cron de recordatorios agregaba otra tanda al fixture de avisos en masa (pruebas, CORREGIDO, 10/10)
+
+**Síntoma literal.** El `clean verify` completo terminó con 6219 unitarias correctas y 1 fallo de
+370 integraciones: `AvisosDeEventoEnMasaIT.unAvisoQueFalloSeReintentaYLlega`,
+`[todos quedaron entregados al outbox] expected: 0L but was: 1000L`. A las 18:20 UTC,
+`GenerarRecordatoriosScheduler` registró `1000 recordatorio(s) encolado(s)` durante el escenario.
+
+**Causa real.** El fixture tenía un evento a +2 horas y sembraba manualmente una tanda vencida.
+El generador automático podía producir otros 1000 recordatorios para el mismo evento según el
+minuto en que corriera. El test no estaba aislado de ese trabajo legítimo del cron.
+
+**Solución y prevención.** El evento del fixture está a +365 días, fuera del horizonte automático;
+la tanda vencida sigue sembrándose manualmente. Se invoca explícitamente el generador real después
+de sembrar y se exige que la cola siga en 1000, reproduciendo el cruce sin depender del minuto.
+No se desactivó el scheduler ni se alteró el código de recordatorios de producción.
+
+## E-596 · Dos confirmaciones simultáneas aceptaban fechas distintas para el mismo Día 1 (backend, CORREGIDO, 10/10)
+
+**Síntoma.** Dos POST reales simultáneos de un aprendiz pendiente devolvieron 200 con fechas
+distintas, aunque en Postgres solo quedó una. Además, dos confirmaciones iguales del personal sin
+participación podían devolver 200 y 409 por colisión de clave, en lugar de ser idempotentes.
+
+**Causa real.** Ambas transacciones podían leer «sin activar» antes de que alguna confirmara.
+La comprobación de dominio protege peticiones consecutivas, pero no esa lectura concurrente.
+
+**Solución.** `BloquearActivacionProgramaPort` toma `SELECT ... FOR UPDATE` sobre el usuario en
+la transacción de activación, antes de leer la participación. Esa fila existe también para el
+personal que todavía no tiene programa; el bloqueo dura hasta el commit y funciona entre instancias.
+La segunda petición relee el resultado confirmado: misma fecha → 200; distinta → 409, conservando
+la primera elección. Cada respuesta exitosa corresponde a la fecha que realmente quedó guardada.
+
+**Prevención.** `ActivacionProgramaConcurrenteIT` fuerza el solapamiento con un bloqueo SQL y
+comprueba las dos peticiones en `pg_blocking_pids`, sin depender de una carrera por tiempo.
+Cruza cinco roles, fila previa o nueva y fechas iguales o distintas (18 casos). Contra la
+implementación anterior fallaron 9/18; las 29 unitarias del reloj siguieron pasando, demostrando
+que el fallo estaba en la concurrencia real. También exige una sola participación y cero ajustes.
+
+
+**Verificación focalizada del 2026-10-10 (E-595/E-596).** `TZ=UTC ./mvnw verify` con las clases
+del reloj y arquitectura y ambas integraciones pasó: 41 unitarias y 20 integraciones, cero fallos,
+errores u omitidos (`/tmp/renaser-dia1-concurrencia-despues.log`). La comprobación completa se
+registra después de los recorridos E2E finales.
+
+
+## E-597 · Una lectura anterior podía reemplazar el estado después de elegir Día 1 (front, CORREGIDO, 10/10)
+
+**Síntoma.** Las seis regresiones de `lecturasDiaUnoFueraDeOrden.test.ts` fallaron contra el código
+anterior. Después de una relectura correcta, una respuesta anterior de Home o del contador volvía a
+`inscrito=false`, y capacidades podía volver a `canStartProgram=true`. Un error de esa petición antigua
+también podía reemplazar el éxito nuevo por un aviso de error o por un contador sin inscripción.
+
+**Causa real.** Confirmar invalida las lecturas en las pestañas montadas, pero los hooks aceptaban
+las respuestas en el orden en que llegaban. Una consulta iniciada antes del POST podía terminar
+después de la nueva y hacer retroceder la pantalla sin que el servidor hubiera cambiado.
+
+**Solución y prevención.** `useResumenHome`, `useProgramaDia` y `useCapacidades` identifican la
+consulta actual. Una respuesta, error o cierre de carga anteriores no cambian el estado nuevo;
+al desmontarse invalidan sus peticiones pendientes. La regresión cruza esos tres hooks con una
+respuesta atrasada y un error atrasado (6/6 verdes después del arreglo). Las cuatro suites focalizadas
+de recuperación, selección y límite de espera pasaron 76 casos sin omitidos.
+
+
+## E-598 · Repetir la batería en el mismo Redis agotó el límite de login (pruebas, CORREGIDO, 10/10)
+
+**Síntoma literal.** La segunda batería completa sobre el mismo backend aislado pasó los primeros
+15 casos y luego falló 19: `expect(respuesta.status()).toBe(200)`, recibido `429`. El servidor
+registró `RateLimitExceededException: Demasiados intentos. Espera unos minutos.` en `/auth/login`.
+
+**Causa real.** Se acumularon las 35 entradas de la batería anterior y las de la repetición dentro
+del límite de 50 por origen/hora. Cambiar los UUID y los correos del fixture no limpia ese contador.
+La protección respondió correctamente; no era una regresión de roles o del selector.
+
+**Solución y prevención.** `preparar.py --redis-container` valida imagen, etiqueta y que Redis y
+Postgres pertenezcan a la misma sesión Testcontainers. Retira solo los contadores
+`reset-password:rl:login:*` de esa batería antes de sembrar cuentas nuevas. No borra sesiones ni
+cambia la protección de producción. Preparar cada batería sin otra ejecución activa en ese Redis;
+la suite de Día 1 y la del mapa juntas usan menos de 50 logins. Se repite la batería completa,
+sin reintentos automáticos ni casos omitidos.
+
+
+**Verificación E2E final del 2026-10-12 (E-592/E-594/E-597/E-598).** Se levantaron las fuentes
+finales en un backend y Expo propios, con Postgres/Redis nuevos y 40 cuentas nuevas. Pasaron los
+34 casos de Día 1 (354,2 s) y los cinco mapas completos (137,2 s), sin reintentos automáticos ni
+omitidos; ambos JUnit confirmaron cero fallos y errores. La consulta SQL posterior comprobó
+3 rocas, 3 hábitos, 3 acciones, 1 reemplazo, 37 respuestas, compromiso y etapa completos y cero
+ajustes para cada rol. Informes en `artifacts/e2e-dia-uno/` y `artifacts/e2e-mapa/` del frontend;
+logs de esta ejecución en `~/.cache/renaser-e2e/mapa-poder/logs-2026-10-12/`. Se retiraron los
+fixtures privados y se cerraron solo los procesos y contenedores propios. Las 330 suites / 2746
+pruebas unitarias del frontend y TypeScript habían pasado el 2026-10-10 con estas fuentes.
+
+
+**Verificación completa final del 2026-10-12.** `TZ=UTC ./mvnw -B -ntp clean verify`, en el
+worktree propio `e2e-mapa-roles`, terminó con `BUILD SUCCESS` en **23:02 min**: **6219 unitarias y
+388 integraciones**, cero fallos, errores u omitidos. Pasaron arquitectura, los diez casos de
+`MapaDelPersonalAutenticacionIT`, los 18 de `ActivacionProgramaConcurrenteIT` y los dos de
+`AvisosDeEventoEnMasaIT`. El log, los XML y la cobertura quedaron conservados fuera del worktree,
+en `~/.cache/renaser-e2e/mapa-poder/logs-2026-10-12/`. Ambas bases `master` coinciden con sus remotos
+al verificar: backend `23eceb15`, frontend `127bdfb4`. Las correcciones requieren desplegar el
+backend y publicar la versión actualizada del frontend.
+
+**Volvió a pasar el 2026-10-12** (E2E de la spec 001, un solo backend contra el Redis local): tras unos diez inicios
+de sesión por script, `HTTP Error 429` en `/auth/login` («Demasiados intentos. Espera unos minutos.»). Se borraron
+solo las claves `reset-password:rl:login:origen-email:*habrol-*` y las dos de IP local, y el script pasó a guardar el
+token de cada cuenta y reusarlo (`GET /api/v1/home` para ver si sigue vivo) en vez de iniciar sesión en cada paso.
+
+## E-599 · El atributo tests de Surefire no contaba seis casos Nested con nombres repetidos (informe, 12/10)
+
+**Síntoma literal.** El resumen de Maven indicaba `Tests run: 6219, Failures: 0, Errors: 0,
+Skipped: 0`, pero sumar los atributos `tests` de los XML daba 6213. En
+`DnsResolverMxAdapterTest`, el atributo decía 26 aunque el archivo contenía 32 nodos `testcase`.
+
+**Causa comprobada.** Dos clases `@Nested` tienen el método parametrizado
+`respondeDominioInexistenteSinAbrirContexto(String)` y repiten los índices `[1]` a `[6]`.
+El informe conserva ambos resultados con distintos `classname`, pero su contador agregado pierde
+esos seis nombres repetidos. Las cuatro tandas de la consola suman 32; ninguna prueba quedó fuera.
+
+**Solución y prevención.** Para comprobar y conservar esta ejecución se contaron los nodos
+`testcase` y sus elementos `failure`, `error` y `skipped`, en lugar del atributo agregado. Así se
+confirmaron 6219 unitarias y 388 integraciones, todos correctos. `verificacion.json` deja ambos
+valores explicados y `backend-junit.tar.gz` conserva los XML originales. No se cambió código de
+producción ni se volvió a ejecutar una batería ya verde por una diferencia de metadatos.
+
 ## E-600 · Metro no encontraba `./index` desde un worktree del frontend (front, herramienta, CORREGIDO, 12/10)
 
 **Síntoma literal.** Con Metro levantado dentro de `.claude/worktrees/habitos-por-rol/` del frontend, la app
@@ -14937,5 +15150,52 @@ ensanchaba y corría a los de al lado.
 **Solución y prevención.** Cualquier cambio del formulario limpia el aviso; si falta el nombre, la vista sube al
 inicio y el campo toma el foco; el chip usa el mismo peso (`Jost_500Medium`) activo o no y marca la elección con
 el borde, el fondo y el color. Verificado en el emulador, también con letra al 130 % y en modo oscuro.
+
+## E-603 · Tras caerse, el emulador volvió con una build vieja de la app (entorno, RESUELTO, 12/10)
+
+**Síntoma literal.** A mitad del E2E de la spec 001 el emulador `Pixel_6` desapareció (`adb devices` vacío, sin
+proceso `qemu`). Relanzado con `emulator -avd Pixel_6`, la app se cayó al abrir con `Fatal signal 11 (SIGSEGV), code 2
+(SEGV_ACCERR) … in tid … (mqt_v_js)` en `facebook::react::MountingCoordinator::pullTransaction`, y después mostró
+`Render Error · View config not found for component RiveReactNativeView`.
+
+**Causa real.** El emulador arrancó desde un snapshot guardado antes: `dumpsys package com.renaser.app` decía
+`lastUpdateTime=2026-09-29`, una build debug sin Rive. El APK compilado ese día (con Rive) ya no estaba instalado y el
+JavaScript nuevo pedía una vista nativa que esa build no tenía. No era un bug del código.
+
+**Solución y prevención.** `adb install -r <worktree>/android/app/build/outputs/apk/debug/app-debug.apk` y
+`adb reverse tcp:8081 tcp:8081`. Después de cualquier reinicio del emulador, comparar `lastUpdateTime` con la fecha del
+APK antes de seguir. La reinstalación borra los permisos (el de micrófono vuelve a pedirse).
+
+## E-604 · El mentor sembrado a mano no podía liderar un grupo (pruebas, RESUELTO, 12/10)
+
+**Síntoma literal.** `PUT /api/v1/admin/cells/{id}/mentor` respondió `409` «El usuario todavia no tiene un perfil de
+mentor (perfiles_mentor) — debe crearse desde el modulo de usuarios antes de poder liderar una celula».
+
+**Causa real.** El script de sembrado del E2E creó la cuenta con `rol = MENTOR` directo en la base, sin
+`perfiles_mentor`. El camino real (`PATCH /api/v1/users/{id}/role`) sí crea el perfil: las dos cuentas promovidas así
+en la misma corrida lo tenían.
+
+**Solución y prevención.** En la base clonada, `insert into perfiles_mentor(usuario_id) …` con los valores por
+defecto. Para sembrar personal, crear la cuenta como aprendiz y promoverla con el endpoint de cambio de rol.
+
+## E-605 · «Equipo y roles» muestra como «Aprendiz» al personal con programa propio (front, ABIERTO, 12/10)
+
+**Síntoma literal.** En Administración → Más opciones → «Equipo y roles», la lista «APRENDICES» incluía «Cambiar el
+rol de E2E ALQUIMISTA, hoy Aprendiz», y lo mismo con E2E ADMIN y E2E MENTOR, aunque esas cuentas son Alquimista,
+Administrador y Mentor (también aparecen bien en la lista del equipo).
+
+**Causa real.** `StaffRolesScreen` arma esa lista con `GET /admin/trainees` y le pone `TRAINEE` a todos («deducido
+de la lista de origen»). Ese listado trae a cualquiera con programa, también al personal que eligió su Día 1.
+
+**Estado.** Reportado, no corregido (fuera de la spec 001). El rol real no cambia y el filtro de hábitos lee el rol
+real, pero quien administra lee mal el rol de esa persona y puede elegir un cambio pensando que es aprendiz.
+Arreglo probable: usar el rol que manda el servidor o sacar de esa lista a quien ya está en la del equipo.
+
+## E-606 · El atrás de Android no cierra los diálogos de confirmación (front, ABIERTO, 12/10)
+
+**Síntoma literal.** Con un diálogo de `dialogo.confirmar` abierto (por ejemplo «¿Eliminar este hábito?»), el botón
+atrás de Android no lo cierra; hay que tocar «Cancelar».
+
+**Estado.** Reportado, no investigado (fuera de la spec 001). Visto en el E2E del 2026-10-12.
 
 ---

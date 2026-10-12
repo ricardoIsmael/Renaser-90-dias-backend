@@ -49,18 +49,18 @@ Capturas: `~/Imágenes/e2e-2026-10-12/habitos-por-rol/`.
 
 ## Observaciones fuera de esta funcionalidad (no se tocaron)
 
-1. **«Equipo y roles» rotula «Aprendiz» a todo el que viene de `GET /admin/trainees`**, también al personal con
+1. **E-605 · «Equipo y roles» rotula «Aprendiz» a todo el que viene de `GET /admin/trainees`**, también al personal con
    programa propio (E2E ALQUIMISTA, E2E ADMIN y E2E MENTOR aparecían en «Aprendices · hoy Aprendiz»). El rol real
    de la cuenta no cambia y el filtro de hábitos lee el rol real, pero quien administra puede confundirse.
-2. **El atrás de Android no cierra los diálogos de `dialogo.confirmar`.**
+2. **E-606 · El atrás de Android no cierra los diálogos de `dialogo.confirmar`.**
 3. **Un cambio de rol no siempre llega a los oyentes en desarrollo**: con DevTools, el oyente de `habits` falló con
-   `InconsistentClassPathException` (la misma familia que E-162) y Modulith lo reentregó al reiniciar. En
+   `InconsistentClassPathException` (E-162, anotado como recurrencia) y Modulith lo reentregó al reiniciar. En
    producción no hay DevTools.
-4. **Varios inicios de sesión seguidos agotan el límite de 10 por correo y hora** (como en E-598): se liberaron
+4. **Varios inicios de sesión seguidos agotan el límite de 10 por correo y hora** (E-598, anotado como recurrencia): se liberaron
    solo los contadores `reset-password:rl:login:*` de las cuentas de prueba en el Redis local.
-5. **El MENTOR sembrado a mano no tenía `perfiles_mentor`** y no se le podía asignar un grupo; el cambio de rol por
+5. **E-604 · El MENTOR sembrado a mano no tenía `perfiles_mentor`** y no se le podía asignar un grupo; el cambio de rol por
    la app sí lo crea. Es del sembrado, no del producto.
-6. **Si el emulador se cae, arranca desde un snapshot viejo** y la app instalada vuelve a una build anterior (sin
+6. **E-603 · Si el emulador se cae, arranca desde un snapshot viejo** y la app instalada vuelve a una build anterior (sin
    Rive): la app se caía con SIGSEGV o «View config not found for component `RiveReactNativeView`». Se reinstaló
    el APK del día; todo lo anterior a la caída se probó con el APK correcto.
 

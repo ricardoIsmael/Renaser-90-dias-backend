@@ -2,6 +2,7 @@ package com.renaser.os.notifications.infrastructure.adapter.in.event;
 
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.calendar.application.ports.in.recordatorio.DespacharRecordatoriosUseCase;
+import com.renaser.os.calendar.application.ports.in.recordatorio.GenerarRecordatoriosUseCase;
 import com.renaser.os.shared.infrastructure.event.EventPublicationMaintenanceScheduler;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -72,6 +73,8 @@ class AvisosDeEventoEnMasaIT {
     @Autowired
     private DespacharRecordatoriosUseCase despachar;
     @Autowired
+    private GenerarRecordatoriosUseCase generar;
+    @Autowired
     private EventPublicationMaintenanceScheduler mantenimientoDelOutbox;
     @Autowired
     private JdbcTemplate jdbc;
@@ -87,11 +90,13 @@ class AvisosDeEventoEnMasaIT {
         personas.clear();
         eventoId = UUID.randomUUID();
         Instant ahora = Instant.now();
+        // Fuera del horizonte del generador automático: la cola vencida la siembra este test.
+        // A +2 h, un cron concurrente agregaba otros 1000 y rompía la comprobación.
         jdbc.update("""
                 INSERT INTO renaser.eventos (id, titulo, inicia_en, timezone, tipo_ubicacion, tipo_audiencia,
                                              estado, tipo_evento, creado_en, actualizado_en)
                 VALUES (?, ?, ?, 'America/Lima', 'LLAMADA_INTERNA', 'TODOS', 'PUBLICADO', 'SESION_ESPECIAL', ?, ?)
-                """, eventoId, TITULO, Timestamp.from(ahora.plus(Duration.ofHours(2))),
+                """, eventoId, TITULO, Timestamp.from(ahora.plus(Duration.ofDays(365))),
                 Timestamp.from(ahora.minus(Duration.ofDays(1))), Timestamp.from(ahora.minus(Duration.ofDays(1))));
         for (int i = 0; i < PERSONAS; i++) {
             personas.add(UUID.randomUUID());
@@ -169,6 +174,9 @@ class AvisosDeEventoEnMasaIT {
             ps.setObject(3, id);
             ps.setTimestamp(4, vencio);
         });
+        generar.generar(Instant.now()); // Reproduce el cruce con el cron, sin depender del minuto.
+        assertThat(recordatoriosSinEnviar()).as("el generador no agregó avisos ajenos al escenario")
+                .isEqualTo(PERSONAS);
     }
 
     /** Lo que haria el scheduler en sus pasadas de cada minuto, sin esperar al minuto siguiente. */
