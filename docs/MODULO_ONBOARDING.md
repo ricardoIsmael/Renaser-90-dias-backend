@@ -82,7 +82,9 @@ onboarding/
 
 ## 5. Endpoints construidos
 
-Base `/api/v1/onboarding`. Todos protegidos, todos con `@RequestHeader("X-Actor-Id")` — el `usuarioId` de todo el módulo ES el actor (ver D-O2 abajo, no hay concepto de "actuar en nombre de otro" en este alcance).
+Base `/api/v1/onboarding`. Todos protegidos por una sesión real (`X-Auth-Token`), con el actor obtenido mediante `@ActorAutenticado`. El `usuarioId` de todo el módulo ES el actor (ver D-O2 abajo, no hay concepto de "actuar en nombre de otro" en este alcance). Un `X-Actor-Id` sin sesión no autoriza estas rutas; con sesión, prevalece la identidad de la sesión.
+
+> **Corregido 2026-10-10.** Esta sección decía «todos con `@RequestHeader("X-Actor-Id")`», aunque los controllers ya usaban `@ActorAutenticado` y `SecurityConfig` exigía sesión. La nota de la auditoría del 2026-08-28, al final de este documento, había identificado la contradicción. `MapaDelPersonalAutenticacionIT` comprueba el rechazo del header sin sesión y la precedencia de la sesión sobre un header ajeno.
 
 | Método | Ruta | Caso de uso |
 |---|---|---|
@@ -102,12 +104,92 @@ Base `/api/v1/onboarding`. Todos protegidos, todos con `@RequestHeader("X-Actor-
 
 **No se verificó contra `docs/API_CONTRACT.md`** — no se encontró una sección de onboarding en ese documento al momento de construir esto; si existe y difiere, es una desviación a resolver, no algo ya reconciliado.
 
+### 5.1. Mapa del Poder propio para mentores, administradores y alquimistas
+
+Confirmado por el dueño el **2026-10-10 (D-263)**: `MENTOR`, `ADMIN` y `ALCHEMIST` pueden guardar su propio Mapa del Poder (Mapa de Renacimiento, flujo `mapa_dia7`) y activarlo después de elegir su Día 1, como los aprendices. La cuenta debe estar aprobada y activa; el rol no sustituye esa condición. Esta capacidad ya estaba implementada en `master`: no requiere ampliar la matriz de permisos ni modificar cuentas existentes.
+
+La app permite abrir el mapa sin filtrar por rol (`HoyScreen` y `RootNavigator`). El interruptor `EXPO_PUBLIC_MAPA_DIA7` ya está en `on` en los perfiles `preview` y `production` de `Renaser-90-dias-frontend-/eas.json`, comprobado el 2026-10-10.
+
+El recorrido usa los endpoints existentes:
+
+1. `POST /api/v1/auth/login` entrega la sesión; `GET /api/v1/auth/me` confirma la identidad y el rol.
+2. `GET /api/v1/onboarding/activate-program` ofrece las fechas y el `POST` a esa ruta guarda la elegida. También crea la participación del personal que todavía no tiene fila (D-261).
+3. `POST /api/v1/onboarding/answers`, `PUT /api/v1/mapa-renacimiento/acciones` y `/reemplazos` guardan el mapa propio. `/onboarding/media/upload-url` y `/onboarding/media` autorizan y registran sus archivos.
+4. La activación de la app define las tres Rocas Maestras (`PUT /api/v1/rocks/master/{eje}`), crea los hábitos propios (`POST /api/v1/habits`) y marca la etapa (`POST /api/v1/mapa-renacimiento/completar`). Los objetivos exigen tener el programa activado; guardar un borrador no inicia el programa.
+
+`MapaDelPersonalAutenticacionIT` recorre el login y este flujo para los tres roles con HTTP real, Redis y Postgres. Comprueba la persistencia del mapa y que un header ajeno no cambie a su dueño. También prueba el rechazo del login para cuentas sin aprobar o suspendidas, y el 403 de las diez operaciones del mapa sin sesión o al suspender una cuenta con sesión todavía viva. El almacenamiento de la suite es NoOp: la prueba verifica la autorización y el registro de archivos, sin transferir contenido a S3.
+
+La verificación E2E de la app vive en `Renaser-90-dias-frontend-/e2e/mapa-poder/`: cinco cuentas nuevas
+(`MENTOR`, `ADMIN`, `ALCHEMIST`, `MENTOR_LEAD`, `TRAINEE`), navegador a 360 × 800, backend aislado con
+Postgres y Redis reales. El recorrido elige el Día 1 y llena los diez pasos desde la interfaz; después
+lee el mapa, sus respuestas, Rocas Maestras y hábitos, y abre el cierre en otro navegador sin borrador.
+El fixture ya tiene el onboarding inicial completado; no prueba la aprobación de cuentas ni sube archivos
+a S3. Instrucciones en `e2e/mapa-poder/README.md` del frontend.
+
+Resultado del 2026-10-10: **5/5 E2E aprobados, sin reintentos ni casos omitidos**. En cada cuenta se
+comprobaron tres Rocas Maestras, tres hábitos, tres acciones, un reemplazo y 37 respuestas del mapa,
+incluido el compromiso de seguimiento verdadero; el Día 1 elegido quedó sin ajustes. Informes HTML,
+JUnit y comprobación de persistencia en `artifacts/e2e-mapa/` del frontend.
+
+> **Corregido 2026-10-10 (E-592, frontend).** Al abrir un mapa activo en otro navegador, el cierre mostraba
+> cero acciones y reemplazos aunque el servidor los hubiera guardado. Ahora recupera sus cantidades del
+> mismo `GET /mapa-renacimiento`, también para un cierre vacío guardado por la versión anterior. No cambia
+> permisos ni endpoints; la corrección requiere una versión nueva de la app.
+
+### 5.2. Cuentas anteriores que nunca eligieron Día 1
+
+Actualizar el frontend no asigna una fecha ni empieza los 90 días. Si la cuenta ya terminó el
+onboarding inicial y tiene participación pendiente (`programa_activado_en = NULL`), Hoy, Yo y Training
+ofrecen **«Todavía no elegiste tu Día 1» → «Elegir mi Día 1»** al entrar. El selector se abre al
+tocar y guarda solamente al confirmar. La fecha provisional del alta no se usa como una elección.
+Si la persona aceptó términos y cerró la app antes de elegir, vuelve a ese último paso del onboarding.
+
+| Estado de la cuenta activa | Comportamiento |
+|---|---|
+| Participación pendiente, cualquier rol | Entrada para elegir; volver sin elegir conserva el programa pausado. |
+| Personal sin participación | «Hacer mi programa de 90 días». «Ahora no» se recuerda por cuenta en Hoy; Yo y Training siguen ofreciendo empezar. Al confirmar se crea la participación. |
+| Día 1 futuro, programa en curso o completado | Conserva la fecha y el avance; la actualización no reinicia ni vuelve a pedir elegir. |
+| Aprendiz aprobado sin participación | Es una anomalía: la aprobación crea esa fila. Training muestra el aviso de revisar la inscripción y permite reintentar; la app no inventa una participación. |
+| Fallo al consultar inicio, fechas o capacidades | Aviso con «Reintentar Día 1». Un error no se interpreta como programa iniciado ni esconde definitivamente la entrada. |
+
+Las consultas de inicio, capacidades y Home y la confirmación tienen un límite de **15 s**, también
+al leer el cuerpo. Training espera a conocer el estado para habilitar acciones. Las respuestas de
+otra cuenta o de una consulta reemplazada se descartan; al recargar, la invitación anterior se oculta
+desde el primer render. Confirmar avisa a las otras pestañas montadas para que relean su estado.
+
+Si una fecha queda fuera de la ventana (400), se recargan las opciones y se requiere confirmar de
+nuevo. Si otro dispositivo ya eligió (409), se consulta y conserva esa elección. Si se pierde la
+respuesta de un POST que sí se guardó, reintentar la misma fecha devuelve la confirmación existente.
+El backend serializa los POST por usuario hasta el commit: dos fechas distintas simultáneas no
+pueden recibir dos confirmaciones exitosas; la segunda devuelve 409 (E-596).
+
+`dia-uno.spec.ts` recorre 34 casos con 35 cuentas distintas: cinco roles × cinco estados y nueve
+casos de recuperación, reentrada y cambio de cuenta. `ActivacionProgramaConcurrenteIT` cubre otras
+18 combinaciones de concurrencia con dos peticiones HTTP y bloqueo SQL real. Las instrucciones y
+el alcance de las interrupciones de transporte están en `e2e/mapa-poder/README.md` del frontend.
+E-593 a E-597 documentan los fallos encontrados y su prevención. Estas correcciones necesitan
+publicar el frontend y el backend nuevos; no modifican automáticamente cuentas reales.
+
+**Verificación final de la app, 2026-10-12:** 34/34 recorridos de Día 1 y 5/5 recorridos completos
+del mapa, sin reintentos ni casos omitidos, contra las fuentes finales y 40 cuentas nuevas del
+entorno aislado. JUnit confirmó cero fallos y errores. La consulta SQL posterior verificó para
+cada mapa tres rocas, tres hábitos, tres acciones, un reemplazo, 37 respuestas, el compromiso y la
+etapa completos, y cero ajustes del inicio. Informes en `artifacts/e2e-dia-uno/` y
+`artifacts/e2e-mapa/` del frontend. La preparación evita acumular contadores de login de ejecuciones
+anteriores en el Redis de prueba (E-598).
+
+**Verificación final del backend, 2026-10-12:** `TZ=UTC ./mvnw -B -ntp clean verify` terminó con
+`BUILD SUCCESS` en 23:02 min: 6219 unitarias y 388 integraciones, cero fallos, errores u omitidos.
+Incluye los diez casos de autenticación del mapa, las 18 confirmaciones simultáneas y arquitectura.
+Log completo, reportes XML y cobertura conservados en
+`~/.cache/renaser-e2e/mapa-poder/logs-2026-10-12/`.
+
 ---
 
 ## 6. Decisiones propias de este módulo
 
 - **D-O1 — Mapeo `TipoPreguntaOnboarding` → slot de valor EAV.** El baseline no dice explícitamente qué columna de `respuestas_onboarding` usa cada uno de los 11 tipos de pregunta — es una consecuencia forzada de que el esquema EAV solo tiene 5 slots. Se documentó el mapeo completo en el javadoc de `Respuesta` (TEXTO/AREA_TEXTO/FECHA/SELECCION_UNICA → `valorTexto`, NUMERO → `valorNumero`, ESCALA → `valorEscala`, SELECCION_MULTIPLE → `valorJson`, CASILLA → `valorBooleano`, AUDIO/FIRMA/ARCHIVO → solo media). **No es una regla de negocio inventada en el sentido de CLAUDE.MD §0.6** (no hay una alternativa de negocio distinta posible dado el esquema), pero se señala igual porque nadie del equipo la confirmó explícitamente — si la intención real es otra, es un cambio acotado a `Respuesta.slotEsperado()`.
-- **D-O2 — Este módulo es estrictamente self-service: `usuarioId` == actor.** No existe un mentor/admin actuando "en nombre de" un aprendiz en ningún caso de uso — todos los endpoints usan el `X-Actor-Id` como el dueño del recurso, sin un segundo parámetro de "usuario objetivo". Es la simplificación explícita que pide el encargo ("restringí a 'solo el propio usuario' y documentalo"). Si en el futuro un mentor necesita ver el progreso de onboarding de su aprendiz (para acompañamiento), hace falta un caso de uso nuevo con chequeo de scope de mentor (mismo patrón que `phasecontracts` con `ROLES_PUEDEN_CONSULTAR`) — no está construido.
+- **D-O2 — Este módulo es estrictamente self-service: `usuarioId` == actor.** No existe un mentor/admin actuando "en nombre de" un aprendiz en ningún caso de uso — los endpoints del flujo propio usan el actor de la sesión como dueño del recurso, sin un segundo parámetro de "usuario objetivo" (corrección del 2026-10-10 descrita en §5). Es la simplificación explícita que pide el encargo ("restringí a 'solo el propio usuario' y documentalo"). Si en el futuro un mentor necesita ver el progreso de onboarding de su aprendiz (para acompañamiento), hace falta un caso de uso nuevo con chequeo de scope de mentor (mismo patrón que `phasecontracts` con `ROLES_PUEDEN_CONSULTAR`) — no está construido.
 - **D-O3 — `ObtenerEstadoOnboardingUseCase.obtener()` crea la fila si no existe (no hay un endpoint separado "iniciar onboarding").** El primer `GET /state` de un usuario nuevo inicializa `estado_onboarding` con `EstadoOnboarding.iniciar()`. Alternativa descartada: exigir un `POST /state/start` explícito — no había ninguna señal en el encargo de que hiciera falta ese paso extra, y el criterio "abrir la pantalla arranca el onboarding" es el más simple que no inventa un concepto de negocio nuevo.
 - **D-O4 — `CompletarOnboardingUseCase` es una acción EXPLÍCITA, sin precondición automática.** Ver pregunta abierta Q-O1. `marcarCompletado()` es idempotente (completar dos veces conserva el primer `completadoEn`).
 - **D-O5 — `HitoOnboarding.aceptarHito()` es re-aceptable: cada llamada pisa el timestamp con el momento actual.** No hay confirmación de que "aceptar" deba ser de una sola vez o irreversible — se eligió el comportamiento menos sorprendente (repetir la acción simplemente actualiza cuándo fue la última vez), documentado para que se corrija si el negocio quiere lo contrario (ej. rechazar un segundo intento de aceptar `PACTO_FIRMADO`).

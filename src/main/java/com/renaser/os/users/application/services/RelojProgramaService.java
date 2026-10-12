@@ -7,6 +7,7 @@ import com.renaser.os.users.application.ports.in.participante.ActivateProgramUse
 import com.renaser.os.users.application.ports.in.participante.AvanzarDiaProgramaUseCase;
 import com.renaser.os.users.application.ports.in.participante.ConsultarActivacionProgramaUseCase;
 import com.renaser.os.users.application.ports.out.participante.GuardarAvanceDelRelojPort;
+import com.renaser.os.users.application.ports.out.participante.BloquearActivacionProgramaPort;
 import com.renaser.os.users.application.ports.out.participante.ListarParticipantesConProgramaActivoPort;
 import com.renaser.os.users.application.ports.out.participante.LoadParticipacionProgramaPort;
 import com.renaser.os.users.application.ports.out.participante.SaveParticipacionProgramaPort;
@@ -45,18 +46,21 @@ public class RelojProgramaService
     private final ListarParticipantesConProgramaActivoPort listarParticipantesConProgramaActivoPort;
     private final GuardarAvanceDelRelojPort guardarAvanceDelRelojPort;
     private final Clock clock;
+    private final BloquearActivacionProgramaPort bloquearActivacionProgramaPort;
 
     public RelojProgramaService(RequireActiveUserGuard requireActiveUserGuard,
                                  LoadParticipacionProgramaPort loadParticipacionProgramaPort,
                                  SaveParticipacionProgramaPort saveParticipacionProgramaPort,
                                  ListarParticipantesConProgramaActivoPort listarParticipantesConProgramaActivoPort,
-                                 GuardarAvanceDelRelojPort guardarAvanceDelRelojPort, Clock clock) {
+                                 GuardarAvanceDelRelojPort guardarAvanceDelRelojPort, Clock clock,
+                                 BloquearActivacionProgramaPort bloquearActivacionProgramaPort) {
         this.requireActiveUserGuard = requireActiveUserGuard;
         this.loadParticipacionProgramaPort = loadParticipacionProgramaPort;
         this.saveParticipacionProgramaPort = saveParticipacionProgramaPort;
         this.listarParticipantesConProgramaActivoPort = listarParticipantesConProgramaActivoPort;
         this.guardarAvanceDelRelojPort = guardarAvanceDelRelojPort;
         this.clock = clock;
+        this.bloquearActivacionProgramaPort = bloquearActivacionProgramaPort;
     }
 
     /**
@@ -70,6 +74,9 @@ public class RelojProgramaService
     @Override
     @Transactional
     public ParticipacionPrograma activarPrograma(ActivateProgramCommand command) {
+        // Dos dispositivos podían leer «sin activar» y confirmar fechas distintas con dos 200.
+        // La segunda petición relee la participación después del commit de la primera.
+        bloquearActivacionProgramaPort.porUsuario(command.actorId());
         User actor = requireActiveUserGuard.of(command.actorId());
         ParticipacionPrograma participacion = participacionOFilaNuevaDelPersonal(actor);
         participacion.activarPrograma(command.startDate(), clock);
