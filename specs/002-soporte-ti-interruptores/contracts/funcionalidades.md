@@ -186,3 +186,30 @@ useFuncionalidad('chat.grupos') → { prendida: boolean; aviso: string | null }
 - IA: con un proveedor de prueba que falla, el circuito abre a las 5 fallas, la app recibe 503 / 1013, vuelve tras la
   prueba buena; un apagado manual no lo cierra el circuito.
 - E2E: suite completa de Maestro + mobile-mcp en el emulador, local (regla del dueño).
+
+## 10. Cómo quedó en el backend (agente A, 2026-10-13; D-267)
+
+Lo implementado sigue este contrato con estos desvíos mínimos y agregados, todos aditivos para la app:
+
+- **ETag** de `GET /funcionalidades/mias`: `"v<version>-<huella>"` (no `"v<version>"` a secas). La respuesta depende del
+  rol de quien pide y del circuito de la IA, y ninguno de los dos cambia la versión manual: con la versión sola, un cambio
+  de rol o un circuito que abre devolverían 304 con un estado viejo. Para la app es opaco.
+- **`version`** de `/mias` = versión manual (secuencia global de `funcionalidades_estado`) + `version()` del estado
+  automático (`EstadoAutomaticoDeFuncionalidades`, que implementa el agente B): cambia también cuando el circuito abre o
+  cierra. Las claves `ia.*` apagadas por el circuito figuran en `apagadas` con el aviso automático.
+- **Errores**: además de 503/423/428, el desbloqueo con la contraseña mal responde **401** con
+  `codigo: "CONTRASENA_INCORRECTA"` (la app distingue así una sesión vencida).
+- **§4 sin FK** a `usuarios` en `funcionalidades_estado.actualizado_por` ni en `cambios_auditados.actor_id`: la auditoría
+  no se puede borrar y una FK impediría para siempre la purga de la cuenta (D-243). Se agregó la secuencia
+  `funcionalidades_version_seq` y un CHECK de que solo AUTOMATICO va sin actor; el trigger rechaza también TRUNCATE.
+- **`porRol`** en el `PUT`: se aceptan los siete roles con su nombre de la API, en `true` o `false`; solo los `false` se
+  guardan (la base guarda desvíos). Un rol que no existe es 400.
+- **Auditoría**: `antes`/`despues` de un cambio manual traen `prendidaGlobal`, `porRol` (los siete roles), `apagadaPara` y
+  `aviso`; los desbloqueos traen `despues: { resultado: "OK" | "CONTRASENA_INCORRECTA" }`.
+- **Crítico** (428 sin `X-Reautenticacion`): toda funcionalidad marcada crítica, o cualquier `PUT` que la deje apagada para
+  todos. El token `CAMBIO_CRITICO` se pide con `X-Consola-Token` puesto.
+- **§7** `FuncionalidadCambiadaEvent` suma al final `nombre` y `resumen` («Apagada para Aprendiz»). El push de
+  `OPERACION_PLATAFORMA` sale aunque `notificaciones` esté apagada.
+- **Para el agente B** (`shared.application`): `EstadoAutomaticoDeFuncionalidades` (`apagadaAutomaticamente(clave)`,
+  `version()`, `circuitos()`) y `AuditoriaDePlataforma.registrarCambioAutomatico(...)` para la fila AUTOMATICO.
+  `CircuitoDeIaCambiadoEvent` y su push siguen siendo de B.

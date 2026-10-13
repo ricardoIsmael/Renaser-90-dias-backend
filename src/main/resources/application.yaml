@@ -223,6 +223,16 @@ renaser:
     # true recien cuando el log del modo sombra este limpio en uso real; volver atras es cambiar
     # esta linea, no desplegar codigo.
     mentor-lead-enforcement: ${MENTOR_LEAD_ENFORCEMENT:false}
+  # Spec 002 (D-267): interruptores por funcionalidad y consola Soporte TI. El ESTADO de los interruptores no vive
+  # aca (eso exigiria reiniciar): vive en Postgres y se cambia desde la consola. Esto son solo los tiempos.
+  plataforma:
+    # Respaldo del aviso por Redis: cada instancia relee el estado aunque el aviso no llegue.
+    recarga-cada: ${PLATAFORMA_RECARGA_CADA:PT30S}
+    consola:
+      # La consola se bloquea tras este tiempo sin uso (cada pedido lo renueva) y pide la contrasena (FR-024).
+      inactividad: ${PLATAFORMA_CONSOLA_INACTIVIDAD:PT15M}
+      # Vigencia del token de un solo uso para un cambio critico (FR-008).
+      reautenticacion: ${PLATAFORMA_CONSOLA_REAUTENTICACION:PT5M}
   notifications:
     web-push:
       # La publica va al bundle web; la privada queda solo en el backend. Ambas se generan una

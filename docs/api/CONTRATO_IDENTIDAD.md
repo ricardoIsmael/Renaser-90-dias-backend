@@ -187,7 +187,7 @@ Mapeo de excepción de dominio → HTTP (`shared/web/GlobalExceptionHandler.java
 
 - **Headers:** `X-Actor-Id` (obligatorio, debe ser ADMIN/ALCHEMIST).
 - **Path variable:** `id` = UUID de la solicitud (`AccountRequestId`).
-- **Request body:** opcional (D-265): `{ "role": "TRAINEE" | "TRAINEE_GUIDE" | "MENTOR" | "MENTOR_LEAD" | "ADMIN" | "ALCHEMIST" }`. Sin cuerpo o sin `role`, entra como `TRAINEE` (lo que mandan la app 1.5.0 y el panel de solicitudes). Un rol que no existe → 400.
+- **Request body:** opcional (D-265): `{ "role": "TRAINEE" | "TRAINEE_GUIDE" | "MENTOR" | "MENTOR_LEAD" | "ADMIN" | "ALCHEMIST" }`. Sin cuerpo o sin `role`, entra como `TRAINEE` (lo que mandan la app 1.5.0 y el panel de solicitudes). Un rol que no existe → 400. `IT_SUPPORT` también → 400 y la solicitud sigue pendiente: Soporte TI se asigna solo desde la base (D-267).
 - **Response body:** ninguno.
 - **Código de éxito:** 204 No Content.
 - **Quién puede llamarlo:** ADMIN/ALCHEMIST (`AccountRequest.approve` → `requireManager` → `actor.canManageRoles()`).

@@ -37,6 +37,7 @@ Además de las funcionales, para todo endpoint nuevo:
 - **Test de autorización negativa**: cada endpoint protegido debe tener una prueba que verifique que un rol *sin* permiso recibe **403**, y que un usuario `SUSPENDED` recibe 403 aunque su token sea válido.
 - **Test de que el rol no se puede inyectar**: verificar que mandar `role` en el body de un alta pública no lo cambia (§5.3.3).
 - **Test de reflexión** que falle si un endpoint no declara `@RequiresPermission` ni `@PublicEndpoint`.
+- **Y que declare su funcionalidad** (D-267): `@Funcionalidad("clave")` del catálogo de `plataforma`, o `@SinInterruptor(motivo = …)` si es anti-bloqueo (login, sesión, consola). `FuncionalidadDeclaradaTest` rompe el build si falta o si la clave no existe. Un endpoint de la consola Soporte TI se prueba además con ADMIN y ALQUIMISTA → 403.
 - Antes de cada release: revisar dependencias con vulnerabilidades conocidas.
 
 ### 0.4 Documentar lo que se avanza
@@ -74,6 +75,7 @@ Se registra **aunque el error haya sido de configuración, del entorno o "una to
 - Java 25 (LTS) + Virtual Threads/Structured Concurrency maduros son el motivo técnico real para migrar desde Node/Next si el driver es rendimiento bajo alta concurrencia I/O-bound (llamadas a Postgres, Redis, S3, SMTP y los proveedores OIDC) — no la sintaxis ni el tipado.
 - El dominio actual (Users, Habits, Rocks, Community, Academy, Chat, Calendar, Notifications, Onboarding+IA, RAG, Renasia, Support/Tickets, Phase Contracts, Points/Ranking) mapea de forma natural a **14 módulos** hexagonales. Ver §5.
   > **Actualizado 2026-09-27.** Hoy son 16 módulos de Spring Modulith: los 14 de la tabla de §5, más `mentoring` y `shared` (ver `src/main/java/com/renaser/os/`; `docs/MODULO_RAG.md` ya lo había corregido el 2026-09-14).
+  > **Actualizado 2026-10-13 (D-267).** Son **18**: a los 16 de arriba se sumaron `leadership` (D-241) y `plataforma` (interruptores por funcionalidad, auditoría append-only y la consola del rol Soporte TI; ver §5).
 
 ---
 
@@ -213,6 +215,7 @@ Basado en `docs/FEATURE_*.md` del repo actual:
 | `support` | Support, Tickets | |
 | `points` | Points/Ranking | Consumidor de eventos (`HabitCompletedEvent`, `RockCompletedEvent`…) |
 | `phasecontracts` | Phase Contracts (Pacto de Sangre) | Reglas de "día de firma por fase" → dominio puro |
+| `plataforma` | — (nuevo, spec 002, D-267) | Catálogo de funcionalidades en código, interruptores por rol (estado en Postgres, copia en memoria, aviso por Redis `renaser:funcionalidades`), auditoría append-only y la consola Soporte TI. Los demás módulos usan lo de `shared` (`@Funcionalidad`, `Interruptores`); **todo endpoint nuevo declara `@Funcionalidad("clave")` o `@SinInterruptor(motivo = …)`** (`FuncionalidadDeclaradaTest`), y todo proceso nuevo consulta `ProcesosConInterruptor` |
 | ~~`trainee-profile`~~ | Trainee Profile | ❌ **No es módulo propio.** `TraineeProfile` vive dentro de `users`, igual que los otros 4 perfiles — ver `docs/MODULOS_A_AVANZAR.md` §3 (D-16) |
 
 `shared-kernel` contiene solo lo que de verdad es transversal: `UserId`, `TraineePhase`, reloj (`Clock` inyectable — crítico para testear reglas de "día N del programa" sin esperar al calendario real), y el contrato de eventos base.
@@ -496,6 +499,7 @@ Bajado a un caso real, contra lo que el repo ya implementa hoy (`docs/FEATURE_US
 - **Los 5 roles y sus perfiles**: `ALCHEMIST`/`AlchemistProfile`, `ADMIN`/`AdminProfile`, `MENTOR_LEAD`/(perfil por definir), `MENTOR`/`MentorProfile`, `TRAINEE`/`TraineeProfile`.
   > **Corregido 2026-08-22.** Esta línea decía "los 4 roles" y omitía `MENTOR_LEAD`, contradiciendo la tabla de §5 que sí lo lista. Son **cinco**: Aprendiz, Mentor, Líder de Mentores, Administrador/Operación y Alquimista. Ver `docs/MODULOS_A_AVANZAR.md` §4.1 para el modelo de roles y la pregunta abierta sobre el perfil de `MENTOR_LEAD`.
   > **Corregido 2026-10-13 (D-265).** Son **seis**: se sumó `TRAINEE_GUIDE` (Guía de aprendiz, `GUIA_APRENDIZ` en la base, V97), que hace todo lo del mentor y usa `MentorProfile`. Ningún chequeo pregunta `== MENTOR`: preguntan `UserRole.actuaComoMentor()`.
+  > **Corregido 2026-10-13 (D-267).** Son **siete**: se sumó `IT_SUPPORT` (Soporte TI, `SOPORTE_TI` en la base, V100), la cuenta del dueño-programador que opera la plataforma desde su consola. **Se asigna solo desde la base** (`scripts/soporte-ti/asignar.sql`): ningún endpoint lo da, lo quita, lo invita ni aprueba con él, y Administración no suspende ni elimina esa cuenta. Su permiso `OPERATE_PLATFORM` es exclusivo (`Permission.exclusivoDeSoporteTi()`) y no pasa por el falla-abierto de A-1. `canManageRoles()` sigue siendo ADMIN/ALCHEMIST: también decide quién está en los chats de soporte, y Soporte TI no lee chats privados; que pase los guards de Administración de los servicios queda pendiente (D-267).
 
   `User.id` no lo genera nunca el repositorio: viaja desde el adaptador de autenticación hasta `UserRepositoryPort.save`, y el dominio no inventa identidad propia. Esa regla no cambió; lo que cambió es de dónde sale el UUID.
 - **Auth NO se queda en Supabase.** Renaser OS emite y valida su propia identidad: sesión como **token opaco en Redis** transportado en cookie `HttpOnly`, credenciales propias (`usuarios.hash_contrasena`, `V3`) y login social resuelto por el backend contra Google/Apple/Facebook (`identidades_externas`, `V3`). No hay proveedor externo de identidad. El diseño completo está en [`docs/MODULO_AUTH.md`](docs/MODULO_AUTH.md).

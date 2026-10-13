@@ -15268,3 +15268,50 @@ hacer cumplir el servidor; la app es solo una de las formas de llamar a la API.
 apunta `AWS_S3_BUCKET` a `s3-renaser90dias`, que AWS responde con `AllAccessDisabled`. Con esa configuración no se
 puede subir ninguna foto en local; producción usa otro bucket. Se resolvió con un S3 local para desarrollo
 (`AWS_S3_ENDPOINT` y el servicio `fotos-local` de `docker-compose.yml`, `docs/DESPLIEGUE_Y_CI.md` §1.3).
+
+---
+
+## E-609 · `La madre de cuenta.eliminar no esta en el catalogo` al cargar el catálogo de funcionalidades (back, RESUELTO, 13/10)
+
+**Síntoma literal.** Todas las pruebas que tocaban `plataforma` fallaban con
+`java.lang.NoClassDefFoundError: Could not initialize class …CatalogoDeFuncionalidades`, causado por
+`ExceptionInInitializerError: … IllegalArgumentException: La madre de cuenta.eliminar no esta en el catalogo`.
+
+**Causa real.** La primera versión del catálogo (D-267) sacaba la madre del prefijo de la clave (`chat.grupos` → `chat`).
+La tabla de la spec 002 tiene dos claves con punto cuyo prefijo NO es una funcionalidad: `cuenta.eliminar` y
+`mentor.mi_grupo`. La validación del catálogo (una hija sin madre es un error) hizo explotar la inicialización estática.
+
+**Solución.** La madre es un campo explícito de `DefinicionDeFuncionalidad`; las entradas normales la sacan del prefijo y
+esas dos se declaran raíz (`EntradasDelCatalogo.raiz`). La definición valida que, si hay madre, sea el prefijo.
+
+**Para que no vuelva.** `CatalogoDeFuncionalidadesTest` verifica las 52 claves de la spec y que esas dos sean raíces. **Regla
+general:** una convención de nombres no es un dato; si la spec la rompe una vez, el campo tiene que ser explícito.
+
+---
+
+## E-610 · `invalid accessor method in record … ResultadoDeEvaluacion` (back, RESUELTO, 13/10)
+
+**Síntoma literal.** `[ERROR] …/ResultadoDeEvaluacion.java:[17,41] invalid accessor method in record
+com.renaser.os.plataforma.domain.model.estado.ResultadoDeEvaluacion (return type of accessor method prendida() must match
+the type of record component prendida)`, y en cascada `ResultadoDeEvaluacion cannot be converted to boolean`.
+
+**Causa real.** Una fábrica estática `prendida()` en un record que tiene el componente `boolean prendida`: el compilador
+la toma por el accesor del componente.
+
+**Solución.** La fábrica se llama `sinApagar()`. **Regla general:** en un record, ningún método estático puede llamarse como
+un componente.
+
+---
+
+## E-611 · La prueba del trigger append-only no encontraba el mensaje del rechazo (back, RESUELTO, 13/10)
+
+**Síntoma literal.** `ConsolaSoporteTiIT.auditoriaAppendOnly`: `Expecting throwable message: … to contain: "append-only"`,
+con el mensaje real en la causa: `Caused by: org.postgresql.util.PSQLException: ERROR: cambios_auditados es append-only:
+no se permite UPDATE (spec 002, FR-007)`.
+
+**Causa real.** El trigger funcionaba; `JdbcTemplate` envuelve el `PSQLException` en una `DataAccessException` cuyo mensaje
+no repite el de Postgres.
+
+**Solución.** La prueba mira la causa raíz (`assertThatThrownBy(…).rootCause().hasMessageContaining("append-only")`).
+**Regla general:** para un error que lanza la base (trigger, CHECK), afirmar sobre la causa raíz, no sobre la excepción de
+Spring.
