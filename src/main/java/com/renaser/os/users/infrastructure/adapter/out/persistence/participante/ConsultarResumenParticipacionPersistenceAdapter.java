@@ -290,6 +290,7 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
             case MENTOR -> "MENTOR";
             case TRAINEE_GUIDE -> "GUIA_APRENDIZ";
             case TRAINEE -> "APRENDIZ";
+            case IT_SUPPORT -> "SOPORTE_TI";
         };
     }
 
@@ -455,6 +456,7 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
             case "MENTOR" -> UserRole.MENTOR;
             case "GUIA_APRENDIZ" -> UserRole.TRAINEE_GUIDE;
             case "APRENDIZ" -> UserRole.TRAINEE;
+            case "SOPORTE_TI" -> UserRole.IT_SUPPORT;
             default -> throw new IllegalStateException("Rol de usuario desconocido: " + rolCrudo);
         };
     }

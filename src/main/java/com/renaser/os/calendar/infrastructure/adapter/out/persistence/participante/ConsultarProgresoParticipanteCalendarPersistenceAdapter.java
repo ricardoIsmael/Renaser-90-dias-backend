@@ -42,7 +42,8 @@ class ConsultarProgresoParticipanteCalendarPersistenceAdapter implements Consult
     private static RolUsuario mapearRol(UserRole rol) {
         return switch (rol) {
             case ALCHEMIST -> RolUsuario.ALCHEMIST;
-            case ADMIN -> RolUsuario.ADMIN;
+            // Soporte TI tiene lo de Administración (D-267): en este módulo cuenta como ADMIN.
+            case ADMIN, IT_SUPPORT -> RolUsuario.ADMIN;
             case MENTOR_LEAD -> RolUsuario.MENTOR_LEAD;
             // El guía de aprendiz hace lo mismo que un mentor (D-265): en este módulo cuenta como MENTOR.
             case MENTOR, TRAINEE_GUIDE -> RolUsuario.MENTOR;

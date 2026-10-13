@@ -59,6 +59,8 @@ public interface ConsultarProgresoParticipanteHabitsPort {
         MENTOR,
         /** Guía de aprendiz (D-265). Valor propio: hábitos por rol lo filtra aparte de MENTOR. */
         TRAINEE_GUIDE,
-        TRAINEE
+        TRAINEE,
+        /** Soporte TI (D-267). Valor propio: hábitos por rol compara por el nombre del rol (CatalogoAplicable). */
+        IT_SUPPORT
     }
 }

@@ -405,6 +405,33 @@ class PermissionEnforcementInterceptorTest {
         assertThat(continua).isFalse(); // TRAINEE no tiene MODERATE_WALL: prueba que SI resolvio el actor via header
     }
 
+    // ─── D-267: OPERATE_PLATFORM es estricto ─────────────────────────────────────────
+
+    @Test
+    @DisplayName("D-267: OPERATE_PLATFORM deja pasar solo a IT_SUPPORT; ADMIN, ALCHEMIST, MENTOR, guía, líder y "
+            + "aprendiz reciben 403 aunque su matriz falle abierta (y sin modo sombra para el líder)")
+    void operarLaPlataformaEsEstricto() throws Exception {
+        for (UserRole rol : UserRole.values()) {
+            UUID actorId = actorConRol(rol, UserStatus.ACTIVE);
+
+            boolean continua = ejecutarPreHandle(actorId, "exigeOperarLaPlataforma");
+
+            assertThat(continua).as("%s pasa la consola", rol).isEqualTo(rol == UserRole.IT_SUPPORT);
+            if (rol != UserRole.IT_SUPPORT) {
+                assertThat(ultimaRespuesta.getStatus()).isEqualTo(403);
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("D-267: una cuenta IT_SUPPORT suspendida tampoco pasa la consola")
+    void soporteTiSuspendidoNoPasa() throws Exception {
+        UUID actorId = actorConRol(UserRole.IT_SUPPORT, UserStatus.SUSPENDED);
+
+        assertThat(ejecutarPreHandle(actorId, "exigeOperarLaPlataforma")).isFalse();
+        assertThat(ultimaRespuesta.getStatus()).isEqualTo(403);
+    }
+
     // ─── helpers ────────────────────────────────────────────────────────────────────
 
     private MockHttpServletResponse ultimaRespuesta;
@@ -461,6 +488,10 @@ class PermissionEnforcementInterceptorTest {
 
         @RequiresPermission(Permission.VIEW_MENTOR_CORPS)
         public void exigeVerPadronDeMentores() {
+        }
+
+        @RequiresPermission(Permission.OPERATE_PLATFORM)
+        public void exigeOperarLaPlataforma() {
         }
 
         @PublicEndpoint("prueba")

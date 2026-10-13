@@ -228,7 +228,7 @@ public class AcompanamientoService
      */
     private static boolean esStaff(UserRole rol) {
         return rol.actuaComoMentor() || rol == UserRole.MENTOR_LEAD
-                || rol == UserRole.ADMIN || rol == UserRole.ALCHEMIST;
+                || rol == UserRole.ADMIN || rol == UserRole.ALCHEMIST || rol == UserRole.IT_SUPPORT;
     }
 
     /**

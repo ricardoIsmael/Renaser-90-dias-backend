@@ -93,6 +93,7 @@ public final class User {
     /** Alta por invitacion de un admin, con rol explicito (§5.3.3, InviteAndCreateUser). */
     public static User invite(UserId id, Email email, String fullName, UserRole role, User actor) {
         requireRoleManager(actor);
+        requireNoEsSoporteTi(role);
         return new User(requireId(id), requireEmail(email), Objects.requireNonNull(role, "role es obligatorio"),
                 UserStatus.ACTIVE, requireName(fullName), null, null, null, null, null);
     }
@@ -115,7 +116,27 @@ public final class User {
 
     public void changeRole(UserRole newRole, User actor) {
         requireRoleManager(actor);
-        this.role = Objects.requireNonNull(newRole, "El nuevo rol es obligatorio");
+        if (role == UserRole.IT_SUPPORT) {
+            throw new NotAuthorizedException("Una cuenta Soporte TI no se cambia desde la app");
+        }
+        this.role = requireNoEsSoporteTi(Objects.requireNonNull(newRole, "El nuevo rol es obligatorio"));
+    }
+
+    /**
+     * Soporte TI se asigna SOLO desde la base ({@code scripts/soporte-ti/asignar.sql}, D-267, FR-022): ni invitar, ni
+     * aprobar con ese rol (que pasa por {@link #changeRole}), ni cambiar el rol de alguien a Soporte TI. Es 400 y no
+     * 403: el rol pedido no es uno que la app pueda dar, lo pida quien lo pida.
+     */
+    private static UserRole requireNoEsSoporteTi(UserRole rol) {
+        if (rol == UserRole.IT_SUPPORT) {
+            throw new IllegalArgumentException("El rol Soporte TI no se asigna desde la app");
+        }
+        return rol;
+    }
+
+    /** Si es la cuenta Soporte TI: Administración no la suspende, no la reactiva ni la elimina (D-267). */
+    public boolean esSoporteTi() {
+        return role == UserRole.IT_SUPPORT;
     }
 
     /**

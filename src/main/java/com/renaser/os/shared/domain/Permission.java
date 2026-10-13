@@ -392,7 +392,33 @@ public enum Permission {
      *
      * <p>Roles que lo satisfacen: MENTOR_LEAD, ADMIN, ALCHEMIST.
      */
-    SET_MENTOR_OPERATIONAL_STATUS;
+    SET_MENTOR_OPERATIONAL_STATUS,
+
+    // ---------------------------------------------------------------------------------
+    // plataforma — consola Soporte TI (spec 002, D-267)
+    // ---------------------------------------------------------------------------------
+
+    /**
+     * Operar la plataforma desde la consola Soporte TI: desbloquearla con la contraseña, listar y cambiar los
+     * interruptores de las funcionalidades, leer la auditoría y el estado del circuito de la IA.
+     *
+     * <p>Roles que lo satisfacen: <b>solo IT_SUPPORT activo</b>. Ni ADMIN ni ALCHEMIST (FR-025).
+     *
+     * <p><b>Es exclusivo ({@link #exclusivoDeSoporteTi()}) porque la matriz falla abierta:</b>
+     * {@code UserRole.can()} devuelve {@code true} para MENTOR, TRAINEE_GUIDE, ADMIN y ALCHEMIST (deuda A-1), y un
+     * permiso nuevo pasaría solo para todos ellos. El interceptor lo verifica estricto antes del paso libre, y cada
+     * servicio de la consola repite el guard ({@code GuardiaDeSoporteTi}).
+     */
+    OPERATE_PLATFORM;
+
+    /**
+     * Si este permiso lo tiene solo Soporte TI, sin pasar por el falla-abierto de la matriz (A-1). Lo leen
+     * {@code UserRole.can} y {@code PermissionEnforcementInterceptor}: un permiso exclusivo se niega a cualquier otro
+     * rol aunque su matriz todavía no esté definida.
+     */
+    public boolean exclusivoDeSoporteTi() {
+        return this == OPERATE_PLATFORM;
+    }
 
     /**
      * Si una cuenta SUSPENDIDA sigue teniendo este permiso. Por defecto, no — una cuenta

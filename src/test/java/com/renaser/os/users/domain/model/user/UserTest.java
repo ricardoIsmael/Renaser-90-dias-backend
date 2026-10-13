@@ -75,6 +75,32 @@ class UserTest {
     }
 
     @Test
+    @DisplayName("D-267: nadie da el rol Soporte TI desde la app — ni invitando ni cambiando el rol (400)")
+    void soporteTiNoSeAsignaDesdeLaApp() {
+        User alquimista = User.rehydrate(newId(), new Email("alq@renaser.com"), UserRole.ALCHEMIST,
+                UserStatus.ACTIVE, "Alquimista", null, null, null, null);
+        User target = trainee();
+
+        assertThatThrownBy(() -> User.invite(newId(), new Email("ti@renaser.com"), "TI", UserRole.IT_SUPPORT,
+                adminActor())).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Soporte TI");
+        assertThatThrownBy(() -> target.changeRole(UserRole.IT_SUPPORT, alquimista))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(target.role()).isEqualTo(UserRole.TRAINEE);
+    }
+
+    @Test
+    @DisplayName("D-267: el rol de una cuenta Soporte TI no se cambia desde la app (403)")
+    void soporteTiNoSeQuitaDesdeLaApp() {
+        User soporte = User.rehydrate(newId(), new Email("ti@renaser.com"), UserRole.IT_SUPPORT,
+                UserStatus.ACTIVE, "TI", null, null, null, null);
+
+        assertThatThrownBy(() -> soporte.changeRole(UserRole.ADMIN, adminActor()))
+                .isInstanceOf(NotAuthorizedException.class);
+        assertThat(soporte.role()).isEqualTo(UserRole.IT_SUPPORT);
+        assertThat(soporte.esSoporteTi()).isTrue();
+    }
+
+    @Test
     @DisplayName("un usuario suspendido pierde el acceso")
     void suspendedUserLosesAccess() {
         User user = trainee();
