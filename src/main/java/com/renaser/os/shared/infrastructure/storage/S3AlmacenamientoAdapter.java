@@ -71,11 +71,16 @@ public class S3AlmacenamientoAdapter implements AlmacenamientoPort {
 
     public S3AlmacenamientoAdapter(S3Presigner presigner, S3Client cliente,
                                     @Value("${renaser.storage.s3.bucket}") String bucket,
-                                    @Value("${renaser.storage.s3.region}") String region) {
+                                    @Value("${renaser.storage.s3.region}") String region,
+                                    @Value("${renaser.storage.s3.endpoint:}") String endpoint) {
         this.presigner = presigner;
         this.cliente = cliente;
         this.bucket = bucket;
-        this.urls = S3Utilities.builder().region(Region.of(region)).build();
+        Optional<URI> local = AlmacenamientoS3Config.endpointLocal(endpoint);
+        S3Utilities.Builder utilidades = S3Utilities.builder().region(Region.of(region))
+                .s3Configuration(AlmacenamientoS3Config.configuracionDe(local));
+        local.ifPresent(utilidades::endpoint);
+        this.urls = utilidades.build();
     }
 
     @Override

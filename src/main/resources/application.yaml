@@ -586,6 +586,9 @@ renaser:
     s3:
       bucket: ${AWS_S3_BUCKET:s3-renaser90dias}
       region: ${AWS_REGION:us-east-1}
+      # Solo desarrollo: un S3 compatible local (el servicio `fotos-local` de docker-compose.yml). Vacío en producción:
+      # el SDK usa el S3 de AWS de la región. Ver docs/DESPLIEGUE_Y_CI.md, «Fotos en local».
+      endpoint: ${AWS_S3_ENDPOINT:}
   auth:
     apple:
       auth-key-path: ${APPLE_AUTH_KEY_PATH:}
