@@ -112,6 +112,40 @@ su propio `git worktree`.
 
 ---
 
+### 1.3 Fotos en local (E2E con fotos)
+
+El backend sube y lee fotos por URL firmada de S3. En local no se usa AWS: el servicio `fotos-local` de
+`docker-compose.yml` (RustFS, S3 compatible) hace de S3 en `localhost:9002`. Nunca se apunta un backend local al bucket
+de producción.
+
+1. Levantarlo y crear el bucket (una vez):
+
+   ```bash
+   docker compose --profile fotos-local up -d fotos-local
+   AWS_ACCESS_KEY_ID=renaser-local AWS_SECRET_ACCESS_KEY=renaser-local-secreto \
+     aws --endpoint-url http://localhost:9002 --region us-east-1 s3 mb s3://renaser-local
+   ```
+
+2. Arrancar el backend con estas variables, encima de las de siempre (y **sin** `AWS_PROFILE`, que tiene prioridad
+   sobre las claves en algunos casos):
+
+   | Variable | Valor |
+   |---|---|
+   | `STORAGE_PROVEEDOR` | `s3` |
+   | `AWS_S3_ENDPOINT` | `http://localhost:9002` |
+   | `AWS_S3_BUCKET` | `renaser-local` |
+   | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | `renaser-local` / `renaser-local-secreto` |
+
+3. En el emulador, que su `localhost:9002` llegue al de la máquina (las URL firmadas dicen `localhost:9002` y la firma
+   incluye el host, así que backend y teléfono tienen que usar el mismo):
+
+   ```bash
+   adb reverse tcp:9002 tcp:9002
+   ```
+
+Con `AWS_S3_ENDPOINT` vacío (producción) el SDK va al S3 de AWS como siempre; con valor, usa ese host y rutas
+`/bucket/clave` (`pathStyleAccess`).
+
 ## 2. Cobertura (JaCoCo)
 
 El agente de JaCoCo se engancha en `initialize` y escribe la opción `-javaagent` en la propiedad
