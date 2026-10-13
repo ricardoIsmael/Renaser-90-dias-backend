@@ -2,6 +2,8 @@ package com.renaser.os.calendar.infrastructure.adapter.in.scheduler;
 
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.renaser.os.calendar.application.ports.in.recordatorio.DespacharRecordatoriosUseCase;
+import com.renaser.os.shared.application.Interruptores;
+import com.renaser.os.shared.application.ProcesosConInterruptor;
 import com.renaser.os.shared.domain.Clock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,8 +22,11 @@ class DespacharRecordatoriosScheduler {
 
     private final DespacharRecordatoriosUseCase despacharUseCase;
     private final Clock clock;
+    private final Interruptores interruptores;
 
-    DespacharRecordatoriosScheduler(DespacharRecordatoriosUseCase despacharUseCase, Clock clock) {
+    DespacharRecordatoriosScheduler(DespacharRecordatoriosUseCase despacharUseCase, Clock clock,
+                                    Interruptores interruptores) {
+        this.interruptores = interruptores;
         this.despacharUseCase = despacharUseCase;
         this.clock = clock;
     }
@@ -33,6 +38,9 @@ class DespacharRecordatoriosScheduler {
             lockAtMostFor = "${renaser.scheduling.shedlock.calendar-despachar-recordatorios.lock-at-most-for:PT10M}",
             lockAtLeastFor = "${renaser.scheduling.shedlock.calendar-despachar-recordatorios.lock-at-least-for:PT30S}")
     void ejecutar() {
+        if (ProcesosConInterruptor.saltaEsteTurno(interruptores, "eventos", "calendar.despachar-recordatorios")) {
+            return;
+        }
         int despachados = despacharUseCase.despachar(clock.now());
         if (despachados > 0) {
             log.info("[calendar.DespacharRecordatoriosScheduler] {} recordatorio(s) despachado(s)", despachados);

@@ -80,7 +80,7 @@ class NotificacionServiceTest {
         service = new NotificacionService(loadNotificacionPort, saveNotificacionPort, loadPreferenciasPort,
                 loadTokenPushPort, pushPort, desactivarTokenPushPort,
                 new ActorNotificacionesGuard(userSummaryFinder), CLOCK,
-                transactionManager);
+                transactionManager, new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido());
         lenient().when(userSummaryFinder.findById(any())).thenAnswer(inv -> Optional.of(
                 new UserSummary(inv.getArgument(0), "Test", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
         lenient().when(saveNotificacionPort.guardar(any())).thenAnswer(inv -> {
@@ -107,6 +107,21 @@ class NotificacionServiceTest {
 
         assertThat(resultado).isPresent();
         verify(saveNotificacionPort).guardar(any());
+    }
+
+    @Test
+    @DisplayName("spec 002: con «notificaciones» apagada, emitir lanza ProcesoPospuestoException (el outbox reintenta) "
+            + "y no guarda nada")
+    void conLasNotificacionesApagadasSePospone() {
+        NotificacionService apagado = new NotificacionService(loadNotificacionPort, saveNotificacionPort,
+                loadPreferenciasPort, loadTokenPushPort, pushPort, desactivarTokenPushPort,
+                new ActorNotificacionesGuard(userSummaryFinder), CLOCK, transactionManager,
+                com.renaser.os.shared.application.InterruptoresDePrueba.conApagadas("notificaciones"));
+
+        assertThatThrownBy(() -> apagado.emitir(new EmitirNotificacionCommand(usuario(),
+                TipoNotificacion.SANTUARIO_ROTO, "T", "C", null, null)))
+                .isInstanceOf(com.renaser.os.shared.domain.ProcesoPospuestoException.class);
+        verify(saveNotificacionPort, never()).guardar(any());
     }
 
     @Test

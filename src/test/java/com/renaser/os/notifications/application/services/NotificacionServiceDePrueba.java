@@ -29,6 +29,6 @@ public final class NotificacionServiceDePrueba {
         return new NotificacionService(puertos.loadNotificacionPort(), puertos.saveNotificacionPort(),
                 puertos.loadPreferenciasPort(), puertos.loadTokenPushPort(), puertos.pushPort(),
                 puertos.desactivarTokenPushPort(), new ActorNotificacionesGuard(puertos.userSummaryFinder()), clock,
-                puertos.transactionManager());
+                puertos.transactionManager(), new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido());
     }
 }

@@ -28,9 +28,20 @@ class GenerarTracksDelDiaSchedulerTest {
         GenerarJornadasDelDiaUseCase casoDeUso = mock(GenerarJornadasDelDiaUseCase.class);
         when(casoDeUso.generarLasQueYaEmpezaron()).thenReturn(new ResultadoDelBarrido(3, 1, 0));
 
-        new GenerarTracksDelDiaScheduler(casoDeUso).ejecutar();
+        new GenerarTracksDelDiaScheduler(casoDeUso, new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido()).ejecutar();
 
         verify(casoDeUso).generarLasQueYaEmpezaron();
+    }
+
+    @Test
+    @DisplayName("spec 002: con los hábitos apagados no arma el día; el barrido de la hora siguiente se pone al día")
+    void conLosHabitosApagadosNoArmaElDia() {
+        GenerarJornadasDelDiaUseCase casoDeUso = mock(GenerarJornadasDelDiaUseCase.class);
+
+        new GenerarTracksDelDiaScheduler(casoDeUso,
+                com.renaser.os.shared.application.InterruptoresDePrueba.conApagadas("habitos")).ejecutar();
+
+        org.mockito.Mockito.verifyNoInteractions(casoDeUso);
     }
 
     @Test

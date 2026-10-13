@@ -1,6 +1,8 @@
 package com.renaser.os.mentoring.infrastructure.adapter.in.scheduler;
 
 import com.renaser.os.mentoring.application.ports.in.DetectarAvisosUseCase;
+import com.renaser.os.shared.application.Interruptores;
+import com.renaser.os.shared.application.ProcesosConInterruptor;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,8 +25,10 @@ class DetectarAvisosScheduler {
     private static final Logger log = LoggerFactory.getLogger(DetectarAvisosScheduler.class);
 
     private final DetectarAvisosUseCase detectarAvisos;
+    private final Interruptores interruptores;
 
-    DetectarAvisosScheduler(DetectarAvisosUseCase detectarAvisos) {
+    DetectarAvisosScheduler(DetectarAvisosUseCase detectarAvisos, Interruptores interruptores) {
+        this.interruptores = interruptores;
         this.detectarAvisos = detectarAvisos;
     }
 
@@ -33,6 +37,9 @@ class DetectarAvisosScheduler {
             lockAtMostFor = "${renaser.scheduling.shedlock.mentoring-detectar-avisos.lock-at-most-for:PT20M}",
             lockAtLeastFor = "${renaser.scheduling.shedlock.mentoring-detectar-avisos.lock-at-least-for:PT30S}")
     public void ejecutar() {
+        if (ProcesosConInterruptor.saltaEsteTurno(interruptores, "mentor.mi_grupo", "mentoring.avisos-de-acompanamiento")) {
+            return;
+        }
         int publicados = detectarAvisos.detectar();
         if (publicados > 0) {
             log.info("[mentoring.DetectarAvisosScheduler] {} aviso(s) de acompanamiento publicado(s)", publicados);

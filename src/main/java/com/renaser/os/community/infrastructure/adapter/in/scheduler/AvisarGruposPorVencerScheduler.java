@@ -1,6 +1,8 @@
 package com.renaser.os.community.infrastructure.adapter.in.scheduler;
 
 import com.renaser.os.community.application.ports.in.celula.DetectarGruposPorVencerUseCase;
+import com.renaser.os.shared.application.Interruptores;
+import com.renaser.os.shared.application.ProcesosConInterruptor;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,8 +30,10 @@ class AvisarGruposPorVencerScheduler {
     private static final Logger log = LoggerFactory.getLogger(AvisarGruposPorVencerScheduler.class);
 
     private final DetectarGruposPorVencerUseCase detectar;
+    private final Interruptores interruptores;
 
-    AvisarGruposPorVencerScheduler(DetectarGruposPorVencerUseCase detectar) {
+    AvisarGruposPorVencerScheduler(DetectarGruposPorVencerUseCase detectar, Interruptores interruptores) {
+        this.interruptores = interruptores;
         this.detectar = detectar;
     }
 
@@ -38,6 +42,9 @@ class AvisarGruposPorVencerScheduler {
             lockAtMostFor = "${renaser.scheduling.shedlock.community-avisar-grupos-por-vencer.lock-at-most-for:PT10M}",
             lockAtLeastFor = "${renaser.scheduling.shedlock.community-avisar-grupos-por-vencer.lock-at-least-for:PT30S}")
     public void ejecutar() {
+        if (ProcesosConInterruptor.saltaEsteTurno(interruptores, "admin.grupos", "community.grupos-por-vencer")) {
+            return;
+        }
         int avisados = detectar.avisarDeLosQueVencen();
         if (avisados > 0) {
             log.info("[community.AvisarGruposPorVencerScheduler] {} grupo(s) por vencer", avisados);

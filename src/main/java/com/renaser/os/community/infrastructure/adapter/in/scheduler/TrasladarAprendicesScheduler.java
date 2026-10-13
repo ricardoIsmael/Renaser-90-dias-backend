@@ -1,6 +1,8 @@
 package com.renaser.os.community.infrastructure.adapter.in.scheduler;
 
 import com.renaser.os.community.application.ports.in.acompanamiento.TrasladarAprendicesUseCase;
+import com.renaser.os.shared.application.Interruptores;
+import com.renaser.os.shared.application.ProcesosConInterruptor;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,9 +41,12 @@ class TrasladarAprendicesScheduler {
 
     private final TrasladarAprendicesUseCase trasladarAprendices;
     private final int tamanoLote;
+    private final Interruptores interruptores;
 
     TrasladarAprendicesScheduler(TrasladarAprendicesUseCase trasladarAprendices,
-                                  @Value("${renaser.scheduling.traslado-aprendices.tamano-lote:200}") int tamanoLote) {
+                                  @Value("${renaser.scheduling.traslado-aprendices.tamano-lote:200}") int tamanoLote,
+                                 Interruptores interruptores) {
+        this.interruptores = interruptores;
         this.trasladarAprendices = trasladarAprendices;
         this.tamanoLote = tamanoLote;
     }
@@ -51,6 +56,9 @@ class TrasladarAprendicesScheduler {
             lockAtMostFor = "${renaser.scheduling.shedlock.community-trasladar-aprendices.lock-at-most-for:PT20M}",
             lockAtLeastFor = "${renaser.scheduling.shedlock.community-trasladar-aprendices.lock-at-least-for:PT30S}")
     public void ejecutar() {
+        if (ProcesosConInterruptor.saltaEsteTurno(interruptores, "admin.grupos", "community.trasladar-aprendices")) {
+            return;
+        }
         int movidos = trasladarAprendices.procesarLote(tamanoLote);
         if (movidos > 0) {
             log.info("[community.TrasladarAprendicesScheduler] {} aprendiz(ces) ubicado(s)", movidos);

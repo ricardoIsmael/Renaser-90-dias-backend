@@ -21,7 +21,7 @@ class VerdugoIgnoradoSchedulerTest {
     void a23_55UtcResuelveLosPendientesDelDiaUtcEnCurso() {
         List<LocalDate> pedidos = new ArrayList<>();
         var scheduler = new VerdugoIgnoradoScheduler(pedidos::add,
-                FixedClock.at(Instant.parse("2026-10-06T23:55:00Z")));
+                FixedClock.at(Instant.parse("2026-10-06T23:55:00Z")), new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido());
 
         scheduler.resolverPendientesDeHoy();
 

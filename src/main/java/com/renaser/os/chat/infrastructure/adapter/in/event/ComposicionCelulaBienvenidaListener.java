@@ -2,6 +2,8 @@ package com.renaser.os.chat.infrastructure.adapter.in.event;
 
 import com.renaser.os.chat.application.ports.in.conversacion.DarBienvenidaEnGrupoUseCase;
 import com.renaser.os.community.api.ComposicionDeCelulaCambiadaEvent;
+import com.renaser.os.shared.application.Interruptores;
+import com.renaser.os.shared.application.ProcesosConInterruptor;
 import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Component;
 
@@ -18,13 +20,20 @@ import org.springframework.stereotype.Component;
 class ComposicionCelulaBienvenidaListener {
 
     private final DarBienvenidaEnGrupoUseCase darBienvenidas;
+    private final Interruptores interruptores;
 
-    ComposicionCelulaBienvenidaListener(DarBienvenidaEnGrupoUseCase darBienvenidas) {
+    ComposicionCelulaBienvenidaListener(DarBienvenidaEnGrupoUseCase darBienvenidas, Interruptores interruptores) {
+        this.interruptores = interruptores;
         this.darBienvenidas = darBienvenidas;
     }
 
     @ApplicationModuleListener
     void on(ComposicionDeCelulaCambiadaEvent event) {
+        // Spec 002: con la bienvenida apagada, salta; con el chat apagado, se pospone (el outbox la reentrega).
+        if (ProcesosConInterruptor.saltaEsteTurno(interruptores, "admin.bienvenida", "chat.bienvenida-en-grupo")) {
+            return;
+        }
+        ProcesosConInterruptor.posponerSiEstaApagada(interruptores, "chat", "chat.bienvenida-en-grupo");
         darBienvenidas.darBienvenidas(event.celulaId());
     }
 }
