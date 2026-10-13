@@ -190,10 +190,37 @@ class RankingServiceTest {
     }
 
     @Test
-    @DisplayName("el corte diario genera los cuatro rankings, KILOMETROS incluido")
-    void elCorteDiarioIncluyeKilometros() {
-        assertThat(TipoRanking.CON_CORTE_DIARIO)
-                .containsExactly(TipoRanking.LEAGUE, TipoRanking.CELL, TipoRanking.GENERAL, TipoRanking.KILOMETROS);
+    @DisplayName("el corte diario genera los cinco rankings, KILOMETROS y GIMNASIO incluidos")
+    void elCorteDiarioIncluyeKilometrosYGimnasio() {
+        assertThat(TipoRanking.CON_CORTE_DIARIO).containsExactly(TipoRanking.LEAGUE, TipoRanking.CELL,
+                TipoRanking.GENERAL, TipoRanking.KILOMETROS, TipoRanking.GIMNASIO);
+    }
+
+    /** D-266: GIMNASIO ordena por días cumplidos desde el Día 1 (una consulta en lote) y deja al fondo con 0. */
+    @Test
+    @DisplayName("GIMNASIO ordena por días de gimnasio, en lote, y deja al fondo con 0 a quien no fue")
+    void gimnasioOrdenaPorDias() {
+        UserId constante = id();
+        UserId ocasional = id();
+        UserId nada = id();
+        when(loadRankingCandidatosPort.aprendicesActivosConPuntaje()).thenReturn(List.of(
+                new CandidatoRanking(nada, "Nada", 900, BigDecimal.valueOf(100)),
+                new CandidatoRanking(ocasional, "Ocasional", 0, BigDecimal.ZERO),
+                new CandidatoRanking(constante, "Constante", 0, BigDecimal.ZERO)));
+        when(medicionAcumuladaFinder.diasDeGimnasio(anyCollection(), eq(FECHA)))
+                .thenReturn(Map.of(constante, 12, ocasional, 3));
+
+        service.generar(TipoRanking.GIMNASIO, FECHA);
+
+        ArgumentCaptor<List<PosicionRanking>> captor = ArgumentCaptor.forClass(List.class);
+        verify(saveRankingSnapshotPort).reemplazar(eq(TipoRanking.GIMNASIO), eq(FECHA), captor.capture());
+        assertThat(captor.getValue()).extracting(PosicionRanking::participanteId)
+                .containsExactly(constante, ocasional, nada);
+        assertThat(captor.getValue()).extracting(PosicionRanking::puntaje)
+                .usingElementComparator(BigDecimal::compareTo)
+                .containsExactly(BigDecimal.valueOf(12), BigDecimal.valueOf(3), BigDecimal.ZERO);
+        verify(medicionAcumuladaFinder, times(1)).diasDeGimnasio(anyCollection(), eq(FECHA));
+        verifyNoInteractions(porcentajeHabitosFinder, porcentajeRocasFinder, porcentajeCursosFinder);
     }
 
     @Test

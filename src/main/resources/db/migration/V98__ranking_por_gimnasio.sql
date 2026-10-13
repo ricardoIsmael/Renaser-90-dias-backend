@@ -1,0 +1,23 @@
+-- V98 — Ranking por días de gimnasio (D-266, pedido del dueño del 2026-10-13).
+--
+-- Que problema resuelve
+-- ---------------------
+-- El dueño pidió activar el hábito de gimnasio y que salga en el ranking de Comunidad como el de
+-- kilómetros: los días que cada aprendiz activo fue al gimnasio desde su Día 1. El corte diario vive
+-- en `ranking_aprendices`, cuyo `tipo` es el enum `tipo_ranking`. Un tipo nuevo necesita su valor.
+--
+-- Por que un valor mas del enum y no una tabla ni una columna
+-- ----------------------------------------------------------
+-- Igual que KILOMETROS (V85): la tabla ya tiene fecha del corte, participante, posición y
+-- `puntaje numeric(10,2)` (acá, días enteros). La consulta, la limpieza y la caché se reusan tal cual.
+--
+-- Por que este nombre
+-- -------------------
+-- `GIMNASIO`, en español como los demás valores. Su espejo es `TipoRanking.GIMNASIO`, mapeado en
+-- `RankingPersistenceMapper` con un `switch` exhaustivo.
+--
+-- Lo que NO hace
+-- --------------
+-- No escribe cortes (el primero lo genera el barrido de las 05:05 UTC) ni toca filas existentes. Va
+-- sola, sin otra sentencia que use el valor nuevo, como V46, V49, V59, V60 y V85.
+ALTER TYPE renaser.tipo_ranking ADD VALUE IF NOT EXISTS 'GIMNASIO';

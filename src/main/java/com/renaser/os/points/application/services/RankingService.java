@@ -80,6 +80,8 @@ public class RankingService implements ConsultarRankingUseCase, GenerarSnapshotR
             // D-226: km acumulados desde el Dia 1 hasta el dia del corte, entre los mismos candidatos
             // (todos los aprendices activos). Una consulta en lote.
             case KILOMETROS -> medicionAcumuladaFinder.kilometrosAcumulados(idsDe(candidatos), fecha);
+            // D-266: días de gimnasio desde el Día 1, entre los mismos candidatos. Una consulta en lote.
+            case GIMNASIO -> enDecimales(medicionAcumuladaFinder.diasDeGimnasio(idsDe(candidatos), fecha));
             default -> Map.of();
         };
         List<PosicionRanking> posiciones = ordenarYNumerar(tipo, fecha, candidatos, puntajesCalculados);
@@ -94,6 +96,13 @@ public class RankingService implements ConsultarRankingUseCase, GenerarSnapshotR
      * la formula vive en el dominio ({@link PuntajeGeneral}) y lo unico que se resuelve en
      * lote es el dato crudo de cada modulo.
      */
+    /** Los días (enteros) como el puntaje {@code numeric} del corte. */
+    private static Map<UserId, BigDecimal> enDecimales(Map<UserId, Integer> dias) {
+        Map<UserId, BigDecimal> puntajes = new java.util.HashMap<>();
+        dias.forEach((id, n) -> puntajes.put(id, BigDecimal.valueOf(n)));
+        return puntajes;
+    }
+
     /** Los ids, en el mismo orden, para las consultas EN LOTE de los finders (D-43: nunca una por
      * participante — ese bucle fue el incidente de "Too many database connections opened"). */
     private static List<UserId> idsDe(List<CandidatoRanking> candidatos) {
@@ -194,6 +203,8 @@ public class RankingService implements ConsultarRankingUseCase, GenerarSnapshotR
             // D-226: quien nunca registro km va al fondo con cero, como en CELL y GENERAL. El desempate
             // de `ordenarYNumerar` (por id) deja estable el orden entre los que tienen cero.
             case KILOMETROS -> puntajesCalculados.getOrDefault(candidato.participanteId(), BigDecimal.ZERO);
+            // D-266: quien nunca fue al gimnasio va al fondo con cero, como en KILOMETROS.
+            case GIMNASIO -> puntajesCalculados.getOrDefault(candidato.participanteId(), BigDecimal.ZERO);
             case COHORT -> throw new UnsupportedOperationException(unsupportedMessage(tipo));
         };
     }
