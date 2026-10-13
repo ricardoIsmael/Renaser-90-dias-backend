@@ -45,7 +45,23 @@ public enum TipoNotificacion {
      * que trasladar a quien terminó la bienvenida (al administrador y al líder), o un grupo en curso
      * no tiene mentor (al líder).
      */
-    ARMADO_DE_GRUPOS;
+    ARMADO_DE_GRUPOS,
+
+    /**
+     * V102 (D-267, spec 002): Soporte TI cambió el interruptor de una funcionalidad. Le llega a Soporte TI siempre, y al
+     * Admin y al Alquimista si es crítica o quedó apagada para todos. No se pospone con las notificaciones apagadas
+     * ({@link #seEntregaConLasNotificacionesApagadas()}).
+     */
+    OPERACION_PLATAFORMA;
+
+    /**
+     * Si este aviso sale aunque Soporte TI haya apagado la funcionalidad {@code notificaciones} (spec 002). Solo el de
+     * operación de la plataforma: es el que le cuenta a Soporte TI, al Admin y al Alquimista qué se apagó —incluido el
+     * apagado de las propias notificaciones—; posponerlo sería no enterarse.
+     */
+    public boolean seEntregaConLasNotificacionesApagadas() {
+        return this == OPERACION_PLATAFORMA;
+    }
 
     /**
      * Si el aviso se ve en la campana de la app (D-221). Los mensajes de chat no: el chat tiene sus

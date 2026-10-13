@@ -122,6 +122,10 @@ class NotificacionServiceTest {
                 TipoNotificacion.SANTUARIO_ROTO, "T", "C", null, null)))
                 .isInstanceOf(com.renaser.os.shared.domain.ProcesoPospuestoException.class);
         verify(saveNotificacionPort, never()).guardar(any());
+
+        // El aviso de operación de la plataforma sale igual: es el que cuenta que se apagaron (D-267).
+        assertThat(apagado.emitir(new EmitirNotificacionCommand(usuario(), TipoNotificacion.OPERACION_PLATAFORMA,
+                "Soporte TI", "Notificaciones: Apagada para todos.", null, null))).isPresent();
     }
 
     @Test

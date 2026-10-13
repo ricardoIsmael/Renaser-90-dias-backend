@@ -109,7 +109,10 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
     public Optional<Notificacion> emitir(EmitirNotificacionCommand command, EntregaPush entregaPush) {
         // Spec 002: lo llaman solo los oyentes de eventos de otros modulos. Con las notificaciones apagadas, el oyente
         // falla a proposito y el outbox lo reentrega cada 5 min hasta que se prendan; la fila es idempotente (C-7).
-        ProcesosConInterruptor.posponerSiEstaApagada(interruptores, CLAVE_NOTIFICACIONES, "notifications.emitir");
+        // El aviso de operacion de la plataforma sale igual: es el que cuenta que se apagaron (D-267).
+        if (!command.tipo().seEntregaConLasNotificacionesApagadas()) {
+            ProcesosConInterruptor.posponerSiEstaApagada(interruptores, CLAVE_NOTIFICACIONES, "notifications.emitir");
+        }
         boolean habilitada = loadPreferenciasPort.habilitadaPara(command.usuarioId(), command.tipo())
                 .orElse(PreferenciaNotificacion.DEFAULT_HABILITADA);
         if (!habilitada) {

@@ -232,7 +232,7 @@ class ConsolaSoporteTiIT {
         assertThatThrownBy(() -> jdbc.update("DELETE FROM renaser.cambios_auditados WHERE id = ?", id))
                 .rootCause().hasMessageContaining("append-only");
 
-        HttpResponse<String> auditoria = pedidos.enviar("GET", "/api/v1/soporte-ti/auditoria?clave=chat.audio&size=10",
+        HttpResponse<String> auditoria = pedidos.enviar("GET", "/api/v1/soporte-ti/auditoria?clave=chat.audio&size=10&actor=" + soporte,
                 sesion, null, consola);
         assertThat(auditoria.statusCode()).isEqualTo(200);
         JsonNode primera = pedidos.json(auditoria).get("contenido").get(0);
@@ -245,6 +245,34 @@ class ConsolaSoporteTiIT {
         assertThat(primera.get("despues").has("aviso")).isTrue();
         assertThat(pedidos.json(auditoria).get("pagina").asInt()).isZero();
         assertThat(pedidos.json(auditoria).get("total").asLong()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("un cambio crítico avisa por push a Soporte TI, al Admin y al Alquimista; uno que no lo es, solo a "
+            + "Soporte TI (FR-008)")
+    void avisaPorPush() throws Exception {
+        UUID soporte = pedidos.usuario("SOPORTE_TI");
+        UUID admin = pedidos.usuario("ADMIN");
+        String sesion = pedidos.sesionDe(soporte);
+        String consola = pedidos.desbloquear(sesion);
+
+        pedidos.enviar("PUT", "/api/v1/soporte-ti/funcionalidades/chat.audio", sesion,
+                cambio(true, Map.of("TRAINEE", false), null, 0), Map.of("X-Consola-Token", consola));
+        pedidos.esperarElOutbox(inicio);
+        assertThat(avisosDePlataforma(soporte)).isEqualTo(1);
+        assertThat(avisosDePlataforma(admin)).as("no crítico: el Admin no se entera").isZero();
+
+        String reautenticacion = pedidos.reautenticar(sesion, consola);
+        pedidos.enviar("PUT", "/api/v1/soporte-ti/funcionalidades/muro", sesion, cambio(false, Map.of(), null, 0),
+                Map.of("X-Consola-Token", consola, "X-Reautenticacion", reautenticacion));
+        pedidos.esperarElOutbox(inicio);
+        assertThat(avisosDePlataforma(soporte)).isEqualTo(2);
+        assertThat(avisosDePlataforma(admin)).as("crítico: el Admin se entera").isEqualTo(1);
+    }
+
+    private int avisosDePlataforma(UUID usuario) {
+        return jdbc.queryForObject("SELECT count(*) FROM renaser.notificaciones WHERE usuario_id = ? "
+                + "AND tipo = 'OPERACION_PLATAFORMA'", Integer.class, usuario);
     }
 
     @Test
