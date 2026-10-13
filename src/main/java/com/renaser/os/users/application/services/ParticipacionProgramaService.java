@@ -67,7 +67,7 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
      * opcional de "seguimiento personal" de staff.
      */
     private static final Set<UserRole> ROLES_CON_SEGUIMIENTO_OPCIONAL =
-            EnumSet.of(UserRole.MENTOR, UserRole.MENTOR_LEAD, UserRole.ADMIN, UserRole.ALCHEMIST);
+            EnumSet.of(UserRole.MENTOR, UserRole.TRAINEE_GUIDE, UserRole.MENTOR_LEAD, UserRole.ADMIN, UserRole.ALCHEMIST);
 
     private static final Logger log = LoggerFactory.getLogger(ParticipacionProgramaService.class);
 
@@ -245,12 +245,13 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
     public PaginaTrainees listar(ListTraineesCommand command) {
         requireAdminGuard.requireAdminActivo(command.actorId());
         var contenido = consultarResumenParticipacionPort.listarAprendices(command.page() * command.size(),
-                        command.size(), command.busqueda(), command.soloSinGrupo()).stream()
+                        command.size(), command.busqueda(), command.soloSinGrupo(), command.rol()).stream()
                 .map(resumen -> resumen.conBorradoProgramado(plazoDeGracia))
                 .toList();
         // El total se cuenta CON los mismos filtros: si contara el padron entero, la pantalla
         // diria "1 de 340" y el paginador ofreceria paginas que no existen.
-        long total = consultarResumenParticipacionPort.contarAprendices(command.busqueda(), command.soloSinGrupo());
+        long total = consultarResumenParticipacionPort.contarAprendices(command.busqueda(), command.soloSinGrupo(),
+                command.rol());
         return new PaginaTrainees(contenido, total, command.page(), command.size());
     }
 

@@ -322,8 +322,9 @@ class HabitoAdminServiceTest {
     @DisplayName("los roles elegibles salen del sistema, del aprendiz al alquimista, con su nombre")
     void rolesElegibles() {
         assertThat(service.rolesElegibles(admin)).extracting(RolElegible::codigo)
-                .containsExactly("TRAINEE", "MENTOR", "MENTOR_LEAD", "ADMIN", "ALCHEMIST");
-        assertThat(service.rolesElegibles(admin).get(2).nombre()).isEqualTo("Líder de mentores");
+                .containsExactly("TRAINEE", "TRAINEE_GUIDE", "MENTOR", "MENTOR_LEAD", "ADMIN", "ALCHEMIST");
+        assertThat(service.rolesElegibles(admin).get(1).nombre()).isEqualTo("Guía de aprendiz");
+        assertThat(service.rolesElegibles(admin).get(3).nombre()).isEqualTo("Líder de mentores");
         assertThatThrownBy(() -> service.rolesElegibles(mentor)).isInstanceOf(NotAuthorizedException.class);
     }
 

@@ -318,7 +318,7 @@ public class EvidenciaService implements RegistrarEvidenciaPort, ConsultarEviden
             UserId deQuien = participanteId != null ? participanteId : actor.id();
             return new FiltroEvidencia(deQuien, estado, tipoDestino, desde, hasta);
         }
-        if (actor.role() == UserRole.MENTOR) {
+        if (actor.role().actuaComoMentor()) {
             /*
              * Autoconsulta primero. Un mentor tambien puede cursar el programa (D-07), y hasta
              * ahora no tenia ninguna forma de ver su propia evidencia: sin filtro se le exigia
@@ -403,7 +403,7 @@ public class EvidenciaService implements RegistrarEvidenciaPort, ConsultarEviden
             return;
         }
         UserSummary actor = requireActorActivo(actorId);
-        if (actor.role() == UserRole.MENTOR) {
+        if (actor.role().actuaComoMentor()) {
             requireMentorAsignado(actorId, evidencia.participanteId());
             return;
         }

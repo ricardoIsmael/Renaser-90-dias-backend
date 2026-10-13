@@ -76,7 +76,7 @@ public class TicketMentorService implements AbrirTicketMentorUseCase, ResponderT
     @Override
     @Transactional
     public TicketMentor responder(ResponderTicketMentorCommand command) {
-        requireRol(command.actorId(), UserRole.MENTOR, "Solo el mentor asignado puede responder un ticket");
+        requireActuaComoMentor(command.actorId(), "Solo el mentor asignado puede responder un ticket");
         TicketMentor ticket = requireTicket(command.ticketId());
         requireMentorAsignado(command.actorId(), ticket);
         ticket.responder(command.respuesta(), command.actorId(), clock);
@@ -88,7 +88,7 @@ public class TicketMentorService implements AbrirTicketMentorUseCase, ResponderT
     @Override
     @Transactional
     public TicketMentor guardar(GuardarEnBibliotecaCommand command) {
-        requireRol(command.actorId(), UserRole.MENTOR, "Solo el mentor asignado puede guardar en la biblioteca");
+        requireActuaComoMentor(command.actorId(), "Solo el mentor asignado puede guardar en la biblioteca");
         TicketMentor ticket = requireTicket(command.ticketId());
         requireMentorAsignado(command.actorId(), ticket);
         ticket.guardarEnBiblioteca();
@@ -98,7 +98,7 @@ public class TicketMentorService implements AbrirTicketMentorUseCase, ResponderT
     @Override
     public List<String> buscar(BuscarBibliotecaCommand command) {
         UserSummary actor = requireActor(command.actorId());
-        if (actor.role() != UserRole.TRAINEE && actor.role() != UserRole.MENTOR) {
+        if (actor.role() != UserRole.TRAINEE && !actor.role().actuaComoMentor()) {
             throw new NotAuthorizedException("Solo un aprendiz o un mentor pueden buscar en la biblioteca");
         }
         return buscarBibliotecaPort.buscar(command.query(), LIBRARY_SEARCH_COUNT).stream()
@@ -114,7 +114,7 @@ public class TicketMentorService implements AbrirTicketMentorUseCase, ResponderT
         if (actor.role() == UserRole.TRAINEE) {
             return paginar(loadTicketMentorPort.porParticipante(actorId, cursor, PAGE_SIZE + 1));
         }
-        if (actor.role() == UserRole.MENTOR) {
+        if (actor.role().actuaComoMentor()) {
             return paginar(loadTicketMentorPort.todos(cursor, PAGE_SIZE + 1));
         }
         throw new NotAuthorizedException("Solo un aprendiz o un mentor pueden listar estos tickets");
@@ -141,6 +141,14 @@ public class TicketMentorService implements AbrirTicketMentorUseCase, ResponderT
     private void requireRol(UserId actorId, UserRole requerido, String mensaje) {
         UserSummary actor = requireActor(actorId);
         if (actor.role() != requerido) {
+            throw new NotAuthorizedException(mensaje);
+        }
+    }
+
+    /** MENTOR o GUÍA DE APRENDIZ (D-265: el guía hace lo mismo que el mentor). */
+    private void requireActuaComoMentor(UserId actorId, String mensaje) {
+        UserSummary actor = requireActor(actorId);
+        if (!actor.role().actuaComoMentor()) {
             throw new NotAuthorizedException(mensaje);
         }
     }

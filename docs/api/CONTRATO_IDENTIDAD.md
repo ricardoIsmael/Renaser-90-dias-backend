@@ -187,12 +187,12 @@ Mapeo de excepción de dominio → HTTP (`shared/web/GlobalExceptionHandler.java
 
 - **Headers:** `X-Actor-Id` (obligatorio, debe ser ADMIN/ALCHEMIST).
 - **Path variable:** `id` = UUID de la solicitud (`AccountRequestId`).
-- **Request body:** ninguno.
+- **Request body:** opcional (D-265): `{ "role": "TRAINEE" | "TRAINEE_GUIDE" | "MENTOR" | "MENTOR_LEAD" | "ADMIN" | "ALCHEMIST" }`. Sin cuerpo o sin `role`, entra como `TRAINEE` (lo que mandan la app 1.5.0 y el panel de solicitudes). Un rol que no existe → 400.
 - **Response body:** ninguno.
 - **Código de éxito:** 204 No Content.
 - **Quién puede llamarlo:** ADMIN/ALCHEMIST (`AccountRequest.approve` → `requireManager` → `actor.canManageRoles()`).
 - **Errores:** 404 `"Solicitud no encontrada: <id>"`; 403 `"Solo ADMIN/ALCHEMIST deciden solicitudes de alta"`; **409** `"La solicitud ya fue decidida: <status>"` si ya estaba `APPROVED`/`REJECTED` (`requirePending()` → `IllegalStateException`).
-- **Efecto colateral, en UNA sola transacción:** crea el `User` (fuerza rol `TRAINEE`), crea la fila de `ParticipacionPrograma` (día 0, `programaActivadoEn = null` — el reloj del programa arranca **pausado**, se activa después con primer login + Ficha + Términos, fuera de este alcance), y marca la solicitud `APPROVED`.
+- **Efecto colateral, en UNA sola transacción:** crea el `User` (fuerza rol `TRAINEE`; con otro `role`, a continuación se lo cambia por `UpdateUserRoleUseCase`, igual que `PATCH /users/{id}/role`: mismo guard, perfil de mentor si actúa como mentor y `RolDeUsuarioCambiadoEvent`, D-265), crea la fila de `ParticipacionPrograma` (día 0, `programaActivadoEn = null` — el reloj del programa arranca **pausado**, se activa después con primer login + Ficha + Términos, fuera de este alcance), y marca la solicitud `APPROVED`.
 - **curl:**
   ```bash
   curl -X POST http://localhost:8080/api/v1/account-requests/<accountRequestId>/approve \

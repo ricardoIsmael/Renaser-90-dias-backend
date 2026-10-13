@@ -183,7 +183,7 @@ public class EspejoSombraService implements GenerarInformeEspejoSombraUseCase, O
         if (actorId.equals(participanteId)) {
             return;
         }
-        if (actor.role() == UserRole.MENTOR && esMentorAsignado(actorId, participanteId)) {
+        if (actor.role().actuaComoMentor() && esMentorAsignado(actorId, participanteId)) {
             return;
         }
         throw new NotAuthorizedException("No tenes visibilidad sobre los informes de ese participante");

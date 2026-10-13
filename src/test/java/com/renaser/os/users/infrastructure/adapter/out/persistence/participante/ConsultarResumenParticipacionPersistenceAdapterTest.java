@@ -472,6 +472,30 @@ class ConsultarResumenParticipacionPersistenceAdapterTest {
         assertThat(adapter.contarAprendices(marca, false)).isEqualTo(2);
     }
 
+    /**
+     * E-605: «Equipo y roles» pide solo aprendices para su sección y el total tiene que cuadrar con lo que muestra.
+     * También fija que el guía de aprendiz (V97, D-265) se lee con su rol y no revienta el mapeo de texto.
+     */
+    @Test
+    void elFiltroDeRolDejaSoloEseRolEnLaListaYEnElTotal() {
+        String marca = "Rol" + UUID.randomUUID().toString().substring(0, 8);
+        UserId mentor = crearUsuarioLlamado("MENTOR", marca + " Mentor");
+        UserId guia = crearUsuarioLlamado("GUIA_APRENDIZ", marca + " Guia");
+        UserId aprendiz = crearUsuarioLlamado("APRENDIZ", marca + " Aprendiz");
+
+        assertThat(adapter.listarAprendices(0, 20, marca, false, UserRole.TRAINEE))
+                .extracting(ResumenTraineeAdmin::id).containsExactly(aprendiz);
+        assertThat(adapter.contarAprendices(marca, false, UserRole.TRAINEE)).isEqualTo(1);
+        assertThat(adapter.listarAprendices(0, 20, marca, false, UserRole.TRAINEE_GUIDE))
+                .singleElement().satisfies(fila -> {
+                    assertThat(fila.id()).isEqualTo(guia);
+                    assertThat(fila.rol()).isEqualTo(UserRole.TRAINEE_GUIDE);
+                });
+        assertThat(adapter.listarAprendices(0, 20, marca, false))
+                .extracting(ResumenTraineeAdmin::id).containsExactlyInAnyOrder(mentor, guia, aprendiz);
+        assertThat(adapter.contarAprendices(marca, false)).isEqualTo(3);
+    }
+
     private UserId crearUsuarioLlamado(String rolCrudo, String nombreCompleto) {
         UserId id = UserId.of(UUID.randomUUID());
         entityManager.createNativeQuery("""

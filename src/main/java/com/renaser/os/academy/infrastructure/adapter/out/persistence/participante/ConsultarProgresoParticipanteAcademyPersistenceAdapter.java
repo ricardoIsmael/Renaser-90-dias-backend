@@ -46,7 +46,8 @@ class ConsultarProgresoParticipanteAcademyPersistenceAdapter implements Consulta
             case ALCHEMIST -> RolParticipante.ALCHEMIST;
             case ADMIN -> RolParticipante.ADMIN;
             case MENTOR_LEAD -> RolParticipante.MENTOR_LEAD;
-            case MENTOR -> RolParticipante.MENTOR;
+            // El guía de aprendiz hace lo mismo que un mentor (D-265): en este módulo cuenta como MENTOR.
+            case MENTOR, TRAINEE_GUIDE -> RolParticipante.MENTOR;
             case TRAINEE -> RolParticipante.TRAINEE;
         };
     }

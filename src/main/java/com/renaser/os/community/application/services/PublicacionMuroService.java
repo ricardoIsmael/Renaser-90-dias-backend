@@ -701,7 +701,7 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
 
     private void requireActorPuedePublicar(UserId actorId) {
         UserSummary actor = requireActorActivo(actorId);
-        if (actor.role() != UserRole.TRAINEE && actor.role() != UserRole.MENTOR
+        if (actor.role() != UserRole.TRAINEE && !actor.role().actuaComoMentor()
                 && actor.role() != UserRole.MENTOR_LEAD && actor.role() != UserRole.ADMIN
                 && actor.role() != UserRole.ALCHEMIST) {
             throw new NotAuthorizedException("Rol sin permiso para publicar en el Muro");

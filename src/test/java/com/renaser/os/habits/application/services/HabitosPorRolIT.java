@@ -205,6 +205,22 @@ class HabitosPorRolIT {
     }
 
     @Test
+    @DisplayName("D-265: el guía de aprendiz es un rol aparte para los hábitos: lo de guías le llega a él y no al "
+            + "mentor, y lo de mentores no le llega a él")
+    void guiaDeAprendizSeFiltraAparte() {
+        UserId guia = usuario("GUIA_APRENDIZ", true);
+        HabitoId deMentores = habitoConHorario("Solo mentores");
+        reloj.fijar(AHORA.minusSeconds(2 * 86_400));
+        restringir(habito, Audiencia.de(Set.of(CodigoDeRol.of("TRAINEE_GUIDE"))));
+        restringir(deMentores, SOLO_MENTORES);
+        reloj.fijar(AHORA);
+
+        assertThat(habitosGenerados(guia, HOY)).contains(habito).doesNotContain(deMentores);
+        assertThat(habitosGenerados(mentor, HOY)).contains(deMentores).doesNotContain(habito);
+        assertThat(habitosGenerados(aprendiz, HOY)).doesNotContain(habito, deMentores);
+    }
+
+    @Test
     @DisplayName("la lista de «mis hábitos» de mañana ya no muestra un hábito de otro rol")
     void misHabitosFiltrado() {
         restringir(habito, SOLO_MENTORES);

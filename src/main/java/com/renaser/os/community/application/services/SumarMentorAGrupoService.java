@@ -177,7 +177,7 @@ public class SumarMentorAGrupoService implements SumarMentorAGrupoUseCase {
         if (lider.status() != UserStatus.ACTIVE) {
             throw new IllegalArgumentException("El usuario seleccionado no esta activo");
         }
-        if (lider.role() != UserRole.MENTOR && lider.role() != UserRole.ADMIN && lider.role() != UserRole.ALCHEMIST) {
+        if (!lider.role().actuaComoMentor() && lider.role() != UserRole.ADMIN && lider.role() != UserRole.ALCHEMIST) {
             throw new IllegalArgumentException("El usuario seleccionado no puede liderar una celula");
         }
         if (!existePerfilMentorPort.existe(mentorId)) {

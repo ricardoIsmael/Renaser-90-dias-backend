@@ -18,14 +18,18 @@ import java.util.List;
  * significa que el mentor no la declaro —asi quedaron los perfiles anteriores a V48— y la pantalla
  * lo muestra "Sin especialidad definida". No se rellena con ninguna de las tres: el administrador
  * elige el mentor del grupo justamente por esto, y adivinarla seria decidir por el.
+ *
+ * <p>{@code role} (D-265): {@code MENTOR} o {@code TRAINEE_GUIDE}, para que la pantalla diga «Guía de aprendiz»
+ * donde corresponda. Va al final: una app que no lo conoce lo ignora.
  */
 public record MentorCandidatoResponse(String userId, String fullName, String avatarUrl, String cellId,
-                                       List<String> cellIds, String specialty) {
+                                       List<String> cellIds, String specialty, String role) {
 
     public static MentorCandidatoResponse from(MentorCandidato candidato) {
         return new MentorCandidatoResponse(candidato.userId().toString(), candidato.nombreCompleto(),
                 candidato.avatarUrl(), candidato.celulaActual() != null ? candidato.celulaActual().toString() : null,
                 candidato.celulasActuales().stream().map(CelulaId::toString).toList(),
-                candidato.especialidad() != null ? candidato.especialidad().name() : null);
+                candidato.especialidad() != null ? candidato.especialidad().name() : null,
+                candidato.rol() != null ? candidato.rol().name() : null);
     }
 }

@@ -28,12 +28,19 @@ public interface ListTraineesUseCase {
      *                     <b>Sigue siendo solo de APRENDICES</b> aunque el listado ya traiga todos
      *                     los roles (D-138): a un miembro de staff no se le puede asignar celula,
      *                     asi que contarlo aca lo dejaria en una cola de la que nada lo saca.
+     * @param rol          {@code null} = todas las cuentas; si viene, solo las de ese rol (E-605).
      */
-    record ListTraineesCommand(UserId actorId, int page, int size, String busqueda, boolean soloSinGrupo) {
+    record ListTraineesCommand(UserId actorId, int page, int size, String busqueda, boolean soloSinGrupo,
+                               UserRole rol) {
 
         /** Sobrecarga previa al SDD 003: listado completo, sin filtros. */
         public ListTraineesCommand(UserId actorId, int page, int size) {
-            this(actorId, page, size, null, false);
+            this(actorId, page, size, null, false, null);
+        }
+
+        /** Sin filtro de rol ({@code rol} = null): todas las cuentas (D-138). */
+        public ListTraineesCommand(UserId actorId, int page, int size, String busqueda, boolean soloSinGrupo) {
+            this(actorId, page, size, busqueda, soloSinGrupo, null);
         }
 
         public ListTraineesCommand {

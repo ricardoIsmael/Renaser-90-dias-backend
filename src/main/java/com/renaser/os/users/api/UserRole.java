@@ -16,7 +16,20 @@ public enum UserRole {
     ADMIN,
     MENTOR_LEAD,
     MENTOR,
+    /**
+     * Guía de aprendiz (D-265, pedido del dueño del 2026-10-13): hace todo lo que hace un {@link #MENTOR} —grupos,
+     * aprendices, tickets, evidencias, cursos y eventos— y solo se distingue por cómo lo clasifica quien administra
+     * («Equipo y roles», hábitos por rol). Por eso ningún chequeo pregunta {@code == MENTOR}: preguntan
+     * {@link #actuaComoMentor()}, y un rol que acompañe grupos en el futuro se suma ahí.
+     */
+    TRAINEE_GUIDE,
     TRAINEE;
+
+    /**
+     * Los roles que acompañan grupos como mentor (D-265). Es el conjunto que reemplaza a {@code Set.of(MENTOR)} en las
+     * consultas por rol (padrón de mentores, rotación, candidatos a liderar un grupo).
+     */
+    public static final Set<UserRole> ROLES_QUE_ACTUAN_COMO_MENTOR = Set.copyOf(EnumSet.of(MENTOR, TRAINEE_GUIDE));
 
     /**
      * La matriz rol -> permiso que CLAUDE.MD §5.3.2 pide en un solo archivo, no en {@code if}
@@ -109,8 +122,14 @@ public enum UserRole {
             case ADMIN -> "Administrador";
             case MENTOR_LEAD -> "Líder de mentores";
             case MENTOR -> "Mentor";
+            case TRAINEE_GUIDE -> "Guía de aprendiz";
             case TRAINEE -> "Aprendiz";
         };
+    }
+
+    /** Si acompaña grupos con las mismas capacidades que un mentor: MENTOR y TRAINEE_GUIDE (D-265). */
+    public boolean actuaComoMentor() {
+        return ROLES_QUE_ACTUAN_COMO_MENTOR.contains(this);
     }
 
     public boolean canManageRoles() {
@@ -119,7 +138,8 @@ public enum UserRole {
 
     /**
      * <b>HUECO DE SEGURIDAD DELIBERADO Y TEMPORAL (A-1), ya no completo.</b> TRAINEE y
-     * MENTOR_LEAD consultan su matriz real. Para MENTOR, ADMIN y ALCHEMIST <b>sigue devolviendo
+     * MENTOR_LEAD consultan su matriz real. Para MENTOR, TRAINEE_GUIDE (D-265: lo mismo que MENTOR), ADMIN y
+     * ALCHEMIST <b>sigue devolviendo
      * {@code true}</b> — falla-abierto, no falla-cerrado — porque CLAUDE.MD §0.6 prohibe
      * inventar que puede hacer cada uno de esos roles sin que el dueño del proyecto lo
      * confirme. No se esconde detras de un {@code default} silencioso: el {@code switch} nombra
@@ -138,7 +158,7 @@ public enum UserRole {
         return switch (this) {
             case TRAINEE -> PERMISOS_TRAINEE.contains(permission);
             case MENTOR_LEAD -> PERMISOS_MENTOR_LEAD.contains(permission);
-            case MENTOR, ADMIN, ALCHEMIST -> true;
+            case MENTOR, TRAINEE_GUIDE, ADMIN, ALCHEMIST -> true;
         };
     }
 

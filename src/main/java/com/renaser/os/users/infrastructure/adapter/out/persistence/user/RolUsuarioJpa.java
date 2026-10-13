@@ -8,6 +8,8 @@ package com.renaser.os.users.infrastructure.adapter.out.persistence.user;
 public enum RolUsuarioJpa {
     APRENDIZ,
     MENTOR,
+    /** V97 (D-265): Guía de aprendiz. */
+    GUIA_APRENDIZ,
     LIDER_MENTORES,
     ADMIN,
     ALQUIMISTA

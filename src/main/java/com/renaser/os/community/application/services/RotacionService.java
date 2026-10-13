@@ -243,7 +243,7 @@ public class RotacionService implements RotarMentoresUseCase {
     /** Mentores activos, con perfil de mentor y sin grupo regular vigente. */
     private List<UserId> mentoresLibres(java.util.Collection<UserId> yaAsignados) {
         Set<UserId> ocupados = Set.copyOf(yaAsignados);
-        return participacionProgramaFinder.usuariosActivosConRol(Set.of(UserRole.MENTOR)).stream()
+        return participacionProgramaFinder.usuariosActivosConRol(UserRole.ROLES_QUE_ACTUAN_COMO_MENTOR).stream()
                 .filter(m -> !ocupados.contains(m))
                 .filter(existePerfilMentorPort::existe)
                 .toList();

@@ -51,13 +51,14 @@ class ResolverAudienciaMasivaPersistenceAdapter implements ResolverAudienciaMasi
     private static Set<UserRole> aUserRoles(Set<RolUsuario> roles) {
         Set<UserRole> traducidos = EnumSet.noneOf(UserRole.class);
         for (RolUsuario rol : roles) {
-            traducidos.add(switch (rol) {
-                case ALCHEMIST -> UserRole.ALCHEMIST;
-                case ADMIN -> UserRole.ADMIN;
-                case MENTOR_LEAD -> UserRole.MENTOR_LEAD;
-                case MENTOR -> UserRole.MENTOR;
-                case TRAINEE -> UserRole.TRAINEE;
-            });
+            switch (rol) {
+                case ALCHEMIST -> traducidos.add(UserRole.ALCHEMIST);
+                case ADMIN -> traducidos.add(UserRole.ADMIN);
+                case MENTOR_LEAD -> traducidos.add(UserRole.MENTOR_LEAD);
+                // Un evento para mentores llega también a los guías de aprendiz (D-265: hacen lo mismo).
+                case MENTOR -> traducidos.addAll(UserRole.ROLES_QUE_ACTUAN_COMO_MENTOR);
+                case TRAINEE -> traducidos.add(UserRole.TRAINEE);
+            }
         }
         return traducidos;
     }

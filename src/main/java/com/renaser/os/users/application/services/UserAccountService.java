@@ -283,9 +283,9 @@ public class UserAccountService implements InviteAndCreateUserUseCase, GetMyProf
         }
     }
 
-    /** Camino simple de §4.3: MENTOR nuevo (por invitacion o por cambio de rol) recibe un perfil vacio. */
+    /** Camino simple de §4.3: MENTOR o GUÍA DE APRENDIZ nuevo (por invitacion o por cambio de rol) recibe un perfil vacio (D-265). */
     private void ensureMentorProfileIfNeeded(User user) {
-        if (user.role() != UserRole.MENTOR) {
+        if (!user.role().actuaComoMentor()) {
             return;
         }
         boolean alreadyHasProfile = loadMentorProfilePort.byUserId(user.id()).isPresent();

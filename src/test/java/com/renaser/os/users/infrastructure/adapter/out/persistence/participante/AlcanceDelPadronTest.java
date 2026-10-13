@@ -76,9 +76,27 @@ class AlcanceDelPadronTest {
         }
     }
 
-    /** Las lineas del SQL que comparan el rol contra un valor — el SELECT de {@code u.rol} no cuenta. */
+    /**
+     * Las lineas del SQL que comparan el rol contra un valor — el SELECT de {@code u.rol} no cuenta, y tampoco el filtro
+     * OPCIONAL {@code ?3} de E-605 («Equipo y roles» pide un rol; null = todos), que no recorta nada si no viene. Se
+     * reconoce por su forma exacta: un {@code ?3} que no empiece en «es null, deja pasar» sigue contando y falla.
+     */
     private static List<String> filtrosDeRolDe(String sql) {
-        return sql.lines().map(String::trim).filter(linea -> linea.contains("u.rol =")).toList();
+        return sql.lines().map(String::trim)
+                .filter(linea -> linea.contains("u.rol ="))
+                .filter(linea -> !linea.startsWith("AND (CAST(?3 AS text) IS NULL OR u.rol ="))
+                .toList();
+    }
+
+    @Test
+    @DisplayName("E-605: el filtro de rol es opcional — si no viene (?3 null) deja pasar a todos")
+    void elFiltroDeRolEsOpcional() {
+        for (String sql : List.of(sqlDelListado(), sqlDelConteo())) {
+            assertThat(sql.lines().map(String::trim).filter(linea -> linea.contains("?3")))
+                    .as("el filtro de rol tiene que arrancar dejando pasar todo cuando no viene:\n" + sql)
+                    .singleElement()
+                    .satisfies(linea -> assertThat(linea).startsWith("AND (CAST(?3 AS text) IS NULL OR u.rol ="));
+        }
     }
 
     private String sqlDelListado() {
