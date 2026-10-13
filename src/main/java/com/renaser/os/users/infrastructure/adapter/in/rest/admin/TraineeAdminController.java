@@ -1,5 +1,6 @@
 package com.renaser.os.users.infrastructure.adapter.in.rest.admin;
 
+import com.renaser.os.users.api.UserRole;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
@@ -55,12 +56,14 @@ public class TraineeAdminController {
                                        @RequestParam(defaultValue = "0") int page,
                                        @RequestParam(defaultValue = "20") int size,
                                        @RequestParam(required = false) String q,
-                                       @RequestParam(defaultValue = "false") boolean withoutGroup) {
+                                       @RequestParam(defaultValue = "false") boolean withoutGroup,
+                                       @RequestParam(required = false) UserRole role) {
         // q y withoutGroup se resuelven en la BASE, no sobre la pagina: buscar sobre los veinte
         // ya descargados esconde al que esta mas atras (SDD 003, ARF-02 / V28).
         // withoutGroup=true sigue devolviendo SOLO aprendices sin celula (D-138): es la cola de
         // "a quien hay que ubicar", y el staff no se ubica en ningun grupo.
-        var pagina = listTraineesUseCase.listar(new ListTraineesCommand(actor, page, size, q, withoutGroup));
+        // role (E-605): opcional; «Equipo y roles» pide role=TRAINEE para su sección de aprendices. Sin él, todos.
+        var pagina = listTraineesUseCase.listar(new ListTraineesCommand(actor, page, size, q, withoutGroup, role));
         return TraineePageResponse.from(pagina);
     }
 

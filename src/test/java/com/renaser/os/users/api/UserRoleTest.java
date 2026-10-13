@@ -131,8 +131,9 @@ class UserRoleTest {
      * tests de arriba.</blockquote>
      */
     @ParameterizedTest
-    @EnumSource(value = UserRole.class, names = {"MENTOR", "ADMIN", "ALCHEMIST"})
-    @DisplayName("TEMPORAL: los 3 roles sin matriz definida pasan cualquier permiso (fail-open, no verificado todavia)")
+    @EnumSource(value = UserRole.class, names = {"MENTOR", "TRAINEE_GUIDE", "ADMIN", "ALCHEMIST"})
+    @DisplayName("TEMPORAL: los roles sin matriz definida pasan cualquier permiso (fail-open, no verificado todavia); "
+            + "el guía de aprendiz, igual que el mentor (D-265)")
     void rolesSinMatrizDefinidaFallanAbiertoParaCualquierPermiso(UserRole rol) {
         for (Permission permiso : Permission.values()) {
             assertThat(rol.can(permiso))
@@ -150,5 +151,20 @@ class UserRoleTest {
         assertThat(UserRole.TRAINEE.canManageRoles()).isFalse();
         assertThat(UserRole.MENTOR.canManageRoles()).isFalse();
         assertThat(UserRole.MENTOR_LEAD.canManageRoles()).isFalse();
+        assertThat(UserRole.TRAINEE_GUIDE.canManageRoles()).isFalse();
+    }
+
+    @Test
+    @DisplayName("D-265: solo MENTOR y TRAINEE_GUIDE actúan como mentor; el líder, el staff y el aprendiz no")
+    void actuanComoMentorSoloElMentorYElGuia() {
+        assertThat(EnumSet.allOf(UserRole.class).stream().filter(UserRole::actuaComoMentor))
+                .containsExactlyInAnyOrder(UserRole.MENTOR, UserRole.TRAINEE_GUIDE);
+        assertThat(UserRole.ROLES_QUE_ACTUAN_COMO_MENTOR).containsExactlyInAnyOrder(UserRole.MENTOR, UserRole.TRAINEE_GUIDE);
+    }
+
+    @Test
+    @DisplayName("D-265: el guía de aprendiz se muestra como «Guía de aprendiz»")
+    void nombreVisibleDelGuia() {
+        assertThat(UserRole.TRAINEE_GUIDE.nombreVisible()).isEqualTo("Guía de aprendiz");
     }
 }

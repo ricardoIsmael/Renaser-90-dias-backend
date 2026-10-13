@@ -15,6 +15,22 @@ interface SpringDataParticipanteConversacionRepository
     boolean existsByConversacionIdAndUsuarioId(UUID conversacionId, UUID usuarioId);
 
     /**
+     * Sumar a alguien sin chocar si ya está, también cuando dos oyentes lo hacen a la vez (D-265: al aprobar como
+     * ADMIN/ALCHEMIST, «usuario registrado» y «rol cambiado» suman a la misma persona a los mismos soportes en dos
+     * transacciones simultáneas; con «¿existe? → INSERT» las dos veían que no y la segunda reventaba con
+     * {@code participantes_conversacion_pkey}). {@code ON CONFLICT} lo resuelve la base: la segunda espera a la
+     * primera y no hace nada. Sin {@code clearAutomatically}: nadie relee la entidad en la misma transacción.
+     */
+    @Modifying(flushAutomatically = true)
+    @Query(value = """
+            INSERT INTO renaser.participantes_conversacion (conversacion_id, usuario_id, ultimo_leido_en, creado_en)
+            VALUES (:conversacionId, :usuarioId, :ultimoLeidoEn, :creadoEn)
+            ON CONFLICT (conversacion_id, usuario_id) DO NOTHING
+            """, nativeQuery = true)
+    int insertarSiNoEsta(@Param("conversacionId") UUID conversacionId, @Param("usuarioId") UUID usuarioId,
+                         @Param("ultimoLeidoEn") Instant ultimoLeidoEn, @Param("creadoEn") Instant creadoEn);
+
+    /**
      * La marca de lectura solo avanza (D-208): de ella sale el ✓✓, y un ✓✓ no puede volver a ✓. Antes
      * era leer la fila, cambiarla y guardarla: dos lecturas a la vez (el teléfono y la web) podían
      * pisarse y dejar la marca más vieja. Un solo UPDATE condicionado no tiene esa carrera.

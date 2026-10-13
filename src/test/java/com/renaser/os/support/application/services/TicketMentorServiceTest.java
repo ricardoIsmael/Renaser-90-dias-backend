@@ -120,6 +120,24 @@ class TicketMentorServiceTest {
     }
 
     @Test
+    @DisplayName("D-265: el guía de aprendiz asignado responde, archiva y busca como un mentor")
+    void guiaDeAprendizHaceLoMismoQueElMentor() {
+        UserId guia = UserId.of(UUID.randomUUID());
+        UserId aprendizDelGuia = UserId.of(UUID.randomUUID());
+        actores.conActor(guia, UserRole.TRAINEE_GUIDE).conActor(aprendizDelGuia, UserRole.TRAINEE);
+        participaciones.conMentorAsignado(aprendizDelGuia, guia);
+        TicketMentor ticket = service.abrir(new AbrirTicketMentorCommand(aprendizDelGuia, "Bloqueo", "Intento",
+                "Impacto"));
+
+        TicketMentor respondido = service.responder(new ResponderTicketMentorCommand(ticket.id(), guia, "Respuesta"));
+        service.guardar(new GuardarEnBibliotecaCommand(ticket.id(), guia));
+
+        assertThat(respondido.respondidoPor()).isEqualTo(guia);
+        assertThat(service.buscar(new BuscarBibliotecaCommand(guia, "bloqueo"))).hasSize(1);
+        assertThat(service.propios(guia, null).tickets()).isNotEmpty();
+    }
+
+    @Test
     @DisplayName("seguridad: un TRAINEE no puede responder su propio ticket")
     void traineeNoPuedeResponder() {
         TicketMentor ticket = abrirTicketDeTrainee();

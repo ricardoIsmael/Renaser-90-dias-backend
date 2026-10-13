@@ -317,4 +317,39 @@ class TraineeAdminControllerTest {
                 .andExpect(jsonPath("$.content[0].role").value("LIDER_MENTORES"))
                 .andExpect(jsonPath("$.content[1].role").value("APRENDIZ"));
     }
+
+    @Test
+    @DisplayName("E-605: role=TRAINEE llega al caso de uso; sin role, ninguno (todas las cuentas); un rol inventado es 400")
+    void elFiltroDeRolLlegaAlCasoDeUso() throws Exception {
+        when(listTraineesUseCase.listar(any())).thenReturn(
+                new ListTraineesUseCase.PaginaTrainees(java.util.List.of(), 0, 0, 20));
+        String actor = UserId.of(UUID.randomUUID()).toString();
+
+        mockMvc.perform(get("/api/v1/admin/trainees").param("role", "TRAINEE").header("X-Actor-Id", actor))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/admin/trainees").header("X-Actor-Id", actor))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/admin/trainees").param("role", "GUIA").header("X-Actor-Id", actor))
+                .andExpect(status().isBadRequest());
+
+        ArgumentCaptor<ListTraineesUseCase.ListTraineesCommand> captor =
+                ArgumentCaptor.forClass(ListTraineesUseCase.ListTraineesCommand.class);
+        verify(listTraineesUseCase, org.mockito.Mockito.times(2)).listar(captor.capture());
+        assertThat(captor.getAllValues()).extracting(ListTraineesUseCase.ListTraineesCommand::rol)
+                .containsExactly(UserRole.TRAINEE, null);
+    }
+
+    @Test
+    @DisplayName("D-265: un guía de aprendiz viaja con la etiqueta de la base, GUIA_APRENDIZ")
+    void elGuiaViajaConSuEtiqueta() throws Exception {
+        when(listTraineesUseCase.listar(any())).thenReturn(new ListTraineesUseCase.PaginaTrainees(
+                java.util.List.of(new ResumenTraineeAdmin(UserId.of(UUID.randomUUID()), "Guia Fixture",
+                        "guia@renaser.com", UserStatus.ACTIVE, 0, FasePrograma.paraDiaPrograma(0), null, null,
+                        UserRole.TRAINEE_GUIDE)),
+                1, 0, 20));
+
+        mockMvc.perform(get("/api/v1/admin/trainees").header("X-Actor-Id", UserId.of(UUID.randomUUID()).toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].role").value("GUIA_APRENDIZ"));
+    }
 }

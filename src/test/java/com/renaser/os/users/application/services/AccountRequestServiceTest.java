@@ -90,6 +90,8 @@ class AccountRequestServiceTest {
     private org.springframework.context.ApplicationEventPublisher events;
     @Mock
     private IdGenerator idGenerator;
+    @Mock
+    private com.renaser.os.users.application.ports.in.user.UpdateUserRoleUseCase updateUserRole;
 
     private AccountRequestService service;
 
@@ -99,7 +101,7 @@ class AccountRequestServiceTest {
                 loadUserPort, saveUserPort, deleteUserPort, saveCredencialPort, saveIdentidadExternaPort,
                 passwordEncoder, saveParticipacionProgramaPort, tokenVerificacionEmailPort,
                 limitarSolicitudesResetPort, new RequireActiveUserGuard(loadUserPort),
-                new RequireAdminGuard(loadUserPort), events, CLOCK, idGenerator);
+                new RequireAdminGuard(loadUserPort), updateUserRole, events, CLOCK, idGenerator);
         lenient().when(saveAccountRequestPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveUserPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveParticipacionProgramaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -351,6 +353,40 @@ class AccountRequestServiceTest {
                 .isEqualTo(com.renaser.os.users.domain.model.identidadexterna.ProveedorIdentidad.GOOGLE);
         assertThat(captor.getValue().sujetoProveedor()).isEqualTo("google-sub-aprobado");
         assertThat(captor.getValue().usuarioId()).isEqualTo(request.usuarioId());
+    }
+
+    @Test
+    @DisplayName("D-265: aprobar con un rol de staff es aprobar como aprendiz y cambiar el rol por el mismo caso de "
+            + "uso que «Equipo y roles», en la misma transaccion")
+    void approveConRolCambiaElRolPorElCasoDeUsoDeSiempre() {
+        AccountRequest request = pendiente();
+        UserId actorId = id();
+        when(loadAccountRequestPort.byId(request.id())).thenReturn(Optional.of(request));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+        stubUsuarioPendiente(request);
+
+        service.approve(new ApproveAccountRequestCommand(request.id(), actorId, UserRole.TRAINEE_GUIDE));
+
+        var orden = org.mockito.Mockito.inOrder(saveParticipacionProgramaPort, updateUserRole, events);
+        orden.verify(saveParticipacionProgramaPort).save(any());
+        orden.verify(updateUserRole).updateRole(
+                new com.renaser.os.users.application.ports.in.user.UpdateUserRoleUseCase.UpdateUserRoleCommand(
+                        request.usuarioId(), UserRole.TRAINEE_GUIDE, actorId));
+        orden.verify(events).publishEvent(any(com.renaser.os.users.api.UsuarioRegistradoEvent.class));
+    }
+
+    @Test
+    @DisplayName("D-265: sin rol elegido (app 1.5.0, panel de solicitudes) entra como aprendiz y no se cambia nada")
+    void approveSinRolEntraComoAprendiz() {
+        AccountRequest request = pendiente();
+        UserId actorId = id();
+        when(loadAccountRequestPort.byId(request.id())).thenReturn(Optional.of(request));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+        stubUsuarioPendiente(request);
+
+        service.approve(new ApproveAccountRequestCommand(request.id(), actorId));
+
+        verify(updateUserRole, never()).updateRole(any());
     }
 
     @Test

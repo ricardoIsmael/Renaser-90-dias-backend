@@ -20,10 +20,10 @@ import java.util.Optional;
  */
 public interface FichaDeMentorFinder {
 
-    /** Usuarios con rol MENTOR y cuenta ACTIVA, ordenados por nombre. */
+    /** Usuarios con rol MENTOR o GUÍA DE APRENDIZ (D-265) y cuenta ACTIVA, ordenados por nombre. */
     List<FichaDeMentor> mentoresActivos();
 
-    /** Ese usuario si su rol es MENTOR, en cualquier estado de cuenta; vacio si no existe o no es mentor. */
+    /** Ese usuario si su rol es MENTOR o GUÍA DE APRENDIZ (D-265), en cualquier estado de cuenta; vacio si no existe o no es mentor. */
     Optional<FichaDeMentor> mentor(UserId usuarioId);
 
     record FichaDeMentor(UserId id, String nombreCompleto, String avatarUrl, UserStatus estado,

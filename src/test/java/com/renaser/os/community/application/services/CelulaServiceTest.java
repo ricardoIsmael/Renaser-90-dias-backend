@@ -218,7 +218,7 @@ class CelulaServiceTest {
         Celula celulaConMentor = celulaExistente();
         celulaConMentor.asignarMentor(mentor, CLOCK.now());
         when(loadCelulaPort.todas()).thenReturn(java.util.List.of(celulaConMentor));
-        when(participacionProgramaFinder.usuariosActivosConRol(java.util.Set.of(UserRole.MENTOR)))
+        when(participacionProgramaFinder.usuariosActivosConRol(UserRole.ROLES_QUE_ACTUAN_COMO_MENTOR))
                 .thenReturn(java.util.List.of(mentor, mentorLibre));
         when(userSummaryFinder.findById(mentorLibre)).thenReturn(
                 Optional.of(new UserSummary(mentorLibre, "Mentor Libre", null, UserRole.MENTOR, UserStatus.ACTIVE)));
@@ -235,7 +235,7 @@ class CelulaServiceTest {
         Celula celulaConMentor = celulaExistente();
         celulaConMentor.asignarMentor(mentor, CLOCK.now());
         when(loadCelulaPort.todas()).thenReturn(java.util.List.of(celulaConMentor));
-        when(participacionProgramaFinder.usuariosActivosConRol(java.util.Set.of(UserRole.MENTOR)))
+        when(participacionProgramaFinder.usuariosActivosConRol(UserRole.ROLES_QUE_ACTUAN_COMO_MENTOR))
                 .thenReturn(java.util.List.of(mentor));
 
         var todos = service.mentores(admin);
@@ -254,7 +254,7 @@ class CelulaServiceTest {
         // Llegan en orden inverso al alfabetico a proposito: el orden de la respuesta no puede
         // depender del orden en que la base devuelva las filas.
         when(loadCelulaPort.todas()).thenReturn(java.util.List.of(zeta, alfa));
-        when(participacionProgramaFinder.usuariosActivosConRol(java.util.Set.of(UserRole.MENTOR)))
+        when(participacionProgramaFinder.usuariosActivosConRol(UserRole.ROLES_QUE_ACTUAN_COMO_MENTOR))
                 .thenReturn(java.util.List.of(mentor));
 
         var todos = service.mentores(admin);

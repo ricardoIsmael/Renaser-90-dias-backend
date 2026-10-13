@@ -96,7 +96,9 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
      *
      * <p>{@code ?1} llega null cuando no hay busqueda y el {@code IS NULL} deja pasar todo: un solo
      * SQL en vez de concatenar el WHERE segun los filtros, que es como se cuela una inyeccion o un
-     * plan distinto por combinacion. {@code ?2} hace lo mismo con "solo sin grupo".
+     * plan distinto por combinacion. {@code ?2} hace lo mismo con "solo sin grupo", y {@code ?3} con el rol
+     * (E-605, null = todos; se castea el TEXTO al enum, como los literales, porque un parametro ligado llega como
+     * varchar y Postgres no lo compara solo contra {@code rol_usuario}, E-47).
      *
      * <blockquote><b>Corregido 2026-09-16 (E-191, D-138).</b> Aca arrancaba con
      * {@code WHERE u.rol = 'APRENDIZ'}, asi que la pantalla "Personas" no mostraba <b>nunca</b> a
@@ -123,6 +125,7 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
                    OR u.nombre_completo ILIKE '%' || CAST(?1 AS text) || '%'
                    OR u.email ILIKE '%' || CAST(?1 AS text) || '%')
               AND (?2 = FALSE OR (pp.celula_id IS NULL AND u.rol = 'APRENDIZ'))
+              AND (CAST(?3 AS text) IS NULL OR u.rol = CAST(CAST(?3 AS text) AS renaser.rol_usuario))
             """;
 
     /**
@@ -179,7 +182,7 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
                    u.rol, u.baja_solicitada_en
             """ + FILTRO_PADRON + """
             ORDER BY u.creado_en DESC, u.id
-            LIMIT ?3 OFFSET ?4
+            LIMIT ?4 OFFSET ?5
             """;
 
     private static final String QUERY_CONTAR_APRENDICES = "SELECT COUNT(*) " + FILTRO_PADRON;
@@ -285,6 +288,7 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
             case ADMIN -> "ADMIN";
             case MENTOR_LEAD -> "LIDER_MENTORES";
             case MENTOR -> "MENTOR";
+            case TRAINEE_GUIDE -> "GUIA_APRENDIZ";
             case TRAINEE -> "APRENDIZ";
         };
     }
@@ -300,21 +304,23 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
     @Override
     @SuppressWarnings("unchecked")
     public List<ResumenTraineeAdmin> listarAprendices(int offset, int limit, String busqueda,
-                                                       boolean soloSinGrupo) {
+                                                       boolean soloSinGrupo, UserRole rol) {
         List<Object[]> filas = entityManager.createNativeQuery(QUERY_LISTAR_APRENDICES)
                 .setParameter(1, normalizar(busqueda))
                 .setParameter(2, soloSinGrupo)
-                .setParameter(3, limit)
-                .setParameter(4, offset)
+                .setParameter(3, rol == null ? null : aClave(rol))
+                .setParameter(4, limit)
+                .setParameter(5, offset)
                 .getResultList();
         return filas.stream().map(this::aResumenTraineeAdmin).collect(Collectors.toList());
     }
 
     @Override
-    public long contarAprendices(String busqueda, boolean soloSinGrupo) {
+    public long contarAprendices(String busqueda, boolean soloSinGrupo, UserRole rol) {
         Number total = (Number) entityManager.createNativeQuery(QUERY_CONTAR_APRENDICES)
                 .setParameter(1, normalizar(busqueda))
                 .setParameter(2, soloSinGrupo)
+                .setParameter(3, rol == null ? null : aClave(rol))
                 .getSingleResult();
         return total.longValue();
     }
@@ -447,6 +453,7 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
             case "ADMIN" -> UserRole.ADMIN;
             case "LIDER_MENTORES" -> UserRole.MENTOR_LEAD;
             case "MENTOR" -> UserRole.MENTOR;
+            case "GUIA_APRENDIZ" -> UserRole.TRAINEE_GUIDE;
             case "APRENDIZ" -> UserRole.TRAINEE;
             default -> throw new IllegalStateException("Rol de usuario desconocido: " + rolCrudo);
         };

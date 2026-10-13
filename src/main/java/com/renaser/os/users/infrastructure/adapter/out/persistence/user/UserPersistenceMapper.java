@@ -59,6 +59,7 @@ class UserPersistenceMapper {
         return switch (role) {
             case TRAINEE -> RolUsuarioJpa.APRENDIZ;
             case MENTOR -> RolUsuarioJpa.MENTOR;
+            case TRAINEE_GUIDE -> RolUsuarioJpa.GUIA_APRENDIZ;
             case MENTOR_LEAD -> RolUsuarioJpa.LIDER_MENTORES;
             case ADMIN -> RolUsuarioJpa.ADMIN;
             case ALCHEMIST -> RolUsuarioJpa.ALQUIMISTA;
@@ -69,6 +70,7 @@ class UserPersistenceMapper {
         return switch (jpa) {
             case APRENDIZ -> UserRole.TRAINEE;
             case MENTOR -> UserRole.MENTOR;
+            case GUIA_APRENDIZ -> UserRole.TRAINEE_GUIDE;
             case LIDER_MENTORES -> UserRole.MENTOR_LEAD;
             case ADMIN -> UserRole.ADMIN;
             case ALQUIMISTA -> UserRole.ALCHEMIST;

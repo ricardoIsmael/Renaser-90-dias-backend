@@ -57,8 +57,21 @@ public interface ConsultarResumenParticipacionPort {
      *                     El rol quedo dentro de ESTE filtro cuando el listado se abrio a todos los
      *                     roles (D-138): a un miembro de staff no se le puede asignar celula, asi
      *                     que sumarlo a la cola daria un numero que no baja nunca.
+     * @param rol         {@code null} = todas las cuentas; si viene, solo las de ese rol (E-605: «Equipo y roles»
+     *                    pide solo aprendices para su sección y que el total cuadre con lo que muestra).
      */
-    List<ResumenTraineeAdmin> listarAprendices(int offset, int limit, String busqueda, boolean soloSinGrupo);
+    List<ResumenTraineeAdmin> listarAprendices(int offset, int limit, String busqueda, boolean soloSinGrupo,
+                                               UserRole rol);
 
-    long contarAprendices(String busqueda, boolean soloSinGrupo);
+    long contarAprendices(String busqueda, boolean soloSinGrupo, UserRole rol);
+
+    /** Sin filtro de rol: todas las cuentas (D-138). */
+    default List<ResumenTraineeAdmin> listarAprendices(int offset, int limit, String busqueda, boolean soloSinGrupo) {
+        return listarAprendices(offset, limit, busqueda, soloSinGrupo, null);
+    }
+
+    /** Sin filtro de rol: todas las cuentas (D-138). */
+    default long contarAprendices(String busqueda, boolean soloSinGrupo) {
+        return contarAprendices(busqueda, soloSinGrupo, null);
+    }
 }

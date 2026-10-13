@@ -12,12 +12,15 @@ Las decisiones de acá usan la misma numeración `D-N` que `MODULOS_A_AVANZAR.md
 
 Todo módulo del sistema pregunta *"¿quién es este usuario y qué puede hacer?"*. `users` es la fuente de verdad de identidad, rol y estado. Nada se puede construir encima de algo que todavía no existe.
 
-## 2. Los 5 roles
+## 2. Los 6 roles
+
+> **Corregido 2026-10-13 (D-265).** Eran cinco. Se sumó el Guía de aprendiz.
 
 | Nombre de negocio | Constante | Qué es |
 |---|---|---|
 | Aprendiz | `TRAINEE` | El usuario del programa de 90 días. Rol por defecto de todo alta pública |
 | Mentor | `MENTOR` | Acompaña a un conjunto de aprendices asignados |
+| Guía de aprendiz | `TRAINEE_GUIDE` (`GUIA_APRENDIZ` en la base, V97) | Hace todo lo del mentor (grupos, aprendices, tickets, evidencias, perfil de mentor); es un rol aparte solo para clasificarlo y filtrarlo (hábitos por rol, «Equipo y roles»). Los chequeos preguntan `UserRole.actuaComoMentor()`, nunca `== MENTOR` (D-265). No confundir con la función `GUIA` del grupo de recepción (V45) |
 | Líder de Mentores | `MENTOR_LEAD` | Coordina mentores |
 | Administrador / Operación | `ADMIN` | Panel de gestión: aprueba cuentas, asigna mentores |
 | Alquimista | `ALCHEMIST` | Máximo nivel |

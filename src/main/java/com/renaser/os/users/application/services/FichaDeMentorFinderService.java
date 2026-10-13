@@ -55,14 +55,14 @@ public class FichaDeMentorFinderService implements FichaDeMentorFinder {
     @Transactional(readOnly = true)
     public Optional<FichaDeMentor> mentor(UserId usuarioId) {
         return loadUserPort.byId(usuarioId)
-                .filter(usuario -> usuario.role() == UserRole.MENTOR)
+                .filter(usuario -> usuario.role().actuaComoMentor())
                 .map(usuario -> aFicha(usuario, loadMentorProfilePort.byUserId(usuarioId).orElse(null)));
     }
 
     private List<User> mentoresConCuentaActiva() {
         List<User> todos = new ArrayList<>();
         for (int pagina = 0; ; pagina++) {
-            List<User> lote = loadUserPort.byRoles(List.of(UserRole.MENTOR), UserStatus.ACTIVE, pagina, TAMANO_LOTE);
+            List<User> lote = loadUserPort.byRoles(List.copyOf(UserRole.ROLES_QUE_ACTUAN_COMO_MENTOR), UserStatus.ACTIVE, pagina, TAMANO_LOTE);
             todos.addAll(lote);
             if (lote.size() < TAMANO_LOTE) {
                 return todos;

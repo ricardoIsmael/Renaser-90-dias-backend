@@ -1,0 +1,22 @@
+-- V97 — Rol «Guía de aprendiz» (D-265)
+--
+-- Por qué se toca la base:
+--   El dueño pidió (2026-10-13) un sexto rol, «Guía de aprendiz», que se elige al aprobar una solicitud
+--   y en «Equipo y roles». Hace todo lo que hace un mentor (grupos, aprendices, tickets, evidencias) y
+--   solo se distingue en cómo lo clasifica quien administra. Eligió rol propio, y no «Mentor con otro
+--   nombre», para poder filtrarlo aparte (hábitos por rol, listas del equipo).
+--
+-- Por qué así:
+--   * `usuarios.rol` es `rol_usuario`: un rol nuevo es un valor nuevo del enum, igual que los cinco de
+--     V1. No se reusa MENTOR con una marca aparte porque el dueño eligió rol propio.
+--   * El nombre va en español como los demás valores del tipo (D-21); la API lo llama TRAINEE_GUIDE y
+--     la traducción vive en `UserPersistenceMapper`. No se llama `GUIA` a secas para no confundirlo
+--     con `funcion_acompanamiento.GUIA` (V45), que es otra cosa: quien acompaña el grupo de recepción.
+--   * Va después de MENTOR solo para que el orden del tipo se lea igual que el de `UserRole`; nadie
+--     compara roles por su orden.
+--   * No se agrega una fila en `roles`: esa tabla está SUPERADA (D-21) y solo la leen las audiencias de
+--     cursos y eventos, donde el guía cuenta como mentor (lo traduce cada módulo).
+--   * `ADD VALUE` dentro de la transacción de Flyway es válido desde PostgreSQL 12; el valor nuevo no se
+--     usa en esta misma migración, que es lo único que Postgres no permite.
+
+ALTER TYPE renaser.rol_usuario ADD VALUE IF NOT EXISTS 'GUIA_APRENDIZ' AFTER 'MENTOR';

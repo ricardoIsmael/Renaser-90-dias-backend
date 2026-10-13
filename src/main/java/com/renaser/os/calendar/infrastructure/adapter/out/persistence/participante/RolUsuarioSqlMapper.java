@@ -26,6 +26,8 @@ public final class RolUsuarioSqlMapper {
             case "ADMIN" -> RolUsuario.ADMIN;
             case "LIDER_MENTORES" -> RolUsuario.MENTOR_LEAD;
             case "MENTOR" -> RolUsuario.MENTOR;
+            // El guía de aprendiz cuenta como mentor en calendar (D-265).
+            case "GUIA_APRENDIZ" -> RolUsuario.MENTOR;
             case "APRENDIZ" -> RolUsuario.TRAINEE;
             default -> throw new IllegalStateException("Rol de usuario desconocido: " + clave);
         };

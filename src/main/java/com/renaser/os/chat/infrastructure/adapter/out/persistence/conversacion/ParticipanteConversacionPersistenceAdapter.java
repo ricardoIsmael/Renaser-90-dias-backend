@@ -38,11 +38,8 @@ class ParticipanteConversacionPersistenceAdapter
     public void agregar(Participante participante) {
         UUID conversacionId = participante.conversacionId().value();
         UUID usuarioId = participante.usuarioId().value();
-        if (repository.existsByConversacionIdAndUsuarioId(conversacionId, usuarioId)) {
-            return;
-        }
-        repository.save(new ParticipanteConversacionJpaEntity(conversacionId, usuarioId,
-                participante.ultimoLeidoEn(), participante.creadoEn()));
+        // Idempotente también bajo carrera (D-265): ver insertarSiNoEsta.
+        repository.insertarSiNoEsta(conversacionId, usuarioId, participante.ultimoLeidoEn(), participante.creadoEn());
     }
 
     @Override

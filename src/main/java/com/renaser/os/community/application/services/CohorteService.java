@@ -95,7 +95,7 @@ public class CohorteService implements CrearCohorteUseCase, ActualizarCohorteUse
     @Override
     public List<CohorteResumen> listar(UserId actorId, EstadoCohorte filtroEstado) {
         UserSummary actor = requireActorActivo(actorId);
-        if (actor.role() == UserRole.MENTOR) {
+        if (actor.role().actuaComoMentor()) {
             /* Las cohortes de los grupos que lidera, cada una una vez y sin las completadas. Desde D-141
                pueden ser varios grupos, y de varias cohortes (E-371: antes se buscaba "el" grupo y con dos
                la consulta reventaba). */
@@ -114,7 +114,7 @@ public class CohorteService implements CrearCohorteUseCase, ActualizarCohorteUse
     @Override
     public CohorteResumen obtener(UserId actorId, CohorteId cohorteId) {
         UserSummary actor = requireActorActivo(actorId);
-        if (actor.role() == UserRole.MENTOR) {
+        if (actor.role().actuaComoMentor()) {
             List<Celula> propias = loadCelulaPort.porMentor(actorId);
             if (propias.isEmpty()) {
                 throw new NotAuthorizedException("No lideras ninguna celula");

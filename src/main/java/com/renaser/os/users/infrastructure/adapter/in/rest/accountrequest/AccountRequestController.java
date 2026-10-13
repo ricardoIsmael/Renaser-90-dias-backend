@@ -6,6 +6,7 @@ import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
 import com.renaser.os.shared.web.security.PublicEndpoint;
 import com.renaser.os.shared.web.security.RequiresPermission;
+import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.application.ports.in.accountrequest.ApproveAccountRequestUseCase;
 import com.renaser.os.users.application.ports.in.accountrequest.ApproveAccountRequestUseCase.ApproveAccountRequestCommand;
 import com.renaser.os.users.application.ports.in.accountrequest.CheckAccountRequestStatusUseCase;
@@ -135,8 +136,10 @@ public class AccountRequestController {
 
     @RequiresPermission(Permission.APPROVE_ACCOUNT_REQUEST)
     @PostMapping("/{id}/approve")
-    public ResponseEntity<Void> approve(@PathVariable UUID id, @ActorAutenticado UserId actor) {
-        approveUseCase.approve(new ApproveAccountRequestCommand(AccountRequestId.of(id), actor));
+    public ResponseEntity<Void> approve(@PathVariable UUID id, @ActorAutenticado UserId actor,
+                                         @RequestBody(required = false) ApproveAccountRequestRequest request) {
+        UserRole rol = request == null || request.role() == null ? UserRole.defaultForSelfRegistration() : request.role();
+        approveUseCase.approve(new ApproveAccountRequestCommand(AccountRequestId.of(id), actor, rol));
         return ResponseEntity.noContent().build();
     }
 

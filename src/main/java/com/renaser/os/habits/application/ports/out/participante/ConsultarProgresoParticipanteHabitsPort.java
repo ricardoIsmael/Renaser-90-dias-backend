@@ -57,6 +57,8 @@ public interface ConsultarProgresoParticipanteHabitsPort {
         ADMIN,
         MENTOR_LEAD,
         MENTOR,
+        /** Guía de aprendiz (D-265). Valor propio: hábitos por rol lo filtra aparte de MENTOR. */
+        TRAINEE_GUIDE,
         TRAINEE
     }
 }

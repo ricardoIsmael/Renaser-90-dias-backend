@@ -401,6 +401,24 @@ class ComposicionDeCelulaServiceTest {
     }
 
     @Test
+    @DisplayName("D-265: un guía de aprendiz lidera un grupo igual que un mentor")
+    void guiaDeAprendizLideraUnGrupo() {
+        Celula destino = grupo();
+        UserId guia = UserId.of(UUID.randomUUID());
+        usuario(guia, UserRole.TRAINEE_GUIDE, UserStatus.ACTIVE);
+        when(existePerfilMentorPort.existe(guia)).thenReturn(true);
+        when(saveCelulaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(loadAsignacionesPort.porCelula(destino.id())).thenReturn(List.of());
+
+        service.asignar(new AsignarMentorCelulaCommand(admin, destino.id(), guia));
+
+        ArgumentCaptor<AsignacionCelula> guardada = ArgumentCaptor.forClass(AsignacionCelula.class);
+        verify(saveAsignacionPort).save(guardada.capture());
+        assertThat(guardada.getValue().funcion()).isEqualTo(FuncionAcompanamiento.MENTOR);
+        assertThat(destino.mentorId()).isEqualTo(guia);
+    }
+
+    @Test
     @DisplayName("asignar(mentor): el saliente pierde el intervalo, no solo el puntero")
     void cambioDeMentorCierraAlSaliente() {
         Celula destino = grupo();

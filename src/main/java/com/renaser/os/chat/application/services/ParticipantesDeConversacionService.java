@@ -160,6 +160,7 @@ public class ParticipantesDeConversacionService implements VerParticipantesDeCon
         return switch (rol) {
             case TRAINEE -> RolEnElChat.APRENDIZ;
             case MENTOR, MENTOR_LEAD -> RolEnElChat.MENTOR;
+            case TRAINEE_GUIDE -> RolEnElChat.GUIA_APRENDIZ;
             case ADMIN -> RolEnElChat.ADMIN;
             case ALCHEMIST -> RolEnElChat.ALQUIMISTA;
         };

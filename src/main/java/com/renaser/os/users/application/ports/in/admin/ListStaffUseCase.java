@@ -19,7 +19,7 @@ public interface ListStaffUseCase {
     PaginaStaff listar(ListStaffCommand command);
 
     /** El staff son los 4 roles distintos de TRAINEE — conjunto cerrado, no una regla de negocio inventada. */
-    Set<UserRole> ROLES_STAFF = EnumSet.of(UserRole.MENTOR, UserRole.MENTOR_LEAD, UserRole.ADMIN, UserRole.ALCHEMIST);
+    Set<UserRole> ROLES_STAFF = EnumSet.of(UserRole.MENTOR, UserRole.TRAINEE_GUIDE, UserRole.MENTOR_LEAD, UserRole.ADMIN, UserRole.ALCHEMIST);
 
     record ListStaffCommand(UserId actorId, UserRole roleFilter, UserStatus statusFilter, int page, int size) {
 

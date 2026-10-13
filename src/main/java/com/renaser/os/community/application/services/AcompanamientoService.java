@@ -227,7 +227,7 @@ public class AcompanamientoService
      * en la base, inglés en Java— y comparar cadenas es como se cuela un rol que no matchea.
      */
     private static boolean esStaff(UserRole rol) {
-        return rol == UserRole.MENTOR || rol == UserRole.MENTOR_LEAD
+        return rol.actuaComoMentor() || rol == UserRole.MENTOR_LEAD
                 || rol == UserRole.ADMIN || rol == UserRole.ALCHEMIST;
     }
 

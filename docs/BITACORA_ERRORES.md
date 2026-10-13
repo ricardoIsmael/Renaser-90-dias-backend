@@ -15178,7 +15178,7 @@ en la misma corrida lo tenían.
 **Solución y prevención.** En la base clonada, `insert into perfiles_mentor(usuario_id) …` con los valores por
 defecto. Para sembrar personal, crear la cuenta como aprendiz y promoverla con el endpoint de cambio de rol.
 
-## E-605 · «Equipo y roles» muestra como «Aprendiz» al personal con programa propio (front, ABIERTO, 12/10)
+## E-605 · «Equipo y roles» muestra como «Aprendiz» al personal con programa propio (front + back, RESUELTO, 12/10 → 13/10)
 
 **Síntoma literal.** En Administración → Más opciones → «Equipo y roles», la lista «APRENDICES» incluía «Cambiar el
 rol de E2E ALQUIMISTA, hoy Aprendiz», y lo mismo con E2E ADMIN y E2E MENTOR, aunque esas cuentas son Alquimista,
@@ -15191,11 +15191,51 @@ de la lista de origen»). Ese listado trae a cualquiera con programa, también a
 real, pero quien administra lee mal el rol de esa persona y puede elegir un cambio pensando que es aprendiz.
 Arreglo probable: usar el rol que manda el servidor o sacar de esa lista a quien ya está en la del equipo.
 
-## E-606 · El atrás de Android no cierra los diálogos de confirmación (front, ABIERTO, 12/10)
+> **Resuelto 2026-10-13 (con D-265).** No alcanzaba con poner el rol del servidor: la misma persona seguía saliendo
+> dos veces (en el equipo y en «Aprendices») y el total de «Aprendices» la contaba. `GET /admin/trainees` acepta
+> ahora un `role` opcional (`?3` del filtro compartido, así la lista y el total cuadran; sin él, todas las cuentas
+> como desde D-138) y la sección pide `role=TRAINEE`. Prueba: `elFiltroDeRolDejaSoloEseRolEnLaListaYEnElTotal`
+> (Postgres), `elFiltroDeRolLlegaAlCasoDeUso` (400 con un rol inventado) y, en la app, `guiaDeAprendizApi.test.ts`.
+> **Para que no vuelva:** una sección que se llama por un rol pide ese rol al servidor; no se deduce de la lista de
+> origen.
+## E-606 · El atrás de Android no cierra los diálogos de confirmación (front, RESUELTO, 12/10 → 13/10)
 
 **Síntoma literal.** Con un diálogo de `dialogo.confirmar` abierto (por ejemplo «¿Eliminar este hábito?»), el botón
 atrás de Android no lo cierra; hay que tocar «Cancelar».
 
 **Estado.** Reportado, no investigado (fuera de la spec 001). Visto en el E2E del 2026-10-12.
 
+> **Resuelto 2026-10-13.** **Causa real:** el `Alert` nativo de Android solo se cierra con el atrás (o tocando fuera)
+> si se le pasa `{ cancelable: true }`; por defecto es `false`, y ni `dialogo.ts` (Administración) ni `Alerta.tsx`
+> (el resto de la app) lo pasaban. **Arreglo:** `opcionesNativasDeDescarte` en `components/Alerta.tsx`, con la regla
+> del diálogo de web: con un botón `cancel`, cerrar es elegirlo (una confirmación resuelve «no»); sin botones o con
+> botones que no hacen nada, se cierra; una elección obligada (acciones y ninguna `cancel`) no se cierra. Lo usan
+> `avisar`, `confirmar` y `Alert.alert`. Se revisó que ningún botón `cancel` de la app haga otra cosa que cancelar.
+> Prueba: `descarteDeAlertas.test.ts`. iOS no cambia: sus diálogos del sistema no se cierran con un gesto.
 ---
+
+## E-607 · Aprobar como ADMIN dejaba un oyente del chat incompleto: `participantes_conversacion_pkey` (back, RESUELTO, 13/10)
+
+**Síntoma literal.** En el E2E de D-265, al aprobar una solicitud como Administrador, el log del backend dijo
+`Invocation of listener void com.renaser.os.chat.infrastructure.adapter.in.event.RolDeUsuarioCambiadoSoporteListener.on(...)
+failed with message could not execute statement [ERROR: duplicate key value violates unique constraint
+"participantes_conversacion_pkey"] ... Leaving event publication uncompleted.` La cuenta quedó bien (ADMIN y dentro
+de los soportes) y la app no mostró nada raro.
+
+**Causa real.** Aprobar con rol publica en la misma transacción `UsuarioRegistradoEvent` y `RolDeUsuarioCambiadoEvent`.
+En chat, los dos oyentes suman al nuevo ADMIN a los soportes que ya existen (`sumarStaffALasQueYaExisten`), cada uno en
+su transacción y a la vez. El adaptador hacía «¿existe? → INSERT»: las dos transacciones veían que no y la segunda
+reventaba contra la clave primaria al confirmar la primera. Antes de D-265 no pasaba porque el ascenso a ADMIN siempre
+era un pedido aparte, nunca junto con el alta.
+
+**Solución.** `agregar` pasó a `INSERT … ON CONFLICT (conversacion_id, usuario_id) DO NOTHING`
+(`SpringDataParticipanteConversacionRepository.insertarSiNoEsta`, con `flushAutomatically` para que una conversación
+recién creada en la misma transacción ya esté escrita). El javadoc del servicio ya prometía que `agregar` era
+idempotente; ahora también lo es bajo carrera. La publicación incompleta se habría reintentado sola al reiniciar
+(`republish-outstanding-events-on-restart`), pero dejaba un ERROR por cada aprobación así.
+
+**Para que no vuelva.** `AgregarParticipanteConcurrenteIT`: dos transacciones reales, la segunda inserta mientras la
+primera no confirmó. Falla con el adaptador anterior con este mismo mensaje (comprobado) y pasa con el arreglo. Y
+`AprobarConRolIT.aprobarComoAdministrador`, que exige el outbox vacío al terminar. **Regla general:** un «¿existe? →
+INSERT» solo es idempotente si nadie más inserta a la vez; cuando dos oyentes del mismo hecho escriben la misma fila,
+la idempotencia la pone la base (`ON CONFLICT`), no un `exists` previo.

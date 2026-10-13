@@ -495,6 +495,7 @@ Bajado a un caso real, contra lo que el repo ya implementa hoy (`docs/FEATURE_US
 
 - **Los 5 roles y sus perfiles**: `ALCHEMIST`/`AlchemistProfile`, `ADMIN`/`AdminProfile`, `MENTOR_LEAD`/(perfil por definir), `MENTOR`/`MentorProfile`, `TRAINEE`/`TraineeProfile`.
   > **Corregido 2026-08-22.** Esta línea decía "los 4 roles" y omitía `MENTOR_LEAD`, contradiciendo la tabla de §5 que sí lo lista. Son **cinco**: Aprendiz, Mentor, Líder de Mentores, Administrador/Operación y Alquimista. Ver `docs/MODULOS_A_AVANZAR.md` §4.1 para el modelo de roles y la pregunta abierta sobre el perfil de `MENTOR_LEAD`.
+  > **Corregido 2026-10-13 (D-265).** Son **seis**: se sumó `TRAINEE_GUIDE` (Guía de aprendiz, `GUIA_APRENDIZ` en la base, V97), que hace todo lo del mentor y usa `MentorProfile`. Ningún chequeo pregunta `== MENTOR`: preguntan `UserRole.actuaComoMentor()`.
 
   `User.id` no lo genera nunca el repositorio: viaja desde el adaptador de autenticación hasta `UserRepositoryPort.save`, y el dominio no inventa identidad propia. Esa regla no cambió; lo que cambió es de dónde sale el UUID.
 - **Auth NO se queda en Supabase.** Renaser OS emite y valida su propia identidad: sesión como **token opaco en Redis** transportado en cookie `HttpOnly`, credenciales propias (`usuarios.hash_contrasena`, `V3`) y login social resuelto por el backend contra Google/Apple/Facebook (`identidades_externas`, `V3`). No hay proveedor externo de identidad. El diseño completo está en [`docs/MODULO_AUTH.md`](docs/MODULO_AUTH.md).

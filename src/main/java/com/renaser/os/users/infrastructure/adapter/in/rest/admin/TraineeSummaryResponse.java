@@ -45,6 +45,7 @@ public record TraineeSummaryResponse(String id, String fullName, String email, U
         return switch (rol) {
             case TRAINEE -> "APRENDIZ";
             case MENTOR -> "MENTOR";
+            case TRAINEE_GUIDE -> "GUIA_APRENDIZ";
             case MENTOR_LEAD -> "LIDER_MENTORES";
             case ADMIN -> "ADMIN";
             case ALCHEMIST -> "ALQUIMISTA";

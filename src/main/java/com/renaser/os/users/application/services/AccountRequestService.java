@@ -6,12 +6,15 @@ import com.renaser.os.shared.domain.RateLimitExceededException;
 import com.renaser.os.shared.domain.TokenVerificacionEmailInvalidoException;
 import com.renaser.os.shared.domain.UnidadDeConteoPorIp;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.application.ports.in.accountrequest.ApproveAccountRequestUseCase;
 import com.renaser.os.users.application.ports.in.accountrequest.CheckAccountRequestStatusUseCase;
 import com.renaser.os.users.application.ports.in.accountrequest.DeleteAccountRequestUseCase;
 import com.renaser.os.users.application.ports.in.accountrequest.ListAccountRequestsUseCase;
 import com.renaser.os.users.application.ports.in.accountrequest.RejectAccountRequestUseCase;
 import com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase;
+import com.renaser.os.users.application.ports.in.user.UpdateUserRoleUseCase;
+import com.renaser.os.users.application.ports.in.user.UpdateUserRoleUseCase.UpdateUserRoleCommand;
 import com.renaser.os.users.application.ports.out.accountrequest.DeleteAccountRequestPort;
 import com.renaser.os.users.application.ports.out.accountrequest.LoadAccountRequestPort;
 import com.renaser.os.users.application.ports.out.accountrequest.SaveAccountRequestPort;
@@ -86,6 +89,7 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
     private final LimitarSolicitudesResetPort limitarSolicitudesResetPort;
     private final RequireActiveUserGuard requireActiveUserGuard;
     private final RequireAdminGuard requireAdminGuard;
+    private final UpdateUserRoleUseCase updateUserRole;
     private final ApplicationEventPublisher events;
     private final Clock clock;
     private final IdGenerator idGenerator;
@@ -101,6 +105,7 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
                                   TokenVerificacionEmailPort tokenVerificacionEmailPort,
                                   LimitarSolicitudesResetPort limitarSolicitudesResetPort,
                                   RequireActiveUserGuard requireActiveUserGuard, RequireAdminGuard requireAdminGuard,
+                                  UpdateUserRoleUseCase updateUserRole,
                                   ApplicationEventPublisher events, Clock clock, IdGenerator idGenerator) {
         this.loadAccountRequestPort = loadAccountRequestPort;
         this.saveAccountRequestPort = saveAccountRequestPort;
@@ -116,6 +121,7 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
         this.limitarSolicitudesResetPort = limitarSolicitudesResetPort;
         this.requireActiveUserGuard = requireActiveUserGuard;
         this.requireAdminGuard = requireAdminGuard;
+        this.updateUserRole = updateUserRole;
         this.events = events;
         this.clock = clock;
         this.idGenerator = idGenerator;
@@ -271,6 +277,14 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
         saveParticipacionProgramaPort.save(ParticipacionPrograma.inscribirTraineeAprobado(usuario.id(), clock));
         request.approve(actor, usuario.id(), clock);
         saveAccountRequestPort.save(request);
+
+        // D-265: entrar con otro rol es aprobar como aprendiz y cambiarle el rol en la MISMA transaccion, por el
+        // mismo caso de uso que «Equipo y roles» (mismo guard, perfil de mentor y RolDeUsuarioCambiadoEvent). Los
+        // oyentes de UsuarioRegistradoEvent corren despues del commit y ya leen el rol final: un mentor o un guia
+        // aprobado asi no entra al grupo de bienvenida ni recibe chat de soporte de aprendiz.
+        if (command.rol() != UserRole.defaultForSelfRegistration()) {
+            updateUserRole.updateRole(new UpdateUserRoleCommand(usuario.id(), command.rol(), command.actorId()));
+        }
 
         events.publishEvent(new UsuarioRegistradoEvent(usuario.id(), clock.now()));
     }
