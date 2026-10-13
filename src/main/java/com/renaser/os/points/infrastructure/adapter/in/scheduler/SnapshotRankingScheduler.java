@@ -30,7 +30,7 @@ public class SnapshotRankingScheduler {
             lockAtLeastFor = "${renaser.scheduling.shedlock.points-snapshot-ranking.lock-at-least-for:PT30S}")
     public void generarSnapshotsDelDia() {
         var hoy = clock.today();
-        // GENERAL entra desde D-43 y KILOMETROS desde D-226. COHORT sigue afuera — le falta el dato
+        // GENERAL entra desde D-43, KILOMETROS desde D-226 y GIMNASIO desde D-266. COHORT sigue afuera — le falta el dato
         // de cohorte. La lista es la misma que usa la regeneracion del panel (un solo lugar).
         for (TipoRanking tipo : TipoRanking.CON_CORTE_DIARIO) {
             try {

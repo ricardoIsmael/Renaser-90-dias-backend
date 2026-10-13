@@ -31,4 +31,13 @@ public interface MedicionAcumuladaFinder {
      *         clave = nunca registró km; el ranking lo pone con cero, al fondo.
      */
     Map<UserId, BigDecimal> kilometrosAcumulados(Collection<UserId> participantes, LocalDate hasta);
+
+    /**
+     * D-266: los días que cada participante cumplió el hábito de gimnasio, desde su Día 1 hasta {@code hasta}
+     * inclusive (un día por registro COMPLETADO; no es una medición, es un conteo, y por eso es su propio método).
+     *
+     * @return días por participante, <b>solo para quienes cumplieron alguno</b>. Sin clave = ninguno; el ranking lo
+     *         pone con cero, al fondo.
+     */
+    Map<UserId, Integer> diasDeGimnasio(Collection<UserId> participantes, LocalDate hasta);
 }
