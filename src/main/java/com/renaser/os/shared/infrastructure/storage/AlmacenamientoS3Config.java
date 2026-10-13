@@ -7,7 +7,11 @@ import org.springframework.context.annotation.Configuration;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+
+import java.net.URI;
+import java.util.Optional;
 
 /**
  * Clientes de S3, creados SOLO cuando {@code renaser.storage.proveedor=s3}. Mismo patron que
@@ -30,9 +34,25 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 class AlmacenamientoS3Config {
 
     private final Region region;
+    /** Solo en desarrollo: un S3 compatible local ({@code AWS_S3_ENDPOINT}). Vacío, el SDK va al S3 de AWS. */
+    private final Optional<URI> endpoint;
 
-    AlmacenamientoS3Config(@Value("${renaser.storage.s3.region}") String region) {
+    AlmacenamientoS3Config(@Value("${renaser.storage.s3.region}") String region,
+                           @Value("${renaser.storage.s3.endpoint:}") String endpoint) {
         this.region = Region.of(region);
+        this.endpoint = endpointLocal(endpoint);
+    }
+
+    /**
+     * Un S3 compatible local (RustFS, MinIO) no tiene un subdominio por bucket: se le habla con la ruta
+     * ({@code http://localhost:9002/bucket/clave}). Por eso, con endpoint, va también {@code pathStyleAccess}.
+     */
+    static Optional<URI> endpointLocal(String valor) {
+        return valor == null || valor.isBlank() ? Optional.empty() : Optional.of(URI.create(valor.trim()));
+    }
+
+    static S3Configuration configuracionDe(Optional<URI> endpoint) {
+        return S3Configuration.builder().pathStyleAccessEnabled(endpoint.isPresent()).build();
     }
 
     /**
@@ -42,10 +62,12 @@ class AlmacenamientoS3Config {
      */
     @Bean
     S3Presigner s3Presigner() {
-        return S3Presigner.builder()
+        S3Presigner.Builder builder = S3Presigner.builder()
                 .region(region)
-                .credentialsProvider(DefaultCredentialsProvider.create())
-                .build();
+                .serviceConfiguration(configuracionDe(endpoint))
+                .credentialsProvider(DefaultCredentialsProvider.create());
+        endpoint.ifPresent(builder::endpointOverride);
+        return builder.build();
     }
 
     /**
@@ -58,9 +80,11 @@ class AlmacenamientoS3Config {
      */
     @Bean
     S3Client s3Client() {
-        return S3Client.builder()
+        var builder = S3Client.builder()
                 .region(region)
-                .credentialsProvider(DefaultCredentialsProvider.create())
-                .build();
+                .serviceConfiguration(configuracionDe(endpoint))
+                .credentialsProvider(DefaultCredentialsProvider.create());
+        endpoint.ifPresent(builder::endpointOverride);
+        return builder.build();
     }
 }

@@ -67,7 +67,7 @@ class S3AlmacenamientoAdapterTest {
 
     private S3AlmacenamientoAdapter adapter() {
         return new S3AlmacenamientoAdapter(presignerConCredencialesDeMentira(), s3Client, BUCKET,
-                REGION.id());
+                REGION.id(), "");
     }
 
     @Test

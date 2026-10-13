@@ -17,6 +17,25 @@ services:
       timeout: 5s
       retries: 10
 
+  fotos-local:
+    # Solo desarrollo y E2E: un S3 compatible para que las fotos funcionen en local sin tocar AWS (el bucket de la
+    # configuración de IntelliJ, s3-renaser90dias, quedó deshabilitado en AWS; E-608). Tiene perfil propio: un
+    # `docker compose up` común no lo levanta. Cómo usarlo: docs/DESPLIEGUE_Y_CI.md, «1.3 Fotos en local».
+    image: rustfs/rustfs:1.0.1
+    container_name: renaser-fotos
+    profiles: ["fotos-local"]
+    restart: unless-stopped
+    environment:
+      RUSTFS_ACCESS_KEY: renaser-local
+      RUSTFS_SECRET_KEY: renaser-local-secreto
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ENABLE: "false"
+    ports:
+      - "127.0.0.1:9002:9000"
+    volumes:
+      - renaser_fotos_data:/data
+
   redis:
     image: redis:7-alpine
     container_name: renaser-redis
@@ -109,3 +128,4 @@ volumes:
   renaser_redis_data:
   renaser_prometheus_data:
   renaser_grafana_data:
+  renaser_fotos_data:
