@@ -15239,3 +15239,25 @@ primera no confirmó. Falla con el adaptador anterior con este mismo mensaje (co
 `AprobarConRolIT.aprobarComoAdministrador`, que exige el outbox vacío al terminar. **Regla general:** un «¿existe? →
 INSERT» solo es idempotente si nadie más inserta a la vez; cuando dos oyentes del mismo hecho escriben la misma fila,
 la idempotencia la pone la base (`ON CONFLICT`), no un `exists` previo.
+
+---
+
+## E-608 · El servidor completa un hábito de foto obligatoria sin ninguna foto (back, ABIERTO, 13/10)
+
+**Síntoma literal.** En el E2E de D-266 (GIMNASIO), `POST /api/v1/habit-tracks/{id}/complete` con cuerpo `{}` sobre el
+registro de GIMNASIO (`exigencia_evidencia = OBLIGATORIA`), sin haber subido evidencia, respondió `200` con
+`"estado": "COMPLETADO", "puntosOtorgados": 10`.
+
+**Causa real.** La regla «este hábito exige foto» solo la cumple la app (abre la cámara antes de completar). En el
+servidor, `exigencia_evidencia` se usa para dibujar el hábito (`TracksDelDiaProyeccionService`) y en Administración;
+`RegistroService.completar` y el dominio no la miran. Vale para **todos** los hábitos con foto obligatoria, no solo
+GIMNASIO; con su ranking propio, un llamado directo a la API podría sumar días de gimnasio sin foto.
+
+**Pendiente.** Exigir en `completar` que un registro con exigencia `OBLIGATORIA` tenga al menos una evidencia
+registrada (o que el gesto sea uno que la trae, como el registro con foto), con 400 y un motivo claro; cuidar los APK
+viejos que completan después de confirmar la evidencia (el orden de la app ya es subir → confirmar → completar). Prueba
+de regresión: completar sin evidencia → 400, y con evidencia → 200.
+
+**Nota del mismo E2E (entorno, no código).** La subida de la foto falló en local porque la configuración de IntelliJ
+apunta `AWS_S3_BUCKET` a `s3-renaser90dias`, que AWS responde con `AllAccessDisabled`. Con esa configuración no se
+puede subir ninguna foto en local; producción usa otro bucket.
