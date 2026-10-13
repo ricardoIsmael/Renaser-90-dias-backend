@@ -5,6 +5,7 @@ import com.renaser.os.rag.application.ports.in.voz.VozDelOrbeUseCase.AudioDelOrb
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -40,6 +41,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/renasia/voz")
+@Funcionalidad("ia.voz")
 public class VozRenasiaController {
 
     static final MediaType AUDIO_WAV = MediaType.parseMediaType("audio/wav");

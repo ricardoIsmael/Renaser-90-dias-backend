@@ -5,12 +5,14 @@ import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
 import com.renaser.os.shared.web.security.RequiresPermission;
+import com.renaser.os.shared.web.security.SinInterruptor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/home")
+@SinInterruptor(motivo = "Resumen de Hoy: junta datos de varias funcionalidades y la app lo lee al entrar; cada funcionalidad se apaga en su propio endpoint")
 public class HomeController {
 
     private final ConsultarResumenHomeUseCase consultarResumenHomeUseCase;

@@ -5,6 +5,7 @@ import com.renaser.os.onboarding.application.ports.in.cuestionario.ObtenerCuesti
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/onboarding")
+@Funcionalidad("onboarding")
 public class CuestionarioController {
 
     private final ObtenerCuestionarioUseCase obtenerCuestionarioUseCase;

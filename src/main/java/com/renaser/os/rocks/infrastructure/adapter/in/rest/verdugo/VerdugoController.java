@@ -8,6 +8,7 @@ import com.renaser.os.rocks.domain.model.verdugo.ResultadoVerdugo;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -23,6 +24,7 @@ import java.util.List;
 /** Contrato preservado del repo viejo: `POST/GET /api/v1/enforcer-events` (ahora implementado por `rocks`). */
 @RestController
 @RequestMapping("/api/v1/enforcer-events")
+@Funcionalidad("plan")
 public class VerdugoController {
 
     private final RegistrarEventoVerdugoUseCase registrarUseCase;

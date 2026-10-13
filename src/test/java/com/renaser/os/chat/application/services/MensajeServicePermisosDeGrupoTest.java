@@ -231,7 +231,7 @@ class MensajeServicePermisosDeGrupoTest {
         servicio = new MensajeService(conversaciones, esParticipante, new AccesoAChatsDeGrupo(pertenencia, org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.participante.GruposEnCursoPort.class), usuarios), marcarLeido, guardar,
                 cargarMensajes, fanout, usuarios, almacenamiento, conversacion -> ConfirmacionDeLectura.sinDobleMarca(),
                 FixedClock.at(AHORA),
-                UUID::randomUUID, evento -> { }, new MetricasDelChatEnMemoria());
+                UUID::randomUUID, evento -> { }, new MetricasDelChatEnMemoria(), new com.renaser.os.chat.application.services.InterruptoresDelChat(new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido(), org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort.class)));
     }
 
     private EnviarMensajeCommand mensajeDe(UserId autor, ConversacionId conversacion) {

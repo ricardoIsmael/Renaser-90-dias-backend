@@ -8,6 +8,7 @@ import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestraFijaException;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -26,6 +27,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/rocks/master")
+@Funcionalidad("plan")
 public class RocaMaestraController {
 
     private final ConsultarRocasMaestrasUseCase consultarUseCase;

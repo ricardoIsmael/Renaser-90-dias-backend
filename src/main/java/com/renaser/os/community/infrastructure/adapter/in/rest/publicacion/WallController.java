@@ -21,6 +21,7 @@ import com.renaser.os.community.domain.model.publicacion.TipoReaccion;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -49,6 +50,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/wall")
+@Funcionalidad("muro")
 public class WallController {
 
     private final ConsultarFeedUseCase consultarFeedUseCase;
@@ -87,6 +89,7 @@ public class WallController {
     }
 
     @RequiresPermission(Permission.PUBLISH_ON_WALL)
+    @Funcionalidad("muro.publicar")
     @PostMapping
     public ResponseEntity<WallPostResponse> publicar(@ActorAutenticado UserId actorId,
                                                        @RequestBody @Valid CreateWallPostRequest request) {
@@ -96,6 +99,7 @@ public class WallController {
     }
 
     @RequiresPermission(value = Permission.USE_APP, scope = "solo el autor de la publicacion")
+    @Funcionalidad("muro.publicar")
     @PatchMapping("/{id}")
     public WallPostResponse actualizar(@ActorAutenticado UserId actorId, @PathVariable UUID id,
                                         @RequestBody @Valid UpdateWallPostRequest request) {
@@ -158,6 +162,7 @@ public class WallController {
     }
 
     @RequiresPermission(Permission.USE_APP)
+    @Funcionalidad("muro.reacciones")
     @PostMapping("/{id}/react")
     public WallReactionToggleResponse reaccionar(@ActorAutenticado UserId actorId, @PathVariable UUID id,
                                                   @RequestBody @Valid ReactToWallPostRequest request) {
@@ -170,12 +175,14 @@ public class WallController {
      * {@link #feed} y {@link #reaccionar} (y que {@code WallCommentController#listar}, que
      * estuvo "sin clasificar" hasta E-215). */
     @RequiresPermission(Permission.USE_APP)
+    @Funcionalidad("muro.reacciones")
     @GetMapping("/{id}/reactions")
     public WallReactionsResponse reacciones(@ActorAutenticado UserId actorId, @PathVariable UUID id) {
         return WallReactionsResponse.from(consultarReaccionesUseCase.reacciones(actorId, PublicacionId.of(id)));
     }
 
     @RequiresPermission(Permission.PUBLISH_ON_WALL)
+    @Funcionalidad("muro.publicar")
     @PostMapping("/media/upload-url")
     public UrlSubidaMediaResponse urlDeSubida(@ActorAutenticado UserId actorId,
                                                @RequestBody SolicitarUrlSubidaMediaRequest request) {

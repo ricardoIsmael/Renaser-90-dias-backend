@@ -94,7 +94,7 @@ class MediaDelMuroEnElChatTest {
         mensajeService = new MensajeService(loadConversacionPort, esParticipantePort, new AccesoAChatsDeGrupo(pertenenciaVigentePort, org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.participante.GruposEnCursoPort.class), userSummaryFinder),
                 marcarLeidoPort, saveMensajePort, loadMensajePort, publicarMensajeFanoutPort, userSummaryFinder,
                 almacenamientoPort, conversacion -> ConfirmacionDeLectura.sinDobleMarca(), FixedClock.at(AHORA),
-                UUID::randomUUID, evento -> { }, new MetricasDelChatEnMemoria());
+                UUID::randomUUID, evento -> { }, new MetricasDelChatEnMemoria(), new com.renaser.os.chat.application.services.InterruptoresDelChat(new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido(), org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort.class)));
         compartirService = new CompartirPublicacionService(mensajeService, publicacionMuroFinder, userSummaryFinder);
 
         lenient().when(userSummaryFinder.findById(actor)).thenReturn(

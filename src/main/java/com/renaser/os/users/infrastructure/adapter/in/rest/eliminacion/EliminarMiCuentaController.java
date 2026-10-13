@@ -3,6 +3,7 @@ package com.renaser.os.users.infrastructure.adapter.in.rest.eliminacion;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import com.renaser.os.users.application.ports.in.eliminacion.CerrarMiCuentaUseCase;
 import com.renaser.os.users.application.ports.in.eliminacion.CerrarMiCuentaUseCase.CerrarMiCuentaCommand;
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/v1/users/me/account-deletion")
+@Funcionalidad("cuenta.eliminar")
 public class EliminarMiCuentaController {
 
     private final CerrarMiCuentaUseCase cerrarMiCuenta;

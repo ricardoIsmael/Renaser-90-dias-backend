@@ -85,7 +85,7 @@ class RespuestasEnElChatTest {
                 new AccesoAChatsDeGrupo(pertenenciaVigentePort, mock(GruposEnCursoPort.class), userSummaryFinder),
                 marcarLeidoPort, saveMensajePort, loadMensajePort, publicarMensajeFanoutPort, userSummaryFinder,
                 almacenamientoPort, conversacion -> ConfirmacionDeLectura.sinDobleMarca(), CLOCK, idGenerator,
-                publicados::add, new MetricasDelChatEnMemoria());
+                publicados::add, new MetricasDelChatEnMemoria(), new com.renaser.os.chat.application.services.InterruptoresDelChat(new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido(), org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort.class)));
         lenient().when(idGenerator.newId()).thenAnswer(inv -> UUID.randomUUID());
         lenient().when(userSummaryFinder.findById(ana)).thenReturn(Optional.of(persona(ana, "Ana Pérez")));
         lenient().when(userSummaryFinder.findById(luis)).thenReturn(Optional.of(persona(luis, "Luis Soto")));

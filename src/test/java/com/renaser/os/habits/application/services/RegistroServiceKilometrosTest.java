@@ -88,6 +88,27 @@ class RegistroServiceKilometrosTest {
 
     private RegistroService service;
     private UserId dueno;
+    /** Spec 002: apaga las claves que la prueba elija; por defecto, todo prendido. */
+    private final java.util.Set<String> apagadas = new java.util.HashSet<>();
+    private final com.renaser.os.shared.application.Interruptores interruptores =
+            new com.renaser.os.shared.application.Interruptores() {
+                @Override
+                public boolean prendida(String clave) {
+                    return !apagadas.contains(clave);
+                }
+
+                @Override
+                public boolean prendidaPara(String clave, UserId actor) {
+                    return prendida(clave);
+                }
+
+                @Override
+                public void exigirPrendidaPara(String clave, UserId actor) {
+                    if (!prendida(clave)) {
+                        throw new com.renaser.os.shared.domain.FuncionalidadApagadaException(clave, "Volvemos pronto");
+                    }
+                }
+            };
 
     @BeforeEach
     void setUp() {
@@ -95,7 +116,7 @@ class RegistroServiceKilometrosTest {
                 loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder, loadDesbloqueoPort, events,
                 CLOCK, idGenerator, List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(),
                         new PoliticaClaseDiaria(), new PoliticaKilometros()), CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort),
-                ids -> Set.copyOf(ids));
+                ids -> Set.copyOf(ids), interruptores);
         dueno = UserId.of(UUID.randomUUID());
         lenient().when(saveRegistroPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(loadHorarioPort.porHabito(any())).thenReturn(List.of());
@@ -201,5 +222,21 @@ class RegistroServiceKilometrosTest {
         assertThatThrownBy(() -> service.completar(CompletarRegistroCommand.conValorManual(otro, registro.id(), null,
                 null, new BigDecimal("5")))).isInstanceOf(NotAuthorizedException.class);
         verify(saveRegistroPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("spec 002: con habitos.km apagado, completar los kilómetros es 503 con el aviso y no guarda ni paga; "
+            + "un hábito común se sigue completando")
+    void conLosKilometrosApagadosNoSeCompleta() {
+        apagadas.add("habitos.km");
+        RegistroHabito registro = pendienteDe(habitoKilometros());
+
+        assertThatThrownBy(() -> completarCon(registro, "5"))
+                .isInstanceOf(com.renaser.os.shared.domain.FuncionalidadApagadaException.class)
+                .hasMessage("Volvemos pronto");
+
+        assertThat(registro.estado()).isEqualTo(EstadoRegistro.PENDIENTE);
+        verify(saveRegistroPort, never()).save(any());
+        assertThat(completarCon(pendienteDe(habitoComun()), null).estado()).isEqualTo(EstadoRegistro.COMPLETADO);
     }
 }

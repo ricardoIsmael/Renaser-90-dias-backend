@@ -10,7 +10,9 @@ import com.renaser.os.onboarding.application.ports.in.estado.ObtenerEstadoOnboar
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
+import com.renaser.os.shared.web.security.SinInterruptor;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/onboarding")
+@Funcionalidad("onboarding")
 public class EstadoOnboardingController {
 
     private final ObtenerEstadoOnboardingUseCase obtenerUseCase;
@@ -39,6 +42,7 @@ public class EstadoOnboardingController {
     }
 
     @RequiresPermission(Permission.USE_APP)
+    @SinInterruptor(motivo = "La app lee el estado del onboarding al entrar para decidir a qué pantalla ir: apagar el onboarding no puede dejar a nadie sin entrar")
     @GetMapping("/state")
     public EstadoOnboardingResponse obtener(@ActorAutenticado UserId actor) {
         return EstadoOnboardingResponse.from(obtenerUseCase.obtener(actor));

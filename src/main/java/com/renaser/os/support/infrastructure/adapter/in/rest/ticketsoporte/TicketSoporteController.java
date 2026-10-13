@@ -3,6 +3,7 @@ package com.renaser.os.support.infrastructure.adapter.in.rest.ticketsoporte;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import com.renaser.os.support.application.ports.in.ticketsoporte.AbrirTicketSoporteUseCase;
 import com.renaser.os.support.application.ports.in.ticketsoporte.AbrirTicketSoporteUseCase.AbrirTicketSoporteCommand;
@@ -23,6 +24,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/support-tickets")
+@Funcionalidad("chat.soporte")
 public class TicketSoporteController {
 
     private final AbrirTicketSoporteUseCase abrirUseCase;

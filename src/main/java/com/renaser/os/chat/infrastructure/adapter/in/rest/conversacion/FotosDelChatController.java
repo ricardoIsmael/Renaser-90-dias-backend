@@ -6,6 +6,7 @@ import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
@@ -32,6 +33,7 @@ import java.util.UUID;
  * ruta y la misma respuesta.</blockquote>
  */
 @RestController
+@Funcionalidad("chat")
 public class FotosDelChatController {
 
     static final String RUTA_FOTO_DE_LA_CONVERSACION = "/api/v1/chat/conversations/{id}/foto";

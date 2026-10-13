@@ -11,6 +11,7 @@ import com.renaser.os.calendar.infrastructure.adapter.in.rest.evento.AsistenciaR
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -34,6 +35,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/calendar/events")
+@Funcionalidad("eventos.asistencia")
 class AsistenciaController {
 
     private static final String QUIEN = "quien creó el evento, ADMIN, ALCHEMIST o MENTOR_LEAD (D-256): el servicio "

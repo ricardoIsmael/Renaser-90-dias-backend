@@ -1,5 +1,6 @@
 package com.renaser.os.users.infrastructure.adapter.in.rest.admin;
 
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
@@ -36,6 +37,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/admin/trainees")
+@Funcionalidad("admin.personas")
 public class TraineeAdminController {
 
     private final ListTraineesUseCase listTraineesUseCase;

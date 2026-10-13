@@ -3,7 +3,9 @@ package com.renaser.os.users.infrastructure.adapter.in.rest.user;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
+import com.renaser.os.shared.web.security.SinInterruptor;
 import com.renaser.os.users.application.ports.in.user.ConfirmarAvatarUseCase;
 import com.renaser.os.users.application.ports.in.user.ConfirmarAvatarUseCase.ConfirmarAvatarCommand;
 import com.renaser.os.users.application.ports.in.user.GetMyFullProfileUseCase;
@@ -32,6 +34,7 @@ import java.util.UUID;
  * temporal por el header {@code X-Actor-Id} mientras dura la migracion. */
 @RestController
 @RequestMapping("/api/v1/users")
+@Funcionalidad("perfil")
 public class UserController {
 
     private final GetMyFullProfileUseCase getMyFullProfileUseCase;
@@ -55,6 +58,7 @@ public class UserController {
     }
 
     @RequiresPermission(value = Permission.USE_APP, scope = "self")
+    @SinInterruptor(motivo = "Lectura del perfil propio, que la app usa al entrar; perfil apaga solo la edición")
     @PostMapping("/me")
     public UserResponse me(@ActorAutenticado UserId actor) {
         return UserResponse.from(getMyFullProfileUseCase.getMyFullProfile(actor));
@@ -70,6 +74,7 @@ public class UserController {
     }
 
     @RequiresPermission(value = Permission.MANAGE_ROLES, scope = "el guard real es User.requireRoleManager: invitar es asignar un rol")
+    @Funcionalidad("admin.equipo")
     @PostMapping("/invite")
     public ResponseEntity<UserIdResponse> invite(@ActorAutenticado UserId actor,
                                                   @RequestBody @Valid InviteUserRequest request) {
@@ -79,6 +84,7 @@ public class UserController {
     }
 
     @RequiresPermission(Permission.MANAGE_ROLES)
+    @Funcionalidad("admin.equipo")
     @PatchMapping("/{id}/role")
     public ResponseEntity<Void> updateRole(@PathVariable UUID id, @ActorAutenticado UserId actor,
                                             @RequestBody @Valid UpdateUserRoleRequest request) {

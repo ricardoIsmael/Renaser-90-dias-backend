@@ -6,6 +6,7 @@ import com.renaser.os.points.application.ports.in.semaforo.PausarSemaforoUseCase
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -25,6 +26,7 @@ import java.time.LocalDate;
  */
 @RestController
 @RequestMapping("/api/v1/me/semaforo")
+@Funcionalidad("semaforo")
 public class MiSemaforoController {
 
     private final ConsultarMiSemaforoUseCase consultarMiSemaforo;

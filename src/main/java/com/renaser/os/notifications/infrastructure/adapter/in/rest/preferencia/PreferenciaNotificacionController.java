@@ -7,6 +7,7 @@ import com.renaser.os.notifications.domain.model.notificacion.TipoNotificacion;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
  * del actor resuelto, nunca las de otro usuario. */
 @RestController
 @RequestMapping("/api/v1/notification-preferences")
+@Funcionalidad("notificaciones")
 public class PreferenciaNotificacionController {
 
     private final GestionarPreferenciasUseCase gestionarPreferenciasUseCase;

@@ -6,6 +6,7 @@ import com.renaser.os.community.domain.model.celula.CelulaId;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -35,6 +36,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/admin/cells/{id}/additional-mentor")
+@Funcionalidad("admin.grupos")
 public class AltaAdicionalDeMentorController {
 
     private final SumarMentorAGrupoUseCase sumarUseCase;

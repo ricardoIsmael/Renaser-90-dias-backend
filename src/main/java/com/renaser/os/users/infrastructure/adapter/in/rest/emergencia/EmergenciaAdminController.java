@@ -3,6 +3,7 @@ package com.renaser.os.users.infrastructure.adapter.in.rest.emergencia;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import com.renaser.os.users.application.ports.in.emergencia.AtenderEmergenciaUseCase;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +20,7 @@ import java.util.UUID;
  * que además deja el pedido resuelto; acá solo se lee y se cierra sin cambiar el día.
  */
 @RestController
+@Funcionalidad("emergencia")
 public class EmergenciaAdminController {
 
     private final AtenderEmergenciaUseCase atender;

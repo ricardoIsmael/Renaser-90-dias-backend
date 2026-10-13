@@ -5,6 +5,7 @@ import com.renaser.os.community.application.ports.in.acompanamiento.ConsultarApr
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -23,6 +24,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/mentor/groups/{groupId}/learners")
+@Funcionalidad("mentor.mi_grupo")
 public class AprendicesDelGrupoController {
 
     private static final int LIMITE_POR_DEFECTO = 25;

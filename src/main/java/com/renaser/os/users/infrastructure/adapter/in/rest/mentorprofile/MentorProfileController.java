@@ -3,6 +3,7 @@ package com.renaser.os.users.infrastructure.adapter.in.rest.mentorprofile;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import com.renaser.os.users.application.ports.in.mentorprofile.SetMentorOperationalStatusUseCase;
 import com.renaser.os.users.application.ports.in.mentorprofile.SetMentorOperationalStatusUseCase.SetMentorOperationalStatusCommand;
@@ -22,6 +23,7 @@ import java.util.UUID;
  * temporal por el header {@code X-Actor-Id}. */
 @RestController
 @RequestMapping("/api/v1/users/{mentorId}/mentor-profile")
+@Funcionalidad("admin.equipo")
 public class MentorProfileController {
 
     private final UpdateMentorProfileUseCase updateMentorProfileUseCase;
@@ -55,6 +57,7 @@ public class MentorProfileController {
      */
     @RequiresPermission(value = Permission.SET_MENTOR_OPERATIONAL_STATUS,
             scope = "el destinatario tiene que tener perfil de mentor; lo verifica el caso de uso")
+    @Funcionalidad("lider")
     @PatchMapping("/operational-status")
     public ResponseEntity<Void> setOperationalStatus(@PathVariable UUID mentorId, @ActorAutenticado UserId actor,
                                                       @Valid @RequestBody SetMentorOperationalStatusRequest request) {

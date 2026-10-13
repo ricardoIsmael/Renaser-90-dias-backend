@@ -9,6 +9,7 @@ import com.renaser.os.mentoring.application.ports.in.ConsultarSemaforoDelGrupoAd
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -39,6 +40,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/admin")
+@Funcionalidad("semaforo")
 public class SemaforoAdministrativoController {
 
     private final ConsultarSemaforoDelGrupoAdministrativoUseCase consultarTabla;

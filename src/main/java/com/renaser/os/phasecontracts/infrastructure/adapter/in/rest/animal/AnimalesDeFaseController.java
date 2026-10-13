@@ -8,7 +8,9 @@ import com.renaser.os.phasecontracts.application.ports.in.animal.VerAnimalesDeFa
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
+import com.renaser.os.shared.web.security.SinInterruptor;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,6 +30,7 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/api/v1/phase-animals")
+@Funcionalidad("admin.fases")
 public class AnimalesDeFaseController {
 
     private static final String SOLO_ADMIN = "solo ADMIN/ALCHEMIST activos (D-258): el servicio rechaza a los "
@@ -48,6 +51,7 @@ public class AnimalesDeFaseController {
     }
 
     @RequiresPermission(Permission.USE_APP)
+    @SinInterruptor(motivo = "Lectura de las imágenes de las fases que usa la tarjeta de Yo para todos; solo su edición es de admin.fases")
     @GetMapping
     public List<AnimalDeFaseResponse> ver(@ActorAutenticado UserId actorId) {
         return responder(verUseCase.ver(actorId));

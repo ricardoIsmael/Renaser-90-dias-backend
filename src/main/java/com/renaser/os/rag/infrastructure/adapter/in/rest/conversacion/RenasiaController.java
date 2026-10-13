@@ -9,6 +9,7 @@ import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
@@ -35,6 +36,7 @@ import java.time.Instant;
  */
 @RestController
 @RequestMapping("/api/v1/renasia/mensajes")
+@Funcionalidad("ia.chat")
 public class RenasiaController {
 
     private final PreguntarRenasiaUseCase preguntarUseCase;

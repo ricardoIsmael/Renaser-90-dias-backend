@@ -9,6 +9,7 @@ import com.renaser.os.academy.infrastructure.adapter.in.rest.curso.MotivoBloqueo
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 /** Lecciones — lado alumno. Espejo de `/api/v1/lecciones/**` del repo viejo. */
 @RestController
 @RequestMapping("/api/v1/lecciones")
+@Funcionalidad("cursos")
 public class LeccionController {
 
     private final ConsultarLeccionUseCase leccionUseCase;

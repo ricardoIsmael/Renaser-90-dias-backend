@@ -3,6 +3,7 @@ package com.renaser.os.users.infrastructure.adapter.in.rest.user;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import com.renaser.os.users.application.ports.in.user.GetLogrosUseCase;
 import com.renaser.os.users.application.ports.in.user.GetLogrosUseCase.GetLogrosQuery;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
  * como respaldo temporal de la migracion. */
 @RestController
 @RequestMapping("/api/v1/profile")
+@Funcionalidad("perfil")
 public class LogrosController {
 
     private final GetLogrosUseCase getLogrosUseCase;

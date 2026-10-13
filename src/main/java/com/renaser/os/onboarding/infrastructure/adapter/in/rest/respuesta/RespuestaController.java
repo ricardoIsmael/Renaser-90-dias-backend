@@ -7,6 +7,7 @@ import com.renaser.os.onboarding.application.ports.in.respuesta.ObtenerRespuesta
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/onboarding")
+@Funcionalidad("onboarding")
 public class RespuestaController {
 
     private final GuardarRespuestaUseCase guardarRespuestaUseCase;

@@ -6,6 +6,7 @@ import com.renaser.os.habits.application.ports.in.diario.EscribirBitacoraNocturn
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/v1/journal/today")
+@Funcionalidad("habitos")
 public class JournalTodayController {
 
     private final ConsultarBitacoraNocturnaUseCase consultarUseCase;

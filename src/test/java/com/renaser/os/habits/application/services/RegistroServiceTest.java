@@ -100,7 +100,7 @@ class RegistroServiceTest {
                 loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder, loadDesbloqueoPort, events,
                 CLOCK, idGenerator,
                 List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()), CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort),
-                ids -> Set.copyOf(ids));
+                ids -> Set.copyOf(ids), new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido());
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(saveRegistroPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveRegistroPort.insertarSiNoExiste(any())).thenReturn(true);
@@ -204,7 +204,7 @@ class RegistroServiceTest {
                 loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder, loadDesbloqueoPort, events,
                 CLOCK, idGenerator,
                 List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()),
-                CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort), ids -> Set.of());
+                CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort), ids -> Set.of(), new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido());
     }
 
     private RegistroHabito pendienteListoParaCompletar(UserId dueno, Habito habito) {
@@ -647,7 +647,7 @@ class RegistroServiceTest {
                 loadHorarioPort, loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder,
                 loadDesbloqueoPort, events, FixedClock.at(Instant.parse("2026-09-28T03:00:00Z")), idGenerator,
                 List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()), CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort),
-                ids -> Set.copyOf(ids));
+                ids -> Set.copyOf(ids), new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido());
         UserId participante = participante();
         Habito personal = habitoPersonalDe(participante);
         conUnHabitoPersonal(participante, personal, 25, horarioDesdeElDia(personal.id(), 30, TipoDia.TODOS));
@@ -687,7 +687,7 @@ class RegistroServiceTest {
                 loadHorarioPort, loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder,
                 loadDesbloqueoPort, events, FixedClock.at(Instant.parse("2026-08-31T04:30:00Z")), idGenerator,
                 List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()), CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort),
-                ids -> Set.copyOf(ids));
+                ids -> Set.copyOf(ids), new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido());
         UserId participante = participante();
         Habito descanso = habitoCheckbox();
         when(progresoPort.deParticipante(participante)).thenReturn(Optional.of(
@@ -756,7 +756,7 @@ class RegistroServiceTest {
                 loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder, loadDesbloqueoPort, events,
                 FixedClock.at(Instant.parse(instante)), idGenerator,
                 List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()), CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort),
-                ids -> Set.copyOf(ids));
+                ids -> Set.copyOf(ids), new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido());
     }
 
     private static HorarioHabito horarioDeSeisAOcho(HabitoId habitoId) {

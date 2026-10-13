@@ -14,6 +14,7 @@ import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -27,6 +28,7 @@ import java.util.UUID;
 /** "Dia sin celular". Contrato viejo: POST .../phone-free/{start,complete,break} — ver docs/MODULO_HABITS.md. */
 @RestController
 @RequestMapping("/api/v1/habit-tracks")
+@Funcionalidad("habitos")
 public class RachaController {
 
     private static final int EXTENSION_DEFAULT_HORAS = 3;

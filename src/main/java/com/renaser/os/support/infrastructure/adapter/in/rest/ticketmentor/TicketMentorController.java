@@ -3,6 +3,7 @@ package com.renaser.os.support.infrastructure.adapter.in.rest.ticketmentor;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import com.renaser.os.support.application.ports.in.ticketmentor.AbrirTicketMentorUseCase;
 import com.renaser.os.support.application.ports.in.ticketmentor.AbrirTicketMentorUseCase.AbrirTicketMentorCommand;
@@ -31,6 +32,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/tickets")
+@Funcionalidad("tickets")
 public class TicketMentorController {
 
     private final AbrirTicketMentorUseCase abrirUseCase;

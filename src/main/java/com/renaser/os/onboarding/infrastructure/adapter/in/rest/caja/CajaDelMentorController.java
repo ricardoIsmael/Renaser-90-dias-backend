@@ -5,6 +5,7 @@ import com.renaser.os.onboarding.infrastructure.adapter.in.rest.caja.CajaRespons
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,6 +17,7 @@ import java.util.UUID;
 /** El chip de la caja en la ficha del aprendiz, para su mentor (D-219). */
 @RestController
 @RequestMapping("/api/v1/mentor/trainees/{aprendizId}/caja")
+@Funcionalidad("caja")
 public class CajaDelMentorController {
 
     private final CajaDelMentorUseCase cajaDelMentor;

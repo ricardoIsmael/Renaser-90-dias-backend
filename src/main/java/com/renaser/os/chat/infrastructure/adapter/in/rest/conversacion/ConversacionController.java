@@ -14,6 +14,7 @@ import com.renaser.os.chat.infrastructure.adapter.in.rest.miembro.MiembrosPageRe
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -36,6 +37,7 @@ import java.util.UUID;
  * {@code MensajeController} (ruta anidada). */
 @RestController
 @RequestMapping("/api/v1/chat/conversations")
+@Funcionalidad("chat")
 public class ConversacionController {
 
     private final CrearConversacionDirectaUseCase crearDirectaUseCase;
@@ -57,6 +59,7 @@ public class ConversacionController {
     }
 
     @RequiresPermission(value = Permission.USE_APP, scope = "el destinatario tambien tiene que estar activo")
+    @Funcionalidad("chat.directos")
     @PostMapping("/direct")
     public ResponseEntity<ConversacionResponse> obtenerOCrearDirecta(
             @ActorAutenticado UserId actorId,
@@ -82,6 +85,7 @@ public class ConversacionController {
 
     /** Ficha del grupo GLOBAL (#28): todos sus miembros, los cinco roles. */
     @RequiresPermission(value = Permission.USE_APP, scope = "participante del grupo GLOBAL")
+    @Funcionalidad("chat.global")
     @GetMapping("/global/members")
     public MiembrosPageResponse listarMiembrosGlobal(@ActorAutenticado UserId actorId,
                                                        @RequestParam(required = false) String cursor,
@@ -94,6 +98,7 @@ public class ConversacionController {
     /** Renombrar el grupo GLOBAL (#28) — solo ADMIN/ALCHEMIST, el caso de uso rechaza
      * con 403 a cualquier otro rol. */
     @RequiresPermission(Permission.RENAME_GLOBAL_CHAT)
+    @Funcionalidad("chat.global")
     @PatchMapping("/global/name")
     public ResponseEntity<Map<String, String>> renombrarGlobal(
             @ActorAutenticado UserId actorId,

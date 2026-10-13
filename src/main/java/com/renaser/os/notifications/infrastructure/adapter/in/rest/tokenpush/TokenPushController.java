@@ -8,6 +8,7 @@ import com.renaser.os.notifications.domain.model.tokenpush.PlataformaPush;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,6 +23,7 @@ import java.util.Locale;
  * respaldo por el header X-Actor-Id — nunca del body. */
 @RestController
 @RequestMapping("/api/v1/push-tokens")
+@Funcionalidad("notificaciones")
 public class TokenPushController {
 
     private final RegistrarTokenPushUseCase registrarTokenPushUseCase;

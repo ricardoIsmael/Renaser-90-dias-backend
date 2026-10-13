@@ -12,6 +12,7 @@ import com.renaser.os.evidence.domain.model.evidencia.EvidenciaId;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,6 +29,7 @@ import java.util.UUID;
 /** Solo ADMIN/ALCHEMIST — gateado dentro de {@code EvidenciaService}, no en el controller (CLAUDE.MD §5.4.6). */
 @RestController
 @RequestMapping("/api/v1/admin/evidence")
+@Funcionalidad("evidencias")
 public class EvidenciaAdminController {
 
     private final RevisarManualmenteUseCase revisarUseCase;

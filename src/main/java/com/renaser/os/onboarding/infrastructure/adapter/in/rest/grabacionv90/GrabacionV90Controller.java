@@ -9,6 +9,7 @@ import com.renaser.os.onboarding.application.ports.in.grabacionv90.ValidarV90Use
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -41,6 +42,7 @@ import java.util.List;
 @ConditionalOnProperty(name = "renaser.onboarding.v90.habilitado", havingValue = "true")
 @RestController
 @RequestMapping("/api/v1/onboarding/v90-recordings")
+@Funcionalidad("onboarding")
 public class GrabacionV90Controller {
 
     private final RegistrarGrabacionV90UseCase registrarUseCase;
