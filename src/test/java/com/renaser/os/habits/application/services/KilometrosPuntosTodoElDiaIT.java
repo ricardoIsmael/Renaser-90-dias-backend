@@ -150,6 +150,11 @@ class KilometrosPuntosTodoElDiaIT {
                                                       tipo_dia, es_opcional, estado)
                 VALUES (?, ?, ?, ?, ?, 'TODOS', true, 'PENDIENTE')
                 """, id, aprendiz, HABITO_KM, DIA_EN_LIMA, DIA_PROGRAMA);
+        // La captura ya subida, como la deja la app antes de completar (KILÓMETROS DIARIOS la exige, E-608).
+        jdbc.update("""
+                INSERT INTO renaser.evidencias (participante_id, registro_habito_id, tipo, bucket, ruta_storage)
+                VALUES (?, ?, 'FOTO', 'pruebas', ?)
+                """, aprendiz, id, "evidencia-habitos/" + aprendiz + "/" + id + "/captura.jpg");
         return id;
     }
 

@@ -45,6 +45,7 @@ import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.renaser.os.habits.api.CompletarClaseDiariaHabitoUseCase.CLAVE_SISTEMA_DAILY_CLASS;
@@ -98,7 +99,8 @@ class RegistroServiceTest {
         service = new RegistroService(loadRegistroPort, saveRegistroPort, loadHabitoPort, loadHorarioPort,
                 loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder, loadDesbloqueoPort, events,
                 CLOCK, idGenerator,
-                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()), CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort));
+                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()), CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort),
+                ids -> Set.copyOf(ids));
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(saveRegistroPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveRegistroPort.insertarSiNoExiste(any())).thenReturn(true);
@@ -183,6 +185,78 @@ class RegistroServiceTest {
         assertThat(resultado.estado()).isEqualTo(EstadoRegistro.COMPLETADO);
         assertThat(resultado.respuestaTexto()).isEqualTo("Entendi que la disciplina se construye a diario");
         verify(ajustarPuntosPort).ajustar(eq(dueno), eq(MotivoPuntos.HABIT_COMPLETED), eq(10), any());
+    }
+
+    // ────────────────────────────────────────────────────────────────────────────────────
+    // FOTO OBLIGATORIA (E-608): un hábito con exigencia OBLIGATORIA no se completa por el gesto
+    // genérico sin una evidencia subida. El primero FALLA contra el código anterior: completaba
+    // y pagaba 10 puntos sin foto.
+    // ────────────────────────────────────────────────────────────────────────────────────
+
+    private static Habito habitoConFotoObligatoria() {
+        return Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "GIMNASIO", TipoHabito.CHECKBOX, "CUERPO",
+                ExigenciaEvidencia.OBLIGATORIA, CLOCK.now());
+    }
+
+    /** El mismo servicio del {@code setUp}, pero sin ninguna evidencia subida para ningún registro. */
+    private RegistroService sinEvidenciaSubida() {
+        return new RegistroService(loadRegistroPort, saveRegistroPort, loadHabitoPort, loadHorarioPort,
+                loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder, loadDesbloqueoPort, events,
+                CLOCK, idGenerator,
+                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()),
+                CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort), ids -> Set.of());
+    }
+
+    private RegistroHabito pendienteListoParaCompletar(UserId dueno, Habito habito) {
+        RegistroHabito registro = registroPendiente(dueno, habito.id());
+        when(loadRegistroPort.byIdParaEscritura(registro.id())).thenReturn(Optional.of(registro));
+        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
+        lenient().when(loadHorarioPort.porHabito(habito.id())).thenReturn(List.of());
+        lenient().when(loadPreferenciaPort.porParticipanteHabitoYFecha(dueno, habito.id(), registro.fechaEjecucion()))
+                .thenReturn(Optional.empty());
+        when(progresoPort.deParticipante(dueno)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, false, false)));
+        return registro;
+    }
+
+    @Test
+    @DisplayName("FOTO OBLIGATORIA (E-608): sin evidencia subida no se completa ni paga")
+    void fotoObligatoriaSinEvidenciaNoSeCompleta() {
+        UserId dueno = participante();
+        RegistroHabito registro = pendienteListoParaCompletar(dueno, habitoConFotoObligatoria());
+
+        assertThatThrownBy(() -> sinEvidenciaSubida().completar(
+                new CompletarRegistroCommand(dueno, registro.id(), null, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("pide una foto");
+
+        assertThat(registro.estado()).isEqualTo(EstadoRegistro.PENDIENTE);
+        verify(saveRegistroPort, never()).save(any());
+        verify(ajustarPuntosPort, never()).ajustar(any(), any(), anyInt(), any());
+    }
+
+    @Test
+    @DisplayName("FOTO OBLIGATORIA (E-608): con la foto ya subida se completa y paga como siempre")
+    void fotoObligatoriaConEvidenciaSeCompleta() {
+        UserId dueno = participante();
+        RegistroHabito registro = pendienteListoParaCompletar(dueno, habitoConFotoObligatoria());
+
+        RegistroHabito resultado = service.completar(new CompletarRegistroCommand(dueno, registro.id(), null, null));
+
+        assertThat(resultado.estado()).isEqualTo(EstadoRegistro.COMPLETADO);
+        verify(ajustarPuntosPort).ajustar(eq(dueno), eq(MotivoPuntos.HABIT_COMPLETED), eq(10), any());
+    }
+
+    @Test
+    @DisplayName("FOTO OBLIGATORIA (E-608): un hábito de evidencia opcional sigue completándose sin foto")
+    void evidenciaOpcionalNoPideFoto() {
+        UserId dueno = participante();
+        RegistroHabito registro = pendienteListoParaCompletar(dueno, habitoCheckbox());
+
+        RegistroHabito resultado = sinEvidenciaSubida().completar(
+                new CompletarRegistroCommand(dueno, registro.id(), null, null));
+
+        assertThat(resultado.estado()).isEqualTo(EstadoRegistro.COMPLETADO);
     }
 
     @Test
@@ -572,7 +646,8 @@ class RegistroServiceTest {
         RegistroService deMadrugada = new RegistroService(loadRegistroPort, saveRegistroPort, loadHabitoPort,
                 loadHorarioPort, loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder,
                 loadDesbloqueoPort, events, FixedClock.at(Instant.parse("2026-09-28T03:00:00Z")), idGenerator,
-                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()), CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort));
+                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()), CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort),
+                ids -> Set.copyOf(ids));
         UserId participante = participante();
         Habito personal = habitoPersonalDe(participante);
         conUnHabitoPersonal(participante, personal, 25, horarioDesdeElDia(personal.id(), 30, TipoDia.TODOS));
@@ -611,7 +686,8 @@ class RegistroServiceTest {
         RegistroService deMadrugada = new RegistroService(loadRegistroPort, saveRegistroPort, loadHabitoPort,
                 loadHorarioPort, loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder,
                 loadDesbloqueoPort, events, FixedClock.at(Instant.parse("2026-08-31T04:30:00Z")), idGenerator,
-                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()), CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort));
+                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()), CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort),
+                ids -> Set.copyOf(ids));
         UserId participante = participante();
         Habito descanso = habitoCheckbox();
         when(progresoPort.deParticipante(participante)).thenReturn(Optional.of(
@@ -679,7 +755,8 @@ class RegistroServiceTest {
         return new RegistroService(loadRegistroPort, saveRegistroPort, loadHabitoPort, loadHorarioPort,
                 loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder, loadDesbloqueoPort, events,
                 FixedClock.at(Instant.parse(instante)), idGenerator,
-                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()), CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort));
+                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()), CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort),
+                ids -> Set.copyOf(ids));
     }
 
     private static HorarioHabito horarioDeSeisAOcho(HabitoId habitoId) {
