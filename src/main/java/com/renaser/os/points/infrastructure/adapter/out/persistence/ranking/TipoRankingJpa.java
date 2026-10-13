@@ -6,5 +6,7 @@ public enum TipoRankingJpa {
     CELULA,
     LIGA,
     /** V85. */
-    KILOMETROS
+    KILOMETROS,
+    /** V98 (D-266). */
+    GIMNASIO
 }

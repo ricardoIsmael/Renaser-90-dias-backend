@@ -1,6 +1,7 @@
 package com.renaser.os.habits.application.services;
 
 import com.renaser.os.habits.application.politica.PoliticaKilometros;
+import com.renaser.os.habits.application.ports.out.medicion.ContarDiasCumplidosPort;
 import com.renaser.os.habits.application.ports.out.medicion.SumarMedicionesPort;
 import com.renaser.os.points.api.MedicionAcumuladaFinder;
 import com.renaser.os.shared.domain.UserId;
@@ -13,22 +14,34 @@ import java.util.Collection;
 import java.util.Map;
 
 /**
- * D-226 — implementa {@link MedicionAcumuladaFinder} para el ranking de km. La suma sale de las
+ * D-226 — implementa {@link MedicionAcumuladaFinder} para el ranking de km y, desde D-266, el de días de gimnasio. La suma sale de las
  * FECHAS (cada registro del día con su número), no de un contador que se incrementa: si una noche no
  * corre el corte del ranking, la siguiente da el total correcto igual (regla 02 §2).
  */
 @Service
 public class KilometrosAcumuladosService implements MedicionAcumuladaFinder {
 
-    private final SumarMedicionesPort sumarMedicionesPort;
+    /** D-266: la clave que V99 le puso al hábito GIMNASIO. No tiene política propia: solo la usa el ranking. */
+    public static final String CLAVE_GIMNASIO = "GYM";
 
-    public KilometrosAcumuladosService(SumarMedicionesPort sumarMedicionesPort) {
+    private final SumarMedicionesPort sumarMedicionesPort;
+    private final ContarDiasCumplidosPort contarDiasCumplidosPort;
+
+    public KilometrosAcumuladosService(SumarMedicionesPort sumarMedicionesPort,
+                                       ContarDiasCumplidosPort contarDiasCumplidosPort) {
         this.sumarMedicionesPort = sumarMedicionesPort;
+        this.contarDiasCumplidosPort = contarDiasCumplidosPort;
     }
 
     @Override
     @Transactional(readOnly = true)
     public Map<UserId, BigDecimal> kilometrosAcumulados(Collection<UserId> participantes, LocalDate hasta) {
         return sumarMedicionesPort.sumaPorParticipante(participantes, PoliticaKilometros.CLAVE_SISTEMA, hasta);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UserId, Integer> diasDeGimnasio(Collection<UserId> participantes, LocalDate hasta) {
+        return contarDiasCumplidosPort.diasPorParticipante(participantes, CLAVE_GIMNASIO, hasta);
     }
 }

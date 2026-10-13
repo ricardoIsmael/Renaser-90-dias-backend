@@ -58,11 +58,11 @@ class RankingConAprendizSinProgramaIT {
     }
 
     @Test
-    void elCorteSaleParaLosDemasEnLosCuatroTiposYElSinProgramaQuedaAfuera() {
+    void elCorteSaleParaLosDemasEnTodosLosTiposYElSinProgramaQuedaAfuera() {
         ResultadoRegeneracion resultado = regenerar.regenerar(new RegenerarSnapshotsCommand(admin, FECHA));
 
         assertThat(resultado.fallados()).isEmpty();
-        assertThat(resultado.tipos()).containsExactlyInAnyOrder("LEAGUE", "CELL", "GENERAL", "KILOMETROS");
+        assertThat(resultado.tipos()).containsExactlyInAnyOrder("LEAGUE", "CELL", "GENERAL", "KILOMETROS", "GIMNASIO");
         for (TipoRanking tipo : TipoRanking.CON_CORTE_DIARIO) {
             assertThat(ranking.porTipoYFecha(tipo, FECHA))
                     .as("corte %s", tipo)

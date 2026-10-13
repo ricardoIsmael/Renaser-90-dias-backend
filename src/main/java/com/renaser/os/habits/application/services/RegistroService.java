@@ -1,6 +1,7 @@
 package com.renaser.os.habits.application.services;
 
 import com.renaser.os.community.api.PublicacionMuroFinder;
+import com.renaser.os.evidence.api.RegistrosConEvidenciaFinder;
 import com.renaser.os.habits.api.HabitoCompletadoEvent;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaUseCase;
@@ -15,6 +16,7 @@ import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHo
 import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort;
 import com.renaser.os.habits.application.ports.out.registro.SaveRegistroHabitoPort;
 import com.renaser.os.habits.domain.model.desbloqueo.DesbloqueoHabito;
+import com.renaser.os.habits.domain.model.habito.ExigenciaEvidencia;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
@@ -39,6 +41,7 @@ import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
@@ -56,6 +59,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -95,6 +99,7 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
     private final RegistroPoliticasHabito politicas;
     /** Spec 001 (D-264): qué hábitos globales le tocan a la persona ese día, según su rol. */
     private final CatalogoAplicable catalogoAplicable;
+    private final RegistrosConEvidenciaFinder registrosConEvidencia;
 
     public RegistroService(LoadRegistroHabitoPort loadRegistroPort, SaveRegistroHabitoPort saveRegistroPort,
                             LoadHabitoPort loadHabitoPort, LoadHorarioHabitoPort loadHorarioPort,
@@ -103,7 +108,8 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
                             PublicacionMuroFinder publicacionMuroFinder,
                             LoadDesbloqueoHabitoPort loadDesbloqueoPort,
                             ApplicationEventPublisher events, Clock clock, IdGenerator idGenerator,
-                            List<PoliticaHabito> politicas, CatalogoAplicable catalogoAplicable) {
+                            List<PoliticaHabito> politicas, CatalogoAplicable catalogoAplicable,
+                            RegistrosConEvidenciaFinder registrosConEvidencia) {
         this.loadRegistroPort = loadRegistroPort;
         this.saveRegistroPort = saveRegistroPort;
         this.loadHabitoPort = loadHabitoPort;
@@ -120,6 +126,7 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         // mapa, sin streams ni asignaciones (CLAUDE.MD §5.4.7, hot path).
         this.politicas = new RegistroPoliticasHabito(politicas);
         this.catalogoAplicable = catalogoAplicable;
+        this.registrosConEvidencia = registrosConEvidencia;
     }
 
     @Override
@@ -378,6 +385,7 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         // le corresponde, y le cerraria al habito su unico camino valido (E-120).
         if (command.gesto() == GestoCompletar.GENERICO) {
             requirePoliticaPermiteCompletarDirecto(habito, contextoDe(registro, command.medicion()));
+            requireEvidenciaSiLaExige(habito, registro);
         }
 
         Instant ahora = clock.now();
@@ -497,6 +505,23 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
      * <p>El {@code switch} sobre {@link DecisionPolitica} es exhaustivo por ser sellada:
      * si manana aparece una tercera variante, el compilador obliga a contemplarla aca.
      */
+    /**
+     * E-608: un hábito con exigencia {@code OBLIGATORIA} no se completa por el gesto genérico si su registro no tiene
+     * ninguna evidencia subida. Antes la regla la cumplía solo la app (abre la cámara antes de completar) y un
+     * {@code POST /complete} directo pagaba los puntos sin foto; con GIMNASIO y su ranking propio (D-266), sumaba días
+     * sin ir. La app ya hace subir → confirmar → completar, así que un APK viejo no cambia. Un gesto propio (la Clase
+     * Diaria) trae su propia prueba y no pasa por acá; SER no marca hábitos que exigen evidencia (D-171).
+     */
+    private void requireEvidenciaSiLaExige(Habito habito, RegistroHabito registro) {
+        if (habito.exigenciaEvidencia() != ExigenciaEvidencia.OBLIGATORIA) {
+            return;
+        }
+        UUID id = registro.id().value();
+        if (!registrosConEvidencia.deEntre(Set.of(id)).contains(id)) {
+            throw new IllegalArgumentException("Este hábito pide una foto: súbela antes de marcarlo como cumplido.");
+        }
+    }
+
     private void requirePoliticaPermiteCompletarDirecto(Habito habito, ContextoCompletar contexto) {
         PoliticaHabito politica = politicas.para(habito);
         switch (politica.puedeCompletarseDirecto(habito, contexto)) {

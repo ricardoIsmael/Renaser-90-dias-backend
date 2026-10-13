@@ -43,20 +43,21 @@ class RegeneracionRankingServiceTest {
         return new RegeneracionRankingService(generarSnapshotRankingUseCase, verificarActorAdministrativoPort, CLOCK);
     }
 
-    /** Desde D-226 son cuatro: KILOMETROS entra al corte diario y a la regeneracion por la misma lista. */
+    /** Desde D-266 son cinco: KILOMETROS (D-226) y GIMNASIO entran al corte diario y a la regeneracion por la misma lista. */
     @Test
-    void unAdminRegeneraLosCuatroTiposDelDiaDeHoy() {
+    void unAdminRegeneraLosCincoTiposDelDiaDeHoy() {
         when(verificarActorAdministrativoPort.esAdministrativoActivo(actor)).thenReturn(true);
 
         ResultadoRegeneracion resultado = service().regenerar(new RegenerarSnapshotsCommand(actor, null));
 
         assertThat(resultado.fecha()).isEqualTo(CLOCK.today());
-        assertThat(resultado.tipos()).containsExactly("LEAGUE", "CELL", "GENERAL", "KILOMETROS");
+        assertThat(resultado.tipos()).containsExactly("LEAGUE", "CELL", "GENERAL", "KILOMETROS", "GIMNASIO");
         assertThat(resultado.fallados()).isEmpty();
         verify(generarSnapshotRankingUseCase).generar(TipoRanking.LEAGUE, CLOCK.today());
         verify(generarSnapshotRankingUseCase).generar(TipoRanking.CELL, CLOCK.today());
         verify(generarSnapshotRankingUseCase).generar(TipoRanking.GENERAL, CLOCK.today());
         verify(generarSnapshotRankingUseCase).generar(TipoRanking.KILOMETROS, CLOCK.today());
+        verify(generarSnapshotRankingUseCase).generar(TipoRanking.GIMNASIO, CLOCK.today());
     }
 
     @Test
@@ -95,7 +96,7 @@ class RegeneracionRankingServiceTest {
 
         ResultadoRegeneracion resultado = service().regenerar(new RegenerarSnapshotsCommand(actor, null));
 
-        assertThat(resultado.tipos()).containsExactly("LEAGUE", "GENERAL", "KILOMETROS");
+        assertThat(resultado.tipos()).containsExactly("LEAGUE", "GENERAL", "KILOMETROS", "GIMNASIO");
         assertThat(resultado.fallados()).hasSize(1);
         assertThat(resultado.fallados().get(0)).contains("CELL").contains("sin candidatos");
         verify(generarSnapshotRankingUseCase).generar(TipoRanking.GENERAL, CLOCK.today());

@@ -39,10 +39,12 @@ public interface ConsultarRankingAgregadoUseCase {
      * @param general               snapshot {@link com.renaser.os.points.domain.model.ranking.TipoRanking#GENERAL}
      * @param kilometros            snapshot {@link com.renaser.os.points.domain.model.ranking.TipoRanking#KILOMETROS}
      *                              (D-226): km acumulados del programa; {@code puntaje} son km con dos decimales
+     * @param gimnasio              snapshot {@link com.renaser.os.points.domain.model.ranking.TipoRanking#GIMNASIO}
+     *                              (D-266): días de gimnasio del programa; {@code puntaje} son días enteros
      */
     record RankingAgregado(LocalDate fecha, CelulaResumen celula, List<EntradaRanking> liga,
                             List<EntradaRanking> coherenciaIndividual, List<EntradaRanking> general,
-                            List<EntradaRanking> kilometros) {
+                            List<EntradaRanking> kilometros, List<EntradaRanking> gimnasio) {
 
         /** Proyeccion publica de la celula del actor, tal como la expone {@code community.api.CelulaFinder}. */
         public record CelulaResumen(UUID celulaId, String cellName, String cohortName, String mentorName,

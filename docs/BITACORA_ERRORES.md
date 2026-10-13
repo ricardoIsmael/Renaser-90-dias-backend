@@ -15239,3 +15239,32 @@ primera no confirmó. Falla con el adaptador anterior con este mismo mensaje (co
 `AprobarConRolIT.aprobarComoAdministrador`, que exige el outbox vacío al terminar. **Regla general:** un «¿existe? →
 INSERT» solo es idempotente si nadie más inserta a la vez; cuando dos oyentes del mismo hecho escriben la misma fila,
 la idempotencia la pone la base (`ON CONFLICT`), no un `exists` previo.
+
+---
+
+## E-608 · El servidor completa un hábito de foto obligatoria sin ninguna foto (back, RESUELTO, 13/10)
+
+**Síntoma literal.** En el E2E de D-266 (GIMNASIO), `POST /api/v1/habit-tracks/{id}/complete` con cuerpo `{}` sobre el
+registro de GIMNASIO (`exigencia_evidencia = OBLIGATORIA`), sin haber subido evidencia, respondió `200` con
+`"estado": "COMPLETADO", "puntosOtorgados": 10`.
+
+**Causa real.** La regla «este hábito exige foto» solo la cumple la app (abre la cámara antes de completar). En el
+servidor, `exigencia_evidencia` se usa para dibujar el hábito (`TracksDelDiaProyeccionService`) y en Administración;
+`RegistroService.completar` y el dominio no la miran. Vale para **todos** los hábitos con foto obligatoria, no solo
+GIMNASIO; con su ranking propio, un llamado directo a la API podría sumar días de gimnasio sin foto.
+
+**Solución.** `RegistroService.completar`, por el gesto genérico, exige que el registro de un hábito `OBLIGATORIA`
+tenga al menos una evidencia (`evidence.api.RegistrosConEvidenciaFinder`, la consulta que ya usa la tarjeta) y si no,
+400 «Este hábito pide una foto: súbela antes de marcarlo como cumplido.». La app ya hace subir → confirmar → completar
+(también la 1.5.0); la Clase Diaria tiene gesto propio y SER no marca hábitos que exigen evidencia (D-171).
+
+**Para que no vuelva.** `RegistroServiceTest.fotoObligatoriaSinEvidenciaNoSeCompleta` (falla contra el código anterior,
+comprobado), `fotoObligatoriaConEvidenciaSeCompleta`, `evidenciaOpcionalNoPideFoto` y
+`KilometrosDiariosIT.sinCapturaNoSeCompleta` por HTTP. Las pruebas de km siembran la captura antes de completar, como la
+app. **Regla general:** una regla de negocio que la app hace cumplir (abrir la cámara antes) también la tiene que
+hacer cumplir el servidor; la app es solo una de las formas de llamar a la API.
+
+**Nota del mismo E2E (entorno, no código).** La subida de la foto falló en local porque la configuración de IntelliJ
+apunta `AWS_S3_BUCKET` a `s3-renaser90dias`, que AWS responde con `AllAccessDisabled`. Con esa configuración no se
+puede subir ninguna foto en local; producción usa otro bucket. Se resolvió con un S3 local para desarrollo
+(`AWS_S3_ENDPOINT` y el servicio `fotos-local` de `docker-compose.yml`, `docs/DESPLIEGUE_Y_CI.md` §1.3).

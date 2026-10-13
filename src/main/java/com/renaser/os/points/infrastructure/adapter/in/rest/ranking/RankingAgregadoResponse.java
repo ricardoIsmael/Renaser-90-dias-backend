@@ -13,19 +13,23 @@ import java.util.List;
  *
  * <p>{@code kilometros} (D-226, aditivo: el APK publicado lo ignora) — km acumulados del programa;
  * {@code puntaje} son km con dos decimales, no puntos.
+ *
+ * <p>{@code gimnasio} (D-266, aditivo, al final) — días de gimnasio del programa; {@code puntaje} son días.
  */
 public record RankingAgregadoResponse(LocalDate fecha, CelulaResumenResponse celula,
                                        List<EntradaRankingResponse> liga,
                                        List<EntradaRankingResponse> coherenciaIndividual,
                                        List<EntradaRankingResponse> general,
-                                       List<EntradaRankingResponse> kilometros) {
+                                       List<EntradaRankingResponse> kilometros,
+                                       List<EntradaRankingResponse> gimnasio) {
 
     public static RankingAgregadoResponse from(RankingAgregado agregado) {
         return new RankingAgregadoResponse(agregado.fecha(), CelulaResumenResponse.from(agregado.celula()),
                 agregado.liga().stream().map(EntradaRankingResponse::from).toList(),
                 agregado.coherenciaIndividual().stream().map(EntradaRankingResponse::from).toList(),
                 agregado.general().stream().map(EntradaRankingResponse::from).toList(),
-                agregado.kilometros().stream().map(EntradaRankingResponse::from).toList());
+                agregado.kilometros().stream().map(EntradaRankingResponse::from).toList(),
+                agregado.gimnasio().stream().map(EntradaRankingResponse::from).toList());
     }
 
     public record CelulaResumenResponse(String cellId, String cellName, String cohortName, String mentorName,

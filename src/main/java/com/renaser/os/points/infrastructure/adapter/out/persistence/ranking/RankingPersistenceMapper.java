@@ -20,6 +20,7 @@ class RankingPersistenceMapper {
             case CELL -> TipoRankingJpa.CELULA;
             case LEAGUE -> TipoRankingJpa.LIGA;
             case KILOMETROS -> TipoRankingJpa.KILOMETROS;
+            case GIMNASIO -> TipoRankingJpa.GIMNASIO;
         };
     }
 

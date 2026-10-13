@@ -50,6 +50,8 @@ class KilometrosPuntosTodoElDiaIT {
     private static final UUID HABITO_KM = UUID.fromString("ea87fdec-d4c1-4c4f-9e61-1557bc7255d1");
     /** El otro hábito del catálogo que termina a las 23:59, desde V4. */
     private static final UUID DIA_SIN_CELULAR = UUID.fromString("d2d58e66-db7f-4226-9c95-30b380f68b73");
+    /** GIMNASIO (V9 «ENTRENAMIENTO FÍSICO», prendido por V99, D-266): también termina a las 23:59. */
+    private static final UUID GIMNASIO = UUID.fromString("ec0f2b08-3a18-4ff4-8e2b-243e5220d211");
     /** El día del aprendiz en Lima; en UTC ya es el 30. */
     private static final LocalDate DIA_EN_LIMA = LocalDate.of(2026, 9, 29);
     private static final int DIA_PROGRAMA = 12;
@@ -110,7 +112,7 @@ class KilometrosPuntosTodoElDiaIT {
     }
 
     @Test
-    @DisplayName("V86 toca solo el horario de KILÓMETROS DIARIOS (07:00 – 23:59); el único otro que termina a las 23:59 es el de V4")
+    @DisplayName("V86 toca solo el horario de KILÓMETROS DIARIOS (07:00 – 23:59); los otros que terminan a las 23:59 son el de V4 y el de GIMNASIO (V99)")
     void v86SoloTocaElHorarioDeKm() {
         assertThat(jdbc.queryForList(
                 "SELECT hora_disparo, hora_limite FROM renaser.horarios_habito WHERE habito_id = ?", HABITO_KM))
@@ -119,11 +121,12 @@ class KilometrosPuntosTodoElDiaIT {
                     assertThat(h.get("hora_disparo").toString()).startsWith("07:00");
                     assertThat(h.get("hora_limite").toString()).startsWith("23:59");
                 });
-        // DÍA SIN CELULAR ya venía con 06:30 – 23:59 desde V4: el precedente, no un efecto de V86.
+        // DÍA SIN CELULAR ya venía con 06:30 – 23:59 desde V4: el precedente, no un efecto de V86. GIMNASIO lo copia
+        // a propósito desde V99 (D-266): paga completo todo el día, como los km.
         assertThat(jdbc.queryForList("""
                 SELECT DISTINCT habito_id FROM renaser.horarios_habito
                  WHERE hora_limite = ? AND habito_id <> ?
-                """, UUID.class, LocalTime.of(23, 59), HABITO_KM)).containsExactly(DIA_SIN_CELULAR);
+                """, UUID.class, LocalTime.of(23, 59), HABITO_KM)).containsExactlyInAnyOrder(DIA_SIN_CELULAR, GIMNASIO);
     }
 
     private Map<String, Object> completarKmA(Instant instante) {
@@ -147,6 +150,11 @@ class KilometrosPuntosTodoElDiaIT {
                                                       tipo_dia, es_opcional, estado)
                 VALUES (?, ?, ?, ?, ?, 'TODOS', true, 'PENDIENTE')
                 """, id, aprendiz, HABITO_KM, DIA_EN_LIMA, DIA_PROGRAMA);
+        // La captura ya subida, como la deja la app antes de completar (KILÓMETROS DIARIOS la exige, E-608).
+        jdbc.update("""
+                INSERT INTO renaser.evidencias (participante_id, registro_habito_id, tipo, bucket, ruta_storage)
+                VALUES (?, ?, 'FOTO', 'pruebas', ?)
+                """, aprendiz, id, "evidencia-habitos/" + aprendiz + "/" + id + "/captura.jpg");
         return id;
     }
 
