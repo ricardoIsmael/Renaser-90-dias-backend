@@ -74,4 +74,30 @@ class GlobalExceptionHandlerTest {
         assertThat(sinParte.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(sinParte.getBody().message()).contains("foto");
     }
+
+    @Test
+    @DisplayName("spec 002: funcionalidad apagada sale 503 con el aviso como message, el código y la clave; sin aviso, el "
+            + "genérico; consola bloqueada 423 y reautenticación 428, con su código")
+    void losErroresDeLaPlataforma() {
+        var apagada = handler.handleFuncionalidadApagada(new com.renaser.os.shared.domain.FuncionalidadApagadaException(
+                "chat.grupos", "Volvemos a las 18:00"));
+        var sinAviso = handler.handleFuncionalidadApagada(new com.renaser.os.shared.domain.FuncionalidadApagadaException(
+                "muro", "  "));
+        var bloqueada = handler.handleConsolaBloqueada(new com.renaser.os.shared.domain.ConsolaBloqueadaException());
+        var reautenticar = handler.handleReautenticacionRequerida(
+                new com.renaser.os.shared.domain.ReautenticacionRequeridaException());
+
+        assertThat(apagada.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(apagada.getBody()).isNotNull();
+        assertThat(apagada.getBody().message()).isEqualTo("Volvemos a las 18:00");
+        assertThat(apagada.getBody().codigo()).isEqualTo("FUNCIONALIDAD_APAGADA");
+        assertThat(apagada.getBody().funcionalidad()).isEqualTo("chat.grupos");
+        assertThat(sinAviso.getBody().message())
+                .isEqualTo("Esta función está en mantenimiento. Vuelve a intentarlo en un rato.");
+        assertThat(bloqueada.getStatusCode().value()).isEqualTo(423);
+        assertThat(bloqueada.getBody().codigo()).isEqualTo("CONSOLA_BLOQUEADA");
+        assertThat(bloqueada.getBody().funcionalidad()).isNull();
+        assertThat(reautenticar.getStatusCode().value()).isEqualTo(428);
+        assertThat(reautenticar.getBody().codigo()).isEqualTo("REAUTENTICACION_REQUERIDA");
+    }
 }
