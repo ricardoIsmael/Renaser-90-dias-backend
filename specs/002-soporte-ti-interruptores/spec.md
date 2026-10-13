@@ -79,9 +79,16 @@ El inventario completo por área está abajo, en «Catálogo inicial de funciona
 - Q: ¿Quién sube de escalón? → A: **Las dos formas**: «prender para todos» de golpe, o **por partes a mano** con
   métricas a la vista. (El escalón automático no se pidió; queda fuera.)
 
+**Roles personalizados** (pedido del dueño el mismo día: «con esto ya podríamos hacer un CRUD de roles y asignar al rol
+los permisos de las funcionalidades»)
+- Q: ¿CRUD total de roles o roles que heredan? → A: **Rol nuevo que hereda de uno base**: Soporte TI crea, renombra,
+  desactiva o borra un rol, elige de qué rol existente hereda el comportamiento y marca sus funcionalidades del catálogo.
+  El CRUD total (roles solo como datos) se descartó: exige reescribir la autorización del backend.
+- Q: ¿Quién asigna los roles creados? → A: **Admin y Alquimista, como hoy** (Equipo y roles, y al aprobar una solicitud).
+
 **Orden**
-- Q: ¿En qué orden se construye? → A: **1) interruptores + Soporte TI (con la IA), 2) progresivo, 3) herramientas sobre
-  datos de personas.**
+- Q: ¿En qué orden se construye? → A: **1) interruptores + Soporte TI (con la IA), 2) progresivo, ver como rol y roles
+  personalizados, 3) herramientas sobre datos de personas.**
 
 ---
 
@@ -239,6 +246,37 @@ de la lista queda auditado y uno fuera de la lista no existe.
 
 ---
 
+### User Story 7 — Crear roles que heredan de uno base (Priority: P2)
+
+Soporte TI crea «Coordinador de eventos»: hereda de MENTOR y tiene solo eventos, chat y muro. Admin o Alquimista se lo
+asignan a una persona desde «Equipo y roles» o al aprobar su solicitud. Esa persona se comporta como mentor en todo lo
+que el código decide por rol, pero solo ve y usa las funcionalidades marcadas. Si mañana sobra, Soporte TI lo desactiva
+o, si nadie lo tiene, lo borra. Es «Guía de aprendiz» (D-265) hecho desde la consola y sin desplegar.
+
+**Why this priority**: da al dueño roles nuevos sin código, apoyado en el catálogo de la fase 1. Va después porque
+depende de que el catálogo y la evaluación por rol ya existan.
+
+**Independent Test**: crear un rol que hereda de MENTOR con «eventos» y sin «muro», asignarlo a una cuenta de prueba: la
+cuenta usa eventos, ve el aviso en el muro, pasa los chequeos de mentor del backend (por ejemplo, su grupo) y figura con
+el nombre nuevo en el chat y en Equipo y roles.
+
+**Acceptance Scenarios**:
+
+1. **Given** el catálogo, **When** Soporte TI crea un rol con base MENTOR, **Then** solo puede marcar funcionalidades que
+   MENTOR tiene: un rol hijo nunca tiene más que su base.
+2. **Given** un rol personalizado activo, **When** Admin o Alquimista abren Equipo y roles o aprueban una solicitud,
+   **Then** el rol aparece en la lista con su nombre y el texto «Se comporta como Mentor».
+3. **Given** una persona con ese rol, **When** el backend decide algo por rol (guards, rankings, padrones, hábitos por
+   rol), **Then** usa el rol base; **When** decide si una funcionalidad está prendida, **Then** usa el rol personalizado.
+4. **Given** un rol con personas asignadas, **When** Soporte TI intenta borrarlo, **Then** no puede: lo desactiva (nadie
+   nuevo lo recibe; quienes lo tienen lo conservan) o lo reemplaza en bloque por otro rol, con motivo.
+5. **Given** un rol con personas asignadas, **When** Soporte TI intenta cambiar su rol base, **Then** no puede (cambiaría
+   permisos sin aviso); se crea otro rol y se reasigna.
+6. **Given** cualquier alta, cambio, desactivación, borrado o reemplazo en bloque, **Then** queda auditado y, si afecta a
+   personas, avisa al Alquimista y al Admin.
+
+---
+
 ### Edge Cases
 
 - **Anti-bloqueo**: login, sesión, `GET` de interruptores, la consola Soporte TI y el health del servidor **no tienen
@@ -262,6 +300,13 @@ de la lista queda auditado y uno fuera de la lista no existe.
 - **Funcionalidad desconocida para la app** (una app vieja recibe una clave nueva): la ignora; el servidor sigue
   bloqueando.
 - **Ver como rol** mientras la funcionalidad está apagada para ese rol: se ve apagada (es lo que vería ese rol).
+- **Rol personalizado y funcionalidad nueva**: una funcionalidad que se suma al catálogo después de crear el rol nace
+  **apagada** para los roles personalizados (hay que marcarla a propósito) y con su valor normal para los seis base.
+- **Interruptor por rol base vs. personalizado**: apagar «chat» para MENTOR también lo apaga para los roles que heredan de
+  MENTOR (el hijo nunca tiene más que su base).
+- **APK viejo con una persona de rol personalizado**: la app vieja ve el rol base en `/auth/me` (`role`) y el nombre nuevo
+  solo en un campo aditivo; el servidor sigue bloqueando lo no marcado.
+- **Nombre repetido o igual a un rol base** («Mentor»): se rechaza.
 
 ---
 
@@ -341,6 +386,22 @@ de la lista queda auditado y uno fuera de la lista no existe.
 - **FR-028**: Arreglos de soporte de una **lista cerrada** (a confirmar), cada uno con motivo, ejecutado por el mismo caso
   de uso que la app y auditado.
 
+**J. Roles personalizados**
+- **FR-029**: Soporte TI MUST poder crear, renombrar, describir, desactivar, reactivar y borrar roles personalizados,
+  cada uno con un **rol base** entre los seis (nunca SOPORTE_TI) y un conjunto de funcionalidades del catálogo que
+  MUST ser un subconjunto de las del rol base.
+- **FR-030**: La cuenta MUST seguir guardando el **rol base** en `usuarios.rol` (así todos los guards, rankings,
+  padrones, enums espejo y hábitos por rol siguen igual) más una referencia opcional al rol personalizado. La evaluación de
+  interruptores MUST usar el rol personalizado cuando exista.
+- **FR-031**: ADMIN y ALQUIMISTA MUST poder asignar y quitar los roles personalizados activos desde los mismos lugares que
+  hoy (Equipo y roles, aprobar solicitud), con las mismas reglas que el rol base (p. ej. solo ADMIN asigna un rol que
+  hereda de ADMIN).
+- **FR-032**: La app MUST mostrar el nombre del rol personalizado donde hoy muestra el rol (perfil, chat, muro, Equipo y
+  roles), vía un campo aditivo de `/auth/me` y de las listas; `role` sigue siendo el base.
+- **FR-033**: Un rol con personas asignadas MUST NOT borrarse ni cambiar de base; MUST poder reemplazarse en bloque por
+  otro rol con motivo.
+- **FR-034**: Máximo de roles personalizados activos (a confirmar: 20) para que la consola siga siendo manejable.
+
 ### Key Entities
 
 - **Funcionalidad** (catálogo, en código): clave, área, madre, nombre, descripción, roles aplicables, crítica, defecto,
@@ -352,6 +413,8 @@ de la lista queda auditado y uno fuera de la lista no existe.
   después, roles, aviso, motivo, dispositivo.
 - **CircuitoDeIa** (memoria compartida): parte, estado (cerrado/abierto/probando), fallas en ventana, próxima prueba.
 - **SesionDeConsola**: actor, desbloqueada hasta, re-autenticaciones.
+- **RolPersonalizado** (base): id, clave, nombre visible, descripción, rol base, activo, funcionalidades marcadas, creado
+  y actualizado por/en. La cuenta lo referencia de forma opcional junto a su rol base.
 
 ---
 
@@ -453,6 +516,8 @@ cualquier apagado «para todos».
 - Leer el contenido de chats privados.
 - Suplantar («entrar como») una cuenta real; «ver como rol» usa datos de prueba propios.
 - Un proveedor de IA alternativo (fallback a otro modelo): se evalúa aparte.
+- Un CRUD total de roles (roles solo como datos, sin rol base en el código): exigiría reescribir los ~60 guards, los enums
+  espejo de 8 módulos y el enum de Postgres. Los roles personalizados heredan de uno base (US7).
 
 ## Preguntas abiertas (para el plan)
 
@@ -462,6 +527,8 @@ cualquier apagado «para todos».
 4. ¿El Alquimista y el Admin pueden ver la auditoría en solo lectura?
 5. Canal de los avisos a Alquimista/Admin: ¿push solamente, o también chat de soporte?
 6. ¿Qué datos de prueba usa «ver como rol»: cuentas sintéticas fijas por rol o la cuenta Soporte TI con el rol simulado?
+7. Hábitos por rol (D-264): ¿la audiencia de un hábito puede elegir un rol personalizado, o solo los seis base?
+8. ¿«Ver como rol» incluye los roles personalizados?
 
 ---
 
@@ -478,8 +545,10 @@ cualquier apagado «para todos».
 | C — app | frontend | lectura del estado, componente de aviso, manejo del error, consola Soporte TI (lista por área, cambio con motivo y contraseña, auditoría) |
 | D — QA | ambos | E2E en el emulador con la base clonada: apagar/prender por rol, APK viejo, circuito de IA, permisos negativos |
 
-**Fase 2 (P2): despliegue progresivo + ver como rol.** Un agente backend (asignación estable, escalones, métricas) y uno
-de app (controles de escalón, «ver como»).
+**Fase 2 (P2): despliegue progresivo + ver como rol + roles personalizados.** Un agente backend (asignación estable,
+escalones, métricas), uno backend para roles personalizados (tabla, referencia en la cuenta, evaluación de interruptores,
+asignación por Admin y Alquimista) y uno de app (controles de escalón, «ver como», CRUD de roles en la consola y el rol
+nuevo en Equipo y roles y Solicitudes).
 
 **Fase 3 (P3): datos de personas.** Un agente por lado, con la lista cerrada de arreglos ya confirmada.
 
