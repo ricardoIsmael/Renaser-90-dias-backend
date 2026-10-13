@@ -41,6 +41,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -93,7 +94,8 @@ class RegistroServiceKilometrosTest {
         service = new RegistroService(loadRegistroPort, saveRegistroPort, loadHabitoPort, loadHorarioPort,
                 loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder, loadDesbloqueoPort, events,
                 CLOCK, idGenerator, List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(),
-                        new PoliticaClaseDiaria(), new PoliticaKilometros()), CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort));
+                        new PoliticaClaseDiaria(), new PoliticaKilometros()), CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort),
+                ids -> Set.copyOf(ids));
         dueno = UserId.of(UUID.randomUUID());
         lenient().when(saveRegistroPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(loadHorarioPort.porHabito(any())).thenReturn(List.of());

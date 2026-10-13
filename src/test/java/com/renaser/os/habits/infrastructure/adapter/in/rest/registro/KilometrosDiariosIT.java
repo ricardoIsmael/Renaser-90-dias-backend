@@ -97,6 +97,9 @@ class KilometrosDiariosIT {
         registroKm(ana, hoy.minusDays(1), "COMPLETADO", new BigDecimal("2.25"));
         kmDeAnaHoy = registroKm(ana, hoy, "PENDIENTE", null);
         kmDeBetoHoy = registroKm(beto, hoy, "PENDIENTE", null);
+        // KILÓMETROS DIARIOS pide la captura (exigencia OBLIGATORIA): la app la sube antes de completar (E-608).
+        conCapturaSubida(ana, kmDeAnaHoy);
+        conCapturaSubida(beto, kmDeBetoHoy);
     }
 
     @AfterEach
@@ -201,6 +204,21 @@ class KilometrosDiariosIT {
     }
 
     @Test
+    @DisplayName("sin la captura subida no se completa: 400 con el motivo, y no paga (E-608)")
+    void sinCapturaNoSeCompleta() throws Exception {
+        // El registro de hoy de Ana, pero sin la captura que le siembra el seed (uno por día: se rehace).
+        jdbc.update("DELETE FROM renaser.registros_habito WHERE id = ?", kmDeAnaHoy);
+        UUID sinCaptura = registroKm(ana, hoy, "PENDIENTE", null);
+
+        HttpResponse<byte[]> respuesta = completar(sinCaptura, "{\"valorMedido\": 4}", sesionDe(ana));
+
+        assertThat(respuesta.statusCode()).isEqualTo(400);
+        assertThat(new String(respuesta.body(), java.nio.charset.StandardCharsets.UTF_8)).contains("pide una foto");
+        assertThat(jdbc.queryForObject("SELECT estado::text FROM renaser.registros_habito WHERE id = ?",
+                String.class, sinCaptura)).isEqualTo("PENDIENTE");
+    }
+
+    @Test
     @DisplayName("el corte KILOMETROS suma desde el Día 1 y GET /ranking lo devuelve, con quien no corrió al fondo")
     void rankingDeKilometros() throws Exception {
         assertThat(completar(kmDeAnaHoy, "{\"valorMedido\": 1.25}", sesionDe(ana)).statusCode()).isEqualTo(200);
@@ -300,6 +318,14 @@ class KilometrosDiariosIT {
                 """, id, titulo + " " + id);
         habitos.add(id);
         return id;
+    }
+
+    /** La captura ya subida y confirmada, como la deja la app antes de completar (E-608). */
+    private void conCapturaSubida(UUID quien, UUID registro) {
+        jdbc.update("""
+                INSERT INTO renaser.evidencias (participante_id, registro_habito_id, tipo, bucket, ruta_storage)
+                VALUES (?, ?, 'FOTO', 'pruebas', ?)
+                """, quien, registro, "evidencia-habitos/" + quien + "/" + registro + "/captura.jpg");
     }
 
     private UUID registroKm(UUID quien, LocalDate fecha, String estado, BigDecimal km) {
