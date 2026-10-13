@@ -35,3 +35,20 @@ Capturas: `~/Imágenes/e2e-2026-10-13/gimnasio/`.
 - **Al desplegar:** quien ya tenía armado su día antes de V99 ve GIMNASIO desde el día siguiente (el barrido arma el
   día una sola vez). Es lo mismo que pasa con un hábito nuevo del catálogo.
 - **Entorno local:** sin un bucket de S3 válido en la configuración de IntelliJ no se puede probar ninguna foto.
+
+## Segunda pasada (13/10, tarde): fotos reales, E-608 y la suite de Maestro completa
+
+Sobre la integración local de las tres ramas que suben juntas (`claude/gimnasio`, `claude/foto-obligatoria` con E-608 y
+`claude/s3-local`), con `./mvnw clean verify` en verde (6279 unitarias, 409 de integración) y las fotos en el S3 local
+(`fotos-local`, `AWS_S3_ENDPOINT=http://localhost:9002`, `adb reverse tcp:9002`).
+
+| Caso | Resultado | Evidencia |
+|---|---|---|
+| GIMNASIO con foto real | OK | La cámara se abre directo, la foto se sube al S3 local, se confirma la evidencia y recién después se completa: `COMPLETADO`, 10 puntos, 1 evidencia en la base. La app registra sola al aceptar la foto (sin pregunta) |
+| KILÓMETROS con foto y 3,5 km | OK | `COMPLETADO`, `valor_medido = 3.50`, 1 evidencia |
+| E-608 con la app | OK | El orden de la app (subir → confirmar → completar) pasa la regla nueva; sin foto, `POST /complete` responde 400 (prueba `KilometrosDiariosIT.sinCapturaNoSeCompleta`) |
+| Suite de Maestro (`.maestro/regresion/`, 11 flujos) | OK | Kilómetros con foto, publicar en el Muro, chats del admin y del aprendiz, Yo y Ajustes, Planificar DESPERTAR a las 22:00, gimnasio con foto, ranking con la pestaña Gimnasio, y Administración (entrar y volver, Personas y vuelta, crear grupo con el teclado). Corrida completa: 9 de 11; los dos restantes (ajustes del flujo, no de la app) en verde al repetirlos. Capturas: `~/Imágenes/e2e-2026-10-13/gimnasio/maestro/` |
+
+Notas de la suite: Maestro 2.11 no podía escribir en este emulador (animación de bienvenida trabada, Maestro #3667);
+la sesión la abre `correr.sh` por adb. Datos de prueba ajustados en la base clonada: las cuentas `habrol-*` se sumaron al
+chat global (se habían creado por SQL, sin el alta) y el límite de intentos de login se reinicia solo en el Redis local.
