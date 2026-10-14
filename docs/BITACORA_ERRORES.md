@@ -15398,3 +15398,47 @@ nombre que choca dentro de una clase), con la diferencia de que acá la cascada 
 el error está en otro lado: filtrar la cascada con `./mvnw -o -q compile 2>&1 | grep ERROR | grep -v 'symbol:\|location:'` y
 leer el primero que no sea `cannot find symbol`. **Regla general:** en una clase, una fábrica estática sin parámetros no puede
 llamarse como un método de instancia sin parámetros (ni, en un record, como un componente: E-610).
+
+---
+
+## E-620 · El catálogo de funcionalidades no lista a MENTOR ni a la Guía en `caja`, aunque el mentor la usa (back, ANOTADO, 14/10)
+
+**Síntoma.** Hallado leyendo el código al diseñar la regla de los roles personalizados (D-269), no en producción: con la
+letra del contrato de la fase 2 («si su clave o una madre no está marcada, no disponible»), un «Mentor junior» con
+**todo** lo de MENTOR marcado habría recibido `404 FUNCIONALIDAD_NO_DISPONIBLE` en
+`GET /api/v1/mentor/trainees/{aprendizId}/caja` (el chip de la caja en la ficha del aprendiz, D-219), que un mentor sin
+rol personalizado ve con 200. En la consola, además, `caja` no muestra el interruptor de MENTOR.
+
+**Causa real.** `EntradasDelCatalogo` declara `caja` con `rolesQueLaUsan = {TRAINEE, ADMIN, IT_SUPPORT}`, pero
+`CajaDelMentorController` (`@Funcionalidad("caja")`) es para el mentor del aprendiz (MENTOR y TRAINEE_GUIDE). El campo es
+informativo en la fase 1 («no restringe nada»), así que nadie lo notó; un rol personalizado solo puede marcar claves que
+su base usa según ese campo, y la letra del contrato dejaba fuera lo que la base usa por los guards pero el catálogo omite.
+
+**Solución.** En la regla, lo que el rol base no usa según el catálogo no lo decide el rol personalizado (desvío anotado en
+D-269): con todo marcado, un rol personalizado equivale a su base. **El catálogo no se tocó** (es de la fase 1 y cambia lo
+que muestra la consola): queda propuesto sumar MENTOR y TRAINEE_GUIDE a `caja`.
+
+**Cómo evitarlo.** Una clave nueva en el catálogo se declara con los roles que pasan los guards de TODOS sus endpoints,
+no con los de la pantalla principal. Prueba que lo cubre: `DisponibilidadPorRolPersonalizadoTest.todoMarcadoEsLaBase`.
+
+## E-621 · `SelfValidating` valida el primer constructor que da la reflexión, y en un record con dos no es el canónico (back, ANOTADO, 14/10)
+
+**Síntoma literal.** Sonda en esta laptop (Temurin 25.0.4) sobre `record Dos(@NotNull String a, @NotNull String b)` con un
+constructor extra `Dos(String a)`: `Dos.class.getDeclaredConstructors()` devolvió primero el de **1** parámetro y después
+el canónico de **2**. `validateConstructorParameters(<el de 1>, new Object[]{"a", "b"})` no lanzó nada ni reportó
+violaciones.
+
+**Causa real.** `SelfValidating.validateConstructorArgs` usa `recordClass.getDeclaredConstructors()[0]`, y el javadoc de
+`getDeclaredConstructors` dice que el orden no está garantizado. En un record con un constructor de conveniencia, el
+`[0]` puede ser ese, que no tiene las anotaciones: la validación pasa sin mirar nada. Pasaba en
+`ApproveAccountRequestCommand` (canónico de 3 + uno de 2): su `@NotNull` no se evaluaba.
+
+**Solución.** Los dos comandos que tocó D-269 (`UpdateUserRoleCommand`, `ApproveAccountRequestCommand`) validan a mano en
+el constructor compacto. **No se cambió `SelfValidating`**: hacerlo encendería de golpe validaciones que hoy no corren en
+otros comandos con constructores extra (`ActualizarCelulaCommand`, `CrearCelulaCommand`, `CambiarEstadoHabitoCommand`,
+`ActualizarHabitoCommand`, `CrearHabitoCommand`, `CompletarRegistroCommand`, `FirmarContratoCommand`,
+`UpdateMentorProfileCommand`), y cada uno hay que revisarlo con sus pruebas.
+
+**Cómo evitarlo.** Arreglo propuesto: en un record, validar el canónico
+(`getDeclaredConstructor(Arrays.stream(recordClass.getRecordComponents()).map(RecordComponent::getType).toArray(Class[]::new))`),
+y revisar los ocho comandos de arriba. Mientras tanto, un record con más de un constructor no usa `SelfValidating`.

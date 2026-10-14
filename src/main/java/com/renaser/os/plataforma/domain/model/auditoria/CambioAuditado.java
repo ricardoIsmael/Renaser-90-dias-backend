@@ -47,6 +47,21 @@ public record CambioAuditado(UUID id, TipoDeCambio tipo, UserId actor, String cl
         return new CambioAuditado(id, TipoDeCambio.AUTOMATICO, null, clave, antes, despues, causa, null, en);
     }
 
+    /**
+     * Un cambio de un rol personalizado (fase 2, D-269): {@code clave} es {@code rp:<id>} y las fotos llevan
+     * {@code nombre}, {@code rolBase}, {@code activo} y {@code funcionalidades} ({@code null} antes de crearlo o
+     * después de borrarlo).
+     */
+    public static CambioAuditado deRolPersonalizado(UUID id, UserId actor, String clave, Map<String, Object> antes,
+                                                    Map<String, Object> despues, String motivo, String dispositivo,
+                                                    Instant en) {
+        if (clave == null || !clave.startsWith("rp:")) {
+            throw new IllegalArgumentException("La clave de un rol personalizado es rp:<id>");
+        }
+        return new CambioAuditado(id, TipoDeCambio.ROL_PERSONALIZADO, Objects.requireNonNull(actor), clave, antes,
+                despues, motivo, dispositivo, en);
+    }
+
     /** Un intento de desbloqueo o de reautenticación; {@code resultado} es «OK» o «CONTRASENA_INCORRECTA». */
     public static CambioAuditado acceso(UUID id, TipoDeCambio tipo, UserId actor, String resultado,
                                         String dispositivo, Instant en) {

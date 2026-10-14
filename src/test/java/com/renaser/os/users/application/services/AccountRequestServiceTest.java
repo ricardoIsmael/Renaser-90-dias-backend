@@ -390,6 +390,23 @@ class AccountRequestServiceTest {
     }
 
     @Test
+    @DisplayName("D-269: con un rol personalizado pasa por el cambio de rol de siempre, aunque herede de APRENDIZ")
+    void approveConRolPersonalizado() {
+        AccountRequest request = pendiente();
+        UserId actorId = id();
+        UUID rolPersonalizado = UUID.randomUUID();
+        when(loadAccountRequestPort.byId(request.id())).thenReturn(Optional.of(request));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+        stubUsuarioPendiente(request);
+
+        service.approve(new ApproveAccountRequestCommand(request.id(), actorId, UserRole.TRAINEE, rolPersonalizado));
+
+        verify(updateUserRole).updateRole(
+                new com.renaser.os.users.application.ports.in.user.UpdateUserRoleUseCase.UpdateUserRoleCommand(
+                        request.usuarioId(), UserRole.TRAINEE, actorId, rolPersonalizado));
+    }
+
+    @Test
     @DisplayName("A-7: un alta por formulario no vincula ninguna identidad externa")
     void approveDeUnaSolicitudPorFormularioNoVinculaNada() {
         AccountRequest request = pendiente();

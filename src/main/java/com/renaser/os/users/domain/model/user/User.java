@@ -1,10 +1,12 @@
 package com.renaser.os.users.domain.model.user;
 
+import com.renaser.os.users.api.RolPersonalizadoAsignado;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.domain.model.rolpersonalizado.RolPersonalizado;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
@@ -13,6 +15,8 @@ import lombok.experimental.Accessors;
 
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 
 
 @Getter
@@ -50,6 +54,18 @@ public final class User {
      * recupera, si la persona escribe a soporte dentro de los 30 dias.</blockquote>
      */
     private Instant bajaSolicitadaEn;
+    /**
+     * El rol personalizado asignado ({@code usuarios.rol_personalizado_id}, V105; spec 002, US7; D-269), o
+     * {@code null}. <b>{@link #role} sigue siendo el rol base</b>: todos los guards, rankings y padrones lo ven igual, y
+     * este dato solo lo lee la evaluación de interruptores y lo que muestra el nombre. Se conserva aunque el rol se
+     * desactive (quienes lo tienen lo vuelven a tener si se reactiva); {@link #changeRole} lo borra.
+     */
+    private UUID rolPersonalizadoId;
+    /**
+     * El nombre de ese rol, <b>solo si está activo y hereda del rol de la cuenta</b>; {@code null} si no. Solo de
+     * lectura: lo calcula la base al cargar la cuenta y nunca se guarda desde acá.
+     */
+    private String nombreDelRolPersonalizado;
 
     /**
      * Alta por autoregistro. Fuerza TRAINEE: el rol no es parametro a proposito,
@@ -57,7 +73,7 @@ public final class User {
      */
     public static User registerTrainee(UserId id, Email email, String fullName) {
         return new User(requireId(id), requireEmail(email), UserRole.defaultForSelfRegistration(),
-                UserStatus.ACTIVE, requireName(fullName), null, null, null, null, null);
+                UserStatus.ACTIVE, requireName(fullName), null, null, null, null, null, null, null);
     }
 
     /**
@@ -74,7 +90,7 @@ public final class User {
      */
     public static User registrarPendienteAprobacion(UserId id, Email email, String fullName) {
         return new User(requireId(id), requireEmail(email), UserRole.defaultForSelfRegistration(),
-                UserStatus.INACTIVE, requireName(fullName), null, null, null, null, null);
+                UserStatus.INACTIVE, requireName(fullName), null, null, null, null, null, null, null);
     }
 
     /**
@@ -95,7 +111,7 @@ public final class User {
         requireRoleManager(actor);
         requireNoEsSoporteTi(role);
         return new User(requireId(id), requireEmail(email), Objects.requireNonNull(role, "role es obligatorio"),
-                UserStatus.ACTIVE, requireName(fullName), null, null, null, null, null);
+                UserStatus.ACTIVE, requireName(fullName), null, null, null, null, null, null, null);
     }
 
     /** Firma historica (9 campos, sin bajaSolicitadaEn): se conserva para no obligar a
@@ -110,16 +126,71 @@ public final class User {
     public static User rehydrate(UserId id, Email email, UserRole role, UserStatus status,
                                  String fullName, String avatarUrl, String bio, String department,
                                  Instant lastActiveAt, Instant bajaSolicitadaEn) {
-        return new User(id, email, role, status, fullName, avatarUrl, bio, department, lastActiveAt,
-                bajaSolicitadaEn);
+        return rehydrate(id, email, role, status, fullName, avatarUrl, bio, department, lastActiveAt,
+                bajaSolicitadaEn, null, null);
     }
 
+    /**
+     * Con el rol personalizado (V105, D-269).
+     *
+     * @param nombreDelRolPersonalizado {@code null} si no tiene, o si el suyo está desactivado o no hereda de
+     *                                  {@code role}
+     */
+    @SuppressWarnings("java:S107") // es la fila entera
+    public static User rehydrate(UserId id, Email email, UserRole role, UserStatus status,
+                                 String fullName, String avatarUrl, String bio, String department,
+                                 Instant lastActiveAt, Instant bajaSolicitadaEn, UUID rolPersonalizadoId,
+                                 String nombreDelRolPersonalizado) {
+        return new User(id, email, role, status, fullName, avatarUrl, bio, department, lastActiveAt,
+                bajaSolicitadaEn, rolPersonalizadoId, nombreDelRolPersonalizado);
+    }
+
+    /**
+     * Cambia el rol base y <b>quita el rol personalizado</b> que tuviera (contrato de la fase 2, §4.5: sin
+     * {@code rolPersonalizadoId}, se borra el que tuviera). Así una cuenta nunca queda con un rol personalizado que
+     * hereda de otro rol que el suyo, venga el cambio de donde venga.
+     */
     public void changeRole(UserRole newRole, User actor) {
         requireRoleManager(actor);
         if (role == UserRole.IT_SUPPORT) {
             throw new NotAuthorizedException("Una cuenta Soporte TI no se cambia desde la app");
         }
         this.role = requireNoEsSoporteTi(Objects.requireNonNull(newRole, "El nuevo rol es obligatorio"));
+        this.rolPersonalizadoId = null;
+        this.nombreDelRolPersonalizado = null;
+    }
+
+    /**
+     * Le asigna un rol personalizado (spec 002, FR-031; D-269): el rol de la cuenta pasa a ser el rol base de ese rol
+     * y la evaluación de interruptores usa sus funcionalidades. Mismas reglas que asignar el rol base, más dos:
+     * <ul>
+     *   <li>solo un rol <b>activo</b> se asigna (uno desactivado no recibe a nadie nuevo, spec US7 escenario 4) → 400;</li>
+     *   <li>un rol que hereda de ADMIN o de ALQUIMISTA lo asigna solo un ADMIN (FR-031) → 403.</li>
+     * </ul>
+     */
+    public void asignarRolPersonalizado(RolPersonalizado rolPersonalizado, User actor) {
+        requireRoleManager(actor);
+        if (role == UserRole.IT_SUPPORT) {
+            throw new NotAuthorizedException("Una cuenta Soporte TI no se cambia desde la app");
+        }
+        UserRole base = rolPersonalizado.rolBase();
+        if ((base == UserRole.ADMIN || base == UserRole.ALCHEMIST) && actor.role() != UserRole.ADMIN) {
+            throw new NotAuthorizedException("Solo un ADMIN asigna un rol que hereda de " + base.nombreVisible());
+        }
+        if (!rolPersonalizado.activo()) {
+            throw new IllegalArgumentException("«" + rolPersonalizado.nombre() + "» está desactivado: no se asigna");
+        }
+        this.role = requireNoEsSoporteTi(base);
+        this.rolPersonalizadoId = rolPersonalizado.id();
+        this.nombreDelRolPersonalizado = rolPersonalizado.nombre();
+    }
+
+    /** El rol personalizado vigente: asignado, activo y que hereda del rol de la cuenta. */
+    public Optional<RolPersonalizadoAsignado> rolPersonalizado() {
+        if (rolPersonalizadoId == null || nombreDelRolPersonalizado == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new RolPersonalizadoAsignado(rolPersonalizadoId, nombreDelRolPersonalizado));
     }
 
     /**

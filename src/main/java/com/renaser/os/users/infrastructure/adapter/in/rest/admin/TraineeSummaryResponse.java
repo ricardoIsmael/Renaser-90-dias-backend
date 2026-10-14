@@ -4,6 +4,7 @@ import com.renaser.os.users.api.FasePrograma;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.application.ports.in.participante.ListTraineesUseCase.ResumenTraineeAdmin;
+import com.renaser.os.users.infrastructure.adapter.in.rest.user.RolPersonalizadoResponse;
 
 import java.util.UUID;
 
@@ -24,16 +25,20 @@ import java.util.UUID;
  *
  * <p>{@code deletionScheduledFor} (D-243): si la persona cerro su cuenta, cuando se borra para siempre;
  * {@code null} si no. Campo agregado al final: una app vieja lo ignora.
+ *
+ * <p>{@code rolPersonalizado} (spec 002, fase 2; D-269): {@code { id, nombre }} si tiene un rol personalizado vigente;
+ * aditivo, al final. {@code role} sigue siendo el rol base.
  */
 public record TraineeSummaryResponse(String id, String fullName, String email, UserStatus status, int programDay,
                                       FasePrograma phase, UUID cellId, String mentorId, String role,
-                                      java.time.Instant deletionScheduledFor) {
+                                      java.time.Instant deletionScheduledFor,
+                                      RolPersonalizadoResponse rolPersonalizado) {
 
     public static TraineeSummaryResponse from(ResumenTraineeAdmin resumen) {
         return new TraineeSummaryResponse(resumen.id().toString(), resumen.fullName(), resumen.email(),
                 resumen.status(), resumen.diaPrograma(), resumen.fase(), resumen.celulaId(),
                 resumen.mentorId() == null ? null : resumen.mentorId().toString(), etiquetaDe(resumen.rol()),
-                resumen.seBorraEl());
+                resumen.seBorraEl(), RolPersonalizadoResponse.de(resumen.rolPersonalizado()));
     }
 
     /**

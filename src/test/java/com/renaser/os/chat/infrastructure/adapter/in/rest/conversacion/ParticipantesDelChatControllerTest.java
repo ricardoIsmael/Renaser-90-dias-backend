@@ -80,6 +80,25 @@ class ParticipantesDelChatControllerTest {
     }
 
     @Test
+    @DisplayName("D-269: el rol personalizado vigente viaja como rolPersonalizado { id, nombre }; sin él, null")
+    void elRolPersonalizado() throws Exception {
+        UserId actorId = actor();
+        UserId otro = UserId.of(UUID.randomUUID());
+        UUID rol = UUID.randomUUID();
+        when(participantes.ver(actorId, ConversacionId.of(conversacion), null, 0, 50)).thenReturn(
+                new PaginaDeParticipantes(List.of(new ParticipanteDelChat(otro, "Kelin", RolEnElChat.MENTOR, false,
+                        false, null, new com.renaser.os.users.api.RolPersonalizadoAsignado(rol, "Mentor junior")),
+                        new ParticipanteDelChat(actorId, "Ana", RolEnElChat.APRENDIZ, true, false, null)), 2, 0, 50));
+
+        mockMvc.perform(get(RUTA, conversacion).header("X-Actor-Id", actorId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.participants[0].rol").value("MENTOR"))
+                .andExpect(jsonPath("$.participants[0].rolPersonalizado.id").value(rol.toString()))
+                .andExpect(jsonPath("$.participants[0].rolPersonalizado.nombre").value("Mentor junior"))
+                .andExpect(jsonPath("$.participants[1].rolPersonalizado").value(nullValue()));
+    }
+
+    @Test
     @DisplayName("sin parámetros: página 0 y 50 por página")
     void losValoresPorDefecto() throws Exception {
         UserId actorId = actor();
