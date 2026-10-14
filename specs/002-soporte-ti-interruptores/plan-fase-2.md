@@ -21,7 +21,7 @@
 | A — núcleo backend | `claude/plataforma-nucleo` en `.claude/worktrees/plataforma-nucleo` (backend) | **Terminado** (≈ 19:30): `clean verify` 6366 unitarias y 431 de integración, 0 fallas. Commits `9f4a4804` rol IT_SUPPORT, `d763de65` módulo `plataforma` y consola, `51b329ed` `@Funcionalidad` en 118 controladores, `8fcd4857` procesos con interruptor, `3858045a` push `OPERACION_PLATAFORMA` (V102), `e0e601fc` arreglo de prueba, `82abbcc7` documentación (D-267, §10 del contrato). Migraciones V100–V102. Bitácora E-609 a E-611 |
 | C — app | `claude/plataforma-app` en `.claude/worktrees/plataforma-app` (frontend) | **Terminado**: jest 342 suites / 2847 pruebas, tsc 0. Commits `740d822`, `7d6cd6c`, `cfaba50`, `7d89f79`, `44bdb97`, `a46dc9b` |
 | B — IA y circuito de SER | `claude/plataforma-ia` en `.claude/worktrees/plataforma-ia` (sale de `claude/plataforma-nucleo`, así que **contiene A + B**) | **Terminado** (≈ 21:15): `clean verify` 6425 unitarias y 435 de integración, 0 fallas. Commits `17898318` (E-612: el stream del chat terminaba cortado si se apagaba algo en medio; error del núcleo), `58204e40` circuito de `ia.chat` e `ia.voz`, `5ad44e64` propuestas, memoria y mensajes automáticos, `a2d4cc34` push al circuito (máx. 4/h), `183a9ba0` IT de punta a punta, `917a5f93` documentación. Sin migraciones. Bitácora E-612 a E-614 |
-| D — QA | backend `plataforma-ia` (puerto 8092, base `renaser_guia` con V100–V102) + app `plataforma-app` por Metro | **En curso (noche del 13/10)**. Hecho: cuenta Soporte TI de prueba con `asignar.sql` (funcionó: ADMIN → SOPORTE_TI); API: Admin 403 en la consola, 423 sin desbloqueo, 401 `CONTRASENA_INCORRECTA`, 428 sin reautenticar, 52 funciones (7 críticas), circuito con las dos partes cerradas, `chat` apagado para Aprendiz → 503 con el aviso y 6 hijas en `/mias`; Maestro `.maestro/interruptores/` 30–33 en verde (Tribu, Muro, Training, SER). Falta: suite de regresión completa sobre la fase 1, consola con mobile-mcp |
+| D — QA | backend `plataforma-ia` (8092, base `renaser_guia` con V100–V102) + app `plataforma-app` por Metro, APK debug del 12/10 (sin nativo nuevo) | **Hecho (noche del 13/10), todo en verde salvo un texto a corregir**. API: Admin 403 en la consola, 423 sin desbloqueo, 401 `CONTRASENA_INCORRECTA`, 428 sin reautenticar, 52 funciones (7 críticas), circuito con las dos partes cerradas, `chat` apagado para Aprendiz → 503 con el aviso y las 6 hijas en `/mias`, el mentor sigue con 200. Maestro: los 11 de `regresion/` y los 4 de `interruptores/` (Tribu, Muro, Training, SER) en verde. mobile-mcp (cuenta Soporte TI hecha con `asignar.sql`): fila «Soporte TI» en Yo, desbloqueo, lista con circuito, buscador y filtros, detalle crítico, apagar para Aprendiz con aviso y motivo, hoja de contraseña, «Guardado. Rige en unos segundos», auditoría. Capturas en `~/Imágenes/e2e-2026-10-13/soporte-ti/` |
 
 Puntos de coordinación que la app ya asume y se le pasaron a A (revisar en su informe que estén):
 
@@ -33,7 +33,26 @@ Puntos de coordinación que la app ya asume y se le pasaron a A (revisar en su i
 4. Auditoría: filas con `id`, `tipo`, `clave`, `actor {id, nombre}`, `antes`/`despues` (`prendidaGlobal`, `porRol`,
    `aviso`), `motivo`, `creadoEn`; página con `contenido`, `pagina` (desde 0) y `total`.
 
-### Orden para retomar
+### Hallazgos del QA para corregir antes de subir
+
+1. **Auditoría (app)**: un cambio que apagó `chat` para Aprendiz se resume como «Prendida para todos (cambiaron los roles
+   o el aviso)». Debe decir «Apagada para Aprendiz»: usar `despues.apagadaPara` que ya manda el backend (captura
+   `ST7-auditoria.png`).
+2. **Detalle de la consola (app, menor)**: con la lista desplazada al final, el botón flotante de SER tapa el extremo
+   derecho de «Guardar con contraseña»; se puede tocar por el centro, pero conviene el espacio de abajo
+   (`EspacioSobreFlotantes`, como en Eventos).
+3. **Decisión del dueño (P7)**: Soporte TI todavía no entra a Administración.
+
+### Orden para retomar (actualizado al cierre del 13/10, 22:45)
+
+1. Corregir los hallazgos 1 y 2 en `claude/plataforma-app` (jest + tsc) y repetir el flujo de la auditoría con mobile-mcp.
+2. Mostrarle al dueño el resultado y pedir el visto bueno para subir: backend `claude/plataforma-ia` (contiene A + B;
+   V100–V102) primero, después la app `claude/plataforma-app` y un APK nuevo. Antes de subir, `clean verify` y la suite de
+   Maestro otra vez sobre lo que se suba (regla del dueño).
+3. Después de subir: el dueño corre `asignar.sql` con su correo contra producción (lo hace él, a mano).
+4. Fase 2 (este documento), con las respuestas a P1–P7.
+
+### Orden para retomar (versión original del 13/10, antes del QA)
 
 1. Leer el informe del agente A (o, si la sesión se cortó, mirar `git log origin/master..` y el estado de su worktree;
    correr `./mvnw -o clean verify` ahí y leer `Tests run:`).
