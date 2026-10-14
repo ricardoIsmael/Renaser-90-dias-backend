@@ -3,6 +3,7 @@ package com.renaser.os.plataforma.application.services;
 import com.renaser.os.plataforma.domain.model.estado.ResultadoDeEvaluacion;
 import com.renaser.os.shared.application.Interruptores;
 import com.renaser.os.shared.domain.FuncionalidadApagadaException;
+import com.renaser.os.shared.domain.FuncionalidadNoDisponibleException;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
@@ -36,6 +37,9 @@ class InterruptoresService implements Interruptores {
     @Override
     public void exigirPrendidaPara(String clave, UserId actor) {
         ResultadoDeEvaluacion resultado = actor == null ? estado.evaluar(clave, null) : evaluarPara(clave, actor);
+        if (resultado.noDisponible()) {
+            throw new FuncionalidadNoDisponibleException(resultado.apagadaEn());
+        }
         if (!resultado.prendida()) {
             throw new FuncionalidadApagadaException(clave, resultado.aviso());
         }

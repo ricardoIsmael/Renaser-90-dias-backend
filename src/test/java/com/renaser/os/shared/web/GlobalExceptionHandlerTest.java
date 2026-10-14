@@ -98,6 +98,13 @@ class GlobalExceptionHandlerTest {
         assertThat(bloqueada.getBody().codigo()).isEqualTo("CONSOLA_BLOQUEADA");
         assertThat(bloqueada.getBody().funcionalidad()).isNull();
         assertThat(reautenticar.getStatusCode().value()).isEqualTo(428);
+
+        var noDisponible = handler.handleFuncionalidadNoDisponible(
+                new com.renaser.os.shared.domain.FuncionalidadNoDisponibleException("eventos"));
+        assertThat(noDisponible.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(noDisponible.getBody().codigo()).isEqualTo("FUNCIONALIDAD_NO_DISPONIBLE");
+        assertThat(noDisponible.getBody().funcionalidad()).isEqualTo("eventos");
+        assertThat(noDisponible.getBody().message()).isEqualTo("Esta función todavía no está disponible para tu cuenta.");
         assertThat(reautenticar.getBody().codigo()).isEqualTo("REAUTENTICACION_REQUERIDA");
     }
 }

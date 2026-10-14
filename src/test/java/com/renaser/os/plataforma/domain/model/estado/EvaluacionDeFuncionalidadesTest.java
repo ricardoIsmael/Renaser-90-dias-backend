@@ -18,7 +18,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -26,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class EvaluacionDeFuncionalidadesTest {
 
     private static final UserId SOPORTE = UserId.of(UUID.randomUUID());
+    private static final UserId APRENDIZ = UserId.of(UUID.randomUUID());
     private static final Function<String, Optional<String>> SIN_AUTOMATICOS = clave -> Optional.empty();
 
     private final EvaluacionDeFuncionalidades evaluacion =
@@ -97,9 +97,17 @@ class EvaluacionDeFuncionalidadesTest {
     @DisplayName("el rol se lee solo si hace falta: sin excepciones por rol, nadie lo consulta (FR-011)")
     void elRolSeLeeSoloSiHaceFalta() {
         AtomicInteger lecturas = new AtomicInteger();
-        Supplier<UserRole> rol = () -> {
-            lecturas.incrementAndGet();
-            return UserRole.TRAINEE;
+        ActorEvaluado rol = new ActorEvaluado() {
+            @Override
+            public UserId id() {
+                return APRENDIZ;
+            }
+
+            @Override
+            public UserRole rol() {
+                lecturas.incrementAndGet();
+                return UserRole.TRAINEE;
+            }
         };
 
         evaluacion.evaluar("chat.grupos", foto(estado("muro", true, Set.of(UserRole.TRAINEE), null)), rol,
@@ -117,15 +125,15 @@ class EvaluacionDeFuncionalidadesTest {
         Function<String, Optional<String>> circuito = clave -> clave.equals("ia.chat")
                 ? Optional.of("SER está en pausa") : Optional.empty();
 
-        ResultadoDeEvaluacion chat = evaluacion.evaluar("ia.chat", FotoDeEstados.vacia(), () -> UserRole.TRAINEE,
+        ResultadoDeEvaluacion chat = evaluacion.evaluar("ia.chat", FotoDeEstados.vacia(), actor(UserRole.TRAINEE),
                 circuito);
 
         assertThat(chat.prendida()).isFalse();
         assertThat(chat.automatico()).isTrue();
         assertThat(chat.aviso()).isEqualTo("SER está en pausa");
-        assertThat(evaluacion.evaluar("ia.voz", FotoDeEstados.vacia(), () -> UserRole.TRAINEE, circuito).prendida())
+        assertThat(evaluacion.evaluar("ia.voz", FotoDeEstados.vacia(), actor(UserRole.TRAINEE), circuito).prendida())
                 .isTrue();
-        assertThat(evaluacion.evaluar("chat", FotoDeEstados.vacia(), () -> UserRole.TRAINEE,
+        assertThat(evaluacion.evaluar("chat", FotoDeEstados.vacia(), actor(UserRole.TRAINEE),
                 clave -> Optional.of("no debería mirarse")).prendida()).isTrue();
     }
 
@@ -134,7 +142,7 @@ class EvaluacionDeFuncionalidadesTest {
     void loManualMandaSobreElCircuito() {
         FotoDeEstados foto = foto(estado("ia", false, Set.of(), "Actualizando SER"));
 
-        ResultadoDeEvaluacion resultado = evaluacion.evaluar("ia.chat", foto, () -> UserRole.TRAINEE,
+        ResultadoDeEvaluacion resultado = evaluacion.evaluar("ia.chat", foto, actor(UserRole.TRAINEE),
                 clave -> Optional.of("aviso automático"));
 
         assertThat(resultado.prendida()).isFalse();
@@ -162,6 +170,59 @@ class EvaluacionDeFuncionalidadesTest {
     }
 
     @Test
+    @DisplayName("fase 2: una regla que deja fuera a la persona la vuelve no disponible, en el nivel que dice la regla")
+    void unaReglaLaVuelveNoDisponible() {
+        List<List<String>> cadenasVistas = new java.util.ArrayList<>();
+        ReglaDeDisponibilidad soloParaOtros = (cadena, quien) -> {
+            cadenasVistas.add(cadena);
+            return cadena.contains("chat") ? Optional.of("chat") : Optional.empty();
+        };
+
+        ResultadoDeEvaluacion audio = evaluacion.evaluar("chat.audio", FotoDeEstados.vacia(), actor(UserRole.TRAINEE),
+                SIN_AUTOMATICOS, List.of(soloParaOtros));
+
+        assertThat(audio.prendida()).isFalse();
+        assertThat(audio.noDisponible()).isTrue();
+        assertThat(audio.apagadaEn()).isEqualTo("chat");
+        assertThat(audio.aviso()).isEqualTo(com.renaser.os.shared.domain.FuncionalidadNoDisponibleException.MENSAJE);
+        assertThat(cadenasVistas).containsExactly(List.of("chat", "chat.audio"));
+        assertThat(evaluacion.evaluar("muro", FotoDeEstados.vacia(), actor(UserRole.TRAINEE), SIN_AUTOMATICOS,
+                List.of(soloParaOtros)).prendida()).isTrue();
+    }
+
+    @Test
+    @DisplayName("fase 2: el apagado manual gana sobre las reglas (es mantenimiento para todos, con su aviso)")
+    void elApagadoGanaSobreLasReglas() {
+        FotoDeEstados foto = foto(estado("chat", false, Set.of(), "Chat en mantenimiento"));
+        ReglaDeDisponibilidad nadie = (cadena, quien) -> Optional.of(cadena.getLast());
+
+        ResultadoDeEvaluacion resultado = evaluacion.evaluar("chat.grupos", foto, actor(UserRole.TRAINEE),
+                SIN_AUTOMATICOS, List.of(nadie));
+
+        assertThat(resultado.noDisponible()).isFalse();
+        assertThat(resultado.aviso()).isEqualTo("Chat en mantenimiento");
+    }
+
+    @Test
+    @DisplayName("fase 2: un proceso sin actor no ve las reglas, y la primera regla que deja fuera es la que responde")
+    void reglasSoloParaPersonasYEnOrden() {
+        AtomicInteger segundaConsultada = new AtomicInteger();
+        ReglaDeDisponibilidad primera = (cadena, quien) -> Optional.of("muro");
+        ReglaDeDisponibilidad segunda = (cadena, quien) -> {
+            segundaConsultada.incrementAndGet();
+            return Optional.empty();
+        };
+
+        assertThat(evaluacion.evaluar("muro", FotoDeEstados.vacia(), null, SIN_AUTOMATICOS, List.of(primera))
+                .prendida()).as("un proceso no tiene persona: la regla no aplica").isTrue();
+        assertThat(evaluacion.evaluar("muro", FotoDeEstados.vacia(), actor(UserRole.MENTOR), SIN_AUTOMATICOS,
+                List.of(primera, segunda)).noDisponible()).isTrue();
+        assertThat(segundaConsultada).hasValue(0);
+        assertThat(evaluacion.evaluar("login", FotoDeEstados.vacia(), actor(UserRole.MENTOR), SIN_AUTOMATICOS,
+                List.of(primera)).prendida()).as("fuera del catálogo no hay regla que valga").isTrue();
+    }
+
+    @Test
     @DisplayName("la versión de la foto es la mayor de sus filas")
     void versionDeLaFoto() {
         assertThat(foto(estado("chat", true, Set.of(), null, 7), estado("muro", true, Set.of(), null, 42)).version())
@@ -170,7 +231,21 @@ class EvaluacionDeFuncionalidadesTest {
     }
 
     private ResultadoDeEvaluacion evaluar(String clave, FotoDeEstados foto, UserRole rol) {
-        return evaluacion.evaluar(clave, foto, () -> rol, SIN_AUTOMATICOS);
+        return evaluacion.evaluar(clave, foto, actor(rol), SIN_AUTOMATICOS);
+    }
+
+    static ActorEvaluado actor(UserRole rol) {
+        return new ActorEvaluado() {
+            @Override
+            public UserId id() {
+                return APRENDIZ;
+            }
+
+            @Override
+            public UserRole rol() {
+                return rol;
+            }
+        };
     }
 
     static FotoDeEstados foto(EstadoDeFuncionalidad... estados) {

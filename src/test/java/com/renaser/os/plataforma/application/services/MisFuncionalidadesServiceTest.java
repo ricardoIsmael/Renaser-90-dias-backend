@@ -3,6 +3,9 @@ package com.renaser.os.plataforma.application.services;
 import com.renaser.os.plataforma.application.ports.in.ConsultarMisFuncionalidadesUseCase.FuncionalidadApagada;
 import com.renaser.os.plataforma.application.ports.in.ConsultarMisFuncionalidadesUseCase.MisFuncionalidades;
 import com.renaser.os.plataforma.domain.model.estado.EstadoDeFuncionalidad;
+import com.renaser.os.plataforma.domain.model.estado.ReglaDeDisponibilidad;
+import com.renaser.os.shared.domain.FuncionalidadApagadaException;
+import com.renaser.os.shared.domain.FuncionalidadNoDisponibleException;
 import com.renaser.os.shared.application.EstadoAutomaticoDeFuncionalidades;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -15,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -22,6 +26,7 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -40,6 +45,8 @@ class MisFuncionalidadesServiceTest {
     private final CircuitoFalso circuito = new CircuitoFalso();
     private final UserSummaryFinder usuarios = mock(UserSummaryFinder.class);
     private final CopiaDeEstados copia = new CopiaDeEstados(base);
+    private final List<ReglaDeDisponibilidad> reglas = new ArrayList<>();
+    private EstadoVigente estado;
     private MisFuncionalidadesService service;
 
     @BeforeEach
@@ -48,7 +55,10 @@ class MisFuncionalidadesServiceTest {
                 new UserSummary(aprendiz, "A", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
         ObjectProvider<EstadoAutomaticoDeFuncionalidades> automaticos = mock(ObjectProvider.class);
         when(automaticos.orderedStream()).thenAnswer(invocacion -> Stream.of(circuito));
-        service = new MisFuncionalidadesService(new EstadoVigente(copia, automaticos), new RolDelActor(usuarios));
+        ObjectProvider<ReglaDeDisponibilidad> proveedorDeReglas = mock(ObjectProvider.class);
+        when(proveedorDeReglas.orderedStream()).thenAnswer(invocacion -> reglas.stream());
+        estado = new EstadoVigente(copia, automaticos, proveedorDeReglas);
+        service = new MisFuncionalidadesService(estado, new RolDelActor(usuarios));
     }
 
     @Test
@@ -90,6 +100,44 @@ class MisFuncionalidadesServiceTest {
         assertThat(abierto.version()).isGreaterThan(cerrado);
         assertThat(otraVezCerrado.apagadas()).isEmpty();
         assertThat(otraVezCerrado.version()).isGreaterThan(abierto.version());
+    }
+
+    @Test
+    @DisplayName("fase 2: lo que una regla deja fuera va a noDisponibles con sus hijas, no a apagadas, y sin leer el rol")
+    void loQueNoLeCorrespondeVaAparte() {
+        reglas.add((cadena, quien) -> cadena.getFirst().equals("eventos") && quien.id().equals(aprendiz)
+                ? Optional.of("eventos") : Optional.empty());
+
+        MisFuncionalidades mias = service.mias(aprendiz);
+
+        assertThat(mias.apagadas()).isEmpty();
+        assertThat(mias.noDisponibles()).isNotEmpty().allMatch(clave -> clave.equals("eventos")
+                || clave.startsWith("eventos."));
+        verify(usuarios, never()).findById(any());
+    }
+
+    @Test
+    @DisplayName("fase 2: una regla que falla no tira el pedido: la funcionalidad se trata como disponible")
+    void unaReglaQueFallaNoTiraElPedido() {
+        reglas.add((cadena, quien) -> {
+            throw new IllegalStateException("se cayó la copia del despliegue");
+        });
+
+        assertThat(service.mias(aprendiz).noDisponibles()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("fase 2: exigirla a quien no le corresponde lanza la excepción de no disponible (404), que es apagada")
+    void exigirLaNoDisponible() {
+        reglas.add((cadena, quien) -> cadena.contains("muro") ? Optional.of("muro") : Optional.empty());
+        InterruptoresService interruptores = new InterruptoresService(estado, new RolDelActor(usuarios));
+
+        assertThatThrownBy(() -> interruptores.exigirPrendidaPara("muro.publicar", aprendiz))
+                .isInstanceOf(FuncionalidadNoDisponibleException.class)
+                .isInstanceOf(FuncionalidadApagadaException.class)
+                .extracting(e -> ((FuncionalidadNoDisponibleException) e).clave()).isEqualTo("muro");
+        assertThat(interruptores.prendidaPara("muro.publicar", aprendiz)).isFalse();
+        assertThat(interruptores.prendida("muro.publicar")).as("un proceso no ve las reglas").isTrue();
     }
 
     /** Un circuito de prueba: cada apertura y cada cierre suman uno a su versión. */
