@@ -18,9 +18,9 @@
 
 | Pieza | Rama / worktree | Estado al cierre |
 |---|---|---|
-| A — núcleo backend | `claude/plataforma-nucleo` en `.claude/worktrees/plataforma-nucleo` (backend) | El agente seguía trabajando. Ya había commiteado el rol `IT_SUPPORT` y el módulo `plataforma` con la consola; faltaba lo que su informe diga (anotaciones en los controladores, procesos, notificaciones, verify) |
+| A — núcleo backend | `claude/plataforma-nucleo` en `.claude/worktrees/plataforma-nucleo` (backend) | **Terminado** (≈ 19:30): `clean verify` 6366 unitarias y 431 de integración, 0 fallas. Commits `9f4a4804` rol IT_SUPPORT, `d763de65` módulo `plataforma` y consola, `51b329ed` `@Funcionalidad` en 118 controladores, `8fcd4857` procesos con interruptor, `3858045a` push `OPERACION_PLATAFORMA` (V102), `e0e601fc` arreglo de prueba, `82abbcc7` documentación (D-267, §10 del contrato). Migraciones V100–V102. Bitácora E-609 a E-611 |
 | C — app | `claude/plataforma-app` en `.claude/worktrees/plataforma-app` (frontend) | **Terminado**: jest 342 suites / 2847 pruebas, tsc 0. Commits `740d822`, `7d6cd6c`, `cfaba50`, `7d89f79`, `44bdb97`, `a46dc9b` |
-| B — IA y circuito de SER | (sin crear) | Pendiente. Se lanza cuando A termine (la máquina no aguanta dos builds de Maven a la vez) |
+| B — IA y circuito de SER | `claude/plataforma-ia` en `.claude/worktrees/plataforma-ia` (sale de `claude/plataforma-nucleo`) | **Lanzado ≈ 19:40**: circuito por parte en `rag`, 204/1013/503, propuestas, mensajes automáticos, `CircuitoDeIaCambiadoEvent` y push (máx. 4/h). Bitácora desde E-612 |
 | D — QA | — | Pendiente: integrar A + B + C y probar en el emulador |
 
 Puntos de coordinación que la app ya asume y se le pasaron a A (revisar en su informe que estén):
@@ -44,6 +44,12 @@ Puntos de coordinación que la app ya asume y se le pasaron a A (revisar en su i
    del contrato §9. Sumar a Maestro los flujos de la consola y del aviso de mantenimiento.
 5. Pedir el visto bueno del dueño y subir (backend antes que el APK).
 6. Recién después, la fase 2 (este documento).
+
+Riesgos que anotó A para el despliegue: publicar el backend antes del APK (V100 y V102 son `ADD VALUE` solos; un APK
+1.5.0 ve los 503 como un error normal); la cuenta Soporte TI necesita contraseña (las que entran solo con Google o Apple
+no desbloquean la consola) y `asignar.sql` no deja convertir al único ADMIN/ALQUIMISTA; con notificaciones o chat
+apagados, avisos y bienvenidas se acumulan en el outbox y salen al prender (ERROR en el log cada 5 min mientras tanto);
+con una excepción por rol en la cadena, la evaluación suma una consulta del rol por pedido (sin caché).
 
 Notas del entorno: el emulador se apagó para liberar memoria (al relanzarlo, revisar que la app instalada sea la del día;
 ver la memoria «emulador vuelve de un snapshot viejo»). El contenedor `renaser-fotos` quedó prendido. Worktrees de hoy por
@@ -145,5 +151,10 @@ y se integran de a uno.
 - **P3.** Hábitos por rol (D-264): ¿la audiencia de un hábito puede elegir un rol personalizado, o solo los seis base?
 - **P4.** ¿«Ver como» incluye los roles personalizados?
 - **P5.** Métricas del despliegue: ¿alcanzan las últimas 24 h, o quieres ver días?
+- **P7.** (Lo dejó abierto el agente A) **¿Soporte TI entra a Administración?** Hoy tiene su consola pero recibe 403 en
+  Administración y `canAdminister` sale en false: unos 56 chequeos preguntan ADMIN/ALQUIMISTA por nombre o por
+  `canManageRoles()`, y `canManageRoles()` también abre los chats de soporte, que la spec dice que Soporte TI no lee.
+  Opciones: (a) que pase todos los chequeos de Administración menos el de leer chats de soporte (cambio en esos 56
+  lugares, con prueba por cada uno); (b) dejarlo solo con su consola y «ver como rol» (fase 2) para revisar.
 - **P6.** (De la fase 1, sin cerrar) ¿Alquimista y Admin ven la auditoría en solo lectura? ¿Los avisos de cambios
   críticos van solo por push o también al chat de soporte?
