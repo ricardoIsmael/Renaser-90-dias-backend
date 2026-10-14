@@ -67,6 +67,12 @@ class ResolverDeHerramientasDesconocidas implements ToolCallbackResolver {
     }
 
     private static String mensaje(String nombrePedido, Optional<String> sugerencia) {
+        if (sugerencia.filter(nombrePedido::equals).isPresent()) {
+            // Existe pero no se ofrecio en este turno: Soporte TI apago las propuestas para esta persona (spec 002,
+            // D-267). Sugerirle el mismo nombre lo haria llamarla en bucle.
+            return "La herramienta '" + nombrePedido + "' no esta disponible en esta conversacion. No la vuelvas a "
+                    + "llamar: dile a la persona que por ahora lo haga desde la app.";
+        }
         return sugerencia.map(nombre -> "No existe una herramienta llamada '" + nombrePedido + "'. Quisiste decir '"
                         + nombre + "': vuelve a llamarla con ese nombre exacto.")
                 .orElse("No existe una herramienta llamada '" + nombrePedido + "'. Usa solo los nombres exactos de "

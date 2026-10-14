@@ -1,5 +1,7 @@
 package com.renaser.os.rag.application.services;
 
+import com.renaser.os.rag.application.services.circuito.CircuitoDePrueba;
+
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort;
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase;
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort;
@@ -119,7 +121,8 @@ class HerramientasAgenteServiceTest {
 
     private HerramientasAgenteService servicio() {
         return new HerramientasAgenteService(agendaHabitosPort, List.of(),
-                new PropuestaDeMarcarHabito(agendaHabitosPort, proponerAccion, false), RELOJ, planPort);
+                new PropuestaDeMarcarHabito(agendaHabitosPort, proponerAccion, false), RELOJ, planPort,
+                CircuitoDePrueba.cerrado().interruptores());
     }
 
     private static HabitoDelDia habitoVivo(String titulo, int puntos) {
@@ -270,7 +273,7 @@ class HerramientasAgenteServiceTest {
                 0, 10, Instant.parse("2026-09-05T14:10:00Z"), false)));
         var servicio = new HerramientasAgenteService(agenda, List.of(),
                 new PropuestaDeMarcarHabito(agenda, proponerAccion, false), RELOJ,
-                mock(GestionarPlanDeHabitosPort.class));
+                mock(GestionarPlanDeHabitosPort.class), CircuitoDePrueba.cerrado().interruptores());
 
         String contenido = ((ResultadoHerramienta.Exito) servicio.ejecutar(APRENDIZ,
                 InvocacionHerramienta.sinArgumentos(CatalogoHerramientasAgente.CONSULTAR_HABITOS_DEL_DIA))).contenido();

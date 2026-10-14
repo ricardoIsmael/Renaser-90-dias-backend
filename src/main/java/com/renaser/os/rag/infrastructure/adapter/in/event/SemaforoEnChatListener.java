@@ -7,6 +7,8 @@ import com.renaser.os.rag.application.ports.in.semaforo.DejarSemaforoEnChatUseCa
 import com.renaser.os.rag.domain.model.semaforo.ColorDeLaSemana;
 import com.renaser.os.rag.domain.model.semaforo.SemaforoEnChat.CierreDeSemana;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.application.Interruptores;
+import com.renaser.os.shared.application.ProcesosConInterruptor;
 import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Component;
 
@@ -22,13 +24,19 @@ import org.springframework.stereotype.Component;
 class SemaforoEnChatListener {
 
     private final DejarSemaforoEnChatUseCase dejarSemaforoEnChatUseCase;
+    private final Interruptores interruptores;
 
-    SemaforoEnChatListener(DejarSemaforoEnChatUseCase dejarSemaforoEnChatUseCase) {
+    SemaforoEnChatListener(DejarSemaforoEnChatUseCase dejarSemaforoEnChatUseCase, Interruptores interruptores) {
         this.dejarSemaforoEnChatUseCase = dejarSemaforoEnChatUseCase;
+        this.interruptores = interruptores;
     }
 
     @ApplicationModuleListener
     void onSemanaCerrada(SemanaDelSemaforoCerradaEvent event) {
+        // Spec 002 (D-267): con SER («ia») apagada, los mensajes automaticos de SER saltan (politica del catalogo).
+        if (ProcesosConInterruptor.saltaEsteTurno(interruptores, "ia", "rag.semaforo-en-chat")) {
+            return;
+        }
         CierreDeSemana cierre = new CierreDeSemana(espejo(event.color()), event.color().etiqueta(),
                 event.porcentaje(), event.diasConDatos());
         dejarSemaforoEnChatUseCase.dejarEnElChat(

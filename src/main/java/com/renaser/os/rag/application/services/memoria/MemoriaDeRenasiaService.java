@@ -1,5 +1,6 @@
 package com.renaser.os.rag.application.services.memoria;
 
+import com.renaser.os.rag.application.services.circuito.InterruptoresDeSer;
 import com.renaser.os.rag.application.ports.in.memoria.BorrarMemoriaUseCase;
 import com.renaser.os.rag.application.ports.in.memoria.CompactarMemoriaUseCase;
 import com.renaser.os.rag.application.ports.in.memoria.ConsultarMemoriaUseCase;
@@ -77,11 +78,15 @@ public class MemoriaDeRenasiaService implements ConsultarMemoriaUseCase, BorrarM
     private final Clock clock;
     private final boolean activa;
     private final Set<UserId> compactando = ConcurrentHashMap.newKeySet();
+    /** Spec 002 (D-267): con {@code ia} apagada, o el circuito del chat abierto, no se compacta. */
+    private final InterruptoresDeSer interruptoresDeSer;
 
     public MemoriaDeRenasiaService(MemoriaDeRenasiaPort memoriaPort, LoadMensajeRenasiaPort mensajesPort,
                                    CompactarConversacionPort compactarPort, EjecutarEnSegundoPlanoPort segundoPlano,
                                    IdGenerator idGenerator, Clock clock,
-                                   @Value("${renaser.ia.acompanante.memoria:false}") boolean activa) {
+                                   @Value("${renaser.ia.acompanante.memoria:false}") boolean activa,
+                                   InterruptoresDeSer interruptoresDeSer) {
+        this.interruptoresDeSer = interruptoresDeSer;
         this.memoriaPort = memoriaPort;
         this.mensajesPort = mensajesPort;
         this.compactarPort = compactarPort;
@@ -125,7 +130,7 @@ public class MemoriaDeRenasiaService implements ConsultarMemoriaUseCase, BorrarM
 
     @Override
     public void compactarEnSegundoPlano(UserId actorId) {
-        if (!activa || !compactando.add(actorId)) {
+        if (!activa || !interruptoresDeSer.puedeCompactarMemoria() || !compactando.add(actorId)) {
             return;
         }
         segundoPlano.ejecutar(() -> {

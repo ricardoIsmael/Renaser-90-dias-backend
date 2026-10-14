@@ -1,5 +1,10 @@
 package com.renaser.os.rag.application.services.memoria;
 
+import com.renaser.os.rag.application.services.circuito.CircuitoDePrueba;
+import com.renaser.os.rag.domain.model.circuito.ParteDeLaIa;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
 import com.renaser.os.rag.application.ports.out.conversacion.LoadMensajeRenasiaPort;
 import com.renaser.os.rag.application.ports.out.memoria.CompactarConversacionPort;
 import com.renaser.os.rag.application.ports.out.memoria.EjecutarEnSegundoPlanoPort;
@@ -66,7 +71,7 @@ class MemoriaDeRenasiaServiceTest {
 
     private MemoriaDeRenasiaService conMemoria(boolean activa) {
         return new MemoriaDeRenasiaService(memoriaPort, mensajesPort, compactarPort, segundoPlano,
-                UUID::randomUUID, FixedClock.at(AHORA), activa);
+                UUID::randomUUID, FixedClock.at(AHORA), activa, CircuitoDePrueba.cerrado().interruptores());
     }
 
     /** {@code cuantos} mensajes, uno por minuto desde {@code desde}, como los da el puerto: del mas nuevo al mas viejo. */
@@ -221,6 +226,22 @@ class MemoriaDeRenasiaServiceTest {
 
         assertThat(enSegundoPlano).hasSize(2);
         verify(memoriaPort, never()).reemplazar(any(), any(), any());
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"ia apagada", "circuito del chat abierto"})
+    @DisplayName("spec 002: con SER apagada o el circuito del chat abierto no se compacta (se reintenta en otro turno)")
+    void conSerApagadaNoCompacta(String motivo) {
+        CircuitoDePrueba circuito = motivo.equals("ia apagada") ? CircuitoDePrueba.cerrado()
+                : CircuitoDePrueba.cortando(ParteDeLaIa.CHAT);
+        MemoriaDeRenasiaService enPausa = new MemoriaDeRenasiaService(memoriaPort, mensajesPort, compactarPort,
+                segundoPlano, UUID::randomUUID, FixedClock.at(AHORA), true,
+                motivo.equals("ia apagada") ? circuito.interruptoresConApagadas("ia") : circuito.interruptores());
+
+        enPausa.compactarEnSegundoPlano(ACTOR);
+
+        assertThat(enSegundoPlano).isEmpty();
+        verifyNoInteractions(compactarPort);
     }
 
     @Test

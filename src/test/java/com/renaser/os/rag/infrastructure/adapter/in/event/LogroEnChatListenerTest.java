@@ -1,5 +1,9 @@
 package com.renaser.os.rag.infrastructure.adapter.in.event;
 
+import static org.mockito.Mockito.verifyNoInteractions;
+
+import com.renaser.os.shared.application.InterruptoresDePrueba;
+
 import com.renaser.os.habits.api.RachaCompletadaEvent;
 import com.renaser.os.rag.application.ports.in.logro.CelebrarLogroEnChatUseCase;
 import com.renaser.os.rag.application.ports.in.logro.CelebrarLogroEnChatUseCase.LogroEnChatCommand;
@@ -31,7 +35,7 @@ class LogroEnChatListenerTest {
     void laRachaCompletadaSeCelebraConSuRachaId() {
         UUID rachaId = UUID.randomUUID();
 
-        new LogroEnChatListener(useCase).onRachaCompletada(new RachaCompletadaEvent(rachaId, aprendiz, AHORA));
+        new LogroEnChatListener(useCase, InterruptoresDePrueba.conApagadas()).onRachaCompletada(new RachaCompletadaEvent(rachaId, aprendiz, AHORA));
 
         verify(useCase).celebrarEnElChat(new LogroEnChatCommand(aprendiz, TipoLogro.RACHA_SIN_CELULAR, rachaId));
     }
@@ -40,8 +44,18 @@ class LogroEnChatListenerTest {
     void laRocaCompletadaSeCelebraConSuRocaId() {
         UUID rocaId = UUID.randomUUID();
 
-        new LogroEnChatListener(useCase).onRocaCompletada(new RocaCompletadaEvent(rocaId, aprendiz, AHORA));
+        new LogroEnChatListener(useCase, InterruptoresDePrueba.conApagadas()).onRocaCompletada(new RocaCompletadaEvent(rocaId, aprendiz, AHORA));
 
         verify(useCase).celebrarEnElChat(new LogroEnChatCommand(aprendiz, TipoLogro.ROCA_COMPLETADA, rocaId));
+    }
+
+    @Test
+    void conSerApagadaNingunLogroSeCelebra() {
+        var listener = new LogroEnChatListener(useCase, InterruptoresDePrueba.conApagadas("ia"));
+
+        listener.onRachaCompletada(new RachaCompletadaEvent(UUID.randomUUID(), aprendiz, AHORA));
+        listener.onRocaCompletada(new RocaCompletadaEvent(UUID.randomUUID(), aprendiz, AHORA));
+
+        verifyNoInteractions(useCase);
     }
 }
