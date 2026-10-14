@@ -166,6 +166,45 @@ public final class ParticipacionPrograma {
                 null, null, null, 0);
     }
 
+    /** El día en que vive la cuenta de prueba de «ver como» con rol aprendiz (D-270): a mitad del programa. */
+    public static final int DIA_DE_LA_CUENTA_DE_PRUEBA = 45;
+    /** Fuera de este tramo, la cuenta de prueba se vuelve a poner en {@link #DIA_DE_LA_CUENTA_DE_PRUEBA}. */
+    private static final int PRIMER_DIA_A_MITAD = 30;
+    private static final int ULTIMO_DIA_A_MITAD = 60;
+
+    /**
+     * El programa de la cuenta de prueba de «ver como» con rol aprendiz (spec 002, fase 2, US5; D-270): activo y
+     * viviendo hoy el {@link #DIA_DE_LA_CUENTA_DE_PRUEBA} (fase y fechas coherentes, sin ajuste), así la vista se parece a
+     * la de un aprendiz a mitad del programa. El día se DERIVA de la fecha de inicio, como el de cualquiera: no se fija a
+     * mano con {@link #fijarDia}, que dejaría un ajuste negativo y el día 1 del semáforo en la fecha de hoy.
+     *
+     * <p>Conserva el grupo y el mentor que ya tuviera la fila ({@code anterior}): el grupo de prueba los sincroniza aparte.
+     */
+    public static ParticipacionPrograma aMitadDelProgramaParaCuentaDePrueba(UserId participanteId,
+                                                                           ParticipacionPrograma anterior,
+                                                                           Clock clock) {
+        Objects.requireNonNull(participanteId, "participanteId es obligatorio");
+        Instant now = clock.now();
+        LocalDate hoy = hoyDelParticipante(clock);
+        int dia = DIA_DE_LA_CUENTA_DE_PRUEBA;
+        return new ParticipacionPrograma(participanteId, anterior == null ? null : anterior.mentorId,
+                anterior == null ? null : anterior.celulaId, dia, FasePrograma.paraDiaPrograma(dia),
+                hoy.minusDays(dia - 1L), now, ZONA_POR_DEFECTO, false, 0,
+                anterior == null ? now : anterior.creadoEn, now, null, null, null, hoy, 0);
+    }
+
+    /**
+     * Si la cuenta de prueba sigue «a mitad del programa» (entre el día 30 y el 60, activa y sin graduarse). El reloj la
+     * sigue avanzando como a cualquiera; cuando sale de ese tramo, «ver como» la vuelve a poner en el día 45.
+     */
+    public boolean sigueAMitadDelPrograma(Clock clock) {
+        if (!estaActivado() || programaCompletado || diasAjuste != 0) {
+            return false;
+        }
+        int dia = diaVigente(clock);
+        return dia >= PRIMER_DIA_A_MITAD && dia <= ULTIMO_DIA_A_MITAD;
+    }
+
     /** Firma historica (12 campos, sin tipoMeta/nombreRetoPersonal/programaCompletadoEn): se
      * conserva para no obligar a los llamadores existentes a agregar 3 campos que la
      * mayoria no necesita rehidratar. */

@@ -1,5 +1,6 @@
 package com.renaser.os.users.infrastructure.adapter.out.persistence.user;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -74,6 +75,13 @@ public class UserJpaEntity implements Persistable<UUID> {
 
     /** `usuarios.rol_personalizado_id` (V105, D-269): el rol personalizado asignado, o null. */
     private UUID rolPersonalizadoId;
+
+    /**
+     * `usuarios.es_cuenta_de_prueba` (V107, D-270): una cuenta de prueba de «ver como». Se escribe al crearla y nunca
+     * se actualiza ({@code updatable = false}): un {@code save} de la cuenta no puede convertirla ni desconvertirla.
+     */
+    @Column(name = "es_cuenta_de_prueba", updatable = false)
+    private boolean esCuentaDePrueba;
 
     /**
      * El nombre del rol personalizado <b>vigente</b>: activo y que hereda del rol de la cuenta; null si no. Solo de

@@ -66,6 +66,12 @@ public final class User {
      * lectura: lo calcula la base al cargar la cuenta y nunca se guarda desde acá.
      */
     private String nombreDelRolPersonalizado;
+    /**
+     * Si es una cuenta de prueba de «ver como rol» ({@code usuarios.es_cuenta_de_prueba}, V107; spec 002, fase 2, US5;
+     * D-270): una por rol, sin contraseña, que Soporte TI recorre en solo lectura. No figura en rankings, padrones,
+     * semáforos, listas de Administración, chats ni avisos. Nace así y nunca deja de serlo (la columna no se actualiza).
+     */
+    private boolean esCuentaDePrueba;
 
     /**
      * Alta por autoregistro. Fuerza TRAINEE: el rol no es parametro a proposito,
@@ -73,7 +79,7 @@ public final class User {
      */
     public static User registerTrainee(UserId id, Email email, String fullName) {
         return new User(requireId(id), requireEmail(email), UserRole.defaultForSelfRegistration(),
-                UserStatus.ACTIVE, requireName(fullName), null, null, null, null, null, null, null);
+                UserStatus.ACTIVE, requireName(fullName), null, null, null, null, null, null, null, false);
     }
 
     /**
@@ -90,7 +96,7 @@ public final class User {
      */
     public static User registrarPendienteAprobacion(UserId id, Email email, String fullName) {
         return new User(requireId(id), requireEmail(email), UserRole.defaultForSelfRegistration(),
-                UserStatus.INACTIVE, requireName(fullName), null, null, null, null, null, null, null);
+                UserStatus.INACTIVE, requireName(fullName), null, null, null, null, null, null, null, false);
     }
 
     /**
@@ -111,7 +117,19 @@ public final class User {
         requireRoleManager(actor);
         requireNoEsSoporteTi(role);
         return new User(requireId(id), requireEmail(email), Objects.requireNonNull(role, "role es obligatorio"),
-                UserStatus.ACTIVE, requireName(fullName), null, null, null, null, null, null, null);
+                UserStatus.ACTIVE, requireName(fullName), null, null, null, null, null, null, null, false);
+    }
+
+    /**
+     * Cuenta de prueba de «ver como rol» (D-270): la crea el sistema, no una persona, así que no lleva actor (quien la
+     * pide, Soporte TI, ya se comprobó en el caso de uso). Activa desde el alta, sin contraseña ni solicitud, con el rol
+     * que se va a mirar; nunca Soporte TI. El correo es siempre del dominio reservado (lo exige también la base).
+     */
+    public static User cuentaDePrueba(UserId id, Email email, String fullName, UserRole role) {
+        requireCorreoDePrueba(email);
+        UserRole rol = requireNoEsSoporteTi(Objects.requireNonNull(role, "role es obligatorio"));
+        return new User(requireId(id), email, rol,
+                UserStatus.ACTIVE, requireName(fullName), null, null, null, null, null, null, null, true);
     }
 
     /** Firma historica (9 campos, sin bajaSolicitadaEn): se conserva para no obligar a
@@ -141,8 +159,65 @@ public final class User {
                                  String fullName, String avatarUrl, String bio, String department,
                                  Instant lastActiveAt, Instant bajaSolicitadaEn, UUID rolPersonalizadoId,
                                  String nombreDelRolPersonalizado) {
+        return rehydrate(id, email, role, status, fullName, avatarUrl, bio, department, lastActiveAt,
+                bajaSolicitadaEn, rolPersonalizadoId, nombreDelRolPersonalizado, false);
+    }
+
+    /** Con la marca de cuenta de prueba (V107, D-270). */
+    @SuppressWarnings("java:S107") // es la fila entera
+    public static User rehydrate(UserId id, Email email, UserRole role, UserStatus status,
+                                 String fullName, String avatarUrl, String bio, String department,
+                                 Instant lastActiveAt, Instant bajaSolicitadaEn, UUID rolPersonalizadoId,
+                                 String nombreDelRolPersonalizado, boolean esCuentaDePrueba) {
         return new User(id, email, role, status, fullName, avatarUrl, bio, department, lastActiveAt,
-                bajaSolicitadaEn, rolPersonalizadoId, nombreDelRolPersonalizado);
+                bajaSolicitadaEn, rolPersonalizadoId, nombreDelRolPersonalizado, esCuentaDePrueba);
+    }
+
+    /**
+     * Deja la cuenta de prueba como tiene que estar para «ver como» ese rol (D-270): el nombre, el rol, activa, sin baja
+     * y con el rol personalizado pedido (o sin ninguno). Es el camino interno del sistema que pidió B2 (D-269): no pasa
+     * por {@link #asignarRolPersonalizado}, que exige un ADMIN o ALQUIMISTA como actor. Si alguien la tocó por fuera
+     * (un script, una suspensión), vuelve a quedar bien.
+     *
+     * @param rolPersonalizado {@code null} para la cuenta de un rol base; si no, activo y que hereda de {@code role}
+     * @return si cambió algo que haya que guardar
+     */
+    public boolean prepararComoCuentaDePrueba(String nombre, UserRole role, RolPersonalizado rolPersonalizado) {
+        if (!esCuentaDePrueba) {
+            throw new IllegalStateException("Solo una cuenta de prueba se prepara para «ver como»");
+        }
+        UserRole base = requireNoEsSoporteTi(Objects.requireNonNull(role, "role es obligatorio"));
+        if (rolPersonalizado != null && (!rolPersonalizado.activo() || rolPersonalizado.rolBase() != base)) {
+            throw new IllegalArgumentException("El rol personalizado de una cuenta de prueba está activo y hereda de "
+                    + base.nombreVisible());
+        }
+        String nombreLimpio = requireName(nombre);
+        UUID rolId = rolPersonalizado == null ? null : rolPersonalizado.id();
+        String nombreRol = rolPersonalizado == null ? null : rolPersonalizado.nombre();
+        boolean cambio = !nombreLimpio.equals(fullName) || role != this.role || status != UserStatus.ACTIVE
+                || bajaSolicitadaEn != null || !Objects.equals(rolId, rolPersonalizadoId)
+                || !Objects.equals(nombreRol, nombreDelRolPersonalizado);
+        this.fullName = nombreLimpio;
+        this.role = base;
+        this.status = UserStatus.ACTIVE;
+        this.bajaSolicitadaEn = null;
+        this.rolPersonalizadoId = rolId;
+        this.nombreDelRolPersonalizado = nombreRol;
+        return cambio;
+    }
+
+    private static void requireCorreoDePrueba(Email email) {
+        Objects.requireNonNull(email, "email es obligatorio");
+        if (!CorreoDeCuentaDePrueba.loEs(email)) {
+            throw new IllegalArgumentException("Una cuenta de prueba usa un correo ver-como+…@renaser.invalid");
+        }
+    }
+
+    /** Una cuenta de prueba de «ver como» no se cambia desde Administración: la prepara el sistema (D-270). */
+    private void requireNoEsCuentaDePrueba() {
+        if (esCuentaDePrueba) {
+            throw new NotAuthorizedException("Una cuenta de prueba de «ver como» no se cambia desde Administración");
+        }
     }
 
     /**
@@ -152,6 +227,7 @@ public final class User {
      */
     public void changeRole(UserRole newRole, User actor) {
         requireRoleManager(actor);
+        requireNoEsCuentaDePrueba();
         if (role == UserRole.IT_SUPPORT) {
             throw new NotAuthorizedException("Una cuenta Soporte TI no se cambia desde la app");
         }
@@ -170,6 +246,7 @@ public final class User {
      */
     public void asignarRolPersonalizado(RolPersonalizado rolPersonalizado, User actor) {
         requireRoleManager(actor);
+        requireNoEsCuentaDePrueba();
         if (role == UserRole.IT_SUPPORT) {
             throw new NotAuthorizedException("Una cuenta Soporte TI no se cambia desde la app");
         }

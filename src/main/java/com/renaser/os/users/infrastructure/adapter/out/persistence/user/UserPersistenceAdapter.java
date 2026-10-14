@@ -65,23 +65,42 @@ class UserPersistenceAdapter implements LoadUserPort, SaveUserPort, DeleteUserPo
         return repository.findAllById(valores).stream().map(mapper::toDomain).toList();
     }
 
-    /** Panel admin de staff (gap #6). `statusFilter == null` = cualquier estado. */
+    /**
+     * Panel admin de staff (gap #6). `statusFilter == null` = cualquier estado. Sin las cuentas de prueba de «ver como»
+     * (D-270), igual que {@link #countByRoles}.
+     */
     @Override
     public List<User> byRoles(Collection<UserRole> roles, UserStatus statusFilter, int page, int size) {
         List<RolUsuarioJpa> rolesJpa = roles.stream().map(mapper::toJpaRolePublic).toList();
         var pageable = PageRequest.of(page, tamanoAcotado(size), Sort.by("nombreCompleto"));
         var entidades = statusFilter == null
-                ? repository.findByRolIn(rolesJpa, pageable)
-                : repository.findByRolInAndEstado(rolesJpa, mapper.toJpaStatusPublic(statusFilter), pageable);
+                ? repository.findByRolInAndEsCuentaDePruebaFalse(rolesJpa, pageable)
+                : repository.findByRolInAndEstadoAndEsCuentaDePruebaFalse(rolesJpa,
+                        mapper.toJpaStatusPublic(statusFilter), pageable);
         return entidades.stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
+    public Set<UserId> cuentasDePruebaEntre(Collection<UserId> ids) {
+        if (ids.isEmpty()) {
+            return Set.of();
+        }
+        return repository.cuentasDePruebaEntre(ids.stream().map(UserId::value).toList()).stream().map(UserId::of)
+                .collect(Collectors.toUnmodifiableSet());
+    }
+
+    @Override
+    public Set<UserId> cuentasDePrueba() {
+        return repository.cuentasDePrueba().stream().map(UserId::of).collect(Collectors.toUnmodifiableSet());
     }
 
     @Override
     public long countByRoles(Collection<UserRole> roles, UserStatus statusFilter) {
         List<RolUsuarioJpa> rolesJpa = roles.stream().map(mapper::toJpaRolePublic).toList();
         return statusFilter == null
-                ? repository.countByRolIn(rolesJpa)
-                : repository.countByRolInAndEstado(rolesJpa, mapper.toJpaStatusPublic(statusFilter));
+                ? repository.countByRolInAndEsCuentaDePruebaFalse(rolesJpa)
+                : repository.countByRolInAndEstadoAndEsCuentaDePruebaFalse(rolesJpa,
+                        mapper.toJpaStatusPublic(statusFilter));
     }
 
     /**

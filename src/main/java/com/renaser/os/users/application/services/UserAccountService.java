@@ -385,7 +385,7 @@ public class UserAccountService implements InviteAndCreateUserUseCase, GetMyProf
      */
     private static UserSummary aResumen(User user) {
         return new UserSummary(user.id(), user.fullName(), user.avatarUrl(), user.role(), user.status(),
-                user.rolPersonalizado().orElse(null));
+                user.rolPersonalizado().orElse(null), user.esCuentaDePrueba());
     }
 
     /** Sin chequeo de {@code hasAccess()}: usado solo para cargar el OBJETIVO de un cambio de rol

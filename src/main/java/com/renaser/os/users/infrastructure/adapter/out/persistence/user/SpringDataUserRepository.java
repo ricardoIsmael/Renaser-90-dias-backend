@@ -32,12 +32,24 @@ interface SpringDataUserRepository extends JpaRepository<UserJpaEntity, UUID> {
     @Query("select u.id from UserJpaEntity u where u.id in :ids and u.bajaSolicitadaEn is not null")
     List<UUID> cerradasEntre(@Param("ids") Collection<UUID> ids);
 
-    List<UserJpaEntity> findByRolInAndEstado(Collection<RolUsuarioJpa> roles, EstadoUsuarioJpa estado,
-                                              Pageable pageable);
+    /*
+     * Las listas por rol NUNCA traen cuentas de prueba de «ver como» (V107, D-270): de acá salen el padrón del ranking
+     * (`aprendicesActivos`), el padrón y el reporte del Líder de Mentores (`mentoresActivos`), el panel de staff y la
+     * protección del último ADMIN (`countByRoles`). Una cuenta de prueba ADMIN no puede contar como «otro admin».
+     */
+    List<UserJpaEntity> findByRolInAndEstadoAndEsCuentaDePruebaFalse(Collection<RolUsuarioJpa> roles,
+                                                                     EstadoUsuarioJpa estado, Pageable pageable);
 
-    List<UserJpaEntity> findByRolIn(Collection<RolUsuarioJpa> roles, Pageable pageable);
+    List<UserJpaEntity> findByRolInAndEsCuentaDePruebaFalse(Collection<RolUsuarioJpa> roles, Pageable pageable);
 
-    long countByRolInAndEstado(Collection<RolUsuarioJpa> roles, EstadoUsuarioJpa estado);
+    long countByRolInAndEstadoAndEsCuentaDePruebaFalse(Collection<RolUsuarioJpa> roles, EstadoUsuarioJpa estado);
 
-    long countByRolIn(Collection<RolUsuarioJpa> roles);
+    long countByRolInAndEsCuentaDePruebaFalse(Collection<RolUsuarioJpa> roles);
+
+    /** Las cuentas de prueba de «ver como» entre estos ids (D-270). */
+    @Query("select u.id from UserJpaEntity u where u.id in :ids and u.esCuentaDePrueba = true")
+    List<UUID> cuentasDePruebaEntre(@Param("ids") Collection<UUID> ids);
+
+    @Query("select u.id from UserJpaEntity u where u.esCuentaDePrueba = true")
+    List<UUID> cuentasDePrueba();
 }
