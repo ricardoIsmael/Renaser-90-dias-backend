@@ -62,6 +62,30 @@ public record CambioAuditado(UUID id, TipoDeCambio tipo, UserId actor, String cl
                 despues, motivo, dispositivo, en);
     }
 
+    /**
+     * Soporte TI entró a «ver como rol» (fase 2, D-270): {@code antes} {@code null} y {@code despues} el rol que eligió
+     * ({@code {rol: "MENTOR"}} o {@code {rolPersonalizado: {id, nombre}}}). {@code actor} es quien la abrió.
+     */
+    public static CambioAuditado entradaAVerComo(UUID id, UserId actor, Map<String, Object> rol, String dispositivo,
+                                                 Instant en) {
+        return new CambioAuditado(id, TipoDeCambio.VER_COMO, Objects.requireNonNull(actor), null, null,
+                requerirRol(rol), null, dispositivo, en);
+    }
+
+    /** Y salió: {@code antes} el rol que estaba viendo y {@code despues} {@code null}. {@code actor} sigue siendo quien la abrió. */
+    public static CambioAuditado salidaDeVerComo(UUID id, UserId actor, Map<String, Object> rol, String dispositivo,
+                                                 Instant en) {
+        return new CambioAuditado(id, TipoDeCambio.VER_COMO, Objects.requireNonNull(actor), null, requerirRol(rol),
+                null, null, dispositivo, en);
+    }
+
+    private static Map<String, Object> requerirRol(Map<String, Object> rol) {
+        if (rol == null || rol.size() != 1 || !(rol.containsKey("rol") || rol.containsKey("rolPersonalizado"))) {
+            throw new IllegalArgumentException("Ver como guarda {rol} o {rolPersonalizado}, uno solo");
+        }
+        return rol;
+    }
+
     /** Un intento de desbloqueo o de reautenticación; {@code resultado} es «OK» o «CONTRASENA_INCORRECTA». */
     public static CambioAuditado acceso(UUID id, TipoDeCambio tipo, UserId actor, String resultado,
                                         String dispositivo, Instant en) {
