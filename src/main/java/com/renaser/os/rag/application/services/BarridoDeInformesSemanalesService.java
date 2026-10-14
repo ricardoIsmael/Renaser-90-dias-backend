@@ -8,6 +8,8 @@ import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.ProgramasActivadosFinder;
 import com.renaser.os.users.api.ProgramasActivadosFinder.ProgramaActivado;
+import com.renaser.os.users.api.UserSummary;
+import com.renaser.os.users.api.UserSummaryFinder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -16,6 +18,8 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Barrido horario del Espejo Sombra (E-560). Antes corría una vez por semana, el lunes 03:00 UTC con la fecha del
@@ -25,6 +29,10 @@ import java.util.Map;
  * <p>Sin {@code @Transactional} (regla 02 §4): {@code generar} llama a la IA y no puede retener una conexión (C-1);
  * las lecturas y el guardado ya son transacciones cortas propias. Un participante que falla no detiene el barrido.
  * El padrón se recorre por lotes: la zona se pide en UNA consulta por lote, nunca una por persona.
+ *
+ * <p><b>Las cuentas de prueba de «ver como» no tienen informe</b> (D-270, decisión del coordinador del 2026-10-14): cada
+ * informe es una llamada a la IA y nadie lo lee. El aprendiz de prueba sí está en el padrón de inscritos (los hábitos
+ * de su programa se arman como los de cualquiera), así que se descarta acá, con UNA lectura de resúmenes por lote.
  */
 @Service
 public class BarridoDeInformesSemanalesService implements GenerarInformesSemanalesUseCase {
@@ -42,14 +50,17 @@ public class BarridoDeInformesSemanalesService implements GenerarInformesSemanal
     private final GenerarInformeEspejoSombraUseCase generarInforme;
     private final ParticipacionProgramaFinder participaciones;
     private final ProgramasActivadosFinder programas;
+    private final UserSummaryFinder usuarios;
     private final Clock clock;
 
     public BarridoDeInformesSemanalesService(GenerarInformeEspejoSombraUseCase generarInforme,
                                               ParticipacionProgramaFinder participaciones,
-                                              ProgramasActivadosFinder programas, Clock clock) {
+                                              ProgramasActivadosFinder programas, UserSummaryFinder usuarios,
+                                              Clock clock) {
         this.generarInforme = generarInforme;
         this.participaciones = participaciones;
         this.programas = programas;
+        this.usuarios = usuarios;
         this.clock = clock;
     }
 
@@ -64,8 +75,12 @@ public class BarridoDeInformesSemanalesService implements GenerarInformesSemanal
 
     private void recorrer(List<UserId> lote, Instant ahora) {
         Map<UserId, ProgramaActivado> programasDelLote = programas.deVarios(lote);
+        Set<UserId> deCuentasDePrueba = usuarios.findByIds(lote).values().stream()
+                .filter(UserSummary::esCuentaDePrueba).map(UserSummary::id).collect(Collectors.toSet());
         for (UserId participante : lote) {
-            generarSinTumbarElBarrido(participante, zonaDe(programasDelLote.get(participante)), ahora);
+            if (!deCuentasDePrueba.contains(participante)) {
+                generarSinTumbarElBarrido(participante, zonaDe(programasDelLote.get(participante)), ahora);
+            }
         }
     }
 
