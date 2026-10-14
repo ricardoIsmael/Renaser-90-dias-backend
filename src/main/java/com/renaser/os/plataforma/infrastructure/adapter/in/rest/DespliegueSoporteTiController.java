@@ -6,15 +6,20 @@ import com.renaser.os.plataforma.application.ports.in.CambiarDespliegueUseCase.C
 import com.renaser.os.plataforma.application.ports.in.CambiarProbadorasUseCase;
 import com.renaser.os.plataforma.application.ports.in.CambiarProbadorasUseCase.ProbadoraCommand;
 import com.renaser.os.plataforma.application.ports.in.ConsultarDespliegueUseCase;
+import com.renaser.os.plataforma.domain.model.despliegue.DespliegueSinCuentaException;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.ApiErrorConCodigo;
 import com.renaser.os.shared.web.security.ActorAutenticado;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import com.renaser.os.shared.web.security.SinInterruptor;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -33,7 +38,8 @@ import java.util.UUID;
  *
  * <p>Misma autorización que la consola de la fase 1: solo IT_SUPPORT ({@code OPERATE_PLATFORM}, estricto en el
  * interceptor y repetido en cada servicio) y {@code X-Consola-Token} vivo (423). Un paso crítico pide además
- * {@code X-Reautenticacion} (428).
+ * {@code X-Reautenticacion} (428). Empezar el despliegue de una funcionalidad que se usa sin cuenta es 409 con
+ * {@code codigo: "DESPLIEGUE_SIN_CUENTA"}.
  */
 @RestController
 @RequestMapping("/api/v1/soporte-ti")
@@ -86,6 +92,13 @@ class DespliegueSoporteTiController {
                                 @PathVariable UUID usuarioId, HttpServletRequest request) {
         probadoras.quitar(new ProbadoraCommand(PedidoDeConsola.acceso(actor, request), clave, UserId.of(usuarioId),
                 null, PedidoDeConsola.dispositivo(request)));
+    }
+
+    /** 409 con su código, para que la app lo distinga de un 409 de versión vieja sin leer el texto. */
+    @ExceptionHandler(DespliegueSinCuentaException.class)
+    public ResponseEntity<ApiErrorConCodigo> sinCuenta(DespliegueSinCuentaException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).contentType(MediaType.APPLICATION_JSON)
+                .body(ApiErrorConCodigo.of(ex.getMessage(), DespliegueSinCuentaException.CODIGO, ex.clave()));
     }
 
     @GetMapping("/personas")

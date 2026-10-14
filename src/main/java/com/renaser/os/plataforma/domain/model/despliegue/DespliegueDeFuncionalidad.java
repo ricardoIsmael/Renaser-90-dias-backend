@@ -1,5 +1,6 @@
 package com.renaser.os.plataforma.domain.model.despliegue;
 
+import com.renaser.os.plataforma.domain.model.catalogo.DefinicionDeFuncionalidad;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.Instant;
@@ -39,6 +40,15 @@ public record DespliegueDeFuncionalidad(String clave, int porcentaje, Set<UserId
     public static DespliegueDeFuncionalidad empezar(String clave, int porcentaje, long version, UserId actor,
                                                     Instant ahora) {
         return new DespliegueDeFuncionalidad(clave, porcentaje, Set.of(), version, ahora, actor, ahora);
+    }
+
+    /**
+     * Si la funcionalidad admite despliegue: solo las que se usan con cuenta. La que en el catálogo no tiene roles (el
+     * alta pública, {@code registro}) no: sin persona no hay cubeta y la regla no se aplica. Sale del catálogo, no de un
+     * nombre fijo.
+     */
+    public static boolean admite(DefinicionDeFuncionalidad definicion) {
+        return !definicion.rolesQueLaUsan().isEmpty();
     }
 
     /** Si a esta persona le llega: es probadora o su cubeta cae dentro del porcentaje. */

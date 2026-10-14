@@ -8,14 +8,17 @@ import java.util.List;
 
 /**
  * {@code GET /soporte-ti/funcionalidades/{clave}/despliegue} (contrato fase 2 §3.4): el escalón, quién lo movió, los
- * probadores y las últimas 24 h por hora (las horas sin datos en 0).
+ * probadores y las últimas 24 h por hora (las horas sin datos en 0). {@code desplegable} es aditivo: {@code false} en una
+ * funcionalidad que se usa sin cuenta, para que la app esconda el control.
  */
-record DespliegueResponse(String clave, boolean enDespliegue, int porcentaje, long version, Instant iniciadoEn,
+record DespliegueResponse(String clave, boolean enDespliegue, boolean desplegable, int porcentaje, long version,
+                          Instant iniciadoEn,
                           FuncionalidadEnConsolaResponse.ActorResponse actualizadoPor, Instant actualizadoEn,
                           List<ProbadoraResponse> probadores, List<MetricaResponse> metricas) {
 
     static DespliegueResponse from(DespliegueEnConsola d) {
-        return new DespliegueResponse(d.clave(), d.enDespliegue(), d.porcentaje(), d.version(), d.iniciadoEn(),
+        return new DespliegueResponse(d.clave(), d.enDespliegue(), d.desplegable(), d.porcentaje(), d.version(),
+                d.iniciadoEn(),
                 FuncionalidadEnConsolaResponse.ActorResponse.from(d.actualizadoPor()), d.actualizadoEn(),
                 d.probadores().stream().map(p -> new ProbadoraResponse(p.id().toString(), p.nombre(), p.email()))
                         .toList(),

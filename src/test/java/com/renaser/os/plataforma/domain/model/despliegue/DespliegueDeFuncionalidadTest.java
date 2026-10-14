@@ -1,5 +1,7 @@
 package com.renaser.os.plataforma.domain.model.despliegue;
 
+import com.renaser.os.plataforma.domain.model.catalogo.CatalogoDeFuncionalidades;
+import com.renaser.os.plataforma.domain.model.catalogo.DefinicionDeFuncionalidad;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -99,6 +101,18 @@ class DespliegueDeFuncionalidadTest {
                 "probadores", 1)));
         assertThat(DespliegueDeFuncionalidad.sinDespliegueParaAuditoria()).containsKey("despliegue")
                 .containsEntry("despliegue", null);
+    }
+
+    @Test
+    @DisplayName("admite despliegue solo lo que se usa con cuenta: lo que en el catálogo no tiene roles (registro) no")
+    void admiteSoloConCuenta() {
+        List<String> sinCuenta = CatalogoDeFuncionalidades.inicial().todas().stream()
+                .filter(definicion -> !DespliegueDeFuncionalidad.admite(definicion))
+                .map(DefinicionDeFuncionalidad::clave).toList();
+
+        assertThat(sinCuenta).as("sale de los roles del catálogo, no de un nombre fijo").containsExactly("registro");
+        assertThat(CatalogoDeFuncionalidades.inicial().definicion("chat.grupos").map(DespliegueDeFuncionalidad::admite))
+                .contains(true);
     }
 
     private static DespliegueDeFuncionalidad alPorcentaje(String clave, int porcentaje) {

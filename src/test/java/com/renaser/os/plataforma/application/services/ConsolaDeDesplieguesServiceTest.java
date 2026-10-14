@@ -8,6 +8,7 @@ import com.renaser.os.plataforma.application.ports.out.MetricasDeDesplieguePort;
 import com.renaser.os.plataforma.domain.model.auditoria.CambioAuditado;
 import com.renaser.os.plataforma.domain.model.auditoria.TipoDeCambio;
 import com.renaser.os.plataforma.domain.model.despliegue.DespliegueCambiado;
+import com.renaser.os.plataforma.domain.model.despliegue.DespliegueSinCuentaException;
 import com.renaser.os.plataforma.domain.model.estado.ReglaDeDisponibilidad;
 import com.renaser.os.shared.application.EstadoAutomaticoDeFuncionalidades;
 import com.renaser.os.shared.domain.ConsolaBloqueadaException;
@@ -188,6 +189,27 @@ class ConsolaDeDesplieguesServiceTest {
                 .isEqualTo(version);
         assertThat(service.cambiar(pedido(soporte, consola, "radar", 100, null, null)).enDespliegue()).isFalse();
         assertThat(auditoria.filas).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("409 DESPLIEGUE_SIN_CUENTA al empezar el de una funcionalidad sin cuenta (registro), sin pedir la "
+            + "contraseña aunque sea al 0 % y sin guardar nada; el detalle dice desplegable false")
+    void sinCuentaNoSeDespliega() {
+        assertThatThrownBy(() -> service.cambiar(pedido(soporte, consola, "registro", 0, null, null)))
+                .isInstanceOf(DespliegueSinCuentaException.class)
+                .hasMessage("Esta funcionalidad se usa sin cuenta; un despliegue no tendría efecto.")
+                .extracting(e -> ((DespliegueSinCuentaException) e).clave()).isEqualTo("registro");
+        assertThatThrownBy(() -> service.cambiar(pedido(soporte, consola, "registro", 25, null,
+                tokens.emitirDeReautenticacion(soporte, SESION, Duration.ofMinutes(5)))))
+                .isInstanceOf(DespliegueSinCuentaException.class);
+
+        assertThat(despliegues.filas).isEmpty();
+        assertThat(auditoria.filas).isEmpty();
+        verify(events, never()).publishEvent(any());
+        assertThat(service.cambiar(pedido(soporte, consola, "registro", 100, null, null)).enDespliegue())
+                .as("100 sin despliegue no hace nada: no es «empezar»").isFalse();
+        assertThat(service.detalle(acceso(soporte, consola), "registro").desplegable()).isFalse();
+        assertThat(service.detalle(acceso(soporte, consola), "eventos").desplegable()).isTrue();
     }
 
     private CambiarDespliegueCommand pedido(UserId actor, String token, String clave, Integer porcentaje, Long version,

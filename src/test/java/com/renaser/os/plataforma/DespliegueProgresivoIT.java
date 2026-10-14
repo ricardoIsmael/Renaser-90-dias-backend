@@ -199,6 +199,26 @@ class DespliegueProgresivoIT {
     }
 
     @Test
+    @DisplayName("una funcionalidad que se usa sin cuenta (registro) no se despliega: 409 DESPLIEGUE_SIN_CUENTA y "
+            + "desplegable false en el GET")
+    void sinCuentaNoSeDespliega() throws Exception {
+        HttpResponse<String> respuesta = cambiar("registro", 25, null, true);
+
+        assertThat(respuesta.statusCode()).isEqualTo(409);
+        JsonNode error = pedidos.json(respuesta);
+        assertThat(error.get("codigo").asText()).isEqualTo("DESPLIEGUE_SIN_CUENTA");
+        assertThat(error.get("funcionalidad").asText()).isEqualTo("registro");
+        assertThat(error.get("message").asText())
+                .isEqualTo("Esta funcionalidad se usa sin cuenta; un despliegue no tendría efecto.");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM renaser.funcionalidades_despliegue", Integer.class))
+                .isZero();
+        assertThat(pedidos.json(pedidos.enviar("GET", DESPLIEGUE.formatted("registro"), soporte, null, conConsola()))
+                .get("desplegable").asBoolean()).isFalse();
+        assertThat(pedidos.json(pedidos.enviar("GET", DESPLIEGUE.formatted("chat.grupos"), soporte, null,
+                conConsola())).get("desplegable").asBoolean()).isTrue();
+    }
+
+    @Test
     @DisplayName("probadores: 404 si la persona no existe, 409 si no hay despliegue, quitar da 204")
     void probadores() throws Exception {
         UUID aprendiz = pedidos.usuario("APRENDIZ");

@@ -5,6 +5,7 @@ import com.renaser.os.plataforma.application.ports.in.DespliegueEnConsola.Probad
 import com.renaser.os.plataforma.application.ports.in.FuncionalidadEnConsola.Actor;
 import com.renaser.os.plataforma.application.ports.out.CargarDesplieguesPort;
 import com.renaser.os.plataforma.application.ports.out.MetricasDeDesplieguePort;
+import com.renaser.os.plataforma.domain.model.catalogo.CatalogoDeFuncionalidades;
 import com.renaser.os.plataforma.domain.model.despliegue.DespliegueDeFuncionalidad;
 import com.renaser.os.plataforma.domain.model.despliegue.MetricasPorHora;
 import com.renaser.os.plataforma.domain.model.despliegue.MetricasPorHora.MetricaDeLaHora;
@@ -49,17 +50,19 @@ class DesplieguesEnConsola {
         Instant ahora = clock.now();
         List<MetricaDeLaHora> metricas = MetricasPorHora.ultimas24Horas(ahora,
                 metricasPort.desde(clave, MetricasPorHora.desde(ahora)));
+        boolean desplegable = CatalogoDeFuncionalidades.inicial().definicion(clave)
+                .map(DespliegueDeFuncionalidad::admite).orElse(false);
         Optional<DespliegueDeFuncionalidad> despliegue = cargarDesplieguesPort.de(clave);
         if (despliegue.isEmpty()) {
-            return new DespliegueEnConsola(clave, false, DespliegueDeFuncionalidad.PARA_TODOS, 0L, null, null, null,
-                    List.of(), metricas);
+            return new DespliegueEnConsola(clave, false, desplegable, DespliegueDeFuncionalidad.PARA_TODOS, 0L, null,
+                    null, null, List.of(), metricas);
         }
         DespliegueDeFuncionalidad d = despliegue.get();
         Set<UserId> personas = new HashSet<>(d.probadores());
         personas.add(d.actualizadoPor());
         Map<UserId, UserSummary> resumenes = userSummaryFinder.findByIds(personas);
         Map<UserId, String> correos = correosFinder.correosDe(d.probadores());
-        return new DespliegueEnConsola(clave, true, d.porcentaje(), d.version(), d.iniciadoEn(),
+        return new DespliegueEnConsola(clave, true, desplegable, d.porcentaje(), d.version(), d.iniciadoEn(),
                 new Actor(d.actualizadoPor(), nombre(resumenes, d.actualizadoPor())), d.actualizadoEn(),
                 probadores(d, resumenes, correos), metricas);
     }

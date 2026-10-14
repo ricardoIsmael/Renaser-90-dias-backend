@@ -11,6 +11,7 @@ import com.renaser.os.plataforma.application.services.AnotadorDeDespliegues.Anot
 import com.renaser.os.plataforma.domain.model.catalogo.DefinicionDeFuncionalidad;
 import com.renaser.os.plataforma.domain.model.despliegue.CambioDeDespliegue;
 import com.renaser.os.plataforma.domain.model.despliegue.DespliegueDeFuncionalidad;
+import com.renaser.os.plataforma.domain.model.despliegue.DespliegueSinCuentaException;
 import com.renaser.os.plataforma.domain.model.despliegue.PasoDelDespliegue;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.ReautenticacionRequeridaException;
@@ -28,6 +29,8 @@ import java.util.function.Predicate;
  *   <li>Soporte TI con la consola abierta (403 / 423);</li>
  *   <li>clave del catálogo, porcentaje 0..100 y motivo (400; una clave anti-bloqueo no está en el catálogo);</li>
  *   <li>si mandó versión, que siga siendo la vigente (409);</li>
+ *   <li>empezar el despliegue de una funcionalidad que se usa sin cuenta: 409 {@code DESPLIEGUE_SIN_CUENTA} (antes de
+ *       pedir la contraseña: no tendría efecto);</li>
  *   <li>si el paso es crítico, el token de reautenticación de un solo uso (428);</li>
  *   <li>guarda (409 si otro cambio llegó en el medio), deja la auditoría y publica los eventos en la MISMA transacción.
  *       Pedir lo que ya está no guarda, no audita ni avisa.</li>
@@ -79,6 +82,9 @@ class ConsolaDeDesplieguesService implements ConsultarDespliegueUseCase, Cambiar
         PasoDelDespliegue paso = cambio.pasoDesde(actual);
         if (paso == PasoDelDespliegue.NINGUNO) {
             return vistas.detalle(definicion.clave());
+        }
+        if (paso == PasoDelDespliegue.EMPIEZA && !DespliegueDeFuncionalidad.admite(definicion)) {
+            throw new DespliegueSinCuentaException(definicion.clave());
         }
         if (cambio.esCritico(paso, definicion.critica())) {
             exigirReautenticacion(command);

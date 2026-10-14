@@ -113,6 +113,12 @@ Prometheus.
 
 - `porcentaje: 100` termina el despliegue (borra la fila). Empezar un despliegue es poner un porcentaje < 100 en una
   funcionalidad que no lo tenía.
+- **Aditivo (A2, 2026-10-14, decisión del coordinador): funcionalidades que se usan sin cuenta.** Las que en el catálogo
+  no tienen roles (`rolesQueLaUsan` vacío; hoy solo `registro`, el alta pública) no se despliegan: sin persona no hay
+  cubeta y la regla no se aplica. Empezar su despliegue responde `409 { codigo: "DESPLIEGUE_SIN_CUENTA", funcionalidad,
+  message: "Esta funcionalidad se usa sin cuenta; un despliegue no tendría efecto." }` (antes de pedir la contraseña), y
+  el `GET …/despliegue` suma `desplegable: boolean` (`false` en esas, `true` en el resto) para que la app esconda el
+  control. La decisión sale del catálogo, no de un nombre fijo.
 - **Crítico** (pide contraseña, como en la fase 1): empezar un despliegue o bajar el porcentaje de una funcionalidad
   marcada crítica, y empezar uno con porcentaje 0 en cualquiera (la esconde para todos salvo probadores).
 - `GET /api/v1/soporte-ti/funcionalidades` suma por funcionalidad `despliegue: { porcentaje, probadores } | null`
