@@ -33,15 +33,24 @@ Puntos de coordinación que la app ya asume y se le pasaron a A (revisar en su i
 4. Auditoría: filas con `id`, `tipo`, `clave`, `actor {id, nombre}`, `antes`/`despues` (`prendidaGlobal`, `porRol`,
    `aviso`), `motivo`, `creadoEn`; página con `contenido`, `pagina` (desde 0) y `total`.
 
-### Hallazgos del QA para corregir antes de subir
+### Hallazgos del QA — corregidos el 2026-10-14
 
-1. **Auditoría (app)**: un cambio que apagó `chat` para Aprendiz se resume como «Prendida para todos (cambiaron los roles
-   o el aviso)». Debe decir «Apagada para Aprendiz»: usar `despues.apagadaPara` que ya manda el backend (captura
-   `ST7-auditoria.png`).
-2. **Detalle de la consola (app, menor)**: con la lista desplazada al final, el botón flotante de SER tapa el extremo
-   derecho de «Guardar con contraseña»; se puede tocar por el centro, pero conviene el espacio de abajo
-   (`EspacioSobreFlotantes`, como en Eventos).
-3. **Decisión del dueño (P7)**: Soporte TI todavía no entra a Administración.
+1. **Auditoría (app)**: un cambio que apagó `chat` para Aprendiz se resumía «Prendida para todos (cambiaron los roles o
+   el aviso)». **Corregido** (`803f38a`): lee `apagadaPara` (o `porRol`) de cada foto y dice «Prendida para todos →
+   Apagada para Aprendiz»; si solo cambió el aviso, «(cambió el aviso)». Las filas viejas también se leen bien.
+2. **Detalle de la consola (app)**: el botón flotante de SER tapaba el extremo de «Guardar con contraseña». **Corregido**
+   (`78e8870`): las cuatro pantallas de la consola dejan `36 + ESPACIO_PARA_LANZADOR`, como Administración y la Caja.
+3. **Cabecera de la consola (app, visto el 14/10)**: decía «1 apagadas». **Corregido** (`1aff964`): «1 apagada».
+
+Los tres, verificados en el emulador con mobile-mcp el 14/10 (apagar el Muro para Aprendiz con contraseña, ver el final
+del detalle y la auditoría); jest 342 suites / 2848 pruebas, tsc 0. Capturas en `~/Imágenes/e2e-2026-10-14/soporte-ti/`.
+
+### P7 respondida (2026-10-14): Soporte TI va en una cuenta aparte
+
+Una cuenta tiene un solo rol: ponerle Soporte TI a la cuenta del dueño le quitaría Administración. El dueño eligió **una
+cuenta aparte para Soporte TI** (otro correo suyo); su cuenta de siempre sigue como Admin o Alquimista. No se toca ningún
+permiso de Administración. `asignar.sql` se corre con ese otro correo. Queda descartado, por ahora, que Soporte TI pase
+los 56 chequeos de Administración.
 
 ### Orden para retomar (actualizado al cierre del 13/10, 22:45)
 
@@ -175,7 +184,7 @@ y se integran de a uno.
 - **P3.** Hábitos por rol (D-264): ¿la audiencia de un hábito puede elegir un rol personalizado, o solo los seis base?
 - **P4.** ¿«Ver como» incluye los roles personalizados?
 - **P5.** Métricas del despliegue: ¿alcanzan las últimas 24 h, o quieres ver días?
-- **P7.** (Lo dejó abierto el agente A) **¿Soporte TI entra a Administración?** Hoy tiene su consola pero recibe 403 en
+- **P7. RESPONDIDA el 2026-10-14: cuenta aparte para Soporte TI, no entra a Administración (ver §0).** (Lo dejó abierto el agente A) **¿Soporte TI entra a Administración?** Hoy tiene su consola pero recibe 403 en
   Administración y `canAdminister` sale en false: unos 56 chequeos preguntan ADMIN/ALQUIMISTA por nombre o por
   `canManageRoles()`, y `canManageRoles()` también abre los chats de soporte, que la spec dice que Soporte TI no lee.
   Opciones: (a) que pase todos los chequeos de Administración menos el de leer chats de soporte (cambio en esos 56
