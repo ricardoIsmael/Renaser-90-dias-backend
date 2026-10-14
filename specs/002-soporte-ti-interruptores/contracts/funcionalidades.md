@@ -213,3 +213,37 @@ Lo implementado sigue este contrato con estos desvíos mínimos y agregados, tod
 - **Para el agente B** (`shared.application`): `EstadoAutomaticoDeFuncionalidades` (`apagadaAutomaticamente(clave)`,
   `version()`, `circuitos()`) y `AuditoriaDePlataforma.registrarCambioAutomatico(...)` para la fila AUTOMATICO.
   `CircuitoDeIaCambiadoEvent` y su push siguen siendo de B.
+
+### 10.1 Lo del agente B (IA de SER, 2026-10-13; D-267)
+
+Rama `claude/plataforma-ia`, sobre la de A. Sigue el contrato con estos agregados y desvíos, todos aditivos para la app:
+
+- **Circuito** (§5, plan.md D7): por parte, `ia.chat` (chat de SER y del curso, embeddings) e `ia.voz` (texto a voz y
+  Gemini Live). Abre con 5 fallas del proveedor en 2 min; espera 2, 5 y 15 min en las reaperturas seguidas (la última se
+  repite); vencida la espera pasa un solo pedido de prueba. Configurable: `renaser.ia.circuito.fallas-para-abrir`,
+  `ventana`, `esperas`, `plazo-de-la-prueba` (2 min: lo que se reserva a la prueba si se corta sin avisar) y
+  `recarga-cada`. Estado en Redis (`renaser:ia:circuito:<parte>` y `…:fallas`), aviso entre instancias por el canal
+  `renaser:ia:circuito`. Sin Redis el circuito deja pasar.
+- **Qué cuenta:** falla = `ProveedorIaNoDisponibleException` (429, 408, 5xx, timeouts) del chat, de los embeddings y del
+  texto a voz, y en la voz en vivo toda `ConversacionEnVivoNoDisponibleException` al abrir (desvío: el adaptador de Gemini
+  Live no distingue el código). Éxito = el stream del chat completo, el audio completo, la sesión en vivo abierta. Los
+  embeddings solo suman fallas: la prueba la resuelve el modelo de esa parte. Un error nuestro (un 400) no cuenta.
+- **`EstadoAutomaticoDeFuncionalidades`** lo implementa `rag.application.services.circuito.EstadoAutomaticoDeLaIa`:
+  `apagadaAutomaticamente("ia.chat" | "ia.voz")` con el aviso «SER está en pausa por un problema con el proveedor. Vuelve
+  en unos minutos.» mientras la espera corre o hay una prueba en curso (`ia` e `ia.propuestas` no tienen circuito);
+  `version()` = suma de las versiones del circuito, que suben con cada apertura, cierre y toma de la prueba (no retrocede
+  si Redis se vacía); `circuitos()` con `estado` `CERRADO` / `ABIERTO` / `PROBANDO` (abierto con la espera vencida se
+  muestra `PROBANDO`), `fallasEnVentana`, `abiertoDesde` y `proximaPrueba` (los dos `null` cerrado).
+- **§7** `CircuitoDeIaCambiadoEvent(parte, estado, causa, occurredAt)` tal cual, solo para `ABIERTO` y `CERRADO` (tomar la
+  prueba no se avisa ni se audita). La fila `AUTOMATICO` lleva `antes`/`despues` con `estado` (y, abierto,
+  `abiertoDesde`, `proximaPrueba`, `aperturasSeguidas`) y la causa como `motivo`.
+- **Push:** a IT_SUPPORT activa, `OPERACION_PLATAFORMA`, como máximo 4 por hora y por parte
+  (`renaser.notifications.circuito-ia.maximo-por-hora`); los omitidos no ocupan lugar y quedan en el log.
+- **Respuestas** (§2 y plan.md D2): chat 503 antes del stream (un turno en vuelo termina con el `error` de siempre: el
+  interceptor ya no evalúa el despacho `ASYNC`, E-612); voz del orbe **204** con `ia.voz` apagada, a mano o por el
+  circuito (agregado a §1: `@Funcionalidad(value = "ia.voz", laResuelveElCasoDeUso = true)`, el interceptor no corta y
+  responde el caso de uso); voz en vivo: se abre el socket y se cierra con **1013 `no-disponible`**; `ia.propuestas`: el
+  modelo no recibe las herramientas `proponer_*` (ni `marcar_habito_completado` cuando propone) y confirmar/cancelar dan
+  el 503 del interceptor; `ia` general: no se compacta memoria y los mensajes automáticos de SER saltan.
+- **Desvío en un puerto:** `SintetizarVozPort` decía «nunca lanza»; ahora puede lanzar `ProveedorIaNoDisponibleException`
+  (el único que llama la cuenta y la trata como sin voz).

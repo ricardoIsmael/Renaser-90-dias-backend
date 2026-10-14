@@ -211,7 +211,7 @@ Basado en `docs/FEATURE_*.md` del repo actual:
 | `calendar` | Calendar | |
 | `chat` | Chat | Candidato a WebSocket/SSE nativo de Spring, no polling |
 | `notifications` | Notifications | Consumidor de eventos de todos los demás módulos |
-| `rag` / `renasia` | RAG, Renasia, Shadow Mirror | Ver §7, usa Spring AI VectorStore |
+| `rag` / `renasia` | RAG, Renasia, Shadow Mirror | Ver §7, usa Spring AI VectorStore. **Circuito automático de SER** (D-267, agente B): toda llamada nueva al proveedor de IA pide paso y cuenta cómo le fue en `CircuitoDeLaIa` (`ia.chat` o `ia.voz`), y todo camino nuevo de SER respeta `InterruptoresDeSer` (lo manual manda) |
 | `support` | Support, Tickets | |
 | `points` | Points/Ranking | Consumidor de eventos (`HabitCompletedEvent`, `RockCompletedEvent`…) |
 | `phasecontracts` | Phase Contracts (Pacto de Sangre) | Reglas de "día de firma por fase" → dominio puro |

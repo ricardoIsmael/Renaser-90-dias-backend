@@ -15342,3 +15342,37 @@ entrar el pedido. El turno en vuelo termina con su `error` + `fin` y el siguient
 puede cortar un pedido tiene que preguntarse qué pasa en el despacho `ASYNC` de un endpoint que transmite.
 `PermissionEnforcementInterceptor` tiene el mismo patrón (no mira el tipo de despacho); hoy no se nota porque el permiso de
 una sesión no cambia en medio de un stream, pero queda anotado.
+
+---
+
+## E-613 · La versión de `/funcionalidades/mias` no cambiaba al abrir el circuito después de vaciar Redis (back, RESUELTO, 13/10)
+
+**Síntoma literal.** `CircuitoDeLaIaIT.chatSeApagaYVuelve`, después de abrir `ia.chat`: `Expecting actual: 3L to be greater
+than: 3L`. Las apagadas sí listaban `ia.chat`; solo la `version` seguía igual.
+
+**Causa real.** La primera versión de `CopiaDelCircuito.version()` devolvía `max(la mayor que dio, suma de versiones en
+Redis)` para no retroceder nunca. Entre pruebas se borran las claves del circuito (como pasaría en producción si Redis se
+reinicia sin persistencia): la suma vuelve a 0 y la versión quedaba congelada en el máximo viejo hasta superarlo, así que
+abrir el circuito de nuevo no la movía. El ETag sí cambiaba (lleva la huella del contenido), por eso la app no se habría
+quedado con un estado viejo; pero el contrato dice que la versión cambia con cada apertura y cierre.
+
+**Solución.** Cuando una parte vuelve a la versión 0 (Redis vacío), la copia suma un desfase (la versión que tenía + 1) y
+la versión que da es desfase + suma: no retrocede y sigue moviéndose con cada cambio.
+
+**Para que no vuelva.** `ControlDelCircuitoServiceTest.versionTrasVaciarRedis` y el IT. **Regla general:** «nunca
+retrocede» con un `max` congela el número tras un reinicio; hace falta un desfase, no un tope.
+
+---
+
+## E-614 · El orden de las filas AUTOMATICO salía cambiado cuando el circuito se cerraba y se volvía a abrir en el mismo instante (test, RESUELTO, 13/10)
+
+**Síntoma literal.** `CircuitoDeLaIaIT.pushComoMaximoCuatroPorHora`: `Expecting actual: ["ABIERTO", "ABIERTO", "ABIERTO",
+"ABIERTO", "CERRADO", "CERRADO"] to contain exactly (and in same order): ["ABIERTO", "ABIERTO", "ABIERTO", "CERRADO",
+"ABIERTO", "CERRADO"]`.
+
+**Causa real.** Del fixture: el reloj de la prueba no avanzaba entre el pedido de prueba que cerraba el circuito y las
+cinco fallas que lo volvían a abrir, así que las dos filas tenían el mismo `creado_en` y `ORDER BY creado_en` no las
+distinguía (el `id` es un UUID al azar). El código estaba bien.
+
+**Solución.** La prueba avanza un minuto entre el cierre y las fallas siguientes. **Regla general:** con un reloj fijo,
+dos hechos seguidos tienen el mismo instante; si la prueba ordena por tiempo, tiene que mover el reloj entre ellos.
