@@ -27,6 +27,18 @@ Todo módulo del sistema pregunta *"¿quién es este usuario y qué puede hacer?
 | Alquimista | `ALCHEMIST` | Máximo nivel |
 | Soporte TI | `IT_SUPPORT` (`SOPORTE_TI` en la base, V100) | La cuenta del dueño-programador: opera la plataforma (interruptores, auditoría, circuito de la IA) desde su consola (spec 002). **Se asigna solo con `scripts/soporte-ti/asignar.sql`**: invitar o cambiar el rol a `IT_SUPPORT` es 400, cambiar el rol de esa cuenta es 403, y Administración no la suspende ni la elimina. `can()` le da todo y el permiso exclusivo `OPERATE_PLATFORM`; no actúa como mentor ni maneja roles (D-267) |
 
+**Roles personalizados (D-269, spec 002 fase 2).** Encima de los seis roles que asigna la app, Soporte TI crea desde
+su consola roles que **heredan de uno base** y marcan un subconjunto de sus funcionalidades («Mentor junior»: un mentor
+sin eventos). Viven en `users` (`roles_personalizados`, V105) y la cuenta los referencia con
+`usuarios.rol_personalizado_id`; **`usuarios.rol` sigue siendo el rol base**, así que guards, rankings, padrones,
+espejos de rol y hábitos por rol los ven como su base. Solo la evaluación de interruptores (`plataforma`, regla
+`@Order(20)`) usa sus funcionalidades. `users.api` expone `GestionarRolesPersonalizadosUseCase` (crear, editar,
+borrar, reemplazar en bloque; solo Soporte TI), `RolesPersonalizadosFinder`, `RolPersonalizadoResumen`,
+`RolPersonalizadoAsignado` (en `UserSummary.rolPersonalizado`) y `RolPersonalizadoCambiadoEvent`. Administración los
+asigna con `rolPersonalizadoId` en `PATCH /users/{id}/role` y al aprobar; `User.changeRole` quita el rol personalizado
+y `User.asignarRolPersonalizado` toma su base (solo un ADMIN asigna uno que hereda de ADMIN o ALQUIMISTA). Un rol
+desactivado conserva sus referencias pero no restringe ni se muestra.
+
 `UserRole` es un enum (D-13): conjunto cerrado, chico y estable, cada uno atado a una clase de perfil distinta. La matriz fina de **permisos** (`Permission` enum, `caller.can(APPROVE_ACCOUNT_REQUEST)` en vez de `if (role==ADMIN)`) sigue sin construirse — bloqueada por R-2.
 
 `UserStatus`: `ACTIVE`, `SUSPENDED`. `SUSPENDED` corta el acceso antes de llegar al caso de uso. *(Desde D-214, 2026-09-27, eso vale para todos los roles: lo corta `PermissionEnforcementInterceptor`; antes solo para TRAINEE y el resto dependía de cada servicio. Existe además `INACTIVE`, «registrado sin aprobar», desde el 2026-08-27.)*
