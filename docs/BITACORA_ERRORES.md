@@ -15442,3 +15442,37 @@ otros comandos con constructores extra (`ActualizarCelulaCommand`, `CrearCelulaC
 **Cómo evitarlo.** Arreglo propuesto: en un record, validar el canónico
 (`getDeclaredConstructor(Arrays.stream(recordClass.getRecordComponents()).map(RecordComponent::getType).toArray(Class[]::new))`),
 y revisar los ocho comandos de arriba. Mientras tanto, un record con más de un constructor no usa `SelfValidating`.
+
+## E-625 · El chat de un grupo que nace con integrantes quedaba sin participantes (back, RESUELTO, 14/10)
+
+**Síntoma.** Hallado al diseñar el grupo de prueba de «ver como» (D-270), no en producción: el grupo nace con mentor,
+aprendiz y guía en una sola transacción, y su conversación podía quedar creada pero vacía (`participantes_conversacion` sin
+filas). El mentor de prueba no veía el chat de su grupo en Tribu, aunque el acceso por asignación sí lo dejaba abrir.
+
+**Causa real.** `CelulaCreadaEvent` y `ComposicionDeCelulaCambiadaEvent` salen del mismo commit y el outbox los entrega en
+paralelo. `ParticipantesCelulaService.sincronizar` no hace nada si la conversación todavía no existe (lo dice su código), y
+`CelulaCreadaChatListener` solo creaba la fila: si el aviso de la composición llegaba primero, nadie volvía a sincronizar.
+Con los grupos de Administración no se notaba porque el grupo se crea en un pedido y los integrantes se asignan en otros.
+
+**Solución.** `CelulaCreadaChatListener` sincroniza los participantes después de crear la conversación (la sincronización es
+idempotente; en un grupo sin integrantes no cambia nada). Prueba: `CelulaCreadaChatListenerTest.sincronizaLosIntegrantesDespuesDeCrearLaConversacion`.
+
+**Cómo evitarlo.** Un oyente que depende de que otro haya corrido antes (la conversación antes que sus participantes) no
+puede suponer el orden del outbox: o el primero hace también lo del segundo, o el segundo reintenta.
+
+## E-626 · `POST /api/v1/users/me` es una lectura: un solo lectura «por verbo» habría dejado a «ver como» sin arrancar (back, EVITADO, 14/10)
+
+**Síntoma.** Hallado leyendo la app antes de probar (`src/features/auth/api/authApi.ts`: `apiFetch('/api/v1/users/me',
+{ method: 'POST' })`): con la regla literal del contrato («todo POST, PUT, PATCH y DELETE de una sesión `soloLectura` → 403»),
+la primera pantalla de «ver como» habría recibido `403 MODO_SOLO_LECTURA` al leer el perfil y la app no habría arrancado.
+
+**Causa real.** El perfil propio se lee con `POST /users/me` (`UserController.me`, `@SinInterruptor` «Lectura del perfil
+propio, que la app usa al entrar»): es el único endpoint con sesión que usa POST para leer (los otros, `check-email` y
+`exists`, son del alta pública).
+
+**Solución.** `FiltroDeSoloLectura` deja pasar `POST /api/v1/users/me` junto a las dos salidas (`DELETE /soporte-ti/ver-como`
+y `POST /auth/logout`); editar el perfil (`PATCH /users/me`) sigue siendo 403. Prueba: `FiltroDeSoloLecturaTest.elPerfilPropioPasa`
+y `VerComoDePuntaAPuntaIT` (lee el perfil con POST desde la sesión «ver como»).
+
+**Cómo evitarlo.** Un endpoint nuevo que solo lee va con GET. Si alguno vuelve a leer con POST, hay que sumarlo a
+`FiltroDeSoloLectura.PERMITIDOS_AUNQUE_NO_SEAN_GET` o «ver como» lo rechaza.

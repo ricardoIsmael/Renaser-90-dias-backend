@@ -214,6 +214,31 @@ Asignación (Administración, como hoy: ADMIN y ALQUIMISTA; solo ADMIN asigna al
 - Auditoría: tipo nuevo `VER_COMO` al entrar y al salir (`despues: { rol | rolPersonalizado }`).
 - `users` no puede depender de `plataforma`: si hace falta comprobar el desbloqueo de la consola desde `users`, se hace
   con un puerto en `shared` implementado por `plataforma` (como `Interruptores`).
+- **Aditivo (B3, 2026-10-14; D-270).** Lo que el contrato no decía y quedó así (para C2 y el QA):
+  - `POST /ver-como` → `200 { cuenta: { id, nombre, rol, rolPersonalizado: { id, nombre } | null }, venceEn }`; `rol` es
+    el nombre de la API (`TRAINEE`, `TRAINEE_GUIDE`, `MENTOR`, `MENTOR_LEAD`, `ADMIN`, `ALCHEMIST`); con un rol
+    personalizado, `rol` es su base. Errores: 403 (no es Soporte TI activo), 423 (consola bloqueada), 400 (ni `rol` ni
+    `rolPersonalizadoId`, los dos, un rol que no existe, `IT_SUPPORT`, o un rol personalizado desactivado), 404 (rol
+    personalizado que no existe).
+  - `DELETE /ver-como` se llama **con el token de la sesión «ver como»**: 204; con cualquier otra sesión, 404 y no cierra
+    nada. La respuesta trae `X-Auth-Token` vacío (la sesión se invalidó), como el logout.
+  - Además de las dos salidas, la sesión de solo lectura puede pedir `POST /api/v1/users/me` (es la lectura del perfil
+    propio que la app hace al entrar; E-626). Editarlo sigue siendo 403.
+  - Abrir un WebSocket que no sea `/ws` (la voz en vivo con SER) → 403. En `/ws` se puede suscribir; un `SEND` recibe un
+    frame `ERROR` cuyo `message` empieza con `MODO_SOLO_LECTURA:`.
+  - A los 30 minutos (vida absoluta, aunque se siga usando) cualquier pedido con ese token → `401 { codigo:
+    "VER_COMO_VENCIDO", message: "La vista «ver como» venció: vuelve a abrirla desde la consola." }` y la sesión se
+    cierra. La app debería tratarlo como salir de «ver como» (restaurar la sesión de Soporte TI), no como sesión vencida
+    de Soporte TI.
+  - La sesión se indexa a nombre de Soporte TI: suspenderla o cambiarle la contraseña también cierra sus «ver como».
+  - Auditoría `VER_COMO` sin `clave`, actor = quien la abrió: al entrar `antes: null` y `despues: { rol }` o
+    `{ rolPersonalizado: { id, nombre } }`; al salir (`DELETE`), al revés. Salir por `POST /auth/logout` o por
+    vencimiento **no** deja fila.
+  - Cuentas de prueba con grupo: aprendiz, guía y mentor viven en el «Grupo de prueba (ver como)»; una de un rol
+    personalizado entra al mismo grupo como aprendiz (base aprendiz) o como guía (base mentor o guía). Líder, admin y
+    alquimista no tienen grupo. El Admin de prueba no ve los chats de los grupos reales (Soporte TI no lee chats).
+  - Un `GET` que genera datos (los registros del día, el estado de onboarding) se permite: escribe solo datos de la cuenta
+    de prueba, que está excluida de todo lo que ven los demás.
 
 ## 6. C2 — app
 
