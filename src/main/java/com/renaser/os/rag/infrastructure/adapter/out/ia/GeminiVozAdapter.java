@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.renaser.os.rag.application.ports.out.ia.SintetizarVozPort;
+import com.renaser.os.shared.domain.ProveedorIaNoDisponibleException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -39,6 +40,11 @@ import java.util.stream.Stream;
  * de sobra al principio y al final se recorta al vuelo ({@link RecorteDeSilencio}, E-232).
  *
  * <p>Nunca registra el texto ni la key: solo el status o el tipo de la excepcion.
+ *
+ * <p><b>Spec 002 (D-267): las fallas del proveedor se avisan.</b> Un 429, un 408, un 5xx o no poder conectarse (timeout
+ * incluido) lanzan {@link ProveedorIaNoDisponibleException}, como el chat y los embeddings: la cuenta el circuito de
+ * {@code ia.voz}. Lo demas (un 400, una respuesta que no se entiende) sigue siendo {@code false}: es nuestro, no del
+ * proveedor, y no tiene que apagar la voz de nadie.
  */
 @Component
 @ConditionalOnProperty(name = "renaser.ia.voz.proveedor", havingValue = "google")
@@ -76,19 +82,38 @@ class GeminiVozAdapter implements SintetizarVozPort {
             try (Stream<String> lineas = respuesta.body()) {
                 if (respuesta.statusCode() / 100 != 2) {
                     log.warn("Gemini TTS respondio {}; la app usa el TTS del telefono", respuesta.statusCode());
-                    return false;
+                    return falloSegunElCodigo(respuesta.statusCode());
                 }
                 Transmision transmision = new Transmision(destino);
                 lineas.forEach(transmision::procesarLinea);
                 return transmision.completa();
             }
-        } catch (IOException | RuntimeException e) {
+        } catch (ProveedorIaNoDisponibleException e) {
+            throw e;
+        } catch (IOException e) {
+            log.warn("Gemini TTS no respondio ({}); la app usa el TTS del telefono", e.getClass().getSimpleName());
+            throw new ProveedorIaNoDisponibleException(TraduccionErroresGoogleGenAi.MENSAJE_PROVEEDOR,
+                    TraduccionErroresGoogleGenAi.ESPERA_TRAS_FALLO_DEL_PROVEEDOR);
+        } catch (RuntimeException e) {
             log.warn("Gemini TTS no devolvio audio ({})", e.getClass().getSimpleName());
             return false;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return false;
         }
+    }
+
+    /** 429, 408 y 5xx son del proveedor y transitorios (los mismos que traduce el chat); lo demas, {@code false}. */
+    static boolean falloSegunElCodigo(int codigo) {
+        if (codigo == 429) {
+            throw new ProveedorIaNoDisponibleException(TraduccionErroresGoogleGenAi.MENSAJE_CUOTA,
+                    TraduccionErroresGoogleGenAi.ESPERA_TRAS_CUOTA);
+        }
+        if (codigo == 408 || codigo >= 500) {
+            throw new ProveedorIaNoDisponibleException(TraduccionErroresGoogleGenAi.MENSAJE_PROVEEDOR,
+                    TraduccionErroresGoogleGenAi.ESPERA_TRAS_FALLO_DEL_PROVEEDOR);
+        }
+        return false;
     }
 
     private HttpRequest pedido(String texto) throws JsonProcessingException {

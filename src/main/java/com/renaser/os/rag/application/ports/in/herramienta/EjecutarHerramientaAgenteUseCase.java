@@ -33,6 +33,15 @@ public interface EjecutarHerramientaAgenteUseCase {
     List<DefinicionHerramienta> disponibles(AgenteConversacional agente);
 
     /**
+     * Las que se le ofrecen al modelo en un turno de {@code actorId}: las de {@link #disponibles}, sin las que crean
+     * propuestas o tarjetas si Soporte TI apagó {@code ia.propuestas} para esa persona (spec 002, D-267). Por defecto,
+     * todas.
+     */
+    default List<DefinicionHerramienta> disponiblesPara(AgenteConversacional agente, UserId actorId) {
+        return disponibles(agente);
+    }
+
+    /**
      * Ejecuta lo que el modelo pidio, EN NOMBRE DE {@code actorId}.
      *
      * <p><b>El actor no viene del modelo, nunca.</b> Es el usuario autenticado de la conversacion.

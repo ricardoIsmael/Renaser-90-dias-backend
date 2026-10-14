@@ -70,14 +70,19 @@ class InterruptoresInterceptor implements HandlerInterceptor {
         }
         Funcionalidad enElMetodo = handlerMethod.getMethodAnnotation(Funcionalidad.class);
         if (enElMetodo != null) {
-            return enElMetodo.value();
+            return laCortaElInterceptor(enElMetodo);
         }
         Class<?> clase = handlerMethod.getBeanType();
         if (clase.isAnnotationPresent(SinInterruptor.class)) {
             return null;
         }
         Funcionalidad enLaClase = clase.getAnnotation(Funcionalidad.class);
-        return enLaClase == null ? null : enLaClase.value();
+        return enLaClase == null ? null : laCortaElInterceptor(enLaClase);
+    }
+
+    /** Con {@code laResuelveElCasoDeUso}, el caso de uso responde lo suyo (la voz del orbe: 204, D-267). */
+    private static String laCortaElInterceptor(Funcionalidad funcionalidad) {
+        return funcionalidad.laResuelveElCasoDeUso() ? null : funcionalidad.value();
     }
 
     /** Misma precedencia que {@code ActorAutenticadoArgumentResolver}: sesión primero, header de respaldo. */

@@ -1,6 +1,10 @@
 package com.renaser.os.rag.application.services;
 
+import com.renaser.os.rag.application.ports.in.circuito.CircuitoDeLaIa;
 import com.renaser.os.rag.application.ports.in.voz.VozDelOrbeUseCase;
+import com.renaser.os.rag.application.services.circuito.InterruptoresDeSer;
+import com.renaser.os.rag.domain.model.circuito.ParteDeLaIa;
+import com.renaser.os.shared.domain.ProveedorIaNoDisponibleException;
 import com.renaser.os.rag.application.ports.out.ia.SintetizarVozPort;
 import com.renaser.os.rag.domain.model.conversacion.TextoParaLeerEnVozAlta;
 import com.renaser.os.shared.domain.Clock;
@@ -50,14 +54,21 @@ public class VozDelOrbeService implements VozDelOrbeUseCase {
     private final Clock clock;
     private final Executor generador;
     private final Map<UUID, Entrada> audios = new ConcurrentHashMap<>();
+    /** Spec 002 (D-267): {@code ia.voz} apagada (a mano o por el circuito) es 204, y el circuito cuenta las fallas. */
+    private final InterruptoresDeSer interruptoresDeSer;
+    private final CircuitoDeLaIa circuito;
 
     @Autowired
-    public VozDelOrbeService(UserSummaryFinder userSummaryFinder, SintetizarVozPort sintetizarVozPort, Clock clock) {
-        this(userSummaryFinder, sintetizarVozPort, clock, Executors.newVirtualThreadPerTaskExecutor());
+    public VozDelOrbeService(UserSummaryFinder userSummaryFinder, SintetizarVozPort sintetizarVozPort, Clock clock,
+                             InterruptoresDeSer interruptoresDeSer, CircuitoDeLaIa circuito) {
+        this(userSummaryFinder, sintetizarVozPort, clock, interruptoresDeSer, circuito,
+                Executors.newVirtualThreadPerTaskExecutor());
     }
 
     VozDelOrbeService(UserSummaryFinder userSummaryFinder, SintetizarVozPort sintetizarVozPort, Clock clock,
-                      Executor generador) {
+                      InterruptoresDeSer interruptoresDeSer, CircuitoDeLaIa circuito, Executor generador) {
+        this.interruptoresDeSer = interruptoresDeSer;
+        this.circuito = circuito;
         this.userSummaryFinder = userSummaryFinder;
         this.sintetizarVozPort = sintetizarVozPort;
         this.clock = clock;
@@ -70,7 +81,10 @@ public class VozDelOrbeService implements VozDelOrbeUseCase {
         // D-227: el acompanante usa emojis en el chat; la voz no los lee.
         String aLeer = TextoParaLeerEnVozAlta.sinEmojis(textoValido(texto));
         barrerVencidos();
-        if (aLeer.isEmpty() || !sintetizarVozPort.disponible() || audios.size() >= MAXIMO_EN_MEMORIA) {
+        // La voz apagada va ultima: con el circuito medio abierto, preguntar puede tomar el turno de prueba, y no se le
+        // puede dar a un pedido que igual se iba a rechazar por otra razon.
+        if (aLeer.isEmpty() || !sintetizarVozPort.disponible() || audios.size() >= MAXIMO_EN_MEMORIA
+                || !interruptoresDeSer.vozPara(actorId)) {
             return Optional.empty();
         }
         UUID id = UUID.randomUUID();
@@ -92,9 +106,14 @@ public class VozDelOrbeService implements VozDelOrbeUseCase {
 
     private void generar(String texto, AudioEnCurso audio) {
         try {
-            if (!sintetizarVozPort.sintetizar(texto, audio::agregar)) {
+            if (sintetizarVozPort.sintetizar(texto, audio::agregar)) {
+                circuito.anotarExito(ParteDeLaIa.VOZ);
+            } else {
                 log.warn("La voz del orbe no salio completa; la app usa el TTS del telefono");
             }
+        } catch (ProveedorIaNoDisponibleException e) {
+            circuito.anotarFalla(ParteDeLaIa.VOZ);
+            log.warn("La voz del orbe: el proveedor no respondio ({}); la app usa el TTS del telefono", e.getMessage());
         } catch (RuntimeException e) {
             log.warn("La voz del orbe fallo ({})", e.getClass().getSimpleName());
         } finally {

@@ -1,9 +1,11 @@
 package com.renaser.os.rag.application.services.herramientas;
 
+import com.renaser.os.rag.application.ports.in.circuito.CircuitoDeLaIa;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort.FiltroLecciones;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort.FragmentoRelevante;
 import com.renaser.os.rag.application.ports.out.conversacion.ConsultarLeccionesVisiblesPort;
+import com.renaser.os.rag.domain.model.circuito.ParteDeLaIa;
 import com.renaser.os.rag.domain.model.herramienta.DefinicionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ParametroHerramienta;
@@ -65,8 +67,12 @@ public class BuscarEnLosCursosHerramienta implements HerramientaAgente {
     private final VectorStorePort vectorStorePort;
     private final ConsultarLeccionesVisiblesPort leccionesVisiblesPort;
 
+    /** Spec 002 (D-267): una falla del proveedor de embeddings cuenta para el circuito del chat. */
+    private final CircuitoDeLaIa circuito;
+
     public BuscarEnLosCursosHerramienta(VectorStorePort vectorStorePort,
-                                       ConsultarLeccionesVisiblesPort leccionesVisiblesPort) {
+                                       ConsultarLeccionesVisiblesPort leccionesVisiblesPort, CircuitoDeLaIa circuito) {
+        this.circuito = circuito;
         this.vectorStorePort = vectorStorePort;
         this.leccionesVisiblesPort = leccionesVisiblesPort;
     }
@@ -82,7 +88,8 @@ public class BuscarEnLosCursosHerramienta implements HerramientaAgente {
         List<FragmentoRelevante> fragmentos;
         try {
             FiltroLecciones visibles = FiltroLecciones.soloVisibles(leccionesVisiblesPort.visiblesParaActor(actorId));
-            fragmentos = vectorStorePort.buscarSimilares(consulta, FRAGMENTOS, visibles);
+            fragmentos = circuito.contandoFallas(ParteDeLaIa.CHAT,
+                    () -> vectorStorePort.buscarSimilares(consulta, FRAGMENTOS, visibles));
         } catch (RuntimeException falla) {
             log.warn("[rag] no se pudo buscar en el material de los cursos ({})", falla.getClass().getSimpleName());
             return ResultadoHerramienta.fallo("No pude buscar en el material de los cursos en este momento.");

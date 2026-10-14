@@ -1,5 +1,7 @@
 package com.renaser.os.rag.application.services;
 
+import com.renaser.os.rag.application.services.circuito.CircuitoDePrueba;
+
 import com.renaser.os.rag.application.ports.in.memoria.CompactarMemoriaUseCase;
 import com.renaser.os.rag.application.ports.in.memoria.ConsultarMemoriaUseCase;
 import com.renaser.os.rag.domain.model.memoria.CategoriaDeRecuerdo;
@@ -35,6 +37,9 @@ import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.RateLimitExceededException;
 import com.renaser.os.shared.domain.ProveedorIaNoDisponibleException;
+import com.renaser.os.shared.domain.FuncionalidadApagadaException;
+import com.renaser.os.rag.application.services.circuito.EstadoAutomaticoDeLaIa;
+import com.renaser.os.rag.domain.model.circuito.ParteDeLaIa;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
@@ -122,24 +127,21 @@ class ConversacionRenasiaServiceTest {
     private CompactarMemoriaUseCase compactarMemoriaUseCase;
 
     private ConversacionRenasiaService service;
+    private final CircuitoDePrueba circuito = CircuitoDePrueba.cerrado();
 
     private final UserId activo = UserId.of(UUID.randomUUID());
     private final UserId suspendido = UserId.of(UUID.randomUUID());
 
     @BeforeEach
     void setUp() {
-        service = new ConversacionRenasiaService(userSummaryFinder, controlCuotaRenasiaPort,
-                loadConversacionRenasiaPort, saveConversacionRenasiaPort, loadMensajeRenasiaPort,
-                saveMensajeRenasiaPort, vectorStorePort, consultarLeccionesVisiblesPort, chatIAPort,
-                herramientasUseCase, situacionPort, revisarPatronDeMalestarUseCase, propuestasDelTurno,
-                memoriaUseCase, compactarMemoriaUseCase, CLOCK, idGenerator, metricas);
+        service = servicioCon(circuito);
         // Por defecto el turno no propone nada: el caso de todos los dias.
         lenient().when(propuestasDelTurno.pendientesCreadasDesde(any(), any())).thenReturn(List.of());
         // Por defecto nadie viene repitiendo nada: la conversacion normal no se ve afectada.
         lenient().when(revisarPatronDeMalestarUseCase.revisar(any(), anyString())).thenReturn(Optional.empty());
         // lenient: no todos los casos llegan a generar un id (varios cortan antes, en autorizacion o cuota).
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
-        lenient().when(herramientasUseCase.disponibles(any())).thenReturn(List.of());
+        lenient().when(herramientasUseCase.disponiblesPara(any(), any())).thenReturn(List.of());
         // Por defecto, quien conversa no esta cursando: el puerto devuelve vacio y `situacion`
         // viaja en null. Los casos que necesitan un dia lo declaran ellos.
         lenient().when(situacionPort.de(any())).thenReturn(Optional.empty());
@@ -152,6 +154,15 @@ class ConversacionRenasiaServiceTest {
         lenient().when(controlCuotaRenasiaPort.intentarConsumir(any())).thenReturn(true);
         lenient().when(saveMensajeRenasiaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveConversacionRenasiaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    }
+
+    private ConversacionRenasiaService servicioCon(CircuitoDePrueba conEsteCircuito) {
+        return new ConversacionRenasiaService(userSummaryFinder, controlCuotaRenasiaPort,
+                loadConversacionRenasiaPort, saveConversacionRenasiaPort, loadMensajeRenasiaPort,
+                saveMensajeRenasiaPort, vectorStorePort, consultarLeccionesVisiblesPort, chatIAPort,
+                herramientasUseCase, situacionPort, revisarPatronDeMalestarUseCase, propuestasDelTurno,
+                memoriaUseCase, compactarMemoriaUseCase, CLOCK, idGenerator, metricas, conEsteCircuito.interruptores(),
+                conEsteCircuito);
     }
 
     /** Pregunta al acompanante, sin ambito ni curso: el chat general del programa. */
@@ -199,6 +210,53 @@ class ConversacionRenasiaServiceTest {
         verify(saveMensajeRenasiaPort, never()).save(any());
         // D-237: el limite se cuenta, y como limite, no como turno.
         assertThat(metricas.registradas).containsExactly("limite " + pregunta(activo).agente());
+    }
+
+    /**
+     * Spec 002 (D-267): con el circuito del chat cortando (abierto, o con otro pedido haciendo la prueba), el 503 sale
+     * ANTES de abrir el stream —la app lo ve como el aviso, no como un stream con error—, la cuota vuelve y al modelo
+     * no se le pregunta nada. Contra el codigo anterior el turno corria entero.
+     */
+    @Test
+    void conElCircuitoDelChatCortandoElRechazoEsAntesDelStream() {
+        ConversacionRenasiaService conCircuitoAbierto = servicioCon(CircuitoDePrueba.cortando(ParteDeLaIa.CHAT));
+
+        assertThatThrownBy(() -> conCircuitoAbierto.preguntar(pregunta(activo)))
+                .isInstanceOf(FuncionalidadApagadaException.class)
+                .hasMessage(EstadoAutomaticoDeLaIa.AVISO);
+
+        verify(controlCuotaRenasiaPort).liberar(activo);
+        verify(chatIAPort, never()).responder(any());
+        verify(saveMensajeRenasiaPort, never()).save(any());
+    }
+
+    @Test
+    void elCircuitoCuentaComoTerminoElStreamDelModelo() {
+        stubCaminoFeliz();
+        service.preguntar(pregunta(activo)).collectList().block();
+
+        when(chatIAPort.responder(any())).thenReturn(Flux.error(
+                new ProveedorIaNoDisponibleException("saturado", Duration.ofSeconds(10))));
+        service.preguntar(pregunta(activo)).collectList().block();
+
+        when(chatIAPort.responder(any())).thenReturn(Flux.error(new IllegalStateException("bug nuestro")));
+        service.preguntar(pregunta(activo)).collectList().block();
+
+        assertThat(circuito.anotado).as("completo es exito, el proveedor es falla, un error nuestro no cuenta")
+                .containsExactly("exito ia.chat", "falla ia.chat");
+    }
+
+    @Test
+    void unaFallaDelProveedorDeEmbeddingsCuentaYElTurnoSigue() {
+        when(loadConversacionRenasiaPort.porUsuarioId(activo)).thenReturn(Optional.empty());
+        when(vectorStorePort.buscarSimilares(anyString(), eq(5), any()))
+                .thenThrow(new ProveedorIaNoDisponibleException("cuota", Duration.ofSeconds(60)));
+        when(chatIAPort.responder(any())).thenReturn(streamOk());
+
+        List<EventoRenasia> eventos = service.preguntar(pregunta(activo)).collectList().block();
+
+        assertThat(eventos).anyMatch(EventoRenasia.Texto.class::isInstance);
+        assertThat(circuito.anotado).containsExactly("falla ia.chat", "exito ia.chat");
     }
 
     /**
@@ -359,7 +417,7 @@ class ConversacionRenasiaServiceTest {
 
         verify(loadMensajeRenasiaPort).pagina(eq(activo), eq(COMPANION), isNull(), eq(10));
         verify(loadMensajeRenasiaPort, never()).pagina(any(), eq(COURSE_TUTOR), any(), anyInt());
-        verify(herramientasUseCase).disponibles(COMPANION);
+        verify(herramientasUseCase).disponiblesPara(COMPANION, activo);
         assertThat(consultaEnviadaAlModelo().agente()).isEqualTo(COMPANION);
     }
 
@@ -598,7 +656,7 @@ class ConversacionRenasiaServiceTest {
         stubCaminoFeliz();
         var herramienta = com.renaser.os.rag.domain.model.herramienta.DefinicionHerramienta
                 .sinParametros("consultar_habitos_del_dia", "los habitos de hoy");
-        when(herramientasUseCase.disponibles(COMPANION)).thenReturn(List.of(herramienta));
+        when(herramientasUseCase.disponiblesPara(eq(COMPANION), any())).thenReturn(List.of(herramienta));
 
         service.preguntar(pregunta(activo)).collectList().block();
 

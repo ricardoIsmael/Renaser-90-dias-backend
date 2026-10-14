@@ -13,6 +13,12 @@ import java.util.function.Consumer;
  * <p><b>Nunca lanza:</b> devuelve {@code false} si no hubo voz o se corto a la mitad. Una voz
  * caida nunca puede dejar a la persona sin respuesta: la app habla con el TTS del telefono.
  *
+ * <p><b>Corregido 2026-10-13 (spec 002, D-267).</b> Decia «Nunca lanza». Ahora la unica excepcion es
+ * {@code ProveedorIaNoDisponibleException}, cuando el proveedor falla de forma transitoria (429,
+ * 408, 5xx, timeout o conexion): quien llama la cuenta en el circuito de {@code ia.voz} y la trata
+ * como {@code false}. Sin eso, el circuito no podia distinguir un proveedor caido de un texto que
+ * no se pudo leer.
+ *
  * <p>Lo implementan {@code GeminiVozAdapter} ({@code renaser.ia.voz.proveedor=google}),
  * {@code PiperVozAdapter} ({@code piper}) y {@code NoOpVozAdapter} (el default).
  *

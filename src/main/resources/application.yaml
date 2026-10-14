@@ -391,6 +391,20 @@ renaser:
     # busqueda hay que usar un modelo que la soporte (RENASIA_CHAT_MODEL sin `-lite`) Y poner
     # IA_BUSQUEDA_WEB=true — las dos cosas, en la configuracion de ejecucion.
     busqueda-web: ${IA_BUSQUEDA_WEB:false}
+    # Spec 002 (D-267): el circuito automatico de SER. Con `fallas-para-abrir` fallas del proveedor (429, 408, 5xx,
+    # timeouts) dentro de `ventana`, la parte que falla (ia.chat: chat y embeddings; ia.voz: voz del orbe y voz en
+    # vivo) se apaga sola y la app ve «SER está en pausa por un problema con el proveedor»; vencida la espera (la
+    # primera, despues la segunda…; la ultima se repite) pasa UN pedido de prueba: si sale bien se cierra, si falla se
+    # reabre. El estado vive en Redis (lo comparten las instancias). Los numeros son los de la spec, «a confirmar» por
+    # el dueño: se cambian aca, sin tocar codigo. Lo apagado a mano en la consola manda siempre.
+    circuito:
+      fallas-para-abrir: ${IA_CIRCUITO_FALLAS:5}
+      ventana: ${IA_CIRCUITO_VENTANA:PT2M}
+      esperas: ${IA_CIRCUITO_ESPERAS:PT2M,PT5M,PT15M}
+      # Cuanto se le reserva al pedido de prueba si se corta sin decir como le fue (el tope de un pedido async de MVC).
+      plazo-de-la-prueba: ${IA_CIRCUITO_PLAZO_PRUEBA:PT2M}
+      # Respaldo del aviso por Redis entre instancias (canal renaser:ia:circuito).
+      recarga-cada: ${IA_CIRCUITO_RECARGA:PT10S}
     # Voz del orbe (/api/v1/renasia/voz): texto -> WAV con Gemini o Piper (voz es_MX-claude-high,
     # que corre como servicio aparte (infra/piper/, servicio `piper` de docker-compose.yml)).
     # `noop` (el default) no tiene voz: el endpoint responde 204 y la app habla con el TTS del

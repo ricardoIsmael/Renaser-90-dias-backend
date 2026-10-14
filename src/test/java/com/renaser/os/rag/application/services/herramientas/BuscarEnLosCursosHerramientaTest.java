@@ -1,5 +1,11 @@
 package com.renaser.os.rag.application.services.herramientas;
 
+import java.time.Duration;
+
+import com.renaser.os.shared.domain.ProveedorIaNoDisponibleException;
+
+import com.renaser.os.rag.application.services.circuito.CircuitoDePrueba;
+
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort.FiltroLecciones;
 import com.renaser.os.rag.application.ports.out.conocimiento.VectorStorePort.FragmentoRelevante;
@@ -33,8 +39,9 @@ class BuscarEnLosCursosHerramientaTest {
 
     private final VectorStorePort vectorStorePort = mock(VectorStorePort.class);
     private final ConsultarLeccionesVisiblesPort visiblesPort = mock(ConsultarLeccionesVisiblesPort.class);
+    private final CircuitoDePrueba circuito = CircuitoDePrueba.cerrado();
     private final BuscarEnLosCursosHerramienta herramienta = new BuscarEnLosCursosHerramienta(vectorStorePort,
-            visiblesPort);
+            visiblesPort, circuito);
 
     private ResultadoHerramienta buscar(String consulta) {
         return herramienta.ejecutar(APRENDIZ, new InvocacionHerramienta(BuscarEnLosCursosHerramienta.NOMBRE,
@@ -68,6 +75,20 @@ class BuscarEnLosCursosHerramientaTest {
 
         assertThat(((ResultadoHerramienta.Exito) buscar("receta secreta")).contenido())
                 .isEqualTo(BuscarEnLosCursosHerramienta.SIN_RESULTADOS);
+    }
+
+    @Test
+    @DisplayName("spec 002: una falla del proveedor de embeddings cuenta para el circuito del chat; otra no")
+    void laFallaDelProveedorCuenta() {
+        when(visiblesPort.visiblesParaActor(APRENDIZ)).thenReturn(Set.of("x"));
+        when(vectorStorePort.buscarSimilares(anyString(), anyInt(), any()))
+                .thenThrow(new ProveedorIaNoDisponibleException("429", Duration.ofSeconds(60)))
+                .thenThrow(new IllegalStateException("bug nuestro"));
+
+        assertThat(buscar("ritual")).isInstanceOf(ResultadoHerramienta.Fallo.class);
+        assertThat(buscar("ritual")).isInstanceOf(ResultadoHerramienta.Fallo.class);
+
+        assertThat(circuito.anotado).containsExactly("falla ia.chat");
     }
 
     @Test

@@ -78,6 +78,17 @@ class InterruptoresInterceptorTest {
         assertThat(interruptores.consultas).isEmpty();
     }
 
+    @Test
+    @DisplayName("laResuelveElCasoDeUso (la voz del orbe, D-267): el interceptor no corta ni consulta; responde el caso de uso")
+    void loResuelveElCasoDeUso() throws Exception {
+        when(provider.getIfAvailable()).thenReturn(interruptores);
+        interruptores.apagada = "ia.voz";
+
+        assertThat(preHandle(UUID.randomUUID(), ControladorDeLaVoz.class, "preparar")).isTrue();
+        assertThat(preHandle(UUID.randomUUID(), ControladorDePrueba.class, "laResuelveElServicio")).isTrue();
+        assertThat(interruptores.consultas).isEmpty();
+    }
+
     /**
      * E-612: el chat de SER abría el stream con la funcionalidad prendida; si se apagaba en el medio (el circuito se
      * abría con esa misma falla), el despacho ASYNC que escribe el final volvía a pasar por el interceptor, lanzaba, y
@@ -150,6 +161,17 @@ class InterruptoresInterceptorTest {
 
         @SinInterruptor(motivo = "prueba")
         public void antiBloqueo() {
+        }
+
+        @Funcionalidad(value = "ia.voz", laResuelveElCasoDeUso = true)
+        public void laResuelveElServicio() {
+        }
+    }
+
+    @Funcionalidad(value = "ia.voz", laResuelveElCasoDeUso = true)
+    static class ControladorDeLaVoz {
+
+        public void preparar() {
         }
     }
 
