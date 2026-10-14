@@ -15,7 +15,7 @@ import org.springframework.data.redis.listener.RedisMessageListenerContainer;
  * inofensivo (dos consultas chicas).
  */
 @Configuration
-class SuscripcionAlCanalDeRolesPersonalizados {
+public class SuscripcionAlCanalDeRolesPersonalizados {
 
     @Bean
     RedisMessageListenerContainer redisRolesPersonalizadosListenerContainer(RedisConnectionFactory conexiones,
