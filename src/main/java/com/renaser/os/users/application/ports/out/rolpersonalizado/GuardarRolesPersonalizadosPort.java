@@ -18,10 +18,12 @@ public interface GuardarRolesPersonalizadosPort {
     /** @return {@code false} si la versión guardada ya no es {@code versionEsperada} (otra persona lo cambió) */
     boolean actualizar(RolPersonalizado rol, long versionEsperada);
 
+    /** Borra el rol; antes suelta la cuenta de prueba de «ver como» que lo lleve (D-270), para que la FK no lo frene. */
     void borrar(UUID id);
 
     /**
-     * Pasa a todas las cuentas de {@code origen} a {@code destino} ({@code null}: sin rol personalizado).
+     * Pasa a todas las cuentas de {@code origen} a {@code destino} ({@code null}: sin rol personalizado), menos la cuenta
+     * de prueba de «ver como» (D-270), que sigue siendo la de {@code origen}.
      *
      * @return cuántas cuentas se movieron
      */

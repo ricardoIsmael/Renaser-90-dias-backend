@@ -16,12 +16,19 @@ public interface CargarRolesPersonalizadosPort {
     /** Todos, activos e inactivos, por nombre. */
     List<RolPersonalizado> todos();
 
-    /** Cuántas cuentas tiene asignadas cada rol (cualquier estado). Un rol sin personas no figura. */
+    /**
+     * Cuántas cuentas tiene asignadas cada rol (cualquier estado). Un rol sin personas no figura. Sin la cuenta de prueba
+     * de «ver como» (D-270): no es una persona, y con ella un rol que nadie usa no se podría borrar.
+     */
     Map<UUID, Long> personasPorRol();
 
+    /** Igual que {@link #personasPorRol}, para un rol: sin la cuenta de prueba de «ver como». */
     long personasCon(UUID rolId);
 
-    /** Las cuentas con un rol personalizado vigente: activo y que hereda del rol de la cuenta. */
+    /**
+     * Las cuentas con un rol personalizado vigente: activo y que hereda del rol de la cuenta. <b>Incluye</b> la cuenta de
+     * prueba de «ver como»: la regla de disponibilidad la tiene que restringir como a cualquiera.
+     */
     Map<UserId, UUID> asignacionesVigentes();
 
     /** El rol personalizado vigente de una cuenta, si tiene. */

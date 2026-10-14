@@ -5,6 +5,7 @@ import com.renaser.os.community.application.ports.out.celula.LoadCelulaPort;
 import com.renaser.os.community.application.ports.out.celula.SaveCelulaPort;
 import com.renaser.os.community.domain.model.celula.Celula;
 import com.renaser.os.community.domain.model.celula.CelulaId;
+import com.renaser.os.community.domain.model.celula.GrupoDePrueba;
 import com.renaser.os.community.domain.model.cohorte.CohorteId;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
@@ -33,9 +34,15 @@ class CelulaPersistenceAdapter implements LoadCelulaPort, SaveCelulaPort, Elimin
         return repository.findByCohorteIdOrderByNombreAsc(cohorteId.value()).stream().map(mapper::toDomain).toList();
     }
 
+    /**
+     * <b>Sin el «Grupo de prueba (ver como)»</b> (D-270): de esta lista salen el panel de grupos de Administración, los
+     * semáforos y rankings por grupo, la vista del administrador sobre los chats de grupo, los avisos de grupos sin
+     * mentor, la rotación y el traslado. El grupo de prueba se lee solo por su id ({@link #porId}) o por su mentor.
+     */
     @Override
     public List<Celula> todas() {
-        return repository.findAllByOrderByNombreAsc().stream().map(mapper::toDomain).toList();
+        return repository.findByCohorteIdNotOrderByNombreAsc(GrupoDePrueba.COHORTE.value()).stream()
+                .map(mapper::toDomain).toList();
     }
 
     @Override

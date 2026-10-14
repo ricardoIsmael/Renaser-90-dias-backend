@@ -72,11 +72,17 @@ class RolesPersonalizadosJdbcAdapter implements CargarRolesPersonalizadosPort, G
                 .list();
     }
 
+    /*
+     * Las personas de un rol NO cuentan la cuenta de prueba de «ver como» (V107, D-270): con ella, un rol que nadie usa
+     * no se podría borrar (409) ni cambiar de base. Sí la incluye `asignacionesVigentes` (VIGENTES): la regla de
+     * disponibilidad la tiene que restringir igual que a cualquiera, porque eso es lo que se quiere ver.
+     */
     @Override
     public Map<UUID, Long> personasPorRol() {
         Map<UUID, Long> personas = new HashMap<>();
         jdbc.sql("SELECT rol_personalizado_id, count(*) AS personas FROM renaser.usuarios "
-                        + "WHERE rol_personalizado_id IS NOT NULL GROUP BY rol_personalizado_id")
+                        + "WHERE rol_personalizado_id IS NOT NULL AND NOT es_cuenta_de_prueba "
+                        + "GROUP BY rol_personalizado_id")
                 .query((rs, n) -> personas.put(rs.getObject("rol_personalizado_id", UUID.class),
                         rs.getLong("personas")))
                 .list();
@@ -85,7 +91,8 @@ class RolesPersonalizadosJdbcAdapter implements CargarRolesPersonalizadosPort, G
 
     @Override
     public long personasCon(UUID rolId) {
-        return jdbc.sql("SELECT count(*) FROM renaser.usuarios WHERE rol_personalizado_id = :rol")
+        return jdbc.sql("SELECT count(*) FROM renaser.usuarios WHERE rol_personalizado_id = :rol "
+                        + "AND NOT es_cuenta_de_prueba")
                 .param("rol", rolId).query(Long.class).single();
     }
 
@@ -144,15 +151,26 @@ class RolesPersonalizadosJdbcAdapter implements CargarRolesPersonalizadosPort, G
         return true;
     }
 
+    /**
+     * Antes de borrar, suelta la cuenta de prueba de «ver como» que lleve este rol (D-270): no cuenta como persona, pero
+     * la FK de {@code usuarios.rol_personalizado_id} (sin ON DELETE) frenaría el borrado. Queda con su rol base y sin
+     * rol personalizado; nadie la puede volver a pedir, porque el rol ya no existe.
+     */
     @Override
     public void borrar(UUID id) {
+        jdbc.sql("UPDATE renaser.usuarios SET rol_personalizado_id = NULL "
+                + "WHERE rol_personalizado_id = :id AND es_cuenta_de_prueba").param("id", id).update();
         jdbc.sql("DELETE FROM renaser.roles_personalizados WHERE id = :id").param("id", id).update();
     }
 
+    /**
+     * Sin la cuenta de prueba de «ver como» (D-270): se queda con el rol de origen (es «la cuenta de prueba de ese rol»)
+     * y no cuenta entre las personas movidas. Si después se borra el de origen, {@link #borrar} la suelta.
+     */
     @Override
     public int reemplazarAsignaciones(UUID origen, UUID destino) {
         return jdbc.sql("UPDATE renaser.usuarios SET rol_personalizado_id = :destino "
-                        + "WHERE rol_personalizado_id = :origen")
+                        + "WHERE rol_personalizado_id = :origen AND NOT es_cuenta_de_prueba")
                 .param("destino", destino, java.sql.Types.OTHER).param("origen", origen).update();
     }
 

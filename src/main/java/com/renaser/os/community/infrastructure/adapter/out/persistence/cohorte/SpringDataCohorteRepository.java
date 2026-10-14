@@ -7,7 +7,8 @@ import java.util.UUID;
 
 interface SpringDataCohorteRepository extends JpaRepository<CohorteJpaEntity, UUID> {
 
-    List<CohorteJpaEntity> findByEstadoOrderByCreadoEnDesc(EstadoCohorteJpa estado);
+    /* Sin la cohorte de prueba de «ver como» (D-270): `CohortePersistenceAdapter.listar`. */
+    List<CohorteJpaEntity> findByEstadoAndIdNotOrderByCreadoEnDesc(EstadoCohorteJpa estado, UUID excluida);
 
-    List<CohorteJpaEntity> findAllByOrderByCreadoEnDesc();
+    List<CohorteJpaEntity> findByIdNotOrderByCreadoEnDesc(UUID excluida);
 }

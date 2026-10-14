@@ -77,10 +77,15 @@ public class AccesoAChatsDeGrupo {
         return veTodosLosGrupos(usuarioId) ? gruposEnCursoPort.gruposEnCurso() : List.of();
     }
 
-    /** El rol y el estado de AHORA. Un usuario que no existe no ve nada: falla cerrado. */
+    /**
+     * El rol y el estado de AHORA. Un usuario que no existe no ve nada: falla cerrado.
+     *
+     * <p>Una cuenta de prueba de «ver como» (D-270) no ve los grupos por su rol aunque sea ADMIN: Soporte TI no lee los
+     * chats de los grupos reales (spec 002, FR-025) ni siquiera mirando la app como un administrador.
+     */
     private boolean veTodosLosGrupos(UserId usuarioId) {
         return userSummaryFinder.findById(usuarioId)
-                .filter(usuario -> usuario.status() == UserStatus.ACTIVE)
+                .filter(usuario -> usuario.status() == UserStatus.ACTIVE && !usuario.esCuentaDePrueba())
                 .map(usuario -> ROLES_QUE_VEN_TODOS_LOS_GRUPOS.contains(usuario.role()))
                 .orElse(false);
     }

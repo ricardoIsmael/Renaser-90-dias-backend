@@ -50,6 +50,14 @@ class ActorNotificacionesGuard {
      * <p>Un destinatario que ya no existe tampoco recibe: no es un error del envio, es que no hay
      * a quien entregarle.
      */
+    /**
+     * Una cuenta de prueba de «ver como» (D-270) no recibe avisos: ni fila en la bandeja ni push. Un destinatario que no
+     * existe no es de prueba (lo resuelve {@link #puedeRecibirEntregas} en la entrega).
+     */
+    boolean esCuentaDePrueba(UserId destinatarioId) {
+        return userSummaryFinder.findById(destinatarioId).map(UserSummary::esCuentaDePrueba).orElse(false);
+    }
+
     boolean puedeRecibirEntregas(UserId destinatarioId) {
         return userSummaryFinder.findById(destinatarioId)
                 .map(destinatario -> destinatario.status().allowsAccess())

@@ -113,6 +113,11 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
         if (!command.tipo().seEntregaConLasNotificacionesApagadas()) {
             ProcesosConInterruptor.posponerSiEstaApagada(interruptores, CLAVE_NOTIFICACIONES, "notifications.emitir");
         }
+        if (actorGuard.esCuentaDePrueba(command.usuarioId())) {
+            // «Ver como» (D-270): una cuenta de prueba no recibe avisos. Como una preferencia apagada: sin fila, sin
+            // push y sin reintento del outbox. Cubre a los veintitantos oyentes de una vez.
+            return Optional.empty();
+        }
         boolean habilitada = loadPreferenciasPort.habilitadaPara(command.usuarioId(), command.tipo())
                 .orElse(PreferenciaNotificacion.DEFAULT_HABILITADA);
         if (!habilitada) {

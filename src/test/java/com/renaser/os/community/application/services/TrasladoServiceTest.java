@@ -74,6 +74,21 @@ class TrasladoServiceTest {
     }
 
     @Test
+    @DisplayName("«ver como» (D-270): el aprendiz del grupo de prueba no se traslada ni hace avisar a nadie")
+    void elGrupoDePruebaNoSeToca() {
+        CelulaId deprueba = com.renaser.os.community.domain.model.celula.GrupoDePrueba.CELULA;
+        banco.grupo(deprueba, com.renaser.os.community.domain.model.celula.GrupoDePrueba.COHORTE, TipoCelula.REGULAR,
+                null, AHORA);
+        banco.aprendiz(ANA, 45, true, deprueba.value());
+        banco.asignar(deprueba, ANA, FuncionAcompanamiento.APRENDIZ, AHORA.minusSeconds(200_000), null);
+
+        ResultadoTraslado resultado = servicio().ubicar(ANA);
+
+        assertThat(resultado.destino()).isEqualTo("SIN_CAMBIO");
+        assertThat(banco.primeraOperacion("abrir:APRENDIZ")).as("no abrió ninguna asignación").isNegative();
+    }
+
+    @Test
     @DisplayName("dia 4: cierra recepcion y abre grupo estable, en ese orden")
     void diaCuatroSeMueve() {
         anaEnRecepcion(4);

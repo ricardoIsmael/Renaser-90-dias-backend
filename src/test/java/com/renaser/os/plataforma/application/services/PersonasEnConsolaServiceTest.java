@@ -80,6 +80,22 @@ class PersonasEnConsolaServiceTest {
     }
 
     @Test
+    @DisplayName("«ver como» (D-270): una cuenta de prueba nunca sale en la búsqueda, aunque la búsqueda la devolviera")
+    void sinCuentasDePrueba() {
+        UserId real = UserId.of(UUID.randomUUID());
+        UserId dePrueba = UserId.of(UUID.randomUUID());
+        Map<UserId, UserSummary> encontradas = Map.of(
+                real, new UserSummary(real, "Mentora real", null, UserRole.MENTOR, UserStatus.ACTIVE),
+                dePrueba, new UserSummary(dePrueba, "Prueba · Mentor", null, UserRole.MENTOR, UserStatus.ACTIVE, null,
+                        true));
+        when(busqueda.coincidenCon("mentor")).thenReturn(encontradas.keySet());
+        when(usuarios.findByIds(anyCollection())).thenReturn(encontradas);
+        when(correos.correosDe(anyCollection())).thenReturn(Map.of(real, "real@renaser.test"));
+
+        assertThat(service.buscar(acceso(), "mentor")).extracting(PersonaEncontrada::id).containsExactly(real);
+    }
+
+    @Test
     @DisplayName("sin texto no busca nada; un ADMIN no busca (403)")
     void sinTextoYCerrojo() {
         when(busqueda.coincidenCon(" ")).thenReturn(Set.of());

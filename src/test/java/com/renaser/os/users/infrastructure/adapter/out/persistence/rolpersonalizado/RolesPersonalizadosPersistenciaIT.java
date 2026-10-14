@@ -152,6 +152,60 @@ class RolesPersonalizadosPersistenciaIT {
                 + "WHERE rol_id = ?", Integer.class, rol)).isZero();
     }
 
+    /** Una cuenta de prueba de «ver como» (V107, D-270), como la deja {@code CuentasDePruebaService}. */
+    private UUID cuentaDePrueba(UUID rolPersonalizado) {
+        UUID id = UUID.randomUUID();
+        jdbc.update("INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado, es_cuenta_de_prueba, "
+                + "rol_personalizado_id) VALUES (?, ?, 'Prueba · Mentor junior', 'MENTOR', 'ACTIVO', true, ?)", id,
+                "ver-como+rp-" + rolPersonalizado + "@renaser.invalid", rolPersonalizado);
+        cuentas.add(id);
+        return id;
+    }
+
+    @Test
+    @DisplayName("«ver como» (D-270): la cuenta de prueba no cuenta entre las personas, no se mueve en un reemplazo y "
+            + "no impide borrar el rol (se suelta sola); sí la restringe la regla (asignaciones vigentes)")
+    void cuentaDePruebaDeUnRol() {
+        UserId soporte = UserId.of(cuenta("SOPORTE_TI"));
+        UUID rol = gestion.crear(new CrearRolPersonalizadoCommand(soporte, "Mentor junior", null, UserRole.MENTOR,
+                Set.of("muro"))).despues().id();
+        UUID otro = gestion.crear(new CrearRolPersonalizadoCommand(soporte, "Mentor senior", null, UserRole.MENTOR,
+                Set.of("muro"))).despues().id();
+        UUID dePrueba = cuentaDePrueba(rol);
+        UUID real = cuenta("MENTOR");
+        asignar(real, rol);
+
+        assertThat(finder.porId(rol).orElseThrow().personas()).as("solo la persona real").isEqualTo(1);
+        assertThat(finder.todos()).filteredOn(r -> r.id().equals(rol)).extracting(RolPersonalizadoResumen::personas)
+                .containsExactly(1L);
+        assertThat(finder.asignaciones()).as("la regla la restringe igual").containsKey(UserId.of(dePrueba));
+
+        assertThat(gestion.reemplazarEnBloque(new ReemplazarRolPersonalizadoCommand(soporte, rol, otro))
+                .personasMovidas()).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT rol_personalizado_id FROM renaser.usuarios WHERE id = ?", UUID.class,
+                dePrueba)).as("la cuenta de prueba sigue siendo la de su rol").isEqualTo(rol);
+
+        gestion.borrar(new BorrarRolPersonalizadoCommand(soporte, rol));
+
+        assertThat(finder.porId(rol)).isEmpty();
+        assertThat(jdbc.queryForObject("SELECT rol_personalizado_id FROM renaser.usuarios WHERE id = ?", UUID.class,
+                dePrueba)).as("se soltó para poder borrar").isNull();
+    }
+
+    @Test
+    @DisplayName("V107: una cuenta de prueba nunca es Soporte TI, siempre usa el correo reservado y no guarda contraseña")
+    void laBaseDefiendeLasCuentasDePrueba() {
+        String insertar = "INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado, es_cuenta_de_prueba, "
+                + "hash_contrasena) VALUES (?, ?, 'Prueba', CAST(? AS renaser.rol_usuario), 'ACTIVO', true, ?)";
+
+        assertThatThrownBy(() -> jdbc.update(insertar, UUID.randomUUID(), "ver-como+it-support@renaser.invalid",
+                "SOPORTE_TI", null)).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbc.update(insertar, UUID.randomUUID(), UUID.randomUUID() + "@renaser.test",
+                "MENTOR", null)).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbc.update(insertar, UUID.randomUUID(), "ver-como+mentor-x@renaser.invalid",
+                "MENTOR", "{bcrypt}$2a$10$abc")).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
     @Test
     @DisplayName("la base rechaza un rol personalizado con base Soporte TI o con una clave que no es su id")
     void laBaseDefiende() {

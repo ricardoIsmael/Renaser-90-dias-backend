@@ -37,6 +37,8 @@ import org.springframework.stereotype.Component;
 public class SmtpEnviarEmailAdapter implements EnviarEmailPort {
 
     private static final Logger log = LoggerFactory.getLogger(SmtpEnviarEmailAdapter.class);
+    /** El de las cuentas de prueba de «ver como» (V107, D-270). */
+    static final String DOMINIO_RESERVADO = "@renaser.invalid";
 
     private final JavaMailSender mailSender;
     private final String remitente;
@@ -90,6 +92,12 @@ public class SmtpEnviarEmailAdapter implements EnviarEmailPort {
      * del castellano llegan rotos segun el servidor SMTP.
      */
     private void enviar(String destinatarioEmail, MensajeEmail mensaje) {
+        if (destinatarioEmail != null && destinatarioEmail.toLowerCase(java.util.Locale.ROOT).endsWith(DOMINIO_RESERVADO)) {
+            // Las cuentas de prueba de «ver como» (D-270) viven en este dominio reservado (RFC 2606): no hay buzón.
+            log.info("[users.SmtpEnviarEmailAdapter] correo a un dominio reservado sin enviar (asunto '{}')",
+                    mensaje.asunto());
+            return;
+        }
         try {
             MimeMessage mimeMessage = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, false, "UTF-8");

@@ -46,6 +46,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -126,6 +127,24 @@ class NotificacionServiceTest {
         // El aviso de operación de la plataforma sale igual: es el que cuenta que se apagaron (D-267).
         assertThat(apagado.emitir(new EmitirNotificacionCommand(usuario(), TipoNotificacion.OPERACION_PLATAFORMA,
                 "Soporte TI", "Notificaciones: Apagada para todos.", null, null))).isPresent();
+    }
+
+    @Test
+    @DisplayName("«ver como» (D-270): a una cuenta de prueba no se le manda nada, ni fila ni push (ni la operación de "
+            + "la plataforma)")
+    void aUnaCuentaDePruebaNoSeLeMandaNada() {
+        UserId cuentaDePrueba = usuario();
+        when(userSummaryFinder.findById(cuentaDePrueba)).thenReturn(Optional.of(new UserSummary(cuentaDePrueba,
+                "Prueba · Mentor", null, UserRole.MENTOR, UserStatus.ACTIVE, null, true)));
+
+        for (TipoNotificacion tipo : new TipoNotificacion[]{TipoNotificacion.SANTUARIO_ROTO,
+                TipoNotificacion.OPERACION_PLATAFORMA}) {
+            assertThat(service.emitir(new EmitirNotificacionCommand(cuentaDePrueba, tipo, "T", "C", null, null)))
+                    .as(tipo.name()).isEmpty();
+        }
+
+        verify(saveNotificacionPort, never()).guardar(any());
+        verifyNoInteractions(pushPort, loadPreferenciasPort);
     }
 
     @Test
@@ -243,14 +262,17 @@ class NotificacionServiceTest {
         UserId destinatario = usuario();
         when(loadPreferenciasPort.habilitadaPara(destinatario, TipoNotificacion.MENSAJE_MENTOR))
                 .thenReturn(Optional.of(true));
+        // Corregido 2026-10-14 (D-270): emitir() ahora sí lee el resumen del destinatario, pero solo para no mandarle
+        // nada a una cuenta de prueba de «ver como». La asercion clave sigue siendo la misma: un SUSPENDIDO acumula
+        // bandeja (antes se verificaba que el guard ni se consultara).
+        when(userSummaryFinder.findById(destinatario)).thenReturn(Optional.of(new UserSummary(destinatario, "Test",
+                null, UserRole.TRAINEE, UserStatus.SUSPENDED)));
 
         Optional<Notificacion> emitida = service.emitir(new EmitirNotificacionCommand(destinatario,
                 TipoNotificacion.MENSAJE_MENTOR, "Titulo", "Cuerpo", null, null));
 
         assertThat(emitida).isPresent();
         verify(saveNotificacionPort).guardar(any());
-        // La asercion clave: el guard no se invoca en este camino, por eso da igual el estado.
-        verify(userSummaryFinder, never()).findById(any());
     }
 
     /**

@@ -6,6 +6,7 @@ import com.renaser.os.onboarding.application.ports.out.grabacionv90.LoadGrabacio
 import com.renaser.os.onboarding.domain.model.grabacionv90.EstadoIAv90;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.CuentasDePruebaFinder;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
@@ -42,13 +43,15 @@ class OnboardingDashboardServiceTest {
     private UserSummaryFinder userSummaryFinder;
     @Mock
     private ParticipacionProgramaFinder participacionProgramaFinder;
+    @Mock
+    private CuentasDePruebaFinder cuentasDePrueba;
 
     private OnboardingDashboardService service;
 
     @BeforeEach
     void setUp() {
         service = new OnboardingDashboardService(loadEstadoOnboardingPort, loadGrabacionV90Port, userSummaryFinder,
-                participacionProgramaFinder);
+                participacionProgramaFinder, cuentasDePrueba);
         lenient().when(loadGrabacionV90Port.contarPorEstado(any())).thenReturn(0L);
     }
 
@@ -95,7 +98,7 @@ class OnboardingDashboardServiceTest {
         UserId actorId = id();
         when(userSummaryFinder.findById(actorId))
                 .thenReturn(Optional.of(resumen(actorId, UserRole.ADMIN, UserStatus.ACTIVE)));
-        when(loadEstadoOnboardingPort.contarResumen()).thenReturn(new ResumenEstadosOnboarding(10, 4, 6));
+        when(loadEstadoOnboardingPort.contarResumen(Set.of())).thenReturn(new ResumenEstadosOnboarding(10, 4, 6));
         when(loadGrabacionV90Port.contarPorEstado(EstadoIAv90.REVISION_MANUAL)).thenReturn(3L);
         when(loadGrabacionV90Port.contarPorEstado(EstadoIAv90.APROBADA)).thenReturn(1L);
         when(participacionProgramaFinder.usuariosActivosConRol(Set.of(UserRole.TRAINEE)))
@@ -117,9 +120,26 @@ class OnboardingDashboardServiceTest {
         UserId actorId = id();
         when(userSummaryFinder.findById(actorId))
                 .thenReturn(Optional.of(resumen(actorId, UserRole.ALCHEMIST, UserStatus.ACTIVE)));
-        when(loadEstadoOnboardingPort.contarResumen()).thenReturn(new ResumenEstadosOnboarding(0, 0, 0));
+        when(loadEstadoOnboardingPort.contarResumen(Set.of())).thenReturn(new ResumenEstadosOnboarding(0, 0, 0));
         when(participacionProgramaFinder.usuariosActivosConRol(Set.of(UserRole.TRAINEE))).thenReturn(List.of());
 
         assertThat(service.obtenerResumen(actorId)).isNotNull();
+    }
+
+    @Test
+    @DisplayName("«ver como» (D-270): los estados de onboarding se cuentan sin las cuentas de prueba")
+    void noCuentaLasCuentasDePrueba() {
+        UserId actorId = id();
+        Set<UserId> deprueba = Set.of(id(), id());
+        when(userSummaryFinder.findById(actorId))
+                .thenReturn(Optional.of(resumen(actorId, UserRole.ADMIN, UserStatus.ACTIVE)));
+        when(cuentasDePrueba.todas()).thenReturn(deprueba);
+        when(loadEstadoOnboardingPort.contarResumen(deprueba)).thenReturn(new ResumenEstadosOnboarding(7, 2, 3));
+        when(participacionProgramaFinder.usuariosActivosConRol(Set.of(UserRole.TRAINEE))).thenReturn(List.of());
+
+        var resumen = service.obtenerResumen(actorId);
+
+        assertThat(resumen.totalOnboardingIniciado()).isEqualTo(7);
+        assertThat(resumen.totalOnboardingCompletado()).isEqualTo(2);
     }
 }

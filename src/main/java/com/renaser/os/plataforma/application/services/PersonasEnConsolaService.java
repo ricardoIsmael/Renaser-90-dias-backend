@@ -20,8 +20,8 @@ import java.util.Set;
  * Buscar a quién sumar como probadora (contrato fase 2 §3.4, {@code GET /soporte-ti/personas?q=}). La búsqueda sin
  * tildes ni mayúsculas es la de {@code users} (D-249); acá se dejan las cuentas activas, ordenadas por nombre, hasta 20.
  *
- * <p>Las cuentas de prueba de «ver como» (B3, {@code usuarios.es_cuenta_de_prueba}, V107) todavía no existen: cuando
- * entren, se excluyen acá.
+ * <p>Sin las cuentas de prueba de «ver como» (V107, D-270): la búsqueda de {@code users} ya no las encuentra, y acá se
+ * vuelve a filtrar por la marca de cada resumen (una probadora de prueba no mediría nada: sus pedidos no se cuentan).
  */
 @Service
 class PersonasEnConsolaService implements BuscarPersonasUseCase {
@@ -48,7 +48,7 @@ class PersonasEnConsolaService implements BuscarPersonasUseCase {
             return List.of();
         }
         List<UserSummary> activas = userSummaryFinder.findByIds(coinciden).values().stream()
-                .filter(persona -> persona.status() == UserStatus.ACTIVE)
+                .filter(persona -> persona.status() == UserStatus.ACTIVE && !persona.esCuentaDePrueba())
                 .sorted(Comparator.comparing(UserSummary::fullName,
                                 Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER))
                         .thenComparing(persona -> persona.id().value()))

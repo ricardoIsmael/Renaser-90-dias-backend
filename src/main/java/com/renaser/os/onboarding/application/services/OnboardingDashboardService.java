@@ -6,6 +6,7 @@ import com.renaser.os.onboarding.application.ports.out.grabacionv90.LoadGrabacio
 import com.renaser.os.onboarding.domain.model.grabacionv90.EstadoIAv90;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.CuentasDePruebaFinder;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserSummary;
@@ -29,10 +30,13 @@ class OnboardingDashboardService implements OnboardingDashboardUseCase {
     private final LoadGrabacionV90Port loadGrabacionV90Port;
     private final UserSummaryFinder userSummaryFinder;
     private final ParticipacionProgramaFinder participacionProgramaFinder;
+    private final CuentasDePruebaFinder cuentasDePrueba;
 
     OnboardingDashboardService(LoadEstadoOnboardingPort loadEstadoOnboardingPort,
                                LoadGrabacionV90Port loadGrabacionV90Port, UserSummaryFinder userSummaryFinder,
-                               ParticipacionProgramaFinder participacionProgramaFinder) {
+                               ParticipacionProgramaFinder participacionProgramaFinder,
+                               CuentasDePruebaFinder cuentasDePrueba) {
+        this.cuentasDePrueba = cuentasDePrueba;
         this.loadEstadoOnboardingPort = loadEstadoOnboardingPort;
         this.loadGrabacionV90Port = loadGrabacionV90Port;
         this.userSummaryFinder = userSummaryFinder;
@@ -43,7 +47,8 @@ class OnboardingDashboardService implements OnboardingDashboardUseCase {
     public ResumenOnboardingAdmin obtenerResumen(UserId actorId) {
         requireAdminActivo(actorId);
 
-        var resumenEstados = loadEstadoOnboardingPort.contarResumen();
+        // Sin las cuentas de prueba de «ver como» (D-270): el total de aprendices ya no las cuenta (users.api).
+        var resumenEstados = loadEstadoOnboardingPort.contarResumen(cuentasDePrueba.todas());
         long totalAprendices = participacionProgramaFinder.usuariosActivosConRol(Set.of(UserRole.TRAINEE)).size();
 
         return new ResumenOnboardingAdmin(
