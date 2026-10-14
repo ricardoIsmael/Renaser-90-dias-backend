@@ -1,7 +1,9 @@
 package com.renaser.os.plataforma.infrastructure.adapter.in.web;
 
+import com.renaser.os.plataforma.application.ports.in.MedirPedidoEnDespliegueUseCase;
 import com.renaser.os.shared.application.Interruptores;
 import com.renaser.os.shared.domain.FuncionalidadApagadaException;
+import com.renaser.os.shared.domain.FuncionalidadNoDisponibleException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.SinInterruptor;
@@ -29,8 +31,9 @@ import static org.mockito.Mockito.when;
 class InterruptoresInterceptorTest {
 
     private final ObjectProvider<Interruptores> provider = mock(ObjectProvider.class);
+    private final ObjectProvider<MedirPedidoEnDespliegueUseCase> medidorProvider = mock(ObjectProvider.class);
     private final InterruptoresFalsos interruptores = new InterruptoresFalsos();
-    private final InterruptoresInterceptor interceptor = new InterruptoresInterceptor(provider);
+    private final InterruptoresInterceptor interceptor = new InterruptoresInterceptor(provider, medidorProvider);
 
     @AfterEach
     void limpiar() {
@@ -139,6 +142,97 @@ class InterruptoresInterceptorTest {
         assertThat(preHandle(UUID.randomUUID(), ControladorDePrueba.class, "deClase")).isTrue();
     }
 
+    // ── Métricas del despliegue (fase 2, contrato §3.3) ─────────────────────────────
+
+    @Test
+    @DisplayName("fase 2: al terminar, cuenta el pedido con su clave y su persona; 5xx o excepción = error")
+    void cuentaAlTerminar() throws Exception {
+        when(provider.getIfAvailable()).thenReturn(interruptores);
+        when(medidorProvider.getIfAvailable()).thenReturn(medidor);
+        UUID actor = UUID.randomUUID();
+
+        terminar(actor, "deClase", 200, null);
+        terminar(actor, "deClase", 503, null);
+        terminar(actor, "propia", 200, new IllegalStateException("se cayó"));
+        terminar(actor, "deClase", 404, null);
+
+        assertThat(medidor.pedidos).containsExactly("chat.grupos@" + actor + ":ok", "chat.grupos@" + actor + ":error",
+                "chat.audio@" + actor + ":error", "chat.grupos@" + actor + ":ok");
+    }
+
+    @Test
+    @DisplayName("fase 2: el 404 de quien está fuera del despliegue se cuenta al cortarlo (Spring no llama a afterCompletion)")
+    void fueraDelDespliegueSeCuentaAlCortar() {
+        when(provider.getIfAvailable()).thenReturn(interruptores);
+        when(medidorProvider.getIfAvailable()).thenReturn(medidor);
+        interruptores.noDisponible = "chat.grupos";
+        UUID actor = UUID.randomUUID();
+
+        assertThatThrownBy(() -> preHandle(actor, ControladorDePrueba.class, "deClase"))
+                .isInstanceOf(FuncionalidadNoDisponibleException.class);
+        assertThat(medidor.pedidos).containsExactly("chat.grupos@" + actor + ":ok");
+    }
+
+    @Test
+    @DisplayName("fase 2: no se cuenta un 503 de mantenimiento, un pedido sin persona ni un endpoint sin interruptor")
+    void loQueNoSeCuenta() throws Exception {
+        when(provider.getIfAvailable()).thenReturn(interruptores);
+        when(medidorProvider.getIfAvailable()).thenReturn(medidor);
+        interruptores.apagada = "chat.grupos";
+
+        assertThatThrownBy(() -> preHandle(UUID.randomUUID(), ControladorDePrueba.class, "deClase"))
+                .isInstanceOf(FuncionalidadApagadaException.class);
+        terminar(null, "propia", 500, null);
+        terminar(UUID.randomUUID(), "antiBloqueo", 500, null);
+
+        assertThat(medidor.pedidos).isEmpty();
+    }
+
+    @Test
+    @DisplayName("fase 2: lo que resuelve el caso de uso también se cuenta; un medidor que falla no rompe el pedido")
+    void casoDeUsoYMedidorQueFalla() throws Exception {
+        when(provider.getIfAvailable()).thenReturn(interruptores);
+        when(medidorProvider.getIfAvailable()).thenReturn(medidor);
+        UUID actor = UUID.randomUUID();
+
+        terminar(actor, "laResuelveElServicio", 204, null);
+        medidor.fallar = true;
+        terminar(actor, "deClase", 200, null);
+
+        assertThat(medidor.pedidos).containsExactly("ia.voz@" + actor + ":ok");
+    }
+
+    /** Un pedido entero: preHandle (si deja pasar) y afterCompletion con ese estado. */
+    private void terminar(UUID actor, String metodo, int estado, Exception ex) throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        if (actor != null) {
+            request.addHeader("X-Actor-Id", actor.toString());
+        }
+        HandlerMethod handler = new HandlerMethod(new ControladorDePrueba(),
+                ControladorDePrueba.class.getDeclaredMethod(metodo));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        interceptor.preHandle(request, response, handler);
+        response.setStatus(estado);
+        interceptor.afterCompletion(request, response, handler, ex);
+    }
+
+    private final MedidorFalso medidor = new MedidorFalso();
+
+    /** Anota cada pedido contado como «clave@actor:ok|error». */
+    static class MedidorFalso implements MedirPedidoEnDespliegueUseCase {
+
+        final List<String> pedidos = new ArrayList<>();
+        boolean fallar;
+
+        @Override
+        public void registrar(String clave, UserId persona, boolean error) {
+            if (fallar) {
+                throw new IllegalStateException("se cayó el medidor");
+            }
+            pedidos.add(clave + "@" + persona + (error ? ":error" : ":ok"));
+        }
+    }
+
     private boolean preHandle(UUID actor, Class<?> controlador, String metodo) throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest();
         if (actor != null) {
@@ -186,6 +280,7 @@ class InterruptoresInterceptorTest {
     static class InterruptoresFalsos implements Interruptores {
 
         String apagada;
+        String noDisponible;
         final List<String> consultas = new ArrayList<>();
 
         @Override
@@ -201,6 +296,9 @@ class InterruptoresInterceptorTest {
         @Override
         public void exigirPrendidaPara(String clave, UserId actor) {
             consultas.add(clave + "@" + actor);
+            if (clave.equals(noDisponible)) {
+                throw new FuncionalidadNoDisponibleException(clave);
+            }
             if (clave.equals(apagada)) {
                 throw new FuncionalidadApagadaException(clave, "Volvemos pronto");
             }

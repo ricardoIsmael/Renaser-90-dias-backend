@@ -233,6 +233,12 @@ renaser:
       inactividad: ${PLATAFORMA_CONSOLA_INACTIVIDAD:PT15M}
       # Vigencia del token de un solo uso para un cambio critico (FR-008).
       reautenticacion: ${PLATAFORMA_CONSOLA_REAUTENTICACION:PT5M}
+    despliegue:
+      metricas:
+        # Spec 002 fase 2 (D-268): cada instancia escribe en lote lo contado en memoria; la consola muestra 24 h y se
+        # borra lo de mas de 48 h (purga cada hora, renaser.scheduling.plataforma-purgar-metricas-de-despliegue.cron).
+        escribir-cada: ${PLATAFORMA_DESPLIEGUE_METRICAS_ESCRIBIR_CADA:PT1M}
+        retencion: ${PLATAFORMA_DESPLIEGUE_METRICAS_RETENCION:PT48H}
   notifications:
     # Spec 002 (D-267): push a Soporte TI cuando el circuito de SER abre o cierra, como maximo estos por hora y por parte
     # (un circuito que oscila no inunda el telefono; los de mas quedan en el log).
