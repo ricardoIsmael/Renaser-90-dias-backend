@@ -234,6 +234,10 @@ renaser:
       # Vigencia del token de un solo uso para un cambio critico (FR-008).
       reautenticacion: ${PLATAFORMA_CONSOLA_REAUTENTICACION:PT5M}
   notifications:
+    # Spec 002 (D-267): push a Soporte TI cuando el circuito de SER abre o cierra, como maximo estos por hora y por parte
+    # (un circuito que oscila no inunda el telefono; los de mas quedan en el log).
+    circuito-ia:
+      maximo-por-hora: ${NOTIFICACIONES_CIRCUITO_IA_MAXIMO_POR_HORA:4}
     web-push:
       # La publica va al bundle web; la privada queda solo en el backend. Ambas se generan una
       # vez y se conservan estables para que las suscripciones no se invaliden.
