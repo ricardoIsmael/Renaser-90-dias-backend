@@ -15376,3 +15376,25 @@ distinguía (el `id` es un UUID al azar). El código estaba bien.
 
 **Solución.** La prueba avanza un minuto entre el cierre y las fallas siguientes. **Regla general:** con un reloj fijo,
 dos hechos seguidos tienen el mismo instante; si la prueba ordena por tiempo, tiene que mover el reloj entre ellos.
+
+---
+
+## E-615 · Cientos de `cannot find symbol` de Lombok en módulos que no se tocaron escondían un método repetido (back, RESUELTO, 14/10)
+
+**Síntoma literal.** `./mvnw -o -q compile` en `claude/fase2-despliegue` terminó con una pantalla de errores como
+`[ERROR] …/calendar/application/services/AccesoEventoService.java:[95,30] cannot find symbol` / `symbol: method
+tipoAudiencia()` y otros tantos en `academy` (`AsignacionCursoPersistenceMapper`, `CursoPersistenceAdapter`), archivos que no
+se habían tocado. El error real era UNO solo, arriba de todo: `[ERROR] …/plataforma/domain/model/despliegue/FotoDeDespliegues.java:[36,20]
+method vacia() is already defined in class …FotoDeDespliegues`.
+
+**Causa real.** `FotoDeDespliegues` tenía la fábrica estática `vacia()` y un método de instancia `vacia()` (sin parámetros los
+dos): Java no los distingue. Con un error de compilación, javac corta el procesamiento de anotaciones, Lombok no genera los
+accesores y TODO lo que los usa en el resto del proyecto aparece como `cannot find symbol`. Es la misma familia que E-610 (un
+nombre que choca dentro de una clase), con la diferencia de que acá la cascada tapaba la causa.
+
+**Solución.** El método de instancia se llama `sinDespliegues()`.
+
+**Para que no vuelva.** Si un compilado muestra muchos `cannot find symbol` de accesores de Lombok en módulos que no se tocaron,
+el error está en otro lado: filtrar la cascada con `./mvnw -o -q compile 2>&1 | grep ERROR | grep -v 'symbol:\|location:'` y
+leer el primero que no sea `cannot find symbol`. **Regla general:** en una clase, una fábrica estática sin parámetros no puede
+llamarse como un método de instancia sin parámetros (ni, en un record, como un componente: E-610).

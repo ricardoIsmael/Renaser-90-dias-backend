@@ -218,6 +218,8 @@ Basado en `docs/FEATURE_*.md` del repo actual:
 | `plataforma` | — (nuevo, spec 002, D-267) | Catálogo de funcionalidades en código, interruptores por rol (estado en Postgres, copia en memoria, aviso por Redis `renaser:funcionalidades`), auditoría append-only y la consola Soporte TI. Los demás módulos usan lo de `shared` (`@Funcionalidad`, `Interruptores`); **todo endpoint nuevo declara `@Funcionalidad("clave")` o `@SinInterruptor(motivo = …)`** (`FuncionalidadDeclaradaTest`), y todo proceso nuevo consulta `ProcesosConInterruptor` |
 | ~~`trainee-profile`~~ | Trainee Profile | ❌ **No es módulo propio.** `TraineeProfile` vive dentro de `users`, igual que los otros 4 perfiles — ver `docs/MODULOS_A_AVANZAR.md` §3 (D-16) |
 
+> **Agregado 2026-10-14 (D-268).** `plataforma` suma el **despliegue progresivo**: una funcionalidad puede llegar solo a sus probadores y a un porcentaje estable de personas (cubeta SHA-256 de clave y persona, sin nada guardado). A quien todavía no le toca, la API le responde 404 `FUNCIONALIDAD_NO_DISPONIBLE` y la app la esconde. **Un proceso que actúa sobre una persona y depende de una funcionalidad pregunta `Interruptores.prendidaPara(clave, persona)`**, no `prendida(clave)`: el despliegue (y los roles personalizados de la fase 2) solo existen para una persona.
+
 `shared-kernel` contiene solo lo que de verdad es transversal: `UserId`, `TraineePhase`, reloj (`Clock` inyectable — crítico para testear reglas de "día N del programa" sin esperar al calendario real), y el contrato de eventos base.
 
 ---
