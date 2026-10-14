@@ -18,6 +18,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -145,6 +147,23 @@ class StaffAdminServiceTest {
         service.updateStatus(new UpdateUserStatusCommand(actorId, targetId, UserStatus.SUSPENDED));
 
         verify(cerrarTodasLasSesionesUseCase).cerrarTodas(targetId);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = UserStatus.class, names = {"SUSPENDED", "ACTIVE"})
+    @DisplayName("D-267: ni un ADMIN ni un ALQUIMISTA suspenden o reactivan la cuenta Soporte TI (403) y no se guarda nada")
+    void updateStatusNoTocaLaCuentaSoporteTi(UserStatus nuevo) {
+        for (UserRole rolDelActor : new UserRole[] {UserRole.ADMIN, UserRole.ALCHEMIST}) {
+            UserId actorId = id();
+            UserId targetId = id();
+            when(loadUserPort.byId(targetId)).thenReturn(Optional.of(activo(targetId, UserRole.IT_SUPPORT)));
+            when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, rolDelActor)));
+
+            assertThatThrownBy(() -> service.updateStatus(new UpdateUserStatusCommand(actorId, targetId, nuevo)))
+                    .isInstanceOf(NotAuthorizedException.class);
+        }
+        verify(saveUserPort, never()).save(any());
+        verify(cerrarTodasLasSesionesUseCase, never()).cerrarTodas(any());
     }
 
     @Test

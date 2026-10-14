@@ -1,6 +1,7 @@
 package com.renaser.os.users.application.services;
 
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.application.ports.in.admin.ListStaffUseCase;
 import com.renaser.os.users.application.ports.in.admin.UpdateStaffProfileUseCase;
@@ -75,6 +76,10 @@ class StaffAdminService implements ListStaffUseCase, UpdateUserStatusUseCase, Up
     public void updateStatus(UpdateUserStatusCommand command) {
         User target = requireTarget(command.targetUserId());
         requireAdminGuard.requireAdminActivo(command.actorId());
+        if (target.esSoporteTi()) {
+            // La cuenta del dueño-programador no la suspende Administración (D-267, FR-022).
+            throw new NotAuthorizedException("Una cuenta Soporte TI no se suspende ni se reactiva desde Administración");
+        }
 
         // Se lee ANTES de applyStatus, que muta el agregado en sitio.
         UserStatus estadoAnterior = target.status();

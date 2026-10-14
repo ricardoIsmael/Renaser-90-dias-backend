@@ -1,6 +1,8 @@
 package com.renaser.os.community.infrastructure.adapter.in.scheduler;
 
 import com.renaser.os.community.application.ports.in.celula.DetectarGruposSinMentorUseCase;
+import com.renaser.os.shared.application.Interruptores;
+import com.renaser.os.shared.application.ProcesosConInterruptor;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,8 +28,10 @@ class AvisarGruposSinMentorScheduler {
     private static final Logger log = LoggerFactory.getLogger(AvisarGruposSinMentorScheduler.class);
 
     private final DetectarGruposSinMentorUseCase detectar;
+    private final Interruptores interruptores;
 
-    AvisarGruposSinMentorScheduler(DetectarGruposSinMentorUseCase detectar) {
+    AvisarGruposSinMentorScheduler(DetectarGruposSinMentorUseCase detectar, Interruptores interruptores) {
+        this.interruptores = interruptores;
         this.detectar = detectar;
     }
 
@@ -36,6 +40,9 @@ class AvisarGruposSinMentorScheduler {
             lockAtMostFor = "${renaser.scheduling.shedlock.community-avisar-grupos-sin-mentor.lock-at-most-for:PT10M}",
             lockAtLeastFor = "${renaser.scheduling.shedlock.community-avisar-grupos-sin-mentor.lock-at-least-for:PT30S}")
     public void ejecutar() {
+        if (ProcesosConInterruptor.saltaEsteTurno(interruptores, "admin.grupos", "community.grupos-sin-mentor")) {
+            return;
+        }
         int avisados = detectar.avisarDeLosQueNoTienenMentor();
         if (avisados > 0) {
             log.info("[community.AvisarGruposSinMentorScheduler] {} grupo(s) en curso sin mentor", avisados);

@@ -5,6 +5,7 @@ import com.renaser.os.rag.application.ports.in.memoria.ConsultarMemoriaUseCase;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -23,6 +24,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/renasia/memoria")
+@Funcionalidad("ia")
 public class MemoriaRenasiaController {
 
     private final ConsultarMemoriaUseCase consultarUseCase;

@@ -5,6 +5,7 @@ import com.renaser.os.points.application.ports.in.ranking.ConsultarRankingUseCas
 import com.renaser.os.points.domain.model.ranking.TipoRanking;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.Permission;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,6 +22,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/ranking")
+@Funcionalidad("ranking")
 public class RankingController {
 
     /** Zona del padron. Igual que `ParticipacionPrograma.ZONA_POR_DEFECTO`: hoy todos en Lima. */

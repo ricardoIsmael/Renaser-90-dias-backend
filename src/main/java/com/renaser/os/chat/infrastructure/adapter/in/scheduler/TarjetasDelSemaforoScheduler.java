@@ -2,6 +2,8 @@ package com.renaser.os.chat.infrastructure.adapter.in.scheduler;
 
 import com.renaser.os.chat.application.ports.in.semaforo.EnviarTarjetasDelSemaforoUseCase;
 import com.renaser.os.chat.application.ports.in.semaforo.EnviarTarjetasDelSemaforoUseCase.ResultadoDeTarjetas;
+import com.renaser.os.shared.application.Interruptores;
+import com.renaser.os.shared.application.ProcesosConInterruptor;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,9 +35,12 @@ public class TarjetasDelSemaforoScheduler {
 
     private final EnviarTarjetasDelSemaforoUseCase tarjetas;
     private final boolean activa;
+    private final Interruptores interruptores;
 
     public TarjetasDelSemaforoScheduler(EnviarTarjetasDelSemaforoUseCase tarjetas,
-                                        @Value("${renaser.semaforo.tarjeta-diaria.activa:false}") boolean activa) {
+                                        @Value("${renaser.semaforo.tarjeta-diaria.activa:false}") boolean activa,
+                                        Interruptores interruptores) {
+        this.interruptores = interruptores;
         this.tarjetas = tarjetas;
         this.activa = activa;
         log.info("[chat.semaforo] tarjeta diaria del semáforo en el soporte: {}", activa ? "PRENDIDA" : "apagada");
@@ -46,6 +51,10 @@ public class TarjetasDelSemaforoScheduler {
             lockAtMostFor = "${renaser.scheduling.shedlock.chat-tarjetas-del-semaforo.lock-at-most-for:PT4M}",
             lockAtLeastFor = "${renaser.scheduling.shedlock.chat-tarjetas-del-semaforo.lock-at-least-for:PT10S}")
     public void enviarLasQueTocan() {
+        // Spec 002: la tarjeta diaria del soporte salta mientras chat.soporte (o chat) este apagado.
+        if (ProcesosConInterruptor.saltaEsteTurno(interruptores, "chat.soporte", "chat.tarjetas-del-semaforo")) {
+            return;
+        }
         if (!activa) {
             return;
         }

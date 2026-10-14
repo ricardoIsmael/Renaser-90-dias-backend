@@ -12,6 +12,7 @@ import com.renaser.os.habits.domain.model.horario.HorarioHabitoId;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -31,6 +32,7 @@ import java.util.UUID;
 /** Panel admin de horarios por defecto del catalogo (hueco #11). Rutas literales de {@code habitsAdmin.ts}. */
 @RestController
 @RequestMapping("/api/v1/admin/habits")
+@Funcionalidad("admin.habitos")
 public class HorarioHabitoAdminController {
 
     private final ConsultarHorariosDeHabitoUseCase consultarUseCase;

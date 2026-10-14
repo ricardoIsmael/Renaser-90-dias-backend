@@ -15268,3 +15268,111 @@ hacer cumplir el servidor; la app es solo una de las formas de llamar a la API.
 apunta `AWS_S3_BUCKET` a `s3-renaser90dias`, que AWS responde con `AllAccessDisabled`. Con esa configuración no se
 puede subir ninguna foto en local; producción usa otro bucket. Se resolvió con un S3 local para desarrollo
 (`AWS_S3_ENDPOINT` y el servicio `fotos-local` de `docker-compose.yml`, `docs/DESPLIEGUE_Y_CI.md` §1.3).
+
+---
+
+## E-609 · `La madre de cuenta.eliminar no esta en el catalogo` al cargar el catálogo de funcionalidades (back, RESUELTO, 13/10)
+
+**Síntoma literal.** Todas las pruebas que tocaban `plataforma` fallaban con
+`java.lang.NoClassDefFoundError: Could not initialize class …CatalogoDeFuncionalidades`, causado por
+`ExceptionInInitializerError: … IllegalArgumentException: La madre de cuenta.eliminar no esta en el catalogo`.
+
+**Causa real.** La primera versión del catálogo (D-267) sacaba la madre del prefijo de la clave (`chat.grupos` → `chat`).
+La tabla de la spec 002 tiene dos claves con punto cuyo prefijo NO es una funcionalidad: `cuenta.eliminar` y
+`mentor.mi_grupo`. La validación del catálogo (una hija sin madre es un error) hizo explotar la inicialización estática.
+
+**Solución.** La madre es un campo explícito de `DefinicionDeFuncionalidad`; las entradas normales la sacan del prefijo y
+esas dos se declaran raíz (`EntradasDelCatalogo.raiz`). La definición valida que, si hay madre, sea el prefijo.
+
+**Para que no vuelva.** `CatalogoDeFuncionalidadesTest` verifica las 52 claves de la spec y que esas dos sean raíces. **Regla
+general:** una convención de nombres no es un dato; si la spec la rompe una vez, el campo tiene que ser explícito.
+
+---
+
+## E-610 · `invalid accessor method in record … ResultadoDeEvaluacion` (back, RESUELTO, 13/10)
+
+**Síntoma literal.** `[ERROR] …/ResultadoDeEvaluacion.java:[17,41] invalid accessor method in record
+com.renaser.os.plataforma.domain.model.estado.ResultadoDeEvaluacion (return type of accessor method prendida() must match
+the type of record component prendida)`, y en cascada `ResultadoDeEvaluacion cannot be converted to boolean`.
+
+**Causa real.** Una fábrica estática `prendida()` en un record que tiene el componente `boolean prendida`: el compilador
+la toma por el accesor del componente.
+
+**Solución.** La fábrica se llama `sinApagar()`. **Regla general:** en un record, ningún método estático puede llamarse como
+un componente.
+
+---
+
+## E-611 · La prueba del trigger append-only no encontraba el mensaje del rechazo (back, RESUELTO, 13/10)
+
+**Síntoma literal.** `ConsolaSoporteTiIT.auditoriaAppendOnly`: `Expecting throwable message: … to contain: "append-only"`,
+con el mensaje real en la causa: `Caused by: org.postgresql.util.PSQLException: ERROR: cambios_auditados es append-only:
+no se permite UPDATE (spec 002, FR-007)`.
+
+**Causa real.** El trigger funcionaba; `JdbcTemplate` envuelve el `PSQLException` en una `DataAccessException` cuyo mensaje
+no repite el de Postgres.
+
+**Solución.** La prueba mira la causa raíz (`assertThatThrownBy(…).rootCause().hasMessageContaining("append-only")`).
+**Regla general:** para un error que lanza la base (trigger, CHECK), afirmar sobre la causa raíz, no sobre la excepción de
+Spring.
+
+---
+
+## E-612 · El chat de SER cortaba la conexión si una funcionalidad se apagaba con el stream abierto (back, RESUELTO, 13/10)
+
+**Síntoma literal.** En `CircuitoDeLaIaIT` (D-267, agente B), el pedido de chat que abría el circuito (la quinta falla)
+terminaba en el cliente con `java.io.IOException: chunked transfer encoding, state: READING_LENGTH`. En el log del servidor:
+`503 -> funcionalidad apagada: ia.chat` seguido de `Failure in @ExceptionHandler …GlobalExceptionHandler#handleFuncionalidadApagada`
+con `HttpMessageNotWritableException: No converter for [class com.renaser.os.shared.web.ApiErrorConCodigo] with preset
+Content-Type 'text/event-stream'`, y la pila pasaba por `CoyoteAdapter.asyncDispatch`.
+
+**Causa real.** `POST /renasia/mensajes` es asíncrono (SSE): el stream se abre en el despacho inicial y, al terminar, Tomcat
+hace un despacho `ASYNC` que vuelve a pasar por todos los `HandlerInterceptor`. `InterruptoresInterceptor` (D-267) volvía a
+evaluar `ia.chat` en ese despacho; como la funcionalidad se había apagado en el medio (el circuito se abrió con la falla de
+ese mismo turno), lanzaba `FuncionalidadApagadaException` cuando la respuesta ya estaba comprometida como
+`text/event-stream`: el 503 no se podía escribir y la conexión se cortaba. Pasa igual con un apagado manual desde la consola
+mientras alguien tiene el chat abierto. La spec pide lo contrario: «pedido en vuelo cuando se apaga: termina», con el evento
+de error de siempre.
+
+**Solución.** `InterruptoresInterceptor.preHandle` deja pasar el despacho `DispatcherType.ASYNC`: la decisión se tomó al
+entrar el pedido. El turno en vuelo termina con su `error` + `fin` y el siguiente ya recibe el 503.
+
+**Para que no vuelva.** `InterruptoresInterceptorTest.elDespachoAsyncNoSeEvalua` (lanza contra el código anterior) y
+`CircuitoDeLaIaIT.chatSeApagaYVuelve`, que abre el circuito con un stream de verdad. **Regla general:** un interceptor que
+puede cortar un pedido tiene que preguntarse qué pasa en el despacho `ASYNC` de un endpoint que transmite.
+`PermissionEnforcementInterceptor` tiene el mismo patrón (no mira el tipo de despacho); hoy no se nota porque el permiso de
+una sesión no cambia en medio de un stream, pero queda anotado.
+
+---
+
+## E-613 · La versión de `/funcionalidades/mias` no cambiaba al abrir el circuito después de vaciar Redis (back, RESUELTO, 13/10)
+
+**Síntoma literal.** `CircuitoDeLaIaIT.chatSeApagaYVuelve`, después de abrir `ia.chat`: `Expecting actual: 3L to be greater
+than: 3L`. Las apagadas sí listaban `ia.chat`; solo la `version` seguía igual.
+
+**Causa real.** La primera versión de `CopiaDelCircuito.version()` devolvía `max(la mayor que dio, suma de versiones en
+Redis)` para no retroceder nunca. Entre pruebas se borran las claves del circuito (como pasaría en producción si Redis se
+reinicia sin persistencia): la suma vuelve a 0 y la versión quedaba congelada en el máximo viejo hasta superarlo, así que
+abrir el circuito de nuevo no la movía. El ETag sí cambiaba (lleva la huella del contenido), por eso la app no se habría
+quedado con un estado viejo; pero el contrato dice que la versión cambia con cada apertura y cierre.
+
+**Solución.** Cuando una parte vuelve a la versión 0 (Redis vacío), la copia suma un desfase (la versión que tenía + 1) y
+la versión que da es desfase + suma: no retrocede y sigue moviéndose con cada cambio.
+
+**Para que no vuelva.** `ControlDelCircuitoServiceTest.versionTrasVaciarRedis` y el IT. **Regla general:** «nunca
+retrocede» con un `max` congela el número tras un reinicio; hace falta un desfase, no un tope.
+
+---
+
+## E-614 · El orden de las filas AUTOMATICO salía cambiado cuando el circuito se cerraba y se volvía a abrir en el mismo instante (test, RESUELTO, 13/10)
+
+**Síntoma literal.** `CircuitoDeLaIaIT.pushComoMaximoCuatroPorHora`: `Expecting actual: ["ABIERTO", "ABIERTO", "ABIERTO",
+"ABIERTO", "CERRADO", "CERRADO"] to contain exactly (and in same order): ["ABIERTO", "ABIERTO", "ABIERTO", "CERRADO",
+"ABIERTO", "CERRADO"]`.
+
+**Causa real.** Del fixture: el reloj de la prueba no avanzaba entre el pedido de prueba que cerraba el circuito y las
+cinco fallas que lo volvían a abrir, así que las dos filas tenían el mismo `creado_en` y `ORDER BY creado_en` no las
+distinguía (el `id` es un UUID al azar). El código estaba bien.
+
+**Solución.** La prueba avanza un minuto entre el cierre y las fallas siguientes. **Regla general:** con un reloj fijo,
+dos hechos seguidos tienen el mismo instante; si la prueba ordena por tiempo, tiene que mover el reloj entre ellos.

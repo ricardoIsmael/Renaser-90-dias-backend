@@ -5,6 +5,7 @@ import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
 import com.renaser.os.shared.web.security.RequiresPermission;
+import com.renaser.os.shared.web.security.SinInterruptor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/v1/mentor/context")
+@SinInterruptor(motivo = "La app lo lee al entrar, para todos los roles, para decidir qué pantallas mostrar (capacidades): apagarlo rompería el arranque")
 public class ContextoMentorController {
 
     private final ConsultarContextoAcompanamientoUseCase consultarContexto;

@@ -10,6 +10,7 @@ import com.renaser.os.onboarding.application.ports.in.mapa.GuardarPasoMapaUseCas
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -32,6 +33,7 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/api/v1/mapa-renacimiento")
+@Funcionalidad("mapa")
 public class MapaRenacimientoController {
 
     private final GuardarPasoMapaUseCase guardarPasoMapaUseCase;

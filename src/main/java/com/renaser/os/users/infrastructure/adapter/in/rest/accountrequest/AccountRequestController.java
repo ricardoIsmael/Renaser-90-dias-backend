@@ -4,6 +4,7 @@ import com.renaser.os.shared.web.DireccionIpDelCliente;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.PublicEndpoint;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import com.renaser.os.users.api.UserRole;
@@ -54,6 +55,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/account-requests")
+@Funcionalidad("registro")
 public class AccountRequestController {
 
     private final SubmitAccountRequestUseCase submitUseCase;
@@ -135,6 +137,7 @@ public class AccountRequestController {
     }
 
     @RequiresPermission(Permission.APPROVE_ACCOUNT_REQUEST)
+    @Funcionalidad("admin.solicitudes")
     @PostMapping("/{id}/approve")
     public ResponseEntity<Void> approve(@PathVariable UUID id, @ActorAutenticado UserId actor,
                                          @RequestBody(required = false) ApproveAccountRequestRequest request) {
@@ -144,6 +147,7 @@ public class AccountRequestController {
     }
 
     @RequiresPermission(Permission.APPROVE_ACCOUNT_REQUEST)
+    @Funcionalidad("admin.solicitudes")
     @PostMapping("/{id}/reject")
     public ResponseEntity<Void> reject(@PathVariable UUID id, @ActorAutenticado UserId actor,
                                         @RequestBody @Valid RejectAccountRequestRequest request) {
@@ -154,6 +158,7 @@ public class AccountRequestController {
 
     /** Panel admin (gap #9): ADMIN/ALCHEMIST — gate DENTRO del servicio (CLAUDE.MD §5.4.6). */
     @RequiresPermission(Permission.APPROVE_ACCOUNT_REQUEST)
+    @Funcionalidad("admin.solicitudes")
     @GetMapping
     public AccountRequestPageResponse listar(@ActorAutenticado UserId actor,
                                               @RequestParam(required = false) AccountRequestStatus status,
@@ -165,6 +170,7 @@ public class AccountRequestController {
 
     /** Panel admin (gap #9): borrar una solicitud (cualquier estado, ver javadoc de {@link DeleteAccountRequestUseCase}). */
     @RequiresPermission(Permission.APPROVE_ACCOUNT_REQUEST)
+    @Funcionalidad("admin.solicitudes")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminar(@PathVariable UUID id, @ActorAutenticado UserId actor) {
         deleteUseCase.eliminar(new DeleteAccountRequestCommand(actor, AccountRequestId.of(id)));

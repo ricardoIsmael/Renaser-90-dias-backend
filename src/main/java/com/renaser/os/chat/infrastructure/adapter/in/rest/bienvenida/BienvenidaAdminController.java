@@ -7,6 +7,7 @@ import com.renaser.os.chat.application.ports.in.bienvenida.VerTarjetaDeMuestraUs
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
@@ -32,6 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/v1/admin/bienvenida")
+@Funcionalidad("admin.bienvenida")
 public class BienvenidaAdminController {
 
     private static final String SOLO_ADMIN = "solo ADMIN/ALCHEMIST activos (D-210): el servicio rechaza a los "

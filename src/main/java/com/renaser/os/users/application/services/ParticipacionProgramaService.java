@@ -67,7 +67,9 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
      * opcional de "seguimiento personal" de staff.
      */
     private static final Set<UserRole> ROLES_CON_SEGUIMIENTO_OPCIONAL =
-            EnumSet.of(UserRole.MENTOR, UserRole.TRAINEE_GUIDE, UserRole.MENTOR_LEAD, UserRole.ADMIN, UserRole.ALCHEMIST);
+            EnumSet.of(UserRole.MENTOR, UserRole.TRAINEE_GUIDE, UserRole.MENTOR_LEAD, UserRole.ADMIN, UserRole.ALCHEMIST,
+                    // Soporte TI activa su programa como el resto del personal, si quiere (D-267, FR-023).
+                    UserRole.IT_SUPPORT);
 
     private static final Logger log = LoggerFactory.getLogger(ParticipacionProgramaService.class);
 

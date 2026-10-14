@@ -1,6 +1,8 @@
 package com.renaser.os.evidence.infrastructure.adapter.in.scheduler;
 
 import com.renaser.os.evidence.application.ports.in.evidencia.ProcesarColaValidacionUseCase;
+import com.renaser.os.shared.application.Interruptores;
+import com.renaser.os.shared.application.ProcesosConInterruptor;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,8 +32,10 @@ class ProcesarColaValidacionScheduler {
     private static final Logger log = LoggerFactory.getLogger(ProcesarColaValidacionScheduler.class);
 
     private final ProcesarColaValidacionUseCase procesarColaUseCase;
+    private final Interruptores interruptores;
 
-    ProcesarColaValidacionScheduler(ProcesarColaValidacionUseCase procesarColaUseCase) {
+    ProcesarColaValidacionScheduler(ProcesarColaValidacionUseCase procesarColaUseCase, Interruptores interruptores) {
+        this.interruptores = interruptores;
         this.procesarColaUseCase = procesarColaUseCase;
     }
 
@@ -49,6 +53,10 @@ class ProcesarColaValidacionScheduler {
             lockAtMostFor = "${renaser.scheduling.shedlock.evidence-procesar-cola.lock-at-most-for:PT20M}",
             lockAtLeastFor = "${renaser.scheduling.shedlock.evidence-procesar-cola.lock-at-least-for:PT10S}")
     public void ejecutar() {
+        // Spec 002: la cola pospone; lo encolado espera y se procesa cuando se prende.
+        if (ProcesosConInterruptor.saltaEsteTurno(interruptores, "evidencias", "evidence.cola-de-validacion")) {
+            return;
+        }
         int procesadas = procesarColaUseCase.procesarLote();
         if (procesadas > 0) {
             log.info("[evidence.ProcesarColaValidacionScheduler] {} evidencia(s) procesada(s)", procesadas);

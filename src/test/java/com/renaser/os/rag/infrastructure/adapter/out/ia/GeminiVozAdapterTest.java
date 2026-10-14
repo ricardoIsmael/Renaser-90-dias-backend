@@ -1,9 +1,12 @@
 package com.renaser.os.rag.infrastructure.adapter.out.ia;
 
+import com.renaser.os.shared.domain.ProveedorIaNoDisponibleException;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -17,6 +20,7 @@ import java.util.Base64;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Contra un servidor SSE falso con la forma real de la Interactions API (verificada el 2026-09-23
@@ -132,14 +136,42 @@ class GeminiVozAdapterTest {
         assertThat(cabecera.getInt(40)).isEqualTo(0xFFFFFFFF);
     }
 
+    /**
+     * Corregido 2026-10-13 (spec 002, D-267). Decia «un error de Gemini (429, 500) es false». Ahora 429, 408 y 5xx son
+     * del proveedor y se avisan con {@link ProveedorIaNoDisponibleException}, para que los cuente el circuito de
+     * {@code ia.voz}; quien llama sigue sin entregar audio y la app usa la voz del telefono.
+     */
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(ints = {429, 408, 500, 503})
+    @DisplayName("un error del proveedor (429, 408, 5xx) lanza ProveedorIaNoDisponibleException y no entrega nada")
+    void errorDelProveedorSeAvisa(int status) throws IOException {
+        GeminiVozAdapter adapter = adapterContra(status, "{\"error\":{\"code\":" + status + "}}", "key-de-prueba");
+        ByteArrayOutputStream entregado = new ByteArrayOutputStream();
+
+        assertThatThrownBy(() -> adapter.sintetizar("Hola", entregado::writeBytes))
+                .isInstanceOf(ProveedorIaNoDisponibleException.class);
+        assertThat(entregado.size()).isZero();
+    }
+
     @Test
-    @DisplayName("un error de Gemini (429, 500) es false y no entrega nada")
-    void errorDeGeminiEsFalse() throws IOException {
-        GeminiVozAdapter adapter = adapterContra(429, "{\"error\":{\"code\":429}}", "key-de-prueba");
+    @DisplayName("un 400 es nuestro, no del proveedor: false, sin excepcion (no apaga la voz de nadie)")
+    void errorNuestroEsFalse() throws IOException {
+        GeminiVozAdapter adapter = adapterContra(400, "{\"error\":{\"code\":400}}", "key-de-prueba");
         ByteArrayOutputStream entregado = new ByteArrayOutputStream();
 
         assertThat(adapter.sintetizar("Hola", entregado::writeBytes)).isFalse();
         assertThat(entregado.size()).isZero();
+    }
+
+    @Test
+    @DisplayName("sin poder conectarse con Gemini tambien es del proveedor")
+    void sinConexionSeAvisa() throws IOException {
+        GeminiVozAdapter adapter = adapterContra(200, INICIO + delta(PCM_1) + FIN, "key-de-prueba");
+        servidor.stop(0);
+        servidor = null;
+
+        assertThatThrownBy(() -> adapter.sintetizar("Hola", bytes -> { }))
+                .isInstanceOf(ProveedorIaNoDisponibleException.class);
     }
 
     @Test

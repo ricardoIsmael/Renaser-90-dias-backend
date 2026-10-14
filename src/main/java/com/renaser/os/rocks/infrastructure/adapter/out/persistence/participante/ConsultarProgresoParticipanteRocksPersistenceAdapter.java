@@ -70,7 +70,8 @@ class ConsultarProgresoParticipanteRocksPersistenceAdapter implements ConsultarP
     private static RolParticipante mapearRol(UserRole rol) {
         return switch (rol) {
             case ALCHEMIST -> RolParticipante.ALCHEMIST;
-            case ADMIN -> RolParticipante.ADMIN;
+            // Soporte TI tiene lo de Administración (D-267): en este módulo cuenta como ADMIN.
+            case ADMIN, IT_SUPPORT -> RolParticipante.ADMIN;
             case MENTOR_LEAD -> RolParticipante.MENTOR_LEAD;
             // El guía de aprendiz hace lo mismo que un mentor (D-265): en este módulo cuenta como MENTOR.
             case MENTOR, TRAINEE_GUIDE -> RolParticipante.MENTOR;

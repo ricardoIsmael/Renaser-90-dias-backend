@@ -5,6 +5,8 @@ import com.renaser.os.rag.application.ports.in.logro.CelebrarLogroEnChatUseCase;
 import com.renaser.os.rag.application.ports.in.logro.CelebrarLogroEnChatUseCase.LogroEnChatCommand;
 import com.renaser.os.rag.domain.model.logro.TipoLogro;
 import com.renaser.os.rocks.api.RocaCompletadaEvent;
+import com.renaser.os.shared.application.Interruptores;
+import com.renaser.os.shared.application.ProcesosConInterruptor;
 import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Component;
 
@@ -24,20 +26,33 @@ import org.springframework.stereotype.Component;
 class LogroEnChatListener {
 
     private final CelebrarLogroEnChatUseCase celebrarLogroEnChatUseCase;
+    private final Interruptores interruptores;
 
-    LogroEnChatListener(CelebrarLogroEnChatUseCase celebrarLogroEnChatUseCase) {
+    LogroEnChatListener(CelebrarLogroEnChatUseCase celebrarLogroEnChatUseCase, Interruptores interruptores) {
         this.celebrarLogroEnChatUseCase = celebrarLogroEnChatUseCase;
+        this.interruptores = interruptores;
     }
 
     @ApplicationModuleListener
     void onRachaCompletada(RachaCompletadaEvent event) {
+        if (serApagada()) {
+            return;
+        }
         celebrarLogroEnChatUseCase.celebrarEnElChat(
                 new LogroEnChatCommand(event.participanteId(), TipoLogro.RACHA_SIN_CELULAR, event.rachaId()));
     }
 
     @ApplicationModuleListener
     void onRocaCompletada(RocaCompletadaEvent event) {
+        if (serApagada()) {
+            return;
+        }
         celebrarLogroEnChatUseCase.celebrarEnElChat(
                 new LogroEnChatCommand(event.participanteId(), TipoLogro.ROCA_COMPLETADA, event.rocaId()));
+    }
+
+    /** Spec 002 (D-267): con SER («ia») apagada, los mensajes automaticos de SER saltan (politica del catalogo). */
+    private boolean serApagada() {
+        return ProcesosConInterruptor.saltaEsteTurno(interruptores, "ia", "rag.logro-en-chat");
     }
 }

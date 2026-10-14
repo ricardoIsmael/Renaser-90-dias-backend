@@ -39,7 +39,7 @@ class SubscripcionAutorizadaInterceptorEnvioTest {
     private AutorizacionViva autorizacionViva;
 
     private SubscripcionAutorizadaInterceptor interceptor() {
-        return new SubscripcionAutorizadaInterceptor(autorizarAcceso, userSummaryFinder, sesionViva, autorizacionViva);
+        return new SubscripcionAutorizadaInterceptor(autorizarAcceso, userSummaryFinder, sesionViva, autorizacionViva, (conversacion, actor) -> { });
     }
 
     private static Message<byte[]> envioA(String destino) {

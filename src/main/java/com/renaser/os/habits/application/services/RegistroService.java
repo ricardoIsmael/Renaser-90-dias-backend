@@ -38,6 +38,7 @@ import com.renaser.os.habits.domain.model.registro.VentanaEntrega;
 import com.renaser.os.points.api.AjustarPuntosPort;
 import com.renaser.os.points.api.MotivoPuntos;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.application.Interruptores;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -100,6 +101,8 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
     /** Spec 001 (D-264): qué hábitos globales le tocan a la persona ese día, según su rol. */
     private final CatalogoAplicable catalogoAplicable;
     private final RegistrosConEvidenciaFinder registrosConEvidencia;
+    /** Spec 002: el interruptor propio de kilómetros y de gimnasio al completar. */
+    private final Interruptores interruptores;
 
     public RegistroService(LoadRegistroHabitoPort loadRegistroPort, SaveRegistroHabitoPort saveRegistroPort,
                             LoadHabitoPort loadHabitoPort, LoadHorarioHabitoPort loadHorarioPort,
@@ -109,7 +112,8 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
                             LoadDesbloqueoHabitoPort loadDesbloqueoPort,
                             ApplicationEventPublisher events, Clock clock, IdGenerator idGenerator,
                             List<PoliticaHabito> politicas, CatalogoAplicable catalogoAplicable,
-                            RegistrosConEvidenciaFinder registrosConEvidencia) {
+                            RegistrosConEvidenciaFinder registrosConEvidencia, Interruptores interruptores) {
+        this.interruptores = interruptores;
         this.loadRegistroPort = loadRegistroPort;
         this.saveRegistroPort = saveRegistroPort;
         this.loadHabitoPort = loadHabitoPort;
@@ -377,6 +381,8 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         ProgresoParticipanteHabits progreso = requireSelf(command.actorId(), registro.participanteId());
         requireDeUnDiaQueNoTermino(registro, ZoneId.of(progreso.timezone()));
         Habito habito = requireHabito(registro.habitoId());
+        // Spec 002: kilómetros y gimnasio tienen su propio interruptor, además del de los hábitos (la ruta).
+        FuncionalidadesDeHabitos.exigirParaCompletar(interruptores, habito, command.actorId());
         requireMedicionAdmitida(habito, command.medicion());
         // La politica gobierna el GESTO GENERICO y solo ese — es literalmente la pregunta que
         // `puedeCompletarseDirecto` dice contestar. Un habito con gesto propio (hoy solo la Clase

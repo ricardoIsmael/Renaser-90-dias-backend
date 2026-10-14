@@ -1,5 +1,11 @@
 package com.renaser.os.rag.application.services.vozenvivo;
 
+import com.renaser.os.rag.application.services.circuito.CircuitoDePrueba;
+import com.renaser.os.rag.application.services.circuito.InterruptoresDeSer;
+import com.renaser.os.rag.domain.model.circuito.ParteDeLaIa;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
 import com.renaser.os.rag.application.services.MetricasDelAcompananteEnMemoria;
 
 import com.renaser.os.rag.application.ports.in.memoria.CompactarMemoriaUseCase;
@@ -94,6 +100,7 @@ class ConversacionEnVivoServiceTest {
     private final SalidaGrabada salida = new SalidaGrabada();
 
     private ConversacionEnVivoService service;
+    private final CircuitoDePrueba circuito = CircuitoDePrueba.cerrado();
 
     @BeforeEach
     void armar() {
@@ -101,7 +108,7 @@ class ConversacionEnVivoServiceTest {
         when(loadConversacion.porUsuarioId(actor)).thenReturn(Optional.empty());
         when(malestar.revisar(any(), any())).thenReturn(Optional.empty());
         when(situacion.de(actor)).thenReturn(Optional.of(new SituacionDelAprendiz(12, 1)));
-        when(herramientas.disponibles(AgenteConversacional.COMPANION)).thenReturn(List.of(
+        when(herramientas.disponiblesPara(AgenteConversacional.COMPANION, actor)).thenReturn(List.of(
                 DefinicionHerramienta.sinParametros("consultar_habitos_del_dia", "Los habitos de hoy.")));
         when(propuestas.pendientesCreadasDesde(any(), any())).thenReturn(List.of());
         TiempoDeVozEnVivo tiempo = new TiempoDeVozEnVivo(cuotaPort, id -> LIMA,
@@ -109,7 +116,7 @@ class ConversacionEnVivoServiceTest {
         TurnosDeVozEnVivo turnos = new TurnosDeVozEnVivo(loadConversacion, saveConversacion, mensajes, malestar,
                 compactar, reloj, UUID::randomUUID);
         service = new ConversacionEnVivoService(usuarios, proveedor, situacion, memoria, herramientas, propuestas,
-                turnos, tiempo, temporizador, reloj, metricas);
+                turnos, tiempo, temporizador, reloj, metricas, circuito.interruptores(), circuito);
     }
 
     private void conCuenta(UserRole rol, UserStatus estado) {
@@ -455,6 +462,37 @@ class ConversacionEnVivoServiceTest {
         assertThat(metricas.registradas).containsExactly("voz NO_DISPONIBLE");
     }
 
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"a mano", "por el circuito"})
+    @DisplayName("spec 002: con ia.voz apagada cierra con 1013 no-disponible y no abre nada")
+    void vozApagada(String como) {
+        CircuitoDePrueba circuitoDeLaPrueba = como.equals("a mano") ? CircuitoDePrueba.cerrado()
+                : CircuitoDePrueba.cortando(ParteDeLaIa.VOZ);
+        InterruptoresDeSer ser = como.equals("a mano") ? circuitoDeLaPrueba.interruptoresConApagadas("ia.voz")
+                : circuitoDeLaPrueba.interruptores();
+        ConversacionEnVivoService conVozApagada = new ConversacionEnVivoService(usuarios, proveedor, situacion, memoria,
+                herramientas, propuestas, new TurnosDeVozEnVivo(loadConversacion, saveConversacion, mensajes, malestar,
+                compactar, reloj, UUID::randomUUID), new TiempoDeVozEnVivo(cuotaPort, id -> LIMA,
+                new CuotaDeVozEnVivo(Duration.ofMinutes(10), Duration.ofMinutes(15)), reloj, metricas), temporizador,
+                reloj, metricas, ser, circuitoDeLaPrueba);
+
+        conVozApagada.iniciar(actor, salida);
+
+        assertThat(salida.motivo).isEqualTo(MotivoDeCierre.NO_DISPONIBLE);
+        assertThat(salida.eventos).containsExactly(new EventoDeVozEnVivo.Error(ConversacionEnVivoService.MENSAJE_NO_DISPONIBLE));
+        assertThat(proveedor.apertura).isNull();
+    }
+
+    @Test
+    @DisplayName("spec 002: abrir la sesion cuenta como exito del proveedor; que Gemini no la acepte, como falla")
+    void elCircuitoCuentaLasAperturas() {
+        service.iniciar(actor, salida);
+        proveedor.falla = true;
+        service.iniciar(actor, new SalidaGrabada());
+
+        assertThat(circuito.anotado).containsExactly("exito ia.voz", "falla ia.voz");
+    }
+
     @Test
     @DisplayName("si Gemini no acepta la sesion responde no disponible")
     void geminiNoAbre() {
@@ -475,7 +513,7 @@ class ConversacionEnVivoServiceTest {
         service = new ConversacionEnVivoService(usuarios, proveedor, situacion, memoria, herramientas, propuestas,
                 new TurnosDeVozEnVivo(loadConversacion, saveConversacion, mensajes, malestar, compactar, reloj,
                         UUID::randomUUID),
-                tiempo, temporizador, reloj, metricas);
+                tiempo, temporizador, reloj, metricas, circuito.interruptores(), circuito);
         service.iniciar(actor, salida);
 
         reloj.avanzar(Duration.ofMinutes(15));

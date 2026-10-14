@@ -24,6 +24,7 @@ import com.renaser.os.community.domain.model.cohorte.CohorteId;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -44,6 +45,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/admin/cells")
+@Funcionalidad("admin.grupos")
 public class CelulaAdminController {
 
     private final CrearCelulaUseCase crearUseCase;

@@ -20,6 +20,7 @@ import com.renaser.os.calendar.domain.model.evento.TipoEvento;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -53,6 +54,7 @@ import java.util.stream.Collectors;
  */
 @RestController
 @RequestMapping("/api/v1/calendar/events")
+@Funcionalidad("eventos")
 class EventoController {
 
     private final ListarEventosParaVisorUseCase listarUseCase;
@@ -99,6 +101,7 @@ class EventoController {
     }
 
     @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "solo ADMIN/ALCHEMIST (D-186): el servicio rechaza a MENTOR, MENTOR_LEAD y TRAINEE")
+    @Funcionalidad("eventos.gestion")
     @PostMapping
     public ResponseEntity<EventoResponse> crear(@ActorAutenticado UserId actor,
                                                  @Valid @RequestBody EventoRequest request) {
@@ -107,6 +110,7 @@ class EventoController {
     }
 
     @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "solo ADMIN/ALCHEMIST (D-186): el servicio rechaza a MENTOR, MENTOR_LEAD y TRAINEE")
+    @Funcionalidad("eventos.gestion")
     @PutMapping("/{id}")
     public EventoResponse actualizar(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                       @Valid @RequestBody EventoRequest request) {
@@ -115,6 +119,7 @@ class EventoController {
     }
 
     @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "solo ADMIN/ALCHEMIST (D-186): el servicio rechaza a MENTOR, MENTOR_LEAD y TRAINEE")
+    @Funcionalidad("eventos.gestion")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminar(@ActorAutenticado UserId actor, @PathVariable UUID id) {
         eliminarUseCase.eliminar(actor, EventoId.of(id));
@@ -131,6 +136,7 @@ class EventoController {
     }
 
     @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "solo ADMIN/ALCHEMIST (D-186): el servicio rechaza a MENTOR, MENTOR_LEAD y TRAINEE")
+    @Funcionalidad("eventos.gestion")
     @PostMapping("/{id}/cancel-occurrence")
     public ResponseEntity<Void> cancelarOcurrencia(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                                     @Valid @RequestBody CancelarOcurrenciaRequest request) {
@@ -139,6 +145,7 @@ class EventoController {
     }
 
     @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "solo ADMIN/ALCHEMIST (D-186): el servicio rechaza a MENTOR, MENTOR_LEAD y TRAINEE")
+    @Funcionalidad("eventos.gestion")
     @PostMapping("/{id}/portada/upload-url")
     public UrlPortadaResponse solicitarUrlPortada(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                                    @Valid @RequestBody SolicitarUrlPortadaRequest request) {
@@ -147,6 +154,7 @@ class EventoController {
     }
 
     @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "solo ADMIN/ALCHEMIST (D-186): el servicio rechaza a MENTOR, MENTOR_LEAD y TRAINEE")
+    @Funcionalidad("eventos.gestion")
     @PostMapping("/{id}/portada/confirm")
     public EventoResponse confirmarPortada(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                             @Valid @RequestBody ConfirmarPortadaRequest request) {

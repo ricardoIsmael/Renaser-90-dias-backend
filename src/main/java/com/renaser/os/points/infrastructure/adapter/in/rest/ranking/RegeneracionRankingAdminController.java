@@ -6,6 +6,7 @@ import com.renaser.os.points.application.ports.in.ranking.RegenerarSnapshotsRank
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -33,6 +34,7 @@ import java.time.LocalDate;
  */
 @RestController
 @RequestMapping("/api/v1/admin/ranking/snapshots")
+@Funcionalidad("ranking")
 public class RegeneracionRankingAdminController {
 
     private final RegenerarSnapshotsRankingUseCase regenerarUseCase;

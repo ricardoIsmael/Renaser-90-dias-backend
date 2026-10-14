@@ -45,6 +45,18 @@ class ResolverDeHerramientasDesconocidasTest {
     }
 
     @Test
+    @DisplayName("spec 002: una que existe pero no se ofrecio (propuestas apagadas) dice que no esta disponible, sin "
+            + "sugerir el mismo nombre (lo llamaria en bucle)")
+    void existeperoNoSeOfrecio() {
+        conHerramientas("proponer_apagar_dia", "consultar_horarios");
+
+        String respuesta = resolver.resolve("proponer_apagar_dia").call("{}");
+
+        assertThat(respuesta).contains("\"ok\":false").contains("no esta disponible en esta conversacion")
+                .doesNotContain("Quisiste");
+    }
+
+    @Test
     @DisplayName("un nombre que no se parece a ninguno no sugiere nada, pero tampoco lanza")
     void sinSugerenciaSiNoSeParece() {
         conHerramientas("proponer_apagar_dia", "consultar_horarios");

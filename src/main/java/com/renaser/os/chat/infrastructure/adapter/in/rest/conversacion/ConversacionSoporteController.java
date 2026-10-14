@@ -10,6 +10,7 @@ import com.renaser.os.chat.domain.model.conversacion.CursorDeSoportes;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -31,6 +32,7 @@ import java.util.UUID;
  * Se prefiere eso a partir en dos controllers una funcion que es una sola.
  */
 @RestController
+@Funcionalidad("chat.soporte")
 public class ConversacionSoporteController {
 
     private final SalirDeConversacionSoporteUseCase salirUseCase;
@@ -64,6 +66,7 @@ public class ConversacionSoporteController {
      * rechaza, no este metodo. */
     @RequiresPermission(value = Permission.USE_APP,
             scope = "participante de la conversacion, y no el aprendiz dueño del soporte")
+    @Funcionalidad("chat")
     @PostMapping("/api/v1/chat/conversations/{id}/leave")
     public ResponseEntity<Map<String, String>> salir(@ActorAutenticado UserId actorId, @PathVariable UUID id) {
         salirUseCase.salir(new SalirDeConversacionSoporteCommand(actorId, ConversacionId.of(id)));

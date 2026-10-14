@@ -2,6 +2,8 @@ package com.renaser.os.community.infrastructure.adapter.in.scheduler;
 
 import com.renaser.os.community.application.ports.in.acompanamiento.RotarMentoresUseCase;
 import com.renaser.os.community.application.ports.in.acompanamiento.RotarMentoresUseCase.ResultadoRotacion;
+import com.renaser.os.shared.application.Interruptores;
+import com.renaser.os.shared.application.ProcesosConInterruptor;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,8 +43,10 @@ class RotarMentoresScheduler {
     private static final Logger log = LoggerFactory.getLogger(RotarMentoresScheduler.class);
 
     private final RotarMentoresUseCase rotarMentores;
+    private final Interruptores interruptores;
 
-    RotarMentoresScheduler(RotarMentoresUseCase rotarMentores) {
+    RotarMentoresScheduler(RotarMentoresUseCase rotarMentores, Interruptores interruptores) {
+        this.interruptores = interruptores;
         this.rotarMentores = rotarMentores;
     }
 
@@ -51,6 +55,9 @@ class RotarMentoresScheduler {
             lockAtMostFor = "${renaser.scheduling.shedlock.community-rotar-mentores.lock-at-most-for:PT15M}",
             lockAtLeastFor = "${renaser.scheduling.shedlock.community-rotar-mentores.lock-at-least-for:PT30S}")
     public void ejecutar() {
+        if (ProcesosConInterruptor.saltaEsteTurno(interruptores, "admin.grupos", "community.rotar-mentores")) {
+            return;
+        }
         List<ResultadoRotacion> resultados = rotarMentores.rotarLasQueCorresponda();
         for (ResultadoRotacion resultado : resultados) {
             log.info("[community.RotarMentoresScheduler] cohorte {}: {} cambio(s), {} ya aplicado(s), "

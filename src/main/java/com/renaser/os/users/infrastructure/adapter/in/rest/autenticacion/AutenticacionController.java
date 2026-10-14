@@ -4,6 +4,7 @@ import com.renaser.os.shared.web.DireccionIpDelCliente;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.web.security.PublicEndpoint;
 import com.renaser.os.shared.web.security.RequiresPermission;
+import com.renaser.os.shared.web.security.SinInterruptor;
 import com.renaser.os.users.application.ports.in.autenticacion.CompletarRegistroSocialUseCase;
 import com.renaser.os.users.application.ports.in.autenticacion.CompletarRegistroSocialUseCase.CompletarRegistroSocialCommand;
 import com.renaser.os.users.application.ports.in.autenticacion.ConfirmarResetContrasenaUseCase;
@@ -49,6 +50,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/v1/auth")
+@SinInterruptor(motivo = "Login, sesión y recuperación de contraseña: sin esto nadie entra, tampoco Soporte TI (anti-bloqueo, FR-004)")
 public class AutenticacionController {
 
     private final IniciarSesionUseCase iniciarSesionUseCase;

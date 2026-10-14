@@ -15,6 +15,7 @@ import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -41,6 +42,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/admin/habits")
+@Funcionalidad("admin.habitos")
 public class HabitoAdminController {
 
     private final ConsultarCatalogoAdminUseCase consultarUseCase;

@@ -5,6 +5,7 @@ import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -17,6 +18,7 @@ import java.util.UUID;
 /** Los integrantes de una conversación, para la info del chat: de cualquier tipo, con la regla de quién la ve. */
 @RestController
 @RequestMapping("/api/v1/chat/conversations/{id}/participants")
+@Funcionalidad("chat")
 public class ParticipantesDelChatController {
 
     private final VerParticipantesDeConversacionUseCase participantes;

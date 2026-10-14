@@ -2,6 +2,7 @@ package com.renaser.os.users.infrastructure.adapter.in.rest.autenticacion;
 
 import com.renaser.os.shared.web.DireccionIpDelCliente;
 import com.renaser.os.shared.web.security.PublicEndpoint;
+import com.renaser.os.shared.web.security.SinInterruptor;
 import com.renaser.os.users.application.ports.in.autenticacion.SolicitarCodigoResetContrasenaUseCase;
 import com.renaser.os.users.application.ports.in.autenticacion.SolicitarCodigoResetContrasenaUseCase.SolicitarCodigoResetContrasenaCommand;
 import com.renaser.os.users.application.ports.in.autenticacion.VerificarCodigoResetContrasenaUseCase;
@@ -28,6 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/v1/auth/password")
+@SinInterruptor(motivo = "Recuperar la contraseña: sin esto nadie vuelve a entrar, tampoco Soporte TI (anti-bloqueo, FR-004)")
 public class ResetContrasenaPorCodigoController {
 
     private final SolicitarCodigoResetContrasenaUseCase solicitarCodigoUseCase;

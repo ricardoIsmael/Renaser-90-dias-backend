@@ -63,6 +63,7 @@ class UserPersistenceMapper {
             case MENTOR_LEAD -> RolUsuarioJpa.LIDER_MENTORES;
             case ADMIN -> RolUsuarioJpa.ADMIN;
             case ALCHEMIST -> RolUsuarioJpa.ALQUIMISTA;
+            case IT_SUPPORT -> RolUsuarioJpa.SOPORTE_TI;
         };
     }
 
@@ -74,6 +75,7 @@ class UserPersistenceMapper {
             case LIDER_MENTORES -> UserRole.MENTOR_LEAD;
             case ADMIN -> UserRole.ADMIN;
             case ALQUIMISTA -> UserRole.ALCHEMIST;
+            case SOPORTE_TI -> UserRole.IT_SUPPORT;
         };
     }
 

@@ -2,6 +2,8 @@ package com.renaser.os.points.infrastructure.adapter.in.scheduler;
 
 import com.renaser.os.points.application.ports.in.semaforo.CerrarSemaforoUseCase;
 import com.renaser.os.points.application.ports.in.semaforo.CerrarSemaforoUseCase.ResultadoDelCierre;
+import com.renaser.os.shared.application.Interruptores;
+import com.renaser.os.shared.application.ProcesosConInterruptor;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,8 +29,10 @@ public class CerrarSemaforoScheduler {
     private static final Logger log = LoggerFactory.getLogger(CerrarSemaforoScheduler.class);
 
     private final CerrarSemaforoUseCase cerrarSemaforo;
+    private final Interruptores interruptores;
 
-    public CerrarSemaforoScheduler(CerrarSemaforoUseCase cerrarSemaforo) {
+    public CerrarSemaforoScheduler(CerrarSemaforoUseCase cerrarSemaforo, Interruptores interruptores) {
+        this.interruptores = interruptores;
         this.cerrarSemaforo = cerrarSemaforo;
     }
 
@@ -37,6 +41,10 @@ public class CerrarSemaforoScheduler {
             lockAtMostFor = "${renaser.scheduling.shedlock.points-cerrar-semaforo.lock-at-most-for:PT20M}",
             lockAtLeastFor = "${renaser.scheduling.shedlock.points-cerrar-semaforo.lock-at-least-for:PT30S}")
     public void cerrarPendientes() {
+        // Spec 002: el cierre semanal pospone; corre cada hora y cierra lo pendiente cuando se prende.
+        if (ProcesosConInterruptor.saltaEsteTurno(interruptores, "semaforo", "points.cerrar-semaforo")) {
+            return;
+        }
         ResultadoDelCierre resultado = cerrarSemaforo.cerrarPendientes();
         if (resultado.fallidos() > 0) {
             log.warn("[points.CerrarSemaforoScheduler] {} participantes fallaron (de {}); se reintentan en la proxima corrida",

@@ -14,5 +14,7 @@ public enum RolEnElChat {
      */
     GUIA_APRENDIZ,
     ADMIN,
-    ALQUIMISTA
+    ALQUIMISTA,
+    /** Soporte TI (D-267). Una app que no conoce la marca la muestra cruda, como pasó con GUIA_APRENDIZ. */
+    SOPORTE_TI
 }

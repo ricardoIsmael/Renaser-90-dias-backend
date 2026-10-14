@@ -2,6 +2,8 @@ package com.renaser.os.chat.infrastructure.adapter.in.scheduler;
 
 import com.renaser.os.chat.application.ports.in.ranking.PublicarPodioDeLaSemanaUseCase;
 import com.renaser.os.chat.application.ports.in.ranking.PublicarPodioDeLaSemanaUseCase.ResultadoDelPodio;
+import com.renaser.os.shared.application.Interruptores;
+import com.renaser.os.shared.application.ProcesosConInterruptor;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,9 +36,12 @@ public class PodioDeLaSemanaScheduler {
     private static final Logger log = LoggerFactory.getLogger(PodioDeLaSemanaScheduler.class);
 
     private final PublicarPodioDeLaSemanaUseCase podio;
+    private final Interruptores interruptores;
 
     public PodioDeLaSemanaScheduler(PublicarPodioDeLaSemanaUseCase podio,
-                                    @Value("${renaser.chat.ranking-semanal.activo:false}") boolean activo) {
+                                    @Value("${renaser.chat.ranking-semanal.activo:false}") boolean activo,
+                                    Interruptores interruptores) {
+        this.interruptores = interruptores;
         this.podio = podio;
         log.info("[chat.podio] podio semanal en el grupo general: {}", activo ? "PRENDIDO" : "apagado");
     }
@@ -46,6 +51,13 @@ public class PodioDeLaSemanaScheduler {
             lockAtMostFor = "${renaser.scheduling.shedlock.chat-podio-de-la-semana.lock-at-most-for:PT20M}",
             lockAtLeastFor = "${renaser.scheduling.shedlock.chat-podio-de-la-semana.lock-at-least-for:PT30S}")
     public void publicar() {
+        // Spec 002: el podio pospone; corre cada hora del lunes, asi que lo intenta la hora siguiente.
+        if (ProcesosConInterruptor.saltaEsteTurno(interruptores, "chat.global", "chat.podio")) {
+            return;
+        }
+        if (ProcesosConInterruptor.saltaEsteTurno(interruptores, "ranking.podio_semanal", "chat.podio")) {
+            return;
+        }
         try {
             ResultadoDelPodio resultado = podio.publicarLaSemanaCerrada();
             log.debug("[chat.podio] semana del {}: {} ({} piezas)", resultado.lunes(), resultado.estado(),

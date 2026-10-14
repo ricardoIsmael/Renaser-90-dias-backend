@@ -1,5 +1,6 @@
 package com.renaser.os.rag.application.services;
 
+import com.renaser.os.rag.application.ports.in.circuito.CircuitoDeLaIa;
 import com.renaser.os.rag.application.ports.in.conversacion.ObtenerHistorialUseCase;
 import com.renaser.os.rag.application.ports.in.conversacion.PreguntarRenasiaUseCase;
 import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAgenteUseCase;
@@ -33,7 +34,10 @@ import com.renaser.os.rag.domain.model.conversacion.FuenteMensaje;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
 import com.renaser.os.rag.domain.model.conversacion.RolMensaje;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasiaId;
+import com.renaser.os.rag.application.services.circuito.InterruptoresDeSer;
+import com.renaser.os.rag.domain.model.circuito.ParteDeLaIa;
 import com.renaser.os.rag.domain.model.memoria.MemoriaDeRenasia;
+import com.renaser.os.shared.domain.FuncionalidadApagadaException;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -197,6 +201,9 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
     private final IdGenerator idGenerator;
     /** D-237: cuantos turnos, como terminaron y cuanto tardaron. Sin datos de la persona. */
     private final RegistrarMetricaDelAcompanantePort metricas;
+    /** Spec 002: lo apagado a mano y el circuito automatico; y como le va al proveedor (D-267). */
+    private final InterruptoresDeSer interruptoresDeSer;
+    private final CircuitoDeLaIa circuito;
 
     public ConversacionRenasiaService(UserSummaryFinder userSummaryFinder,
                                        ControlCuotaRenasiaPort controlCuotaRenasiaPort,
@@ -212,7 +219,8 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
                                        ConsultarMemoriaUseCase memoriaUseCase,
                                        CompactarMemoriaUseCase compactarMemoriaUseCase,
                                        Clock clock, IdGenerator idGenerator,
-                                       RegistrarMetricaDelAcompanantePort metricas) {
+                                       RegistrarMetricaDelAcompanantePort metricas,
+                                       InterruptoresDeSer interruptoresDeSer, CircuitoDeLaIa circuito) {
         this.userSummaryFinder = userSummaryFinder;
         this.controlCuotaRenasiaPort = controlCuotaRenasiaPort;
         this.loadConversacionRenasiaPort = loadConversacionRenasiaPort;
@@ -231,6 +239,8 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         this.clock = clock;
         this.idGenerator = idGenerator;
         this.metricas = metricas;
+        this.interruptoresDeSer = interruptoresDeSer;
+        this.circuito = circuito;
     }
 
     @Override
@@ -239,6 +249,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         PreguntarRenasiaCommand command = pedido.paraQuienResponde();
         requireActivo(command.actorId());
         requireCuotaDisponible(command);
+        requireSerPrendida(command);
         // Antes de cualquier otra cosa del turno: toda propuesta de este turno nace despues.
         Instant inicioDelTurno = clock.now();
 
@@ -268,10 +279,10 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         String apoyo = textoDeApoyo(command);
 
         StringBuilder respuestaCompleta = new StringBuilder();
-        Flux<EventoRenasia> delModelo = sinIdentificadores(chatIAPort.responder(new Consulta(command.agente(),
-                command.actorId(), command.pregunta(), contexto, command.ambito(), historial,
-                herramientasUseCase.disponibles(command.agente()),
-                situacionPara(command), command.canal(), memoriaDe(command))));
+        Flux<EventoRenasia> delModelo = sinIdentificadores(circuito.vigilando(ParteDeLaIa.CHAT,
+                chatIAPort.responder(new Consulta(command.agente(), command.actorId(), command.pregunta(), contexto,
+                        command.ambito(), historial, herramientasUseCase.disponiblesPara(command.agente(),
+                        command.actorId()), situacionPara(command), command.canal(), memoriaDe(command)))));
         return conApoyoAntesDelFin(conPropuestasAntesDelFin(delModelo, command.actorId(), inicioDelTurno), apoyo)
                 .doOnNext(evento -> acumularTexto(evento, respuestaCompleta))
                 .concatMap(evento -> agregarFuentesAntesDeFin(evento, fragmentos))
@@ -360,7 +371,9 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
      */
     private List<FragmentoRelevante> materialDelPrograma(PreguntarRenasiaCommand command) {
         try {
-            return vectorStorePort.buscarSimilares(command.pregunta(), TOP_K, filtroDeContexto(command));
+            FiltroLecciones filtro = filtroDeContexto(command);
+            return circuito.contandoFallas(ParteDeLaIa.CHAT,
+                    () -> vectorStorePort.buscarSimilares(command.pregunta(), TOP_K, filtro));
         } catch (RuntimeException e) {
             log.warn("[rag] no se pudo buscar material del programa; el turno sigue sin el ({})",
                     e.getClass().getSimpleName());
@@ -564,6 +577,21 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         if (!controlCuotaRenasiaPort.intentarConsumir(command.actorId())) {
             metricas.turnoRechazadoPorLimite(command.agente());
             throw new RateLimitExceededException(MENSAJE_LIMITE_DIARIO);
+        }
+    }
+
+    /**
+     * Spec 002 (D-267): ANTES de abrir el stream, para que la app reciba el 503 con el aviso y no un stream con error.
+     * El interceptor ya corto lo apagado a mano y el circuito abierto; aca queda el circuito medio abierto, donde pasa
+     * un solo pedido de prueba (puede ser este). Despues de la cuota, para no regalar la prueba a un pedido que la cuota
+     * iba a rechazar; y si corta, la cuota se devuelve.
+     */
+    private void requireSerPrendida(PreguntarRenasiaCommand command) {
+        try {
+            interruptoresDeSer.exigirChat(command.actorId());
+        } catch (FuncionalidadApagadaException apagada) {
+            controlCuotaRenasiaPort.liberar(command.actorId());
+            throw apagada;
         }
     }
 

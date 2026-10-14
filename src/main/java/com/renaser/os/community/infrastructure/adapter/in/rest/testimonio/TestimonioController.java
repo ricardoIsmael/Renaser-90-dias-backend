@@ -10,6 +10,7 @@ import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -29,6 +30,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/testimonios")
+@Funcionalidad("muro")
 public class TestimonioController {
 
     private final ConsultarTestimoniosUseCase consultarUseCase;

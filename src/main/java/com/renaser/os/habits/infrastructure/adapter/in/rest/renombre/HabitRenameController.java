@@ -8,6 +8,7 @@ import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -22,6 +23,7 @@ import java.util.UUID;
 /** Ruta literal del contrato viejo (D-36): {@code PUT/DELETE /api/v1/habits/{habitId}/rename}. */
 @RestController
 @RequestMapping("/api/v1/habits/{habitId}/rename")
+@Funcionalidad("habitos.ajustes")
 public class HabitRenameController {
 
     private final RenombrarHabitoUseCase renombrarUseCase;

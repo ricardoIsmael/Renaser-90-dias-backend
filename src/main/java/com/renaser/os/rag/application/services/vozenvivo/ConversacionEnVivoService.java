@@ -7,10 +7,13 @@ import com.renaser.os.rag.application.ports.in.voz.ConversarEnVivoUseCase;
 import com.renaser.os.rag.application.ports.out.ia.ConversacionEnVivoPort;
 import com.renaser.os.rag.application.ports.out.ia.ConversacionEnVivoPort.ConversacionEnVivoNoDisponibleException;
 import com.renaser.os.rag.application.ports.out.ia.ConversacionEnVivoPort.SesionEnVivo;
+import com.renaser.os.rag.application.ports.in.circuito.CircuitoDeLaIa;
 import com.renaser.os.rag.application.ports.in.conversacion.ConsultarSituacionDelTurnoUseCase;
 import com.renaser.os.rag.application.ports.out.metricas.RegistrarMetricaDelAcompanantePort;
 import com.renaser.os.rag.application.ports.out.metricas.RegistrarMetricaDelAcompanantePort.AperturaDeVoz;
 import com.renaser.os.rag.application.ports.out.tiempo.ProgramarTareaPeriodicaPort;
+import com.renaser.os.rag.application.services.circuito.InterruptoresDeSer;
+import com.renaser.os.rag.domain.model.circuito.ParteDeLaIa;
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
 import com.renaser.os.rag.domain.model.conversacion.EventoDeVozEnVivo;
 import com.renaser.os.shared.domain.Clock;
@@ -59,6 +62,9 @@ public class ConversacionEnVivoService implements ConversarEnVivoUseCase {
     private final SesionDeVozEnVivo.Colaboradores colaboradores;
     /** D-237: cuantas sesiones se abren y por que no se abren las demas. */
     private final RegistrarMetricaDelAcompanantePort metricas;
+    /** Spec 002 (D-267): {@code ia.voz} apagada (a mano o por el circuito) cierra con 1013, y el circuito cuenta. */
+    private final InterruptoresDeSer interruptoresDeSer;
+    private final CircuitoDeLaIa circuito;
 
     public ConversacionEnVivoService(UserSummaryFinder userSummaryFinder, ConversacionEnVivoPort conversacionPort,
                                      ConsultarSituacionDelTurnoUseCase situacionDelTurno,
@@ -66,8 +72,11 @@ public class ConversacionEnVivoService implements ConversarEnVivoUseCase {
                                      EjecutarHerramientaAgenteUseCase herramientas,
                                      ConsultarPropuestasDelTurnoUseCase propuestas, TurnosDeVozEnVivo turnos,
                                      TiempoDeVozEnVivo tiempo, ProgramarTareaPeriodicaPort programador, Clock clock,
-                                     RegistrarMetricaDelAcompanantePort metricas) {
+                                     RegistrarMetricaDelAcompanantePort metricas, InterruptoresDeSer interruptoresDeSer,
+                                     CircuitoDeLaIa circuito) {
         this.metricas = metricas;
+        this.interruptoresDeSer = interruptoresDeSer;
+        this.circuito = circuito;
         this.userSummaryFinder = userSummaryFinder;
         this.conversacionPort = conversacionPort;
         this.situacionDelTurno = situacionDelTurno;
@@ -109,6 +118,10 @@ public class ConversacionEnVivoService implements ConversarEnVivoUseCase {
         if (restante.isZero()) {
             return rechazar(salida, new EventoDeVozEnVivo.CuotaAgotada(), MotivoDeCierre.CUOTA_AGOTADA);
         }
+        // Spec 002: lo ultimo antes de abrir, porque con el circuito medio abierto puede tomar el turno de prueba.
+        if (!interruptoresDeSer.vozPara(actorId)) {
+            return rechazar(salida, new EventoDeVozEnVivo.Error(MENSAJE_NO_DISPONIBLE), MotivoDeCierre.NO_DISPONIBLE);
+        }
         return abrir(actorId, salida, restante);
     }
 
@@ -120,6 +133,7 @@ public class ConversacionEnVivoService implements ConversarEnVivoUseCase {
             ConversacionEnVivoPort.Apertura apertura = apertura(actorId);
             Instant preparada = colaboradores.clock().now();
             SesionEnVivo abierta = conversacionPort.abrir(apertura, sesion);
+            circuito.anotarExito(ParteDeLaIa.VOZ);
             // E-458: lo que tarda abrir, separado en lo nuestro y lo de Gemini. Solo numeros.
             log.info("[rag] voz en vivo: sesion abierta (preparar {} ms, proveedor {} ms)",
                     Duration.between(desde, preparada).toMillis(),
@@ -128,6 +142,8 @@ public class ConversacionEnVivoService implements ConversarEnVivoUseCase {
             metricas.aperturaDeVozEnVivo(AperturaDeVoz.ABIERTA);
             return sesion;
         } catch (ConversacionEnVivoNoDisponibleException e) {
+            // Spec 002: que Gemini Live no abra (timeout, conexion o cierre durante el setup) es falla del proveedor.
+            circuito.anotarFalla(ParteDeLaIa.VOZ);
             log.warn("No se pudo abrir la voz en vivo: {}", e.getMessage());
             return rechazar(salida, new EventoDeVozEnVivo.Error(MENSAJE_NO_DISPONIBLE), MotivoDeCierre.NO_DISPONIBLE);
         } catch (RuntimeException e) {
@@ -138,7 +154,7 @@ public class ConversacionEnVivoService implements ConversarEnVivoUseCase {
 
     private ConversacionEnVivoPort.Apertura apertura(UserId actorId) {
         return new ConversacionEnVivoPort.Apertura(situacionDelTurno.de(actorId).orElse(null),
-                colaboradores.herramientas().disponibles(AgenteConversacional.COMPANION),
+                colaboradores.herramientas().disponiblesPara(AgenteConversacional.COMPANION, actorId),
                 memoriaUseCase.paraConversar(actorId).orElse(null));
     }
 

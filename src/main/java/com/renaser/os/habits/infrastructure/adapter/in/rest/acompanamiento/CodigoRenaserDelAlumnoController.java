@@ -6,6 +6,7 @@ import com.renaser.os.habits.infrastructure.adapter.in.rest.radar.RadarHistoryPa
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,6 +30,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/mentor/groups/{groupId}/learners/{userId}/radar")
+@Funcionalidad("mentor.mi_grupo")
 public class CodigoRenaserDelAlumnoController {
 
     /**

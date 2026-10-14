@@ -9,6 +9,7 @@ import com.renaser.os.academy.domain.model.curso.CursoId;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,6 +26,7 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/api/v1/cursos")
+@Funcionalidad("cursos")
 public class CursoController {
 
     private final ConsultarMisCursosUseCase misCursosUseCase;

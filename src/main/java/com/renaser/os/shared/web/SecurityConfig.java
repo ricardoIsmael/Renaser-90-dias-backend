@@ -277,6 +277,9 @@ public class SecurityConfig {
                                 "/api/v1/testimonios/**").authenticated()
                         .requestMatchers("/api/v1/audio-therapy/**", "/api/v1/academia/**",
                                 "/api/v1/enforcer-events/**").authenticated()
+                        // Spec 002 (D-267): lo apagado para la sesion y la consola Soporte TI. La consola ademas
+                        // exige OPERATE_PLATFORM (estricto) y su propio token de desbloqueo.
+                        .requestMatchers("/api/v1/funcionalidades/**", "/api/v1/soporte-ti/**").authenticated()
 
                         // ---------------------------------------------------------------------
                         // EL RESTO sigue abierto: son rutas que la app movil todavia no consume.
@@ -308,8 +311,11 @@ public class SecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(origenesPermitidos);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Actor-Id", "X-Auth-Token"));
-        config.setExposedHeaders(List.of("X-Auth-Token"));
+        // X-Consola-Token, X-Reautenticacion e If-None-Match / ETag: la consola Soporte TI y la lectura de
+        // interruptores con 304 desde el build web (spec 002, contrato §6).
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Actor-Id", "X-Auth-Token",
+                "X-Consola-Token", "X-Reautenticacion", "If-None-Match"));
+        config.setExposedHeaders(List.of("X-Auth-Token", "ETag"));
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
 

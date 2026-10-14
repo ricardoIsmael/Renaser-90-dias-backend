@@ -2,6 +2,8 @@ package com.renaser.os.rocks.infrastructure.adapter.in.scheduler;
 
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.renaser.os.rocks.application.ports.in.verdugo.ResolverEventosIgnoradosUseCase;
+import com.renaser.os.shared.application.Interruptores;
+import com.renaser.os.shared.application.ProcesosConInterruptor;
 import com.renaser.os.shared.domain.Clock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -17,8 +19,11 @@ public class VerdugoIgnoradoScheduler {
 
     private final ResolverEventosIgnoradosUseCase resolverUseCase;
     private final Clock clock;
+    private final Interruptores interruptores;
 
-    public VerdugoIgnoradoScheduler(ResolverEventosIgnoradosUseCase resolverUseCase, Clock clock) {
+    public VerdugoIgnoradoScheduler(ResolverEventosIgnoradosUseCase resolverUseCase, Clock clock,
+                                    Interruptores interruptores) {
+        this.interruptores = interruptores;
         this.resolverUseCase = resolverUseCase;
         this.clock = clock;
     }
@@ -30,6 +35,9 @@ public class VerdugoIgnoradoScheduler {
             lockAtMostFor = "${renaser.scheduling.shedlock.rocks-verdugo-ignorado.lock-at-most-for:PT10M}",
             lockAtLeastFor = "${renaser.scheduling.shedlock.rocks-verdugo-ignorado.lock-at-least-for:PT30S}")
     public void resolverPendientesDeHoy() {
+        if (ProcesosConInterruptor.saltaEsteTurno(interruptores, "plan", "rocks.verdugo")) {
+            return;
+        }
         resolverUseCase.resolverPendientesDe(clock.today());
     }
 }

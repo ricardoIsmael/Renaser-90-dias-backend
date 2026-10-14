@@ -12,6 +12,7 @@ import com.renaser.os.community.application.ports.in.categoria.ReordenarCategori
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -33,6 +34,7 @@ import java.util.List;
  * esta API (CM-13, docs/MODULO_COMMUNITY.md sec. 5). */
 @RestController
 @RequestMapping("/api/v1/admin/wall-categories")
+@Funcionalidad("muro")
 public class WallCategoryAdminController {
 
     private final CrearCategoriaMuroUseCase crearUseCase;

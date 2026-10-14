@@ -2,6 +2,8 @@ package com.renaser.os.habits.infrastructure.adapter.in.scheduler;
 
 import com.renaser.os.habits.application.ports.in.registro.GenerarJornadasDelDiaUseCase;
 import com.renaser.os.habits.application.ports.in.registro.GenerarJornadasDelDiaUseCase.ResultadoDelBarrido;
+import com.renaser.os.shared.application.Interruptores;
+import com.renaser.os.shared.application.ProcesosConInterruptor;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,8 +45,10 @@ class GenerarTracksDelDiaScheduler {
     private static final Logger log = LoggerFactory.getLogger(GenerarTracksDelDiaScheduler.class);
 
     private final GenerarJornadasDelDiaUseCase generarJornadasUseCase;
+    private final Interruptores interruptores;
 
-    GenerarTracksDelDiaScheduler(GenerarJornadasDelDiaUseCase generarJornadasUseCase) {
+    GenerarTracksDelDiaScheduler(GenerarJornadasDelDiaUseCase generarJornadasUseCase, Interruptores interruptores) {
+        this.interruptores = interruptores;
         this.generarJornadasUseCase = generarJornadasUseCase;
     }
 
@@ -53,6 +57,9 @@ class GenerarTracksDelDiaScheduler {
             lockAtMostFor = "${renaser.scheduling.shedlock.habits-generar-tracks-del-dia.lock-at-most-for:PT30M}",
             lockAtLeastFor = "${renaser.scheduling.shedlock.habits-generar-tracks-del-dia.lock-at-least-for:PT30S}")
     public void ejecutar() {
+        if (ProcesosConInterruptor.saltaEsteTurno(interruptores, "habitos", "habits.generar-tracks")) {
+            return;
+        }
         ResultadoDelBarrido resultado = generarJornadasUseCase.generarLasQueYaEmpezaron();
         if (resultado.generados() > 0 || resultado.fallidos() > 0) {
             log.info("[habits.GenerarTracksDelDiaScheduler] barrido horario: {} participante(s) con el dia recien "

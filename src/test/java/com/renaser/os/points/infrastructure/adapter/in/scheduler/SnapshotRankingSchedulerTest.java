@@ -29,7 +29,7 @@ class SnapshotRankingSchedulerTest {
         List<Corte> cortes = new ArrayList<>();
         Instant ahora = Instant.parse("2026-10-06T05:05:00Z");
         var scheduler = new SnapshotRankingScheduler((tipo, fecha) -> cortes.add(new Corte(tipo, fecha)),
-                FixedClock.at(ahora));
+                FixedClock.at(ahora), new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido());
 
         scheduler.generarSnapshotsDelDia();
 
@@ -47,11 +47,25 @@ class SnapshotRankingSchedulerTest {
                 throw new IllegalStateException("fallo");
             }
             generados.add(tipo);
-        }, FixedClock.at(Instant.parse("2026-10-06T05:05:00Z")));
+        }, FixedClock.at(Instant.parse("2026-10-06T05:05:00Z")),
+                new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido());
 
         scheduler.generarSnapshotsDelDia();
 
         assertThat(generados).containsExactlyElementsOf(
                 TipoRanking.CON_CORTE_DIARIO.subList(1, TipoRanking.CON_CORTE_DIARIO.size()));
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("spec 002: con habitos.km apagado salta el corte de kilómetros; el general sigue (es dato)")
+    void conLosKilometrosApagadosSaltaSuCorte() {
+        List<TipoRanking> generados = new ArrayList<>();
+        var scheduler = new SnapshotRankingScheduler((tipo, fecha) -> generados.add(tipo),
+                FixedClock.at(Instant.parse("2026-10-06T05:05:00Z")),
+                com.renaser.os.shared.application.InterruptoresDePrueba.conApagadas("habitos.km", "ranking"));
+
+        scheduler.generarSnapshotsDelDia();
+
+        assertThat(generados).doesNotContain(TipoRanking.KILOMETROS).contains(TipoRanking.GENERAL, TipoRanking.GIMNASIO);
     }
 }

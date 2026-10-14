@@ -52,6 +52,7 @@ class ConsultarProgresoParticipanteHabitsPersistenceAdapter implements Consultar
             case MENTOR -> RolParticipante.MENTOR;
             case TRAINEE_GUIDE -> RolParticipante.TRAINEE_GUIDE;
             case TRAINEE -> RolParticipante.TRAINEE;
+            case IT_SUPPORT -> RolParticipante.IT_SUPPORT;
         };
     }
 }

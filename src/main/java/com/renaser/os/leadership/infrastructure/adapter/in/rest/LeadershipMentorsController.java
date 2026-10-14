@@ -8,6 +8,7 @@ import com.renaser.os.leadership.application.ports.in.RegistrarObservacionUseCas
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -33,6 +34,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/leadership/mentors")
+@Funcionalidad("lider")
 public class LeadershipMentorsController {
 
     private static final String GUARD = "AccesoDeLiderazgo: MENTOR_LEAD/ADMIN/ALCHEMIST activo; el permiso no alcanza (A-1)";

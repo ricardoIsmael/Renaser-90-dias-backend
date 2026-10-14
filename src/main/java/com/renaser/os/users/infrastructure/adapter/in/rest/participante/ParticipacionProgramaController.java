@@ -3,6 +3,7 @@ package com.renaser.os.users.infrastructure.adapter.in.rest.participante;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import com.renaser.os.users.application.ports.in.participante.ActivateProgramUseCase;
 import com.renaser.os.users.application.ports.in.participante.ActivateProgramUseCase.ActivateProgramCommand;
@@ -47,6 +48,7 @@ import java.util.UUID;
  * — ver nota de AccountRequestController.
  */
 @RestController
+@Funcionalidad("dia_uno")
 public class ParticipacionProgramaController {
 
     private final ActivateSelfTrackingUseCase activateUseCase;
@@ -97,6 +99,7 @@ public class ParticipacionProgramaController {
     /** Administrativo (ADMIN/ALCHEMIST) — "nadie activa/desactiva el programa de otro
      * salvo administrativo" (CLAUDE.MD) se extiende a la reasignacion de mentor. */
     @RequiresPermission(Permission.ASSIGN_MENTOR)
+    @Funcionalidad("admin.grupos")
     @PutMapping("/api/v1/participants/{traineeId}/mentor")
     public ResponseEntity<Void> assignMentor(@PathVariable UUID traineeId,
                                               @ActorAutenticado UserId actor,
@@ -113,6 +116,7 @@ public class ParticipacionProgramaController {
      * `usuarios` — mismo criterio que el resto de este controller.
      */
     @RequiresPermission(value = Permission.USE_APP, scope = "self por construccion: el endpoint no recibe traineeId")
+    @Funcionalidad("perfil")
     @PatchMapping("/api/v1/users/me/trainee-profile")
     public TraineeProfileResponse updateTraineeProfile(@ActorAutenticado UserId actor,
                                                          @RequestBody UpdateTraineeProfileRequest request) {

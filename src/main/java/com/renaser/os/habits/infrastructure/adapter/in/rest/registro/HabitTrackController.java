@@ -12,6 +12,7 @@ import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,6 +31,7 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/api/v1/habit-tracks")
+@Funcionalidad("habitos")
 public class HabitTrackController {
 
     private final ConsultarTracksDelDiaConCatalogoUseCase consultarTracksDelDiaUseCase;
@@ -81,6 +83,7 @@ public class HabitTrackController {
      * El TEXTO no pasa por aca — va directo al POST de abajo con `contenidoTexto`.
      */
     @RequiresPermission(value = Permission.USE_APP, scope = "dueno del registro de habito")
+    @Funcionalidad("habitos.foto")
     @PostMapping("/{id}/evidence/upload-url")
     public UrlEvidenciaRegistroResponse urlDeSubidaEvidencia(@ActorAutenticado UserId actor,
                                                                @PathVariable String id,
@@ -93,6 +96,7 @@ public class HabitTrackController {
 
     /** D-H6: sube la evidencia de un registro diario, delegando en `evidence.api.RegistrarEvidenciaPort`. */
     @RequiresPermission(value = Permission.USE_APP, scope = "dueno del registro de habito")
+    @Funcionalidad("habitos.foto")
     @PostMapping("/{id}/evidence")
     public EvidenciaRegistroResponse subirEvidencia(@ActorAutenticado UserId actor,
                                                       @PathVariable String id,

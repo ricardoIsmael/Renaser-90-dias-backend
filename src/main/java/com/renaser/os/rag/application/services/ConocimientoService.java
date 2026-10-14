@@ -1,10 +1,12 @@
 package com.renaser.os.rag.application.services;
 
+import com.renaser.os.rag.application.ports.in.circuito.CircuitoDeLaIa;
 import com.renaser.os.rag.application.ports.in.conocimiento.IndexarConocimientoUseCase;
 import com.renaser.os.rag.application.ports.out.conocimiento.SaveChunkConocimientoPort;
 import com.renaser.os.rag.application.ports.out.ia.EmbeddingPort;
 import com.renaser.os.rag.domain.model.conocimiento.ChunkConocimiento;
 import com.renaser.os.rag.domain.model.conocimiento.ChunkConocimientoId;
+import com.renaser.os.rag.domain.model.circuito.ParteDeLaIa;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -26,9 +28,13 @@ public class ConocimientoService implements IndexarConocimientoUseCase {
     private final UserSummaryFinder userSummaryFinder;
     private final Clock clock;
     private final IdGenerator idGenerator;
+    /** Spec 002 (D-267): una falla del proveedor de embeddings cuenta para el circuito del chat. */
+    private final CircuitoDeLaIa circuito;
 
     public ConocimientoService(SaveChunkConocimientoPort saveChunkConocimientoPort, EmbeddingPort embeddingPort,
-                                UserSummaryFinder userSummaryFinder, Clock clock, IdGenerator idGenerator) {
+                                UserSummaryFinder userSummaryFinder, Clock clock, IdGenerator idGenerator,
+                                CircuitoDeLaIa circuito) {
+        this.circuito = circuito;
         this.saveChunkConocimientoPort = saveChunkConocimientoPort;
         this.embeddingPort = embeddingPort;
         this.userSummaryFinder = userSummaryFinder;
@@ -47,7 +53,7 @@ public class ConocimientoService implements IndexarConocimientoUseCase {
     @Override
     public ChunkIndexado indexar(IndexarConocimientoCommand command) {
         requireAdmin(command.actorId());
-        var embedding = embeddingPort.generar(command.contenido());
+        var embedding = circuito.contandoFallas(ParteDeLaIa.CHAT, () -> embeddingPort.generar(command.contenido()));
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
         var chunk = ChunkConocimiento.indexar(ChunkConocimientoId.of(idGenerator.newId()), command.tipoFuente(),
                 command.clase(), command.documentoId(), command.leccionId(), command.contenido(), embedding,

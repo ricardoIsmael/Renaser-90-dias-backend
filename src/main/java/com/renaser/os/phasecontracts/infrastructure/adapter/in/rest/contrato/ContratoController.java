@@ -9,6 +9,7 @@ import com.renaser.os.phasecontracts.application.ports.in.contrato.ObtenerUrlFir
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +23,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/phase-contracts")
+@Funcionalidad("onboarding")
 public class ContratoController {
 
     private final ConsultarContratosPendientesUseCase pendientesUseCase;

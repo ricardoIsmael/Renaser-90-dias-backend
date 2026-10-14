@@ -4,6 +4,7 @@ import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAg
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort;
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort.HabitoDelDia;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort;
+import com.renaser.os.rag.application.services.circuito.InterruptoresDeSer;
 import com.renaser.os.rag.application.services.herramientas.LoQueLeFaltaHoy;
 import com.renaser.os.rag.application.services.herramientas.CompletacionDeHabito;
 import com.renaser.os.rag.application.services.herramientas.HerramientaAgente;
@@ -49,6 +50,12 @@ public class HerramientasAgenteService implements EjecutarHerramientaAgenteUseCa
 
     private static final Logger log = LoggerFactory.getLogger(HerramientasAgenteService.class);
 
+    /** Las herramientas que dejan una propuesta o una tarjeta se llaman todas asi (spec 002, D-267). */
+    static final String PREFIJO_DE_LAS_QUE_PROPONEN = "proponer_";
+    /** Lo que recibe el modelo si igual pide una con {@code ia.propuestas} apagada (un turno abierto antes). */
+    static final String PROPUESTAS_EN_PAUSA = "Las propuestas de SER estan en pausa: no se creo ninguna. Dile a la "
+            + "persona que por ahora lo haga desde la app.";
+
     private final ConsultarAgendaHabitosPort agendaHabitosPort;
     /** Las herramientas que viven en su propia clase (2026-09-23). Ver {@link HerramientaAgente}. */
     private final List<HerramientaAgente> adicionales;
@@ -72,11 +79,14 @@ public class HerramientasAgenteService implements EjecutarHerramientaAgenteUseCa
      * subir evidencia, en vez de decir que esta pausada.
      */
     private final GestionarPlanDeHabitosPort planPort;
+    /** Spec 002: con {@code ia.propuestas} apagada para la persona, SER no propone (D-267). */
+    private final InterruptoresDeSer interruptoresDeSer;
 
     public HerramientasAgenteService(ConsultarAgendaHabitosPort agendaHabitosPort,
                                      List<HerramientaAgente> adicionales,
                                      PropuestaDeMarcarHabito propuestaDeMarcar, Clock clock,
-                                     GestionarPlanDeHabitosPort planPort) {
+                                     GestionarPlanDeHabitosPort planPort, InterruptoresDeSer interruptoresDeSer) {
+        this.interruptoresDeSer = interruptoresDeSer;
         this.agendaHabitosPort = agendaHabitosPort;
         this.clock = clock;
         this.planPort = planPort;
@@ -94,6 +104,25 @@ public class HerramientasAgenteService implements EjecutarHerramientaAgenteUseCa
                 .toList();
     }
 
+    /**
+     * Spec 002 (D-267): con {@code ia.propuestas} apagada para esta persona, al modelo no se le ofrecen las que
+     * proponen: no puede dejar una propuesta ni una tarjeta de camara. Las de consulta siguen.
+     */
+    @Override
+    public List<DefinicionHerramienta> disponiblesPara(AgenteConversacional agente, UserId actorId) {
+        List<DefinicionHerramienta> todas = disponibles(agente);
+        if (todas.isEmpty() || interruptoresDeSer.propuestasPara(actorId)) {
+            return todas;
+        }
+        return todas.stream().filter(definicion -> !propone(definicion.nombre())).toList();
+    }
+
+    /** {@code marcar_habito_completado} propone solo con la confirmacion con botones prendida (D-153). */
+    private boolean propone(String nombre) {
+        return nombre.startsWith(PREFIJO_DE_LAS_QUE_PROPONEN)
+                || (CatalogoHerramientasAgente.MARCAR_HABITO_COMPLETADO.equals(nombre) && propuestaDeMarcar.activa());
+    }
+
     /** Con el flag prendido, {@code marcar_habito_completado} se describe como lo que hace: proponer. */
     private List<DefinicionHerramienta> delCatalogo() {
         return propuestaDeMarcar.activa() ? CatalogoHerramientasAgente.definicionesConConfirmacion()
@@ -102,6 +131,9 @@ public class HerramientasAgenteService implements EjecutarHerramientaAgenteUseCa
 
     @Override
     public ResultadoHerramienta ejecutar(UserId actorId, InvocacionHerramienta invocacion) {
+        if (propone(invocacion.nombre()) && !interruptoresDeSer.propuestasPara(actorId)) {
+            return ResultadoHerramienta.fallo(PROPUESTAS_EN_PAUSA);
+        }
         Optional<HerramientaAgente> adicional = adicionalLlamada(invocacion.nombre());
         Optional<DefinicionHerramienta> definicion = adicional.map(HerramientaAgente::definicion)
                 .or(() -> CatalogoHerramientasAgente.porNombre(invocacion.nombre()));

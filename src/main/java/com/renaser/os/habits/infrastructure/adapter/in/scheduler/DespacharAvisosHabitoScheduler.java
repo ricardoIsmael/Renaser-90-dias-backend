@@ -2,6 +2,8 @@ package com.renaser.os.habits.infrastructure.adapter.in.scheduler;
 
 import com.renaser.os.habits.application.ports.in.aviso.DespacharAvisosHabitoUseCase;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
+import com.renaser.os.shared.application.Interruptores;
+import com.renaser.os.shared.application.ProcesosConInterruptor;
 import com.renaser.os.shared.domain.UserId;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
@@ -51,9 +53,12 @@ class DespacharAvisosHabitoScheduler {
 
     private final DespacharAvisosHabitoUseCase despacharAvisosUseCase;
     private final ConsultarProgresoParticipanteHabitsPort progresoPort;
+    private final Interruptores interruptores;
 
     DespacharAvisosHabitoScheduler(DespacharAvisosHabitoUseCase despacharAvisosUseCase,
-                                    ConsultarProgresoParticipanteHabitsPort progresoPort) {
+                                    ConsultarProgresoParticipanteHabitsPort progresoPort,
+                                   Interruptores interruptores) {
+        this.interruptores = interruptores;
         this.despacharAvisosUseCase = despacharAvisosUseCase;
         this.progresoPort = progresoPort;
     }
@@ -63,6 +68,9 @@ class DespacharAvisosHabitoScheduler {
             lockAtMostFor = "${renaser.scheduling.shedlock.habits-despachar-avisos.lock-at-most-for:PT4M}",
             lockAtLeastFor = "${renaser.scheduling.shedlock.habits-despachar-avisos.lock-at-least-for:PT10S}")
     public void ejecutar() {
+        if (ProcesosConInterruptor.saltaEsteTurno(interruptores, "habitos", "habits.avisos")) {
+            return;
+        }
         List<UserId> participantes = progresoPort.participantesInscritosActivos();
         int avisos = 0;
         int fallidos = 0;

@@ -1,7 +1,9 @@
 package com.renaser.os.chat.infrastructure.adapter.in.websocket;
 
 import com.renaser.os.chat.application.ports.in.conversacion.AutorizarAccesoAConversacionUseCase;
+import com.renaser.os.chat.application.ports.in.conversacion.ExigirChatPrendidoUseCase;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
+import com.renaser.os.shared.domain.FuncionalidadApagadaException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummaryFinder;
@@ -47,10 +49,12 @@ class SubscripcionAutorizadaInterceptor implements ChannelInterceptor {
     private final UserSummaryFinder userSummaryFinder;
     private final SesionViva sesionViva;
     private final AutorizacionViva autorizacionViva;
+    private final ExigirChatPrendidoUseCase chatPrendido;
 
     SubscripcionAutorizadaInterceptor(AutorizarAccesoAConversacionUseCase autorizarAcceso,
                                       UserSummaryFinder userSummaryFinder, SesionViva sesionViva,
-                                      AutorizacionViva autorizacionViva) {
+                                      AutorizacionViva autorizacionViva, ExigirChatPrendidoUseCase chatPrendido) {
+        this.chatPrendido = chatPrendido;
         this.autorizarAcceso = autorizarAcceso;
         this.userSummaryFinder = userSummaryFinder;
         this.sesionViva = sesionViva;
@@ -92,11 +96,24 @@ class SubscripcionAutorizadaInterceptor implements ChannelInterceptor {
                 .orElseThrow(() -> new org.springframework.messaging.MessagingException(
                         "Destino de suscripcion no permitido"));
         requireParticipanteActivo(actorId, conversacionId);
+        requireChatPrendido(actorId, conversacionId);
         // Recien aca, con la suscripcion ya autorizada: el canal de SALIDA necesita saber de quien
         // es este socket para poder volver a preguntar en cada entrega, y este frame es el ultimo
         // que trae los atributos del handshake — el de entrega ya no los trae.
         autorizacionViva.anotarActorDelSocket(socketId, actorId);
         return message;
+    }
+
+    /**
+     * Spec 002 (plan.md D2): no se abre una suscripción en vivo a una conversación cuya funcionalidad está apagada para
+     * esa persona ({@code chat}, o la del tipo: grupos, global, soporte, directos). El mensaje del rechazo es el aviso.
+     */
+    private void requireChatPrendido(UserId actorId, ConversacionId conversacionId) {
+        try {
+            chatPrendido.exigir(conversacionId, actorId);
+        } catch (FuncionalidadApagadaException apagada) {
+            throw new org.springframework.messaging.MessagingException(apagada.getMessage());
+        }
     }
 
     private UserId actorDeLaSesion(@Nullable Map<String, Object> sessionAttributes) {

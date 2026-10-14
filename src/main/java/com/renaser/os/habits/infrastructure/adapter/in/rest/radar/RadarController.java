@@ -7,6 +7,7 @@ import com.renaser.os.habits.application.ports.in.radar.RegistrarCheckInRadarUse
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -34,6 +35,7 @@ import java.time.Instant;
  */
 @RestController
 @RequestMapping("/api/v1/radar")
+@Funcionalidad("radar")
 public class RadarController {
 
     /** radar.ts:343 (`RADAR_HISTORY_PAGE_SIZE`). */

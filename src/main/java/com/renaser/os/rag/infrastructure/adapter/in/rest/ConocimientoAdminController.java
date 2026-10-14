@@ -5,6 +5,7 @@ import com.renaser.os.rag.application.ports.in.conocimiento.IndexarConocimientoU
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 /** Solo ADMIN/ALCHEMIST (D-46) — gateado dentro de {@code ConocimientoService}, no acá (CLAUDE.MD sec. 5.4.6). */
 @RestController
 @RequestMapping("/api/v1/admin/conocimiento")
+@Funcionalidad("ia")
 public class ConocimientoAdminController {
 
     private final IndexarConocimientoUseCase indexarConocimientoUseCase;

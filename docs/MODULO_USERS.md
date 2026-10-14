@@ -12,9 +12,10 @@ Las decisiones de acá usan la misma numeración `D-N` que `MODULOS_A_AVANZAR.md
 
 Todo módulo del sistema pregunta *"¿quién es este usuario y qué puede hacer?"*. `users` es la fuente de verdad de identidad, rol y estado. Nada se puede construir encima de algo que todavía no existe.
 
-## 2. Los 6 roles
+## 2. Los 7 roles
 
 > **Corregido 2026-10-13 (D-265).** Eran cinco. Se sumó el Guía de aprendiz.
+> **Corregido 2026-10-13 (D-267).** Eran seis. Se sumó Soporte TI, que no se asigna desde la app.
 
 | Nombre de negocio | Constante | Qué es |
 |---|---|---|
@@ -24,6 +25,7 @@ Todo módulo del sistema pregunta *"¿quién es este usuario y qué puede hacer?
 | Líder de Mentores | `MENTOR_LEAD` | Coordina mentores |
 | Administrador / Operación | `ADMIN` | Panel de gestión: aprueba cuentas, asigna mentores |
 | Alquimista | `ALCHEMIST` | Máximo nivel |
+| Soporte TI | `IT_SUPPORT` (`SOPORTE_TI` en la base, V100) | La cuenta del dueño-programador: opera la plataforma (interruptores, auditoría, circuito de la IA) desde su consola (spec 002). **Se asigna solo con `scripts/soporte-ti/asignar.sql`**: invitar o cambiar el rol a `IT_SUPPORT` es 400, cambiar el rol de esa cuenta es 403, y Administración no la suspende ni la elimina. `can()` le da todo y el permiso exclusivo `OPERATE_PLATFORM`; no actúa como mentor ni maneja roles (D-267) |
 
 `UserRole` es un enum (D-13): conjunto cerrado, chico y estable, cada uno atado a una clase de perfil distinta. La matriz fina de **permisos** (`Permission` enum, `caller.can(APPROVE_ACCOUNT_REQUEST)` en vez de `if (role==ADMIN)`) sigue sin construirse — bloqueada por R-2.
 

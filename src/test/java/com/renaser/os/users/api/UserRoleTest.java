@@ -136,6 +136,9 @@ class UserRoleTest {
             + "el guía de aprendiz, igual que el mentor (D-265)")
     void rolesSinMatrizDefinidaFallanAbiertoParaCualquierPermiso(UserRole rol) {
         for (Permission permiso : Permission.values()) {
+            if (permiso.exclusivoDeSoporteTi()) {
+                continue; // D-267: lo exclusivo de Soporte TI no pasa por el falla-abierto (prueba aparte, abajo)
+            }
             assertThat(rol.can(permiso))
                     .as("%s deberia pasar %s porque su matriz todavia no esta definida (hueco temporal A-1)",
                             rol, permiso)
@@ -160,6 +163,29 @@ class UserRoleTest {
         assertThat(EnumSet.allOf(UserRole.class).stream().filter(UserRole::actuaComoMentor))
                 .containsExactlyInAnyOrder(UserRole.MENTOR, UserRole.TRAINEE_GUIDE);
         assertThat(UserRole.ROLES_QUE_ACTUAN_COMO_MENTOR).containsExactlyInAnyOrder(UserRole.MENTOR, UserRole.TRAINEE_GUIDE);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = UserRole.class, names = "IT_SUPPORT", mode = EnumSource.Mode.EXCLUDE)
+    @DisplayName("D-267: OPERATE_PLATFORM es solo de Soporte TI — ni ADMIN ni ALCHEMIST, aunque su matriz falle abierta")
+    void operarLaPlataformaEsExclusivoDeSoporteTi(UserRole rol) {
+        assertThat(rol.can(Permission.OPERATE_PLATFORM)).isFalse();
+    }
+
+    @Test
+    @DisplayName("D-267: Soporte TI tiene todos los permisos, incluida la consola; no acompaña grupos ni maneja roles")
+    void soporteTiTieneTodoMenosAcompanarYManejarRoles() {
+        for (Permission permiso : Permission.values()) {
+            assertThat(UserRole.IT_SUPPORT.can(permiso)).as("IT_SUPPORT debería pasar %s", permiso).isTrue();
+        }
+        assertThat(UserRole.IT_SUPPORT.actuaComoMentor()).isFalse();
+        assertThat(UserRole.IT_SUPPORT.canManageRoles())
+                .as("canManageRoles es también «está en los chats de soporte»: Soporte TI no lee chats privados")
+                .isFalse();
+        assertThat(UserRole.IT_SUPPORT.nombreVisible()).isEqualTo("Soporte TI");
+        assertThat(Permission.OPERATE_PLATFORM.exclusivoDeSoporteTi()).isTrue();
+        assertThat(java.util.Arrays.stream(Permission.values()).filter(Permission::exclusivoDeSoporteTi))
+                .containsExactly(Permission.OPERATE_PLATFORM);
     }
 
     @Test

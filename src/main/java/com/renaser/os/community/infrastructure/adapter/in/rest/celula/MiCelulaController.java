@@ -4,6 +4,7 @@ import com.renaser.os.community.application.ports.in.celula.ConsultarMiCelulaUse
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,6 +24,7 @@ import java.util.Map;
  * {@code /me/cell} a ese mismo criterio (sin celula es un estado valido, no un fallo). */
 @RestController
 @RequestMapping("/api/v1/me/cell")
+@Funcionalidad("chat.grupos")
 public class MiCelulaController {
 
     private final ConsultarMiCelulaUseCase consultarUseCase;

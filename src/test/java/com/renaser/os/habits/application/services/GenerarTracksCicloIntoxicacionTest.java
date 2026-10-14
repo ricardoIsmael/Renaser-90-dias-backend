@@ -101,7 +101,7 @@ class GenerarTracksCicloIntoxicacionTest {
                 loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder, loadDesbloqueoPort, events,
                 TRES_AM_UTC, idGenerator,
                 List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()), CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort),
-                ids -> Set.copyOf(ids));
+                ids -> Set.copyOf(ids), new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido());
         lenient().when(idGenerator.newId()).thenAnswer(inv -> UUID.randomUUID());
         lenient().when(saveRegistroPort.insertarSiNoExiste(any())).thenReturn(true);
         when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(jugoVerde, postDiario, diaSinCelular));

@@ -1,5 +1,8 @@
 package com.renaser.os.rag.application.services;
 
+import com.renaser.os.rag.application.services.circuito.CircuitoDePrueba;
+import com.renaser.os.shared.domain.ProveedorIaNoDisponibleException;
+
 import com.renaser.os.rag.application.ports.in.conocimiento.IndexarConocimientoUseCase.IndexarConocimientoCommand;
 import com.renaser.os.rag.application.ports.out.conocimiento.SaveChunkConocimientoPort;
 import com.renaser.os.rag.application.ports.out.ia.EmbeddingPort;
@@ -51,13 +54,14 @@ class ConocimientoServiceTest {
     private IdGenerator idGenerator;
 
     private ConocimientoService service;
+    private final CircuitoDePrueba circuito = CircuitoDePrueba.cerrado();
     private UserId adminId;
     private UserId traineeId;
 
     @BeforeEach
     void setUp() {
         service = new ConocimientoService(saveChunkConocimientoPort, embeddingPort, userSummaryFinder, CLOCK,
-                idGenerator);
+                idGenerator, circuito);
         adminId = UserId.of(UUID.randomUUID());
         traineeId = UserId.of(UUID.randomUUID());
         // lenient: no todos los casos llegan a generar un id (varios cortan antes, en autorizacion).
@@ -81,6 +85,19 @@ class ConocimientoServiceTest {
 
         assertThat(resultado.id()).isNotNull();
         verify(saveChunkConocimientoPort).save(any());
+    }
+
+    /** Spec 002 (D-267): el proveedor de embeddings que no responde cuenta para el circuito del chat; el 503 sigue. */
+    @Test
+    void unaFallaDelProveedorDeEmbeddingsCuentaParaElCircuito() {
+        when(userSummaryFinder.findById(adminId)).thenReturn(Optional.of(
+                new UserSummary(adminId, "Admin", null, UserRole.ADMIN, UserStatus.ACTIVE)));
+        when(embeddingPort.generar("contenido"))
+                .thenThrow(new ProveedorIaNoDisponibleException("saturado", java.time.Duration.ofSeconds(10)));
+        var comando = new IndexarConocimientoCommand(adminId, "LECCION", null, null, null, "contenido", Map.of());
+
+        assertThatThrownBy(() -> service.indexar(comando)).isInstanceOf(ProveedorIaNoDisponibleException.class);
+        assertThat(circuito.anotado).containsExactly("falla ia.chat");
     }
 
     @Test

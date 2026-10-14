@@ -12,5 +12,7 @@ public enum RolUsuarioJpa {
     GUIA_APRENDIZ,
     LIDER_MENTORES,
     ADMIN,
-    ALQUIMISTA
+    ALQUIMISTA,
+    /** V100 (D-267): Soporte TI. */
+    SOPORTE_TI
 }

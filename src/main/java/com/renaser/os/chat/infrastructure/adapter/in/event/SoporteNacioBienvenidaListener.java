@@ -2,6 +2,8 @@ package com.renaser.os.chat.infrastructure.adapter.in.event;
 
 import com.renaser.os.chat.application.ports.in.conversacion.DarBienvenidaEnSoporteUseCase;
 import com.renaser.os.chat.domain.model.conversacion.SoporteDeAprendizNacioEvent;
+import com.renaser.os.shared.application.Interruptores;
+import com.renaser.os.shared.application.ProcesosConInterruptor;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -27,14 +29,21 @@ import org.springframework.transaction.event.TransactionalEventListener;
 class SoporteNacioBienvenidaListener {
 
     private final DarBienvenidaEnSoporteUseCase darBienvenida;
+    private final Interruptores interruptores;
 
-    SoporteNacioBienvenidaListener(DarBienvenidaEnSoporteUseCase darBienvenida) {
+    SoporteNacioBienvenidaListener(DarBienvenidaEnSoporteUseCase darBienvenida, Interruptores interruptores) {
+        this.interruptores = interruptores;
         this.darBienvenida = darBienvenida;
     }
 
     @Async
     @TransactionalEventListener(fallbackExecution = true)
     void on(SoporteDeAprendizNacioEvent event) {
+        // Spec 002: con la bienvenida apagada, salta; con el chat apagado, se pospone (el outbox la reentrega).
+        if (ProcesosConInterruptor.saltaEsteTurno(interruptores, "admin.bienvenida", "chat.bienvenida-en-soporte")) {
+            return;
+        }
+        ProcesosConInterruptor.posponerSiEstaApagada(interruptores, "chat", "chat.bienvenida-en-soporte");
         darBienvenida.darBienvenida(event.soporteId(), event.aprendizId());
     }
 }

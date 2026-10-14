@@ -10,6 +10,7 @@ import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -24,6 +25,7 @@ import java.util.UUID;
  * header temporal `X-Actor-Id` (D-29). */
 @RestController
 @RequestMapping("/api/v1/habit-tracks/{id}/santuario")
+@Funcionalidad("habitos")
 public class SantuarioController {
 
     private final IniciarSesionBloqueoUseCase iniciarUseCase;

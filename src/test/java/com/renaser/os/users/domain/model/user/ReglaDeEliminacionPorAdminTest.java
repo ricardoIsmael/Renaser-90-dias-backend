@@ -91,4 +91,14 @@ class ReglaDeEliminacionPorAdminTest {
         assertThatThrownBy(() -> ReglaDeEliminacionPorAdmin.exigirCorreoConfirmado(aprendiz, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @ParameterizedTest
+    @EnumSource(value = UserRole.class, names = {"ADMIN", "ALCHEMIST"})
+    @DisplayName("D-267: ni ADMIN ni ALQUIMISTA eliminan la cuenta Soporte TI")
+    void nadieEliminaLaCuentaSoporteTi(UserRole rolDelActor) {
+        User actor = cuenta(rolDelActor, UserStatus.ACTIVE);
+
+        assertThatThrownBy(() -> ReglaDeEliminacionPorAdmin.exigirPermitida(actor, cuenta(UserRole.IT_SUPPORT,
+                UserStatus.ACTIVE))).isInstanceOf(NotAuthorizedException.class).hasMessageContaining("Soporte TI");
+    }
 }

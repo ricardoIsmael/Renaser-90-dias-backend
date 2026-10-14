@@ -2,6 +2,7 @@ package com.renaser.os.community.infrastructure.adapter.in.rest.categoria;
 
 import com.renaser.os.community.application.ports.in.categoria.ConsultarCategoriasMuroUseCase;
 import com.renaser.os.shared.domain.Permission;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -15,6 +16,7 @@ import java.util.Map;
  * {@link WallCategoryAdminController}. */
 @RestController
 @RequestMapping("/api/v1/wall/categories")
+@Funcionalidad("muro")
 public class WallCategoryController {
 
     private final ConsultarCategoriasMuroUseCase consultarUseCase;

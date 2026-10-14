@@ -1,5 +1,9 @@
 package com.renaser.os.rag.infrastructure.adapter.in.event;
 
+import static org.mockito.Mockito.verifyNoInteractions;
+
+import com.renaser.os.shared.application.InterruptoresDePrueba;
+
 import com.renaser.os.habits.api.AvisoHabitoDebidoEvent;
 import com.renaser.os.rag.application.ports.in.aviso.DejarAvisoHabitoEnChatUseCase;
 import com.renaser.os.rag.application.ports.in.aviso.DejarAvisoHabitoEnChatUseCase.AvisoHabitoEnChatCommand;
@@ -32,11 +36,21 @@ class AvisoHabitoEnChatListenerTest {
         var event = new AvisoHabitoDebidoEvent(UUID.randomUUID(), aprendiz, "Meditar", "POR_VENCER", 30, 10, clave,
                 false, null, calculadoEn, UUID.randomUUID(), "BODY");
 
-        new AvisoHabitoEnChatListener(useCase).on(event);
+        new AvisoHabitoEnChatListener(useCase, InterruptoresDePrueba.conApagadas()).on(event);
 
         ArgumentCaptor<AvisoHabitoEnChatCommand> captor = ArgumentCaptor.forClass(AvisoHabitoEnChatCommand.class);
         verify(useCase).dejarEnElChat(captor.capture());
         assertThat(captor.getValue()).isEqualTo(
                 new AvisoHabitoEnChatCommand(aprendiz, "Meditar", "POR_VENCER", 30, 10, clave, calculadoEn));
+    }
+
+    @Test
+    void conSerApagadaElAvisoSalta() {
+        var event = new AvisoHabitoDebidoEvent(UUID.randomUUID(), UserId.of(UUID.randomUUID()), "Meditar", "POR_VENCER",
+                30, 10, UUID.randomUUID(), false, null, Instant.parse("2026-09-23T01:59:30Z"), UUID.randomUUID(), "BODY");
+
+        new AvisoHabitoEnChatListener(useCase, InterruptoresDePrueba.conApagadas("ia")).on(event);
+
+        verifyNoInteractions(useCase);
     }
 }

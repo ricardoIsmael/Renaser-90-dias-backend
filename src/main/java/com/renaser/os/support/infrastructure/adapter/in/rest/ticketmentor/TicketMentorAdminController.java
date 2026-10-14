@@ -3,6 +3,7 @@ package com.renaser.os.support.infrastructure.adapter.in.rest.ticketmentor;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import com.renaser.os.support.application.ports.in.ticketmentor.ListarTicketsMentorUseCase;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,6 +15,7 @@ import java.time.Instant;
 
 @RestController
 @RequestMapping("/api/v1/admin/tickets")
+@Funcionalidad("tickets")
 public class TicketMentorAdminController {
 
     private final ListarTicketsMentorUseCase listarUseCase;

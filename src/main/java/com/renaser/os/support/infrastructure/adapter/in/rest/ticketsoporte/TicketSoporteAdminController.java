@@ -3,6 +3,7 @@ package com.renaser.os.support.infrastructure.adapter.in.rest.ticketsoporte;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import com.renaser.os.support.application.ports.in.ticketsoporte.ListarTicketsSoporteUseCase;
 import com.renaser.os.support.application.ports.in.ticketsoporte.ResolverTicketSoporteUseCase;
@@ -22,6 +23,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/admin/support-tickets")
+@Funcionalidad("admin")
 public class TicketSoporteAdminController {
 
     private final ListarTicketsSoporteUseCase listarUseCase;

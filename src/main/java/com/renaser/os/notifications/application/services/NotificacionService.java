@@ -15,6 +15,8 @@ import com.renaser.os.notifications.application.ports.out.tokenpush.LoadTokenPus
 import com.renaser.os.notifications.domain.model.notificacion.EntregaPush;
 import com.renaser.os.notifications.domain.model.notificacion.Notificacion;
 import com.renaser.os.notifications.domain.model.preferencia.PreferenciaNotificacion;
+import com.renaser.os.shared.application.Interruptores;
+import com.renaser.os.shared.application.ProcesosConInterruptor;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import org.slf4j.Logger;
@@ -39,6 +41,7 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
         MarcarLeidaUseCase, MarcarTodasLeidasUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(NotificacionService.class);
+    static final String CLAVE_NOTIFICACIONES = "notificaciones";
 
     private final LoadNotificacionPort loadNotificacionPort;
     private final SaveNotificacionPort saveNotificacionPort;
@@ -59,12 +62,15 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
      * se deshace ESA transaccion chica.
      */
     private final TransactionTemplate transaccionPropia;
+    /** Spec 002: con {@code notificaciones} apagada, el despacho se pospone (catálogo). */
+    private final Interruptores interruptores;
 
     public NotificacionService(LoadNotificacionPort loadNotificacionPort, SaveNotificacionPort saveNotificacionPort,
                                 LoadPreferenciasPort loadPreferenciasPort, LoadTokenPushPort loadTokenPushPort,
                                 PushPort pushPort, DesactivarTokenPushPort desactivarTokenPushPort,
                                 ActorNotificacionesGuard actorGuard, Clock clock,
-                                PlatformTransactionManager transactionManager) {
+                                PlatformTransactionManager transactionManager, Interruptores interruptores) {
+        this.interruptores = interruptores;
         this.loadNotificacionPort = loadNotificacionPort;
         this.saveNotificacionPort = saveNotificacionPort;
         this.loadPreferenciasPort = loadPreferenciasPort;
@@ -101,6 +107,12 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
     @Override
     @Transactional
     public Optional<Notificacion> emitir(EmitirNotificacionCommand command, EntregaPush entregaPush) {
+        // Spec 002: lo llaman solo los oyentes de eventos de otros modulos. Con las notificaciones apagadas, el oyente
+        // falla a proposito y el outbox lo reentrega cada 5 min hasta que se prendan; la fila es idempotente (C-7).
+        // El aviso de operacion de la plataforma sale igual: es el que cuenta que se apagaron (D-267).
+        if (!command.tipo().seEntregaConLasNotificacionesApagadas()) {
+            ProcesosConInterruptor.posponerSiEstaApagada(interruptores, CLAVE_NOTIFICACIONES, "notifications.emitir");
+        }
         boolean habilitada = loadPreferenciasPort.habilitadaPara(command.usuarioId(), command.tipo())
                 .orElse(PreferenciaNotificacion.DEFAULT_HABILITADA);
         if (!habilitada) {

@@ -1,5 +1,9 @@
 package com.renaser.os.rag.application.services;
 
+import com.renaser.os.rag.application.services.circuito.CircuitoDePrueba;
+import com.renaser.os.rag.domain.model.circuito.ParteDeLaIa;
+import com.renaser.os.shared.domain.ProveedorIaNoDisponibleException;
+
 import com.renaser.os.rag.application.ports.in.voz.VozDelOrbeUseCase;
 import com.renaser.os.rag.application.ports.out.ia.SintetizarVozPort;
 import com.renaser.os.shared.domain.Clock;
@@ -32,7 +36,9 @@ class VozDelOrbeServiceTest {
     private final VozFalsa voz = new VozFalsa();
     // 03:00 UTC: en Lima todavia es el dia anterior (regla 02), aunque aca no hay dias de por medio.
     private final RelojMovible reloj = new RelojMovible(Instant.parse("2026-09-23T03:00:00Z"));
-    private final VozDelOrbeService service = new VozDelOrbeService(usuarios, voz, reloj, Runnable::run);
+    private final CircuitoDePrueba circuito = CircuitoDePrueba.cerrado();
+    private final VozDelOrbeService service = new VozDelOrbeService(usuarios, voz, reloj, circuito.interruptores(),
+            circuito, Runnable::run);
 
     private byte[] escuchar(VozDelOrbeUseCase.AudioDelOrbe audio) throws Exception {
         ByteArrayOutputStream escuchado = new ByteArrayOutputStream();
@@ -150,12 +156,49 @@ class VozDelOrbeServiceTest {
         assertThatThrownBy(() -> service.buscar(actor, id)).isInstanceOf(NotAuthorizedException.class);
     }
 
+    @Test
+    @DisplayName("spec 002: con ia.voz apagada a mano es vacio (204, la app usa su voz) y no se genera nada")
+    void vozApagadaAManoEsVacio() {
+        CircuitoDePrueba cerrado = CircuitoDePrueba.cerrado();
+        VozDelOrbeService conVozApagada = new VozDelOrbeService(usuarios, voz, reloj,
+                cerrado.interruptoresConApagadas("ia.voz"), cerrado, Runnable::run);
+
+        assertThat(conVozApagada.preparar(actor, "Hola")).isEmpty();
+        assertThat(voz.textos).isEmpty();
+    }
+
+    @Test
+    @DisplayName("spec 002: con el circuito de la voz abierto es vacio y no se llama al proveedor")
+    void circuitoAbiertoEsVacio() {
+        CircuitoDePrueba abierto = CircuitoDePrueba.cortando(ParteDeLaIa.VOZ);
+        VozDelOrbeService conCircuitoAbierto = new VozDelOrbeService(usuarios, voz, reloj, abierto.interruptores(),
+                abierto, Runnable::run);
+
+        assertThat(conCircuitoAbierto.preparar(actor, "Hola")).isEmpty();
+        assertThat(voz.textos).isEmpty();
+    }
+
+    @Test
+    @DisplayName("spec 002: el audio completo cuenta como exito; ProveedorIaNoDisponibleException, como falla; false, nada")
+    void elCircuitoCuentaComoLeFueALaVoz() throws Exception {
+        service.preparar(actor, "Hola");
+        voz.proveedorCaido = true;
+        UUID conFalla = service.preparar(actor, "Hola").orElseThrow();
+        voz.proveedorCaido = false;
+        voz.falla = true;
+        service.preparar(actor, "Hola");
+
+        assertThat(circuito.anotado).containsExactly("exito ia.voz", "falla ia.voz");
+        assertThat(service.buscar(actor, conFalla).orElseThrow().tieneSonido()).isFalse();
+    }
+
     private static final class VozFalsa implements SintetizarVozPort {
 
         final List<String> textos = new ArrayList<>();
         boolean disponible = true;
         boolean falla;
         boolean lanza;
+        boolean proveedorCaido;
 
         @Override
         public boolean disponible() {
@@ -167,6 +210,9 @@ class VozDelOrbeServiceTest {
             textos.add(texto);
             if (lanza) {
                 throw new IllegalStateException("se cayo");
+            }
+            if (proveedorCaido) {
+                throw new ProveedorIaNoDisponibleException("429", Duration.ofSeconds(60));
             }
             if (falla) {
                 return false;

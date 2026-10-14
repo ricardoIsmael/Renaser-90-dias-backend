@@ -70,6 +70,8 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
     private final RegistrarMetricaDelChatPort metricas;
     /** Nombre, foto, URL firmada y el resumen de la cita, en lote (#29, D-251). */
     private final MensajesParaMostrar paraMostrar;
+    /** Spec 002: la funcionalidad de cada tipo de conversación y la de la media (notas de voz, fotos). */
+    private final InterruptoresDelChat interruptoresDelChat;
 
     public MensajeService(LoadConversacionPort loadConversacionPort, EsParticipantePort esParticipantePort,
                            AccesoAChatsDeGrupo accesoAChatsDeGrupo,
@@ -77,8 +79,10 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
                            LoadMensajePort loadMensajePort, PublicarMensajeFanoutPort publicarMensajeFanoutPort,
                            UserSummaryFinder userSummaryFinder, AlmacenamientoPort almacenamientoPort,
                            ConsultarLecturaUseCase consultarLectura, Clock clock, IdGenerator idGenerator,
-                           ApplicationEventPublisher eventos, RegistrarMetricaDelChatPort metricas) {
+                           ApplicationEventPublisher eventos, RegistrarMetricaDelChatPort metricas,
+                           InterruptoresDelChat interruptoresDelChat) {
         this.metricas = metricas;
+        this.interruptoresDelChat = interruptoresDelChat;
         this.loadConversacionPort = loadConversacionPort;
         this.esParticipantePort = esParticipantePort;
         this.accesoAChatsDeGrupo = accesoAChatsDeGrupo;
@@ -104,7 +108,13 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
     @Transactional
     public MensajeEnriquecido enviar(EnviarMensajeCommand command) {
         requireActivo(command.actorId());
-        requireParticipante(requireConversacion(command.conversacionId()), command.actorId());
+        Conversacion conversacion = requireConversacion(command.conversacionId());
+        requireParticipante(conversacion, command.actorId());
+        // Spec 002: después de la pertenencia, como el 403, y antes de escribir nada.
+        interruptoresDelChat.exigir(conversacion, command.actorId());
+        if (command.origenMedia() != OrigenMedia.MURO_COMPARTIDO) {
+            interruptoresDelChat.exigirMedia(command.mediaMime(), command.actorId());
+        }
         // Después de la participación, a propósito: a quien no está en la conversación se le dice 403 antes
         // de contarle nada sobre el mensaje que quiso citar.
         Cita cita = citaPedida(command);
@@ -181,7 +191,10 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
     @Override
     public UrlSubidaMediaChat solicitarUrl(SolicitarUrlSubidaMediaChatCommand command) {
         requireActivo(command.actorId());
-        requireParticipante(requireConversacion(command.conversacionId()), command.actorId());
+        Conversacion conversacion = requireConversacion(command.conversacionId());
+        requireParticipante(conversacion, command.actorId());
+        interruptoresDelChat.exigir(conversacion, command.actorId());
+        interruptoresDelChat.exigirMedia(command.tipoContenido(), command.actorId());
         String ruta = rutaDeMedia(command.conversacionId(), command.tipoContenido());
         URI url = almacenamientoPort.firmarSubida(ruta, command.tipoContenido(), VALIDEZ_URL_SUBIDA);
         metricas.subidaDeMediaSolicitada(tipoDeLaSubida(command.tipoContenido()));
@@ -225,6 +238,7 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
         requireActivo(actorId);
         Conversacion conversacion = requireConversacion(conversacionId);
         requireParticipante(conversacion, actorId);
+        interruptoresDelChat.exigir(conversacion, actorId);
 
         int limiteEfectivo = limite <= 0 ? LIMITE_POR_DEFECTO : Math.min(limite, LIMITE_MAXIMO);
         List<Mensaje> pagina = loadMensajePort.pagina(conversacionId, cursor, limiteEfectivo + 1);

@@ -49,6 +49,7 @@ public record TraineeSummaryResponse(String id, String fullName, String email, U
             case MENTOR_LEAD -> "LIDER_MENTORES";
             case ADMIN -> "ADMIN";
             case ALCHEMIST -> "ALQUIMISTA";
+            case IT_SUPPORT -> "SOPORTE_TI";
         };
     }
 }

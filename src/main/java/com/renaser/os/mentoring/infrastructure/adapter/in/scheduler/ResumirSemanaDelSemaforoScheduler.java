@@ -1,6 +1,8 @@
 package com.renaser.os.mentoring.infrastructure.adapter.in.scheduler;
 
 import com.renaser.os.mentoring.application.ports.in.ResumirSemanaDelSemaforoUseCase;
+import com.renaser.os.shared.application.Interruptores;
+import com.renaser.os.shared.application.ProcesosConInterruptor;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,8 +31,10 @@ class ResumirSemanaDelSemaforoScheduler {
     private static final Logger log = LoggerFactory.getLogger(ResumirSemanaDelSemaforoScheduler.class);
 
     private final ResumirSemanaDelSemaforoUseCase resumirSemana;
+    private final Interruptores interruptores;
 
-    ResumirSemanaDelSemaforoScheduler(ResumirSemanaDelSemaforoUseCase resumirSemana) {
+    ResumirSemanaDelSemaforoScheduler(ResumirSemanaDelSemaforoUseCase resumirSemana, Interruptores interruptores) {
+        this.interruptores = interruptores;
         this.resumirSemana = resumirSemana;
     }
 
@@ -39,6 +43,9 @@ class ResumirSemanaDelSemaforoScheduler {
             lockAtMostFor = "${renaser.scheduling.shedlock.mentoring-resumir-semana-semaforo.lock-at-most-for:PT20M}",
             lockAtLeastFor = "${renaser.scheduling.shedlock.mentoring-resumir-semana-semaforo.lock-at-least-for:PT30S}")
     public void ejecutar() {
+        if (ProcesosConInterruptor.saltaEsteTurno(interruptores, "semaforo", "mentoring.resumir-semana-del-semaforo")) {
+            return;
+        }
         int publicados = resumirSemana.resumir();
         if (publicados > 0) {
             log.info("[mentoring.ResumirSemanaDelSemaforoScheduler] {} resumen(es) semanal(es) de grupo publicado(s)",

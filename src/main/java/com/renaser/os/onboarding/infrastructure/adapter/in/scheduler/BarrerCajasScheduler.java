@@ -2,6 +2,8 @@ package com.renaser.os.onboarding.infrastructure.adapter.in.scheduler;
 
 import com.renaser.os.onboarding.application.ports.in.caja.BarrerCajasUseCase;
 import com.renaser.os.onboarding.application.ports.in.caja.BarrerCajasUseCase.ResultadoDelBarrido;
+import com.renaser.os.shared.application.Interruptores;
+import com.renaser.os.shared.application.ProcesosConInterruptor;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,8 +28,10 @@ public class BarrerCajasScheduler {
     private static final Logger log = LoggerFactory.getLogger(BarrerCajasScheduler.class);
 
     private final BarrerCajasUseCase barrerCajas;
+    private final Interruptores interruptores;
 
-    public BarrerCajasScheduler(BarrerCajasUseCase barrerCajas) {
+    public BarrerCajasScheduler(BarrerCajasUseCase barrerCajas, Interruptores interruptores) {
+        this.interruptores = interruptores;
         this.barrerCajas = barrerCajas;
     }
 
@@ -36,6 +40,9 @@ public class BarrerCajasScheduler {
             lockAtMostFor = "${renaser.scheduling.shedlock.onboarding-barrer-cajas.lock-at-most-for:PT20M}",
             lockAtLeastFor = "${renaser.scheduling.shedlock.onboarding-barrer-cajas.lock-at-least-for:PT30S}")
     public void barrer() {
+        if (ProcesosConInterruptor.saltaEsteTurno(interruptores, "caja", "onboarding.barrer-cajas")) {
+            return;
+        }
         ResultadoDelBarrido resultado = barrerCajas.barrer();
         if (resultado.fallidas() > 0) {
             log.warn("[onboarding.BarrerCajasScheduler] {} cajas fallaron (de {}); se reintentan en la proxima corrida",

@@ -5,6 +5,7 @@ import com.renaser.os.habits.application.ports.in.audioterapiaadmin.ActualizarDu
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 /** Panel admin: cuántos días dura cada audioterapia antes de pasar a la siguiente. Solo ADMIN/ALCHEMIST. */
 @RestController
 @RequestMapping("/api/v1/admin/audio-therapies")
+@Funcionalidad("admin.habitos")
 public class AudioTherapyAdminController {
 
     private final ActualizarDuracionAudioterapiaUseCase actualizarUseCase;

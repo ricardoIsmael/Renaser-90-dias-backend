@@ -2,6 +2,8 @@ package com.renaser.os.calendar.infrastructure.adapter.in.scheduler;
 
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.renaser.os.calendar.application.ports.in.recordatorio.GenerarRecordatoriosUseCase;
+import com.renaser.os.shared.application.Interruptores;
+import com.renaser.os.shared.application.ProcesosConInterruptor;
 import com.renaser.os.shared.domain.Clock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,8 +20,11 @@ class GenerarRecordatoriosScheduler {
 
     private final GenerarRecordatoriosUseCase generarUseCase;
     private final Clock clock;
+    private final Interruptores interruptores;
 
-    GenerarRecordatoriosScheduler(GenerarRecordatoriosUseCase generarUseCase, Clock clock) {
+    GenerarRecordatoriosScheduler(GenerarRecordatoriosUseCase generarUseCase, Clock clock,
+                                  Interruptores interruptores) {
+        this.interruptores = interruptores;
         this.generarUseCase = generarUseCase;
         this.clock = clock;
     }
@@ -31,6 +36,9 @@ class GenerarRecordatoriosScheduler {
             lockAtMostFor = "${renaser.scheduling.shedlock.calendar-generar-recordatorios.lock-at-most-for:PT10M}",
             lockAtLeastFor = "${renaser.scheduling.shedlock.calendar-generar-recordatorios.lock-at-least-for:PT30S}")
     void ejecutar() {
+        if (ProcesosConInterruptor.saltaEsteTurno(interruptores, "eventos", "calendar.generar-recordatorios")) {
+            return;
+        }
         int creados = generarUseCase.generar(clock.now());
         if (creados > 0) {
             log.info("[calendar.GenerarRecordatoriosScheduler] {} recordatorio(s) encolado(s)", creados);

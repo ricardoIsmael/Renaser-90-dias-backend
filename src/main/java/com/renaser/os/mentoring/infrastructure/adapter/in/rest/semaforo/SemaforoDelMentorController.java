@@ -7,6 +7,7 @@ import com.renaser.os.mentoring.application.ports.in.ConsultarSemaforoDelGrupoUs
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,6 +34,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/mentor/groups/{groupId}")
+@Funcionalidad("semaforo")
 public class SemaforoDelMentorController {
 
     private final ConsultarSemaforoDelGrupoUseCase consultarTabla;

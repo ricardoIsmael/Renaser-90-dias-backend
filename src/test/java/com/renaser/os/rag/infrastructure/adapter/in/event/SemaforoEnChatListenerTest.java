@@ -1,5 +1,9 @@
 package com.renaser.os.rag.infrastructure.adapter.in.event;
 
+import static org.mockito.Mockito.verifyNoInteractions;
+
+import com.renaser.os.shared.application.InterruptoresDePrueba;
+
 import com.renaser.os.points.api.ColorSemaforo;
 import com.renaser.os.points.api.SemanaDelSemaforoCerradaEvent;
 import com.renaser.os.rag.application.ports.in.semaforo.DejarSemaforoEnChatUseCase;
@@ -35,12 +39,23 @@ class SemaforoEnChatListenerTest {
     void elCierreLlegaConColorPalabraPorcentajeYClave() {
         UUID clave = SemanaDelSemaforoCerradaEvent.claveDe(persona, VIERNES);
 
-        new SemaforoEnChatListener(useCase).onSemanaCerrada(new SemanaDelSemaforoCerradaEvent(clave, persona,
+        new SemaforoEnChatListener(useCase, InterruptoresDePrueba.conApagadas()).onSemanaCerrada(new SemanaDelSemaforoCerradaEvent(clave, persona,
                 VIERNES.minusDays(6), VIERNES, new BigDecimal("72.4"), ColorSemaforo.AMARILLO, 6,
                 Instant.parse("2026-09-26T05:25:03Z")));
 
         verify(useCase).dejarEnElChat(new SemaforoEnChatCommand(UserId.of(persona),
                 new CierreDeSemana(ColorDeLaSemana.AMARILLO, "Requiere atención", new BigDecimal("72.4"), 6), clave));
+    }
+
+    @Test
+    void conSerApagadaElCierreNoSeDejaEnElChat() {
+        UUID clave = SemanaDelSemaforoCerradaEvent.claveDe(persona, VIERNES);
+
+        new SemaforoEnChatListener(useCase, InterruptoresDePrueba.conApagadas("ia")).onSemanaCerrada(
+                new SemanaDelSemaforoCerradaEvent(clave, persona, VIERNES.minusDays(6), VIERNES,
+                        new BigDecimal("72.4"), ColorSemaforo.AMARILLO, 6, Instant.parse("2026-09-26T05:25:03Z")));
+
+        verifyNoInteractions(useCase);
     }
 
     @Test

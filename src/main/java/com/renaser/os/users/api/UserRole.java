@@ -12,6 +12,14 @@ import java.util.Set;
  */
 public enum UserRole {
 
+    /**
+     * Soporte TI (spec 002, D-267; {@code SOPORTE_TI} en la base, V100): la cuenta del dueño-programador que opera la
+     * plataforma —interruptores, auditoría, circuito de la IA— desde su consola. <b>Se asigna solo desde la base</b>
+     * ({@code scripts/soporte-ti/asignar.sql}): ningún endpoint lo da, lo quita, lo invita ni aprueba con él, y
+     * Administración no suspende ni elimina una cuenta con este rol. No acompaña grupos ({@link #actuaComoMentor()}
+     * es falso) y no entra a rankings ni padrones salvo que active su programa, como el resto del personal.
+     */
+    IT_SUPPORT,
     ALCHEMIST,
     ADMIN,
     MENTOR_LEAD,
@@ -124,6 +132,7 @@ public enum UserRole {
             case MENTOR -> "Mentor";
             case TRAINEE_GUIDE -> "Guía de aprendiz";
             case TRAINEE -> "Aprendiz";
+            case IT_SUPPORT -> "Soporte TI";
         };
     }
 
@@ -155,10 +164,17 @@ public enum UserRole {
      * dueño active el cumplimiento. Esa es la secuencia de tres pasos de DL-08.
      */
     public boolean can(Permission permission) {
+        // Un permiso exclusivo de Soporte TI (OPERATE_PLATFORM) no pasa por el falla-abierto de abajo (D-267).
+        if (permission.exclusivoDeSoporteTi()) {
+            return this == IT_SUPPORT;
+        }
         return switch (this) {
             case TRAINEE -> PERMISOS_TRAINEE.contains(permission);
             case MENTOR_LEAD -> PERMISOS_MENTOR_LEAD.contains(permission);
             case MENTOR, TRAINEE_GUIDE, ADMIN, ALCHEMIST -> true;
+            // Soporte TI tiene todos los permisos de todos los roles más la consola (FR-023). Ojo: los guards de
+            // Administración de los servicios todavía preguntan ADMIN/ALCHEMIST literal (D-267, pendiente).
+            case IT_SUPPORT -> true;
         };
     }
 

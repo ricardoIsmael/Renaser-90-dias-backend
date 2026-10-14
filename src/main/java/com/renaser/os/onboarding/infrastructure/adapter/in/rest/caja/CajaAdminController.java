@@ -13,6 +13,7 @@ import com.renaser.os.onboarding.infrastructure.adapter.in.rest.caja.CajaRespons
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ContentDisposition;
@@ -37,6 +38,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/admin/caja")
+@Funcionalidad("caja")
 public class CajaAdminController {
 
     static final String SOLO_ADMIN = "solo ADMIN activo (D-219): el servicio rechaza a los demás roles, ALCHEMIST "

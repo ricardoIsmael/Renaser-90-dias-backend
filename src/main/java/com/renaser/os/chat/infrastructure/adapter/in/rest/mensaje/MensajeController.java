@@ -12,6 +12,7 @@ import com.renaser.os.chat.domain.model.mensaje.TipoMensaje;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -29,6 +30,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/chat/conversations/{conversationId}/messages")
+@Funcionalidad("chat")
 public class MensajeController {
 
     private final EnviarMensajeUseCase enviarUseCase;

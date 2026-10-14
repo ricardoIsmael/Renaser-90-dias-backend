@@ -1,6 +1,7 @@
 package com.renaser.os.users.infrastructure.adapter.in.rest.autenticacion;
 
 import com.renaser.os.shared.web.DireccionIpDelCliente;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.PublicEndpoint;
 import com.renaser.os.users.application.ports.in.autenticacion.ConfirmarCodigoVerificacionEmailUseCase;
 import com.renaser.os.users.application.ports.in.autenticacion.ConfirmarCodigoVerificacionEmailUseCase.ConfirmarCodigoVerificacionEmailCommand;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/v1/auth/email-verification")
+@Funcionalidad("registro")
 public class VerificacionEmailController {
 
     private final EnviarCodigoVerificacionEmailUseCase enviarUseCase;

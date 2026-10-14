@@ -1,6 +1,7 @@
 package com.renaser.os.users.infrastructure.adapter.in.rest.eliminacion;
 
 import com.renaser.os.shared.web.DireccionIpDelCliente;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.PublicEndpoint;
 import com.renaser.os.users.application.ports.in.eliminacion.CerrarCuentaPorCorreoUseCase;
 import jakarta.servlet.http.HttpServletRequest;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/v1/account-deletion")
+@Funcionalidad("cuenta.eliminar")
 public class EliminarCuentaPorCorreoController {
 
     private final CerrarCuentaPorCorreoUseCase cerrarPorCorreo;

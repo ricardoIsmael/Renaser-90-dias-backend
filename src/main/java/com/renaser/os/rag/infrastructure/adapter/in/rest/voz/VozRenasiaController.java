@@ -5,6 +5,7 @@ import com.renaser.os.rag.application.ports.in.voz.VozDelOrbeUseCase.AudioDelOrb
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -36,10 +37,16 @@ import java.util.UUID;
  * <p>Vive bajo {@code /api/v1/renasia/**}, que exige sesion real ({@code SecurityConfig}). Sin
  * {@code produces}: asi un 400 sigue saliendo como el JSON de error de siempre.
  *
+ * <p><b>Con {@code ia.voz} apagada</b> (a mano o por el circuito, spec 002, D-267) el {@code POST} responde
+ * <b>204</b>, no el 503 del interceptor: es lo que la app ya entiende como «usa la voz del telefono». Por eso
+ * {@code laResuelveElCasoDeUso}: lo decide {@code VozDelOrbeUseCase}. Un audio ya preparado se sigue pudiendo
+ * escuchar (un pedido en vuelo termina).
+ *
  * <p>Corregido 2026-09-23: el {@code POST} devolvia el WAV entero (D-157).
  */
 @RestController
 @RequestMapping("/api/v1/renasia/voz")
+@Funcionalidad(value = "ia.voz", laResuelveElCasoDeUso = true)
 public class VozRenasiaController {
 
     static final MediaType AUDIO_WAV = MediaType.parseMediaType("audio/wav");

@@ -3,6 +3,7 @@ package com.renaser.os.users.infrastructure.adapter.in.rest.eliminacion;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import com.renaser.os.users.application.ports.in.eliminacion.AdministrarEliminacionDeCuentasUseCase;
 import jakarta.validation.Valid;
@@ -25,6 +26,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/admin/users/{id}/account-deletion")
+@Funcionalidad("admin.personas")
 public class EliminacionDeCuentasAdminController {
 
     private final AdministrarEliminacionDeCuentasUseCase administrar;

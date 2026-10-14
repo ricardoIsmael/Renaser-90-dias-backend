@@ -1,12 +1,16 @@
 package com.renaser.os.shared.web;
 
 import com.renaser.os.shared.domain.CodigoVerificacionInvalidoException;
+import com.renaser.os.shared.domain.ConsolaBloqueadaException;
+import com.renaser.os.shared.domain.ContrasenaIncorrectaException;
 import com.renaser.os.shared.domain.CredencialesInvalidasException;
 import com.renaser.os.shared.domain.EnvioEmailFallidoException;
+import com.renaser.os.shared.domain.FuncionalidadApagadaException;
 import com.renaser.os.shared.domain.IdentidadProveedorInvalidaException;
 import com.renaser.os.shared.domain.IdentidadYaVinculadaException;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.ProveedorIaNoDisponibleException;
+import com.renaser.os.shared.domain.ReautenticacionRequeridaException;
 import com.renaser.os.shared.domain.RateLimitExceededException;
 import com.renaser.os.shared.domain.RegistroPendienteSocialInvalidoException;
 import com.renaser.os.shared.domain.SesionNoIniciadaException;
@@ -164,6 +168,46 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(RateLimitExceededException.class)
     public ResponseEntity<ApiErrorResponse> handleRateLimit(RateLimitExceededException ex) {
         return respond(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage());
+    }
+
+    /**
+     * Una funcionalidad apagada por Soporte TI (spec 002, contrato §2): <b>503</b> con el aviso editable como
+     * {@code message} —que un APK 1.5.0 muestra como cualquier error— y {@code codigo}/{@code funcionalidad} para que
+     * la app nueva muestre el aviso en el lugar de la funcionalidad y relea el estado. Es 503 y no 403: no es un
+     * permiso que falte, es algo que vuelve. Se loguea en INFO: es una decisión de operación, no una falla.
+     */
+    @ExceptionHandler(FuncionalidadApagadaException.class)
+    public ResponseEntity<ApiErrorConCodigo> handleFuncionalidadApagada(FuncionalidadApagadaException ex) {
+        log.info("503 -> funcionalidad apagada: {}", ex.clave());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).contentType(MediaType.APPLICATION_JSON)
+                .body(ApiErrorConCodigo.of(ex.getMessage(), "FUNCIONALIDAD_APAGADA", ex.clave()));
+    }
+
+    /**
+     * La contraseña de la consola Soporte TI no es la de la cuenta (spec 002): 401 con su código, para que la app no lo
+     * confunda con una sesión vencida.
+     */
+    @ExceptionHandler(ContrasenaIncorrectaException.class)
+    public ResponseEntity<ApiErrorConCodigo> handleContrasenaIncorrecta(ContrasenaIncorrectaException ex) {
+        log.warn("401 -> contrasena incorrecta en la consola Soporte TI");
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).contentType(MediaType.APPLICATION_JSON)
+                .body(ApiErrorConCodigo.of(ex.getMessage(), "CONTRASENA_INCORRECTA", null));
+    }
+
+    /** La consola Soporte TI sin desbloquear o vencida por inactividad (spec 002, FR-024): 423. */
+    @ExceptionHandler(ConsolaBloqueadaException.class)
+    public ResponseEntity<ApiErrorConCodigo> handleConsolaBloqueada(ConsolaBloqueadaException ex) {
+        log.warn("423 -> consola Soporte TI bloqueada");
+        return ResponseEntity.status(HttpStatus.LOCKED).contentType(MediaType.APPLICATION_JSON)
+                .body(ApiErrorConCodigo.of(ex.getMessage(), "CONSOLA_BLOQUEADA", null));
+    }
+
+    /** Un cambio crítico de la consola sin reautenticación (spec 002, FR-008): 428. */
+    @ExceptionHandler(ReautenticacionRequeridaException.class)
+    public ResponseEntity<ApiErrorConCodigo> handleReautenticacionRequerida(ReautenticacionRequeridaException ex) {
+        log.warn("428 -> cambio critico sin reautenticacion");
+        return ResponseEntity.status(HttpStatus.PRECONDITION_REQUIRED).contentType(MediaType.APPLICATION_JSON)
+                .body(ApiErrorConCodigo.of(ex.getMessage(), "REAUTENTICACION_REQUERIDA", null));
     }
 
     /**

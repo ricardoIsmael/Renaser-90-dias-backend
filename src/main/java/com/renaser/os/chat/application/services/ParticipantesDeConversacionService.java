@@ -163,6 +163,7 @@ public class ParticipantesDeConversacionService implements VerParticipantesDeCon
             case TRAINEE_GUIDE -> RolEnElChat.GUIA_APRENDIZ;
             case ADMIN -> RolEnElChat.ADMIN;
             case ALCHEMIST -> RolEnElChat.ALQUIMISTA;
+            case IT_SUPPORT -> RolEnElChat.SOPORTE_TI;
         };
     }
 

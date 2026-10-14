@@ -60,8 +60,12 @@ class UserPersistenceAdapterTest {
             User actor = User.rehydrate(UserId.of(UUID.randomUUID()), new Email("admin@renaser.com"),
                     UserRole.ADMIN, com.renaser.os.users.api.UserStatus.ACTIVE, "Admin",
                     null, null, null, null);
-            User user = User.invite(id, new Email(role.name().toLowerCase() + "@renaser.com"),
-                    "Usuario " + role, role, actor);
+            // IT_SUPPORT no se invita (D-267: se asigna solo desde la base); se arma como lo dejaria el script.
+            User user = role == UserRole.IT_SUPPORT
+                    ? User.rehydrate(id, new Email("it_support@renaser.com"), role,
+                            com.renaser.os.users.api.UserStatus.ACTIVE, "Usuario " + role, null, null, null, null)
+                    : User.invite(id, new Email(role.name().toLowerCase() + "@renaser.com"), "Usuario " + role, role,
+                            actor);
 
             adapter.save(user);
 

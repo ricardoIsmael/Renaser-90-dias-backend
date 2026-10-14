@@ -4,6 +4,7 @@ import com.renaser.os.habits.application.ports.in.audioterapia.ConsultarAudioter
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 /** Autoservicio, exclusivo de TRAINEE -- mismo criterio que {@code EspirituController}. */
 @RestController
 @RequestMapping("/api/v1/audio-therapy")
+@Funcionalidad("habitos.espiritu")
 public class AudioTherapyController {
 
     private final ConsultarAudioterapiaSemanalUseCase consultarUseCase;

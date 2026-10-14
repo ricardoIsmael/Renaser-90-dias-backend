@@ -113,7 +113,7 @@ class MensajeServiceTest {
     private MensajeService servicioCon(Clock reloj) {
         return new MensajeService(loadConversacionPort, esParticipantePort, new AccesoAChatsDeGrupo(pertenenciaVigentePort, org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.participante.GruposEnCursoPort.class), userSummaryFinder),
                 marcarLeidoPort, saveMensajePort, loadMensajePort, publicarMensajeFanoutPort, userSummaryFinder,
-                almacenamientoPort, conversacion -> ConfirmacionDeLectura.sinDobleMarca(), reloj, idGenerator, publicados::add, metricas);
+                almacenamientoPort, conversacion -> ConfirmacionDeLectura.sinDobleMarca(), reloj, idGenerator, publicados::add, metricas, new com.renaser.os.chat.application.services.InterruptoresDelChat(new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido(), org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort.class)));
     }
 
     /** D-221: lo que se publicó para el aviso push. */

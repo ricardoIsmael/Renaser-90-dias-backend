@@ -29,6 +29,10 @@ public final class ReglaDeEliminacionPorAdmin {
         if (actor == null || !actor.hasAccess() || !actor.canManageRoles()) {
             throw new NotAuthorizedException("Solo ADMIN/ALCHEMIST eliminan cuentas");
         }
+        if (cuenta.esSoporteTi()) {
+            // La cuenta del dueño-programador no la elimina Administración (D-267, FR-022).
+            throw new NotAuthorizedException("Una cuenta Soporte TI no se elimina desde Administracion");
+        }
         if (actor.id().equals(cuenta.id())) {
             throw new NotAuthorizedException("Nadie elimina su propia cuenta desde Administracion");
         }

@@ -6,6 +6,7 @@ import com.renaser.os.points.application.ports.in.puntaje.ConsultarPuntajeVisibl
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/points")
+@Funcionalidad("ranking")
 public class PuntajeController {
 
     private final ConsultarPuntajeVisibleUseCase consultarPuntajeUseCase;
@@ -39,6 +41,7 @@ public class PuntajeController {
     }
 
     @RequiresPermission(Permission.ADJUST_POINTS)
+    @Funcionalidad("admin.personas")
     @PostMapping("/adjustments")
     public ResponseEntity<AjustePuntosResponse> ajustarManualmente(@ActorAutenticado UserId actor,
                                                                      @RequestBody @Valid AjustarPuntosManualRequest request) {

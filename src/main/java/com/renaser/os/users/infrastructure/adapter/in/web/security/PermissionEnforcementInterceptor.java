@@ -149,11 +149,20 @@ class PermissionEnforcementInterceptor implements HandlerInterceptor {
     /** La matriz rol -> permiso, con la suspension ya descartada. Ver el javadoc de la clase. */
     private boolean verificarMatriz(HttpServletRequest request, HttpServletResponse response,
                                     UserSummary actor, Permission requerido) throws IOException {
+        if (requerido.exclusivoDeSoporteTi()) {
+            // ESTRICTO, antes del falla-abierto de A-1 y sin modo sombra (D-267): la consola Soporte TI no la usa
+            // ningun otro rol, ni ADMIN ni ALCHEMIST (FR-025).
+            if (actor.role() == UserRole.IT_SUPPORT) {
+                return true;
+            }
+            denegar(response, "No autorizado");
+            return false;
+        }
         if (actor.role() == UserRole.MENTOR_LEAD) {
             return verificarMentorLead(request, response, actor, requerido);
         }
         if (actor.role() != UserRole.TRAINEE || actor.role().can(requerido)) {
-            return true; // MENTOR/ADMIN/ALCHEMIST: la matriz sigue falla-abierto (A-1, javadoc de la clase)
+            return true; // MENTOR/ADMIN/ALCHEMIST/IT_SUPPORT: la matriz sigue falla-abierto (A-1, javadoc de la clase)
         }
         denegar(response, "No autorizado");
         return false;
