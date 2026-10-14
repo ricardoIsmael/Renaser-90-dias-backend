@@ -194,6 +194,14 @@ Asignación (Administración, como hoy: ADMIN y ALQUIMISTA; solo ADMIN asigna al
   `rolPersonalizado: { id, nombre } | null` (aditivo). `role` sigue siendo el base.
 - Auditoría: tipo nuevo `ROL_PERSONALIZADO` (crear, editar, desactivar, borrar, reemplazar), `clave` = `"rp:" + id`,
   `antes`/`despues` con `{ nombre, rolBase, activo, funcionalidades }`.
+- **Aditivo (B2, 2026-10-14; D-269, respuesta del dueño): push a Administración.** Si Soporte TI edita un rol con
+  personas cambiando `funcionalidades`, `activo` o la base, o lo reemplaza en bloque moviendo personas, cada ADMIN y
+  ALQUIMISTA activo recibe una notificación `OPERACION_PLATAFORMA` (fila en la bandeja y push), sin `rutaApp`:
+  `titulo` «Soporte TI cambió un rol», `cuerpo` «Soporte TI cambió el rol «<nombre>» (<N> persona|personas): <resumen>.
+  Motivo: <motivo>». `<resumen>` es una o varias de «lo desactivó: quedan solo con su rol base (<Base>)», «lo volvió a
+  activar», «ahora hereda de <Base>», «sumó N funcionalidad(es) y quitó M funcionalidad(es)» (separadas por «; »), o
+  en un reemplazo «las pasó a «<destino>»» / «quedaron solo con su rol base (<Base>)». Renombrar, cambiar la
+  descripción o editar un rol sin personas no avisa. Las cuentas de prueba no lo reciben.
 
 ## 5. B3 — ver como rol (US5), segunda tanda, sobre B2
 

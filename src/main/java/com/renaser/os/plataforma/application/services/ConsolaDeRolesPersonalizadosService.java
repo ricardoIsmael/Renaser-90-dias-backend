@@ -1,5 +1,6 @@
 package com.renaser.os.plataforma.application.services;
 
+import com.renaser.os.plataforma.api.RolConPersonasCambiadoEvent;
 import com.renaser.os.plataforma.application.ports.in.AccesoDeConsola;
 import com.renaser.os.plataforma.application.ports.in.FuncionalidadEnConsola.Actor;
 import com.renaser.os.plataforma.application.ports.in.GestionarRolesEnConsolaUseCase;
@@ -9,6 +10,7 @@ import com.renaser.os.plataforma.application.ports.out.TokensDeConsolaPort;
 import com.renaser.os.plataforma.domain.model.auditoria.CambioAuditado;
 import com.renaser.os.plataforma.domain.model.catalogo.CatalogoDeFuncionalidades;
 import com.renaser.os.plataforma.domain.model.roles.PedidoDeRolPersonalizado;
+import com.renaser.os.plataforma.domain.model.roles.ResumenDelCambioDeRol;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.ReautenticacionRequeridaException;
@@ -25,6 +27,7 @@ import com.renaser.os.users.api.RolesPersonalizadosFinder;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,6 +55,7 @@ class ConsolaDeRolesPersonalizadosService implements GestionarRolesEnConsolaUseC
     private final UserSummaryFinder usuarios;
     private final RegistrarCambioAuditadoPort auditoria;
     private final TokensDeConsolaPort tokens;
+    private final ApplicationEventPublisher events;
     private final IdGenerator idGenerator;
     private final Clock clock;
     private final CatalogoDeFuncionalidades catalogo = CatalogoDeFuncionalidades.inicial();
@@ -60,13 +64,14 @@ class ConsolaDeRolesPersonalizadosService implements GestionarRolesEnConsolaUseC
     ConsolaDeRolesPersonalizadosService(GuardiaDeSoporteTi guardia, GestionarRolesPersonalizadosUseCase gestion,
                                         RolesPersonalizadosFinder finder, UserSummaryFinder usuarios,
                                         RegistrarCambioAuditadoPort auditoria, TokensDeConsolaPort tokens,
-                                        IdGenerator idGenerator, Clock clock) {
+                                        ApplicationEventPublisher events, IdGenerator idGenerator, Clock clock) {
         this.guardia = guardia;
         this.gestion = gestion;
         this.finder = finder;
         this.usuarios = usuarios;
         this.auditoria = auditoria;
         this.tokens = tokens;
+        this.events = events;
         this.idGenerator = idGenerator;
         this.clock = clock;
     }
@@ -112,6 +117,10 @@ class ConsolaDeRolesPersonalizadosService implements GestionarRolesEnConsolaUseC
                 command.version()));
         auditar(command.acceso(), actual.clave(), foto(cambio.antes()), foto(cambio.despues()), motivo,
                 command.dispositivo());
+        ResumenDelCambioDeRol.deUnaEdicion(paraElAviso(cambio.antes()), paraElAviso(cambio.despues()),
+                        cambio.antes().personas())
+                .ifPresent(resumen -> avisar(cambio.despues(), cambio.antes().personas(), resumen, command.acceso(),
+                        motivo));
         return vista(cambio.despues());
     }
 
@@ -146,6 +155,9 @@ class ConsolaDeRolesPersonalizadosService implements GestionarRolesEnConsolaUseC
                 command.acceso().actor(), origen.id(), command.destinoId()));
         auditar(command.acceso(), origen.clave(), fotoConPersonas(reemplazo.origen(), reemplazo.origen().personas()),
                 fotoDelReemplazo(reemplazo), motivo, command.dispositivo());
+        ResumenDelCambioDeRol.deUnReemplazo(reemplazo.destino() == null ? null : reemplazo.destino().nombre(),
+                        origen.rolBase(), reemplazo.personasMovidas())
+                .ifPresent(resumen -> avisar(origen, reemplazo.personasMovidas(), resumen, command.acceso(), motivo));
         return reemplazo.personasMovidas();
     }
 
@@ -170,6 +182,20 @@ class ConsolaDeRolesPersonalizadosService implements GestionarRolesEnConsolaUseC
         if (token == null || token.isBlank() || !tokens.gastarReautenticacion(token, acceso.actor(), acceso.sesion())) {
             throw new ReautenticacionRequeridaException();
         }
+    }
+
+    /**
+     * El aviso a Administración de un cambio que toca a personas (D-269): sale por el outbox en esta misma transacción,
+     * y {@code notifications} lo manda por push a los ADMIN y ALQUIMISTA activos después del commit.
+     */
+    private void avisar(RolPersonalizadoResumen rol, long personas, String resumen, AccesoDeConsola acceso,
+                        String motivo) {
+        events.publishEvent(new RolConPersonasCambiadoEvent(rol.id(), rol.nombre(), personas, resumen, acceso.actor(),
+                motivo, clock.now()));
+    }
+
+    private static ResumenDelCambioDeRol.Foto paraElAviso(RolPersonalizadoResumen rol) {
+        return new ResumenDelCambioDeRol.Foto(rol.rolBase(), rol.activo(), rol.funcionalidades());
     }
 
     private void auditar(AccesoDeConsola acceso, String clave, Map<String, Object> antes, Map<String, Object> despues,

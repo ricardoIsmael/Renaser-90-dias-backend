@@ -1,5 +1,6 @@
 package com.renaser.os.plataforma.application.services;
 
+import com.renaser.os.plataforma.api.RolConPersonasCambiadoEvent;
 import com.renaser.os.plataforma.application.ports.in.AccesoDeConsola;
 import com.renaser.os.plataforma.application.ports.in.GestionarRolesEnConsolaUseCase.BorrarRolEnConsolaCommand;
 import com.renaser.os.plataforma.application.ports.in.GestionarRolesEnConsolaUseCase.CrearRolEnConsolaCommand;
@@ -28,6 +29,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -59,6 +61,7 @@ class ConsolaDeRolesPersonalizadosServiceTest {
     private final RolesPersonalizadosFinder finder = mock(RolesPersonalizadosFinder.class);
     private final Dobles.Auditoria auditoria = new Dobles.Auditoria();
     private final Dobles.Tokens tokens = new Dobles.Tokens();
+    private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
     private ConsolaDeRolesPersonalizadosService service;
     private AccesoDeConsola acceso;
     private final UUID rolId = UUID.randomUUID();
@@ -73,7 +76,7 @@ class ConsolaDeRolesPersonalizadosServiceTest {
                 new UserSummary(soporte, "Dueño", null, UserRole.IT_SUPPORT, UserStatus.ACTIVE)));
         GuardiaDeSoporteTi guardia = new GuardiaDeSoporteTi(usuarios, tokens, Duration.ofMinutes(15));
         service = new ConsolaDeRolesPersonalizadosService(guardia, gestion, finder, usuarios, auditoria, tokens,
-                UUID::randomUUID, CLOCK);
+                events, UUID::randomUUID, CLOCK);
         acceso = new AccesoDeConsola(soporte, tokens.emitirDeConsola(soporte, SESION, Duration.ofMinutes(15)),
                 SESION);
     }
@@ -203,6 +206,62 @@ class ConsolaDeRolesPersonalizadosServiceTest {
 
         assertThatThrownBy(() -> service.borrar(new BorrarRolEnConsolaCommand(acceso, rolId, "m", "t", null)))
                 .isInstanceOf(java.util.NoSuchElementException.class);
+    }
+
+    @Test
+    @DisplayName("editar un rol con personas (desactivarlo) avisa a Administración; con solo el nombre, o sin personas, no")
+    void avisoAlEditar() {
+        when(finder.porId(rolId)).thenReturn(Optional.of(rol(true, 3, Set.of("muro"))));
+        when(gestion.editar(any())).thenReturn(new CambioDeRolPersonalizado(rol(true, 3, Set.of("muro")),
+                rol(false, 3, Set.of("muro"))));
+
+        service.editar(new EditarRolEnConsolaCommand(acceso, rolId, "Mentor junior", null, null, List.of("muro"),
+                false, "Terminó el piloto", 1L, null));
+
+        ArgumentCaptor<RolConPersonasCambiadoEvent> aviso = ArgumentCaptor.forClass(RolConPersonasCambiadoEvent.class);
+        verify(events).publishEvent(aviso.capture());
+        assertThat(aviso.getValue().rolId()).isEqualTo(rolId);
+        assertThat(aviso.getValue().nombre()).isEqualTo("Mentor junior");
+        assertThat(aviso.getValue().personas()).isEqualTo(3);
+        assertThat(aviso.getValue().resumen()).isEqualTo("lo desactivó: quedan solo con su rol base (Mentor)");
+        assertThat(aviso.getValue().motivo()).isEqualTo("Terminó el piloto");
+        assertThat(aviso.getValue().actor()).isEqualTo(soporte);
+
+        org.mockito.Mockito.clearInvocations(events);
+        when(gestion.editar(any())).thenReturn(new CambioDeRolPersonalizado(rol(true, 3, Set.of("muro")),
+                rol(true, 3, Set.of("muro"))));
+        service.editar(new EditarRolEnConsolaCommand(acceso, rolId, "Mentor inicial", null, null, List.of("muro"),
+                true, "Renombrarlo", 1L, null));
+        when(gestion.editar(any())).thenReturn(new CambioDeRolPersonalizado(rol(true, 0, Set.of("muro")),
+                rol(false, 0, Set.of())));
+        service.editar(new EditarRolEnConsolaCommand(acceso, rolId, "Mentor junior", null, null, List.of(), false,
+                "Sin nadie", 1L, null));
+        verify(events, org.mockito.Mockito.never()).publishEvent(any(RolConPersonasCambiadoEvent.class));
+    }
+
+    @Test
+    @DisplayName("reemplazar en bloque moviendo personas avisa, con a dónde pasaron; sin personas movidas, no")
+    void avisoAlReemplazar() {
+        UUID otra = UUID.randomUUID();
+        RolPersonalizadoResumen destino = new RolPersonalizadoResumen(otra, "rp:" + otra, "Mentor inicial", null,
+                UserRole.MENTOR, true, Set.of(), 0, 1, soporte, CLOCK.now());
+        when(finder.porId(rolId)).thenReturn(Optional.of(rol(true, 2, Set.of())));
+        when(finder.porId(otra)).thenReturn(Optional.of(destino));
+        when(gestion.reemplazarEnBloque(any())).thenReturn(new ReemplazoEnBloque(rol(true, 2, Set.of()), destino, 2));
+
+        service.reemplazar(new ReemplazarRolEnConsolaCommand(acceso, rolId, otra, "Fusión",
+                tokens.emitirDeReautenticacion(soporte, SESION, Duration.ofMinutes(5)), null));
+
+        ArgumentCaptor<RolConPersonasCambiadoEvent> aviso = ArgumentCaptor.forClass(RolConPersonasCambiadoEvent.class);
+        verify(events).publishEvent(aviso.capture());
+        assertThat(aviso.getValue().personas()).isEqualTo(2);
+        assertThat(aviso.getValue().resumen()).isEqualTo("las pasó a «Mentor inicial»");
+
+        org.mockito.Mockito.clearInvocations(events);
+        when(gestion.reemplazarEnBloque(any())).thenReturn(new ReemplazoEnBloque(rol(true, 0, Set.of()), null, 0));
+        service.reemplazar(new ReemplazarRolEnConsolaCommand(acceso, rolId, null, "Nada",
+                tokens.emitirDeReautenticacion(soporte, SESION, Duration.ofMinutes(5)), null));
+        verify(events, org.mockito.Mockito.never()).publishEvent(any(RolConPersonasCambiadoEvent.class));
     }
 
     @Test
