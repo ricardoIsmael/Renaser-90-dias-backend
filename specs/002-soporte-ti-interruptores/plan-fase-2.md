@@ -20,8 +20,8 @@
 |---|---|---|
 | A — núcleo backend | `claude/plataforma-nucleo` en `.claude/worktrees/plataforma-nucleo` (backend) | **Terminado** (≈ 19:30): `clean verify` 6366 unitarias y 431 de integración, 0 fallas. Commits `9f4a4804` rol IT_SUPPORT, `d763de65` módulo `plataforma` y consola, `51b329ed` `@Funcionalidad` en 118 controladores, `8fcd4857` procesos con interruptor, `3858045a` push `OPERACION_PLATAFORMA` (V102), `e0e601fc` arreglo de prueba, `82abbcc7` documentación (D-267, §10 del contrato). Migraciones V100–V102. Bitácora E-609 a E-611 |
 | C — app | `claude/plataforma-app` en `.claude/worktrees/plataforma-app` (frontend) | **Terminado**: jest 342 suites / 2847 pruebas, tsc 0. Commits `740d822`, `7d6cd6c`, `cfaba50`, `7d89f79`, `44bdb97`, `a46dc9b` |
-| B — IA y circuito de SER | `claude/plataforma-ia` en `.claude/worktrees/plataforma-ia` (sale de `claude/plataforma-nucleo`) | **Lanzado ≈ 19:40**: circuito por parte en `rag`, 204/1013/503, propuestas, mensajes automáticos, `CircuitoDeIaCambiadoEvent` y push (máx. 4/h). Bitácora desde E-612 |
-| D — QA | — | Pendiente: integrar A + B + C y probar en el emulador |
+| B — IA y circuito de SER | `claude/plataforma-ia` en `.claude/worktrees/plataforma-ia` (sale de `claude/plataforma-nucleo`, así que **contiene A + B**) | **Terminado** (≈ 21:15): `clean verify` 6425 unitarias y 435 de integración, 0 fallas. Commits `17898318` (E-612: el stream del chat terminaba cortado si se apagaba algo en medio; error del núcleo), `58204e40` circuito de `ia.chat` e `ia.voz`, `5ad44e64` propuestas, memoria y mensajes automáticos, `a2d4cc34` push al circuito (máx. 4/h), `183a9ba0` IT de punta a punta, `917a5f93` documentación. Sin migraciones. Bitácora E-612 a E-614 |
+| D — QA | backend `plataforma-ia` (puerto 8092, base `renaser_guia` con V100–V102) + app `plataforma-app` por Metro | **En curso (noche del 13/10)**. Hecho: cuenta Soporte TI de prueba con `asignar.sql` (funcionó: ADMIN → SOPORTE_TI); API: Admin 403 en la consola, 423 sin desbloqueo, 401 `CONTRASENA_INCORRECTA`, 428 sin reautenticar, 52 funciones (7 críticas), circuito con las dos partes cerradas, `chat` apagado para Aprendiz → 503 con el aviso y 6 hijas en `/mias`; Maestro `.maestro/interruptores/` 30–33 en verde (Tribu, Muro, Training, SER). Falta: suite de regresión completa sobre la fase 1, consola con mobile-mcp |
 
 Puntos de coordinación que la app ya asume y se le pasaron a A (revisar en su informe que estén):
 
@@ -50,6 +50,11 @@ Riesgos que anotó A para el despliegue: publicar el backend antes del APK (V100
 no desbloquean la consola) y `asignar.sql` no deja convertir al único ADMIN/ALQUIMISTA; con notificaciones o chat
 apagados, avisos y bienvenidas se acumulan en el outbox y salen al prender (ERROR en el log cada 5 min mientras tanto);
 con una excepción por rol en la cadena, la evaluación suma una consulta del rol por pedido (sin caché).
+
+Hallazgos del QA para no repetir: la cuenta «Aprendiz 2» (`habrol-aprendiz2`) es **Guía de aprendiz** desde el E2E de
+D-265 (un apagado «para Aprendiz» no la toca: usar `habrol-aprendiz1`); desde la máquina el login entra por IPv6 y el
+límite de 10 por hora tiene la clave `reset-password:rl:login:origen-email:::/64|<correo>` en el Redis local
+(`qa_interruptores.py` del scratchpad ahora reusa la sesión).
 
 Notas del entorno: el emulador se apagó para liberar memoria (al relanzarlo, revisar que la app instalada sea la del día;
 ver la memoria «emulador vuelve de un snapshot viejo»). El contenedor `renaser-fotos` quedó prendido. Worktrees de hoy por
