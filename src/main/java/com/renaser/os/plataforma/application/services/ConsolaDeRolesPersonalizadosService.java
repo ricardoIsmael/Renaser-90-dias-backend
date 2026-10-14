@@ -15,6 +15,7 @@ import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.ReautenticacionRequeridaException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.ConflictoDeRolPersonalizadoException;
 import com.renaser.os.users.api.GestionarRolesPersonalizadosUseCase;
 import com.renaser.os.users.api.GestionarRolesPersonalizadosUseCase.BorrarRolPersonalizadoCommand;
 import com.renaser.os.users.api.GestionarRolesPersonalizadosUseCase.CambioDeRolPersonalizado;
@@ -131,8 +132,8 @@ class ConsolaDeRolesPersonalizadosService implements GestionarRolesEnConsolaUseC
         String motivo = PedidoDeRolPersonalizado.motivoValido(command.motivo());
         RolPersonalizadoResumen actual = requerir(command.id());
         if (actual.personas() > 0) {
-            throw new IllegalStateException("«" + actual.nombre() + "» tiene " + actual.personas() + " persona(s): "
-                    + "no se borra. Desactívalo o reemplázalo en bloque.");
+            throw ConflictoDeRolPersonalizadoException.conPersonas("«" + actual.nombre() + "» tiene "
+                    + actual.personas() + " persona(s): no se borra. Desactívalo o reemplázalo en bloque.");
         }
         exigirReautenticacion(command.acceso(), command.reautenticacion());
         CambioDeRolPersonalizado cambio = gestion.borrar(new BorrarRolPersonalizadoCommand(command.acceso().actor(),

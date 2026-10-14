@@ -194,6 +194,18 @@ Asignación (Administración, como hoy: ADMIN y ALQUIMISTA; solo ADMIN asigna al
   `rolPersonalizado: { id, nombre } | null` (aditivo). `role` sigue siendo el base.
 - Auditoría: tipo nuevo `ROL_PERSONALIZADO` (crear, editar, desactivar, borrar, reemplazar), `clave` = `"rp:" + id`,
   `antes`/`despues` con `{ nombre, rolBase, activo, funcionalidades }`.
+- **Aditivo (B2, 2026-10-14; D-269, pedido del coordinador): `codigo` en los rechazos de la consola de roles.** Mismo
+  formato de error con `codigo` (`ApiErrorConCodigo`, sin `funcionalidad`): `{ "message": "…", "timestamp": "…",
+  "codigo": "…" }`. Los estados siguen los de la tabla de arriba:
+
+  | Estado | `codigo` | Cuándo |
+  |---|---|---|
+  | 409 | `VERSION_CAMBIADA` | `PUT` con una `version` que ya no es la del rol (otra persona lo cambió) |
+  | 409 | `ROL_CON_PERSONAS` | `PUT` que cambia el `rolBase` de un rol con personas, o `DELETE` de un rol con personas |
+  | 400 | `NOMBRE_REPETIDO` | `POST` o `PUT` con el nombre de otro rol personalizado o de un rol base (sin mayúsculas ni tildes) |
+  | 400 | `MAXIMO_DE_ROLES` | `POST` de un rol nuevo, o `PUT` que reactiva uno, con 20 activos |
+
+  El resto de los 400 (sin motivo, base `IT_SUPPORT`, clave fuera de la base) siguen sin `codigo`.
 - **Aditivo (B2, 2026-10-14; D-269, respuesta del dueño): push a Administración.** Si Soporte TI edita un rol con
   personas cambiando `funcionalidades`, `activo` o la base, o lo reemplaza en bloque moviendo personas, cada ADMIN y
   ALQUIMISTA activo recibe una notificación `OPERACION_PLATAFORMA` (fila en la bandeja y push), sin `rutaApp`:

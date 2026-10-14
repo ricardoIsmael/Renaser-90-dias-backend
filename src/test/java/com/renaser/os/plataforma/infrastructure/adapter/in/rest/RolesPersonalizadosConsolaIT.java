@@ -194,17 +194,25 @@ class RolesPersonalizadosConsolaIT {
                 .statusCode()).as("base Soporte TI").isEqualTo(400);
         assertThat(pedidos.enviar("POST", RUTA, sesion, crear("Gestor", "MENTOR", List.of("eventos.gestion")),
                 consola).statusCode()).as("clave que MENTOR no usa").isEqualTo(400);
-        assertThat(pedidos.enviar("POST", RUTA, sesion, crear("MENTOR JUNIOR", "TRAINEE", List.of()), consola)
-                .statusCode()).as("nombre repetido").isEqualTo(400);
-        assertThat(pedidos.enviar("POST", RUTA, sesion, crear("Mentor", "TRAINEE", List.of()), consola).statusCode())
-                .as("nombre de un rol base").isEqualTo(400);
+        HttpResponse<String> repetido = pedidos.enviar("POST", RUTA, sesion, crear("MENTOR JUNIOR", "TRAINEE",
+                List.of()), consola);
+        assertThat(repetido.statusCode()).as("nombre repetido").isEqualTo(400);
+        assertThat(pedidos.json(repetido).get("codigo").asText()).isEqualTo("NOMBRE_REPETIDO");
+        HttpResponse<String> deRolBase = pedidos.enviar("POST", RUTA, sesion, crear("Mentor", "TRAINEE", List.of()),
+                consola);
+        assertThat(deRolBase.statusCode()).as("nombre de un rol base").isEqualTo(400);
+        assertThat(pedidos.json(deRolBase).get("codigo").asText()).isEqualTo("NOMBRE_REPETIDO");
 
         JsonNode lista = pedidos.json(pedidos.enviar("GET", RUTA, sesion, null, consola));
         assertThat(lista).hasSize(1);
         assertThat(lista.get(0).get("funcionalidades").toString()).isEqualTo("[\"chat\",\"muro\"]");
 
-        assertThat(pedidos.enviar("PUT", RUTA + "/" + id, sesion, editar("Mentor junior", List.of("muro"), false, 7),
-                consola).statusCode()).as("versión vieja").isEqualTo(409);
+        HttpResponse<String> versionVieja = pedidos.enviar("PUT", RUTA + "/" + id, sesion,
+                editar("Mentor junior", List.of("muro"), false, 7), consola);
+        assertThat(versionVieja.statusCode()).as("versión vieja").isEqualTo(409);
+        assertThat(pedidos.json(versionVieja).get("codigo").asText()).isEqualTo("VERSION_CAMBIADA");
+        assertThat(pedidos.json(versionVieja).get("message").asText()).isNotBlank();
+        assertThat(pedidos.json(versionVieja).has("funcionalidad")).isFalse();
         HttpResponse<String> desactivado = pedidos.enviar("PUT", RUTA + "/" + id, sesion,
                 editar("Mentor junior", List.of("muro"), false, 1), consola);
         assertThat(desactivado.statusCode()).isEqualTo(200);
@@ -236,5 +244,6 @@ class RolesPersonalizadosConsolaIT {
 
         assertThat(vigesimoPrimero.statusCode()).isEqualTo(400);
         assertThat(pedidos.json(vigesimoPrimero).get("message").asText()).contains("20");
+        assertThat(pedidos.json(vigesimoPrimero).get("codigo").asText()).isEqualTo("MAXIMO_DE_ROLES");
     }
 }

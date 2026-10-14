@@ -1,6 +1,7 @@
 package com.renaser.os.users.domain.model.rolpersonalizado;
 
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.ConflictoDeRolPersonalizadoException;
 import com.renaser.os.users.api.UserRole;
 
 import java.time.Instant;
@@ -88,8 +89,8 @@ public final class RolPersonalizado {
     public RolPersonalizado editar(Datos datos, boolean activoNuevo, long personas, UserId actor, Instant ahora) {
         UserRole base = datos.rolBase() == null ? rolBase : rolBaseValido(datos.rolBase());
         if (base != rolBase && personas > 0) {
-            throw new IllegalStateException("«" + nombre + "» tiene " + personas + " persona(s): no cambia de rol "
-                    + "base. Crea otro rol y reemplázalo en bloque.");
+            throw ConflictoDeRolPersonalizadoException.conPersonas("«" + nombre + "» tiene " + personas
+                    + " persona(s): no cambia de rol base. Crea otro rol y reemplázalo en bloque.");
         }
         return new RolPersonalizado(id, nombreValido(datos.nombre()), descripcionValida(datos.descripcion()), base,
                 activoNuevo, clavesValidas(datos.funcionalidades()), version + 1, creadoPor, creadoEn,
@@ -99,8 +100,8 @@ public final class RolPersonalizado {
     /** Con personas asignadas no se borra (FR-033): se desactiva o se reemplaza en bloque. */
     public void exigirQueSePuedaBorrar(long personas) {
         if (personas > 0) {
-            throw new IllegalStateException("«" + nombre + "» tiene " + personas + " persona(s): no se borra. "
-                    + "Desactívalo o reemplázalo en bloque.");
+            throw ConflictoDeRolPersonalizadoException.conPersonas("«" + nombre + "» tiene " + personas
+                    + " persona(s): no se borra. Desactívalo o reemplázalo en bloque.");
         }
     }
 

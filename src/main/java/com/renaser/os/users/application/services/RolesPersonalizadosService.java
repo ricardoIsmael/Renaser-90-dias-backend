@@ -4,6 +4,7 @@ import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.ConflictoDeRolPersonalizadoException;
 import com.renaser.os.users.api.GestionarRolesPersonalizadosUseCase;
 import com.renaser.os.users.api.RolPersonalizadoCambiadoEvent;
 import com.renaser.os.users.application.ports.out.rolpersonalizado.CargarRolesPersonalizadosPort;
@@ -73,7 +74,7 @@ class RolesPersonalizadosService implements GestionarRolesPersonalizadosUseCase 
         guardar.bloquearCambios();
         RolPersonalizado actual = requerir(command.id());
         if (actual.version() != command.version()) {
-            throw new IllegalStateException("Otra persona cambió este rol recién. Vuelve a cargarlo.");
+            throw ConflictoDeRolPersonalizadoException.versionCambiada();
         }
         long personas = cargar.personasCon(actual.id());
         RolPersonalizado editado = actual.editar(new Datos(command.nombre(), command.descripcion(), command.rolBase(),
@@ -84,7 +85,7 @@ class RolesPersonalizadosService implements GestionarRolesPersonalizadosUseCase 
             ReglasDeRolesPersonalizados.exigirCupo(existentes, actual.id());
         }
         if (!guardar.actualizar(editado, actual.version())) {
-            throw new IllegalStateException("Otra persona cambió este rol recién. Vuelve a cargarlo.");
+            throw ConflictoDeRolPersonalizadoException.versionCambiada();
         }
         publicar(editado.id());
         return new CambioDeRolPersonalizado(ResumenDeRolPersonalizado.de(actual, personas),

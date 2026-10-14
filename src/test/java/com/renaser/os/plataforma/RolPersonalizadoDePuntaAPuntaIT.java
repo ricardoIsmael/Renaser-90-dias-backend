@@ -203,8 +203,21 @@ class RolPersonalizadoDePuntaAPuntaIT {
         assertThat(pedidos.json(pedidos.enviar("GET", RUTA, soporte, null, consola)).get(0).get("personas").asLong())
                 .isEqualTo(2);
 
-        assertThat(pedidos.enviar("DELETE", RUTA + "/" + rol + "?motivo=x", soporte, null, withReautenticacion())
-                .statusCode()).as("con personas").isEqualTo(409);
+        HttpResponse<String> borrarConPersonas = pedidos.enviar("DELETE", RUTA + "/" + rol + "?motivo=x", soporte,
+                null, withReautenticacion());
+        assertThat(borrarConPersonas.statusCode()).as("con personas").isEqualTo(409);
+        assertThat(pedidos.json(borrarConPersonas).get("codigo").asText()).isEqualTo("ROL_CON_PERSONAS");
+
+        Map<String, Object> otraBase = new LinkedHashMap<>();
+        otraBase.put("nombre", "Mentor junior");
+        otraBase.put("rolBase", "TRAINEE_GUIDE");
+        otraBase.put("funcionalidades", List.of());
+        otraBase.put("activo", true);
+        otraBase.put("motivo", "Pasarlo a guía");
+        otraBase.put("version", 1);
+        HttpResponse<String> cambiarBase = pedidos.enviar("PUT", RUTA + "/" + rol, soporte, otraBase, consola);
+        assertThat(cambiarBase.statusCode()).as("cambiar la base con personas").isEqualTo(409);
+        assertThat(pedidos.json(cambiarBase).get("codigo").asText()).isEqualTo("ROL_CON_PERSONAS");
 
         Map<String, Object> aNinguno = new LinkedHashMap<>();
         aNinguno.put("rolDestinoId", null);

@@ -1,6 +1,7 @@
 package com.renaser.os.users.domain.model.rolpersonalizado;
 
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.ConflictoDeRolPersonalizadoException;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.domain.model.rolpersonalizado.RolPersonalizado.Datos;
 import org.junit.jupiter.api.DisplayName;
@@ -99,7 +100,8 @@ class RolPersonalizadoTest {
         Datos aGuia = new Datos("Mentor junior", null, UserRole.TRAINEE_GUIDE, Set.of());
 
         assertThatThrownBy(() -> mentorJunior().editar(aGuia, true, 1, soporte, AHORA))
-                .isInstanceOf(IllegalStateException.class).hasMessageContaining("no cambia de rol base");
+                .isInstanceOf(ConflictoDeRolPersonalizadoException.class).hasMessageContaining("no cambia de rol base")
+                .extracting(e -> ((ConflictoDeRolPersonalizadoException) e).codigo()).isEqualTo("ROL_CON_PERSONAS");
         assertThat(mentorJunior().editar(aGuia, true, 0, soporte, AHORA).rolBase())
                 .isEqualTo(UserRole.TRAINEE_GUIDE);
         assertThat(mentorJunior().editar(new Datos("Mentor junior", null, UserRole.MENTOR, Set.of()), true, 5,
@@ -110,7 +112,8 @@ class RolPersonalizadoTest {
     @DisplayName("con personas asignadas no se borra (FR-033): 409")
     void noSeBorraConPersonas() {
         assertThatThrownBy(() -> mentorJunior().exigirQueSePuedaBorrar(2))
-                .isInstanceOf(IllegalStateException.class).hasMessageContaining("2 persona");
+                .isInstanceOf(ConflictoDeRolPersonalizadoException.class).hasMessageContaining("2 persona")
+                .extracting(e -> ((ConflictoDeRolPersonalizadoException) e).codigo()).isEqualTo("ROL_CON_PERSONAS");
         assertThatCode(() -> mentorJunior().exigirQueSePuedaBorrar(0)).doesNotThrowAnyException();
     }
 

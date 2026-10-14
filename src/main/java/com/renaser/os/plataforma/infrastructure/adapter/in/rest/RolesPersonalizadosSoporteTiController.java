@@ -7,13 +7,18 @@ import com.renaser.os.plataforma.application.ports.in.GestionarRolesEnConsolaUse
 import com.renaser.os.plataforma.application.ports.in.GestionarRolesEnConsolaUseCase.ReemplazarRolEnConsolaCommand;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.ApiErrorConCodigo;
 import com.renaser.os.shared.web.security.ActorAutenticado;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import com.renaser.os.shared.web.security.SinInterruptor;
+import com.renaser.os.users.api.ConflictoDeRolPersonalizadoException;
+import com.renaser.os.users.api.RolPersonalizadoRechazadoException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -77,6 +82,23 @@ class RolesPersonalizadosSoporteTiController {
         roles.borrar(new BorrarRolEnConsolaCommand(PedidoDeConsola.acceso(actor, request), id, motivo,
                 request.getHeader(PedidoDeConsola.REAUTENTICACION), PedidoDeConsola.dispositivo(request)));
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * 409 con {@code codigo} ({@code VERSION_CAMBIADA}, {@code ROL_CON_PERSONAS}): la app sabe qué pasó sin releer el rol
+     * ni leer el texto (contrato fase 2 §4, aditivo).
+     */
+    @ExceptionHandler(ConflictoDeRolPersonalizadoException.class)
+    public ResponseEntity<ApiErrorConCodigo> conflicto(ConflictoDeRolPersonalizadoException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).contentType(MediaType.APPLICATION_JSON)
+                .body(ApiErrorConCodigo.of(ex.getMessage(), ex.codigo(), null));
+    }
+
+    /** 400 con {@code codigo} ({@code NOMBRE_REPETIDO}, {@code MAXIMO_DE_ROLES}), como dice el contrato (§4.5). */
+    @ExceptionHandler(RolPersonalizadoRechazadoException.class)
+    public ResponseEntity<ApiErrorConCodigo> rechazado(RolPersonalizadoRechazadoException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).contentType(MediaType.APPLICATION_JSON)
+                .body(ApiErrorConCodigo.of(ex.getMessage(), ex.codigo(), null));
     }
 
     @PostMapping("/{id}/reemplazar")

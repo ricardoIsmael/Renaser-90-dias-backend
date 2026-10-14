@@ -1,5 +1,6 @@
 package com.renaser.os.users.domain.model.rolpersonalizado;
 
+import com.renaser.os.users.api.RolPersonalizadoRechazadoException;
 import com.renaser.os.users.api.UserRole;
 
 import java.util.Collection;
@@ -29,13 +30,14 @@ public final class ReglasDeRolesPersonalizados {
                                          UUID propio) {
         for (UserRole base : UserRole.values()) {
             if (candidato.seLlamaIgualQue(base.nombreVisible())) {
-                throw new IllegalArgumentException("«" + candidato.nombre() + "» es el nombre de un rol base: elige "
-                        + "otro");
+                throw RolPersonalizadoRechazadoException.nombreRepetido("«" + candidato.nombre()
+                        + "» es el nombre de un rol base: elige otro");
             }
         }
         for (RolPersonalizado otro : existentes) {
             if (!otro.id().equals(propio) && candidato.seLlamaIgualQue(otro.nombre())) {
-                throw new IllegalArgumentException("Ya hay un rol que se llama «" + otro.nombre() + "»");
+                throw RolPersonalizadoRechazadoException.nombreRepetido("Ya hay un rol que se llama «" + otro.nombre()
+                        + "»");
             }
         }
     }
@@ -50,8 +52,8 @@ public final class ReglasDeRolesPersonalizados {
         long activos = existentes.stream().filter(RolPersonalizado::activo).filter(r -> !r.id().equals(propio))
                 .count();
         if (activos >= MAXIMO_DE_ACTIVOS) {
-            throw new IllegalArgumentException("Ya hay " + MAXIMO_DE_ACTIVOS + " roles personalizados activos: "
-                    + "desactiva uno antes de sumar otro");
+            throw RolPersonalizadoRechazadoException.maximoDeRoles("Ya hay " + MAXIMO_DE_ACTIVOS
+                    + " roles personalizados activos: desactiva uno antes de sumar otro");
         }
     }
 

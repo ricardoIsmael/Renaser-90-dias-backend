@@ -1,6 +1,7 @@
 package com.renaser.os.users.domain.model.rolpersonalizado;
 
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.RolPersonalizadoRechazadoException;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.domain.model.rolpersonalizado.RolPersonalizado.Datos;
 import org.junit.jupiter.api.DisplayName;
@@ -35,7 +36,8 @@ class ReglasDeRolesPersonalizadosTest {
     @DisplayName("el nombre de un rol base, con o sin tildes y mayúsculas, se rechaza: 400")
     void nombreDeRolBase(String nombre) {
         assertThatThrownBy(() -> ReglasDeRolesPersonalizados.exigirNombreLibre(rol(nombre, UserRole.MENTOR, true),
-                List.of(), null)).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("rol base");
+                List.of(), null)).isInstanceOf(RolPersonalizadoRechazadoException.class).hasMessageContaining("rol base")
+                .extracting(e -> ((RolPersonalizadoRechazadoException) e).codigo()).isEqualTo("NOMBRE_REPETIDO");
     }
 
     @Test
@@ -45,7 +47,8 @@ class ReglasDeRolesPersonalizadosTest {
         RolPersonalizado candidato = rol("mentor JÚNIOR", UserRole.TRAINEE, true);
 
         assertThatThrownBy(() -> ReglasDeRolesPersonalizados.exigirNombreLibre(candidato, List.of(existente), null))
-                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Ya hay un rol");
+                .isInstanceOf(RolPersonalizadoRechazadoException.class).hasMessageContaining("Ya hay un rol")
+                .extracting(e -> ((RolPersonalizadoRechazadoException) e).codigo()).isEqualTo("NOMBRE_REPETIDO");
         assertThatCode(() -> ReglasDeRolesPersonalizados.exigirNombreLibre(existente, List.of(existente),
                 existente.id())).doesNotThrowAnyException();
     }
@@ -64,7 +67,8 @@ class ReglasDeRolesPersonalizadosTest {
         roles.add(vigesimo);
 
         assertThatThrownBy(() -> ReglasDeRolesPersonalizados.exigirCupo(roles, null))
-                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("20");
+                .isInstanceOf(RolPersonalizadoRechazadoException.class).hasMessageContaining("20")
+                .extracting(e -> ((RolPersonalizadoRechazadoException) e).codigo()).isEqualTo("MAXIMO_DE_ROLES");
         assertThatCode(() -> ReglasDeRolesPersonalizados.exigirCupo(roles, vigesimo.id()))
                 .doesNotThrowAnyException();
     }

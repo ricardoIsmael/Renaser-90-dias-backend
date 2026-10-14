@@ -3,6 +3,7 @@ package com.renaser.os.users.application.services;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.ConflictoDeRolPersonalizadoException;
 import com.renaser.os.users.api.GestionarRolesPersonalizadosUseCase.BorrarRolPersonalizadoCommand;
 import com.renaser.os.users.api.GestionarRolesPersonalizadosUseCase.CambioDeRolPersonalizado;
 import com.renaser.os.users.api.GestionarRolesPersonalizadosUseCase.CrearRolPersonalizadoCommand;
@@ -124,7 +125,8 @@ class RolesPersonalizadosServiceTest {
         UUID id = crearMentorJunior().despues().id();
 
         assertThatThrownBy(() -> service.editar(new EditarRolPersonalizadoCommand(soporte, id, "Mentor junior", null,
-                null, Set.of("muro"), true, 7))).isInstanceOf(IllegalStateException.class);
+                null, Set.of("muro"), true, 7))).isInstanceOf(ConflictoDeRolPersonalizadoException.class)
+                .extracting(e -> ((ConflictoDeRolPersonalizadoException) e).codigo()).isEqualTo("VERSION_CAMBIADA");
 
         CambioDeRolPersonalizado cambio = service.editar(new EditarRolPersonalizadoCommand(soporte, id,
                 "Mentor junior", null, null, Set.of("muro"), false, 1));
