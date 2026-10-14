@@ -444,7 +444,7 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         CelulaId primera = celulasActuales.isEmpty() ? null : celulasActuales.get(0);
         return new MentorCandidato(id, resumen != null ? resumen.fullName() : null,
                 resumen != null ? resumen.avatarUrl() : null, primera, celulasActuales, especialidad,
-                resumen != null ? resumen.role() : null);
+                resumen != null ? resumen.role() : null, resumen != null ? resumen.rolPersonalizado() : null);
     }
 
     /**

@@ -4,6 +4,7 @@ import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FasePrograma;
 import com.renaser.os.users.api.ParticipacionPrograma;
+import com.renaser.os.users.api.RolPersonalizadoAsignado;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.application.ports.in.participante.ListTraineesUseCase.ResumenTraineeAdmin;
@@ -179,7 +180,11 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
                    COALESCE(pp.timezone, 'America/Lima') AS timezone,
                    pp.programa_activado_en,
                    COALESCE(pp.dias_ajuste_programa, 0) AS dias_ajuste_programa,
-                   u.rol, u.baja_solicitada_en
+                   u.rol, u.baja_solicitada_en,
+                   (SELECT rp.id FROM renaser.roles_personalizados rp
+                     WHERE rp.id = u.rol_personalizado_id AND rp.activo AND rp.rol_base = u.rol) AS rol_personalizado_id,
+                   (SELECT rp.nombre FROM renaser.roles_personalizados rp
+                     WHERE rp.id = u.rol_personalizado_id AND rp.activo AND rp.rol_base = u.rol) AS rol_personalizado
             """ + FILTRO_PADRON + """
             ORDER BY u.creado_en DESC, u.id
             LIMIT ?4 OFFSET ?5
@@ -346,7 +351,8 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
         return new ResumenTraineeAdmin(id, fullName, email,
                 suspendido ? UserStatus.SUSPENDED : UserStatus.ACTIVE,
                 diaPrograma, FasePrograma.paraDiaPrograma(diaPrograma), celulaId, mentorId,
-                mapearRol(String.valueOf(fila[11])), aInstante(fila[12]), null);
+                mapearRol(String.valueOf(fila[11])), aInstante(fila[12]), null,
+                fila[13] == null ? null : new RolPersonalizadoAsignado(aUuid(fila[13]), String.valueOf(fila[14])));
     }
 
     /**
