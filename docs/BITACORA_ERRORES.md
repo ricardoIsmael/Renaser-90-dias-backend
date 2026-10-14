@@ -15315,3 +15315,30 @@ no repite el de Postgres.
 **Solución.** La prueba mira la causa raíz (`assertThatThrownBy(…).rootCause().hasMessageContaining("append-only")`).
 **Regla general:** para un error que lanza la base (trigger, CHECK), afirmar sobre la causa raíz, no sobre la excepción de
 Spring.
+
+---
+
+## E-612 · El chat de SER cortaba la conexión si una funcionalidad se apagaba con el stream abierto (back, RESUELTO, 13/10)
+
+**Síntoma literal.** En `CircuitoDeLaIaIT` (D-267, agente B), el pedido de chat que abría el circuito (la quinta falla)
+terminaba en el cliente con `java.io.IOException: chunked transfer encoding, state: READING_LENGTH`. En el log del servidor:
+`503 -> funcionalidad apagada: ia.chat` seguido de `Failure in @ExceptionHandler …GlobalExceptionHandler#handleFuncionalidadApagada`
+con `HttpMessageNotWritableException: No converter for [class com.renaser.os.shared.web.ApiErrorConCodigo] with preset
+Content-Type 'text/event-stream'`, y la pila pasaba por `CoyoteAdapter.asyncDispatch`.
+
+**Causa real.** `POST /renasia/mensajes` es asíncrono (SSE): el stream se abre en el despacho inicial y, al terminar, Tomcat
+hace un despacho `ASYNC` que vuelve a pasar por todos los `HandlerInterceptor`. `InterruptoresInterceptor` (D-267) volvía a
+evaluar `ia.chat` en ese despacho; como la funcionalidad se había apagado en el medio (el circuito se abrió con la falla de
+ese mismo turno), lanzaba `FuncionalidadApagadaException` cuando la respuesta ya estaba comprometida como
+`text/event-stream`: el 503 no se podía escribir y la conexión se cortaba. Pasa igual con un apagado manual desde la consola
+mientras alguien tiene el chat abierto. La spec pide lo contrario: «pedido en vuelo cuando se apaga: termina», con el evento
+de error de siempre.
+
+**Solución.** `InterruptoresInterceptor.preHandle` deja pasar el despacho `DispatcherType.ASYNC`: la decisión se tomó al
+entrar el pedido. El turno en vuelo termina con su `error` + `fin` y el siguiente ya recibe el 503.
+
+**Para que no vuelva.** `InterruptoresInterceptorTest.elDespachoAsyncNoSeEvalua` (lanza contra el código anterior) y
+`CircuitoDeLaIaIT.chatSeApagaYVuelve`, que abre el circuito con un stream de verdad. **Regla general:** un interceptor que
+puede cortar un pedido tiene que preguntarse qué pasa en el despacho `ASYNC` de un endpoint que transmite.
+`PermissionEnforcementInterceptor` tiene el mismo patrón (no mira el tipo de despacho); hoy no se nota porque el permiso de
+una sesión no cambia en medio de un stream, pero queda anotado.

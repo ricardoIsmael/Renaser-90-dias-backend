@@ -78,6 +78,26 @@ class InterruptoresInterceptorTest {
         assertThat(interruptores.consultas).isEmpty();
     }
 
+    /**
+     * E-612: el chat de SER abría el stream con la funcionalidad prendida; si se apagaba en el medio (el circuito se
+     * abría con esa misma falla), el despacho ASYNC que escribe el final volvía a pasar por el interceptor, lanzaba, y
+     * la respuesta ya en {@code text/event-stream} no podía llevar el 503: la conexión se cortaba en el cliente con
+     * «chunked transfer encoding, state: READING_LENGTH». Contra el código anterior esta prueba lanza.
+     */
+    @Test
+    @DisplayName("E-612: el despacho ASYNC de un stream ya abierto no se vuelve a evaluar (un pedido en vuelo termina)")
+    void elDespachoAsyncNoSeEvalua() throws Exception {
+        when(provider.getIfAvailable()).thenReturn(interruptores);
+        interruptores.apagada = "chat.grupos";
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setDispatcherType(jakarta.servlet.DispatcherType.ASYNC);
+        ControladorDePrueba bean = new ControladorDePrueba();
+
+        assertThat(interceptor.preHandle(request, new MockHttpServletResponse(),
+                new HandlerMethod(bean, ControladorDePrueba.class.getDeclaredMethod("deClase")))).isTrue();
+        assertThat(interruptores.consultas).isEmpty();
+    }
+
     @Test
     @DisplayName("sin actor (endpoint público) se evalúa el estado global")
     void sinActorEsGlobal() {

@@ -4,6 +4,7 @@ import com.renaser.os.shared.application.Interruptores;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.SinInterruptor;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.ObjectProvider;
@@ -27,6 +28,9 @@ import org.springframework.web.servlet.HandlerInterceptor;
  * actor resoluble (un endpoint público, como el alta) se evalúa el estado global: las excepciones por rol no le
  * aplican a quien todavía no tiene cuenta.
  *
+ * <p>Un pedido en vuelo termina (spec 002): el despacho {@code ASYNC} de un stream ya abierto no se vuelve a evaluar
+ * (E-612).
+ *
  * <p>Recibe {@link Interruptores} por {@link ObjectProvider} por el mismo motivo que el interceptor de permisos: este
  * interceptor entra en todos los {@code @WebMvcTest} del repo, y en esos contextos reducidos no hay quien lo
  * implemente; ahí deja pasar el pedido como antes de existir.
@@ -43,7 +47,11 @@ class InterruptoresInterceptor implements HandlerInterceptor {
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
-        if (!(handler instanceof HandlerMethod handlerMethod)) {
+        if (!(handler instanceof HandlerMethod handlerMethod) || request.getDispatcherType() == DispatcherType.ASYNC) {
+            // E-612: el despacho ASYNC de un stream ya abierto (el chat de SER por SSE) vuelve a pasar por aca solo para
+            // escribir el resultado. Lo que habia que decidir se decidio al entrar el pedido: si la funcionalidad se
+            // apago en el medio, cortar aca rompia la conexion (la respuesta ya estaba en text/event-stream) en vez de
+            // dejar que termine con su evento de siempre (spec 002, «pedido en vuelo»).
             return true;
         }
         String clave = funcionalidadDe(handlerMethod);
