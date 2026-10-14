@@ -348,7 +348,8 @@ public class UserAccountService implements InviteAndCreateUserUseCase, GetMyProf
      * obligaria a redescargar todos los avatares del muro cada vez (E-57).
      */
     private static UserSummary aResumen(User user) {
-        return new UserSummary(user.id(), user.fullName(), user.avatarUrl(), user.role(), user.status());
+        return new UserSummary(user.id(), user.fullName(), user.avatarUrl(), user.role(), user.status(),
+                user.rolPersonalizado().orElse(null));
     }
 
     /** Sin chequeo de {@code hasAccess()}: usado solo para cargar el OBJETIVO de un cambio de rol

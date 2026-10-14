@@ -9,5 +9,10 @@ public enum TipoDeCambio {
     /** Alguien intentó desbloquear la consola con su contraseña (salió bien o no: queda igual). */
     DESBLOQUEO,
     /** Alguien confirmó su contraseña para un cambio crítico (salió bien o no). */
-    REAUTENTICACION
+    REAUTENTICACION,
+    /**
+     * Soporte TI creó, editó, desactivó, borró o reemplazó en bloque un rol personalizado (spec 002, fase 2; V106,
+     * D-269). La {@code clave} es la del rol, {@code rp:<id>}.
+     */
+    ROL_PERSONALIZADO
 }
