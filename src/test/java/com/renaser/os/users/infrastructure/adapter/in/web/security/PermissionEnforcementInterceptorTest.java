@@ -450,6 +450,36 @@ class PermissionEnforcementInterceptorTest {
         return actorId;
     }
 
+    // ─── «ver como» (D-270): una cuenta de prueba solo se usa con la sesión de solo lectura ─────────
+
+    private UUID cuentaDePrueba() {
+        UUID actorId = UUID.randomUUID();
+        when(userSummaryFinder.findById(UserId.of(actorId))).thenReturn(Optional.of(new UserSummary(UserId.of(actorId),
+                "Prueba · Mentor", null, UserRole.MENTOR, UserStatus.ACTIVE, null, true)));
+        return actorId;
+    }
+
+    @Test
+    @DisplayName("una cuenta de prueba por X-Actor-Id (sin la sesión de solo lectura) recibe 403: no se escribe en su nombre")
+    void cuentaDePruebaSinSoloLectura() throws Exception {
+        boolean continua = ejecutarPreHandle(cuentaDePrueba(), "exigeUseApp");
+
+        assertThat(continua).isFalse();
+        assertThat(ultimaRespuesta.getStatus()).isEqualTo(403);
+    }
+
+    @Test
+    @DisplayName("la misma cuenta de prueba desde su sesión de solo lectura pasa (el filtro ya rechazó lo que escribe)")
+    void cuentaDePruebaConSoloLectura() throws Exception {
+        UUID actorId = cuentaDePrueba();
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/home");
+        request.addHeader("X-Actor-Id", actorId.toString());
+        request.setAttribute(com.renaser.os.shared.web.security.SesionDeSoloLectura.EN_EL_PEDIDO, "soporte");
+        ultimaRespuesta = new MockHttpServletResponse();
+
+        assertThat(interceptor.preHandle(request, ultimaRespuesta, handlerMethodFor("exigeUseApp"))).isTrue();
+    }
+
     private boolean ejecutarPreHandle(UUID actorId, String metodo) throws Exception {
         return ejecutarPreHandleCon(interceptor, actorId, metodo);
     }

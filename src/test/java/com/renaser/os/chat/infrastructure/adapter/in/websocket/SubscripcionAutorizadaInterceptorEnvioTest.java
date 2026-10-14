@@ -1,6 +1,7 @@
 package com.renaser.os.chat.infrastructure.adapter.in.websocket;
 
 import com.renaser.os.chat.application.ports.in.conversacion.AutorizarAccesoAConversacionUseCase;
+import com.renaser.os.shared.web.security.SesionDeSoloLectura;
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -63,6 +64,21 @@ class SubscripcionAutorizadaInterceptorEnvioTest {
         Message<byte[]> mensaje = envioA("/app/conversaciones/abc/mensajes");
 
         assertThat(interceptor().preSend(mensaje, canal)).isSameAs(mensaje);
+        verifyNoInteractions(autorizarAcceso, userSummaryFinder);
+    }
+
+    @Test
+    @DisplayName("«ver como» (D-270): una sesión de solo lectura no manda nada, ni a /app (MODO_SOLO_LECTURA)")
+    void soloLecturaNoManda() {
+        StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SEND);
+        accessor.setDestination("/app/conversaciones/abc/mensajes");
+        accessor.setSessionAttributes(new java.util.HashMap<>(java.util.Map.of(SesionDeSoloLectura.ABIERTA_POR,
+                java.util.UUID.randomUUID().toString())));
+        Message<byte[]> mensaje = MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
+
+        assertThatThrownBy(() -> interceptor().preSend(mensaje, canal))
+                .isInstanceOf(MessagingException.class)
+                .hasMessageContaining("MODO_SOLO_LECTURA");
         verifyNoInteractions(autorizarAcceso, userSummaryFinder);
     }
 }

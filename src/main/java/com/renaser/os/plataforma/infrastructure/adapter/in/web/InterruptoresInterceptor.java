@@ -5,6 +5,7 @@ import com.renaser.os.shared.application.Interruptores;
 import com.renaser.os.shared.domain.FuncionalidadNoDisponibleException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.Funcionalidad;
+import com.renaser.os.shared.web.security.SesionDeSoloLectura;
 import com.renaser.os.shared.web.security.SinInterruptor;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletRequest;
@@ -43,7 +44,8 @@ import org.springframework.web.servlet.HandlerInterceptor;
  * persona, {@link #afterCompletion} lo cuenta (5xx = error) para {@link MedirPedidoEnDespliegueUseCase}, que no hace
  * nada si no hay despliegues en curso. Spring NO llama a {@code afterCompletion} de un interceptor cuyo
  * {@code preHandle} lanzó, así que el 404 de quien está fuera del despliegue se cuenta al cortarlo. Un 503 por un
- * interruptor apagado no se cuenta: es mantenimiento, no uso ni falla. Contar nunca rompe el pedido.
+ * interruptor apagado no se cuenta: es mantenimiento, no uso ni falla. Contar nunca rompe el pedido. Tampoco se
+ * cuentan los pedidos de una sesión «ver como» (D-270): los marca {@code FiltroDeSoloLectura}.
  */
 class InterruptoresInterceptor implements HandlerInterceptor {
 
@@ -75,8 +77,11 @@ class InterruptoresInterceptor implements HandlerInterceptor {
             return true;
         }
         UserId actor = actorDelPedido(request);
-        PedidoAMedir pedido = new PedidoAMedir(funcionalidad.value(), actor);
-        if (actor != null) {
+        // «Ver como» (D-270): los pedidos de una sesión de solo lectura (la cuenta de prueba que mira Soporte TI) no
+        // cuentan en las métricas del despliegue: no son uso real. Un pedido sin persona tampoco se cuenta.
+        PedidoAMedir pedido = new PedidoAMedir(funcionalidad.value(),
+                SesionDeSoloLectura.vieneDeUna(request) ? null : actor);
+        if (pedido.actor() != null) {
             request.setAttribute(PEDIDO_A_MEDIR, pedido);
         }
         Interruptores interruptores = interruptoresProvider.getIfAvailable();

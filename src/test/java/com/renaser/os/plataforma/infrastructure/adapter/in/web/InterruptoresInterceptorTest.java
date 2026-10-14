@@ -23,6 +23,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -200,6 +201,29 @@ class InterruptoresInterceptorTest {
         terminar(actor, "deClase", 200, null);
 
         assertThat(medidor.pedidos).containsExactly("ia.voz@" + actor + ":ok");
+    }
+
+    @Test
+    @DisplayName("«ver como» (D-270): los pedidos de una sesión de solo lectura no se cuentan, ni el 404 de quien está fuera")
+    void verComoNoSeCuenta() throws Exception {
+        when(provider.getIfAvailable()).thenReturn(interruptores);
+        lenient().when(medidorProvider.getIfAvailable()).thenReturn(medidor);
+        UUID cuentaDePrueba = UUID.randomUUID();
+        HandlerMethod handler = new HandlerMethod(new ControladorDePrueba(),
+                ControladorDePrueba.class.getDeclaredMethod("deClase"));
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("X-Actor-Id", cuentaDePrueba.toString());
+        request.setAttribute(com.renaser.os.shared.web.security.SesionDeSoloLectura.EN_EL_PEDIDO, "soporte");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        interceptor.preHandle(request, response, handler);
+        response.setStatus(500);
+        interceptor.afterCompletion(request, response, handler, null);
+        interruptores.noDisponible = "chat.grupos";
+        assertThatThrownBy(() -> interceptor.preHandle(request, new MockHttpServletResponse(), handler))
+                .isInstanceOf(FuncionalidadNoDisponibleException.class);
+
+        assertThat(medidor.pedidos).isEmpty();
     }
 
     /** Un pedido entero: preHandle (si deja pasar) y afterCompletion con ese estado. */
