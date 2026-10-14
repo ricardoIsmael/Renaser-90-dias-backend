@@ -94,6 +94,10 @@ class CatalogoDeFuncionalidadesTest {
         assertThat(catalogo.definicion("mentor.mi_grupo").orElseThrow().rolesQueLaUsan())
                 .containsExactlyInAnyOrder(UserRole.MENTOR, UserRole.TRAINEE_GUIDE);
         assertThat(catalogo.definicion("registro").orElseThrow().rolesQueLaUsan()).isEmpty();
+        assertThat(catalogo.definicion("caja").orElseThrow().rolesQueLaUsan())
+                .as("E-620: el mentor y la guía ven la caja en la ficha de su aprendiz; el Alquimista no la gestiona")
+                .containsExactlyInAnyOrder(UserRole.TRAINEE, UserRole.MENTOR, UserRole.TRAINEE_GUIDE, UserRole.ADMIN,
+                        UserRole.IT_SUPPORT);
         assertThat(catalogo.todas()).filteredOn(f -> !f.clave().equals("registro")
                         && !f.clave().equals("mentor.mi_grupo"))
                 .allMatch(f -> f.rolesQueLaUsan().contains(UserRole.IT_SUPPORT));

@@ -81,16 +81,28 @@ class DisponibilidadPorRolPersonalizadoTest {
     }
 
     @Test
-    @DisplayName("lo que la base no usa no lo decide el rol personalizado: caja y registro siguen como para MENTOR")
+    @DisplayName("lo que la base no usa no lo decide el rol personalizado: lider, registro y admin siguen como para MENTOR")
     void loQueLaBaseNoUsa() {
         RolEnMemoria nada = new RolEnMemoria(UserRole.MENTOR, Set.of());
 
-        assertThat(DisponibilidadPorRolPersonalizado.noDisponibleEn(cadena("caja"), nada, CATALOGO)).isEmpty();
+        assertThat(DisponibilidadPorRolPersonalizado.noDisponibleEn(cadena("lider"), nada, CATALOGO)).isEmpty();
         assertThat(DisponibilidadPorRolPersonalizado.noDisponibleEn(cadena("registro"), nada, CATALOGO)).isEmpty();
         assertThat(DisponibilidadPorRolPersonalizado.noDisponibleEn(cadena("admin.equipo"), nada, CATALOGO))
                 .isEmpty();
         assertThat(DisponibilidadPorRolPersonalizado.noDisponibleEn(cadena("perfil"), nada, CATALOGO))
                 .as("una lista vacía deja fuera todo lo que la base usa").contains("perfil");
+    }
+
+    @Test
+    @DisplayName("E-620: caja la usan MENTOR y la Guía (el chip de la ficha del aprendiz): se marca o queda fuera")
+    void cajaEsDelMentor() {
+        assertThat(DisponibilidadPorRolPersonalizado.noDisponibleEn(cadena("caja"),
+                new RolEnMemoria(UserRole.MENTOR, Set.of()), CATALOGO)).contains("caja");
+        assertThat(DisponibilidadPorRolPersonalizado.noDisponibleEn(cadena("caja"),
+                new RolEnMemoria(UserRole.TRAINEE_GUIDE, Set.of("caja")), CATALOGO)).isEmpty();
+        assertThat(DisponibilidadPorRolPersonalizado.noDisponibleEn(cadena("caja"),
+                new RolEnMemoria(UserRole.ALCHEMIST, Set.of()), CATALOGO))
+                .as("el Alquimista no gestiona cajas (GuardiaDeCaja): no es asunto de su rol personalizado").isEmpty();
     }
 
     @Test

@@ -15,9 +15,10 @@ import java.util.Optional;
  *   <li><b>Lo que el rol base no usa no lo decide el rol personalizado</b>: si ningún nivel de la cadena figura en
  *       {@code rolesQueLaUsan} para su rol base, la regla no hace nada (y deciden los guards, como para el rol base).
  *       Un rol personalizado solo puede marcar claves que su base usa, así que lo de afuera nunca se puede marcar;
- *       sin esta regla, un «Mentor junior» con TODO marcado perdería igual lo que el catálogo no lista para MENTOR
- *       pero el mentor usa (la caja del aprendiz en su ficha, {@code caja}), y un alta pública con sesión
- *       ({@code registro}, que no usa nadie). Desvío anotado del contrato, que dice «si no, noDisponible».</li>
+ *       sin esta regla, un «Mentor junior» con TODO marcado perdería igual lo que el catálogo no lista para su base
+ *       y la base usa por sus guards, y un alta pública con sesión ({@code registro}, que no usa nadie). Desvío
+ *       anotado del contrato, que dice «si no, noDisponible». El caso que lo descubrió, {@code caja} para MENTOR, ya
+ *       está corregido en el catálogo (E-620); la regla queda por {@code registro} y como resguardo ante otra omisión.</li>
  *   <li>Si no: <b>no disponible en la clave pedida</b> (§4.4). Con la madre sin marcar quedan fuera también las hijas.</li>
  * </ol>
  */

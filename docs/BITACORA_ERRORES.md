@@ -15401,7 +15401,7 @@ llamarse como un método de instancia sin parámetros (ni, en un record, como un
 
 ---
 
-## E-620 · El catálogo de funcionalidades no lista a MENTOR ni a la Guía en `caja`, aunque el mentor la usa (back, ANOTADO, 14/10)
+## E-620 · El catálogo de funcionalidades no lista a MENTOR ni a la Guía en `caja`, aunque el mentor la usa (back, RESUELTO, 14/10)
 
 **Síntoma.** Hallado leyendo el código al diseñar la regla de los roles personalizados (D-269), no en producción: con la
 letra del contrato de la fase 2 («si su clave o una madre no está marcada, no disponible»), un «Mentor junior» con
@@ -15417,6 +15417,12 @@ su base usa según ese campo, y la letra del contrato dejaba fuera lo que la bas
 **Solución.** En la regla, lo que el rol base no usa según el catálogo no lo decide el rol personalizado (desvío anotado en
 D-269): con todo marcado, un rol personalizado equivale a su base. **El catálogo no se tocó** (es de la fase 1 y cambia lo
 que muestra la consola): queda propuesto sumar MENTOR y TRAINEE_GUIDE a `caja`.
+
+> **Corregido 2026-10-14 (respuesta del dueño).** El catálogo ya lista `caja` con TRAINEE, MENTOR, TRAINEE_GUIDE, ADMIN e
+> IT_SUPPORT (`EntradasDelCatalogo`; el Alquimista no gestiona cajas, `GuardiaDeCaja`). Para `caja`, el desvío de la regla
+> ya no hace falta: un «Mentor junior» la marca o la pierde como cualquier otra. El desvío se conserva por `registro` (la
+> usa el alta sin cuenta) y como resguardo ante otra omisión del catálogo. Pruebas: `CatalogoDeFuncionalidadesTest.
+> rolesQueLaUsan` y `DisponibilidadPorRolPersonalizadoTest.cajaEsDelMentor`.
 
 **Cómo evitarlo.** Una clave nueva en el catálogo se declara con los roles que pasan los guards de TODOS sus endpoints,
 no con los de la pantalla principal. Prueba que lo cubre: `DisponibilidadPorRolPersonalizadoTest.todoMarcadoEsLaBase`.
