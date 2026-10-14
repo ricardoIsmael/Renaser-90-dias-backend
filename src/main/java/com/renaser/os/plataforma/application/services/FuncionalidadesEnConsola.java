@@ -2,9 +2,12 @@ package com.renaser.os.plataforma.application.services;
 
 import com.renaser.os.plataforma.application.ports.in.FuncionalidadEnConsola;
 import com.renaser.os.plataforma.application.ports.in.FuncionalidadEnConsola.Actor;
+import com.renaser.os.plataforma.application.ports.in.FuncionalidadEnConsola.ResumenDeDespliegue;
+import com.renaser.os.plataforma.application.ports.out.CargarDesplieguesPort;
 import com.renaser.os.plataforma.application.ports.out.CargarEstadosPort;
 import com.renaser.os.plataforma.domain.model.catalogo.DefinicionDeFuncionalidad;
 import com.renaser.os.plataforma.domain.model.catalogo.ValorPorDefecto;
+import com.renaser.os.plataforma.domain.model.despliegue.DespliegueDeFuncionalidad;
 import com.renaser.os.plataforma.domain.model.estado.EstadoDeFuncionalidad;
 import com.renaser.os.shared.application.EstadoAutomaticoDeFuncionalidades.CircuitoAutomatico;
 import com.renaser.os.shared.domain.UserId;
@@ -23,7 +26,8 @@ import java.util.stream.Collectors;
 /**
  * Arma la vista de la consola de cada funcionalidad: la definición del catálogo más su fila, leída de la BASE y no de
  * la copia en memoria —la consola muestra lo que está guardado aunque esta instancia todavía no haya recargado—, con
- * el nombre de quien la cambió y, en la IA, el estado de su circuito.
+ * el nombre de quien la cambió y, en la IA, el estado de su circuito. Desde la fase 2, también si está en despliegue
+ * progresivo (escalón y cuántos probadores), leído de la base por la misma razón.
  */
 @Component
 class FuncionalidadesEnConsola {
@@ -31,12 +35,14 @@ class FuncionalidadesEnConsola {
     private final EstadoVigente estado;
     private final CargarEstadosPort cargarEstadosPort;
     private final UserSummaryFinder userSummaryFinder;
+    private final CargarDesplieguesPort cargarDesplieguesPort;
 
     FuncionalidadesEnConsola(EstadoVigente estado, CargarEstadosPort cargarEstadosPort,
-                             UserSummaryFinder userSummaryFinder) {
+                             UserSummaryFinder userSummaryFinder, CargarDesplieguesPort cargarDesplieguesPort) {
         this.estado = estado;
         this.cargarEstadosPort = cargarEstadosPort;
         this.userSummaryFinder = userSummaryFinder;
+        this.cargarDesplieguesPort = cargarDesplieguesPort;
     }
 
     List<FuncionalidadEnConsola> todas() {
@@ -44,8 +50,10 @@ class FuncionalidadesEnConsola {
         Map<UserId, UserSummary> autores = userSummaryFinder.findByIds(filas.values().stream()
                 .map(EstadoDeFuncionalidad::actualizadoPor).distinct().toList());
         Map<String, CircuitoAutomatico> circuitos = circuitos();
+        Map<String, ResumenDeDespliegue> despliegues = despliegues();
         return estado.catalogo().todas().stream()
-                .map(definicion -> vista(definicion, filas.get(definicion.clave()), autores, circuitos))
+                .map(definicion -> vista(definicion, filas.get(definicion.clave()), autores, circuitos)
+                        .conDespliegue(despliegues.get(definicion.clave())))
                 .toList();
     }
 
@@ -56,6 +64,11 @@ class FuncionalidadesEnConsola {
     Map<String, EstadoDeFuncionalidad> filasGuardadas() {
         return cargarEstadosPort.todos().stream()
                 .collect(Collectors.toMap(EstadoDeFuncionalidad::clave, Function.identity()));
+    }
+
+    private Map<String, ResumenDeDespliegue> despliegues() {
+        return cargarDesplieguesPort.todos().stream().collect(Collectors.toMap(DespliegueDeFuncionalidad::clave,
+                d -> new ResumenDeDespliegue(d.porcentaje(), d.probadores().size()), (a, b) -> a));
     }
 
     private Map<String, CircuitoAutomatico> circuitos() {
@@ -74,7 +87,7 @@ class FuncionalidadesEnConsola {
                 definicion.nombre(), definicion.descripcion(), definicion.rolesQueLaUsan(), definicion.critica(),
                 definicion.porDefecto(), definicion.procesos(), prendida, porRol(fila),
                 fila == null ? null : fila.aviso(), fila == null ? 0L : fila.version(), autor,
-                fila == null ? null : fila.actualizadoEn(), circuitos.get(definicion.clave()));
+                fila == null ? null : fila.actualizadoEn(), circuitos.get(definicion.clave()), null);
     }
 
     /** Los siete roles, en el orden de {@code UserRole}: {@code false} solo los que tienen excepción propia. */

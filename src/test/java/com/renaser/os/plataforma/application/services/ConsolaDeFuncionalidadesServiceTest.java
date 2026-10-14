@@ -71,7 +71,8 @@ class ConsolaDeFuncionalidadesServiceTest {
         when(sinReglas.orderedStream()).thenReturn(Stream.empty());
         EstadoVigente estado = new EstadoVigente(new CopiaDeEstados(base), sinAutomaticos, sinReglas);
         GuardiaDeSoporteTi guardia = new GuardiaDeSoporteTi(usuarios, tokens, Duration.ofMinutes(15));
-        service = new ConsolaDeFuncionalidadesService(guardia, new FuncionalidadesEnConsola(estado, base, usuarios),
+        service = new ConsolaDeFuncionalidadesService(guardia, new FuncionalidadesEnConsola(estado, base, usuarios,
+                new Dobles.Despliegues()),
                 estado, base, auditoria, tokens, events, UUID::randomUUID, CLOCK);
         tokenDeConsola = tokens.emitirDeConsola(soporte, SESION, Duration.ofMinutes(15));
     }
