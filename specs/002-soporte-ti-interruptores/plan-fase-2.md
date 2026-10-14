@@ -176,7 +176,27 @@ Las cuentas de prueba no cuentan para rankings, padrones, semáforos ni métrica
 A2 y B2 tocan el mismo módulo `plataforma`: se coordinan por contrato (`contracts/fase-2.md`, a escribir antes de lanzar)
 y se integran de a uno.
 
-## 4. Preguntas para el dueño (antes de lanzar la fase 2)
+## 4. Preguntas para el dueño — RESPONDIDAS el 2026-10-14
+
+| | Respuesta |
+|---|---|
+| P1 | La funcionalidad en despliegue que a la persona no le toca **se esconde** |
+| P2 | «Ver como rol» con **cuentas de prueba por rol**, en solo lectura |
+| P3 | Hábitos por rol: **solo los seis roles base** |
+| P4 | «Ver como» **incluye** los roles personalizados |
+| P5 | Métricas del despliegue: **últimas 24 h**, por hora |
+| P6 | Auditoría **solo para Soporte TI**; avisos de cambios críticos **solo por push** |
+| P7 | Soporte TI en una **cuenta aparte**; no entra a Administración |
+
+El contrato que sale de estas respuestas es [contracts/fase-2.md](contracts/fase-2.md). Cambios respecto de §2 y §3:
+los roles personalizados viven en el módulo `users` (no en `plataforma`, que ya depende de `users.api`: lo contrario
+sería un ciclo); la base común (reglas de disponibilidad y «no disponible») ya está hecha en `claude/fase2-base`
+(`92740e4c`); y el trabajo va en dos tandas por memoria de la máquina: **A2 + B2 + C2** y después **B3 — ver como rol**,
+sobre B2 (necesita los roles personalizados, P4).
+
+Texto original de las preguntas:
+
+
 
 - **P1.** Una funcionalidad en despliegue que a la persona todavía no le toca: ¿se esconde (recomendado) o se muestra
   con un aviso «Muy pronto»?
