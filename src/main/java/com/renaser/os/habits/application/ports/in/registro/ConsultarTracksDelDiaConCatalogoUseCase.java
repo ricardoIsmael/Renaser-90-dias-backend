@@ -36,6 +36,14 @@ public interface ConsultarTracksDelDiaConCatalogoUseCase {
      */
     List<TrackDelDiaConCatalogo> consultarHoyDe(UserId participanteId);
 
+    /** Lectura coherente con el cierre del dia del participante, incluso sin registros. */
+    DiaDeHabitos consultarHoyConContextoDe(UserId participanteId);
+
+    record DiaDeHabitos(LocalDate fechaLocal, java.time.ZoneId zonaHoraria,
+                         java.time.Instant cierraEn, java.time.Instant ahoraServidor,
+                         List<TrackDelDiaConCatalogo> tracks) {
+    }
+
     /**
      * {@code horaDisparo}/{@code horaLimite}: horario RESUELTO (preferencia del participante
      * si existe, si no el del catalogo vigente para {@code diaPrograma}/{@code tipoDia} del

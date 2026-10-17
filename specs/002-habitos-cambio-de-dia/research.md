@@ -1,0 +1,9 @@
+# Investigación — 2026-10-17
+
+- **Decisión:** snapshot aditivo con fecha/zona/cierre/ahora/tracks. **Motivo:** la app actual no tiene la zona real; inferirla del teléfono o de plazoEvidencia sería incorrecto. **Alternativas:** polling solo (recuperación eventual), modificar `/today` (rompe APK), consultar perfil con PATCH (escribe para leer), endpoint de contexto separado (carrera entre dos lecturas). Se eligió conservar el contexto de la misma proyección `RegistrosDelDia` hasta HTTP, incluso si está vacía.
+- **Decisión:** `fecha.plusDays(1).atStartOfDay(zona)`; evita sumar 24 horas en DST. La hora sale de `Clock` y viaja por JSON: web puede no leer Date por CORS.
+- **Decisión:** validación central en los pasos genéricos de evidencia y cierre con `/today`. Los formularios, avisos y SER reutilizan esos pasos. El servidor resuelve la carrera final. El 409 por día cerrado conserva el rechazo y notifica la invalidación; otros 409 conservan su tratamiento.
+- **Decisión:** snapshot vencido se oculta y no se conserva silenciosamente si falla el refresco del día. Refrescos del mismo día después de un logro conservan su comportamiento silencioso. La carga lleva generación para impedir que respuestas viejas restauren datos.
+- **Decisión:** reloj de vigencia anclado al instante recibido y tiempo transcurrido; además revisar actividad/foco y periódicamente. No confiar exclusivamente en temporizadores largos o reloj manual del teléfono.
+- **Fuentes:** `RegistroService.consultarHoy`, `ConsultarTracksDelDiaUseCase.RegistrosDelDia`, `TracksDelDiaProyeccionService`, `useTraining`, `useRegistroConFoto`, `evidenciaHabitoApi`; documentación [Expo 57](https://docs.expo.dev/versions/v57.0.0/) consultada antes de código. No requiere nuevas APIs nativas.
+- **Límite del incidente:** los logs no prueban persona/pantalla exactas ni relación con Vercel; las pruebas reproducen el defecto de actualización conocido.
