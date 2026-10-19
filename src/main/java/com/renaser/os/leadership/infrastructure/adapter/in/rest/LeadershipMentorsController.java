@@ -79,6 +79,7 @@ public class LeadershipMentorsController {
                                          @Valid @RequestBody RegisterObservationRequest cuerpo) {
         return ObservationResponse.from(registrar.registrar(new RegistrarObservacionCommand(actorId,
                 UserId.of(mentorId), cuerpo.type(), cuerpo.text(), cuerpo.sentByChat(), cuerpo.messageId(),
-                cuerpo.operationKey())));
+                cuerpo.operationKey(), cuerpo.personId() == null ? null : UserId.of(cuerpo.personId()),
+                cuerpo.weekStart())));
     }
 }

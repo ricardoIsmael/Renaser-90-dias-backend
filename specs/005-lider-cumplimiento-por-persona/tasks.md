@@ -89,8 +89,12 @@ antes a las otras sesiones.
 
 **Independent Test**: quickstart, escenarios 6 y 7.
 
-- [ ] T037 [P] [US3] Prueba que falle: observación con `personId` y `weekStart` que se guarda y se lista; `personId` fuera de los grupos del mentor → 400; sin esos campos, como antes, en `BT/leadership/application/services/ObservacionesDeMentorServiceTest.java`
-- [ ] T038 [US3] Campos opcionales `personId` y `weekStart` en `RegisterObservationRequest`, en el dominio de la observación, en el adaptador (`persona_id`, `semana_desde`) y en la respuesta del GET (`personId`, `personName`, `weekStart`), en `B/leadership/`
+- [x] T037 [P] [US3] Prueba que falle: observación con `personId` y `weekStart` que se guarda y se lista; `personId` fuera de los grupos del mentor → 400; sin esos campos, como antes, en `BT/leadership/application/services/ObservacionesDeMentorServiceTest.java`
+- [x] T038 [US3] Campos opcionales `personId` y `weekStart` en `RegisterObservationRequest`, en el dominio de la observación, en el adaptador (`persona_id`, `semana_desde`) y en la respuesta del GET (`personId`, `personName`, `weekStart`), en `B/leadership/`
+  > **Corregido 2026-10-19.** Las pruebas de T037 viven en `FichaYObservacionesServiceTest` (el servicio ya tenía ahí su prueba, no en un
+  > `ObservacionesDeMentorServiceTest`), en `ObservacionDeMentorTest`, `LeadershipControllersTest` y, contra Postgres, en
+  > `ObservacionMentorPersistenceAdapterTest` (escrita, no corrida) y `BorradoDeCuentaEnLosModulosIT` (idem). `personId` se valida contra
+  > `AcompanamientoFinder` (aprendiz vigente de un grupo de ESE mentor), no contra la tabla de otro módulo.
 - [ ] T039 [US3] «Avisar a su mentor» en `PersonaDelLiderScreen.tsx`: reutiliza `ObservarScreen` con la persona y la semana; el texto del chat empieza con el nombre (`utils/textoDeObservacion.ts`, con prueba); se esconde si `mentor` es `null`
 - [ ] T040 [US3] «Escribirle» en `PersonaDelLiderScreen.tsx` con `abrirConversacionDirecta` + `irAPestana('Comunidad', …)`, como `AlumnoScreen`, sin enviar nada
 

@@ -6,6 +6,7 @@ import com.renaser.os.leadership.application.ports.out.LeerObservacionesPort;
 import com.renaser.os.leadership.domain.model.observacion.ObservacionDeMentor;
 import com.renaser.os.leadership.domain.model.observacion.ObservacionDeMentor.Contenido;
 import com.renaser.os.leadership.domain.model.observacion.ObservacionDeMentor.Envio;
+import com.renaser.os.leadership.domain.model.observacion.ObservacionDeMentor.SobrePersona;
 import com.renaser.os.leadership.domain.model.observacion.TipoObservacion;
 import com.renaser.os.leadership.infrastructure.adapter.out.persistence.SpringDataObservacionMentorRepository.ConteoPorTipo;
 import com.renaser.os.shared.domain.UserId;
@@ -89,12 +90,15 @@ class ObservacionMentorPersistenceAdapter implements GuardarObservacionPort, Lee
 
     private ObservacionMentorJpaEntity aEntidad(ObservacionDeMentor o) {
         return new ObservacionMentorJpaEntity(o.id(), o.mentorId().value(), o.autorId().value(), o.tipo().name(),
-                o.texto(), o.enviadaPorChat(), o.mensajeId(), o.claveOperacion(), o.creadoEn());
+                o.texto(), o.enviadaPorChat(), o.mensajeId(), o.claveOperacion(), o.creadoEn(),
+                o.personaId() == null ? null : o.personaId().value(), o.semanaDesde());
     }
 
     private ObservacionDeMentor aDominio(ObservacionMentorJpaEntity e) {
         return ObservacionDeMentor.rehydrate(e.getId(), new Contenido(UserId.of(e.getMentorId()),
                 UserId.of(e.getAutorId()), TipoObservacion.de(e.getTipo()), e.getTexto(),
-                new Envio(e.isEnviadaPorChat(), e.getMensajeId()), e.getClaveOperacion()), e.getCreadoEn());
+                new Envio(e.isEnviadaPorChat(), e.getMensajeId()), e.getClaveOperacion(),
+                e.getPersonaId() == null ? null
+                        : new SobrePersona(UserId.of(e.getPersonaId()), e.getSemanaDesde())), e.getCreadoEn());
     }
 }

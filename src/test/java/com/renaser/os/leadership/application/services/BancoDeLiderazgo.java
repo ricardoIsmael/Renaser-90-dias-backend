@@ -4,6 +4,7 @@ import com.renaser.os.leadership.application.ports.in.ConsultarReporteDeMentores
 import com.renaser.os.leadership.application.ports.out.GuardarObservacionPort;
 import com.renaser.os.leadership.application.ports.out.LeerObservacionesPort;
 import com.renaser.os.leadership.domain.model.observacion.ObservacionDeMentor;
+import com.renaser.os.community.api.AcompanamientoFinder;
 import com.renaser.os.mentoring.api.EvaluacionDeMentorFinder;
 import com.renaser.os.mentoring.api.MedicionDeMentoresFinder;
 import com.renaser.os.mentoring.api.MedicionDeMentoresFinder.GrupoMedido;
@@ -153,6 +154,75 @@ public class BancoDeLiderazgo {
         }
     };
 
+    /** Quién acompaña a quién, derivado de los grupos que ya se cargan para el padrón (spec 005, R-7). */
+    public final AcompanamientoFinder acompanamiento = new AcompanamientoFinder() {
+        @Override
+        public List<AcompanamientoFinder.GrupoAcompanado> gruposConMentorVigente(Instant instante) {
+            return grupos.stream().map(g -> new AcompanamientoFinder.GrupoAcompanado(g.grupoId(), g.nombre(),
+                    g.mentorId(), UUID.randomUUID(), "America/Lima", 3)).toList();
+        }
+
+        @Override
+        public List<UserId> aprendicesVigentes(UUID grupoId, Instant instante) {
+            return grupos.stream().filter(g -> g.grupoId().equals(grupoId)).flatMap(g -> g.aprendices().stream()).toList();
+        }
+
+        @Override
+        public List<TramoDeAcompanamiento> tramosDeMentor(UserId mentorId, Instant desde, Instant hasta) {
+            return List.of();
+        }
+
+        @Override
+        public List<TramoDeAprendiz> tramosDeAprendices(UUID grupoId, Instant desde, Instant hasta) {
+            return List.of();
+        }
+
+        @Override
+        public List<UserId> integrantesVigentes(UUID grupoId, Instant instante) {
+            return List.of();
+        }
+
+        @Override
+        public List<UserId> acompanantesVigentes(UUID grupoId, Instant instante) {
+            return List.of();
+        }
+
+        @Override
+        public boolean esIntegranteVigente(UUID grupoId, UserId usuarioId, Instant instante) {
+            return false;
+        }
+
+        @Override
+        public boolean acompanaVigente(UserId actorId, UUID grupoId, Instant instante) {
+            return false;
+        }
+
+        @Override
+        public boolean grupoOperativo(UUID grupoId, Instant instante) {
+            return false;
+        }
+
+        @Override
+        public Optional<GrupoBasico> grupo(UUID grupoId) {
+            return Optional.empty();
+        }
+
+        @Override
+        public List<GrupoAcompanado> gruposRegularesEnCurso(Instant instante) {
+            return gruposConMentorVigente(instante);
+        }
+
+        @Override
+        public List<GrupoAcompanado> gruposRegularesEnCursoEntre(LocalDate desde, LocalDate hasta) {
+            return gruposConMentorVigente(AHORA);
+        }
+
+        @Override
+        public List<GrupoConAprendices> gruposOperativos(Instant instante) {
+            return List.of();
+        }
+    };
+
     public final InMemoryObservaciones almacen = new InMemoryObservaciones();
 
     public class InMemoryObservaciones implements GuardarObservacionPort, LeerObservacionesPort {
@@ -194,6 +264,11 @@ public class BancoDeLiderazgo {
     }
 
     // ── Preparación ─────────────────────────────────────────────────────
+
+    /** El banco de las pruebas del controller es un bean compartido: cada prueba arma sus grupos desde cero. */
+    public void limpiarGrupos() {
+        grupos.clear();
+    }
 
     public void usuario(UserId id, String nombre, UserRole rol, UserStatus estado) {
         usuarios.put(id, new UserSummary(id, nombre, null, rol, estado));
@@ -242,7 +317,7 @@ public class BancoDeLiderazgo {
     }
 
     public ObservacionesDeMentorService observacionesService() {
-        return new ObservacionesDeMentorService(acceso(), almacen, almacen, ids, reloj);
+        return new ObservacionesDeMentorService(acceso(), almacen, almacen, ids, reloj, usuariosFinder, acompanamiento);
     }
 
     public ReporteDeMentoresService reporte() {

@@ -9,7 +9,9 @@ import java.util.List;
 public record ObservationPageResponse(List<ObservationResponse> items, Instant nextBefore) {
 
     static ObservationPageResponse from(PaginaDeObservaciones pagina) {
-        return new ObservationPageResponse(pagina.observaciones().stream().map(ObservationResponse::from).toList(),
-                pagina.siguiente());
+        return new ObservationPageResponse(pagina.observaciones().stream()
+                .map(o -> ObservationResponse.from(o, o.personaId() == null ? null
+                        : pagina.nombresDePersonas().get(o.personaId())))
+                .toList(), pagina.siguiente());
     }
 }
