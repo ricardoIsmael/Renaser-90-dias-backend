@@ -1,0 +1,68 @@
+▶ 05-chats-admin.yaml
+ > Flow 05-chats-admin
+    Wait for animation to end within 4000 ms... COMPLETED
+      Tap on "Allow"... COMPLETED
+    Run flow when "Allow" is visible... COMPLETED
+        Tap on point (92%,92%)... COMPLETED
+      Run flow when "Open debugger to view warnings." is visible... COMPLETED
+    Run cerrar-aviso-dev.yaml... COMPLETED
+  Run despejar-capas.yaml... COMPLETED
+  Assert that "TRAINING" is visible... COMPLETED
+Run ../comun/ya-adentro.yaml... COMPLETED
+Tap on "COMUNIDAD"... COMPLETED
+Tap on "Tribu"... COMPLETED
+Assert that "Formación Renaser" is visible... COMPLETED
+Take screenshot 05a-lista-admin... COMPLETED
+Scrolling DOWN until "Formación Renaser Global" is visible with speed 40, visibility percentage 100%, timeout 60000 ms, with centering disabled... COMPLETED
+Tap on "Formación Renaser Global"... COMPLETED
+Tap on "Información del chat"... COMPLETED
+Assert that "[0-9]+ integrantes" is visible... COMPLETED
+Take screenshot 05b-info-global... COMPLETED
+✔ 05-chats-admin.yaml
+▶ 06-chats-aprendiz.yaml
+ > Flow 06-chats-aprendiz
+    Wait for animation to end within 4000 ms... COMPLETED
+      Tap on "Allow"... COMPLETED
+    Run flow when "Allow" is visible... COMPLETED
+      Tap on "Posponer la guía de SER"... COMPLETED
+    Run flow when "Posponer la guía de SER" is visible... COMPLETED
+    Run cerrar-aviso-dev.yaml... COMPLETED
+  Run despejar-capas.yaml... COMPLETED
+  Assert that "TRAINING" is visible... COMPLETED
+Run ../comun/ya-adentro.yaml... COMPLETED
+Tap on "COMUNIDAD"... COMPLETED
+Tap on "Tribu"... COMPLETED
+Assert that "Formación Renaser" is visible... COMPLETED
+Take screenshot 06a-lista-aprendiz... COMPLETED
+Scrolling DOWN until "Formación Renaser Global" is visible with speed 40, visibility percentage 100%, timeout 60000 ms, with centering disabled... COMPLETED
+Tap on "Formación Renaser Global"... COMPLETED
+Tap on "Información del chat"... COMPLETED
+Assert that "[0-9]+ integrantes" is visible... COMPLETED
+Take screenshot 06b-info-global... COMPLETED
+✔ 06-chats-aprendiz.yaml
+▶ 11-ranking-gimnasio.yaml
+  (reintento de entrada)
+ > Flow 11-ranking-gimnasio
+    Wait for animation to end within 4000 ms... COMPLETED
+      Tap on "Allow"... COMPLETED
+    Run flow when "Allow" is visible... COMPLETED
+      Tap on "Posponer la guía de SER"... COMPLETED
+    Run flow when "Posponer la guía de SER" is visible... COMPLETED
+    Run cerrar-aviso-dev.yaml... COMPLETED
+  Run despejar-capas.yaml... COMPLETED
+  Assert that "TRAINING" is visible... COMPLETED
+Run ../comun/ya-adentro.yaml... COMPLETED
+Tap on "COMUNIDAD"... COMPLETED
+Tap on "Ranking"... COMPLETED
+Assert that "General" is visible... COMPLETED
+Assert that "Coherencia" is visible... COMPLETED
+Assert that "Kilómetros" is visible... COMPLETED
+Tap on "Gimnasio: Días de gimnasio desde tu Día 1"... COMPLETED
+Assert that "Días de gimnasio desde tu Día 1" is visible... COMPLETED
+Assert that "[0-9]+ días?" is visible... COMPLETED
+Take screenshot 11a-ranking-gimnasio... COMPLETED
+Tap on "Kilómetros: Km recorridos desde tu Día 1"... COMPLETED
+Assert that "Km recorridos desde tu Día 1" is visible... COMPLETED
+Take screenshot 11b-ranking-kilometros... COMPLETED
+✔ 11-ranking-gimnasio.yaml
+Resultado: 3 bien, 0 mal 

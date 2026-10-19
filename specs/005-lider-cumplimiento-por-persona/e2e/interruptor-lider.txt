@@ -1,0 +1,7 @@
+apagar lider.cumplimiento -> 200 
+resumen de grupos 200 puedeAbrirse: [False]
+lista del lider 503 {'message': 'La revision por persona vuelve en un rato (prueba E2E)', 'timestamp': '2026-10-19T19:35:05.017079348Z', 'codigo': 'FUNCIONALIDAD_APAGADA', 'funcionalidad': 'lider.cumplimiento'}
+ficha 503 {'message': 'La revision por persona vuelve en un rato (prueba E2E)', 'timestamp': '2026-10-19T19:35:05.064710446Z', 'codigo': 'FUNCIONALIDAD_APAGADA', 'funcionalidad': 'lider.cumplimiento'}
+volver a prender -> 200
+lista del lider otra vez 200
+puedeAbrirse: [False, True]

@@ -1,0 +1,44 @@
+# Escenario 9: resumen de las 20:00 al mentor (base renaser_lider005, backend 8095, TZ=UTC)
+# Luisa (mentora de Fenix 005) con participantes_programa.timezone = Europe/London: a las 19:15 UTC son las 20:15 alli.
+# Cron del barrido puesto a cada minuto solo en esta corrida (-Drenaser.scheduling.resumen-consultas-lider.cron='0 * * * * *'); el de produccion es 0 10,40 * * * *.
+
+## consultas_de_ficha antes del barrido (el rol ADMIN consulto a Beto, del grupo de Pedro)
+ consultor | rol_consultor |  persona   |   grupo   |       mentor        | hora_lima 
+-----------+---------------+------------+-----------+---------------------+-----------
+ E2E LIDER | MENTOR_LEAD   | Ana Pérez  | Fénix 005 | Luisa Rojas Mentora | 14:01
+ E2E LIDER | MENTOR_LEAD   | Rocío Roja | Fénix 005 | Luisa Rojas Mentora | 14:05
+ E2E LIDER | MENTOR_LEAD   | Ana Pérez  | Fénix 005 | Luisa Rojas Mentora | 14:06
+ E2E LIDER | MENTOR_LEAD   | Ana Pérez  | Fénix 005 | Luisa Rojas Mentora | 14:08
+ E2E LIDER | MENTOR_LEAD   | Ana Pérez  | Fénix 005 | Luisa Rojas Mentora | 14:08
+ E2E LIDER | MENTOR_LEAD   | Ana Pérez  | Fénix 005 | Luisa Rojas Mentora | 14:09
+ E2E LIDER | MENTOR_LEAD   | Ana Pérez  | Fénix 005 | Luisa Rojas Mentora | 14:11
+ E2E ADMIN | ADMIN         | Beto Paz   | Loto 005  | Pedro Mentor Loto   | 14:11
+ E2E LIDER | MENTOR_LEAD   | Ana Pérez  | Fénix 005 | Luisa Rojas Mentora | 14:23
+ E2E LIDER | MENTOR_LEAD   | Rocío Roja | Fénix 005 | Luisa Rojas Mentora | 14:24
+ E2E LIDER | MENTOR_LEAD   | Hugo Cedro | Cedro 005 | Gabriela Guía Cedro | 14:30
+ E2E LIDER | MENTOR_LEAD   | Ana Pérez  | Fénix 005 | Luisa Rojas Mentora | 14:34
+(12 rows)
+
+## notificaciones REVISION_DEL_LIDER (hubo corridas a las 19:17, 19:18 y siguientes: una sola fila)
+        para         |           titulo           |          cuerpo          |                           ruta_app                           | hora_utc 
+---------------------+----------------------------+--------------------------+--------------------------------------------------------------+----------
+ Luisa Rojas Mentora | Tu líder revisó a tu grupo | Hoy revisó a Ana y Rocío | /mentor/groups/e2e00500-0000-4000-8000-0000000000a1/semaforo | 19:17:00
+(1 row)
+
+## lineas del scheduler
+2026-10-19T19:17:00.317Z  INFO [essageBroker-12] .a.i.s.ResumirConsultasDelLiderScheduler : [leadership.ResumirConsultasDelLiderScheduler] 1 aviso(s) de revision del lider
+2026-10-19T19:18:00.059Z  INFO [MessageBroker-9] .a.i.s.ResumirConsultasDelLiderScheduler : [leadership.ResumirConsultasDelLiderScheduler] 1 aviso(s) de revision del lider
+2026-10-19T19:19:00.047Z  INFO [MessageBroker-6] .a.i.s.ResumirConsultasDelLiderScheduler : [leadership.ResumirConsultasDelLiderScheduler] 1 aviso(s) de revision del lider
+2026-10-19T19:20:00.085Z  INFO [MessageBroker-5] .a.i.s.ResumirConsultasDelLiderScheduler : [leadership.ResumirConsultasDelLiderScheduler] 1 aviso(s) de revision del lider
+2026-10-19T19:21:00.025Z  INFO [essageBroker-10] .a.i.s.ResumirConsultasDelLiderScheduler : [leadership.ResumirConsultasDelLiderScheduler] 1 aviso(s) de revision del lider
+2026-10-19T19:22:00.022Z  INFO [essageBroker-11] .a.i.s.ResumirConsultasDelLiderScheduler : [leadership.ResumirConsultasDelLiderScheduler] 1 aviso(s) de revision del lider
+
+## Con el cron real (0 10,40 * * * *, backend reiniciado sin la propiedad): corrida de las 19:40 UTC = 20:40 en la zona de Luisa
+2026-10-19T19:40:00.274Z  INFO [essageBroker-10] .a.i.s.ResumirConsultasDelLiderScheduler : [leadership.ResumirConsultasDelLiderScheduler] 1 aviso(s) de revision del lider
+(el evento se emite otra vez, pero la clave consultas-lider:<mentor>:<fecha> deduplica: siguen siendo 1 fila por mentor)
+        para         | filas 
+---------------------+-------
+ Luisa Rojas Mentora |     1
+(1 row)
+
+Pedro (sin consultas del lider) y Gabriela (consulta de Hugo a las 14:30 Lima, fuera de su 20:00-20:59): sin aviso. La consulta del ADMIN sobre Beto no cuenta.
