@@ -31,7 +31,7 @@ import java.util.stream.Collectors;
  */
 public final class ReglaDelResumenDeConsultas {
 
-    /** La hora local en que el resumen sale. La corrida horaria lo intenta toda esa hora; la clave evita repetirlo. */
+    /** La hora local en que el resumen sale. El barrido lo intenta dos veces en esa hora (minutos 10 y 40 UTC); la clave evita repetirlo. */
     static final int HORA_DEL_RESUMEN = 20;
     static final int NOMBRES_A_LA_VISTA = 3;
     private static final String PERSONA_SIN_NOMBRE = "Una persona";

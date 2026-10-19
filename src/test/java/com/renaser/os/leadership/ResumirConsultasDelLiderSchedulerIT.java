@@ -86,7 +86,7 @@ class ResumirConsultasDelLiderSchedulerIT {
                 .containsEntry("ruta_app", "/mentor/groups/" + FENIX + "/semaforo")
                 .containsEntry("origen_evento_id", ReglaDelResumenDeConsultas.clave(UserId.of(MENTORA), DOMINGO)));
 
-        // La corrida de la misma hora, repetida: la clave es la misma y la base no duplica.
+        // La segunda corrida de la misma ventana (20:40): la clave es la misma y la base no duplica.
         resumir.resumir();
         esperarQueElOutboxTermine();
         assertThat(notificacionesDe(MENTORA)).hasSize(1);

@@ -104,8 +104,10 @@ antes a las otras sesiones.
 
 - [x] T041 [P] [US4] Unitaria de `ReglaDelResumenDeConsultas`: `toca` de 20:00 a 20:59 en Lima y en Madrid, y nunca en la madrugada UTC; cuerpo con 1, 2, 3 y 5 nombres («y 2 más»); excluye a ADMIN y ALCHEMIST y al propio mentor; clave `consultas-lider:<mentorId>:<fecha>`, en `BT/leadership/domain/model/consulta/ReglaDelResumenDeConsultasTest.java`
 - [x] T042 [US4] `B/leadership/domain/model/consulta/ReglaDelResumenDeConsultas.java`
-- [x] T043 [US4] `ResumirConsultasDelLiderUseCase` + `ResumenDeConsultasService` (zona: `participantes_programa.timezone` o la del primer grupo, decisión R-8 confirmada; paginado; fallo aislado por mentor; evento `RevisionDelLiderEvent` en `leadership/api`) y `ResumirConsultasDelLiderScheduler` (`cron 0 10 * * * *`, zona UTC, `@SchedulerLock(name="leadership-resumir-consultas")`), con IT del scheduler sin repetir el aviso
+- [x] T043 [US4] `ResumirConsultasDelLiderUseCase` + `ResumenDeConsultasService` (zona: `participantes_programa.timezone` o la del primer grupo, decisión R-8 confirmada; paginado; fallo aislado por mentor; evento `RevisionDelLiderEvent` en `leadership/api`) y `ResumirConsultasDelLiderScheduler` (`cron 0 10 * * * *` en el plan; ver la nota, zona UTC, `@SchedulerLock(name="leadership-resumir-consultas")`), con IT del scheduler sin repetir el aviso
 - [x] T044 [US4] `REVISION_DEL_LIDER` en `B/notifications/domain/model/TipoNotificacion.java` y un listener que emite «Tu líder revisó a tu grupo» con la ruta `/mentor/groups/{g}/semaforo` y la deduplicación por clave, en `B/notifications/infrastructure/adapter/in/event/`
+  > **Corregido 2026-10-19 (cron).** El scheduler corre `0 10,40 * * * *`, no `0 10 * * * *`: dos intentos por ventana local de 20:00–20:59, para
+  > que un fallo de la primera lo recupere la segunda (misma clave, sin aviso doble). Ver research R-8.
   > **Corregido 2026-10-19.** T043: el servicio es `ResumenDeConsultasService` (puerto de lectura `LeerConsultasDeFichaPort`, adaptador
   > `LecturaDeConsultasDeFichaJdbcAdapter`) y el evento lleva el cuerpo ya redactado (`RevisionDelLiderEvent`); el título «Tu líder revisó a tu
   > grupo» lo pone el listener de `notifications` (`RevisionDelLiderNotificationListener`, T044). La regla recibe el día del mentor

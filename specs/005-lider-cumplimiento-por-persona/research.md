@@ -118,11 +118,16 @@ Investigación sobre master (`9f387b78`) y sobre la rama `claude/fase2-integraci
   NULL, consultada_en`. Es append-only, con un trigger que rechaza UPDATE y DELETE (patrón de `cambios_auditados`
   de la fase 2) y sin FK al actor, para que sobreviva al borrado de cuentas. La escribe la lectura de la semana del
   líder, una vez por persona por llamada.
-- **Resumen**: `ResumirConsultasDelLiderScheduler`, cada hora en el minuto 10, `@SchedulerLock`, paginado por
+- **Resumen**: `ResumirConsultasDelLiderScheduler`, dos veces por hora (minutos 10 y 40), `@SchedulerLock`, paginado por
   mentor. La regla de dominio `ReglaDelResumenDeConsultas.toca(ahora, zonaDelMentor)` es verdadera entre las 20:00 y
   las 20:59 locales. Junta las consultas del líder (`rol_consultor = MENTOR_LEAD`, sin el propio mentor) del día
   local del mentor. Clave de deduplicación `consultas-lider:<mentorId>:<fecha>`, que hace idempotente una corrida
   repetida.
+  > **Corregido 2026-10-19 (decisión de la sesión supervisora).** Decía «cada hora, en el minuto 10». Con una sola corrida por
+  > ventana local de 20:00–20:59, un fallo (la base caída, un reinicio) perdía el aviso de ese día. Ahora corre en los minutos
+  > 10 y 40 UTC (`0 10,40 * * * *`): cada ventana local de 60 minutos tiene exactamente dos intentos en cualquier zona. La
+  > segunda corrida no repite el aviso (misma clave `consultas-lider:<mentorId>:<fecha>` y el índice único de la bandeja) y,
+  > si la primera falló, lo manda. Costo: lo que el líder abra entre las dos corridas no cambia el aviso ya enviado.
 - **Zona del mentor**: `participantes_programa.timezone` si tiene programa; si no, la del primer grupo que
   acompaña (`GrupoBasico.zonaHoraria`). Por defecto, America/Lima.
 - **Aviso**: tipo nuevo `REVISION_DEL_LIDER` (V109 `ALTER TYPE … ADD VALUE`). Título «Tu líder revisó a tu

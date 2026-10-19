@@ -32,9 +32,11 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
 
@@ -76,6 +78,8 @@ class ResumenDeConsultasServiceTest {
     private final List<Boolean> enTransaccion = new ArrayList<>();
     private final List<Integer> propagaciones = new ArrayList<>();
     private boolean transaccionAbierta;
+    /** Mentores cuya lectura de consultas falla (la base se cae a mitad del barrido). Se vacía para «arreglarla». */
+    private final Set<UserId> lecturaCaida = new HashSet<>();
     private final Map<UserId, String> nombres = new HashMap<>();
 
     private static UserId id(String sufijo) {
@@ -118,6 +122,9 @@ class ResumenDeConsultasServiceTest {
     private ResumenDeConsultasService servicio(Instant ahora) {
         LeerConsultasDeFichaPort puerto = (mentores, desde, hasta) -> {
             lecturas.add(List.copyOf(mentores));
+            if (mentores.stream().anyMatch(lecturaCaida::contains)) {
+                throw new IllegalStateException("base caida");
+            }
             return registradas.stream().filter(c -> c.rolConsultor() == UserRole.MENTOR_LEAD)
                     .filter(c -> mentores.contains(c.mentorId()))
                     .filter(c -> !c.consultadaEn().isBefore(desde) && c.consultadaEn().isBefore(hasta)).toList();
@@ -321,16 +328,86 @@ class ResumenDeConsultasServiceTest {
         });
     }
 
+    private static final Instant LAS_VEINTE_CUARENTA_EN_LIMA = LAS_VEINTE_EN_LIMA.plusSeconds(30 * 60);
+
     @Test
-    @DisplayName("la clave del aviso de un mismo dia no cambia entre corridas: repetir el barrido publica la misma clave")
+    @DisplayName("las dos corridas de la misma ventana (20:10 y 20:40) llevan la MISMA clave: la bandeja deja un solo aviso")
     void corridaRepetida() {
         grupo(FENIX, LUISA, "America/Lima");
         delLider(ANA, FENIX, LUISA, Instant.parse("2026-10-18T15:00:00Z"));
 
-        servicio(LAS_VEINTE_EN_LIMA).resumir();
-        servicio(LAS_VEINTE_EN_LIMA.plusSeconds(1800)).resumir();
+        assertThat(servicio(LAS_VEINTE_EN_LIMA).resumir()).isEqualTo(1);
+        assertThat(servicio(LAS_VEINTE_CUARENTA_EN_LIMA).resumir()).isEqualTo(1);
 
-        assertThat(avisos()).hasSize(2).extracting(RevisionDelLiderEvent::claveDeduplicacion).containsOnly(
+        assertThat(avisos()).hasSize(2).extracting(RevisionDelLiderEvent::claveDeduplicacion)
+                .containsOnly(ReglaDelResumenDeConsultas.clave(LUISA, DOMINGO));
+        // La bandeja (indice unico usuario-tipo-origen) deja pasar la primera clave y descarta las demas.
+        assertThat(avisos().stream().map(RevisionDelLiderEvent::claveDeduplicacion).distinct()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("si la primera corrida fallo, la segunda de la misma ventana manda el aviso")
+    void laSegundaCorridaRecuperaElFallo() {
+        grupo(FENIX, LUISA, "America/Lima");
+        delLider(ANA, FENIX, LUISA, Instant.parse("2026-10-18T15:00:00Z"));
+        UserSummary ana = new UserSummary(ANA, nombres.get(ANA), null, UserRole.TRAINEE, UserStatus.ACTIVE);
+        lenient().when(usuarios.findByIds(List.of(ANA))).thenThrow(new IllegalStateException("base caida"))
+                .thenReturn(Map.of(ANA, ana));
+
+        assertThat(servicio(LAS_VEINTE_EN_LIMA).resumir()).isZero();
+        assertThat(publicados).isEmpty();
+
+        assertThat(servicio(LAS_VEINTE_CUARENTA_EN_LIMA).resumir()).isEqualTo(1);
+        assertThat(avisos()).singleElement().satisfies(aviso -> {
+            assertThat(aviso.mentorId()).isEqualTo(LUISA.value());
+            assertThat(aviso.claveDeduplicacion()).isEqualTo(ReglaDelResumenDeConsultas.clave(LUISA, DOMINGO));
+        });
+    }
+
+    @Test
+    @DisplayName("si falla la LECTURA de las consultas de un lote, la corrida no revienta, no frena a los otros lotes y la siguiente lo recupera")
+    void laLecturaCaidaNoFrenaAlRestoYSeRecupera() {
+        // 15:10 UTC: Karachi (+5:00) esta en las 20:10 y Kolkata (+5:30) en las 20:40: dos ventanas distintas, dos lotes.
+        Instant quinceDiezUtc = Instant.parse("2026-10-18T15:10:00Z");
+        grupo(FENIX, LUISA, "Asia/Karachi");
+        grupo(AURORA, RAUL, "Asia/Kolkata");
+        delLider(ANA, FENIX, LUISA, Instant.parse("2026-10-18T10:00:00Z"));
+        delLider(PIA, AURORA, RAUL, Instant.parse("2026-10-18T11:00:00Z"));
+        lecturaCaida.add(LUISA);
+
+        assertThat(servicio(quinceDiezUtc).resumir()).isEqualTo(1);
+        assertThat(avisos()).singleElement().satisfies(aviso -> assertThat(aviso.mentorId()).isEqualTo(RAUL.value()));
+
+        // 15:40 UTC: Karachi sigue en su ventana (20:40) y se recupera; Kolkata ya paso a las 21:10 y no vuelve a avisar.
+        lecturaCaida.clear();
+        assertThat(servicio(quinceDiezUtc.plusSeconds(30 * 60)).resumir()).isEqualTo(1);
+        assertThat(avisos()).extracting(RevisionDelLiderEvent::mentorId).containsExactly(RAUL.value(), LUISA.value());
+    }
+
+    @Test
+    @DisplayName("lo que el lider abre entre las dos corridas viaja con la misma clave: la bandeja conserva el primer aviso del dia")
+    void loDeEntreLasDosCorridas() {
+        grupo(FENIX, LUISA, "America/Lima");
+        delLider(ANA, FENIX, LUISA, Instant.parse("2026-10-18T15:00:00Z"));
+        servicio(LAS_VEINTE_EN_LIMA).resumir();
+
+        delLider(LUIS, FENIX, LUISA, LAS_VEINTE_EN_LIMA.plusSeconds(10 * 60));
+        servicio(LAS_VEINTE_CUARENTA_EN_LIMA).resumir();
+
+        assertThat(avisos()).extracting(RevisionDelLiderEvent::cuerpo)
+                .containsExactly("Hoy revisó a Ana", "Hoy revisó a Ana y Luis");
+        assertThat(avisos()).extracting(RevisionDelLiderEvent::claveDeduplicacion).containsOnly(
                 ReglaDelResumenDeConsultas.clave(LUISA, DOMINGO));
+    }
+
+    @Test
+    @DisplayName("a las 21:10 de Lima, con la ventana ya cerrada, ninguna corrida avisa")
+    void cerradaLaVentana() {
+        grupo(FENIX, LUISA, "America/Lima");
+        delLider(ANA, FENIX, LUISA, Instant.parse("2026-10-18T15:00:00Z"));
+
+        assertThat(servicio(Instant.parse("2026-10-19T02:10:00Z")).resumir()).isZero();
+        assertThat(servicio(Instant.parse("2026-10-19T02:40:00Z")).resumir()).isZero();
+        assertThat(publicados).isEmpty();
     }
 }

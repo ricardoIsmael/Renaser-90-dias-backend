@@ -45,8 +45,10 @@ import java.util.stream.Collectors;
  * interna no pasaría por el proxy y el {@code @ApplicationModuleListener}, que corre después del commit, no se
  * ejecutaría nunca (E-250). Un mentor que falla no frena a los demás (regla 02 §4).
  *
- * <p><b>No pregunta si ya avisó</b>: repetir la corrida publica con la misma clave y el índice único de la bandeja
- * descarta la repetición.
+ * <p><b>No pregunta si ya avisó</b>: el barrido corre dos veces por ventana local (minutos 10 y 40 UTC) y la segunda corrida
+ * publica con la misma clave; el índice único de la bandeja descarta la repetición. Es lo que permite el reintento: si la
+ * primera corrida falló, la segunda lo manda. Lo que el líder abra entre las dos corridas viaja con la misma clave y la
+ * bandeja conserva el primer aviso del día.
  */
 @Service
 public class ResumenDeConsultasService implements ResumirConsultasDelLiderUseCase {
@@ -82,9 +84,20 @@ public class ResumenDeConsultasService implements ResumirConsultasDelLiderUseCas
         Instant ahora = clock.now();
         int avisos = 0;
         for (List<DiaDelMentor> lote : lotes(mentoresEnSuHora(ahora))) {
-            avisos += resumirLote(lote, ahora);
+            avisos += resumirLoteAislado(lote, ahora);
         }
         return avisos;
+    }
+
+    /** Si la lectura del lote falla, los demás lotes siguen y la corrida de 30 minutos después lo reintenta. */
+    private int resumirLoteAislado(List<DiaDelMentor> lote, Instant ahora) {
+        try {
+            return resumirLote(lote, ahora);
+        } catch (RuntimeException e) {
+            log.error("[leadership.ResumenDeConsultasService] fallo la lectura de {} mentor(es); sigue el barrido",
+                    lote.size(), e);
+            return 0;
+        }
     }
 
     /** Los mentores con grupo vigente a quienes ahora les toca, cada uno con su día local. */

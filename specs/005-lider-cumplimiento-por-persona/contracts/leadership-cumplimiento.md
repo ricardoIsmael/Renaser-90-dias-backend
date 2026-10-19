@@ -184,8 +184,9 @@ funcionalidad `lider.cumplimiento` está prendida para quien pregunta (apagada, 
 - Deduplicación `consultas-lider:<mentorId>:<fecha>`.
 - Preferencia en `GET/PATCH /notification-preferences`, con el tema `REVISION_DEL_LIDER`.
 - Sale a las 20:00 del día, en la zona del mentor (`participantes_programa.timezone`; si no tiene programa, la de su primer
-  grupo; por defecto America/Lima). El barrido corre en el minuto 10 de cada hora UTC y publica solo a quien ahora está entre
-  las 20:00 y las 20:59 de su zona. Solo cuenta lo que abrió el **líder de mentores** (no Administración ni Alquimista),
+  grupo; por defecto America/Lima). El barrido corre en los minutos 10 y 40 de cada hora UTC (dos intentos por ventana local) y publica solo a quien
+  ahora está entre las 20:00 y las 20:59 de su zona; la segunda corrida no repite el aviso (misma clave) y recupera el fallo de
+  la primera. Solo cuenta lo que abrió el **líder de mentores** (no Administración ni Alquimista),
   sin repetir personas, y nunca a quien se consultó a sí mismo. Las cuentas que ya no existen no se nombran; sin nadie que
   nombrar, no hay aviso. Apagar `lider.cumplimiento` en Soporte TI detiene el barrido.
 

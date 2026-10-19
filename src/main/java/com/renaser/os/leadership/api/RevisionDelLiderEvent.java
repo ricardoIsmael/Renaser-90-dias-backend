@@ -6,7 +6,7 @@ import java.util.UUID;
 
 /**
  * «Tu líder revisó a tu grupo»: lo que el líder de mentores miró hoy en las fichas de las personas de un mentor, para
- * que ese mentor lo sepa (spec 005, FR-017). Sale una vez al día, a las 20:00 de la zona del mentor, y solo cuenta las
+ * que ese mentor lo sepa (spec 005, FR-017). Sale una vez al día —se intenta dos veces entre las 20:00 y las 20:59 de la zona del mentor—, y solo cuenta las
  * consultas del líder: Administración y Alquimista abren la misma ficha y no avisan.
  *
  * <p>Evento y no llamada directa a {@code notifications}, por los mismos dos motivos que
