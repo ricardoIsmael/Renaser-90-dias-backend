@@ -11,6 +11,7 @@
 
 - **El recordatorio de un hábito se comporta como una alarma del reloj de Android** (decisión del dueño): suena a la hora exacta aunque el teléfono esté en reposo o ahorrando batería, y el sistema lo trata como alarma del usuario (aparece como «próxima alarma» y con el ícono del despertador en la barra de estado). Vale para **todos** los recordatorios de hábitos que la persona activó.
 - El dueño pidió avanzar sin más preguntas; lo que no dijo se resolvió con los supuestos de abajo.
+- **El arreglo es general, no solo para Honor** («arregla en general también, no es ese dispositivo, por si acaso»): la detección no puede depender de que una marca reporte bien el motivo de salida, y la guía se ofrece antes de que pase en las marcas que detienen apps.
 
 ### Evidencia de la prueba local (2026-10-19)
 
@@ -129,6 +130,12 @@ Como participante quiero recibir un aviso por cada recordatorio que elegí, a la
 - **FR-015b**: Un hábito cuyo registro del día está en curso (sesión especial abierta) MUST NOT recibir aviso de inicio.
 - **FR-016**: Los títulos y cuerpos de los avisos de hábitos MUST llevar tildes y tuteo en español de Perú.
 - **FR-017**: La regla actual de respaldo se mantiene: el teléfono que confirmó sus alarmas en las últimas 26 h no recibe el push de inicio; el navegador siempre lo recibe.
+
+**Refuerzos generales (cualquier marca)**
+
+- **FR-020**: Al abrir la app, MUST comprobar directamente si las alarmas siguen vivas: si la app tiene alarmas programadas a futuro y el sistema no tiene ninguna «próxima alarma» de Renaser, se considera que el teléfono las borró (aunque el motivo de salida no lo diga) y se aplica FR-007. Si la próxima alarma del sistema es de otra app, el resultado es «no se sabe» y no se avisa por esta vía.
+- **FR-021**: En las marcas que detienen apps (Honor, Huawei, Xiaomi/Redmi/POCO, Oppo, Realme, OnePlus, Vivo/iQOO y Samsung), la primera vez que la persona activa un recordatorio en ese teléfono MUST ofrecerse una vez la guía de su marca (misma hoja, texto preventivo), sin repetirla.
+- **FR-022**: En Android 11 a 14 y en esas marcas, una salida por «quitar de recientes» MUST contar como detención (allí borra las alarmas); en las demás marcas no.
 
 **Compatibilidad**
 

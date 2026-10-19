@@ -170,6 +170,16 @@ Ninguna. Las tres historias son independientes: US1 y US2 solo tocan la app y US
 
 ---
 
+## Phase 5b: Refuerzos generales (FR-020 a FR-022, pedido del dueño 19/10: «arregla en general»)
+
+- [x] T050 [P] [US2] Pruebas primero en `app:src/features/alarmas/__tests__/alarmasVivas.test.ts`: con alarmas programadas a futuro (`getAllScheduledNotificationsAsync` simulado) y `proximaAlarmaPropia` = `'ninguna'` → «borradas»; = `'propia'` → «vivas»; = `'de_otra_app'` o módulo ausente → «no se sabe»; sin alarmas programadas → «vivas» (nada que perder). La revisión se hace ANTES del rearmado.
+- [x] T051 [US2] Kotlin en `app:modules/renaser-alarmas/.../RenaserAlarmasModule.kt`: `proximaAlarmaPropia(): 'propia' | 'de_otra_app' | 'ninguna' | 'desconocido'` con `AlarmManager.getNextAlarmClock()` y `showIntent?.creatorPackage == packageName`; nada lanza. Envoltorio opcional en `alarmaExactaNativa.ts` (neutro `'desconocido'`).
+- [x] T052 [US2] `app:src/features/alarmas/detencionForzada.ts` y `AvisoDeAlarmasBorradas.tsx`: la revisión al abrir combina la detención (R2) con FR-020 (cualquiera de las dos ⇒ avisar, respetando una vez por día y nunca la primera vez de la cuenta); la comprobación de alarmas vivas va antes de `ponerAlDiaLasAlarmas`.
+- [x] T053 [P] [US2] Pruebas y código de FR-021: `app:src/features/alarmas/guiaPreventiva.ts` + prueba: marca en la lista y primera activación de un recordatorio en este teléfono ⇒ ofrecer la hoja con texto preventivo («En tu teléfono, Renaser necesita un ajuste para que tus alarmas suenen siempre.» + línea de la marca), una sola vez (`renaser.alarmas.guiaPreventiva.<userId>`, borrada al cerrar sesión); otras marcas ⇒ nada. Engancharla donde hoy se decide pedir «Alarmas y recordatorios» al guardar el primer recordatorio (`pedirAlarmaExacta.ts` y sus llamadores), sin tocar `InterruptoresDeAvisos.tsx` ni `api/preferenciasDeNotificacion.ts`.
+- [x] T054 [US2] FR-022 en Kotlin: en `detencionEnLasSalidas`, si la marca está en la lista, una salida «remove task» también cuenta como detención. Prueba de la regla de marca en JS si se expone, o comentario y prueba del contrato.
+
+---
+
 ## Phase 6: Polish & validación
 
 - [x] T041 Documentar en `back:docs/MODULOS_A_AVANZAR.md` §8 y `back:docs/BITACORA_ERRORES.md`.
