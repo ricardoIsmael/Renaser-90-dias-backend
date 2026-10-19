@@ -58,6 +58,10 @@ Respuestas del dueño del producto, en la conversación de diseño:
   roles. Las consultas de Administración y Alquimista no entran en el resumen al mentor.
 - Q: ¿Incluye el grupo de bienvenida (sin mentor)? → A: No, solo los grupos con mentor.
 - Q: ¿Cuánto se guarda el registro de consultas? → A: Siempre: no se edita ni se borra (auditoría).
+- Q: (plan) Si el mentor no lleva programa propio, ¿en qué zona le llega el resumen? → A: La de su grupo
+  (confirmado por el dueño, R-8).
+- Q: (plan) ¿«Avisar a su mentor» es una observación nueva o la de siempre? → A: La de siempre, con la persona y la
+  semana (confirmado por el dueño, R-7).
 
 ## User Scenarios & Testing *(mandatory)*
 
