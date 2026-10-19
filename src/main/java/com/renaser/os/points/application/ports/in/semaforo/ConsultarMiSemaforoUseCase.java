@@ -22,8 +22,17 @@ public interface ConsultarMiSemaforoUseCase {
      * @param porcentaje null si la ventana vigente no tuvo días con datos
      * @param pausado    si hoy rige una pausa (las pausas empiezan siempre el mismo día que se piden)
      * @param dias       los 7 días de la ventana vigente: la tarjeta de Hoy los dibuja sin pedir el detalle
+     * @param programaTerminado hoy ya pasó el día 90 de la persona (D-277: el mensaje de quien se graduó)
+     * @param seMideHoy  hoy cuenta para el semáforo (D-277): en el programa y sin pausa ni cuenta reactivada hoy. Sin
+     *                   esto no hay «cuánto falta para subir»
      */
     record ResumenParaHoy(ColorSemaforo color, BigDecimal porcentaje, int diasConDatos, boolean pausado,
-                          List<DiaDelSemaforo> dias) {
+                          List<DiaDelSemaforo> dias, boolean programaTerminado, boolean seMideHoy) {
+
+        /** Sin saber nada de hoy (el resumen anterior a D-277): ni terminó el programa, y hoy se mide. */
+        public ResumenParaHoy(ColorSemaforo color, BigDecimal porcentaje, int diasConDatos, boolean pausado,
+                              List<DiaDelSemaforo> dias) {
+            this(color, porcentaje, diasConDatos, pausado, dias, false, true);
+        }
     }
 }

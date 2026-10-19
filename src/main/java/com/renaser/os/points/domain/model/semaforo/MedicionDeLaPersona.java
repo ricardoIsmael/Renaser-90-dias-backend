@@ -36,6 +36,23 @@ public record MedicionDeLaPersona(CalendarioDeMedicion calendario, Map<LocalDate
         return hoyLocal.minusDays(SemanaDelSemaforo.DIAS);
     }
 
+    /**
+     * Si hoy ya pasó el día 90 de la persona. Sale de las fechas del calendario y no de la bandera
+     * {@code programa_completado}, que se marca al LLEGAR al día 90: ese día todavía se mide y no es graduado.
+     */
+    public boolean programaTerminado() {
+        return calendario.terminadoEl(hoyLocal);
+    }
+
+    /**
+     * Si el día de hoy cuenta para el semáforo: está dentro del programa y no cae en una pausa de la persona ni en un
+     * día con la cuenta suspendida (el de la reactivación tampoco se mide). Es la misma pregunta que se hace al
+     * calcular el día en vivo, y de ella depende que exista un «cuánto falta» (D-277).
+     */
+    public boolean seMideHoy() {
+        return calendario.seMide(hoyLocal);
+    }
+
     public VentanaDelSemaforo vigente() {
         return armar(desdeVigente(hoyLocal), hoyLocal.minusDays(1));
     }

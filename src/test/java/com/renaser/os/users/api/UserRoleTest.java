@@ -59,9 +59,9 @@ class UserRoleTest {
     }
 
     /**
-     * Los 10 permisos de MENTOR_LEAD (SDD 002, DL-08). Cada uno tiene su justificacion en el
-     * javadoc de {@code UserRole.PERMISOS_MENTOR_LEAD}: o el rol ya lo ejercia, o la matriz de
-     * roles de la especificacion del cliente §2.3 se lo concede.
+     * Los 11 permisos de MENTOR_LEAD (SDD 002, DL-08, mas EXPORT_RANKING de D-278). Cada uno tiene su
+     * justificacion en el javadoc de {@code UserRole.PERMISOS_MENTOR_LEAD}: o el rol ya lo ejercia, o la
+     * matriz de roles de la especificacion del cliente §2.3 se lo concede, o el dueño lo nombro.
      */
     private static final Set<Permission> PERMISOS_MENTOR_LEAD_ESPERADOS = EnumSet.of(
             Permission.USE_APP,
@@ -73,15 +73,16 @@ class UserRoleTest {
             Permission.VIEW_MENTOR_CORPS,
             Permission.VIEW_MENTOR_REPORT,
             Permission.FOLLOW_UP_MENTOR,
-            Permission.SET_MENTOR_OPERATIONAL_STATUS);
+            Permission.SET_MENTOR_OPERATIONAL_STATUS,
+            Permission.EXPORT_RANKING);
 
     @ParameterizedTest
     @EnumSource(value = Permission.class, names = {
             "USE_APP", "TRACK_PROGRAM_AS_STAFF", "FOLLOW_OWN_PROGRAM", "PUBLISH_ON_WALL",
             "OPEN_SUPPORT_TICKET", "VIEW_ALL_MENTOR_TICKETS", "VIEW_MENTOR_CORPS",
-            "VIEW_MENTOR_REPORT", "FOLLOW_UP_MENTOR", "SET_MENTOR_OPERATIONAL_STATUS"})
-    @DisplayName("MENTOR_LEAD tiene exactamente los 10 permisos de su alcance")
-    void mentorLeadTieneSusDiezPermisos(Permission permiso) {
+            "VIEW_MENTOR_REPORT", "FOLLOW_UP_MENTOR", "SET_MENTOR_OPERATIONAL_STATUS", "EXPORT_RANKING"})
+    @DisplayName("MENTOR_LEAD tiene exactamente los 11 permisos de su alcance")
+    void mentorLeadTieneSusOncePermisos(Permission permiso) {
         assertThat(UserRole.MENTOR_LEAD.can(permiso)).isTrue();
     }
 
@@ -111,8 +112,8 @@ class UserRoleTest {
     }
 
     @Test
-    @DisplayName("la matriz de MENTOR_LEAD tiene exactamente 10 permisos, ni uno mas ni uno menos")
-    void laMatrizDeMentorLeadTieneDiezPermisos() {
+    @DisplayName("la matriz de MENTOR_LEAD tiene exactamente 11 permisos, ni uno mas ni uno menos")
+    void laMatrizDeMentorLeadTieneOncePermisos() {
         long otorgados = EnumSet.allOf(Permission.class).stream()
                 .filter(UserRole.MENTOR_LEAD::can)
                 .count();
@@ -138,6 +139,9 @@ class UserRoleTest {
         for (Permission permiso : Permission.values()) {
             if (permiso.exclusivoDeSoporteTi()) {
                 continue; // D-267: lo exclusivo de Soporte TI no pasa por el falla-abierto (prueba aparte, abajo)
+            }
+            if (permiso == Permission.EXPORT_RANKING && !rol.canManageRoles()) {
+                continue; // D-278: el mentor y el guía NO pueden descargar el podio (prueba aparte, abajo)
             }
             assertThat(rol.can(permiso))
                     .as("%s deberia pasar %s porque su matriz todavia no esta definida (hueco temporal A-1)",
@@ -192,5 +196,32 @@ class UserRoleTest {
     @DisplayName("D-265: el guía de aprendiz se muestra como «Guía de aprendiz»")
     void nombreVisibleDelGuia() {
         assertThat(UserRole.TRAINEE_GUIDE.nombreVisible()).isEqualTo("Guía de aprendiz");
+    }
+
+    /**
+     * D-278: descargar la imagen del podio es de cuatro roles que nombro el dueño. La matriz de MENTOR y
+     * TRAINEE_GUIDE falla abierta con todo lo demas (A-1), asi que este permiso es la excepcion explicita: si
+     * alguien la borra, el mentor vuelve a ver un boton que no le dieron.
+     */
+    @ParameterizedTest
+    @EnumSource(value = UserRole.class, names = {"MENTOR_LEAD", "ADMIN", "ALCHEMIST", "IT_SUPPORT"})
+    @DisplayName("D-278: el líder de mentores, el administrador, el alquimista y Soporte TI pueden descargar el podio")
+    void cuatroRolesExportanElRanking(UserRole rol) {
+        assertThat(rol.can(Permission.EXPORT_RANKING)).isTrue();
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = UserRole.class, names = {"MENTOR", "TRAINEE_GUIDE", "TRAINEE"})
+    @DisplayName("D-278: el mentor, el guía de aprendiz y el aprendiz NO pueden descargar el podio, aunque la matriz del mentor falle abierta")
+    void losDemasNoExportanElRanking(UserRole rol) {
+        assertThat(rol.can(Permission.EXPORT_RANKING)).isFalse();
+    }
+
+    @Test
+    @DisplayName("D-278: son exactamente cuatro los roles que exportan el podio")
+    void soloCuatroRolesExportan() {
+        assertThat(EnumSet.allOf(UserRole.class).stream().filter(rol -> rol.can(Permission.EXPORT_RANKING)))
+                .containsExactlyInAnyOrder(UserRole.MENTOR_LEAD, UserRole.ADMIN, UserRole.ALCHEMIST,
+                        UserRole.IT_SUPPORT);
     }
 }
