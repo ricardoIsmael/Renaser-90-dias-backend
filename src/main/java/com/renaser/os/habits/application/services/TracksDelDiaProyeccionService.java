@@ -107,13 +107,21 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
     @Override
     public List<TrackDelDiaConCatalogo> consultarHoyDe(UserId participanteId) {
         return consultarConRedDeSeguridad(participanteId, participanteId,
-                () -> consultarTracksUseCase.consultarHoy(participanteId, participanteId));
+                () -> consultarTracksUseCase.consultarHoy(participanteId, participanteId)).tracks();
     }
 
     @Override
     public List<TrackDelDiaConCatalogo> consultar(UserId actorId, UserId participanteId, LocalDate fecha) {
         return consultarConRedDeSeguridad(actorId, participanteId,
-                () -> consultarTracksUseCase.consultarEnSuZona(actorId, participanteId, fecha));
+                () -> consultarTracksUseCase.consultarEnSuZona(actorId, participanteId, fecha)).tracks();
+    }
+
+    @Override
+    public DiaDeHabitos consultarHoyConContextoDe(UserId participanteId) {
+        ProyeccionDelDia dia = consultarConRedDeSeguridad(participanteId, participanteId,
+                () -> consultarTracksUseCase.consultarHoy(participanteId, participanteId));
+        return new DiaDeHabitos(dia.fecha(), dia.zona(),
+                dia.fecha().plusDays(1).atStartOfDay(dia.zona()).toInstant(), clock.now(), dia.tracks());
     }
 
     /**
@@ -131,15 +139,15 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
      * Solo para el propio actor: un mentor mirando los habitos de su aprendiz no debe provocarle
      * escrituras.
      */
-    private List<TrackDelDiaConCatalogo> consultarConRedDeSeguridad(UserId actorId, UserId participanteId,
+    private ProyeccionDelDia consultarConRedDeSeguridad(UserId actorId, UserId participanteId,
                                                                     Supplier<RegistrosDelDia> lectura) {
         ProyeccionDelDia primera = enSoloLectura(() -> proyectar(participanteId, lectura.get()));
         if (!primera.tracks().isEmpty() || !actorId.equals(participanteId)) {
-            return primera.tracks();
+            return primera;
         }
         generarTracksUseCase.generarDisponiblesAhora(participanteId);
         return enSoloLectura(() -> proyectar(participanteId,
-                consultarTracksUseCase.consultarEnSuZona(actorId, participanteId, primera.fecha()))).tracks();
+                consultarTracksUseCase.consultarEnSuZona(actorId, participanteId, primera.fecha())));
     }
 
     private ProyeccionDelDia enSoloLectura(Supplier<ProyeccionDelDia> lectura) {
@@ -149,7 +157,7 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
     private ProyeccionDelDia proyectar(UserId participanteId, RegistrosDelDia dia) {
         List<RegistroHabito> registros = dia.registros();
         if (registros.isEmpty()) {
-            return new ProyeccionDelDia(dia.fecha(), List.of());
+            return new ProyeccionDelDia(dia.fecha(), dia.zona(), List.of());
         }
         LocalDate fecha = dia.fecha();
         Set<HabitoId> habitoIds = registros.stream().map(RegistroHabito::habitoId).collect(Collectors.toSet());
@@ -181,7 +189,7 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
         var mediciones = medicionesDelDia.de(participanteId, registros, habitosPorId, fecha);
         // D-254: la racha de todos los habitos del dia, de lote y por paginas — nunca una consulta por habito.
         Map<HabitoId, Integer> rachas = rachasDeHabitos.de(participanteId, dia);
-        return new ProyeccionDelDia(fecha, registros.stream()
+        return new ProyeccionDelDia(fecha, dia.zona(), registros.stream()
                 .map(registro -> construirVista(registro, new CatalogoDeHabito(
                         habitosPorId.get(registro.habitoId()),
                         horariosPorHabito.getOrDefault(registro.habitoId(), List.of()),
@@ -194,7 +202,7 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
     }
 
     /** La fecha que se leyo y su proyeccion: la fecha hace falta para releer despues de generar. */
-    private record ProyeccionDelDia(LocalDate fecha, List<TrackDelDiaConCatalogo> tracks) {
+    private record ProyeccionDelDia(LocalDate fecha, ZoneId zona, List<TrackDelDiaConCatalogo> tracks) {
     }
 
     private static TrackDelDiaConCatalogo construirVista(RegistroHabito registro, CatalogoDeHabito catalogo,

@@ -68,6 +68,14 @@ public class HabitTrackController {
                 .stream().map(RegistroHabitoConCatalogoResponse::from).toList();
     }
 
+    /** Contrato aditivo: /today conserva su array para los APK anteriores. */
+    @RequiresPermission(value = Permission.USE_APP, scope = "habitos del propio actor")
+    @GetMapping("/today/snapshot")
+    public org.springframework.http.ResponseEntity<DiaDeHabitosResponse> diaConContexto(@ActorAutenticado UserId actor) {
+        return org.springframework.http.ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore())
+                .body(DiaDeHabitosResponse.from(consultarTracksDelDiaUseCase.consultarHoyConContextoDe(actor)));
+    }
+
     @RequiresPermission(value = Permission.USE_APP, scope = "dueno del registro de habito")
     @PostMapping("/{id}/complete")
     public RegistroHabitoResponse completar(@ActorAutenticado UserId actor, @PathVariable String id,
