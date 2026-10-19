@@ -126,7 +126,12 @@ antes a las otras sesiones.
 
 ## Phase 8: Polish & Cross-Cutting
 
-- [ ] T047 [P] Documentación del backend: D-nn y E-nn (verificar el último número en master y en la fase 2), `docs/arquitectura/SEMAFORO_DEL_APRENDIZ.md` (lista del líder) y la corrección de RL-07 en la spec del líder con `> **Corregido 2026-10-19.**`
+- [x] T047 [P] Documentación del backend: D-nn y E-nn (verificar el último número en master y en la fase 2), `docs/arquitectura/SEMAFORO_DEL_APRENDIZ.md` (lista del líder) y la corrección de RL-07 en la spec del líder con `> **Corregido 2026-10-19.**`
+  > **Corregido 2026-10-19.** Hecho en el backend: **D-274** (`docs/MODULOS_A_AVANZAR.md`, tras D-268: es el último número de este master, y
+  > D-269 a D-273 quedan reservados para la fase 2 de Soporte TI), **E-628** (`docs/BITACORA_ERRORES.md`, tras E-616; E-617 a E-627 igual
+  > reservados), `docs/arquitectura/SEMAFORO_DEL_APRENDIZ.md` (§4.7 y las dos notas `Corregido` de la fila del líder y de §4.6) y la fila 21 de
+  > `docs/informes/auditoria-fixes/C-5.md`. **Queda pendiente la corrección de RL-07 en la spec del líder**: esa spec vive en el repo del
+  > frontend (`specs/002-lider-de-mentores/spec.md`, línea RL-07), que este agente no toca; la hace quien tenga ese repo.
 - [ ] T048 [P] `AGENTS.md` del frontend: «Cambio por pedido del dueño — 2026-10-19 — Hoy (semáforo por grupos del líder), fichas del mentor y de administración, Yo → Notificaciones», con lo que cambia y nada más
 - [ ] T049 Verificación completa con la máquina libre: backend `TZ=UTC ./mvnw -B clean verify` (leer `Tests run:` de surefire y failsafe); app `tsc --noEmit` y jest completo
 - [ ] T050 E2E en el emulador con Maestro y mobile-mcp contra el backend local y la base clonada `renaser_lider005`: los 13 escenarios del quickstart, con capturas en `specs/005-lider-cumplimiento-por-persona/e2e.md`. Avisar antes a las otras sesiones

@@ -15395,3 +15395,25 @@ dos hechos seguidos tienen el mismo instante; si la prueba ordena por tiempo, ti
 **Causa.** `PermissionEnforcementInterceptor` deja al caso de uso rechazar un actor inexistente; los mocks del controller devolvían null. La primera variante también suponía que INACTIVE era una denegación del interceptor, cuando este comprueba la suspensión. No era una ejecución de los guards reales del caso de uso.
 
 **Solución y prevención.** El test negativo simula `NotAuthorizedException` desde el caso de uso y comprueba el 403 sin contexto. La prueba separada usa una cuenta SUSPENDED y comprueba que ni se invoque el caso de uso. `DiaDeHabitosIT` comprueba sin sesión y suspendido con filtros, base y sesión reales. No se modifican los permisos ni la política de cuentas. El resultado final de la batería se guarda en la spec de D-268.
+
+## E-628 · La ficha del mentor mostraba el post diario sin nada que ver (backend, spec 005, RESUELTO, 19/10)
+
+**Síntoma literal.** Al revisar la semana de una persona en la ficha del mentor (`…/weekly-progress`), el hábito «Post diario
+en la comunidad» salía `COMPLETADO` con `entrega: NO_REQUERIDA` y sin `evidenciaId` ni forma de abrir lo que la persona
+había publicado. Para el líder, que desde la spec 005 también necesita ver con qué se cumplió cada día, era un hábito
+cumplido «sin prueba».
+
+**Causa real.** El post diario no sube evidencia: `habits` lo cierra solo al publicar en el Muro (la política únicamente
+pregunta si publicó ese día) y `mentoring` solo sabía de evidencias. La publicación existía, pero ningún camino la ligaba
+al registro del hábito.
+
+**Solución.** La ficha deriva la entrega: la **primera** publicación del Muro de ese día en la zona de la persona (la que
+lo cerró; las siguientes no cuentan) pasa a ser `publicacionId` y la entrega, `ENTREGADA` a la hora de esa publicación,
+sin archivo ni revisión. Se deriva y no se guarda, así que vale también para los días anteriores al arreglo. Una sola
+consulta por semana y solo si hay un post diario (`PublicacionMuroFinder.delAutorEntre`, incluye las ocultas: lo que
+cerró el hábito cuenta aunque después se oculte; `GET /api/v1/wall/{id}` decide si quien mira puede abrirla).
+
+**Para que no vuelva.** `SeguimientoServiceTest` (el post diario trae la primera publicación de su día y la de otro día no;
+un hábito común no se liga a una publicación aunque ese día haya publicado), `PublicacionPersistenceAdapterTest`,
+`ObligacionesHistoricasPersistenceAdapterTest` y `CumplimientoDelLiderIT`. **Regla general:** un hábito que se cumple
+sin evidencia tiene que decir con qué se cumplió; si no, «cumplido» y «sin entrega» conviven y nadie sabe cuál creer.

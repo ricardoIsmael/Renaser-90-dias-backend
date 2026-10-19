@@ -38,9 +38,13 @@ contratos: backend, app y agentes trabajan contra lo que dice acá. Si algo camb
 |---|---|
 | Aprendiz (y staff con programa propio) | Su propio semáforo: vigente, sus días y sus semanas. |
 | Mentor | Cada aprendiz de los grupos que **acompaña vigentemente** (`community.api.AcompanamientoFinder`), con nombre. |
-| Líder de mentores | **Resumen por grupo, sin nombres**: cuántos verdes, amarillos, rojos y sin datos (RL-07 del SDD 002). |
+| Líder de mentores | **Resumen por grupo, sin nombres**: cuántos verdes, amarillos, rojos y sin datos (RL-07 del SDD 002; ver la nota de abajo y §4.7). |
 | Admin · Alquimista | Todo: resumen por grupo, el grupo con nombres y la persona. |
 | Compañeros de grupo | Solo el propio. |
+
+> **Corregido 2026-10-19 (D-274, spec 005).** La fila del líder decía «sin nombres». Para la vista de cumplimiento por persona,
+> el líder (y Administración y Alquimista) abre el grupo y ve a cada persona con nombre y su semana: §4.7. El resumen por
+> grupo de §4.4 sigue sin nombres.
 
 ### 1.2 Avisos del sábado (cierre de semana)
 
@@ -470,7 +474,7 @@ La app instalada ignora rutas que no conoce y solo se abre: no rompe nada.
 ### 4.6 «¿A quién atiendo hoy?» — administración (S-4, 2026-09-26)
 
 `GET /api/v1/admin/semaforo/atencion` · permiso `MANAGE_TRAINEES` · guard: ADMIN o ALCHEMIST **y** cuenta
-activa (`AccesoAVistasDelSemaforo.requireAdminActivo`). MENTOR, MENTOR_LEAD (no ve nombres, RL-07),
+activa (`AccesoAVistasDelSemaforo.requireAdminActivo`). MENTOR, MENTOR_LEAD (no ve esta lista; sus nombres están en §4.7 desde D-274),
 TRAINEE y un admin suspendido reciben 403.
 
 **Por qué existe:** §4.4 mira solo grupos regulares con mentor vigente, así que un aprendiz de la
@@ -502,6 +506,30 @@ todos, igual que en §4.3.
 - Solo cuentas activas y solo rol TRAINEE: el staff con programa propio no entra en esta lista.
 
 ---
+
+### 4.7 Cumplimiento por persona — líder, admin, alquimista (spec 005, D-274, 2026-10-19)
+
+> **Corregido 2026-10-19.** RL-07 del SDD 002 decía que el líder veía cantidades y ningún aprendiz con nombre. El dueño lo
+> amplió para esta vista: el líder, Administración y Alquimista abren el grupo, ven a cada persona con su color y su semana, y
+> abren su ficha. Sigue sin leer los chats del grupo y sin poder cambiar nada de la persona (completar, revisar, reasignar).
+
+Contrato completo: `specs/005-lider-cumplimiento-por-persona/contracts/leadership-cumplimiento.md`. En breve:
+
+- `GET /api/v1/leadership/groups/{g}/semaforo` — la tabla del grupo (la forma de §4.3, orden del líder: rojo, amarillo, sin
+  datos, verde, no se mide). **Sin `semanaHasta` = la última semana cerrada.** Quien lleva su propio programa en el grupo
+  (su mentor o guía) sale como `NO_SE_MIDE`, sin barras.
+- `GET /api/v1/leadership/groups/{g}/people/{p}/week` — la ficha: siete días de sábado a viernes con las obligaciones, la
+  respuesta escrita, las evidencias, la publicación del post diario y las acciones del día. **Sin `semanaHasta` = la semana
+  en curso**; sus días futuros salen con `motivo: FUTURO` y vacíos, aunque la persona ya haya planificado acciones.
+- La semana es **la del semáforo (sábado→viernes)**, con el «hoy» de la zona de la persona. Los días sin color traen su
+  `motivo` y **nunca** se cuentan como incumplidos (`SIN_NADA_PLANIFICADO`, `NO_ACTIVADO`, `PENDIENTE_DE_CALCULO`,
+  `CUENTA_SUSPENDIDA`, `PAUSADO`, `FUERA_DEL_PROGRAMA`, `FUTURO`, `EN_CURSO`).
+- Persona fuera del grupo, grupo sin mentor o de recepción, y cuentas suspendidas, cerradas o de prueba: 404. Cada apertura de
+  la ficha queda registrada (`consultas_de_ficha`, append-only).
+- `GET /semaforo/groups` (§4.4) suma `puedeAbrirse` por grupo: la app abre la tarjeta solo si viene `true`.
+- Aviso al mentor: `REVISION_DEL_LIDER` a las 20:00 de su zona con lo que miró **el líder** ese día (§4.5: la ruta es
+  la misma `/mentor/groups/{g}/semaforo`).
+- Apagable con la funcionalidad `lider.cumplimiento` de Soporte TI: 503 `FUNCIONALIDAD_APAGADA` en las dos lecturas.
 
 ## 5. Pautas de experiencia (app)
 
