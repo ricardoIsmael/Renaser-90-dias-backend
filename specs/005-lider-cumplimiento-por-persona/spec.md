@@ -292,8 +292,9 @@ un solo aviso con solo sus personas, y que un día sin consultas no genera aviso
   lo abre, la app avisa con su respuesta, como en la info del chat.
 - **La observación sobre una persona** reutiliza las observaciones del líder al mentor (RL-14..RL-17); no se crea
   un buzón nuevo.
-- **El post diario** se puede abrir como evidencia solo si la publicación queda ligada al cumplimiento. Hoy no lo
-  está: la corrección en curso de `fix/post-diario-en-ficha` es una dependencia de FR-011.
+- **El post diario** hoy se cierra sin evidencia: la publicación no queda ligada al cumplimiento, y la ficha de
+  administración dice «sin evidencia» (`evidenciaId` vacío). **Esta spec la liga** para cumplir FR-011. El ✓ del
+  post diario funciona en local (verificado el 2026-10-19); lo que pasa en producción lo revisa el dueño aparte.
 - **Los hábitos de otro rol** que la persona no tiene (D-264) no aparecen: la semana muestra solo lo que tenía.
 - Se reutilizan la lectura semanal y la de evidencias de administración. No se crea una fórmula de cumplimiento
   nueva.

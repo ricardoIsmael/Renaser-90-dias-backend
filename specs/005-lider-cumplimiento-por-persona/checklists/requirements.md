@@ -34,4 +34,4 @@
 - Las referencias a `AGENTS.md`, RL-07 y D-264 son trazabilidad con decisiones del proyecto, no detalles de
   implementación.
 - Supuestos confirmados en `/speckit-clarify` (2026-10-19): resumen a las 20:00, grupo de bienvenida fuera; Administración y Alquimista también abren los grupos; registro permanente.
-- Dependencia: FR-011 (post diario como evidencia) depende de la corrección `fix/post-diario-en-ficha`.
+- FR-011 incluye ligar la publicación del post diario como evidencia: hoy se cierra sin ninguna (verificado en local el 2026-10-19).
