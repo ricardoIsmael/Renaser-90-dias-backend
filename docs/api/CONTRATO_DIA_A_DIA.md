@@ -133,6 +133,22 @@ todavía puede completar a esta hora antes de responder. Por eso este `GET` pued
 > Ahora la fecha sale de la zona del participante (`consultarHoyDe`). Si alguien reporta "de noche
 > no me aparecen los hábitos", ése era el motivo.
 
+### 1.1.1 `GET /api/v1/habit-tracks/today/snapshot` (D-266, 2026-10-17)
+
+Lectura aditiva con permiso `USE_APP`, limitada al actor autenticado, `Cache-Control: no-store`.
+Conserva el mismo contexto durante la proyección y la generación de respaldo; el array de `/today` no cambia.
+
+```json
+{"fechaLocal":"2026-10-16","zonaHoraria":"America/Lima","cierraEn":"2026-10-17T05:00:00Z","ahoraServidor":"2026-10-17T04:59:59Z","tracks":[]}
+```
+
+`cierraEn` es la siguiente medianoche de `fechaLocal` en `zonaHoraria`, no el plazo de puntos ni
+24 horas sumadas al instante actual. `ahoraServidor` permite medir vigencia sin depender del reloj
+manual del teléfono ni de CORS para HTTP Date. El contexto se conserva con cero tracks; una respuesta
+que atravesó el cierre puede estar vencida al llegar y la app la descarta y relee. El rechazo 409 por
+día cerrado sigue siendo la autoridad en la carrera final. Sin endpoint (backend anterior), la app usa
+`/today`, revalida antes de enviar y actualiza periódicamente sin inferir la zona.
+
 ### 1.2 `POST /api/v1/habit-tracks/{id}/complete`
 
 Completa un hábito directo (`CHECKBOX`/`JOURNALING`/`CALIFICACION`). **NO sirve para hábitos `BLOQUEO`**

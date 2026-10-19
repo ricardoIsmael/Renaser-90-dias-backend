@@ -15239,3 +15239,23 @@ primera no confirmó. Falla con el adaptador anterior con este mismo mensaje (co
 `AprobarConRolIT.aprobarComoAdministrador`, que exige el outbox vacío al terminar. **Regla general:** un «¿existe? →
 INSERT» solo es idempotente si nadie más inserta a la vez; cuando dos oyentes del mismo hecho escriben la misma fila,
 la idempotencia la pone la base (`ON CONFLICT`), no un `exists` previo.
+
+
+## E-608 · Training conserva hábitos de ayer después de medianoche (app + contrato backend, 17/10)
+
+**Síntoma literal.** Dos `POST /api/v1/habit-tracks/{id}/complete` rechazados con 409 a las 05:30:02 y 05:30:10 UTC del 17/10: «Este hábito era del 16 de octubre; ese día ya cerró y no se puede registrar.»
+
+**Causa confirmada.** Training cargaba al montar, sin disparador general de cambio de fecha/foco/actividad. El cierre directo mostraba el error sin recargar. Se cotejó también con el JavaScript de la web publicada. Los logs no identifican usuario, pantalla ni recorrido exactos y no vinculan este defecto con el timeout de Vercel.
+
+**Corrección.** D-266: snapshot coherente con la siguiente medianoche en la zona del participante, calculada desde Clock (no sumar 24 horas); endpoint aditivo y no-store. Training invalida el snapshot vencido, descarta respuestas antiguas y revalida al recuperar actividad. Los pasos compartidos de cierre/evidencia verifican el ID en la lista vigente antes de escribir; ausencia/409 por día cerrado notifica la relectura y conserva el rechazo. Formularios de Clase/Pastilla desde Training conservan el ID elegido. No hay sustitución por un ID nuevo, puntos ficticios, cambios históricos ni cambios a sesiones especiales.
+
+**Prevención y verificación.** `DiaDeHabitosTest`, `DiaDeHabitosControllerTest`, `DiaDeHabitosIT`; app `cambioDeDia.test.ts`, `actividadWebDelDia.test.ts`, `diaDeHabitosApi.test.ts`, `registroVigente.test.ts`. Incluyen madrugada UTC anterior en Lima, Madrid, DST, red caída, reloj manual, respuesta fuera de orden, retorno de actividad y evidencia enviada al cruzar el corte. Resultados exactos en `specs/002-habitos-cambio-de-dia/validation.md`. No está desplegado; requiere publicar backend y app/APK.
+
+
+## E-609 · La prueba nueva de autorización asumía que un actor inexistente se denegaba en el interceptor (pruebas, RESUELTO, 17/10)
+
+**Síntoma literal.** `Cannot invoke "com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase$DiaDeHabitos.fechaLocal()" because "dia" is null` en `DiaDeHabitosControllerTest`, al verificar una denegación con el caso de uso sin stub. El primer clean verify contó 6279 pruebas y un error de este fixture.
+
+**Causa.** `PermissionEnforcementInterceptor` deja al caso de uso rechazar un actor inexistente; los mocks del controller devolvían null. La primera variante también suponía que INACTIVE era una denegación del interceptor, cuando este comprueba la suspensión. No era una ejecución de los guards reales del caso de uso.
+
+**Solución y prevención.** El test negativo simula `NotAuthorizedException` desde el caso de uso y comprueba el 403 sin contexto. La prueba separada usa una cuenta SUSPENDED y comprueba que ni se invoque el caso de uso. `DiaDeHabitosIT` comprueba sin sesión y suspendido con filtros, base y sesión reales. No se modifican los permisos ni la política de cuentas. El resultado final de la batería se guarda en la spec de D-266.
