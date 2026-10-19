@@ -15438,3 +15438,12 @@ de la persona. No se toca `PeriodoDelSemaforo`: las tablas del mentor y de admin
 `BancoDeCumplimiento` ahora aplica la misma regla que la real (todas las ventanas cerradas), para que una prueba así falle
 con el código viejo. **Regla general:** un dato de calendario (¿ya pasó esta semana?) se decide con el calendario, no
 agregando el estado de cada persona del grupo.
+
+**E-629 (b) · El texto de una evidencia salía dos veces en la hoja del líder (app, spec 005, RESUELTO, 19/10).** Hallazgo del mismo E2E.
+**Síntoma.** Al abrir la Audioterapia de una persona, la hoja mostraba el párrafo y, debajo de «Lo que escribió», el mismo párrafo.
+**Causa.** `EvidenciaHabitoModal` entrega un texto con `confirmarEvidencia({ tipo: 'TEXTO', contenidoTexto })` **y**
+`completarRegistro(id, textoUtil)`: la evidencia y `respuestaTexto` son las mismas palabras, y la hoja pintaba las dos.
+**Solución.** `respuestaYaLeidaComoEvidencia` (`features/lider-mentores/utils/respuestaRepetida.ts`): si lo leído como evidencia de
+texto es igual a `respuestaTexto` (sin espacios en los bordes), «Lo que escribió» no se repite; si dice otra cosa (foto con
+«¿Qué sentiste?», un resumen distinto) salen las dos. **Para que no vuelva.** `respuestaRepetida.test.ts`. **Regla general:** un
+dato que el cliente manda por dos caminos se muestra por uno; al leerlo hay que saber que puede venir repetido.
