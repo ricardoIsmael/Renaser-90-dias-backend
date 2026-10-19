@@ -165,8 +165,10 @@ Esta ruta lleva `@Funcionalidad("muro")`, no la de la ficha del líder: es un re
 ```
 
 400 si `personId` no está hoy en un grupo que ese mentor acompaña, o si viene `weekStart` sin `personId`. `weekStart` es
-el `desde` de la semana que el líder miraba. `GET …/observations` devuelve `personId`, `personName` y `weekStart`,
-opcionales.
+el `desde` de la semana que el líder miraba. La respuesta del `POST` y cada elemento de `GET …/observations` devuelven
+`personId` y `weekStart`; solo el `GET` trae además `personName` (la cuenta se lee una vez por página; `null` si ya no existe).
+Los tres son `null` en las observaciones que no tratan de una persona. Reintentar con la misma `operationKey` devuelve lo ya
+creado; usarla con otra `personId` es 400.
 
 ## 6. Resumen de grupos (ruta existente, campo nuevo)
 
@@ -181,8 +183,11 @@ funcionalidad `lider.cumplimiento` está prendida para quien pregunta (apagada, 
 - `rutaApp: /mentor/groups/{g}/semaforo`, con el grupo en el que más personas se consultaron.
 - Deduplicación `consultas-lider:<mentorId>:<fecha>`.
 - Preferencia en `GET/PATCH /notification-preferences`, con el tema `REVISION_DEL_LIDER`.
-- Sale a las 20:00 del día, en la zona del mentor; solo cuenta lo que abrió el **líder de mentores** (no Administración
-  ni Alquimista), sin repetir personas, y nunca a quien se consultó a sí mismo.
+- Sale a las 20:00 del día, en la zona del mentor (`participantes_programa.timezone`; si no tiene programa, la de su primer
+  grupo; por defecto America/Lima). El barrido corre en el minuto 10 de cada hora UTC y publica solo a quien ahora está entre
+  las 20:00 y las 20:59 de su zona. Solo cuenta lo que abrió el **líder de mentores** (no Administración ni Alquimista),
+  sin repetir personas, y nunca a quien se consultó a sí mismo. Las cuentas que ya no existen no se nombran; sin nadie que
+  nombrar, no hay aviso. Apagar `lider.cumplimiento` en Soporte TI detiene el barrido.
 
 ## 8. Fichas del mentor y de administración (campos opcionales nuevos)
 

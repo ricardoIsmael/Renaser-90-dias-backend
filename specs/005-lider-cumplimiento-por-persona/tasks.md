@@ -102,10 +102,16 @@ antes a las otras sesiones.
 
 **Independent Test**: quickstart, escenarios 9 y 10.
 
-- [ ] T041 [P] [US4] Unitaria de `ReglaDelResumenDeConsultas`: `toca` de 20:00 a 20:59 en Lima y en Madrid, y nunca en la madrugada UTC; cuerpo con 1, 2, 3 y 5 nombres («y 2 más»); excluye a ADMIN y ALCHEMIST y al propio mentor; clave `consultas-lider:<mentorId>:<fecha>`, en `BT/leadership/domain/model/consulta/ReglaDelResumenDeConsultasTest.java`
-- [ ] T042 [US4] `B/leadership/domain/model/consulta/ReglaDelResumenDeConsultas.java`
-- [ ] T043 [US4] `ResumirConsultasDelLiderUseCase` + `ResumenDeConsultasService` (zona: `participantes_programa.timezone` o la del primer grupo, decisión R-8 confirmada; paginado; fallo aislado por mentor; evento `RevisionDelLiderEvent` en `leadership/api`) y `ResumirConsultasDelLiderScheduler` (`cron 0 10 * * * *`, zona UTC, `@SchedulerLock(name="leadership-resumir-consultas")`), con IT del scheduler sin repetir el aviso
-- [ ] T044 [US4] `REVISION_DEL_LIDER` en `B/notifications/domain/model/TipoNotificacion.java` y un listener que emite «Tu líder revisó a tu grupo» con la ruta `/mentor/groups/{g}/semaforo` y la deduplicación por clave, en `B/notifications/infrastructure/adapter/in/event/`
+- [x] T041 [P] [US4] Unitaria de `ReglaDelResumenDeConsultas`: `toca` de 20:00 a 20:59 en Lima y en Madrid, y nunca en la madrugada UTC; cuerpo con 1, 2, 3 y 5 nombres («y 2 más»); excluye a ADMIN y ALCHEMIST y al propio mentor; clave `consultas-lider:<mentorId>:<fecha>`, en `BT/leadership/domain/model/consulta/ReglaDelResumenDeConsultasTest.java`
+- [x] T042 [US4] `B/leadership/domain/model/consulta/ReglaDelResumenDeConsultas.java`
+- [x] T043 [US4] `ResumirConsultasDelLiderUseCase` + `ResumenDeConsultasService` (zona: `participantes_programa.timezone` o la del primer grupo, decisión R-8 confirmada; paginado; fallo aislado por mentor; evento `RevisionDelLiderEvent` en `leadership/api`) y `ResumirConsultasDelLiderScheduler` (`cron 0 10 * * * *`, zona UTC, `@SchedulerLock(name="leadership-resumir-consultas")`), con IT del scheduler sin repetir el aviso
+- [x] T044 [US4] `REVISION_DEL_LIDER` en `B/notifications/domain/model/TipoNotificacion.java` y un listener que emite «Tu líder revisó a tu grupo» con la ruta `/mentor/groups/{g}/semaforo` y la deduplicación por clave, en `B/notifications/infrastructure/adapter/in/event/`
+  > **Corregido 2026-10-19.** T043: el servicio es `ResumenDeConsultasService` (puerto de lectura `LeerConsultasDeFichaPort`, adaptador
+  > `LecturaDeConsultasDeFichaJdbcAdapter`) y el evento lleva el cuerpo ya redactado (`RevisionDelLiderEvent`); el título «Tu líder revisó a tu
+  > grupo» lo pone el listener de `notifications` (`RevisionDelLiderNotificationListener`, T044). La regla recibe el día del mentor
+  > (`DiaDelMentor`), no lo adivina de las consultas. El scheduler se apaga por `renaser.scheduling.resumen-consultas-lider.activo` (la suite
+  > lo apaga) y respeta el interruptor `lider.cumplimiento` (`saltaEsteTurno`). Las cuentas que ya no existen no se nombran. La IT del
+  > scheduler (`ResumirConsultasDelLiderSchedulerIT`) está escrita y no corrida (sin Testcontainers en esta máquina).
 - [ ] T045 [US4] Interruptor «Revisiones de tu líder» (tema `REVISION_DEL_LIDER`) en Yo → Notificaciones, solo para quien acompaña un grupo, en `A/screens/YoScreen.tsx` o en su sub-vista de notificaciones, y la apertura de la ruta del aviso en `A/navigation/rutaDeAviso.ts`
 
 ## Phase 7: Integración con la fase 2 de Soporte TI (cuando esté en master)

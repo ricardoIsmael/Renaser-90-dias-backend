@@ -52,7 +52,13 @@ public enum TipoNotificacion {
      * Admin y al Alquimista si es crítica o quedó apagada para todos. No se pospone con las notificaciones apagadas
      * ({@link #seEntregaConLasNotificacionesApagadas()}).
      */
-    OPERACION_PLATAFORMA;
+    OPERACION_PLATAFORMA,
+
+    /**
+     * V109 (D-274, spec 005): el líder de mentores revisó a personas de tu grupo. Le llega al mentor (o a la guía) una vez
+     * al día, a las 20:00 de su zona. Tipo propio y no {@code RESUMEN_SEMANAL} para que se pueda silenciar por separado.
+     */
+    REVISION_DEL_LIDER;
 
     /**
      * Si este aviso sale aunque Soporte TI haya apagado la funcionalidad {@code notificaciones} (spec 002). Solo el de
