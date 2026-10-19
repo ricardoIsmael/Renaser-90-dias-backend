@@ -135,7 +135,8 @@ antes a las otras sesiones.
   > `docs/informes/auditoria-fixes/C-5.md`. **Queda pendiente la corrección de RL-07 en la spec del líder**: esa spec vive en el repo del
   > frontend (`specs/002-lider-de-mentores/spec.md`, línea RL-07), que este agente no toca; la hace quien tenga ese repo.
 - [x] T048 [P] `AGENTS.md` del frontend: «Cambio por pedido del dueño — 2026-10-19 — Hoy (semáforo por grupos del líder), fichas del mentor y de administración, Yo → Notificaciones», con lo que cambia y nada más
-- [ ] T049 Verificación completa con la máquina libre: backend `TZ=UTC ./mvnw -B clean verify` (leer `Tests run:` de surefire y failsafe); app `tsc --noEmit` y jest completo
+- [x] T049 Verificación completa con la máquina libre: backend `TZ=UTC ./mvnw -B clean verify` (leer `Tests run:` de surefire y failsafe); app `tsc --noEmit` y jest completo
+  > Backend 2026-10-19: `TZ=UTC ./mvnw -B clean verify` en verde, surefire 6588 y failsafe 443, 0 fallos, 0 errores y 0 omitidas (11:21 min). App: `tsc` 0 errores y 84 suites relacionadas en verde (788 pruebas); la suite completa de jest corre dentro del E2E (T050).
 - [ ] T050 E2E en el emulador con Maestro y mobile-mcp contra el backend local y la base clonada `renaser_lider005`: los 13 escenarios del quickstart, con capturas en `specs/005-lider-cumplimiento-por-persona/e2e.md`. Avisar antes a las otras sesiones
 - [ ] T051 Un commit por repo y por bloque coherente en la rama `005-lider-cumplimiento-por-persona`; `graphify update .` en los dos repos
 
