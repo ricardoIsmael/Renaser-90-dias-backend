@@ -64,7 +64,7 @@ Mapeo de excepción de dominio → HTTP (`shared/web/GlobalExceptionHandler.java
   2026-08-31 era una URL prefirmada que caducaba a los 7 días — ver `docs/BITACORA_ERRORES.md`
   E-57.
 
-  **`rolPersonalizado`** (aditivo, D-269): `{ "id": "uuid", "nombre": "Mentor junior" } | null`, el rol
+  **`rolPersonalizado`** (aditivo, D-272): `{ "id": "uuid", "nombre": "Mentor junior" } | null`, el rol
   personalizado vigente de la cuenta (activo y que hereda de su rol). Va al final de `UserResponse`, así que
   sale también en `GET /auth/me`, el login, el login social y `GET /admin/staff`. **`role` sigue siendo el rol
   base**: una app 1.5.0 ignora el campo y muestra el rol base.
@@ -136,7 +136,7 @@ Mapeo de excepción de dominio → HTTP (`shared/web/GlobalExceptionHandler.java
 - **Headers:** `X-Actor-Id` (obligatorio, debe ser ADMIN/ALCHEMIST).
 - **Path variable:** `id` = UUID del usuario objetivo.
 - **Request body** (`UpdateUserRoleRequest`, con `@Valid`): `{ "newRole": "ALCHEMIST|ADMIN|MENTOR_LEAD|MENTOR|TRAINEE" }`
-  > **Ampliado 2026-10-14 (D-269).** `{ "newRole"?, "rolPersonalizadoId"? }`. Con `rolPersonalizadoId` (un rol
+  > **Ampliado 2026-10-14 (D-272).** `{ "newRole"?, "rolPersonalizadoId"? }`. Con `rolPersonalizadoId` (un rol
   > personalizado activo, de `GET /admin/roles-asignables`), la cuenta toma el rol base de ese rol y `newRole` se
   > ignora (puede faltar). Sin él, `newRole` es obligatorio (lo que manda la app 1.5.0) y se **quita** el rol
   > personalizado que tuviera. Errores nuevos: 400 si no viene ninguno de los dos, o si el rol personalizado no existe
@@ -199,7 +199,7 @@ Mapeo de excepción de dominio → HTTP (`shared/web/GlobalExceptionHandler.java
 
 - **Headers:** `X-Actor-Id` (obligatorio, debe ser ADMIN/ALCHEMIST).
 - **Path variable:** `id` = UUID de la solicitud (`AccountRequestId`).
-- **Request body:** opcional (D-265): `{ "role": "TRAINEE" | "TRAINEE_GUIDE" | "MENTOR" | "MENTOR_LEAD" | "ADMIN" | "ALCHEMIST" }`. Sin cuerpo o sin `role`, entra como `TRAINEE` (lo que mandan la app 1.5.0 y el panel de solicitudes). Un rol que no existe → 400. `IT_SUPPORT` también → 400 y la solicitud sigue pendiente: Soporte TI se asigna solo desde la base (D-267). **D-269:** también `rolPersonalizadoId` (opcional): entra con ese rol personalizado, por el mismo cambio de rol que `PATCH /users/{id}/role` (mismas reglas y errores; si falla, la aprobación entera se deshace y la solicitud sigue pendiente).
+- **Request body:** opcional (D-265): `{ "role": "TRAINEE" | "TRAINEE_GUIDE" | "MENTOR" | "MENTOR_LEAD" | "ADMIN" | "ALCHEMIST" }`. Sin cuerpo o sin `role`, entra como `TRAINEE` (lo que mandan la app 1.5.0 y el panel de solicitudes). Un rol que no existe → 400. `IT_SUPPORT` también → 400 y la solicitud sigue pendiente: Soporte TI se asigna solo desde la base (D-267). **D-272:** también `rolPersonalizadoId` (opcional): entra con ese rol personalizado, por el mismo cambio de rol que `PATCH /users/{id}/role` (mismas reglas y errores; si falla, la aprobación entera se deshace y la solicitud sigue pendiente).
 - **Response body:** ninguno.
 - **Código de éxito:** 204 No Content.
 - **Quién puede llamarlo:** ADMIN/ALCHEMIST (`AccountRequest.approve` → `requireManager` → `actor.canManageRoles()`).

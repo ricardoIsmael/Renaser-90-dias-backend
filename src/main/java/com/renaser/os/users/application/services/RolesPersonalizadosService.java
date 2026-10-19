@@ -23,7 +23,7 @@ import java.util.NoSuchElementException;
 import java.util.UUID;
 
 /**
- * La gestión de roles personalizados (ver {@link GestionarRolesPersonalizadosUseCase}; D-269). Cada escritura, en este
+ * La gestión de roles personalizados (ver {@link GestionarRolesPersonalizadosUseCase}; D-272). Cada escritura, en este
  * orden: Soporte TI activo (403), candado de escrituras, el rol existe (404), versión (409), las reglas del agregado y
  * las que miran otras filas (400/409), guardar y publicar {@link RolPersonalizadoCambiadoEvent} en la misma
  * transacción.

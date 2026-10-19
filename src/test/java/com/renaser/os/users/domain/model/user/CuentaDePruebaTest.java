@@ -19,7 +19,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** Las cuentas de prueba de «ver como rol» en el agregado {@link User} (spec 002, fase 2, US5; D-270). Sin Spring. */
+/** Las cuentas de prueba de «ver como rol» en el agregado {@link User} (spec 002, fase 2, US5; D-273). Sin Spring. */
 class CuentaDePruebaTest {
 
     private static final Instant AHORA = Instant.parse("2026-10-14T15:00:00Z");

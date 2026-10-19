@@ -25,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-/** {@code GET /admin/roles-asignables} (D-269). Sin Spring. */
+/** {@code GET /admin/roles-asignables} (D-272). Sin Spring. */
 class RolesAsignablesServiceTest {
 
     private final LoadUserPort usuarios = mock(LoadUserPort.class);

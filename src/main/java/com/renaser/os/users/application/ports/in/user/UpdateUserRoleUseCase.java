@@ -10,7 +10,7 @@ import java.util.UUID;
  * MentorProfile todavia, se crea uno vacio. Migracion de datos entre perfiles al
  * cambiar de rol queda fuera de alcance, explicitamente.
  *
- * <p><b>Rol personalizado</b> (spec 002, fase 2, FR-031; D-269): con {@code rolPersonalizadoId}, la cuenta toma el rol
+ * <p><b>Rol personalizado</b> (spec 002, fase 2, FR-031; D-272): con {@code rolPersonalizadoId}, la cuenta toma el rol
  * base de ese rol y se ignora {@code newRole}; sin él, se cambia el rol base y se quita el rol personalizado que
  * tuviera. Un rol que hereda de ADMIN o ALQUIMISTA lo asigna solo un ADMIN (403); uno desactivado o inexistente es 400.
  */
@@ -20,7 +20,7 @@ public interface UpdateUserRoleUseCase {
 
     /**
      * @param newRole            el rol base; puede faltar si viene {@code rolPersonalizadoId}
-     * @param rolPersonalizadoId opcional (D-269)
+     * @param rolPersonalizadoId opcional (D-272)
      */
     record UpdateUserRoleCommand(UserId targetUserId, UserRole newRole, UserId actorId, UUID rolPersonalizadoId) {
 

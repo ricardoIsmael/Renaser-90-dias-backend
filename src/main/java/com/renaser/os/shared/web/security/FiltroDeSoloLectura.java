@@ -16,7 +16,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Hace cumplir el <b>solo lectura</b> de «ver como rol» (spec 002, fase 2, US5; contrato fase-2.md §5; D-270) en todo
+ * Hace cumplir el <b>solo lectura</b> de «ver como rol» (spec 002, fase 2, US5; contrato fase-2.md §5; D-273) en todo
  * el servidor, antes de cualquier controller: con una sesión marcada por {@link SesionDeSoloLectura},
  * <ul>
  *   <li>todo pedido que escribe ({@code POST}, {@code PUT}, {@code PATCH}, {@code DELETE}) responde

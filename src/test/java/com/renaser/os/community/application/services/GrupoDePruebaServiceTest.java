@@ -50,7 +50,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-/** El «Grupo de prueba (ver como)» (D-270): solo cuentas de prueba, como el sistema, idempotente. Sin Spring. */
+/** El «Grupo de prueba (ver como)» (D-273): solo cuentas de prueba, como el sistema, idempotente. Sin Spring. */
 @ExtendWith(MockitoExtension.class)
 class GrupoDePruebaServiceTest {
 

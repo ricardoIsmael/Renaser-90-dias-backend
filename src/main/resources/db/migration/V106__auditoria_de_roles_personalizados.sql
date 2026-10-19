@@ -1,4 +1,4 @@
--- V106 — La auditoría de la plataforma registra los cambios de roles personalizados (spec 002, fase 2; D-269)
+-- V106 — La auditoría de la plataforma registra los cambios de roles personalizados (spec 002, fase 2; D-272)
 --
 -- Por qué se toca la base:
 --   Crear, editar, desactivar, borrar o reemplazar en bloque un rol personalizado cambia lo que pueden usar personas

@@ -9,7 +9,7 @@ import com.renaser.os.users.api.UserStatus;
 /**
  * Proyeccion a mano, no la entidad serializada (CLAUDE.MD §5.4.5/§8: evita fugas de campos).
  *
- * <p>{@code rolPersonalizado} (spec 002, fase 2; D-269): {@code { id, nombre }} si la cuenta tiene un rol personalizado
+ * <p>{@code rolPersonalizado} (spec 002, fase 2; D-272): {@code { id, nombre }} si la cuenta tiene un rol personalizado
  * vigente, o {@code null}. Va al final y es aditivo; {@code role} sigue siendo el rol base.
  */
 public record UserResponse(String id, String email, UserRole role, UserStatus status, String fullName,

@@ -23,7 +23,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
-/** El entorno de cada cuenta de prueba: grupo, onboarding (D-270). Sin Spring. */
+/** El entorno de cada cuenta de prueba: grupo, onboarding (D-273). Sin Spring. */
 @ExtendWith(MockitoExtension.class)
 class EntornoDeLaCuentaDePruebaTest {
 

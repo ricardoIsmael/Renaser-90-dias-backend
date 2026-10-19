@@ -14,7 +14,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * La copia en memoria de los roles personalizados de ESTA instancia (contrato de la fase 2, §4.4; D-269): persona → rol
+ * La copia en memoria de los roles personalizados de ESTA instancia (contrato de la fase 2, §4.4; D-272): persona → rol
  * y rol → claves. La regla de disponibilidad la lee en cada pedido sin tocar la base.
  *
  * <p>Se recarga entera al arrancar, después de cada {@code RolPersonalizadoCambiadoEvent} de esta instancia, cuando

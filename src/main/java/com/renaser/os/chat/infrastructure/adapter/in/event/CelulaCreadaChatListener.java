@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
  * <p>Despues de crearla reconcilia los participantes, como el aviso de composicion
  * ({@code ComposicionCelulaChatListener}). <b>Corregido 2026-10-14 (E-625).</b> Antes solo creaba la
  * fila: si el grupo nacia con integrantes en el mismo commit (el grupo de prueba de «ver como»,
- * D-270), los dos avisos salian juntos del outbox, el de la composicion podia llegar primero, no
+ * D-273), los dos avisos salian juntos del outbox, el de la composicion podia llegar primero, no
  * encontraba la conversacion y no hacia nada, y nadie volvia a sincronizar. La sincronizacion es
  * idempotente: en un grupo recien creado sin integrantes no cambia nada.
  */

@@ -12,7 +12,7 @@ import java.util.TreeSet;
 import java.util.UUID;
 
 /**
- * Un rol personalizado (spec 002, US7; FR-029 a FR-034; D-269): hereda el comportamiento de un rol base —la cuenta
+ * Un rol personalizado (spec 002, US7; FR-029 a FR-034; D-272): hereda el comportamiento de un rol base —la cuenta
  * guarda ese rol base en {@code usuarios.rol}, así que todos los guards lo ven igual— y marca un subconjunto de las
  * funcionalidades del catálogo que ese rol usa. Lo que no está marcado, a quien lo tenga, le queda «no disponible».
  *

@@ -75,7 +75,7 @@ class SubscripcionAutorizadaInterceptor implements ChannelInterceptor {
         // conversacion de otros saltandose el caso de uso (y su persistencia y sus guardas). Un
         // cliente solo manda a /app/**; el unico que escribe en /topic es el servidor.
         if (accessor.getCommand() == StompCommand.SEND) {
-            // «Ver como rol» (D-270): una sesión de solo lectura lee, no manda. El texto lleva el código para que el
+            // «Ver como rol» (D-273): una sesión de solo lectura lee, no manda. El texto lleva el código para que el
             // cliente lo reconozca en el frame ERROR, como el 403 de la API.
             if (SesionDeSoloLectura.loEs(accessor.getSessionAttributes())) {
                 throw new org.springframework.messaging.MessagingException(

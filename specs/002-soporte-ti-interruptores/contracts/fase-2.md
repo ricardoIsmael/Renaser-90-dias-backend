@@ -194,7 +194,7 @@ Asignación (Administración, como hoy: ADMIN y ALQUIMISTA; solo ADMIN asigna al
   `rolPersonalizado: { id, nombre } | null` (aditivo). `role` sigue siendo el base.
 - Auditoría: tipo nuevo `ROL_PERSONALIZADO` (crear, editar, desactivar, borrar, reemplazar), `clave` = `"rp:" + id`,
   `antes`/`despues` con `{ nombre, rolBase, activo, funcionalidades }`.
-- **Aditivo (B2, 2026-10-14; D-269, pedido del coordinador): `codigo` en los rechazos de la consola de roles.** Mismo
+- **Aditivo (B2, 2026-10-14; D-272, pedido del coordinador): `codigo` en los rechazos de la consola de roles.** Mismo
   formato de error con `codigo` (`ApiErrorConCodigo`, sin `funcionalidad`): `{ "message": "…", "timestamp": "…",
   "codigo": "…" }`. Los estados siguen los de la tabla de arriba:
 
@@ -206,7 +206,7 @@ Asignación (Administración, como hoy: ADMIN y ALQUIMISTA; solo ADMIN asigna al
   | 400 | `MAXIMO_DE_ROLES` | `POST` de un rol nuevo, o `PUT` que reactiva uno, con 20 activos |
 
   El resto de los 400 (sin motivo, base `IT_SUPPORT`, clave fuera de la base) siguen sin `codigo`.
-- **Aditivo (B2, 2026-10-14; D-269, respuesta del dueño): push a Administración.** Si Soporte TI edita un rol con
+- **Aditivo (B2, 2026-10-14; D-272, respuesta del dueño): push a Administración.** Si Soporte TI edita un rol con
   personas cambiando `funcionalidades`, `activo` o la base, o lo reemplaza en bloque moviendo personas, cada ADMIN y
   ALQUIMISTA activo recibe una notificación `OPERACION_PLATAFORMA` (fila en la bandeja y push), sin `rutaApp`:
   `titulo` «Soporte TI cambió un rol», `cuerpo` «Soporte TI cambió el rol «<nombre>» (<N> persona|personas): <resumen>.
@@ -234,7 +234,7 @@ Asignación (Administración, como hoy: ADMIN y ALQUIMISTA; solo ADMIN asigna al
 - Auditoría: tipo nuevo `VER_COMO` al entrar y al salir (`despues: { rol | rolPersonalizado }`).
 - `users` no puede depender de `plataforma`: si hace falta comprobar el desbloqueo de la consola desde `users`, se hace
   con un puerto en `shared` implementado por `plataforma` (como `Interruptores`).
-- **Aditivo (B3, 2026-10-14; D-270).** Lo que el contrato no decía y quedó así (para C2 y el QA):
+- **Aditivo (B3, 2026-10-14; D-273).** Lo que el contrato no decía y quedó así (para C2 y el QA):
   - `POST /ver-como` → `200 { cuenta: { id, nombre, rol, rolPersonalizado: { id, nombre } | null }, venceEn }`; `rol` es
     el nombre de la API (`TRAINEE`, `TRAINEE_GUIDE`, `MENTOR`, `MENTOR_LEAD`, `ADMIN`, `ALCHEMIST`); con un rol
     personalizado, `rol` es su base. Errores: 403 (no es Soporte TI activo), 423 (consola bloqueada), 400 (ni `rol` ni

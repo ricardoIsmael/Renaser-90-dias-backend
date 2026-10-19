@@ -94,7 +94,7 @@ class TokenPushServiceTest {
     }
 
     @Test
-    @DisplayName("«ver como» (D-270): una cuenta de prueba no registra un token (el upsert se lo quitaría al teléfono real)")
+    @DisplayName("«ver como» (D-273): una cuenta de prueba no registra un token (el upsert se lo quitaría al teléfono real)")
     void cuentaDePruebaNoRegistraToken() {
         UserId usuario = UserId.of(UUID.randomUUID());
         when(userSummaryFinder.findById(usuario)).thenReturn(Optional.of(

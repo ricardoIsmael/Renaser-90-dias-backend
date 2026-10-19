@@ -6,7 +6,7 @@ import java.util.Collection;
 import java.util.UUID;
 
 /**
- * Arma la primera vez, y repara cada vez, el «Grupo de prueba (ver como)» (spec 002, fase 2, US5; D-270): el mentor
+ * Arma la primera vez, y repara cada vez, el «Grupo de prueba (ver como)» (spec 002, fase 2, US5; D-273): el mentor
  * de prueba lo lidera, los aprendices de prueba son sus integrantes y la guía de prueba lo acompaña. Lo pide la consola
  * Soporte TI al abrir «ver como» un rol que tiene grupo.
  *

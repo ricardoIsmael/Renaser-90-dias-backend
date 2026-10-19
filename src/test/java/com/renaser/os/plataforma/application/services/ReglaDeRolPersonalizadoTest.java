@@ -41,7 +41,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * La regla {@code @Order(20)} de los roles personalizados dentro de la evaluación de verdad (D-269): la copia en memoria,
+ * La regla {@code @Order(20)} de los roles personalizados dentro de la evaluación de verdad (D-272): la copia en memoria,
  * el 404 de la API, {@code noDisponibles} de {@code /mias}, que el apagado manual gana y que un rol desactivado devuelve
  * todo lo de la base. Sin Spring ni base.
  */

@@ -119,7 +119,7 @@ public class TrasladoService implements TrasladarAprendicesUseCase {
         Optional<Celula> celulaActual = Optional.ofNullable(participacion.celulaId())
                 .flatMap(id -> loadCelulaPort.porId(CelulaId.of(id)));
         if (celulaActual.map(Celula::id).filter(GrupoDePrueba.CELULA::equals).isPresent()) {
-            // «Ver como» (D-270): el aprendiz de prueba vive en el grupo de prueba; el traslado no lo mueve ni avisa
+            // «Ver como» (D-273): el aprendiz de prueba vive en el grupo de prueba; el traslado no lo mueve ni avisa
             // que a su cohorte le falta un grupo.
             return new ResultadoTraslado(aprendizId, DestinoTraslado.SIN_CAMBIO.name(), null,
                     "Cuenta de prueba de «ver como»");

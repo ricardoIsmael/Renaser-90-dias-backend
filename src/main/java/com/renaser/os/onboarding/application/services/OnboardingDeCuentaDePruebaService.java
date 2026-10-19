@@ -15,7 +15,7 @@ import com.renaser.os.users.api.UserSummaryFinder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** El onboarding completo de una cuenta de prueba de «ver como» (ver {@link OnboardingDeCuentaDePruebaUseCase}; D-270). */
+/** El onboarding completo de una cuenta de prueba de «ver como» (ver {@link OnboardingDeCuentaDePruebaUseCase}; D-273). */
 @Service
 class OnboardingDeCuentaDePruebaService implements OnboardingDeCuentaDePruebaUseCase {
 

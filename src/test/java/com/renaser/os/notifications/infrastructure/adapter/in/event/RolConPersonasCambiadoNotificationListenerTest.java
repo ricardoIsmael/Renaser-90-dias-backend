@@ -22,7 +22,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/** El push a Administración por un rol con personas que cambió (D-269). Sin Spring. */
+/** El push a Administración por un rol con personas que cambió (D-272). Sin Spring. */
 class RolConPersonasCambiadoNotificationListenerTest {
 
     private static final Instant CUANDO = Instant.parse("2026-10-14T22:00:00Z");

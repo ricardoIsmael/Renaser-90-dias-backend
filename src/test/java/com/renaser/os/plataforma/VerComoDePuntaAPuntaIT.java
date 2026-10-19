@@ -47,7 +47,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * «Ver como rol» de punta a punta (spec 002, fase 2, US5; contrato fase-2.md §5 y §7; D-270), contra el Tomcat, el
+ * «Ver como rol» de punta a punta (spec 002, fase 2, US5; contrato fase-2.md §5 y §7; D-273), contra el Tomcat, el
  * Postgres y el Redis reales: Soporte TI abre «ver como Mentor», recibe el token de una sesión NUEVA (la suya sigue
  * sirviendo), lee como mentor, toda escritura responde 403 {@code MODO_SOLO_LECTURA} (REST y el SEND de STOMP), sale
  * con {@code DELETE /ver-como} y el token deja de servir; la auditoría queda con la forma que lee la app. Además: las

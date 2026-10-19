@@ -38,16 +38,16 @@ public interface LoadUserPort {
      * son primitivos (no {@code Pageable}: el puerto no conoce Spring Data, solo el
      * adaptador lo traduce) — mismo criterio que {@code LoadRecordatorioPort} en `calendar`.
      *
-     * <p><b>Nunca trae cuentas de prueba de «ver como»</b> (V107, D-270), ni las cuenta {@link #countByRoles}: de acá
+     * <p><b>Nunca trae cuentas de prueba de «ver como»</b> (V107, D-273), ni las cuenta {@link #countByRoles}: de acá
      * salen el padrón del ranking, el de mentores, el panel de staff y la protección del último ADMIN.
      */
     List<User> byRoles(Collection<UserRole> roles, UserStatus statusFilter, int page, int size);
 
     long countByRoles(Collection<UserRole> roles, UserStatus statusFilter);
 
-    /** De estos ids, los de cuentas de prueba de «ver como» (D-270). Una consulta. */
+    /** De estos ids, los de cuentas de prueba de «ver como» (D-273). Una consulta. */
     Set<UserId> cuentasDePruebaEntre(Collection<UserId> ids);
 
-    /** Todas las cuentas de prueba de «ver como» (D-270): a lo sumo 6 + 20, por el índice parcial de V107. */
+    /** Todas las cuentas de prueba de «ver como» (D-273): a lo sumo 6 + 20, por el índice parcial de V107. */
     Set<UserId> cuentasDePrueba();
 }

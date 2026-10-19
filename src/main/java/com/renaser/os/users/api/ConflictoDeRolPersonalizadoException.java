@@ -1,7 +1,7 @@
 package com.renaser.os.users.api;
 
 /**
- * Un cambio de un rol personalizado que choca con su estado actual (D-269): <b>409</b> con un {@code codigo} para que la
+ * Un cambio de un rol personalizado que choca con su estado actual (D-272): <b>409</b> con un {@code codigo} para que la
  * app sepa qué pasó sin leer el texto (contrato de la fase 2, §4, aditivo del 2026-10-14).
  * <ul>
  *   <li>{@value #VERSION_CAMBIADA}: otra persona lo cambió después de que se cargó (bloqueo optimista);</li>

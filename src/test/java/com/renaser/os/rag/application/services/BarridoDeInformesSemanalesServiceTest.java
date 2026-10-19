@@ -165,7 +165,7 @@ class BarridoDeInformesSemanalesServiceTest {
     }
 
     @Test
-    @DisplayName("D-270: la cuenta de prueba de «ver como» no tiene informe (una llamada a la IA que nadie lee)")
+    @DisplayName("D-273: la cuenta de prueba de «ver como» no tiene informe (una llamada a la IA que nadie lee)")
     void laCuentaDePruebaNoTieneInforme() {
         UserId real = inscrito(LIMA);
         UserId deVerComo = inscrito(LIMA);

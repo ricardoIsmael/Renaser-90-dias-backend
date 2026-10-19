@@ -8,7 +8,7 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Un rol personalizado visto desde otro módulo (contrato de la fase 2, §4.1; D-269): lo que lista la consola Soporte TI
+ * Un rol personalizado visto desde otro módulo (contrato de la fase 2, §4.1; D-272): lo que lista la consola Soporte TI
  * y lo que copia en memoria la evaluación de interruptores de {@code plataforma}.
  *
  * @param clave           {@code rp:<id>}: la misma con la que figura en la auditoría y en los roles asignables

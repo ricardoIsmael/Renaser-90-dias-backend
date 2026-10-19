@@ -33,7 +33,7 @@ interface SpringDataUserRepository extends JpaRepository<UserJpaEntity, UUID> {
     List<UUID> cerradasEntre(@Param("ids") Collection<UUID> ids);
 
     /*
-     * Las listas por rol NUNCA traen cuentas de prueba de «ver como» (V107, D-270): de acá salen el padrón del ranking
+     * Las listas por rol NUNCA traen cuentas de prueba de «ver como» (V107, D-273): de acá salen el padrón del ranking
      * (`aprendicesActivos`), el padrón y el reporte del Líder de Mentores (`mentoresActivos`), el panel de staff y la
      * protección del último ADMIN (`countByRoles`). Una cuenta de prueba ADMIN no puede contar como «otro admin».
      */
@@ -46,7 +46,7 @@ interface SpringDataUserRepository extends JpaRepository<UserJpaEntity, UUID> {
 
     long countByRolInAndEsCuentaDePruebaFalse(Collection<RolUsuarioJpa> roles);
 
-    /** Las cuentas de prueba de «ver como» entre estos ids (D-270). */
+    /** Las cuentas de prueba de «ver como» entre estos ids (D-273). */
     @Query("select u.id from UserJpaEntity u where u.id in :ids and u.esCuentaDePrueba = true")
     List<UUID> cuentasDePruebaEntre(@Param("ids") Collection<UUID> ids);
 

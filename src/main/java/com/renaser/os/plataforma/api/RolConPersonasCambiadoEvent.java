@@ -8,7 +8,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Soporte TI cambió un rol personalizado que tiene personas asignadas (spec 002, US7 escenario 6; D-269): editó sus
+ * Soporte TI cambió un rol personalizado que tiene personas asignadas (spec 002, US7 escenario 6; D-272): editó sus
  * funcionalidades, lo desactivó o lo reactivó, o lo reemplazó en bloque moviendo personas. Sale por el outbox en la
  * misma transacción que el cambio, y {@code notifications} avisa por push a todos los ADMIN y ALQUIMISTA activos
  * (decisión del dueño del 2026-10-14). Un cambio que no toca a nadie (sin personas, o solo el nombre o la descripción)

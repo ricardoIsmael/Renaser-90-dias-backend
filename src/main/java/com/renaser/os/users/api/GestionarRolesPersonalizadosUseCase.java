@@ -8,7 +8,7 @@ import java.util.UUID;
 
 /**
  * Crear, editar (también desactivar y reactivar), borrar y reemplazar en bloque un rol personalizado (spec 002, FR-029,
- * FR-033 y FR-034; contrato de la fase 2, §4; D-269). Lo llama la consola Soporte TI ({@code plataforma}), que antes
+ * FR-033 y FR-034; contrato de la fase 2, §4; D-272). Lo llama la consola Soporte TI ({@code plataforma}), que antes
  * valida que cada clave exista en el catálogo y que el rol base la use: el catálogo vive en {@code plataforma} y
  * {@code users} no lo ve. Cada operación exige que {@code actor} sea Soporte TI activo (403), publica
  * {@link RolPersonalizadoCambiadoEvent} y devuelve las fotos de antes y después para la auditoría.

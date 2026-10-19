@@ -22,7 +22,7 @@ import java.util.List;
  * <p>{@code role} (D-265): {@code MENTOR} o {@code TRAINEE_GUIDE}, para que la pantalla diga «Guía de aprendiz»
  * donde corresponda. Va al final: una app que no lo conoce lo ignora.
  *
- * <p>{@code rolPersonalizado} (spec 002, fase 2; D-269): {@code { id, nombre }} si tiene un rol personalizado vigente,
+ * <p>{@code rolPersonalizado} (spec 002, fase 2; D-272): {@code { id, nombre }} si tiene un rol personalizado vigente,
  * o {@code null}. Aditivo, al final; {@code role} sigue siendo el rol base.
  */
 public record MentorCandidatoResponse(String userId, String fullName, String avatarUrl, String cellId,

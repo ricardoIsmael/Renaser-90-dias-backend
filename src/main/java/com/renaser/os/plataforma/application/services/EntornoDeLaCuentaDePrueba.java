@@ -13,7 +13,7 @@ import java.util.Set;
 
 /**
  * Lo que una cuenta de prueba necesita alrededor para que «ver como» se parezca a la app real (contrato fase-2.md §5;
- * D-270): el aprendiz, la guía y el mentor de prueba viven en el «Grupo de prueba (ver como)», que el mentor lidera, y el
+ * D-273): el aprendiz, la guía y el mentor de prueba viven en el «Grupo de prueba (ver como)», que el mentor lidera, y el
  * aprendiz tiene su onboarding completo (si no, la app le mostraría la ficha inicial). Los roles sin grupo (líder,
  * admin, alquimista) no necesitan nada más.
  *

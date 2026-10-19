@@ -3,7 +3,7 @@ package com.renaser.os.users.application.services;
 import com.renaser.os.users.api.RolPersonalizadoResumen;
 import com.renaser.os.users.domain.model.rolpersonalizado.RolPersonalizado;
 
-/** Del agregado al resumen de {@code users.api} (D-269). */
+/** Del agregado al resumen de {@code users.api} (D-272). */
 final class ResumenDeRolPersonalizado {
 
     private ResumenDeRolPersonalizado() {

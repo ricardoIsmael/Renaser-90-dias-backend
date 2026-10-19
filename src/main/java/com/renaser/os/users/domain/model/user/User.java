@@ -55,7 +55,7 @@ public final class User {
      */
     private Instant bajaSolicitadaEn;
     /**
-     * El rol personalizado asignado ({@code usuarios.rol_personalizado_id}, V105; spec 002, US7; D-269), o
+     * El rol personalizado asignado ({@code usuarios.rol_personalizado_id}, V105; spec 002, US7; D-272), o
      * {@code null}. <b>{@link #role} sigue siendo el rol base</b>: todos los guards, rankings y padrones lo ven igual, y
      * este dato solo lo lee la evaluación de interruptores y lo que muestra el nombre. Se conserva aunque el rol se
      * desactive (quienes lo tienen lo vuelven a tener si se reactiva); {@link #changeRole} lo borra.
@@ -68,7 +68,7 @@ public final class User {
     private String nombreDelRolPersonalizado;
     /**
      * Si es una cuenta de prueba de «ver como rol» ({@code usuarios.es_cuenta_de_prueba}, V107; spec 002, fase 2, US5;
-     * D-270): una por rol, sin contraseña, que Soporte TI recorre en solo lectura. No figura en rankings, padrones,
+     * D-273): una por rol, sin contraseña, que Soporte TI recorre en solo lectura. No figura en rankings, padrones,
      * semáforos, listas de Administración, chats ni avisos. Nace así y nunca deja de serlo (la columna no se actualiza).
      */
     private boolean esCuentaDePrueba;
@@ -121,7 +121,7 @@ public final class User {
     }
 
     /**
-     * Cuenta de prueba de «ver como rol» (D-270): la crea el sistema, no una persona, así que no lleva actor (quien la
+     * Cuenta de prueba de «ver como rol» (D-273): la crea el sistema, no una persona, así que no lleva actor (quien la
      * pide, Soporte TI, ya se comprobó en el caso de uso). Activa desde el alta, sin contraseña ni solicitud, con el rol
      * que se va a mirar; nunca Soporte TI. El correo es siempre del dominio reservado (lo exige también la base).
      */
@@ -149,7 +149,7 @@ public final class User {
     }
 
     /**
-     * Con el rol personalizado (V105, D-269).
+     * Con el rol personalizado (V105, D-272).
      *
      * @param nombreDelRolPersonalizado {@code null} si no tiene, o si el suyo está desactivado o no hereda de
      *                                  {@code role}
@@ -163,7 +163,7 @@ public final class User {
                 bajaSolicitadaEn, rolPersonalizadoId, nombreDelRolPersonalizado, false);
     }
 
-    /** Con la marca de cuenta de prueba (V107, D-270). */
+    /** Con la marca de cuenta de prueba (V107, D-273). */
     @SuppressWarnings("java:S107") // es la fila entera
     public static User rehydrate(UserId id, Email email, UserRole role, UserStatus status,
                                  String fullName, String avatarUrl, String bio, String department,
@@ -174,8 +174,8 @@ public final class User {
     }
 
     /**
-     * Deja la cuenta de prueba como tiene que estar para «ver como» ese rol (D-270): el nombre, el rol, activa, sin baja
-     * y con el rol personalizado pedido (o sin ninguno). Es el camino interno del sistema que pidió B2 (D-269): no pasa
+     * Deja la cuenta de prueba como tiene que estar para «ver como» ese rol (D-273): el nombre, el rol, activa, sin baja
+     * y con el rol personalizado pedido (o sin ninguno). Es el camino interno del sistema que pidió B2 (D-272): no pasa
      * por {@link #asignarRolPersonalizado}, que exige un ADMIN o ALQUIMISTA como actor. Si alguien la tocó por fuera
      * (un script, una suspensión), vuelve a quedar bien.
      *
@@ -213,7 +213,7 @@ public final class User {
         }
     }
 
-    /** Una cuenta de prueba de «ver como» no se cambia desde Administración: la prepara el sistema (D-270). */
+    /** Una cuenta de prueba de «ver como» no se cambia desde Administración: la prepara el sistema (D-273). */
     private void requireNoEsCuentaDePrueba() {
         if (esCuentaDePrueba) {
             throw new NotAuthorizedException("Una cuenta de prueba de «ver como» no se cambia desde Administración");
@@ -237,7 +237,7 @@ public final class User {
     }
 
     /**
-     * Le asigna un rol personalizado (spec 002, FR-031; D-269): el rol de la cuenta pasa a ser el rol base de ese rol
+     * Le asigna un rol personalizado (spec 002, FR-031; D-272): el rol de la cuenta pasa a ser el rol base de ese rol
      * y la evaluación de interruptores usa sus funcionalidades. Mismas reglas que asignar el rol base, más dos:
      * <ul>
      *   <li>solo un rol <b>activo</b> se asigna (uno desactivado no recibe a nadie nuevo, spec US7 escenario 4) → 400;</li>

@@ -49,7 +49,7 @@ public class TokenPushService implements RegistrarTokenPushUseCase, RevocarToken
     @Transactional
     public TokenPush registrar(RegistrarTokenPushCommand command) {
         if (actorGuard.requireActivo(command.usuarioId()).esCuentaDePrueba()) {
-            // «Ver como» (D-270): el filtro de solo lectura ya rechaza este POST. Si algún día pasara, el ON CONFLICT
+            // «Ver como» (D-273): el filtro de solo lectura ya rechaza este POST. Si algún día pasara, el ON CONFLICT
             // del upsert le quitaría el token al teléfono real de Soporte TI para dárselo a la cuenta de prueba.
             throw new NotAuthorizedException("Una cuenta de prueba no recibe avisos");
         }

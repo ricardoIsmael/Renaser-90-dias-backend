@@ -1,4 +1,4 @@
--- V104 — Uso y errores por hora de las funcionalidades en despliegue (spec 002, fase 2, FR-020; D-268)
+-- V104 — Uso y errores por hora de las funcionalidades en despliegue (spec 002, fase 2, FR-020; D-271)
 --
 -- Por qué se toca la base:
 --   En cada escalón del despliegue, Soporte TI decide si sube o baja mirando cuántos pedidos y cuántos errores del

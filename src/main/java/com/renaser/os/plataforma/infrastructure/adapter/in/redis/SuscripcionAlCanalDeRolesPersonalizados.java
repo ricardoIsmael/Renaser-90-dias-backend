@@ -10,7 +10,7 @@ import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 
 /**
- * El otro lado del aviso de roles personalizados entre instancias (D-269): cada instancia escucha
+ * El otro lado del aviso de roles personalizados entre instancias (D-272): cada instancia escucha
  * {@link CanalDeRolesPersonalizados#NOMBRE} y recarga su copia. También recibe su propio aviso: recargar dos veces es
  * inofensivo (dos consultas chicas).
  */

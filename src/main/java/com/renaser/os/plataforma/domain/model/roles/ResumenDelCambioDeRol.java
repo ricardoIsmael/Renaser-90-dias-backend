@@ -8,7 +8,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Qué cambió de un rol personalizado, en palabras, para el aviso a Administración (D-269, decisión del dueño del
+ * Qué cambió de un rol personalizado, en palabras, para el aviso a Administración (D-272, decisión del dueño del
  * 2026-10-14: «si Soporte TI edita un rol que tiene personas —funcionalidades, activo o base— o lo reemplaza en bloque
  * moviendo personas, avisar a todos los ADMIN y ALQUIMISTA»). Vacío si el cambio no le cambia nada a nadie: sin
  * personas, o solo el nombre o la descripción.

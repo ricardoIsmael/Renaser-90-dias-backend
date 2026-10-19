@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * «Ver como rol» desde la consola Soporte TI (spec 002, fase 2, US5; contrato fase-2.md §5; D-270).
+ * «Ver como rol» desde la consola Soporte TI (spec 002, fase 2, US5; contrato fase-2.md §5; D-273).
  *
  * <ul>
  *   <li>{@code POST /api/v1/soporte-ti/ver-como}: lo pide Soporte TI con SU sesión y la consola desbloqueada

@@ -298,7 +298,7 @@ public class UserAccountService implements InviteAndCreateUserUseCase, GetMyProf
     }
 
     /**
-     * El rol personalizado a asignar (D-269). Quien no administra roles recibe su 403 ANTES de saber si el id existe
+     * El rol personalizado a asignar (D-272). Quien no administra roles recibe su 403 ANTES de saber si el id existe
      * (mismo criterio que E-365 al invitar); uno que no existe es 400: la cuenta sí existe, lo inválido es el cuerpo.
      */
     private RolPersonalizado rolPersonalizadoParaAsignar(UUID id, User actor) {

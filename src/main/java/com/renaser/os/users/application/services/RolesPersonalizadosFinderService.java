@@ -11,7 +11,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
-/** La lectura de roles personalizados para otros módulos (ver {@link RolesPersonalizadosFinder}; D-269). */
+/** La lectura de roles personalizados para otros módulos (ver {@link RolesPersonalizadosFinder}; D-272). */
 @Service
 class RolesPersonalizadosFinderService implements RolesPersonalizadosFinder {
 

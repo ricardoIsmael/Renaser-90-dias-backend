@@ -9,7 +9,7 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Qué cambió de un rol con personas, para el push a Administración (D-269). Sin Spring. */
+/** Qué cambió de un rol con personas, para el push a Administración (D-272). Sin Spring. */
 class ResumenDelCambioDeRolTest {
 
     private static final Foto ACTIVO = new Foto(UserRole.MENTOR, true, Set.of("muro", "chat"));

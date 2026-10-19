@@ -14,7 +14,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** {@code GET /admin/cells/mentores}: el rol personalizado del mentor, aditivo (spec 002, fase 2; D-269). */
+/** {@code GET /admin/cells/mentores}: el rol personalizado del mentor, aditivo (spec 002, fase 2; D-272). */
 class MentorCandidatoResponseTest {
 
     private final ObjectMapper json = new ObjectMapper();

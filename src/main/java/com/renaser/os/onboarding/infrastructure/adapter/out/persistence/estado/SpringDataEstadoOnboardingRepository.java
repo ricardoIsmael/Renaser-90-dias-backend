@@ -10,7 +10,7 @@ interface SpringDataEstadoOnboardingRepository extends JpaRepository<EstadoOnboa
 
     long countByPactoFirmadoEnIsNotNull();
 
-    /* Las mismas, sin unas cuentas: las de prueba de «ver como» (D-270). */
+    /* Las mismas, sin unas cuentas: las de prueba de «ver como» (D-273). */
     long countByUsuarioIdNotIn(java.util.Collection<UUID> sinContar);
 
     long countByCompletadoTrueAndUsuarioIdNotIn(java.util.Collection<UUID> sinContar);

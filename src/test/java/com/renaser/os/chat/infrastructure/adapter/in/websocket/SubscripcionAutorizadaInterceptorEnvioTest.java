@@ -68,7 +68,7 @@ class SubscripcionAutorizadaInterceptorEnvioTest {
     }
 
     @Test
-    @DisplayName("«ver como» (D-270): una sesión de solo lectura no manda nada, ni a /app (MODO_SOLO_LECTURA)")
+    @DisplayName("«ver como» (D-273): una sesión de solo lectura no manda nada, ni a /app (MODO_SOLO_LECTURA)")
     void soloLecturaNoManda() {
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SEND);
         accessor.setDestination("/app/conversaciones/abc/mensajes");

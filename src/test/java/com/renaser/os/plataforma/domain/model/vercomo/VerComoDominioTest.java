@@ -14,7 +14,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** El pedido, el rol elegido, la sesión y la auditoría de «ver como» (contrato fase-2.md §5; D-270). Sin Spring. */
+/** El pedido, el rol elegido, la sesión y la auditoría de «ver como» (contrato fase-2.md §5; D-273). Sin Spring. */
 class VerComoDominioTest {
 
     private static final Instant AHORA = Instant.parse("2026-10-14T15:00:00Z");

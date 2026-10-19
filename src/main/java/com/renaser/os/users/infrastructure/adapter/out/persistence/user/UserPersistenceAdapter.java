@@ -67,7 +67,7 @@ class UserPersistenceAdapter implements LoadUserPort, SaveUserPort, DeleteUserPo
 
     /**
      * Panel admin de staff (gap #6). `statusFilter == null` = cualquier estado. Sin las cuentas de prueba de «ver como»
-     * (D-270), igual que {@link #countByRoles}.
+     * (D-273), igual que {@link #countByRoles}.
      */
     @Override
     public List<User> byRoles(Collection<UserRole> roles, UserStatus statusFilter, int page, int size) {

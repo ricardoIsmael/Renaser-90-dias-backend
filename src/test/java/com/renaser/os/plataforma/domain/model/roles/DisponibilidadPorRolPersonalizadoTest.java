@@ -14,7 +14,7 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** La regla del rol personalizado (contrato de la fase 2, §4.4; D-269), sobre el catálogo real. Sin Spring. */
+/** La regla del rol personalizado (contrato de la fase 2, §4.4; D-272), sobre el catálogo real. Sin Spring. */
 class DisponibilidadPorRolPersonalizadoTest {
 
     private static final CatalogoDeFuncionalidades CATALOGO = CatalogoDeFuncionalidades.inicial();

@@ -47,7 +47,7 @@ class OnboardingDashboardService implements OnboardingDashboardUseCase {
     public ResumenOnboardingAdmin obtenerResumen(UserId actorId) {
         requireAdminActivo(actorId);
 
-        // Sin las cuentas de prueba de «ver como» (D-270): el total de aprendices ya no las cuenta (users.api).
+        // Sin las cuentas de prueba de «ver como» (D-273): el total de aprendices ya no las cuenta (users.api).
         var resumenEstados = loadEstadoOnboardingPort.contarResumen(cuentasDePrueba.todas());
         long totalAprendices = participacionProgramaFinder.usuariosActivosConRol(Set.of(UserRole.TRAINEE)).size();
 

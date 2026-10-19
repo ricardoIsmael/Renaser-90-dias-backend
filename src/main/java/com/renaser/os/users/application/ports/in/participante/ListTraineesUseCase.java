@@ -69,7 +69,7 @@ public interface ListTraineesUseCase {
      *            solo de aprendices, el rol se inferia de "en que listado aparecio"; con los cinco
      *            roles mezclados esa inferencia ya no existe. Se agrego <b>al final</b> para no
      *            mover los parametros que ya usaba el adaptador.
-     * @param rolPersonalizado el rol personalizado vigente (spec 002, fase 2; D-269), o {@code null}. Al final, como
+     * @param rolPersonalizado el rol personalizado vigente (spec 002, fase 2; D-272), o {@code null}. Al final, como
      *                         {@code rol}, y con los constructores de antes intactos.
      */
     record ResumenTraineeAdmin(UserId id, String fullName, String email, UserStatus status, int diaPrograma,
@@ -77,7 +77,7 @@ public interface ListTraineesUseCase {
                                 java.time.Instant cerradaEn, java.time.Instant seBorraEl,
                                 RolPersonalizadoAsignado rolPersonalizado) {
 
-        /** Sin rol personalizado (firma anterior a D-269). */
+        /** Sin rol personalizado (firma anterior a D-272). */
         public ResumenTraineeAdmin(UserId id, String fullName, String email, UserStatus status, int diaPrograma,
                                    FasePrograma fase, UUID celulaId, UserId mentorId, UserRole rol,
                                    java.time.Instant cerradaEn, java.time.Instant seBorraEl) {

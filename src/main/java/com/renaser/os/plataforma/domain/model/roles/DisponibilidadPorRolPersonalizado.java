@@ -8,7 +8,7 @@ import java.util.Optional;
 
 /**
  * Si una funcionalidad le corresponde a quien tiene un rol personalizado (spec 002, FR-030; contrato de la fase 2,
- * §4.4; D-269). Función pura, sin Spring: la usa la regla de disponibilidad {@code @Order(20)} en cada pedido.
+ * §4.4; D-272). Función pura, sin Spring: la usa la regla de disponibilidad {@code @Order(20)} en cada pedido.
  *
  * <ol>
  *   <li><b>Marcar una madre cubre a sus hijas</b>: si la clave pedida o alguna madre está marcada, le corresponde.</li>

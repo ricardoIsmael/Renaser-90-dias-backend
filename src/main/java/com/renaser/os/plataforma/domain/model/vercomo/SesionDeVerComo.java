@@ -7,7 +7,7 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * Una sesión de solo lectura de «ver como» (contrato fase-2.md §5; D-270): la de la cuenta de prueba, marcada con quién
+ * Una sesión de solo lectura de «ver como» (contrato fase-2.md §5; D-273): la de la cuenta de prueba, marcada con quién
  * la abrió y hasta cuándo vale. Vence a los {@link #DURACION} aunque se siga usando.
  *
  * @param cuenta     la cuenta de prueba que se mira

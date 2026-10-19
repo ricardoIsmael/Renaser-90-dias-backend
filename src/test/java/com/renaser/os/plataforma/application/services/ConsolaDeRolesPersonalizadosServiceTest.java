@@ -48,7 +48,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-/** La consola de roles personalizados (D-269): el orden de los cerrojos y la auditoría. Sin Spring ni base. */
+/** La consola de roles personalizados (D-272): el orden de los cerrojos y la auditoría. Sin Spring ni base. */
 class ConsolaDeRolesPersonalizadosServiceTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-10-14T15:00:00Z"));

@@ -39,7 +39,7 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * El «Grupo de prueba (ver como)» (ver {@link GrupoDePruebaUseCase}; D-270). Escribe como el sistema (actor
+ * El «Grupo de prueba (ver como)» (ver {@link GrupoDePruebaUseCase}; D-273). Escribe como el sistema (actor
  * {@code null}, como el ingreso a la recepción), con la misma fuente de verdad que todo grupo: las asignaciones con sus
  * intervalos, los punteros de {@code participantes_programa} y {@code celulas.mentor_id}.
  *

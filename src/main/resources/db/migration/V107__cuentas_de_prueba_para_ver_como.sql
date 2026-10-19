@@ -1,4 +1,4 @@
--- V107 — Cuentas de prueba para «ver como rol» (spec 002, fase 2, US5; contrato fase-2.md §5; D-270)
+-- V107 — Cuentas de prueba para «ver como rol» (spec 002, fase 2, US5; contrato fase-2.md §5; D-273)
 --
 -- Por qué se toca la base:
 --   El dueño eligió que Soporte TI recorra la app «como la vería» un aprendiz, una guía, un mentor, un líder, un

@@ -80,7 +80,7 @@ class PersonasEnConsolaServiceTest {
     }
 
     @Test
-    @DisplayName("«ver como» (D-270): una cuenta de prueba nunca sale en la búsqueda, aunque la búsqueda la devolviera")
+    @DisplayName("«ver como» (D-273): una cuenta de prueba nunca sale en la búsqueda, aunque la búsqueda la devolviera")
     void sinCuentasDePrueba() {
         UserId real = UserId.of(UUID.randomUUID());
         UserId dePrueba = UserId.of(UUID.randomUUID());

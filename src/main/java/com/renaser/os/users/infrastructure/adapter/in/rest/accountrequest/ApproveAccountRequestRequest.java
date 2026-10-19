@@ -9,7 +9,7 @@ import java.util.UUID;
  * entra (los mismos códigos que {@code PATCH /users/{id}/role}); sin cuerpo o sin {@code role}, entra como TRAINEE,
  * que es lo que mandan la app 1.5.0 y el panel de solicitudes.
  *
- * <p>{@code rolPersonalizadoId} (spec 002, fase 2; D-269), opcional y aditivo: entra con ese rol personalizado; el rol
+ * <p>{@code rolPersonalizadoId} (spec 002, fase 2; D-272), opcional y aditivo: entra con ese rol personalizado; el rol
  * base sale de él y {@code role} se ignora.
  */
 public record ApproveAccountRequestRequest(UserRole role, UUID rolPersonalizadoId) {

@@ -204,7 +204,7 @@ class InterruptoresInterceptorTest {
     }
 
     @Test
-    @DisplayName("«ver como» (D-270): los pedidos de una sesión de solo lectura no se cuentan, ni el 404 de quien está fuera")
+    @DisplayName("«ver como» (D-273): los pedidos de una sesión de solo lectura no se cuentan, ni el 404 de quien está fuera")
     void verComoNoSeCuenta() throws Exception {
         when(provider.getIfAvailable()).thenReturn(interruptores);
         lenient().when(medidorProvider.getIfAvailable()).thenReturn(medidor);

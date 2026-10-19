@@ -51,7 +51,7 @@ class ActorNotificacionesGuard {
      * a quien entregarle.
      */
     /**
-     * Una cuenta de prueba de «ver como» (D-270) no recibe avisos: ni fila en la bandeja ni push. Un destinatario que no
+     * Una cuenta de prueba de «ver como» (D-273) no recibe avisos: ni fila en la bandeja ni push. Un destinatario que no
      * existe no es de prueba (lo resuelve {@link #puedeRecibirEntregas} en la entrega).
      */
     boolean esCuentaDePrueba(UserId destinatarioId) {

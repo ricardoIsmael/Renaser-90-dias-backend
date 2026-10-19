@@ -12,7 +12,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** El programa del aprendiz de prueba de «ver como»: activo y a mitad del camino (D-270). Sin Spring. */
+/** El programa del aprendiz de prueba de «ver como»: activo y a mitad del camino (D-273). Sin Spring. */
 class ProgramaDeLaCuentaDePruebaTest {
 
     /**

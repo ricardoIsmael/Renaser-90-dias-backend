@@ -31,7 +31,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-/** El onboarding completo de una cuenta de prueba de «ver como» (D-270). Sin Spring. */
+/** El onboarding completo de una cuenta de prueba de «ver como» (D-273). Sin Spring. */
 @ExtendWith(MockitoExtension.class)
 class OnboardingDeCuentaDePruebaServiceTest {
 

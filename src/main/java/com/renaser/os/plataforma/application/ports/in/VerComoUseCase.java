@@ -7,7 +7,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * «Ver como rol» (spec 002, fase 2, US5; contrato fase-2.md §5; D-270): Soporte TI abre una sesión NUEVA de solo
+ * «Ver como rol» (spec 002, fase 2, US5; contrato fase-2.md §5; D-273): Soporte TI abre una sesión NUEVA de solo
  * lectura de la cuenta de prueba de un rol, sin tocar la suya, y la cierra al salir. Entrar y salir quedan auditados
  * ({@code VER_COMO}).
  */

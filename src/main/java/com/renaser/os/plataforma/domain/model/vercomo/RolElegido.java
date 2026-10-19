@@ -8,7 +8,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * El rol que Soporte TI eligió mirar con «ver como» (spec 002, fase 2, US5; D-270): uno de los seis roles base o un rol
+ * El rol que Soporte TI eligió mirar con «ver como» (spec 002, fase 2, US5; D-273): uno de los seis roles base o un rol
  * personalizado activo (P4).
  */
 public sealed interface RolElegido {

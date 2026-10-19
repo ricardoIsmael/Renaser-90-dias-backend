@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * {@code GET /api/v1/admin/roles-asignables} (spec 002, fase 2; contrato §4.5; D-269): la lista que ofrecen «Equipo y
+ * {@code GET /api/v1/admin/roles-asignables} (spec 002, fase 2; contrato §4.5; D-272): la lista que ofrecen «Equipo y
  * roles» y Solicitudes. Solo ADMIN y ALQUIMISTA: el guard real es {@code RequireAdminGuard} en el servicio (la matriz
  * falla abierta para MENTOR, A-1). Va con {@code admin} y no con {@code admin.equipo}: la usan las dos pantallas.
  * {@code GET /admin/habits/roles} no cambia (decisión del dueño, P3).

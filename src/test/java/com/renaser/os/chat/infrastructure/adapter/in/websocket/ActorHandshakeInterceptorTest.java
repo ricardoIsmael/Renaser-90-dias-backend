@@ -131,7 +131,7 @@ class ActorHandshakeInterceptorTest {
     }
 
     @Test
-    @DisplayName("«ver como» (D-270): una sesión de solo lectura abre el socket y queda marcada para rechazar el SEND")
+    @DisplayName("«ver como» (D-273): una sesión de solo lectura abre el socket y queda marcada para rechazar el SEND")
     void sesionDeSoloLecturaQuedaMarcada() {
         MapSession sesion = sesionAutenticadaDe(ACTOR);
         sesion.setAttribute(SesionDeSoloLectura.ABIERTA_POR, UUID.randomUUID().toString());

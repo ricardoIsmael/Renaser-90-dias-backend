@@ -5,7 +5,7 @@ import com.renaser.os.community.domain.model.cohorte.CohorteId;
 import java.util.UUID;
 
 /**
- * El «Grupo de prueba (ver como)» y su cohorte (spec 002, fase 2, US5; contrato fase-2.md §5; D-270): donde el mentor
+ * El «Grupo de prueba (ver como)» y su cohorte (spec 002, fase 2, US5; contrato fase-2.md §5; D-273): donde el mentor
  * de prueba lidera al aprendiz y a la guía de prueba, para que «ver como Mentor» muestre un grupo real sin mostrar a
  * nadie real.
  *

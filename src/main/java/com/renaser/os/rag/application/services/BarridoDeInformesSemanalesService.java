@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
  * las lecturas y el guardado ya son transacciones cortas propias. Un participante que falla no detiene el barrido.
  * El padrón se recorre por lotes: la zona se pide en UNA consulta por lote, nunca una por persona.
  *
- * <p><b>Las cuentas de prueba de «ver como» no tienen informe</b> (D-270, decisión del coordinador del 2026-10-14): cada
+ * <p><b>Las cuentas de prueba de «ver como» no tienen informe</b> (D-273, decisión del coordinador del 2026-10-14): cada
  * informe es una llamada a la IA y nadie lo lee. El aprendiz de prueba sí está en el padrón de inscritos (los hábitos
  * de su programa se arman como los de cualquiera), así que se descarta acá, con UNA lectura de resúmenes por lote.
  */

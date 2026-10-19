@@ -13,7 +13,7 @@ public interface LoadEstadoOnboardingPort {
     /**
      * Dashboard admin de onboarding (gap #8 de docs/PLAN_INTEGRACION_FRONTEND.md): agregado de `estado_onboarding`.
      *
-     * @param sinContar las cuentas que no cuentan: las de prueba de «ver como» (D-270), que tienen su onboarding
+     * @param sinContar las cuentas que no cuentan: las de prueba de «ver como» (D-273), que tienen su onboarding
      *                  completo para que la app las muestre como a cualquier aprendiz
      */
     ResumenEstadosOnboarding contarResumen(Set<UserId> sinContar);

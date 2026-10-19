@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
-/** Leer los roles personalizados y a quién están asignados (V105, D-269). */
+/** Leer los roles personalizados y a quién están asignados (V105, D-272). */
 public interface CargarRolesPersonalizadosPort {
 
     Optional<RolPersonalizado> porId(UUID id);
@@ -18,7 +18,7 @@ public interface CargarRolesPersonalizadosPort {
 
     /**
      * Cuántas cuentas tiene asignadas cada rol (cualquier estado). Un rol sin personas no figura. Sin la cuenta de prueba
-     * de «ver como» (D-270): no es una persona, y con ella un rol que nadie usa no se podría borrar.
+     * de «ver como» (D-273): no es una persona, y con ella un rol que nadie usa no se podría borrar.
      */
     Map<UUID, Long> personasPorRol();
 

@@ -8,7 +8,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Lectura de los roles personalizados para otros módulos (contrato de la fase 2, §4.1; D-269). La usa {@code plataforma}
+ * Lectura de los roles personalizados para otros módulos (contrato de la fase 2, §4.1; D-272). La usa {@code plataforma}
  * para la consola y para su copia en memoria: {@link #todos()} y {@link #asignaciones()} se leen enteros cada 30 s y
  * después de cada cambio, nunca por pedido.
  */

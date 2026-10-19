@@ -15379,7 +15379,7 @@ dos hechos seguidos tienen el mismo instante; si la prueba ordena por tiempo, ti
 
 ---
 
-## E-615 · Cientos de `cannot find symbol` de Lombok en módulos que no se tocaron escondían un método repetido (back, RESUELTO, 14/10)
+## E-617 · Cientos de `cannot find symbol` de Lombok en módulos que no se tocaron escondían un método repetido (back, RESUELTO, 14/10)
 
 **Síntoma literal.** `./mvnw -o -q compile` en `claude/fase2-despliegue` terminó con una pantalla de errores como
 `[ERROR] …/calendar/application/services/AccesoEventoService.java:[95,30] cannot find symbol` / `symbol: method
@@ -15403,7 +15403,7 @@ llamarse como un método de instancia sin parámetros (ni, en un record, como un
 
 ## E-620 · El catálogo de funcionalidades no lista a MENTOR ni a la Guía en `caja`, aunque el mentor la usa (back, RESUELTO, 14/10)
 
-**Síntoma.** Hallado leyendo el código al diseñar la regla de los roles personalizados (D-269), no en producción: con la
+**Síntoma.** Hallado leyendo el código al diseñar la regla de los roles personalizados (D-272), no en producción: con la
 letra del contrato de la fase 2 («si su clave o una madre no está marcada, no disponible»), un «Mentor junior» con
 **todo** lo de MENTOR marcado habría recibido `404 FUNCIONALIDAD_NO_DISPONIBLE` en
 `GET /api/v1/mentor/trainees/{aprendizId}/caja` (el chip de la caja en la ficha del aprendiz, D-219), que un mentor sin
@@ -15415,7 +15415,7 @@ informativo en la fase 1 («no restringe nada»), así que nadie lo notó; un ro
 su base usa según ese campo, y la letra del contrato dejaba fuera lo que la base usa por los guards pero el catálogo omite.
 
 **Solución.** En la regla, lo que el rol base no usa según el catálogo no lo decide el rol personalizado (desvío anotado en
-D-269): con todo marcado, un rol personalizado equivale a su base. **El catálogo no se tocó** (es de la fase 1 y cambia lo
+D-272): con todo marcado, un rol personalizado equivale a su base. **El catálogo no se tocó** (es de la fase 1 y cambia lo
 que muestra la consola): queda propuesto sumar MENTOR y TRAINEE_GUIDE a `caja`.
 
 > **Corregido 2026-10-14 (respuesta del dueño).** El catálogo ya lista `caja` con TRAINEE, MENTOR, TRAINEE_GUIDE, ADMIN e
@@ -15439,7 +15439,7 @@ violaciones.
 `[0]` puede ser ese, que no tiene las anotaciones: la validación pasa sin mirar nada. Pasaba en
 `ApproveAccountRequestCommand` (canónico de 3 + uno de 2): su `@NotNull` no se evaluaba.
 
-**Solución.** Los dos comandos que tocó D-269 (`UpdateUserRoleCommand`, `ApproveAccountRequestCommand`) validan a mano en
+**Solución.** Los dos comandos que tocó D-272 (`UpdateUserRoleCommand`, `ApproveAccountRequestCommand`) validan a mano en
 el constructor compacto. **No se cambió `SelfValidating`**: hacerlo encendería de golpe validaciones que hoy no corren en
 otros comandos con constructores extra (`ActualizarCelulaCommand`, `CrearCelulaCommand`, `CambiarEstadoHabitoCommand`,
 `ActualizarHabitoCommand`, `CrearHabitoCommand`, `CompletarRegistroCommand`, `FirmarContratoCommand`,
@@ -15451,7 +15451,7 @@ y revisar los ocho comandos de arriba. Mientras tanto, un record con más de un 
 
 ## E-625 · El chat de un grupo que nace con integrantes quedaba sin participantes (back, RESUELTO, 14/10)
 
-**Síntoma.** Hallado al diseñar el grupo de prueba de «ver como» (D-270), no en producción: el grupo nace con mentor,
+**Síntoma.** Hallado al diseñar el grupo de prueba de «ver como» (D-273), no en producción: el grupo nace con mentor,
 aprendiz y guía en una sola transacción, y su conversación podía quedar creada pero vacía (`participantes_conversacion` sin
 filas). El mentor de prueba no veía el chat de su grupo en Tribu, aunque el acceso por asignación sí lo dejaba abrir.
 

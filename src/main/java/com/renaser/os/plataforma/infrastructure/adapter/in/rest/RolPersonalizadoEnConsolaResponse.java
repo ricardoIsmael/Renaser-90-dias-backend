@@ -5,7 +5,7 @@ import com.renaser.os.plataforma.application.ports.in.RolPersonalizadoEnConsola;
 import java.time.Instant;
 import java.util.List;
 
-/** Un elemento de {@code GET /soporte-ti/roles} (contrato de la fase 2, §4.5; D-269). */
+/** Un elemento de {@code GET /soporte-ti/roles} (contrato de la fase 2, §4.5; D-272). */
 record RolPersonalizadoEnConsolaResponse(String id, String clave, String nombre, String descripcion, String rolBase,
                                          boolean activo, List<String> funcionalidades, long personas, long version,
                                          FuncionalidadEnConsolaResponse.ActorResponse actualizadoPor,

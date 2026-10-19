@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Un rol personalizado como lo ve la consola (contrato de la fase 2, §4.5, {@code GET /soporte-ti/roles}; D-269).
+ * Un rol personalizado como lo ve la consola (contrato de la fase 2, §4.5, {@code GET /soporte-ti/roles}; D-272).
  *
  * @param funcionalidades las claves marcadas que siguen en el catálogo, ordenadas
  * @param personas        cuántas cuentas lo tienen asignado

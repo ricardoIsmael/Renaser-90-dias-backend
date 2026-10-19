@@ -8,7 +8,7 @@ import java.util.Map;
 
 /**
  * La marca de una sesión de <b>solo lectura</b>: la que abre Soporte TI con «ver como rol» (spec 002, fase 2, US5;
- * contrato fase-2.md §5; D-270) sobre la cuenta de prueba de un rol.
+ * contrato fase-2.md §5; D-273) sobre la cuenta de prueba de un rol.
  *
  * <p>Vive en {@code shared} porque la leen tres módulos que no se conocen: {@code plataforma} la escribe al abrir la
  * sesión, {@link FiltroDeSoloLectura} rechaza toda escritura HTTP y {@code chat} rechaza el {@code SEND} de STOMP. Los

@@ -7,7 +7,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * La copia en memoria de los roles personalizados de una instancia (contrato de la fase 2, §4.4; D-269): quién tiene
+ * La copia en memoria de los roles personalizados de una instancia (contrato de la fase 2, §4.4; D-272): quién tiene
  * uno vigente y qué marca cada rol activo. Inmutable: se reemplaza entera al recargar, así que leerla en cada pedido
  * es leer una referencia.
  *

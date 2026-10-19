@@ -8,7 +8,7 @@ import java.util.UUID;
 
 /**
  * El correo y el nombre de cada cuenta de prueba de «ver como rol» (spec 002, fase 2, US5; contrato fase-2.md §5;
- * D-270): {@code ver-como+<rol>@renaser.invalid} para un rol base ({@code <rol>} es el de la API en minúsculas y con
+ * D-273): {@code ver-como+<rol>@renaser.invalid} para un rol base ({@code <rol>} es el de la API en minúsculas y con
  * guiones: {@code mentor}, {@code mentor-lead}, {@code trainee-guide}…) y {@code ver-como+rp-<id>@renaser.invalid} para
  * un rol personalizado. El correo es la identidad estable de la cuenta: con él se la vuelve a encontrar la segunda vez.
  *

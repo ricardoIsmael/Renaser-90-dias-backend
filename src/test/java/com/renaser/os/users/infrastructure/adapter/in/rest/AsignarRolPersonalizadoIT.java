@@ -34,7 +34,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Asignar un rol personalizado desde Administración y verlo en la API (spec 002, FR-031 y FR-032; contrato §4.5;
- * D-269), de punta a punta: sesión real, los interceptores, los casos de uso y Postgres con V105. Cubre
+ * D-272), de punta a punta: sesión real, los interceptores, los casos de uso y Postgres con V105. Cubre
  * {@code PATCH /users/{id}/role} con {@code rolPersonalizadoId}, {@code rolPersonalizado} en {@code /auth/me},
  * {@code POST /users/me}, las listas de Administración y {@code GET /admin/roles-asignables} con su autorización.
  */

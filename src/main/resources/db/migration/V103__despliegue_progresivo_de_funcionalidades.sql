@@ -1,4 +1,4 @@
--- V103 — Despliegue progresivo de funcionalidades: porcentaje y probadores (spec 002, fase 2, US4; D-268)
+-- V103 — Despliegue progresivo de funcionalidades: porcentaje y probadores (spec 002, fase 2, US4; D-271)
 --
 -- Por qué se toca la base:
 --   El dueño pidió que una funcionalidad nueva llegue primero a una lista de probadores y después a un porcentaje

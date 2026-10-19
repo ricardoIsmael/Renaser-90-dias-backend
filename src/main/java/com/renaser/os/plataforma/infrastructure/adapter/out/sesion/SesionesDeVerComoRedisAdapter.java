@@ -22,7 +22,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Las sesiones de «ver como» en Spring Session (Redis), las mismas que abre el login (D-270). Se crean directo en el
+ * Las sesiones de «ver como» en Spring Session (Redis), las mismas que abre el login (D-273). Se crean directo en el
  * repositorio, no con la {@code HttpSession} del pedido: así la sesión de Soporte TI con la que se pidió queda intacta
  * (el filtro de Spring Session no reescribe su {@code X-Auth-Token}) y la nueva tiene su propio id.
  *

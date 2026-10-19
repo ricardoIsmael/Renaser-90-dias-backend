@@ -5,7 +5,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 
 /**
- * Candado de transacción ({@code pg_advisory_xact_lock}) para las cuentas de prueba de «ver como» (D-270), como el de
+ * Candado de transacción ({@code pg_advisory_xact_lock}) para las cuentas de prueba de «ver como» (D-273), como el de
  * los roles personalizados ({@code RolesPersonalizadosJdbcAdapter.CANDADO_DE_ESCRITURAS}) con otra clave.
  */
 @Component

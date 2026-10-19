@@ -16,12 +16,12 @@ import java.util.UUID;
 
 /**
  * Avisa por push a Administración que Soporte TI cambió un rol personalizado con personas (spec 002, US7 escenario 6;
- * D-269; decisión del dueño del 2026-10-14). Mismo camino que el aviso de un interruptor
+ * D-272; decisión del dueño del 2026-10-14). Mismo camino que el aviso de un interruptor
  * ({@link FuncionalidadCambiadaNotificationListener}): por evento, después del commit, tipo {@code OPERACION_PLATAFORMA}
  * (sale aunque las notificaciones estén apagadas).
  *
  * <p><b>A quién:</b> a todos los ADMIN y ALQUIMISTA activos, y a nadie más. Las cuentas de prueba de «ver como» no lo
- * reciben: {@code usuariosActivosConRol} ya no las trae y {@code NotificacionService} las corta igual (D-270). Sin ruta
+ * reciben: {@code usuariosActivosConRol} ya no las trae y {@code NotificacionService} las corta igual (D-273). Sin ruta
  * en la app: Administración no tiene la consola, y el nombre del rol ya se ve en «Equipo y roles».
  *
  * <p><b>Idempotente:</b> el {@code origenEventoId} sale del rol y del instante del cambio, así una reentrega del outbox

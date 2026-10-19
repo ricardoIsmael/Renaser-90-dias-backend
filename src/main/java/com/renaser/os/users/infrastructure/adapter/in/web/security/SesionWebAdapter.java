@@ -24,7 +24,7 @@ import java.util.List;
  * transporte puro, la misma categoria que la configuracion de CORS/CSRF de
  * {@code SecurityConfig}.
  *
- * <blockquote><b>Corregido 2026-10-14 (D-270).</b> Ya no es el unico lugar que toca la sesion: el
+ * <blockquote><b>Corregido 2026-10-14 (D-273).</b> Ya no es el unico lugar que toca la sesion: el
  * chat lee las sesiones del repositorio en el handshake ({@code ActorHandshakeInterceptor}), la
  * consola Soporte TI lee el id de la sesion del pedido ({@code PedidoDeConsola}) y «ver como rol»
  * crea la sesion de solo lectura de la cuenta de prueba directo en el repositorio de Spring Session

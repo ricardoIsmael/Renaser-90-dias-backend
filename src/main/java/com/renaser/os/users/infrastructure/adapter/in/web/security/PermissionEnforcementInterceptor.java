@@ -110,7 +110,7 @@ class PermissionEnforcementInterceptor implements HandlerInterceptor {
             return true;
         }
         if (actor.get().esCuentaDePrueba() && !SesionDeSoloLectura.vieneDeUna(request)) {
-            // «Ver como» (D-270): una cuenta de prueba solo se usa desde la sesión de solo lectura que abre Soporte TI.
+            // «Ver como» (D-273): una cuenta de prueba solo se usa desde la sesión de solo lectura que abre Soporte TI.
             // Sin esto, el respaldo de X-Actor-Id de las rutas abiertas permitiría escribir en su nombre.
             denegar(response, "Una cuenta de prueba solo se usa con «ver como»");
             return false;

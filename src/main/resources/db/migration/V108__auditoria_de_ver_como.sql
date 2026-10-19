@@ -1,5 +1,5 @@
 -- V108 — La auditoría de la plataforma registra cuándo Soporte TI entra y sale de «ver como rol» (spec 002, fase 2,
--- US5; contrato fase-2.md §5; D-270)
+-- US5; contrato fase-2.md §5; D-273)
 --
 -- Por qué se toca la base:
 --   «Ver como» abre una sesión de otra cuenta (la de prueba del rol elegido). Aunque sea de solo lectura, deja ver lo que

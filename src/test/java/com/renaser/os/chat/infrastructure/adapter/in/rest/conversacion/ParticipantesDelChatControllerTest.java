@@ -80,7 +80,7 @@ class ParticipantesDelChatControllerTest {
     }
 
     @Test
-    @DisplayName("D-269: el rol personalizado vigente viaja como rolPersonalizado { id, nombre }; sin él, null")
+    @DisplayName("D-272: el rol personalizado vigente viaja como rolPersonalizado { id, nombre }; sin él, null")
     void elRolPersonalizado() throws Exception {
         UserId actorId = actor();
         UserId otro = UserId.of(UUID.randomUUID());

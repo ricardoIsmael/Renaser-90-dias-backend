@@ -27,7 +27,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * La consola de roles personalizados de punta a punta (contrato de la fase 2, §4.5 y §7; D-269): sesión real, los dos
+ * La consola de roles personalizados de punta a punta (contrato de la fase 2, §4.5 y §7; D-272): sesión real, los dos
  * interceptores, los servicios de plataforma y users, Postgres con V105/V106 y Redis para los tokens.
  *
  * <p>Autorización negativa en cada endpoint nuevo (ADMIN, ALQUIMISTA, MENTOR, GUÍA, LÍDER, APRENDIZ y un Soporte TI

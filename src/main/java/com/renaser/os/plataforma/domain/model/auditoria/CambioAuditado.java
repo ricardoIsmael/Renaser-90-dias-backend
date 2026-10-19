@@ -48,7 +48,7 @@ public record CambioAuditado(UUID id, TipoDeCambio tipo, UserId actor, String cl
     }
 
     /**
-     * Un cambio de un rol personalizado (fase 2, D-269): {@code clave} es {@code rp:<id>} y las fotos llevan
+     * Un cambio de un rol personalizado (fase 2, D-272): {@code clave} es {@code rp:<id>} y las fotos llevan
      * {@code nombre}, {@code rolBase}, {@code activo} y {@code funcionalidades} ({@code null} antes de crearlo o
      * después de borrarlo).
      */
@@ -63,7 +63,7 @@ public record CambioAuditado(UUID id, TipoDeCambio tipo, UserId actor, String cl
     }
 
     /**
-     * Soporte TI entró a «ver como rol» (fase 2, D-270): {@code antes} {@code null} y {@code despues} el rol que eligió
+     * Soporte TI entró a «ver como rol» (fase 2, D-273): {@code antes} {@code null} y {@code despues} el rol que eligió
      * ({@code {rol: "MENTOR"}} o {@code {rolPersonalizado: {id, nombre}}}). {@code actor} es quien la abrió.
      */
     public static CambioAuditado entradaAVerComo(UUID id, UserId actor, Map<String, Object> rol, String dispositivo,

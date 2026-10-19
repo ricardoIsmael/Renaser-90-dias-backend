@@ -67,13 +67,13 @@ public interface ConsultarCandidatosCelulaUseCase {
     /**
      * @param rol              MENTOR o TRAINEE_GUIDE (D-265): la lista de mentores incluye a los guías y la pantalla los
      *                         rotula.
-     * @param rolPersonalizado su rol personalizado vigente (spec 002, fase 2; D-269), o {@code null}
+     * @param rolPersonalizado su rol personalizado vigente (spec 002, fase 2; D-272), o {@code null}
      */
     record MentorCandidato(UserId userId, String nombreCompleto, String avatarUrl, CelulaId celulaActual,
                             List<CelulaId> celulasActuales, EspecialidadMentor especialidad, UserRole rol,
                             RolPersonalizadoAsignado rolPersonalizado) {
 
-        /** Sin rol personalizado (firma anterior a D-269). */
+        /** Sin rol personalizado (firma anterior a D-272). */
         public MentorCandidato(UserId userId, String nombreCompleto, String avatarUrl, CelulaId celulaActual,
                                List<CelulaId> celulasActuales, EspecialidadMentor especialidad, UserRole rol) {
             this(userId, nombreCompleto, avatarUrl, celulaActual, celulasActuales, especialidad, rol, null);

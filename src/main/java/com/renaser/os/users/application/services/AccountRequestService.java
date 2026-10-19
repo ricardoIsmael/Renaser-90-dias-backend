@@ -282,7 +282,7 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
         // mismo caso de uso que «Equipo y roles» (mismo guard, perfil de mentor y RolDeUsuarioCambiadoEvent). Los
         // oyentes de UsuarioRegistradoEvent corren despues del commit y ya leen el rol final: un mentor o un guia
         // aprobado asi no entra al grupo de bienvenida ni recibe chat de soporte de aprendiz.
-        // D-269: con un rol personalizado, también por ahí (aunque herede de APRENDIZ: hay que guardar la referencia).
+        // D-272: con un rol personalizado, también por ahí (aunque herede de APRENDIZ: hay que guardar la referencia).
         if (command.rolPersonalizadoId() != null || command.rol() != UserRole.defaultForSelfRegistration()) {
             updateUserRole.updateRole(new UpdateUserRoleCommand(usuario.id(), command.rol(), command.actorId(),
                     command.rolPersonalizadoId()));

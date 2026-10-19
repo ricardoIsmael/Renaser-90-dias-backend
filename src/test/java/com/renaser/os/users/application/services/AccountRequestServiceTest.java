@@ -390,7 +390,7 @@ class AccountRequestServiceTest {
     }
 
     @Test
-    @DisplayName("D-269: con un rol personalizado pasa por el cambio de rol de siempre, aunque herede de APRENDIZ")
+    @DisplayName("D-272: con un rol personalizado pasa por el cambio de rol de siempre, aunque herede de APRENDIZ")
     void approveConRolPersonalizado() {
         AccountRequest request = pendiente();
         UserId actorId = id();

@@ -45,7 +45,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/** La gestión de roles personalizados (D-269): el orden de los cerrojos y lo que deja cada operación. Sin Spring. */
+/** La gestión de roles personalizados (D-272): el orden de los cerrojos y lo que deja cada operación. Sin Spring. */
 class RolesPersonalizadosServiceTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-10-14T15:00:00Z"));

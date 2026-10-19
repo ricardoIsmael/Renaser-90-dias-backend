@@ -4,7 +4,7 @@ import com.renaser.os.users.domain.model.rolpersonalizado.RolPersonalizado;
 
 import java.util.UUID;
 
-/** Escribir roles personalizados (V105, D-269). Todo dentro de la transacción del caso de uso. */
+/** Escribir roles personalizados (V105, D-272). Todo dentro de la transacción del caso de uso. */
 public interface GuardarRolesPersonalizadosPort {
 
     /**
@@ -18,12 +18,12 @@ public interface GuardarRolesPersonalizadosPort {
     /** @return {@code false} si la versión guardada ya no es {@code versionEsperada} (otra persona lo cambió) */
     boolean actualizar(RolPersonalizado rol, long versionEsperada);
 
-    /** Borra el rol; antes suelta la cuenta de prueba de «ver como» que lo lleve (D-270), para que la FK no lo frene. */
+    /** Borra el rol; antes suelta la cuenta de prueba de «ver como» que lo lleve (D-273), para que la FK no lo frene. */
     void borrar(UUID id);
 
     /**
      * Pasa a todas las cuentas de {@code origen} a {@code destino} ({@code null}: sin rol personalizado), menos la cuenta
-     * de prueba de «ver como» (D-270), que sigue siendo la de {@code origen}.
+     * de prueba de «ver como» (D-273), que sigue siendo la de {@code origen}.
      *
      * @return cuántas cuentas se movieron
      */

@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Los cuerpos de la consola de roles personalizados (contrato de la fase 2, §4.5; D-269). Sin anotaciones de
+ * Los cuerpos de la consola de roles personalizados (contrato de la fase 2, §4.5; D-272). Sin anotaciones de
  * validación a propósito: los valida el caso de uso <b>después</b> de los cerrojos de la consola, así un pedido sin
  * desbloqueo es 423 aunque el cuerpo venga incompleto (y no un 400 que delate qué se esperaba).
  */

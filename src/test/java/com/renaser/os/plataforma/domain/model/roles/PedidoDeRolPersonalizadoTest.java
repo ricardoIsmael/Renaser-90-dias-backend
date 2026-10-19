@@ -10,7 +10,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** Lo que la consola valida de un pedido de rol personalizado contra el catálogo (D-269). Sin Spring. */
+/** Lo que la consola valida de un pedido de rol personalizado contra el catálogo (D-272). Sin Spring. */
 class PedidoDeRolPersonalizadoTest {
 
     private static final CatalogoDeFuncionalidades CATALOGO = CatalogoDeFuncionalidades.inicial();

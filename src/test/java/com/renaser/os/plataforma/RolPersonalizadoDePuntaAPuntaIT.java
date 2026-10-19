@@ -35,7 +35,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * El escenario de la spec 002 para roles personalizados (US7; contrato de la fase 2, §7; D-269), de punta a punta:
+ * El escenario de la spec 002 para roles personalizados (US7; contrato de la fase 2, §7; D-272), de punta a punta:
  * Soporte TI crea «Mentor junior» (base MENTOR) sin {@code eventos} desde la consola, Administración se lo asigna a un
  * mentor, y ese mentor recibe 404 {@code FUNCIONALIDAD_NO_DISPONIBLE} en un endpoint de eventos y ve {@code eventos} en
  * sus {@code noDisponibles}; otro mentor, sin rol personalizado, sigue con 200. Al desactivar el rol, vuelve todo lo de

@@ -40,7 +40,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * La consola de roles personalizados (ver {@link GestionarRolesEnConsolaUseCase}; D-269). Cada escritura, en este
+ * La consola de roles personalizados (ver {@link GestionarRolesEnConsolaUseCase}; D-272). Cada escritura, en este
  * orden: Soporte TI con la consola abierta (403 / 423), el pedido válido contra el catálogo (400), el rol existe (404)
  * y, si es crítico, lo que se pueda saber sin escribir (409 por personas, destino inválido) <b>antes</b> de gastar el
  * token de reautenticación (428): así una contraseña no se pide para un cambio que de todos modos se rechazaría. Después,
@@ -186,7 +186,7 @@ class ConsolaDeRolesPersonalizadosService implements GestionarRolesEnConsolaUseC
     }
 
     /**
-     * El aviso a Administración de un cambio que toca a personas (D-269): sale por el outbox en esta misma transacción,
+     * El aviso a Administración de un cambio que toca a personas (D-272): sale por el outbox en esta misma transacción,
      * y {@code notifications} lo manda por push a los ADMIN y ALQUIMISTA activos después del commit.
      */
     private void avisar(RolPersonalizadoResumen rol, long personas, String resumen, AccesoDeConsola acceso,

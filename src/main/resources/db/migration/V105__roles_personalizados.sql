@@ -1,4 +1,4 @@
--- V105 — Roles personalizados que heredan de un rol base (spec 002, fase 2, US7; FR-029 a FR-034; D-269)
+-- V105 — Roles personalizados que heredan de un rol base (spec 002, fase 2, US7; FR-029 a FR-034; D-272)
 --
 -- Por qué se toca la base:
 --   El dueño pidió poder crear roles sin código («con esto ya podríamos hacer un CRUD de roles y asignar al rol los

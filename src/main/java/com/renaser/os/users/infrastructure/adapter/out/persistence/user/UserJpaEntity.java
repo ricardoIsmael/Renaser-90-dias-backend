@@ -73,11 +73,11 @@ public class UserJpaEntity implements Persistable<UUID> {
      * D-XX cuenta con purga por cron). Nullable: la inmensa mayoria de las filas no la tiene. */
     private Instant bajaSolicitadaEn;
 
-    /** `usuarios.rol_personalizado_id` (V105, D-269): el rol personalizado asignado, o null. */
+    /** `usuarios.rol_personalizado_id` (V105, D-272): el rol personalizado asignado, o null. */
     private UUID rolPersonalizadoId;
 
     /**
-     * `usuarios.es_cuenta_de_prueba` (V107, D-270): una cuenta de prueba de «ver como». Se escribe al crearla y nunca
+     * `usuarios.es_cuenta_de_prueba` (V107, D-273): una cuenta de prueba de «ver como». Se escribe al crearla y nunca
      * se actualiza ({@code updatable = false}): un {@code save} de la cuenta no puede convertirla ni desconvertirla.
      */
     @Column(name = "es_cuenta_de_prueba", updatable = false)

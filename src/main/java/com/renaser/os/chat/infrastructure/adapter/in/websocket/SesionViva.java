@@ -118,7 +118,7 @@ class SesionViva {
     }
 
     /**
-     * Una sesión de «ver como» (D-270) vence a los 30 minutos aunque se siga usando; Redis la conserva hasta que pase
+     * Una sesión de «ver como» (D-273) vence a los 30 minutos aunque se siga usando; Redis la conserva hasta que pase
      * su inactividad o hasta el próximo pedido HTTP, que la cierra. Para el socket ya está muerta.
      */
     private boolean soloLecturaVencida(Session sesion) {

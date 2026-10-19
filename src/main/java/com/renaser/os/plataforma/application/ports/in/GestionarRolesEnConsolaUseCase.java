@@ -5,7 +5,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Los roles personalizados en la consola Soporte TI (spec 002, US7; contrato de la fase 2, §4.5; D-269). Cada operación
+ * Los roles personalizados en la consola Soporte TI (spec 002, US7; contrato de la fase 2, §4.5; D-272). Cada operación
  * exige Soporte TI con la consola abierta (403 / 423), valida las claves contra el catálogo y el rol base (400), llama
  * a {@code users.api} y deja su fila de auditoría {@code ROL_PERSONALIZADO} en la misma transacción.
  *

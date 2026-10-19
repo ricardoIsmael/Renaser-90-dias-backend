@@ -8,7 +8,7 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
- * Después del commit de un cambio de rol personalizado o de una asignación (D-269): esta instancia recarga su copia en
+ * Después del commit de un cambio de rol personalizado o de una asignación (D-272): esta instancia recarga su copia en
  * el acto —el próximo pedido de esa persona ya ve su rol nuevo— y avisa a las demás por Redis. Síncrono y en el mismo
  * hilo, como {@link AlCambiarFuncionalidad}: la respuesta del pedido que cambió el rol sale con la copia ya al día.
  * Recargar es idempotente.

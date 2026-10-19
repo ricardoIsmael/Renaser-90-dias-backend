@@ -9,7 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Collection;
 import java.util.Set;
 
-/** Cuáles cuentas son de prueba de «ver como» (ver {@link CuentasDePruebaFinder}; D-270). */
+/** Cuáles cuentas son de prueba de «ver como» (ver {@link CuentasDePruebaFinder}; D-273). */
 @Service
 class CuentasDePruebaFinderService implements CuentasDePruebaFinder {
 

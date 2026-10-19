@@ -5,7 +5,7 @@ import com.renaser.os.shared.domain.UserId;
 import java.util.UUID;
 
 /**
- * Las cuentas de prueba de «ver como rol» (spec 002, fase 2, US5; contrato fase-2.md §5; D-270): una por rol base
+ * Las cuentas de prueba de «ver como rol» (spec 002, fase 2, US5; contrato fase-2.md §5; D-273): una por rol base
  * (los seis, nunca Soporte TI) y una por rol personalizado activo, creadas la primera vez que se piden y reparadas cada
  * vez (rol, nombre, activa). Sin contraseña: no se entra con ellas por el login. Con base aprendiz, además, el
  * programa activo a mitad del camino (día 45, que se vuelve a poner si el reloj la sacó del tramo 30–60) y el mentor y

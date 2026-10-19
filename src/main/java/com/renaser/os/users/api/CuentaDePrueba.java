@@ -5,7 +5,7 @@ import com.renaser.os.shared.domain.UserId;
 import java.util.Objects;
 
 /**
- * Una cuenta de prueba de «ver como rol» lista para abrirle una sesión de solo lectura (spec 002, fase 2, US5; D-270).
+ * Una cuenta de prueba de «ver como rol» lista para abrirle una sesión de solo lectura (spec 002, fase 2, US5; D-273).
  *
  * @param rol              el rol base de la cuenta (con un rol personalizado, el de su base)
  * @param rolPersonalizado el rol personalizado que lleva, o {@code null} si es la de un rol base

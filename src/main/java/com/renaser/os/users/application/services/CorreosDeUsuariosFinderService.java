@@ -11,7 +11,7 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-/** El correo de varias cuentas, en lote (D-268): una lectura de {@code LoadUserPort.byIds}. */
+/** El correo de varias cuentas, en lote (D-271): una lectura de {@code LoadUserPort.byIds}. */
 @Service
 class CorreosDeUsuariosFinderService implements CorreosDeUsuariosFinder {
 

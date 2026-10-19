@@ -68,7 +68,7 @@ class AccesoAChatsDeGrupoTest {
     }
 
     @Test
-    @DisplayName("«ver como» (D-270): el Admin de prueba no lee los chats de los grupos reales (Soporte TI no lee chats)")
+    @DisplayName("«ver como» (D-273): el Admin de prueba no lee los chats de los grupos reales (Soporte TI no lee chats)")
     void elAdminDePruebaNoVeGruposAjenos() {
         when(usuarios.findById(usuario)).thenReturn(Optional.of(new UserSummary(usuario, "Prueba · Administrador",
                 null, UserRole.ADMIN, UserStatus.ACTIVE, null, true)));

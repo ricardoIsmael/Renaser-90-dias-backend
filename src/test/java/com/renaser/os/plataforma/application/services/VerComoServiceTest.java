@@ -45,7 +45,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-/** «Ver como rol» en la plataforma (contrato fase-2.md §5; D-270): cerrojos, orden y auditoría. Sin Spring. */
+/** «Ver como rol» en la plataforma (contrato fase-2.md §5; D-273): cerrojos, orden y auditoría. Sin Spring. */
 @ExtendWith(MockitoExtension.class)
 class VerComoServiceTest {
 

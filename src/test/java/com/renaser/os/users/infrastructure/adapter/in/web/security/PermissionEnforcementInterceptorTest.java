@@ -450,7 +450,7 @@ class PermissionEnforcementInterceptorTest {
         return actorId;
     }
 
-    // ─── «ver como» (D-270): una cuenta de prueba solo se usa con la sesión de solo lectura ─────────
+    // ─── «ver como» (D-273): una cuenta de prueba solo se usa con la sesión de solo lectura ─────────
 
     private UUID cuentaDePrueba() {
         UUID actorId = UUID.randomUUID();

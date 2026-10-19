@@ -20,7 +20,7 @@ import java.util.NoSuchElementException;
 import java.util.Optional;
 
 /**
- * «Ver como rol» (ver {@link VerComoUseCase}; D-270). Al abrir: los cerrojos de la consola (403 / 423), el pedido
+ * «Ver como rol» (ver {@link VerComoUseCase}; D-273). Al abrir: los cerrojos de la consola (403 / 423), el pedido
  * (400), la cuenta de prueba y su entorno (grupo, programa, onboarding), la auditoría y, al final, la sesión nueva en
  * Redis — lo último porque no es transaccional: si algo anterior falla, no queda una sesión suelta.
  */

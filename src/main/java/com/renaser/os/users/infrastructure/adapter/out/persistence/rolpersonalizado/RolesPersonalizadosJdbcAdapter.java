@@ -21,7 +21,7 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * {@code roles_personalizados}, sus funcionalidades y {@code usuarios.rol_personalizado_id} (V105, D-269), con
+ * {@code roles_personalizados}, sus funcionalidades y {@code usuarios.rol_personalizado_id} (V105, D-272), con
  * {@link JdbcClient}: tablas chicas (hasta 20 roles activos) que se leen enteras para la consola y para la copia en
  * memoria de la plataforma.
  *
@@ -73,7 +73,7 @@ class RolesPersonalizadosJdbcAdapter implements CargarRolesPersonalizadosPort, G
     }
 
     /*
-     * Las personas de un rol NO cuentan la cuenta de prueba de «ver como» (V107, D-270): con ella, un rol que nadie usa
+     * Las personas de un rol NO cuentan la cuenta de prueba de «ver como» (V107, D-273): con ella, un rol que nadie usa
      * no se podría borrar (409) ni cambiar de base. Sí la incluye `asignacionesVigentes` (VIGENTES): la regla de
      * disponibilidad la tiene que restringir igual que a cualquiera, porque eso es lo que se quiere ver.
      */
@@ -152,7 +152,7 @@ class RolesPersonalizadosJdbcAdapter implements CargarRolesPersonalizadosPort, G
     }
 
     /**
-     * Antes de borrar, suelta la cuenta de prueba de «ver como» que lleve este rol (D-270): no cuenta como persona, pero
+     * Antes de borrar, suelta la cuenta de prueba de «ver como» que lleve este rol (D-273): no cuenta como persona, pero
      * la FK de {@code usuarios.rol_personalizado_id} (sin ON DELETE) frenaría el borrado. Queda con su rol base y sin
      * rol personalizado; nadie la puede volver a pedir, porque el rol ya no existe.
      */
@@ -164,7 +164,7 @@ class RolesPersonalizadosJdbcAdapter implements CargarRolesPersonalizadosPort, G
     }
 
     /**
-     * Sin la cuenta de prueba de «ver como» (D-270): se queda con el rol de origen (es «la cuenta de prueba de ese rol»)
+     * Sin la cuenta de prueba de «ver como» (D-273): se queda con el rol de origen (es «la cuenta de prueba de ese rol»)
      * y no cuenta entre las personas movidas. Si después se borra el de origen, {@link #borrar} la suelta.
      */
     @Override

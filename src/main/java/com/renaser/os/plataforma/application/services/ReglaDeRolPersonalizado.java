@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * La regla de disponibilidad de los roles personalizados (contrato de la fase 2, §1 y §4.4; D-269), {@code @Order(20)}:
+ * La regla de disponibilidad de los roles personalizados (contrato de la fase 2, §1 y §4.4; D-272), {@code @Order(20)}:
  * después del despliegue progresivo ({@code @Order(10)}). Con un rol personalizado vigente, lo que su rol no marca y su
  * base usa queda «no disponible» (404 {@code FUNCIONALIDAD_NO_DISPONIBLE}, la app lo esconde). Sin rol personalizado, o
  * con uno desactivado, no hace nada.

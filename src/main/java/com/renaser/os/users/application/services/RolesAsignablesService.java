@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * {@code GET /admin/roles-asignables} (D-269): primero los seis roles base, en el orden en que la app los ofrece desde
+ * {@code GET /admin/roles-asignables} (D-272): primero los seis roles base, en el orden en que la app los ofrece desde
  * D-265 (Aprendiz primero), y después los personalizados activos, por nombre. Uno que hereda de ADMIN o ALQUIMISTA
  * figura también para un ALQUIMISTA, como hoy los roles base: quien lo rechaza es la asignación (403).
  */

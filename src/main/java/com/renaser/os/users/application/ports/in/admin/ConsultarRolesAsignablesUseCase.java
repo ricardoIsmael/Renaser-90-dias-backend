@@ -8,7 +8,7 @@ import java.util.UUID;
 
 /**
  * Los roles que Administración puede elegir en «Equipo y roles» y al aprobar una solicitud (spec 002, fase 2, FR-031;
- * contrato §4.5; D-269): los seis roles base y los roles personalizados activos. Solo ADMIN y ALQUIMISTA activos (403).
+ * contrato §4.5; D-272): los seis roles base y los roles personalizados activos. Solo ADMIN y ALQUIMISTA activos (403).
  * Soporte TI no figura: se asigna solo desde la base (D-267).
  */
 public interface ConsultarRolesAsignablesUseCase {

@@ -1,7 +1,7 @@
 package com.renaser.os.users.api;
 
 /**
- * Un rol personalizado que no se puede guardar así (D-269): <b>400</b>, como dice el contrato de la fase 2 (§4.5), con un
+ * Un rol personalizado que no se puede guardar así (D-272): <b>400</b>, como dice el contrato de la fase 2 (§4.5), con un
  * {@code codigo} para que la app sepa qué pasó sin leer el texto (aditivo del 2026-10-14).
  * <ul>
  *   <li>{@value #NOMBRE_REPETIDO}: el nombre es el de otro rol personalizado o el de un rol base (sin mirar mayúsculas

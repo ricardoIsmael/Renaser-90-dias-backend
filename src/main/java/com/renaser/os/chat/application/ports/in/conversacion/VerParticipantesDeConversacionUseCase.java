@@ -37,13 +37,13 @@ public interface VerParticipantesDeConversacionUseCase {
      * @param avatarUrl    la foto que subió, para las conversaciones donde no hay tarjetas
      */
     /**
-     * @param rolPersonalizado el rol personalizado vigente de la persona (spec 002, fase 2; D-269), o {@code null}: la
+     * @param rolPersonalizado el rol personalizado vigente de la persona (spec 002, fase 2; D-272), o {@code null}: la
      *                         info del chat muestra su nombre donde hoy muestra el rol
      */
     record ParticipanteDelChat(UserId userId, String nombre, RolEnElChat rol, boolean esUnoMismo,
                                boolean llevaTarjeta, String avatarUrl, RolPersonalizadoAsignado rolPersonalizado) {
 
-        /** Sin rol personalizado (firma anterior a D-269). */
+        /** Sin rol personalizado (firma anterior a D-272). */
         public ParticipanteDelChat(UserId userId, String nombre, RolEnElChat rol, boolean esUnoMismo,
                                    boolean llevaTarjeta, String avatarUrl) {
             this(userId, nombre, rol, esUnoMismo, llevaTarjeta, avatarUrl, null);

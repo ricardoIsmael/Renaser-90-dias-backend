@@ -45,7 +45,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
  * nada si no hay despliegues en curso. Spring NO llama a {@code afterCompletion} de un interceptor cuyo
  * {@code preHandle} lanzó, así que el 404 de quien está fuera del despliegue se cuenta al cortarlo. Un 503 por un
  * interruptor apagado no se cuenta: es mantenimiento, no uso ni falla. Contar nunca rompe el pedido. Tampoco se
- * cuentan los pedidos de una sesión «ver como» (D-270): los marca {@code FiltroDeSoloLectura}.
+ * cuentan los pedidos de una sesión «ver como» (D-273): los marca {@code FiltroDeSoloLectura}.
  */
 class InterruptoresInterceptor implements HandlerInterceptor {
 
@@ -77,7 +77,7 @@ class InterruptoresInterceptor implements HandlerInterceptor {
             return true;
         }
         UserId actor = actorDelPedido(request);
-        // «Ver como» (D-270): los pedidos de una sesión de solo lectura (la cuenta de prueba que mira Soporte TI) no
+        // «Ver como» (D-273): los pedidos de una sesión de solo lectura (la cuenta de prueba que mira Soporte TI) no
         // cuentan en las métricas del despliegue: no son uso real. Un pedido sin persona tampoco se cuenta.
         PedidoAMedir pedido = new PedidoAMedir(funcionalidad.value(),
                 SesionDeSoloLectura.vieneDeUna(request) ? null : actor);

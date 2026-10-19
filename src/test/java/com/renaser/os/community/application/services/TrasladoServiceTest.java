@@ -74,7 +74,7 @@ class TrasladoServiceTest {
     }
 
     @Test
-    @DisplayName("«ver como» (D-270): el aprendiz del grupo de prueba no se traslada ni hace avisar a nadie")
+    @DisplayName("«ver como» (D-273): el aprendiz del grupo de prueba no se traslada ni hace avisar a nadie")
     void elGrupoDePruebaNoSeToca() {
         CelulaId deprueba = com.renaser.os.community.domain.model.celula.GrupoDePrueba.CELULA;
         banco.grupo(deprueba, com.renaser.os.community.domain.model.celula.GrupoDePrueba.COHORTE, TipoCelula.REGULAR,

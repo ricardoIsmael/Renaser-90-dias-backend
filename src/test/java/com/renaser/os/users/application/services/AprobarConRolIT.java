@@ -174,7 +174,7 @@ class AprobarConRolIT {
     }
 
     @Test
-    @DisplayName("D-269: aprobar con un rol personalizado entra con su rol base y la referencia; uno que hereda de "
+    @DisplayName("D-272: aprobar con un rol personalizado entra con su rol base y la referencia; uno que hereda de "
             + "ADMIN no lo aprueba un ALQUIMISTA (403) y la solicitud sigue pendiente")
     void aprobarConRolPersonalizado() throws Exception {
         UserId soporte = UserId.of(usuario("SOPORTE_TI"));

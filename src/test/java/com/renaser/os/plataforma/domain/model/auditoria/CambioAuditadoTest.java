@@ -38,7 +38,7 @@ class CambioAuditadoTest {
     }
 
     @Test
-    @DisplayName("un cambio de rol personalizado lleva actor y la clave rp:<id> (fase 2, D-269)")
+    @DisplayName("un cambio de rol personalizado lleva actor y la clave rp:<id> (fase 2, D-272)")
     void rolPersonalizado() {
         UUID rol = UUID.randomUUID();
         CambioAuditado cambio = CambioAuditado.deRolPersonalizado(UUID.randomUUID(), UserId.of(UUID.randomUUID()),

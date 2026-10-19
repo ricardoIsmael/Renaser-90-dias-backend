@@ -82,7 +82,7 @@ class ActorHandshakeInterceptor implements HandshakeInterceptor {
     }
 
     /**
-     * «Ver como rol» (spec 002, fase 2; D-270): una sesión de solo lectura puede abrir el socket y suscribirse (leer),
+     * «Ver como rol» (spec 002, fase 2; D-273): una sesión de solo lectura puede abrir el socket y suscribirse (leer),
      * pero no mandar nada. La marca se copia a los atributos del socket para que
      * {@link SubscripcionAutorizadaInterceptor} rechace el {@code SEND} sin volver a Redis en cada frame.
      */

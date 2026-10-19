@@ -84,7 +84,7 @@ class CajasDelPadron {
                 .collect(Collectors.toMap(ProgramaActivado::participanteId, p -> p, (a, b) -> a));
         List<UserSummary> aprendices = porPersona.isEmpty() ? List.of()
                 : usuarios.findByIds(porPersona.keySet()).values().stream()
-                        // Sin las cuentas de prueba de «ver como» (D-270): ni la lista de Administración ni el barrido
+                        // Sin las cuentas de prueba de «ver como» (D-273): ni la lista de Administración ni el barrido
                         // que avisa «está lista para su Caja» las ven.
                         .filter(persona -> persona.role() == UserRole.TRAINEE && !persona.esCuentaDePrueba()).toList();
         List<CajaConFicha> cajas = aprendices.isEmpty() ? List.of() : armar(aprendices, porPersona, clock.now());

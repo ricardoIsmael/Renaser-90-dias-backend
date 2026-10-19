@@ -26,7 +26,7 @@ import java.util.UUID;
  * <p>{@code deletionScheduledFor} (D-243): si la persona cerro su cuenta, cuando se borra para siempre;
  * {@code null} si no. Campo agregado al final: una app vieja lo ignora.
  *
- * <p>{@code rolPersonalizado} (spec 002, fase 2; D-269): {@code { id, nombre }} si tiene un rol personalizado vigente;
+ * <p>{@code rolPersonalizado} (spec 002, fase 2; D-272): {@code { id, nombre }} si tiene un rol personalizado vigente;
  * aditivo, al final. {@code role} sigue siendo el rol base.
  */
 public record TraineeSummaryResponse(String id, String fullName, String email, UserStatus status, int programDay,

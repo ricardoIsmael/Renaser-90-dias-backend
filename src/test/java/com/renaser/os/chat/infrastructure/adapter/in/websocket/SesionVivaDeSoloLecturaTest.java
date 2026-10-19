@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 /**
- * «Ver como» (D-270): la sesión de solo lectura vence a los 30 minutos aunque Redis la conserve (su inactividad cuenta
+ * «Ver como» (D-273): la sesión de solo lectura vence a los 30 minutos aunque Redis la conserve (su inactividad cuenta
  * desde el último pedido). Para el socket del chat, vencida es muerta: deja de recibir.
  */
 @ExtendWith(MockitoExtension.class)

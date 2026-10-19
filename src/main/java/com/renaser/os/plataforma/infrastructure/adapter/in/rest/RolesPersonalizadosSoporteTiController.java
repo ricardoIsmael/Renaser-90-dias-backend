@@ -32,7 +32,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Los roles personalizados en la consola Soporte TI (spec 002, US7; contrato de la fase 2, §4.5; D-269): listar, crear,
+ * Los roles personalizados en la consola Soporte TI (spec 002, US7; contrato de la fase 2, §4.5; D-272): listar, crear,
  * editar (también desactivar y reactivar), borrar y reemplazar en bloque. Mismos cerrojos que la fase 1: solo
  * IT_SUPPORT ({@code OPERATE_PLATFORM}, estricto en el interceptor y repetido en el servicio), {@code X-Consola-Token}
  * vivo (423) y, para borrar y reemplazar en bloque, {@code X-Reautenticacion} (428).

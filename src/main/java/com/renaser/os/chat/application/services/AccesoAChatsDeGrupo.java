@@ -80,7 +80,7 @@ public class AccesoAChatsDeGrupo {
     /**
      * El rol y el estado de AHORA. Un usuario que no existe no ve nada: falla cerrado.
      *
-     * <p>Una cuenta de prueba de «ver como» (D-270) no ve los grupos por su rol aunque sea ADMIN: Soporte TI no lee los
+     * <p>Una cuenta de prueba de «ver como» (D-273) no ve los grupos por su rol aunque sea ADMIN: Soporte TI no lee los
      * chats de los grupos reales (spec 002, FR-025) ni siquiera mirando la app como un administrador.
      */
     private boolean veTodosLosGrupos(UserId usuarioId) {

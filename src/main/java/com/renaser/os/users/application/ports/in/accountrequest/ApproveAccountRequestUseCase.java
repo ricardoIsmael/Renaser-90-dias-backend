@@ -20,7 +20,7 @@ public interface ApproveAccountRequestUseCase {
     void approve(ApproveAccountRequestCommand command);
 
     /**
-     * @param rolPersonalizadoId opcional (spec 002, fase 2; D-269): con él entra con ese rol personalizado —el rol base
+     * @param rolPersonalizadoId opcional (spec 002, fase 2; D-272): con él entra con ese rol personalizado —el rol base
      *                           sale de él y {@code rol} se ignora—, por el mismo caso de uso que «Equipo y roles»
      */
     record ApproveAccountRequestCommand(AccountRequestId accountRequestId, UserId actorId, UserRole rol,

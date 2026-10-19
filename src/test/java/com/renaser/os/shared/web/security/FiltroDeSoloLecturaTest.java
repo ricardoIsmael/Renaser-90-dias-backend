@@ -16,7 +16,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** El solo lectura de «ver como» en todo el servidor (contrato fase-2.md §5; D-270). Sin Spring. */
+/** El solo lectura de «ver como» en todo el servidor (contrato fase-2.md §5; D-273). Sin Spring. */
 class FiltroDeSoloLecturaTest {
 
     private static final Instant AHORA = Instant.parse("2026-10-14T15:00:00Z");

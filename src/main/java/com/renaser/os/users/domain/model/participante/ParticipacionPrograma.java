@@ -166,14 +166,14 @@ public final class ParticipacionPrograma {
                 null, null, null, 0);
     }
 
-    /** El día en que vive la cuenta de prueba de «ver como» con rol aprendiz (D-270): a mitad del programa. */
+    /** El día en que vive la cuenta de prueba de «ver como» con rol aprendiz (D-273): a mitad del programa. */
     public static final int DIA_DE_LA_CUENTA_DE_PRUEBA = 45;
     /** Fuera de este tramo, la cuenta de prueba se vuelve a poner en {@link #DIA_DE_LA_CUENTA_DE_PRUEBA}. */
     private static final int PRIMER_DIA_A_MITAD = 30;
     private static final int ULTIMO_DIA_A_MITAD = 60;
 
     /**
-     * El programa de la cuenta de prueba de «ver como» con rol aprendiz (spec 002, fase 2, US5; D-270): activo y
+     * El programa de la cuenta de prueba de «ver como» con rol aprendiz (spec 002, fase 2, US5; D-273): activo y
      * viviendo hoy el {@link #DIA_DE_LA_CUENTA_DE_PRUEBA} (fase y fechas coherentes, sin ajuste), así la vista se parece a
      * la de un aprendiz a mitad del programa. El día se DERIVA de la fecha de inicio, como el de cualquiera: no se fija a
      * mano con {@link #fijarDia}, que dejaría un ajuste negativo y el día 1 del semáforo en la fecha de hoy.

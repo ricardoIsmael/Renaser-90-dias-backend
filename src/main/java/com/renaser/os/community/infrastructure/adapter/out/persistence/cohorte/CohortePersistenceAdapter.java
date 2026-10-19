@@ -33,7 +33,7 @@ class CohortePersistenceAdapter implements LoadCohortePort, SaveCohortePort, Eli
         return repository.findById(id.value()).map(mapper::toDomain);
     }
 
-    /** Sin la cohorte de prueba de «ver como» (D-270): Administración no la ve ni la puede editar desde la lista. */
+    /** Sin la cohorte de prueba de «ver como» (D-273): Administración no la ve ni la puede editar desde la lista. */
     @Override
     public List<Cohorte> listar(EstadoCohorte filtroEstado) {
         UUID dePrueba = GrupoDePrueba.COHORTE.value();

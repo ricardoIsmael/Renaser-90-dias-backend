@@ -26,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * El push a Administración cuando Soporte TI cambia un rol personalizado con personas (spec 002, US7 escenario 6;
- * D-269; decisión del dueño del 2026-10-14), de punta a punta: la consola publica el aviso por el outbox y
+ * D-272; decisión del dueño del 2026-10-14), de punta a punta: la consola publica el aviso por el outbox y
  * {@code notifications} deja una fila {@code OPERACION_PLATAFORMA} (con su push) a cada ADMIN y ALQUIMISTA activo, a
  * nadie más, y nunca a una cuenta de prueba de «ver como».
  */

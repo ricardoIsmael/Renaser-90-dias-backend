@@ -130,7 +130,7 @@ class NotificacionServiceTest {
     }
 
     @Test
-    @DisplayName("«ver como» (D-270): a una cuenta de prueba no se le manda nada, ni fila ni push (ni la operación de "
+    @DisplayName("«ver como» (D-273): a una cuenta de prueba no se le manda nada, ni fila ni push (ni la operación de "
             + "la plataforma)")
     void aUnaCuentaDePruebaNoSeLeMandaNada() {
         UserId cuentaDePrueba = usuario();
@@ -262,7 +262,7 @@ class NotificacionServiceTest {
         UserId destinatario = usuario();
         when(loadPreferenciasPort.habilitadaPara(destinatario, TipoNotificacion.MENSAJE_MENTOR))
                 .thenReturn(Optional.of(true));
-        // Corregido 2026-10-14 (D-270): emitir() ahora sí lee el resumen del destinatario, pero solo para no mandarle
+        // Corregido 2026-10-14 (D-273): emitir() ahora sí lee el resumen del destinatario, pero solo para no mandarle
         // nada a una cuenta de prueba de «ver como». La asercion clave sigue siendo la misma: un SUSPENDIDO acumula
         // bandeja (antes se verificaba que el guard ni se consultara).
         when(userSummaryFinder.findById(destinatario)).thenReturn(Optional.of(new UserSummary(destinatario, "Test",

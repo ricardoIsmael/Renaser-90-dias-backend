@@ -43,7 +43,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-/** {@code PATCH /users/{id}/role} con rol personalizado (spec 002, FR-031; D-269). Sin Spring. */
+/** {@code PATCH /users/{id}/role} con rol personalizado (spec 002, FR-031; D-272). Sin Spring. */
 class AsignarRolPersonalizadoServiceTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-10-14T15:00:00Z"));

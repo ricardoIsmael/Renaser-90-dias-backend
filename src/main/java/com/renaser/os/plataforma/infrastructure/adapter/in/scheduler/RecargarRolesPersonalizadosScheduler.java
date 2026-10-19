@@ -7,7 +7,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * Lee los roles personalizados al arrancar y los relee cada 30 s (contrato de la fase 2, §4.4; D-269): el respaldo por
+ * Lee los roles personalizados al arrancar y los relee cada 30 s (contrato de la fase 2, §4.4; D-272): el respaldo por
  * si un aviso no llegó. Sin {@code @SchedulerLock}, como {@link RecargarEstadosScheduler}: es la copia de CADA
  * instancia, no un trabajo de una sola.
  */

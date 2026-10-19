@@ -51,7 +51,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-/** Las cuentas de prueba de «ver como» (D-270): quién las pide, cómo se crean y qué NO se dispara. Sin Spring. */
+/** Las cuentas de prueba de «ver como» (D-273): quién las pide, cómo se crean y qué NO se dispara. Sin Spring. */
 @ExtendWith(MockitoExtension.class)
 class CuentasDePruebaServiceTest {
 

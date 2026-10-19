@@ -35,7 +35,7 @@ class CelulaPersistenceAdapter implements LoadCelulaPort, SaveCelulaPort, Elimin
     }
 
     /**
-     * <b>Sin el «Grupo de prueba (ver como)»</b> (D-270): de esta lista salen el panel de grupos de Administración, los
+     * <b>Sin el «Grupo de prueba (ver como)»</b> (D-273): de esta lista salen el panel de grupos de Administración, los
      * semáforos y rankings por grupo, la vista del administrador sobre los chats de grupo, los avisos de grupos sin
      * mentor, la rotación y el traslado. El grupo de prueba se lee solo por su id ({@link #porId}) o por su mentor.
      */

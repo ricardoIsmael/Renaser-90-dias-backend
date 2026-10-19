@@ -17,7 +17,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** Asignar un rol personalizado a una cuenta (spec 002, FR-030 y FR-031; D-269). Sin Spring. */
+/** Asignar un rol personalizado a una cuenta (spec 002, FR-030 y FR-031; D-272). Sin Spring. */
 class AsignarRolPersonalizadoTest {
 
     private static final Instant AHORA = Instant.parse("2026-10-14T15:00:00Z");

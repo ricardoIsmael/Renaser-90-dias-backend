@@ -127,7 +127,7 @@ class OnboardingDashboardServiceTest {
     }
 
     @Test
-    @DisplayName("«ver como» (D-270): los estados de onboarding se cuentan sin las cuentas de prueba")
+    @DisplayName("«ver como» (D-273): los estados de onboarding se cuentan sin las cuentas de prueba")
     void noCuentaLasCuentasDePrueba() {
         UserId actorId = id();
         Set<UserId> deprueba = Set.of(id(), id());
