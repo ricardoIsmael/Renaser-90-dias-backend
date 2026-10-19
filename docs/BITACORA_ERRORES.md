@@ -15417,3 +15417,24 @@ cerró el hábito cuenta aunque después se oculte; `GET /api/v1/wall/{id}` deci
 un hábito común no se liga a una publicación aunque ese día haya publicado), `PublicacionPersistenceAdapterTest`,
 `ObligacionesHistoricasPersistenceAdapterTest` y `CumplimientoDelLiderIT`. **Regla general:** un hábito que se cumple
 sin evidencia tiene que decir con qué se cumplió; si no, «cumplido» y «sin entrega» conviven y nadie sabe cuál creer.
+
+## E-629 · La lista del líder decía «Semana todavía sin cerrar» en una semana que ya había pasado (backend, spec 005, RESUELTO, 19/10)
+
+**Síntoma literal.** En el E2E del emulador, el líder abrió el grupo «Fénix 005» y el encabezado de la lista decía «Semana
+todavía sin cerrar · Del sábado 10 al viernes 16 de octubre», siendo hoy lunes 19. `GET /api/v1/leadership/groups/{id}/semaforo`
+devolvía `"cerrada": false` para ese grupo y `true` para los otros dos de la misma base, con la misma semana.
+
+**Causa real.** `cerrada` salía de `TablaDelSemaforoFinder.tablaDe(...)`, que la arma con `PeriodoDelSemaforo.de(ventanas)`: «cerrada» solo si
+**todas** las ventanas de los aprendices lo están, y una ventana solo es cerrada si existe la foto del cierre semanal
+(`semaforo_semanas`). Quien empezó su programa después de esa semana (aquí, Inés, con el Día 1 el 17/10) no tiene foto de esa
+semana, así que bastaba **un integrante nuevo** para que todo el grupo mostrara la última semana cerrada como abierta. Ocurre
+en cualquier grupo que haya recibido a alguien en los últimos días. Las pruebas no lo vieron porque el doble de la tabla
+devolvía la fecha de calendario y no la regla de la tabla real.
+
+**Solución.** La lista del líder toma `cerrada` del calendario (`VentanaDeLaFicha.cerrada()`: la semana ya terminó), igual que la ficha
+de la persona. No se toca `PeriodoDelSemaforo`: las tablas del mentor y de administración siguen como estaban.
+
+**Para que no vuelva.** `GrupoDelLiderServiceTest.unaPersonaNuevaNoDejaLaSemanaCerradaSinCerrar`, y el doble de la tabla en
+`BancoDeCumplimiento` ahora aplica la misma regla que la real (todas las ventanas cerradas), para que una prueba así falle
+con el código viejo. **Regla general:** un dato de calendario (¿ya pasó esta semana?) se decide con el calendario, no
+agregando el estado de cada persona del grupo.

@@ -272,8 +272,13 @@ public class BancoDeCumplimiento {
         List<TablaDelSemaforoFinder.FilaDeLaTabla> filas = aprendicesPorGrupo.getOrDefault(grupoId, List.of())
                 .stream().filter(id -> usuarios.get(id) != null && usuarios.get(id).status().allowsAccess())
                 .map(id -> fila(id, ventanas.get(id))).toList();
+        // Como el servicio real (PeriodoDelSemaforo.de): la tabla solo dice «cerrada» si TODAS las ventanas de sus
+        // aprendices lo estan, y quien no tiene foto de la semana (empezo hace poco) la deja abierta (E-629).
+        boolean cerradaComoLaTabla = filas.isEmpty() ? ventana.cerrada() : filas.stream()
+                .allMatch(fila -> ventanas.get(UserId.of(fila.personaId())) != null
+                        && ventanas.get(UserId.of(fila.personaId())).cerrada());
         return new TablaDelSemaforoFinder.TablaDeGrupo(grupoId, grupo.nombre(), ventana.desde(), ventana.hasta(),
-                ventana.cerrada(), filas);
+                cerradaComoLaTabla, filas);
     };
 
     final SemanaDeSeguimientoFinder seguimiento = (personaId, grupoId, desde, hasta) -> {

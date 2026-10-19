@@ -241,6 +241,20 @@ class GrupoDelLiderServiceTest {
         assertThat(delLider(LocalDate.of(2026, 10, 9)).hasta()).isEqualTo(LocalDate.of(2026, 10, 9));
     }
 
+    @Test
+    @DisplayName("E-629: la ultima semana cerrada es «cerrada» aunque alguien del grupo haya empezado despues y no tenga su foto")
+    void unaPersonaNuevaNoDejaLaSemanaCerradaSinCerrar() {
+        aprendiz(ANA, "Ana Pérez", 90);
+        // Dora empezo su programa despues de esa semana: el cierre semanal no le dejo foto y su ventana no esta cerrada.
+        aprendiz(DORA, "Dora Vega", null);
+
+        GrupoDelLider lista = delLider(null);
+
+        assertThat(lista.hasta()).isEqualTo(SEMANA_CERRADA);
+        assertThat(lista.cerrada()).as("la semana ya paso: no depende de que cada persona tenga su foto").isTrue();
+        assertThat(delLider(LocalDate.of(2026, 10, 9)).cerrada()).isTrue();
+    }
+
     // ── la semana pedida ────────────────────────────────────────────────────
 
     @Test
