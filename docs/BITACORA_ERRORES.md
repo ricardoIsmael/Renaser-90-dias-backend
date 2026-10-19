@@ -15447,3 +15447,10 @@ agregando el estado de cada persona del grupo.
 texto es igual a `respuestaTexto` (sin espacios en los bordes), «Lo que escribió» no se repite; si dice otra cosa (foto con
 «¿Qué sentiste?», un resumen distinto) salen las dos. **Para que no vuelva.** `respuestaRepetida.test.ts`. **Regla general:** un
 dato que el cliente manda por dos caminos se muestra por uno; al leerlo hay que saber que puede venir repetido.
+
+**E-629 (c) · «Pendiente de revisión» en una publicación del Muro (app, spec 005, RESUELTO, 19/10).** Hallazgo del mismo E2E.
+**Síntoma.** En la ficha del mentor (`AlumnoScreen`), el post diario cumplido decía «Evidencia entregada · pendiente de revisión»
+junto a «Ver publicación»; el mentor entendía que tenía algo que revisar. **Causa.** `etiquetaDeEntrega` solo miraba `entrega` y
+`revision`; el post diario llega con `revision: null` (su entrega es la publicación, E-628) y caía en el «pendiente» por defecto.
+**Solución.** `mentor/utils/etiquetaDeEntrega.ts` recibe `publicacionId` y, sin revisión, dice «Publicado en el Muro» (como la
+ficha del líder). **Para que no vuelva.** `etiquetaDeEntrega.test.ts`. La ficha de administración ya decía «con evidencia».
