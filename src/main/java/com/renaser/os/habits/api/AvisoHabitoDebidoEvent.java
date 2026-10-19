@@ -23,7 +23,9 @@ import java.util.UUID;
  *                         {@code HabitoDelDiaResumen.estado}: no filtrar un tipo interno de
  *                         `habits` fuera de su {@code @NamedInterface}
  * @param minutosQueFaltan cuanto falta para el momento avisado, ya redondeado hacia arriba — es
- *                         el numero que va en el texto ("empieza en 15 minutos")
+ *                         el numero que iba en el texto ("empieza en 15 minutos"). Desde la spec 007 el
+ *                         texto dice la hora ({@code momentoAvisado}); los minutos quedan para redactar
+ *                         las publicaciones viejas que el outbox reentregue
  * @param puntosEnJuego    lo que el aprendiz gana si lo entrega ahora. Va en el evento y no lo
  *                         recalcula `notifications` porque el puntaje es una regla de `habits`
  *                         (D-97) y solo este modulo la conoce
@@ -45,10 +47,18 @@ import java.util.UUID;
  * @param categoriaHabito     la categoria del catalogo del habito ({@code BODY}, {@code MIND},
  *                            {@code CONSCIENCE}, {@code SPIRIT}…), que es la dimension que la app abre.
  *                            Tambien {@code null} en publicaciones viejas
+ * @param momentoAvisado      el instante al que se refiere el aviso: la hora de disparo del habito (inicio) o
+ *                            su plazo de entrega (vencimiento), calculado con la hora del habito y NO con el
+ *                            reloj del barrido (spec 007, FR-012). Con el se escribe «te toca a las 07:00» y se
+ *                            descarta un aviso que llega tarde. {@code null} en publicaciones anteriores a la
+ *                            spec 007 que el outbox reentregue: esas se redactan con los minutos de siempre
+ * @param zonaHoraria         la zona del participante ({@code America/Lima}) en que se dice la hora de
+ *                            {@code momentoAvisado}. {@code null} en publicaciones viejas, por lo mismo
  */
 public record AvisoHabitoDebidoEvent(UUID registroId, UserId participanteId, String tituloHabito, String tipoAviso,
                                       long minutosQueFaltan, int puntosEnJuego, UUID claveEvento,
                                       Boolean recordatorioActivo, Integer minutosRecordatorio,
-                                      Instant occurredAt, UUID habitoId, String categoriaHabito)
+                                      Instant occurredAt, UUID habitoId, String categoriaHabito,
+                                      Instant momentoAvisado, String zonaHoraria)
         implements DomainEvent {
 }

@@ -44,6 +44,18 @@ public interface EmitirNotificacionUseCase {
      */
     Optional<Notificacion> emitir(EmitirNotificacionCommand command, EntregaPush entregaPush);
 
+    /**
+     * Igual que {@link #emitir(EmitirNotificacionCommand, EntregaPush)}, ademas con la etiqueta del push
+     * (spec 007, FR-014): el aviso con la misma etiqueta REEMPLAZA al que ya esta en la bandeja del telefono
+     * en vez de apilarse (Android {@code tag}, iOS {@code threadId}, navegador {@code tag}). La usa el aviso
+     * de un habito, para que el del servidor y la alarma local del telefono sean uno solo.
+     *
+     * <p>Va como argumento y no como campo del comando por lo mismo que {@code entregaPush}. La etiqueta
+     * solo afecta al push: bandeja, preferencia y deduplicacion no cambian. {@code null} = la de siempre
+     * (la de chat se deriva de la ruta, D-221).
+     */
+    Optional<Notificacion> emitir(EmitirNotificacionCommand command, EntregaPush entregaPush, String etiquetaDelPush);
+
     record EmitirNotificacionCommand(@NotNull UserId usuarioId, @NotNull TipoNotificacion tipo,
                                       @NotBlank String titulo, @NotBlank String cuerpo, String rutaApp,
                                       UUID origenEventoId) {

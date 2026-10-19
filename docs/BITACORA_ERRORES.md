@@ -15529,3 +15529,32 @@ para una semana pasada.
 
 **Para que no vuelva.** `alarmasTipoDespertador.test.ts`, `detencionForzada.test.ts`, `guiasPorMarca.test.ts`; quickstart de la spec 007 (A1–A6, B1–B5).
 
+## E-633 · Aviso de inicio de un hábito apagado solo por hoy (backend, 19/10)
+
+**Síntoma literal.** En local, «RITUAL TIERRA - AGUA - FUEGO (noche)» apagado para el 19/10 recibió a las 11:30 «…empieza en 14 min».
+
+**Causa.** Apagar el día (V38 por fecha, V40 por día de la semana) no retira el registro ya generado, y `AvisoHabitoService` no miraba los apagados.
+
+**Corrección y prevención.** D-280 (1). `AvisoHabitoServiceTest`: apagado por fecha, por día de la semana y con el día en Lima.
+
+## E-634 · Sin aviso para la hora nueva tras cambiar la hora de un hábito (backend, 19/10)
+
+**Síntoma literal.** «PRIMERA COMIDA» tenía su aviso de las 10:45 (hora 11:00); pasada a 11:33, ningún barrido creó otro.
+
+**Causa.** La clave de idempotencia era solo registro + tipo; la fila vieja bloqueaba la nueva.
+
+**Corrección y prevención.** D-280 (4). `CalculadoraAvisosHabitoTest`: otra hora, otra clave; misma hora, misma clave.
+
+## E-635 · El push de inicio y la alarma del teléfono se cruzan (backend + app, 19/10)
+
+**Síntoma literal.** El servidor creó a las 11:15 «…empieza en 2 min» mientras el teléfono avisó 11:16 «En 1 min» y 11:17; sin etiqueta común, un teléfono sin confirmar veía los dos.
+
+**Causa.** El texto contaba minutos desde el barrido de 5 min (con antelación mínima de 5) y el push no compartía identidad con la alarma local.
+
+**Corrección y prevención.** D-280 (3), (5) y (6). `AvisoDeHabitoTest`, `AvisoHabitoNotificationListenerTest`, `ExpoPushTransporteTest`, `identificadorDelAvisoDeInicio.test.ts`.
+
+## E-636 · Avisos de hábitos sin tildes (backend, 19/10)
+
+**Síntoma literal.** «Tu habito esta por empezar», «Se te vence un habito».
+
+**Corrección y prevención.** D-280 (3); `AvisoDeHabitoTest` fija los textos.
