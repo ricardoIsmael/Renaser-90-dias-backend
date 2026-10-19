@@ -61,6 +61,28 @@ public class BancoDelSemaforo {
     private final Map<UserId, DetalleDelSemaforo> detalles = new LinkedHashMap<>();
     private Instant ahora = AHORA;
 
+    /** Funcionalidades que Soporte TI apago en la prueba (spec 005: {@code lider.cumplimiento}). */
+    public final java.util.Set<String> apagadas = new java.util.HashSet<>();
+    public final com.renaser.os.shared.application.Interruptores interruptores =
+            new com.renaser.os.shared.application.Interruptores() {
+                @Override
+                public boolean prendida(String clave) {
+                    return !apagadas.contains(clave);
+                }
+
+                @Override
+                public boolean prendidaPara(String clave, UserId actor) {
+                    return prendida(clave);
+                }
+
+                @Override
+                public void exigirPrendidaPara(String clave, UserId actor) {
+                    if (!prendida(clave)) {
+                        throw new com.renaser.os.shared.domain.FuncionalidadApagadaException(clave, null);
+                    }
+                }
+            };
+
     /** Cada lectura al semáforo, con los ids pedidos: una por vista, nunca una por persona. */
     public final List<List<UserId>> lecturasDelSemaforo = new ArrayList<>();
     public final List<LocalDate> semanasPedidas = new ArrayList<>();
@@ -275,7 +297,7 @@ public class BancoDelSemaforo {
 
     public SemaforoPorGruposService servicioPorGrupos() {
         MedicionDeGrupos medicion = medicion();
-        return new SemaforoPorGruposService(acceso(medicion), medicion, acompanamiento, usuarios, reloj);
+        return new SemaforoPorGruposService(acceso(medicion), medicion, acompanamiento, usuarios, reloj, interruptores);
     }
 
     private MedicionDeGrupos medicion() {

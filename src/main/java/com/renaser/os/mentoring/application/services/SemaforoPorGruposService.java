@@ -9,6 +9,7 @@ import com.renaser.os.mentoring.domain.model.semaforo.OrdenDelSemaforo;
 import com.renaser.os.mentoring.domain.model.semaforo.PeriodoDelSemaforo;
 import com.renaser.os.mentoring.domain.model.semaforo.ResumenDelGrupo;
 import com.renaser.os.points.api.VentanaDelSemaforo;
+import com.renaser.os.shared.application.Interruptores;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserSummary;
@@ -41,20 +42,25 @@ public class SemaforoPorGruposService implements ConsultarSemaforoPorGruposUseCa
     /** Referencia del encabezado cuando no hay ningún grupo del que tomar la zona. */
     private static final ZoneId ZONA_POR_DEFECTO = ZoneId.of("America/Lima");
 
+    /** La clave del catalogo de Soporte TI de la ficha de cumplimiento por persona (spec 005). */
+    private static final String FUNCIONALIDAD_DE_LA_FICHA = "lider.cumplimiento";
+
     private final AccesoAVistasDelSemaforo acceso;
     private final MedicionDeGrupos medicion;
     private final AcompanamientoFinder acompanamientoFinder;
     private final UserSummaryFinder userSummaryFinder;
     private final Clock clock;
+    private final Interruptores interruptores;
 
     SemaforoPorGruposService(AccesoAVistasDelSemaforo acceso, MedicionDeGrupos medicion,
                              AcompanamientoFinder acompanamientoFinder, UserSummaryFinder userSummaryFinder,
-                             Clock clock) {
+                             Clock clock, Interruptores interruptores) {
         this.acceso = acceso;
         this.medicion = medicion;
         this.acompanamientoFinder = acompanamientoFinder;
         this.userSummaryFinder = userSummaryFinder;
         this.clock = clock;
+        this.interruptores = interruptores;
     }
 
     @Override
@@ -69,7 +75,9 @@ public class SemaforoPorGruposService implements ConsultarSemaforoPorGruposUseCa
         Map<UserId, VentanaDelSemaforo> ventanas =
                 medicion.ventanasDe(todos(aprendicesPorGrupo), consulta.semanaHasta());
 
-        List<GrupoDelResumen> resumenes = resumir(grupos, aprendicesPorGrupo, ventanas);
+        // Spec 005: la tarjeta de un grupo se abre solo si la ficha de cumplimiento esta prendida para quien pregunta.
+        boolean cumplimientoPrendido = interruptores.prendidaPara(FUNCIONALIDAD_DE_LA_FICHA, consulta.actorId());
+        List<GrupoDelResumen> resumenes = resumir(grupos, new Lectura(aprendicesPorGrupo, ventanas, cumplimientoPrendido));
         PeriodoDelSemaforo esperado = PeriodoDelSemaforo.esperado(
                 ahora.atZone(zonaDeReferencia(grupos)).toLocalDate(), consulta.semanaHasta());
         return new ResumenPorGrupos(PeriodoDelSemaforo.de(ventanas.values(), esperado), totales(resumenes),
@@ -113,15 +121,15 @@ public class SemaforoPorGruposService implements ConsultarSemaforoPorGruposUseCa
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
-    private List<GrupoDelResumen> resumir(List<GrupoAcompanado> grupos, Map<UUID, List<UserId>> aprendicesPorGrupo,
-                                          Map<UserId, VentanaDelSemaforo> ventanas) {
+    private List<GrupoDelResumen> resumir(List<GrupoAcompanado> grupos, Lectura lectura) {
         Map<UserId, UserSummary> mentores = userSummaryFinder.findByIds(grupos.stream()
                 .map(GrupoAcompanado::mentorId).filter(java.util.Objects::nonNull).distinct().toList());
         return grupos.stream()
                 .map(grupo -> new GrupoDelResumen(grupo.grupoId(), grupo.nombre(),
                         grupo.mentorId() == null ? null : nombreDe(mentores.get(grupo.mentorId())),
-                        ResumenDelGrupo.de(medicionesDe(aprendicesPorGrupo.get(grupo.grupoId()), ventanas)),
-                        grupo.mentorId() == null))
+                        ResumenDelGrupo.de(medicionesDe(lectura.aprendicesPorGrupo().get(grupo.grupoId()),
+                                lectura.ventanas())),
+                        grupo.mentorId() == null, grupo.mentorId() != null && lectura.cumplimientoPrendido()))
                 .sorted(Comparator.comparing(GrupoDelResumen::grupoNombre, OrdenDelSemaforo.alfabetico())
                         .thenComparing(GrupoDelResumen::grupoId))
                 .toList();
@@ -148,5 +156,10 @@ public class SemaforoPorGruposService implements ConsultarSemaforoPorGruposUseCa
      */
     private static ZoneId zonaDeReferencia(List<GrupoAcompanado> grupos) {
         return grupos.isEmpty() ? ZONA_POR_DEFECTO : ZoneId.of(grupos.getFirst().zonaHoraria());
+    }
+
+    /** Lo leido para armar el resumen: el padron de cada grupo, el semaforo de todos y si la ficha esta prendida. */
+    private record Lectura(Map<UUID, List<UserId>> aprendicesPorGrupo, Map<UserId, VentanaDelSemaforo> ventanas,
+                           boolean cumplimientoPrendido) {
     }
 }

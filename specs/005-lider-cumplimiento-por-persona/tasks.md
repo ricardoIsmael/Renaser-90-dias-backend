@@ -103,6 +103,12 @@ antes a las otras sesiones.
 ## Phase 7: Integración con la fase 2 de Soporte TI (cuando esté en master)
 
 - [ ] T046 Rebasar sobre master con la fase 2; declarar `normal("lider.cumplimiento", …, roles MENTOR_LEAD, ADMIN, ALCHEMIST, IT_SUPPORT)` en `EntradasDelCatalogo.java`; `@Funcionalidad("lider.cumplimiento")` en los endpoints nuevos; `CuentasDePruebaFinder` real sobre `usuarios.es_cuenta_de_prueba`; `saltaEsteTurno` en el scheduler; `puedeAbrirse` falso con la funcionalidad apagada; `FuncionalidadDeclaradaTest` en verde
+  > **Corregido 2026-10-19.** Con la fase 1 de Soporte TI ya en `origin/master` (V98–V102), la parte de esta tarea que no
+  > depende de la fase 2 **se hizo**: entrada `lider.cumplimiento` en `EntradasDelCatalogo`, `@Funcionalidad` en el
+  > controller nuevo (`CumplimientoDelLiderController`; la publicación del Muro lleva `muro`), `puedeAbrirse` falso con la
+  > funcionalidad apagada (`SemaforoPorGruposService`) y `saltaEsteTurno` en el resumen diario (T043); `FuncionalidadDeclaradaTest`
+  > en verde. **Sigue pendiente**, para cuando entre la fase 2 (V103–V108): `CuentasDePruebaFinder` real sobre
+  > `usuarios.es_cuenta_de_prueba` (V107) y renumerar V109 si esa fase ocupa números por encima de los de hoy.
 
 ## Phase 8: Polish & Cross-Cutting
 

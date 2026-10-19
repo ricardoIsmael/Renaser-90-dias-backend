@@ -7,6 +7,7 @@ import com.renaser.os.leadership.application.ports.in.ConsultarSemanaDePersonaUs
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
+import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.CacheControl;
@@ -34,6 +35,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/leadership")
+@Funcionalidad("lider.cumplimiento")
 public class CumplimientoDelLiderController {
 
     private static final String GUARD = "AccesoDeLiderazgo: MENTOR_LEAD/ADMIN/ALCHEMIST activo; el permiso no alcanza (A-1); "

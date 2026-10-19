@@ -18,6 +18,16 @@ Investigación sobre master (`9f387b78`) y sobre la rama `claude/fase2-integraci
 - **Descartado**: basar la rama en `claude/fase2-integracion`, porque ataría 005 a una rama que todavía cambia y
   mezclaría dos funcionalidades en una revisión.
 
+> **Corregido 2026-10-19.** Esto decía que el catálogo de funcionalidades (`@Funcionalidad`, `EntradasDelCatalogo`,
+> `FuncionalidadDeclaradaTest`) existía «solo en `claude/fase2-integracion`» y que se declararía al rebasar sobre la
+> fase 2. Ya no es así: `origin/master` (`15b07ac6`) trae la **fase 1** de Soporte TI (V98–V102: interruptores por
+> funcionalidad y rol, consola, rol `IT_SUPPORT`, circuito de SER). La rama 005 se rebasó sobre él: la entrada
+> `lider.cumplimiento` (hija de `lider`; roles MENTOR_LEAD, ADMIN, ALCHEMIST e IT_SUPPORT; procesos `SALTA`) está en
+> `EntradasDelCatalogo`, el controller nuevo lleva `@Funcionalidad("lider.cumplimiento")`, `puedeAbrirse` es falso si
+> está apagada y el resumen diario se salta apagada. Lo que sigue esperando a la **fase 2** (V103–V108, en pausa) es solo
+> la marca `usuarios.es_cuenta_de_prueba` (V107): `CuentasDePruebaFinder` sigue devolviendo «ninguna». La migración
+> sigue en **V109** (mayor que la más alta de `origin/master`; quien integre después renumera).
+
 ## R-2 · La semana: de sábado a viernes, no de lunes a domingo
 
 - **Hallazgo**: el semáforo mide de sábado a viernes, pero `weekly-progress` (la ficha del mentor y la de

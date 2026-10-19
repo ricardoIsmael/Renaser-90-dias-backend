@@ -254,6 +254,22 @@ class SemaforoPorGruposServiceTest {
     }
 
     @Test
+    @DisplayName("spec 005: con lider.cumplimiento apagada por Soporte TI ninguna tarjeta se puede abrir; el resumen sigue igual")
+    void funcionalidadApagadaNoDejaAbrirNingunGrupo() {
+        banco.grupo(BRISA, "Grupo Brisa");
+        aprendiz(BRISA, id("b6"), "Sin Mentor", 85);
+
+        assertThat(resumenDelLider().grupos()).extracting(GrupoDelResumen::puedeAbrirse)
+                .containsExactlyInAnyOrder(true, true, false);
+
+        banco.apagadas.add("lider.cumplimiento");
+        ResumenPorGrupos apagada = resumenDelLider();
+
+        assertThat(apagada.grupos()).extracting(GrupoDelResumen::puedeAbrirse).containsOnly(false);
+        assertThat(apagada.totales().total()).isEqualTo(5);
+    }
+
+    @Test
     @DisplayName("E-478: la semana pasada trae los grupos de ESA semana: el que cerro despues si, el que empezo despues no")
     void semanaPasadaConSusGrupos() {
         banco.periodo(FENIX, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 20));

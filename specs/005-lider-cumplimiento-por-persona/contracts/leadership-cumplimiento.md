@@ -16,7 +16,7 @@ Errores, con la convención de siempre:
 | Rol sin permiso o cuenta suspendida | 403 |
 | Grupo sin mentor, recepción, o persona que hoy no está en ese grupo | 404 |
 | Cuenta de prueba, suspendida o cerrada | 404 (en la lista, no aparece) |
-| Funcionalidad apagada por Soporte TI | la respuesta de siempre del catálogo (ver «Funcionalidad apagada») |
+| Funcionalidad `lider.cumplimiento` apagada por Soporte TI | 503 `{ "codigo": "FUNCIONALIDAD_APAGADA", "funcionalidad": "lider.cumplimiento", "message": <aviso editable> }`, antes de entrar al caso de uso |
 | `semanaHasta` que no es viernes, o semana que todavía no empezó | 400 |
 
 ## La semana: qué devuelve cada una sin `semanaHasta`
@@ -153,7 +153,7 @@ disponible»).
 
 `media` son los mismos archivos que muestra el Muro, con la URL firmada que vence (15 minutos); `[]` si la publicación
 no tiene imagen. Los nombres son los de `GET /wall`; los campos de conteo del feed (reacciones, comentarios) no viajan.
-Esta ruta **no** lleva `@Funcionalidad`: es del Muro, no de la ficha del líder.
+Esta ruta lleva `@Funcionalidad("muro")`, no la de la ficha del líder: es un recurso del Muro.
 
 ## 5. Observación sobre una persona (ruta existente, campos nuevos)
 
@@ -171,7 +171,7 @@ opcionales.
 ## 6. Resumen de grupos (ruta existente, campo nuevo)
 
 `GET /semaforo/groups`: cada grupo suma `puedeAbrirse: boolean`, opcional. Vale `true` si tiene mentor y la
-funcionalidad `lider.cumplimiento` está prendida. Si el campo falta (backend anterior), la app no abre la tarjeta
+funcionalidad `lider.cumplimiento` está prendida para quien pregunta (apagada, todos van en `false`). Si el campo falta (backend anterior), la app no abre la tarjeta
 (FR-021).
 
 ## 7. Aviso al mentor
