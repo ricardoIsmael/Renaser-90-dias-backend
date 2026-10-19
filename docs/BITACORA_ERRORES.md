@@ -15518,3 +15518,14 @@ para una semana pasada.
 **Solución.** «Terminó el programa» = `hoy local > ultimaFecha` del calendario del semáforo (`CalendarioDeMedicion.terminadoEl`, expuesto en `ResumenParaHoy.programaTerminado`): el 90 sigue siendo del programa y el 91 ya no, con el ajuste de día incluido. No se fabrica un semáforo SIN_DATOS: la tarjeta de quien terminó ya existe. Pruebas: `MedicionDeLaPersonaTest.elProgramaTerminaDespuesDelDiaNoventa`, `GrupoDelDiaTest`, `HomeMensajeDelSemaforoIT.despuesDelDiaNoventa` / `elDiaNoventaSigueEnElPrograma`.
 
 **Prevención.** Una bandera que el reloj marca «al llegar» no sirve para decir «después de». Para preguntas de calendario, derivar de las fechas (`.claude/rules/02` §2), no de columnas materializadas.
+
+## E-632 · En Honor las alarmas de los hábitos no suenan (app, 19/10)
+
+**Síntoma literal.** «Los usuarios dicen que sus alarmas no suenan» (teléfonos Honor); en Xiaomi funcionan.
+
+**Causa confirmada en local (19/10, emulador Android 17, base `renaser_alarmas`).** Forzar la detención de la app borró sus alarmas (`dumpsys alarm`: 2 → 0) hasta volver a abrirla; quitar de recientes en un Android sin capa no las borra. Honor (MagicOS), como Huawei, aplica una detención forzada al quitar de recientes o al ahorrar batería cuando la app está en «Gestionar automáticamente» (soporte oficial de Honor). Además, las alarmas usaban `setExactAndAllowWhileIdle`, que Doze limita a una cada 9 min por app. Pendiente: confirmar en un Honor real el motivo de salida que registra.
+
+**Corrección.** D-279: alarmas tipo despertador, detección de la detención forzada y guía por marca.
+
+**Para que no vuelva.** `alarmasTipoDespertador.test.ts`, `detencionForzada.test.ts`, `guiasPorMarca.test.ts`; quickstart de la spec 007 (A1–A6, B1–B5).
+
