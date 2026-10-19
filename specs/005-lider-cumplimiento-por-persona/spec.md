@@ -51,6 +51,14 @@ Respuestas del dueño del producto, en la conversación de diseño:
 - Q: ¿Soporte TI la apaga aparte? → A: Sí, con una **clave de funcionalidad propia**, sin apagar el resto del
   líder.
 
+### Session 2026-10-19 (clarify)
+
+- Q: ¿A qué hora le llega al mentor el resumen diario? → A: A las 20:00 del mismo día, en la zona del mentor.
+- Q: ¿Administración y Alquimista también pueden abrir los grupos de su semáforo por grupos? → A: Sí, los tres
+  roles. Las consultas de Administración y Alquimista no entran en el resumen al mentor.
+- Q: ¿Incluye el grupo de bienvenida (sin mentor)? → A: No, solo los grupos con mentor.
+- Q: ¿Cuánto se guarda el registro de consultas? → A: Siempre: no se edita ni se borra (auditoría).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Del grupo a la persona (Priority: P1)
@@ -147,12 +155,14 @@ un solo aviso con solo sus personas, y que un día sin consultas no genera aviso
 
 **Acceptance Scenarios**:
 
-1. **Given** que el líder abrió la ficha de dos personas del grupo de un mentor, **When** llega la hora del
-   resumen, **Then** el mentor recibe un solo aviso que nombra a las dos.
+1. **Given** que el líder abrió la ficha de dos personas del grupo de un mentor, **When** llegan las 20:00 en la
+   zona del mentor, **Then** el mentor recibe un solo aviso que nombra a las dos.
 2. **Given** que el líder abrió la misma ficha cinco veces, **When** llega el resumen, **Then** la persona
    aparece una vez.
 3. **Given** un día sin consultas a su grupo, **Then** el mentor no recibe nada.
 4. **Given** que el mentor apagó ese tipo de aviso en sus preferencias, **Then** no lo recibe.
+5. **Given** que solo Administración o Alquimista abrieron fichas de su grupo ese día, **Then** el mentor no recibe
+   aviso.
 
 ---
 
@@ -181,7 +191,8 @@ un solo aviso con solo sus personas, y que un día sin consultas no genera aviso
 **Alcance y permisos**
 
 - **FR-001**: El sistema MUST permitir al líder de mentores consultar, de cualquier grupo con mentor, la lista de
-  sus personas y la ficha de cumplimiento de cada una.
+  sus personas y la ficha de cumplimiento de cada una. Administración y Alquimista MUST poder abrir de la misma
+  forma los grupos de su propio semáforo por grupos. El grupo de bienvenida (sin mentor) queda fuera.
 - **FR-002**: Las personas listadas MUST ser las del grupo con rol aprendiz y las que lleven su propio programa de
   90 días en él (mentor o guía de aprendiz). MUST quedar fuera las cuentas de prueba y las cuentas cerradas.
 - **FR-003**: El acceso nuevo del líder MUST ser solo de lectura sobre la persona: no edita hábitos, no registra
@@ -225,10 +236,12 @@ un solo aviso con solo sus personas, y que un día sin consultas no genera aviso
 
 **Registro y aviso al mentor**
 
-- **FR-016**: El sistema MUST registrar cada vez que el líder abre la ficha de una persona: quién, a quién, de
-  qué grupo y cuándo. El registro es permanente y no se edita.
-- **FR-017**: Una vez al día, el sistema MUST enviar a cada mentor un solo aviso con las personas de sus grupos
-  cuya ficha abrió el líder ese día, sin repetir a nadie. Sin consultas, no hay aviso.
+- **FR-016**: El sistema MUST registrar cada vez que el líder, Administración o Alquimista abre la ficha de una
+  persona desde esta vista: quién, con qué rol, a quién, de qué grupo y cuándo. El registro se guarda siempre: no
+  se edita ni se borra.
+- **FR-017**: A las 20:00 de cada día, en la zona del mentor, el sistema MUST enviar a cada mentor un solo aviso
+  con las personas de sus grupos cuya ficha abrió **el líder de mentores** ese día, sin repetir a nadie. Las
+  consultas de Administración y Alquimista no entran en el aviso. Sin consultas del líder, no hay aviso.
 - **FR-018**: El aviso MUST respetar las preferencias de notificación del mentor, y tocarlo MUST abrir «Mi
   grupo».
 
@@ -237,7 +250,8 @@ un solo aviso con solo sus personas, y que un día sin consultas no genera aviso
 - **FR-019**: La lista y la ficha MUST tener estados de carga, vacío, sin datos (con su motivo) y error con
   «Reintentar». La falta de datos MUST NOT presentarse como incumplimiento.
 - **FR-020**: Las cinco pestañas MUST NOT cambiar. El cambio en Hoy se limita a que la tarjeta de cada grupo del
-  semáforo por grupos se abra; se anota como excepción en `AGENTS.md` del frontend.
+  semáforo por grupos (el del líder y el de Administración) se abra; se anota como excepción en `AGENTS.md` del
+  frontend.
 - **FR-021**: Contra un backend anterior (sin la lectura nueva), la app MUST seguir mostrando el semáforo por
   grupos como hoy, con las tarjetas sin abrirse.
 
@@ -270,9 +284,6 @@ un solo aviso con solo sus personas, y que un día sin consultas no genera aviso
 
 ## Assumptions
 
-- **Hora del resumen diario**: a las 20:00 en la zona del mentor, con las consultas de ese día. Es una decisión
-  menor que se puede cambiar sin rehacer nada; se confirma en `/speckit-clarify`.
-- **«Todos los grupos»** son los grupos con mentor. El grupo inicial de bienvenida, sin mentor, queda fuera.
 - **El % de la lista** es el de la semana seleccionada en la ficha (la vigente al entrar) y el color es el del
   semáforo de esa misma semana.
 - **Mentor y guía con programa propio** no tienen color porque el semáforo solo mide aprendices; su % sí se
