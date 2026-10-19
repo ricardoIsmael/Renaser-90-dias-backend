@@ -218,6 +218,43 @@ class PublicacionPersistenceAdapterTest {
                 Instant.parse("2026-08-25T05:00:00Z"))).isFalse();
     }
 
+    // ────────────────────────────────────────────────────────────────────────────────────
+    // deAutorEntre — el detalle de existeDeAutorEntre (E-628): con que publicacion se cumplio el
+    // post diario, para que la ficha del mentor, la de administracion y la del lider la muestren.
+    // ────────────────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void deAutorEntreDevuelveLasPropiasDeLaMasVieja_ALaMasNuevaConLaMismaMediaVentana() {
+        Instant desde = Instant.parse("2026-08-24T05:00:00Z");
+        Instant hasta = Instant.parse("2026-08-25T05:00:00Z");
+        Publicacion enElBordeDeArriba = crearPublicacion(null, hasta);
+        Publicacion tarde = crearPublicacion(null, Instant.parse("2026-08-24T22:00:00Z"));
+        Publicacion enElBordeDeAbajo = crearPublicacion(null, desde);
+        crearPublicacion(null, Instant.parse("2026-08-24T04:59:59Z"));
+        crearPublicacionDe(autorSuelto(), Instant.parse("2026-08-24T15:00:00Z"));
+
+        var propias = adapter.deAutorEntre(autorId, desde, hasta);
+
+        assertThat(propias).extracting(p -> p.id()).containsExactly(enElBordeDeAbajo.id().value(),
+                tarde.id().value());
+        assertThat(propias.getFirst().creadaEn()).isEqualTo(desde);
+        assertThat(propias).extracting(p -> p.id()).doesNotContain(enElBordeDeArriba.id().value());
+    }
+
+    @Test
+    void deAutorEntreCuentaTambienLaOcultaYEsVacioSinPublicaciones() {
+        Instant desde = Instant.parse("2026-08-24T05:00:00Z");
+        Instant hasta = Instant.parse("2026-08-25T05:00:00Z");
+        assertThat(adapter.deAutorEntre(autorId, desde, hasta)).isEmpty();
+
+        Publicacion publicada = crearPublicacion(null, Instant.parse("2026-08-24T15:00:00Z"));
+        publicada.ocultar(Instant.parse("2026-08-24T16:00:00Z"));
+        adapter.save(publicada);
+
+        assertThat(adapter.deAutorEntre(autorId, desde, hasta)).extracting(p -> p.id())
+                .containsExactly(publicada.id().value());
+    }
+
     /** Otro usuario con fila propia en `usuarios` — la FK de `publicaciones_muro` la exige. */
     private UserId autorSuelto() {
         UserId otro = UserId.of(UUID.randomUUID());

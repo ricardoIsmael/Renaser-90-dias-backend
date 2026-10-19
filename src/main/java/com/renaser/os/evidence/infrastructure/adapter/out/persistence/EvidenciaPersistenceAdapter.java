@@ -1,7 +1,9 @@
 package com.renaser.os.evidence.infrastructure.adapter.out.persistence;
 
 import com.renaser.os.evidence.api.EntregaDeEvidencia;
+import com.renaser.os.evidence.api.EntregaDeEvidencia.ArchivoEntregado;
 import com.renaser.os.evidence.api.EstadoValidacion;
+import com.renaser.os.evidence.api.TipoEvidencia;
 import com.renaser.os.evidence.application.ports.out.evidencia.LoadEvidenciaPort;
 import com.renaser.os.evidence.application.ports.out.evidencia.SaveEvidenciaPort;
 import com.renaser.os.evidence.domain.model.evidencia.Evidencia;
@@ -14,6 +16,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -96,38 +99,34 @@ class EvidenciaPersistenceAdapter implements LoadEvidenciaPort, SaveEvidenciaPor
     /**
      * Reduce la lectura ordenada a una entrega por obligacion: se queda con la PRIMERA subida y,
      * si alguna de las filas de ese registro esta aprobada, propaga esa aprobacion. Reenviar tres
-     * veces el mismo archivo sigue siendo una entrega (plan.md §8).
+     * veces el mismo archivo sigue siendo una entrega (plan.md §8). Cada fila viaja ademas en
+     * {@code evidencias}, para que la ficha de seguimiento pueda abrirla (spec 005).
      */
     @Override
-    public Map<UUID, EntregaDeEvidencia> entregasDeRegistros(
-            Collection<UUID> registrosHabitoIds) {
+    public Map<UUID, EntregaDeEvidencia> entregasDeRegistros(Collection<UUID> registrosHabitoIds) {
         if (registrosHabitoIds.isEmpty()) {
             return Map.of();
         }
-        Map<UUID, EntregaDeEvidencia> porRegistro =
-                new LinkedHashMap<>();
+        Map<UUID, List<Object[]>> filasPorRegistro = new LinkedHashMap<>();
         for (Object[] fila : repository.entregasDeRegistros(registrosHabitoIds)) {
-            UUID registroId = (UUID) fila[0];
-            UUID evidenciaId = (UUID) fila[1];
-            Instant subidaEn = (Instant) fila[2];
-            EstadoValidacion estado = traducirEstadoValidacion(fila[3]);
-
-            EntregaDeEvidencia previa = porRegistro.get(registroId);
-            if (previa == null) {
-                porRegistro.put(registroId, new EntregaDeEvidencia(
-                        registroId, evidenciaId, subidaEn, estado, 1));
-                continue;
-            }
-            // La consulta viene ordenada por subidaEn, asi que `previa` ya es la mas temprana:
-            // solo se acumula el conteo y, si esta llego aprobada, se conserva esa aprobacion.
-            EstadoValidacion mejor =
-                    previa.verificada() || estado == EstadoValidacion.VALIDA
-                            ? EstadoValidacion.VALIDA
-                            : previa.estadoRevision();
-            porRegistro.put(registroId, new EntregaDeEvidencia(
-                    registroId, previa.evidenciaId(), previa.primeraEntregaEn(), mejor, previa.archivos() + 1));
+            filasPorRegistro.computeIfAbsent((UUID) fila[0], registro -> new ArrayList<>()).add(fila);
         }
+        Map<UUID, EntregaDeEvidencia> porRegistro = new LinkedHashMap<>();
+        filasPorRegistro.forEach((registroId, filas) -> porRegistro.put(registroId, entregaDe(registroId, filas)));
         return porRegistro;
+    }
+
+    /** La consulta viene ordenada por subidaEn, asi que la primera fila ya es la mas temprana. */
+    private static EntregaDeEvidencia entregaDe(UUID registroId, List<Object[]> filas) {
+        Object[] primera = filas.getFirst();
+        boolean aprobada = filas.stream().anyMatch(fila -> traducirEstadoValidacion(fila[3]) == EstadoValidacion.VALIDA);
+        EstadoValidacion estado = aprobada ? EstadoValidacion.VALIDA : traducirEstadoValidacion(primera[3]);
+        List<ArchivoEntregado> archivos = filas.stream()
+                .map(fila -> new ArchivoEntregado((UUID) fila[1], TipoEvidencia.valueOf(String.valueOf(fila[4])),
+                        (Instant) fila[2]))
+                .toList();
+        return new EntregaDeEvidencia(registroId, (UUID) primera[1], (Instant) primera[2], estado, filas.size(),
+                archivos);
     }
 
     private static EstadoValidacion traducirEstadoValidacion(Object valor) {

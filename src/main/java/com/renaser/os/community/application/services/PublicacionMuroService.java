@@ -437,6 +437,13 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
         return loadPublicacionPort.existeDeAutorEntre(autorId, desde, hasta);
     }
 
+    /** Sin {@code requireActorActivo}, por lo mismo que {@link #publicoEntre}: solo ids e instantes (E-628). */
+    @Override
+    @Transactional(readOnly = true)
+    public List<PublicacionDelAutor> delAutorEntre(UserId autorId, Instant desde, Instant hasta) {
+        return loadPublicacionPort.deAutorEntre(autorId, desde, hasta);
+    }
+
     /**
      * Sin {@code requireActorActivo}: a diferencia de {@link #ultimoAutor}, esto NO expone datos de
      * otra persona al cliente — devuelve una referencia de S3 que viaja de modulo a modulo y nunca

@@ -76,7 +76,7 @@ interface SpringDataEvidenciaRepository extends JpaRepository<EvidenciaJpaEntity
      * el SQL. Se resuelve contra {@code evidencias_registro_idx}.
      */
     @Query("""
-            SELECT e.registroHabitoId, e.id, e.subidaEn, e.estadoValidacion
+            SELECT e.registroHabitoId, e.id, e.subidaEn, e.estadoValidacion, e.tipo
             FROM EvidenciaJpaEntity e
             WHERE e.registroHabitoId IN :ids
             ORDER BY e.registroHabitoId, e.subidaEn ASC
