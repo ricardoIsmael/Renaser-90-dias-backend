@@ -191,8 +191,8 @@ un solo aviso con solo sus personas, y que un día sin consultas no genera aviso
 **Alcance y permisos**
 
 - **FR-001**: El sistema MUST permitir al líder de mentores consultar, de cualquier grupo con mentor, la lista de
-  sus personas y la ficha de cumplimiento de cada una. Administración y Alquimista MUST poder abrir de la misma
-  forma los grupos de su propio semáforo por grupos. El grupo de bienvenida (sin mentor) queda fuera.
+  sus personas y la ficha de cumplimiento de cada una. Administración y Alquimista ya lo hacen en Administración →
+  Semáforo → grupo → persona (desde el 2026-09-26). Ese recorrido no cambia y también pueden usar esta vista. El grupo de bienvenida (sin mentor) queda fuera.
 - **FR-002**: Las personas listadas MUST ser las del grupo con rol aprendiz y las que lleven su propio programa de
   90 días en él (mentor o guía de aprendiz). MUST quedar fuera las cuentas de prueba y las cuentas cerradas.
 - **FR-003**: El acceso nuevo del líder MUST ser solo de lectura sobre la persona: no edita hábitos, no registra
@@ -237,7 +237,7 @@ un solo aviso con solo sus personas, y que un día sin consultas no genera aviso
 **Registro y aviso al mentor**
 
 - **FR-016**: El sistema MUST registrar cada vez que el líder, Administración o Alquimista abre la ficha de una
-  persona desde esta vista: quién, con qué rol, a quién, de qué grupo y cuándo. El registro se guarda siempre: no
+  persona desde esta vista (no desde el recorrido de Administración, que no cambia): quién, con qué rol, a quién, de qué grupo y cuándo. El registro se guarda siempre: no
   se edita ni se borra.
 - **FR-017**: A las 20:00 de cada día, en la zona del mentor, el sistema MUST enviar a cada mentor un solo aviso
   con las personas de sus grupos cuya ficha abrió **el líder de mentores** ese día, sin repetir a nadie. Las
@@ -259,8 +259,9 @@ un solo aviso con solo sus personas, y que un día sin consultas no genera aviso
 
 - **Persona del grupo**: alguien que pertenece a un grupo y hace el programa (aprendiz, mentor o guía con
   programa propio). Lleva nombre, foto, color de la semana (o «no se mide») y % cumplido.
-- **Semana de cumplimiento**: los siete días (sábado a viernes) con los hábitos que la persona tenía cada día,
-  su estado y su evidencia. Es la misma que ya leen el mentor y el administrador.
+- **Semana de cumplimiento**: los siete días (sábado a viernes, como el semáforo) con los hábitos que la persona
+  tenía cada día, su estado y su evidencia. Cada día coincide con el que ven el mentor y el administrador; sus
+  fichas siguen mostrando la semana de lunes a domingo.
 - **Evidencia**: lo que respalda un cumplimiento: archivo (foto, audio, video), texto, respuestas guiadas, o la
   publicación del Muro.
 - **Consulta del líder**: quién consultó a quién, de qué grupo y cuándo. Alimenta el resumen diario.
@@ -273,7 +274,7 @@ un solo aviso con solo sus personas, y que un día sin consultas no genera aviso
 
 - **SC-001**: Desde Hoy, el líder llega a la semana de una persona concreta en tres toques o menos (semáforo
   por grupos → grupo → persona).
-- **SC-002**: Para la misma persona y la misma semana, el estado de cada hábito y cada evidencia que ve el líder
+- **SC-002**: Para la misma persona y el mismo día, el estado de cada hábito y cada evidencia que ve el líder
   coinciden al 100 % con lo que ve el administrador.
 - **SC-003**: El 100 % de los intentos de escritura del líder sobre una persona (completar, aprobar, editar,
   reasignar, cambiar rol) son rechazados por el servidor.
