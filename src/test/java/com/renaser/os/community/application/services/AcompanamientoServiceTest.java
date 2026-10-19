@@ -69,6 +69,9 @@ class AcompanamientoServiceTest {
     private final Map<UUID, Celula> celulas = new HashMap<>();
     private final Map<UserId, UserSummary> usuarios = new HashMap<>();
     private boolean mentorInscrito = false;
+    /** D-278: el rol y el estado con que responde el doble de participacion; por defecto, un mentor activo. */
+    private UserRole rolDelActor = UserRole.MENTOR;
+    private boolean actorSuspendido = false;
     /** D-243: las cuentas cerradas esperando su borrado, como las responderia users. */
     private final java.util.Set<UserId> cerradas = new java.util.HashSet<>();
 
@@ -154,7 +157,7 @@ class AcompanamientoServiceTest {
         public Optional<ParticipacionPrograma> deParticipante(UserId participanteId) {
             return Optional.of(new ParticipacionPrograma(participanteId, mentorInscrito,
                     mentorInscrito ? 12 : 0, null, ZoneId.of("America/Lima"), FasePrograma.PHASE_1_REBIRTH,
-                    null, null, UserRole.MENTOR, false, mentorInscrito));
+                    null, null, rolDelActor, actorSuspendido, mentorInscrito));
         }
 
         @Override
@@ -310,6 +313,34 @@ class AcompanamientoServiceTest {
 
         assertThat(capacidades.puedeActivarPrograma()).isFalse();
         assertThat(capacidades.programaObligatorio()).isFalse();
+    }
+
+    /**
+     * D-278: la capacidad de descargar el podio sale de la matriz ESTRICTA de {@code Permission.EXPORT_RANKING},
+     * no de un {@code can()} libre. MENTOR y TRAINEE_GUIDE son los roles cuya matriz general falla abierta (A-1): si
+     * alguien cambiara esta linea por {@code rol.can(...)} sin la excepcion de {@code UserRole}, el mentor veria
+     * el boton y esta prueba se pondria roja.
+     */
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0} puede descargar el podio: {1}")
+    @org.junit.jupiter.params.provider.CsvSource({"MENTOR_LEAD,true", "ADMIN,true", "ALCHEMIST,true",
+            "IT_SUPPORT,true", "MENTOR,false", "TRAINEE_GUIDE,false", "TRAINEE,false"})
+    void descargarElPodioSoloLoPuedenCuatroRoles(UserRole rol, boolean puede) {
+        escenarioBase();
+        rolDelActor = rol;
+
+        var capacidades = servicio().contexto(MENTOR).capacidades();
+
+        assertThat(capacidades.exportarRanking()).isEqualTo(puede);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0} suspendido no descarga el podio")
+    @org.junit.jupiter.params.provider.EnumSource(value = UserRole.class, names = {"MENTOR_LEAD", "ADMIN", "ALCHEMIST", "IT_SUPPORT"})
+    void suspendidoNoDescargaElPodio(UserRole rol) {
+        escenarioBase();
+        rolDelActor = rol;
+        actorSuspendido = true;
+
+        assertThat(servicio().contexto(MENTOR).capacidades().exportarRanking()).isFalse();
     }
 
     @Test

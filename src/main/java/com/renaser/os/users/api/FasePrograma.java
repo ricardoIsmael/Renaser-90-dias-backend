@@ -28,6 +28,20 @@ public enum FasePrograma {
     private static final int DIA_INICIO_FASE_3 = 35;
     private static final int DIA_INICIO_FASE_4 = 65;
 
+    /**
+     * El nombre de la fase tal como lo muestra la app ({@code FASES_EN_ORDEN} de {@code useResumenHome}): lo usa el
+     * mensaje del semaforo (D-277) para decir en que fase esta la persona sin que el frontend reescriba nada.
+     * Si la app cambia un nombre, hay que cambiarlo aca tambien.
+     */
+    public String nombreVisible() {
+        return switch (this) {
+            case PHASE_1_REBIRTH -> "El Espejo";
+            case PHASE_2_DEVELOPMENT -> "El Ciclo Alquímico";
+            case PHASE_3_ALCHEMIST_WARRIOR -> "El Maestro Interno";
+            case PHASE_4_ASCENSION -> "Sistema de Alto Rendimiento";
+        };
+    }
+
     /** Fase inicial de todo participante nuevo (default de la columna Postgres). */
     public static FasePrograma initial() {
         return PHASE_1_REBIRTH;

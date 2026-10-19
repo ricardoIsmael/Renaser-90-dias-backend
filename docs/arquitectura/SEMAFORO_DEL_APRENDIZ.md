@@ -110,11 +110,16 @@ el PROGRAMA manda en su chat de soporte («<nombre> – Formación Renaser») la
 línea «Hoy llevas 85 % de tus hábitos.». Es **del día**, no de la semana: no cambia nada del cierre del sábado
 ni del vigente.
 
+> **Actualizado 2026-10-19 (D-281, spec 006).** El texto ya no es solo el porcentaje: es **«Hoy llevas N % de tus
+> hábitos.», una línea en blanco y un mensaje personalizado** del mismo catálogo que el de Hoy (D-277). La imagen del
+> color sigue igual y **no se manda sticker**. Ver la fila «Mensaje» de la tabla de abajo.
+
 | Regla | Qué significa |
 |---|---|
 | **% y color** | El del día con la regla de §1, calculado en vivo a las 23:50 (`points.api.SemaforoDelDiaFinder`, que usa `CumplimientoDelDia` y `CalendarioDeMedicion`, los mismos objetos del barrido): hábitos + objetivos, redondeado a entero, y verde ≥ 80, amarillo ≥ 60, rojo por debajo. El color se pinta sobre el entero, así que el número del texto y la tarjeta nunca se contradicen (un 79,6 real es «80 %» y verde). Lo completado después de las 23:50 lo toma el barrido para el semáforo; la tarjeta ya salió. |
 | **Quién** | Solo `APRENDIZ` con la cuenta `ACTIVA`, con chat de soporte y con el día `MEDIDO`: no hay tarjeta el día sin nada programado, antes del Día 1, después del 90, en pausa o con la cuenta suspendida ese día (D-209). El staff con programa propio no recibe tarjeta. |
 | **Cuándo** | Un barrido cada 5 minutos; manda a quien está entre las 23:50 y las 23:59 de su zona. En Lima eso son dos corridas (23:50 y 23:55): la segunda es el reintento. **Pasada la medianoche, la de ese día ya no sale** (diría «Hoy llevas…» de un día que terminó). |
+| **Mensaje** | *(D-281)* Debajo del porcentaje, un mensaje del catálogo `mensajes_semaforo` (V110) del **grupo del color DEL DÍA de la tarjeta** (verde, amarillo o rojo), con las variables `{nombre}`, `{dia}`, `{fase}`, `{habitoFlojo}` y `{habitoFuerte}` (los hábitos, de la ventana vigente: la misma regla que en Hoy). **`{faltan}` no existe en el chat**: a las 23:50 el día ya casi cerró, así que los mensajes que lo piden no son candidatos. Es **distinto del que la persona vio en Hoy ese día**, y la regla de no repetir en 14 días cuenta los dos canales (`mensajes_semaforo_elegidos.canal` = `HOY` \| `CHAT`). Lo elige `points` (`points.api.MensajeDelChatFinder`) y se guarda por persona, fecha local, canal y grupo, así que el reintento de las 23:55 usa el mismo. **Si no hay mensaje o elegirlo falla, sale el texto de siempre** y se registra un `warn`: el chat nunca falla por el mensaje. |
 | **Una sola vez** | Sin tablas nuevas: cada mensaje tiene un id calculado de aprendiz + fecha (`UUID.nameUUIDFromBytes`) y se inserta con `ON CONFLICT (id) DO NOTHING`. El mensaje es su propia marca. |
 | **Imagen** | Tres JPEG en `src/main/resources/semaforo/tarjetas/` (diseño de Operaciones). El servidor sube cada uno UNA vez a `semaforo/tarjetas/<color>-v1.jpg` si no está, y todos los mensajes apuntan ahí. Con `STORAGE_PROVEEDOR=noop` o si S3 falla, sale solo el texto. |
 | **Aviso** | Push solo al aprendiz, y solo por el texto (la imagen no avisa). El Admin y el Alquimista del soporte no reciben un push por cada aprendiz cada noche (`MensajeDeChatGuardadoEvent.soloPara`). |
@@ -122,6 +127,7 @@ ni del vigente.
 
 Detalle de implementación: `chat.TarjetasDelSemaforoService` (el barrido), `chat.TarjetaEnSoporte` (una persona),
 `chat.TarjetasDelSemaforoPublicadas` (la imagen) y `chat.HoraDeLaTarjeta` (la ventana, en la zona de cada uno).
+El mensaje (D-281) lo pide `TarjetaEnSoporte` a `points.api.MensajeDelChatFinder`, solo cuando el texto va a salir.
 
 ---
 
@@ -342,6 +348,31 @@ solo rompe esa prueba.
 vigente, compactos: la tarjeta de Hoy dibuja sus barras con esto, **sin una segunda petición** (agregado el
 2026-09-25 a pedido del frontend: con dos lecturas, el número y las barras podían diferir justo en el borde del
 barrido). El detalle con gráficos llama a `/me/semaforo`.
+
+> **Agregado 2026-10-19 (D-277, spec 006).** `semaforo.mensaje`: el mensaje del día que acompaña a la tarjeta de Hoy,
+> con el sticker del búho. Campo **aditivo**: el APK publicado lo ignora y la app nueva contra un backend anterior no lo
+> recibe y dibuja la tarjeta de siempre.
+>
+> ```json
+> "semaforo": { "color": "AMARILLO", "etiqueta": "Requiere atención", "porcentaje": 71.4, "diasConDatos": 6,
+>               "pausado": false, "dias": [ ... ],
+>               "mensaje": { "id": "a011",
+>                            "texto": "María, faltan 2 para avanzar de color. Empieza por lo más sencillo y recupera movimiento.",
+>                            "sticker": "azul-reloj" } }
+> ```
+>
+> - `mensaje` es `null` (o no viene) si no hay ningún mensaje posible para la persona o si elegirlo falló: `/home`
+>   nunca se rompe por esto. Solo viaja dentro de `semaforo`; quien no se mide sigue con `semaforo: null`.
+> - `texto` ya viene escrito: sin llaves, en tuteo, hasta 300 caracteres. La app no lo transforma.
+> - `sticker` es uno de los 15 nombres que lleva la app (`dorado-orgulloso`, `azul-firme`…). Un nombre desconocido se
+>   muestra solo con el texto.
+> - `id` es estable durante el día mientras no cambie el grupo; al día siguiente cambia y no repite los de los últimos
+>   14 días.
+> - El mensaje sale del color de la **ventana vigente** (el mismo de la tarjeta, nunca otro) o, cuando el día no tiene
+>   color, del caso: INICIO, SIN_PROGRAMA, PAUSA, CUENTA_PAUSADA o GRADUADO. Una persona que terminó los 90 días sigue
+>   recibiendo `semaforo` (no se fabrica uno): el programa termina cuando `hoy` es posterior al día 90.
+> - **El aviso del sábado y el detalle (`/me/semaforo`) no cambian**, ni las vistas del mentor, del líder y de
+>   administración (FR-009). El catálogo (`mensajes_semaforo`, V110) se corrige con SQL sin publicar nada.
 
 ### 4.3 Tabla de un grupo — mentor y admin
 

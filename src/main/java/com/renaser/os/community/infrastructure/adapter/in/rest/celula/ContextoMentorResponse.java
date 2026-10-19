@@ -20,7 +20,7 @@ public record ContextoMentorResponse(PersonalProgram personalProgram, boolean ca
                 contexto.puedeAcompanar(),
                 new Capabilities(contexto.capacidades().programaObligatorio(),
                         contexto.capacidades().puedeActivarPrograma(), contexto.capacidades().acompanar(),
-                        contexto.capacidades().administrar()),
+                        contexto.capacidades().administrar(), contexto.capacidades().exportarRanking()),
                 contexto.asignaciones().stream().map(Assignment::from).toList());
     }
 
@@ -31,9 +31,12 @@ public record ContextoMentorResponse(PersonalProgram personalProgram, boolean ca
      *                        una capacidad de INTERFAZ derivada de los guards reales, no un
      *                        permiso nuevo ni la matriz de {@code UserRole.can}. Quien autoriza
      *                        sigue siendo cada endpoint.
+     * @param canExportRanking si la app muestra «Descargar» en Comunidad &gt; Ranking (D-278, spec 006). Campo
+     *                        aditivo: un APK anterior lo ignora, y la app nueva contra un backend anterior lo lee
+     *                        como ausente (sin boton). Solo MENTOR_LEAD, ADMIN, ALCHEMIST e IT_SUPPORT activos.
      */
     public record Capabilities(boolean programRequired, boolean canStartProgram, boolean canAccompany,
-                                boolean canAdminister) {
+                                boolean canAdminister, boolean canExportRanking) {
     }
 
     /** {@code day} es null cuando no participa: no se manda 0, que significaría otra cosa. */

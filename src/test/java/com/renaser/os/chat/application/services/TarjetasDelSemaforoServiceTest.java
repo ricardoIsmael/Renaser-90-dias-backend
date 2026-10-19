@@ -16,6 +16,7 @@ import com.renaser.os.chat.domain.model.semaforo.ColorDeTarjeta;
 import com.renaser.os.points.api.ColorSemaforo;
 import com.renaser.os.points.api.DiaDelSemaforo;
 import com.renaser.os.points.api.EstadoDiaSemaforo;
+import com.renaser.os.points.api.MensajeDelChatFinder;
 import com.renaser.os.points.api.SemaforoDelDiaFinder;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.FixedClock;
@@ -75,6 +76,18 @@ class TarjetasDelSemaforoServiceTest {
     private final List<LocalDate> fechasPedidas = new ArrayList<>();
     private final List<EntregaDelPrograma> entregas = new ArrayList<>();
     private final Set<UserId> fallan = new HashSet<>();
+    /** El mensaje personalizado de cada aprendiz (D-281); sin entrada = el catálogo no tiene uno para él. */
+    private final Map<UserId, String> mensajesDelChat = new HashMap<>();
+    private final List<String> pedidosDelMensaje = new ArrayList<>();
+    private final Set<UserId> fallaElMensaje = new HashSet<>();
+
+    private final MensajeDelChatFinder mensajeDelChat = (aprendiz, fecha, color) -> {
+        pedidosDelMensaje.add(aprendiz + "|" + fecha + "|" + color);
+        if (fallaElMensaje.contains(aprendiz)) {
+            throw new IllegalStateException("el catálogo no responde");
+        }
+        return Optional.ofNullable(mensajesDelChat.get(aprendiz));
+    };
 
     private final SemaforoDelDiaFinder semaforo = (ids, fecha) -> {
         fechasPedidas.add(fecha);
@@ -102,7 +115,7 @@ class TarjetasDelSemaforoServiceTest {
     private TarjetasDelSemaforoService servicio(Instant ahora) {
         TarjetasDelSemaforoPublicadas publicadas = new TarjetasDelSemaforoPublicadas(almacenamiento,
                 color -> ("jpeg-" + color).getBytes());
-        TarjetaEnSoporte enSoporte = new TarjetaEnSoporte(conversaciones, mensajes, publicadas, delPrograma);
+        TarjetaEnSoporte enSoporte = new TarjetaEnSoporte(conversaciones, mensajes, publicadas, delPrograma, mensajeDelChat);
         return new TarjetasDelSemaforoService(programas, usuarios, semaforo, enSoporte, FixedClock.at(ahora));
     }
 
@@ -271,6 +284,88 @@ class TarjetasDelSemaforoServiceTest {
 
         assertThat(servicio(LAS_2350_DEL_28_EN_LIMA).enviarLasQueTocan()).isEqualTo(new ResultadoDeTarjetas(1, 0, 0));
         assertThat(entregas).isEmpty();
+    }
+
+    // ── el mensaje personalizado (D-281) ───────────────────────────────────
+
+    @Test
+    @DisplayName("D-281: con mensaje, el texto es «Hoy llevas N %…», una línea en blanco y el mensaje; la imagen sale igual")
+    void textoConMensajePersonalizado() {
+        almacenamiento.guarda = true;
+        UserId ana = persona(UserRole.TRAINEE, UserStatus.ACTIVE, medido(85, ColorSemaforo.VERDE));
+        mensajesDelChat.put(ana, "Ana, tu constancia está dando frutos.");
+
+        servicio(LAS_2350_DEL_28_EN_LIMA).enviarLasQueTocan();
+
+        EntregaDelPrograma entrega = entregas.getFirst();
+        TarjetaDelSemaforo esperada = new TarjetaDelSemaforo(ana, DIA_28, ColorDeTarjeta.VERDE, 85);
+        assertThat(entrega.piezas()).extracting(PiezaDelPrograma::id)
+                .as("el id del texto no cambia: la idempotencia sigue siendo aprendiz + fecha")
+                .containsExactly(esperada.idDeLaImagen(), esperada.idDelTexto());
+        assertThat(entrega.piezas().get(0).contenido().mediaRuta()).isEqualTo("semaforo/tarjetas/verde-v1.jpg");
+        assertThat(entrega.piezas().get(1).contenido().texto())
+                .isEqualTo("Hoy llevas 85 % de tus hábitos.\n\nAna, tu constancia está dando frutos.");
+        assertThat(entrega.piezas().get(1).aviso()).isEqualTo(AvisoDeLaPieza.SOLO_A_QUIEN_SE_REFIERE);
+    }
+
+    @Test
+    @DisplayName("D-281: el mensaje se pide con la fecha LOCAL de la tarjeta (el 28 de Lima, no el 29 del servidor) y el color del día")
+    void pideElMensajeConLaFechaYElColorDeLaTarjeta() {
+        UserId ana = persona(UserRole.TRAINEE, UserStatus.ACTIVE, medido(65, ColorSemaforo.AMARILLO));
+
+        servicio(LAS_2350_DEL_28_EN_LIMA).enviarLasQueTocan();
+
+        assertThat(pedidosDelMensaje).containsExactly(ana + "|2026-09-28|AMARILLO");
+    }
+
+    @Test
+    @DisplayName("D-281: sin mensaje en el catálogo el texto es el de siempre")
+    void sinMensajeElTextoDeSiempre() {
+        persona(UserRole.TRAINEE, UserStatus.ACTIVE, medido(65, ColorSemaforo.AMARILLO));
+
+        servicio(LAS_2350_DEL_28_EN_LIMA).enviarLasQueTocan();
+
+        assertThat(entregas.getFirst().piezas()).singleElement()
+                .satisfies(p -> assertThat(p.contenido().texto()).isEqualTo("Hoy llevas 65 % de tus hábitos."));
+    }
+
+    @Test
+    @DisplayName("D-281: si elegir el mensaje falla, la tarjeta sale igual con el texto de siempre: el chat nunca falla por el mensaje")
+    void siElMensajeFallaSaleElTextoDeSiempre() {
+        UserId ana = persona(UserRole.TRAINEE, UserStatus.ACTIVE, medido(85, ColorSemaforo.VERDE));
+        fallaElMensaje.add(ana);
+
+        ResultadoDeTarjetas resultado = servicio(LAS_2350_DEL_28_EN_LIMA).enviarLasQueTocan();
+
+        assertThat(resultado).isEqualTo(new ResultadoDeTarjetas(1, 1, 0));
+        assertThat(entregas.getFirst().piezas()).singleElement()
+                .satisfies(p -> assertThat(p.contenido().texto()).isEqualTo("Hoy llevas 85 % de tus hábitos."));
+    }
+
+    @Test
+    @DisplayName("D-281: si el texto del día ya salió no se pide ni se guarda otro mensaje (el reintento de las 23:55)")
+    void siYaSalioNoSePideElMensaje() {
+        UserId ana = persona(UserRole.TRAINEE, UserStatus.ACTIVE, medido(85, ColorSemaforo.VERDE));
+        mensajesDelChat.put(ana, "Ana, sigue así.");
+        MensajeId textoDeAna = new TarjetaDelSemaforo(ana, DIA_28, ColorDeTarjeta.VERDE, 85).idDelTexto();
+        when(mensajes.porId(textoDeAna)).thenReturn(Optional.of(mock(Mensaje.class)));
+
+        ResultadoDeTarjetas resultado = servicio(LAS_2350_DEL_28_EN_LIMA).enviarLasQueTocan();
+
+        assertThat(resultado).isEqualTo(new ResultadoDeTarjetas(1, 0, 0));
+        assertThat(pedidosDelMensaje).as("elegir y guardar un mensaje es trabajo inútil si no se va a mandar").isEmpty();
+        assertThat(entregas).isEmpty();
+    }
+
+    @Test
+    @DisplayName("D-281: sin chat de soporte tampoco se pide el mensaje")
+    void sinSoporteNoSePideElMensaje() {
+        persona(UserRole.TRAINEE, UserStatus.ACTIVE, medido(85, ColorSemaforo.VERDE));
+        org.mockito.Mockito.doReturn(Optional.empty()).when(conversaciones).porClaveDirecta(anyString());
+
+        servicio(LAS_2350_DEL_28_EN_LIMA).enviarLasQueTocan();
+
+        assertThat(pedidosDelMensaje).isEmpty();
     }
 
     /** Almacenamiento con objetos de verdad (o de marcador, con {@code guarda = false}). */

@@ -98,7 +98,8 @@ public class ConsultaDelSemaforoService implements SemaforoFinder, ConsultarMiSe
                 .map(medicion -> {
                     VentanaDelSemaforo vigente = medicion.vigente();
                     return new ResumenParaHoy(vigente.color(), vigente.porcentaje(), vigente.diasConDatos(),
-                            pausaEnCurso(medicion) != null, vigente.dias());
+                            pausaEnCurso(medicion) != null, vigente.dias(), medicion.programaTerminado(),
+                            medicion.seMideHoy());
                 });
     }
 

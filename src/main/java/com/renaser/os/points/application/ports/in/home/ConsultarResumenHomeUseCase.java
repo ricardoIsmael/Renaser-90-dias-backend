@@ -2,6 +2,7 @@ package com.renaser.os.points.application.ports.in.home;
 
 import com.renaser.os.points.api.ColorSemaforo;
 import com.renaser.os.points.api.DiaDelSemaforo;
+import com.renaser.os.points.application.ports.in.semaforo.ConsultarMensajeDelSemaforoUseCase.MensajeDelDia;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FasePrograma;
 
@@ -77,9 +78,18 @@ public interface ConsultarResumenHomeUseCase {
         /**
          * El semáforo de cumplimiento vigente (D-168), para la tarjeta de Hoy. {@code null} si la
          * persona no se mide. {@code porcentaje} null = sin datos en la ventana (nunca verde).
+         *
+         * @param mensaje el mensaje del día con su sticker (D-277, spec 006); {@code null} si no hay ninguno posible
+         *                o si elegirlo falló: la tarjeta se ve entonces como antes
          */
         public record SemaforoHoyResumen(ColorSemaforo color, BigDecimal porcentaje, int diasConDatos,
-                                         boolean pausado, List<DiaDelSemaforo> dias) {
+                                         boolean pausado, List<DiaDelSemaforo> dias, MensajeDelDia mensaje) {
+
+            /** Sin mensaje: la tarjeta de siempre. */
+            public SemaforoHoyResumen(ColorSemaforo color, BigDecimal porcentaje, int diasConDatos,
+                                      boolean pausado, List<DiaDelSemaforo> dias) {
+                this(color, porcentaje, diasConDatos, pausado, dias, null);
+            }
         }
     }
 }

@@ -50,9 +50,14 @@ public interface ConsultarContextoAcompanamientoUseCase {
      *                            <b>Decide que se MUESTRA, nunca que se puede hacer:</b> cada
      *                            endpoint vuelve a autorizar, asi que un cliente que lo falsee ve
      *                            pantallas vacias, no datos de nadie.
+     * @param exportarRanking     si la app muestra «Descargar» en el Ranking (D-278, spec 006). Sale de la matriz
+     *                            ESTRICTA de {@code Permission.EXPORT_RANKING} (MENTOR_LEAD, ADMIN, ALCHEMIST e
+     *                            IT_SUPPORT) y no de un {@code can()} libre: para MENTOR y TRAINEE_GUIDE esa matriz
+     *                            falla abierta con el resto de los permisos. Decide que se MUESTRA; la imagen se arma
+     *                            en el telefono con el ranking que todos ya leen.
      */
     record Capacidades(boolean programaObligatorio, boolean puedeActivarPrograma, boolean acompanar,
-                        boolean administrar) {
+                        boolean administrar, boolean exportarRanking) {
     }
 
     /**

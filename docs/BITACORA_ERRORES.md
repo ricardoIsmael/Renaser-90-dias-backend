@@ -15476,3 +15476,23 @@ datos: mismos días, mismo % y mismo color, con la vigente, con un viernes, en l
 viejo), `VentanaDeLaFichaTest`, `GrupoDelLiderServiceTest`, `SemanaDePersonaServiceTest`, `CumplimientoDelLiderControllerTest` y, en la app,
 `lecturaDelLider.test.ts`, `delGrupoALaPersona.test.ts` y `semanasDelSemaforo.test.ts`. **Regla general:** dos pantallas que se abren una
 desde la otra hablan de los mismos días; si el «por defecto» de cada una es distinto, el usuario ve dos números para lo mismo.
+
+## E-630 · El plan de la spec 006 ponía `CumplimientoPorHabitoFinder` en `habits/api`: points no puede importar habits (plan, RESUELTO, 19/10)
+
+**Síntoma literal (antes de escribir código).** El plan y la tarea T013 decían «`CumplimientoPorHabitoFinder` en `backend:…/habits/api/`» y que `points` lo consumiría para elegir el hábito más flojo y el más fuerte del mensaje del semáforo. `grep -rn "import com.renaser.os.habits" points` no da nada, y `habits` importa `points.api` en ocho servicios (otorga puntos, racha, kilómetros): un `import habits.api.*` desde `points` cierra un ciclo `points ↔ habits` que `ApplicationModules.verify()` rechaza.
+
+**Causa.** El plan copió el patrón «el finder vive en el módulo que lo implementa» sin mirar la dirección de la dependencia. Para `habits` el repo ya tenía la regla contraria (DIP): lo que `points` necesita de `habits` se declara en `points.api` y lo implementa `habits` (`ConteoDiarioHabitosFinder`, `PorcentajeHabitosFinder`, `HabitosDelDiaFinder`).
+
+**Solución.** `points.api.CumplimientoPorHabitoFinder` + `points.api.CumplimientoDeHabito`; lo implementa `habits.application.services.CumplimientoPorHabitoFinderService` sobre `ContarCumplimientoPorHabitoPort` (JDBC, una consulta por persona). La regla de «el hábito contaba» no se copió: `ConteoDiarioHabitos.calificables(total, opcionalesNoCompletados)` pasó a ser estática y la usan el conteo diario y el nuevo.
+
+**Prevención.** Antes de poner un finder en `<modulo>/api/`, mirar quién importa a quién (`grep -rn "import com.renaser.os.<A>" <B>`). `ArchitectureTest` ya rompe el build si se cuela el ciclo. Nota en el plan de la spec 006 y en D-277.
+
+## E-631 · La spec 006 daba por hecho que `/home` podía mandar `semaforo: null` a quien terminó los 90 días y que `programa_completado` marca «después del día 90» (plan, RESUELTO, 19/10)
+
+**Síntoma literal (antes de escribir código).** research R3 y T029: «Programa completado (`programaCompletado`, día > 90) → GRADUADO» y «si `/home` manda `semaforo: null` después del día 90, el servidor manda igual un `semaforo` SIN_DATOS». Ninguna de las dos premisas se cumple.
+
+**Causa.** (1) `ParticipacionPrograma.graduarSiLlegoAlDiaNoventa` marca `programa_completado` **al llegar** al día 90 («se gradúa al llegar al día 90, sin condiciones»), cuando ese día todavía se mide; y `dia_programa` queda acotado en 90, así que no distingue el 90 del 91. (2) `ProgramasActivadosService.deVarios` solo filtra por programa activado, no por completado: `ConsultaDelSemaforoService.resumenParaHoy` devuelve la ventana de siempre y `/home` sigue mandando `semaforo` (con SIN_DATOS cuando pasan siete días de FUERA_DEL_PROGRAMA).
+
+**Solución.** «Terminó el programa» = `hoy local > ultimaFecha` del calendario del semáforo (`CalendarioDeMedicion.terminadoEl`, expuesto en `ResumenParaHoy.programaTerminado`): el 90 sigue siendo del programa y el 91 ya no, con el ajuste de día incluido. No se fabrica un semáforo SIN_DATOS: la tarjeta de quien terminó ya existe. Pruebas: `MedicionDeLaPersonaTest.elProgramaTerminaDespuesDelDiaNoventa`, `GrupoDelDiaTest`, `HomeMensajeDelSemaforoIT.despuesDelDiaNoventa` / `elDiaNoventaSigueEnElPrograma`.
+
+**Prevención.** Una bandera que el reloj marca «al llegar» no sirve para decir «después de». Para preguntas de calendario, derivar de las fechas (`.claude/rules/02` §2), no de columnas materializadas.

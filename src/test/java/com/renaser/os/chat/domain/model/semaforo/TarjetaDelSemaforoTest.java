@@ -23,6 +23,33 @@ class TarjetaDelSemaforoTest {
     }
 
     @Test
+    @DisplayName("D-281: con un mensaje personalizado, el texto es el porcentaje de siempre, una línea en blanco y el mensaje")
+    void textoConMensaje() {
+        TarjetaDelSemaforo tarjeta = new TarjetaDelSemaforo(ANA, DIA, ColorDeTarjeta.VERDE, 85);
+
+        assertThat(tarjeta.textoCon("Ana, tu constancia está dando frutos."))
+                .isEqualTo("Hoy llevas 85 % de tus hábitos.\n\nAna, tu constancia está dando frutos.");
+    }
+
+    @Test
+    @DisplayName("D-281: sin mensaje (nulo o en blanco) el texto es el de siempre: la tarjeta nunca sale incompleta")
+    void textoSinMensajeEsElDeSiempre() {
+        TarjetaDelSemaforo tarjeta = new TarjetaDelSemaforo(ANA, DIA, ColorDeTarjeta.ROJO, 40);
+
+        assertThat(tarjeta.textoCon(null)).isEqualTo(tarjeta.texto());
+        assertThat(tarjeta.textoCon("  \n ")).isEqualTo("Hoy llevas 40 % de tus hábitos.");
+    }
+
+    @Test
+    @DisplayName("D-281: el id del texto no cambia con el mensaje: la idempotencia sigue siendo aprendiz + fecha")
+    void elIdDelTextoNoDependeDelMensaje() {
+        TarjetaDelSemaforo tarjeta = new TarjetaDelSemaforo(ANA, DIA, ColorDeTarjeta.VERDE, 85);
+
+        assertThat(tarjeta.idDelTexto()).isEqualTo(new TarjetaDelSemaforo(ANA, DIA, ColorDeTarjeta.VERDE, 85).idDelTexto());
+        assertThat(tarjeta.textoCon("Un mensaje.")).isNotEqualTo(tarjeta.texto());
+    }
+
+    @Test
     @DisplayName("D-223: los ids se calculan de aprendiz + fecha: iguales en cada corrida, distintos por pieza, día y persona")
     void idsDeterministas() {
         TarjetaDelSemaforo tarjeta = new TarjetaDelSemaforo(ANA, DIA, ColorDeTarjeta.VERDE, 85);

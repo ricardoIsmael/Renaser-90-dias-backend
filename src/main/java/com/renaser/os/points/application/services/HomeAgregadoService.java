@@ -9,10 +9,16 @@ import com.renaser.os.points.api.RocaDelDiaResumen;
 import com.renaser.os.points.api.PorcentajeRocasFinder;
 import com.renaser.os.points.api.RocasDelDiaFinder;
 import com.renaser.os.points.application.ports.in.home.ConsultarResumenHomeUseCase;
+import com.renaser.os.points.application.ports.in.semaforo.ConsultarMensajeDelSemaforoUseCase;
+import com.renaser.os.points.application.ports.in.semaforo.ConsultarMensajeDelSemaforoUseCase.ConsultaDelMensaje;
+import com.renaser.os.points.application.ports.in.semaforo.ConsultarMensajeDelSemaforoUseCase.MensajeDelDia;
 import com.renaser.os.points.application.ports.in.semaforo.ConsultarMiSemaforoUseCase;
+import com.renaser.os.points.application.ports.in.semaforo.ConsultarMiSemaforoUseCase.ResumenParaHoy;
 import com.renaser.os.points.application.ports.in.puntaje.ConsultarPuntajeUseCase;
 import com.renaser.os.points.domain.model.puntaje.PuntajeParticipante;
 import com.renaser.os.points.domain.model.puntaje.Racha;
+import com.renaser.os.points.domain.model.semaforo.CumplimientoDelDia;
+import com.renaser.os.points.domain.model.semaforo.mensaje.CumplimientoDeHoy;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -37,7 +43,7 @@ import java.util.NoSuchElementException;
  *
  * <p><b>Fallas parciales, decision por finder</b> (ver javadoc de {@link ConsultarResumenHomeUseCase}):
  * <ul>
- *   <li>{@link #habitosHoyDe}: {@code HabitosDelDiaFinder.deHoy} reusa puertas adentro
+ *   <li>{@link #habitosDeHoy}: {@code HabitosDelDiaFinder.deHoy} reusa puertas adentro
  *       {@code ConsultarTracksDelDiaUseCase}, que exige {@code ProgresoParticipanteHabits} —
  *       un actor sin fila ahi (ADMIN/MENTOR mirando su propio Inicio, o un TRAINEE cuyo
  *       progreso de habitos todavia no se genero) hace que el finder lance
@@ -85,6 +91,7 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
     private final NotificacionesNoLeidasFinder notificacionesNoLeidasFinder;
     private final PorcentajeRocasFinder porcentajeRocasFinder;
     private final ConsultarMiSemaforoUseCase consultarMiSemaforo;
+    private final ConsultarMensajeDelSemaforoUseCase consultarMensajeDelSemaforo;
     private final Clock clock;
 
     public HomeAgregadoService(ConsultarPuntajeUseCase consultarPuntajeUseCase,
@@ -96,6 +103,7 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
                                 NotificacionesNoLeidasFinder notificacionesNoLeidasFinder,
                                 PorcentajeRocasFinder porcentajeRocasFinder,
                                 ConsultarMiSemaforoUseCase consultarMiSemaforo,
+                                ConsultarMensajeDelSemaforoUseCase consultarMensajeDelSemaforo,
                                 Clock clock) {
         this.consultarPuntajeUseCase = consultarPuntajeUseCase;
         this.participacionProgramaFinder = participacionProgramaFinder;
@@ -106,6 +114,7 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
         this.notificacionesNoLeidasFinder = notificacionesNoLeidasFinder;
         this.porcentajeRocasFinder = porcentajeRocasFinder;
         this.consultarMiSemaforo = consultarMiSemaforo;
+        this.consultarMensajeDelSemaforo = consultarMensajeDelSemaforo;
         this.clock = clock;
     }
 
@@ -115,25 +124,47 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
         ParticipacionPrograma participacion = requireParticipacion(actorId);
 
         Racha racha = rachaDe(actorId, participacion);
+        LocalDate hoy = LocalDate.ofInstant(clock.now(), participacion.zona());
+        List<HabitoDelDiaResumen> habitos = habitosDeHoy(actorId, hoy);
+        List<RocaDelDiaResumen> rocas = rocasDelDiaFinder.deHoy(actorId);
 
         return new ResumenHome(puntaje.puntosLiga(), coherenciaDe(actorId, participacion.zona()), racha.actual(),
                 racha.maxima(), participacion.diaPrograma(), participacion.inscrito(),
-                participacion.fase(), habitosHoyDe(actorId, participacion.zona()), rocasHoyDe(actorId),
-                proximoEventoDe(actorId), notificacionesNoLeidasDe(actorId), BLOQUEOS, semaforoDe(actorId));
+                participacion.fase(), habitosHoyDe(habitos), rocasHoyDe(rocas),
+                proximoEventoDe(actorId), notificacionesNoLeidasDe(actorId), BLOQUEOS,
+                semaforoDe(actorId, participacion, CumplimientoDeHoy.de(hoy, habitos, rocas)));
     }
 
     /**
      * La tarjeta del semáforo (D-168): lee lo que el barrido ya guardó, no calcula nada. {@code null}
-     * si la persona no se mide; misma falla parcial que los otros widgets.
+     * si la persona no se mide; misma falla parcial que los otros widgets. Lleva el mensaje del día
+     * (D-277) cuando hay uno.
      */
-    private ResumenHome.SemaforoHoyResumen semaforoDe(UserId actorId) {
+    private ResumenHome.SemaforoHoyResumen semaforoDe(UserId actorId, ParticipacionPrograma participacion,
+                                                      CumplimientoDelDia deHoy) {
         try {
             return consultarMiSemaforo.resumenParaHoy(actorId)
                     .map(r -> new ResumenHome.SemaforoHoyResumen(r.color(), r.porcentaje(), r.diasConDatos(),
-                            r.pausado(), r.dias()))
+                            r.pausado(), r.dias(), mensajeDe(participacion, r, deHoy)))
                     .orElse(null);
         } catch (NoSuchElementException | NotAuthorizedException e) {
             logWidgetDegradado("semaforo", e);
+            return null;
+        }
+    }
+
+    /**
+     * El mensaje que acompaña al semáforo (D-277). Es un adorno de la tarjeta: si elegirlo falla por lo que sea
+     * (la base, un texto del catálogo mal escrito), se registra y la tarjeta sale sin él, nunca rompe {@code /home}.
+     */
+    private MensajeDelDia mensajeDe(ParticipacionPrograma participacion, ResumenParaHoy semaforo,
+                                    CumplimientoDelDia deHoy) {
+        try {
+            return consultarMensajeDelSemaforo.deHoy(new ConsultaDelMensaje(participacion, semaforo, deHoy))
+                    .orElse(null);
+        } catch (RuntimeException e) {
+            log.warn("[points.HomeAgregadoService] el mensaje del semaforo no se pudo armar, la tarjeta sale sin el. causa={}",
+                    e.toString());
             return null;
         }
     }
@@ -172,20 +203,25 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
         return rachaMostrada.de(actorId, participacion, clock.now());
     }
 
-    private ResumenHome.HabitosHoyResumen habitosHoyDe(UserId actorId, ZoneId zonaDelParticipante) {
+    /** Los tracks de hoy, o {@code null} si esa tarjeta no aplica a este actor (ver la falla parcial de arriba). */
+    private List<HabitoDelDiaResumen> habitosDeHoy(UserId actorId, LocalDate hoy) {
         try {
-            LocalDate hoy = LocalDate.ofInstant(clock.now(), zonaDelParticipante);
-            List<HabitoDelDiaResumen> tracks = habitosDelDiaFinder.deHoy(actorId, hoy);
-            long completados = tracks.stream().filter(t -> "COMPLETADO".equals(t.estado())).count();
-            return new ResumenHome.HabitosHoyResumen((int) completados, tracks.size());
+            return habitosDelDiaFinder.deHoy(actorId, hoy);
         } catch (NoSuchElementException | NotAuthorizedException e) {
             logWidgetDegradado("habitosHoy", e);
             return null;
         }
     }
 
-    private ResumenHome.RocasHoyResumen rocasHoyDe(UserId actorId) {
-        List<RocaDelDiaResumen> rocas = rocasDelDiaFinder.deHoy(actorId);
+    private ResumenHome.HabitosHoyResumen habitosHoyDe(List<HabitoDelDiaResumen> tracks) {
+        if (tracks == null) {
+            return null;
+        }
+        long completados = tracks.stream().filter(t -> "COMPLETADO".equals(t.estado())).count();
+        return new ResumenHome.HabitosHoyResumen((int) completados, tracks.size());
+    }
+
+    private ResumenHome.RocasHoyResumen rocasHoyDe(List<RocaDelDiaResumen> rocas) {
         long completadas = rocas.stream().filter(RocaDelDiaResumen::completada).count();
         return new ResumenHome.RocasHoyResumen((int) completadas, rocas.size());
     }

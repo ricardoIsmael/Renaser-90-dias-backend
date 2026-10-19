@@ -6,6 +6,8 @@ import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDia
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
+import com.renaser.os.habits.domain.model.registro.ConteoDiarioHabitos;
+import com.renaser.os.habits.domain.model.registro.EstadoRegistro;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
@@ -44,9 +46,12 @@ class HabitosDelDiaFinderService implements HabitosDelDiaFinder {
         Map<HabitoId, String> tituloPorHabito = loadHabitoPort.porIds(habitoIds).stream()
                 .collect(Collectors.toMap(Habito::id, Habito::titulo));
 
-        return registros.stream()
-                .map(registro -> new HabitoDelDiaResumen(registro.id().value(),
-                        tituloPorHabito.get(registro.habitoId()), registro.estado().name()))
-                .toList();
+        return registros.stream().map(registro -> resumen(registro, tituloPorHabito)).toList();
+    }
+
+    private static HabitoDelDiaResumen resumen(RegistroHabito registro, Map<HabitoId, String> tituloPorHabito) {
+        boolean completado = registro.estado() == EstadoRegistro.COMPLETADO;
+        return new HabitoDelDiaResumen(registro.id().value(), tituloPorHabito.get(registro.habitoId()),
+                registro.estado().name(), ConteoDiarioHabitos.contaba(registro.esOpcional(), completado));
     }
 }

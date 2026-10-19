@@ -3,6 +3,7 @@ package com.renaser.os.points.infrastructure.adapter.in.rest.home;
 import com.renaser.os.points.api.ColorSemaforo;
 import com.renaser.os.points.api.DiaDelSemaforo;
 import com.renaser.os.points.application.ports.in.home.ConsultarResumenHomeUseCase.ResumenHome;
+import com.renaser.os.points.application.ports.in.semaforo.ConsultarMensajeDelSemaforoUseCase.MensajeDelDia;
 import com.renaser.os.users.api.FasePrograma;
 
 import java.math.BigDecimal;
@@ -37,12 +38,25 @@ public record ResumenHomeResponse(int puntosLiga, BigDecimal coherencia, int rac
      * (RL-30). {@code null} si la persona no se mide.
      */
     public record SemaforoResponse(ColorSemaforo color, String etiqueta, BigDecimal porcentaje, int diasConDatos,
-                                   boolean pausado, List<DiaCompactoResponse> dias) {
+                                   boolean pausado, List<DiaCompactoResponse> dias, MensajeResponse mensaje) {
 
         static SemaforoResponse from(ResumenHome.SemaforoHoyResumen resumen) {
             return resumen == null ? null : new SemaforoResponse(resumen.color(), resumen.color().etiqueta(),
                     resumen.porcentaje(), resumen.diasConDatos(), resumen.pausado(),
-                    resumen.dias().stream().map(DiaCompactoResponse::from).toList());
+                    resumen.dias().stream().map(DiaCompactoResponse::from).toList(),
+                    MensajeResponse.from(resumen.mensaje()));
+        }
+    }
+
+    /**
+     * El mensaje del día que acompaña al semáforo (D-277, spec 006). Campo aditivo: la app instalada lo ignora.
+     * {@code texto} ya viene escrito, sin llaves; {@code sticker} es el nombre de uno de los 15 stickers del búho
+     * que lleva la app.
+     */
+    public record MensajeResponse(String id, String texto, String sticker) {
+
+        static MensajeResponse from(MensajeDelDia mensaje) {
+            return mensaje == null ? null : new MensajeResponse(mensaje.id(), mensaje.texto(), mensaje.sticker());
         }
     }
 
