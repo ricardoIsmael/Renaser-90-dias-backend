@@ -366,11 +366,11 @@ class EvidenciaPersistenceAdapterTest {
     void evidenciasPrincipalesDeRocas() {
         Evidencia primeraSinPrincipal = adapter.save(evidenciaRocaTextoEn(Instant.parse("2026-08-25T09:00:00Z"), false));
         Evidencia principal = adapter.save(evidenciaRocaTextoEn(Instant.parse("2026-08-25T09:30:00Z"), true));
-        UUID otraRoca = seedRocaDiaria();
+        UUID otraRoca = seedRocaDiaria(2);
         Evidencia deOtra = adapter.save(Evidencia.registrar(nuevoId(), participanteId,
                 new DestinoEvidencia.RocaDiaria(otraRoca), TipoEvidencia.TEXTO, null, null, "listo", null, null, null,
                 false, Instant.parse("2026-08-25T10:00:00Z"), FixedClock.at(Instant.parse("2026-08-25T10:00:00Z"))));
-        UUID sinEvidencia = seedRocaDiaria();
+        UUID sinEvidencia = seedRocaDiaria(3);
 
         var resultado = adapter.evidenciasPrincipalesDeRocas(List.of(rocaDiariaId, otraRoca, sinEvidencia));
 
@@ -381,16 +381,17 @@ class EvidenciaPersistenceAdapterTest {
         assertThat(adapter.evidenciasPrincipalesDeRocas(List.of())).isEmpty();
     }
 
-    private UUID seedRocaDiaria() {
+    private UUID seedRocaDiaria(int posicion) {
         UUID id = UUID.randomUUID();
         entityManager.createNativeQuery("""
                         INSERT INTO renaser.rocas_diarias
                             (id, participante_id, fecha, posicion, titulo, color, puntaje_impacto, eje)
-                        VALUES (:id, :pid, CURRENT_DATE, 2, 'otra', CAST('AMARILLO' AS renaser.color_pareto), 5,
+                        VALUES (:id, :pid, CURRENT_DATE, :posicion, 'otra', CAST('AMARILLA' AS renaser.color_pareto), 5,
                                 CAST('CUERPO' AS renaser.eje_objetivo))
                         """)
                 .setParameter("id", id)
                 .setParameter("pid", participanteId.value())
+                .setParameter("posicion", posicion)
                 .executeUpdate();
         return id;
     }
