@@ -73,10 +73,14 @@ antes a las otras sesiones.
 
 **Independent Test**: quickstart, escenarios 3 y 13.
 
-- [ ] T030 [P] [US2] Prueba que falle: MENTOR_LEAD activo lee `GET /evidence/{id}` y `/url`; revisar (aprobar o rechazar) → 403; MENTOR_LEAD `SUSPENDED` → 403, en `BT/evidence/application/services/EvidenciaServiceLectorLiderTest.java`
-- [ ] T031 [US2] Regla de lector para el liderazgo activo en `requireDuenoOAdmin` (solo detalle y URL, sin `MANAGE_EVIDENCE`) en `B/evidence/application/services/EvidenciaService.java`
+- [x] T030 [P] [US2] Prueba que falle: MENTOR_LEAD activo lee `GET /evidence/{id}` y `/url`; revisar (aprobar o rechazar) → 403; MENTOR_LEAD `SUSPENDED` → 403, en `BT/evidence/application/services/EvidenciaServiceLectorLiderTest.java`
+- [x] T031 [US2] Regla de lector para el liderazgo activo en `requireDuenoOAdmin` (solo detalle y URL, sin `MANAGE_EVIDENCE`) en `B/evidence/application/services/EvidenciaService.java`
 - [x] T032 [P] [US2] Prueba que falle y finder `EvidenciasDeRocasFinder.accionesDelDia(persona, desde, hasta)` (`id`, `titulo`, `estado`, `evidenciaId`) en `B/rocks/api/` con su adaptador, y `acciones[]` en cada día de la semana del líder
-- [ ] T033 [P] [US2] `GET /api/v1/leadership/publications/{publicationId}` con `PublicacionMuroFinder.paraCompartir`; 404 si no existe; prueba en el controller test
+- [x] T033 [P] [US2] `GET /api/v1/leadership/publications/{publicationId}` con `PublicacionMuroFinder.paraCompartir`; 404 si no existe; prueba en el controller test
+  > **Corregido 2026-10-19 (decisión de la sesión supervisora).** El endpoint no es `GET /leadership/publications/{id}` sino
+  > `GET /api/v1/wall/{id}` (`PublicacionDelMuroController`, `@Funcionalidad("muro")`), porque «Ver publicación» también está en la ficha
+  > del mentor y en la de administración: lo lee su autor, el liderazgo, o el mentor/guía que acompaña hoy al autor
+  > (`ConsultarPublicacionService`, en `community`). No usa `paraCompartir`, que no trae la fecha ni deja ver lo oculto.
 - [ ] T034 [US2] `A/features/lider-mentores/components/EvidenciaDeObligacion.tsx`: foto (URL al abrir, `expo-image`), texto, audio y video, `respuestaTexto` debajo, «Cumplido · sin evidencia» sin botón, «Ya no está disponible» si da 404
 - [ ] T035 [US2] `A/features/lider-mentores/components/VisorDePublicacion.tsx` (en `HojaDesdeAbajo`) y la foto de las acciones del día en `DiaDeLaPersona.tsx`
 - [ ] T036 [US2] «Ver publicación» del post diario en `A/features/mentor/screens/AlumnoScreen.tsx` y `A/features/admin/screens/FichaAprendizScreen.tsx`, usando `publicacionId` (opcional en `A/features/mentor/api/mentorSchemas.ts`)

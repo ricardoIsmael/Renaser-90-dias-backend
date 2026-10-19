@@ -43,7 +43,7 @@ public class EvidenciaController {
         this.listarUseCase = listarUseCase;
     }
 
-    @RequiresPermission(value = Permission.USE_APP, scope = "el dueno de la evidencia; la ajena exige MANAGE_EVIDENCE")
+    @RequiresPermission(value = Permission.USE_APP, scope = "el dueno de la evidencia, su mentor asignado, el lider de mentores (solo lee, spec 005) o ADMIN/ALCHEMIST")
     @GetMapping("/{id}")
     public EvidenciaResponse porId(@ActorAutenticado UserId actor, @PathVariable UUID id) {
         var evidencia = consultarUseCase.porId(actor, EvidenciaId.of(id));
@@ -91,7 +91,7 @@ public class EvidenciaController {
      * en el detalle.
      */
     @RequiresPermission(value = Permission.USE_APP,
-            scope = "EvidenciaService.requireDuenoOAdmin: dueno, mentor asignado o admin. Se firma DESPUES de autorizar")
+            scope = "EvidenciaService.requireDuenoOAdmin: dueno, mentor asignado, lider de mentores (solo lee) o admin. Se firma DESPUES de autorizar")
     @GetMapping("/{id}/url")
     public ResponseEntity<UrlEvidenciaResponse> url(@ActorAutenticado UserId actor, @PathVariable UUID id) {
         return consultarUseCase.urlDeLectura(actor, EvidenciaId.of(id))
