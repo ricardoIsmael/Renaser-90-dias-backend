@@ -17,27 +17,39 @@ Errores, con la convención de siempre:
 | Grupo sin mentor, recepción, o persona que hoy no está en ese grupo | 404 |
 | Cuenta de prueba, suspendida o cerrada | 404 (en la lista, no aparece) |
 | Funcionalidad `lider.cumplimiento` apagada por Soporte TI | 503 `{ "codigo": "FUNCIONALIDAD_APAGADA", "funcionalidad": "lider.cumplimiento", "message": <aviso editable> }`, antes de entrar al caso de uso |
-| `semanaHasta` que no es viernes, o semana que todavía no empezó | 400 |
+| `semanaHasta` que no es viernes, o un viernes que todavía no llegó (la semana que corre y las futuras) | 400 |
 
-## La semana: qué devuelve cada una sin `semanaHasta`
+## La ventana: la misma del resumen en las tres pantallas
 
-> **Corregido 2026-10-19 (decisión del dueño, vía la sesión supervisora).** El plan decía que la lista devolvía «la
-> semana vigente» (los 7 días que terminan ayer). Siempre es una semana del semáforo, de **sábado a viernes**:
+> **Corregido 2026-10-19 (decisión del dueño tras el E2E: «la ventana del resumen manda en todo»; E-629 d).** Esta sección
+> decía que la lista abría en la última semana cerrada y la ficha en la semana en curso, las dos de sábado a viernes. Eso
+> hacía que el resumen («Últimos 7 días · del lunes 12 al domingo 18») y la lista del grupo («Semana cerrada · del sábado 10
+> al viernes 16») hablaran de días distintos y dieran porcentajes distintos para la misma persona (Rocío: 50 % y 47,6 %). Ahora
+> las tres leen exactamente la misma ventana que `GET /semaforo/groups`:
 
-| Pantalla | Sin `semanaHasta` | Con `semanaHasta` (un viernes) |
+| `semanaHasta` | Ventana (`desde = hasta − 6`) | Se lee con |
 |---|---|---|
-| Lista del grupo (§1) | **la última semana cerrada** del semáforo (la que terminó el viernes pasado) | esa semana |
-| Ficha de la persona (§2) | **la semana en curso**: la que contiene a hoy (cierra el viernes siguiente) | esa semana |
+| ausente | la **vigente**: los 7 días que terminan ayer en la zona de quien se mira (`hasta = hoy − 1`), aunque ayer no sea viernes | `SemaforoFinder.vigenteDe` |
+| un viernes que ya llegó | la semana de **sábado a viernes** que termina ese día | `SemaforoFinder.semanaDe` |
 
-- «Hoy» es el de la persona (`participantes_programa.timezone`) en la ficha y el de la zona del grupo en la lista, nunca
-  el del servidor.
-- La app, al abrir una ficha desde la lista, pasa siempre el `hasta` de la lista: así las dos hablan de los mismos días.
-- Una semana cerrada es `cerrada: true`; la semana en curso es `cerrada: false`. No hay semanas futuras: pedir una cuyo
-  sábado todavía no llegó es 400. Sí se puede pedir la en curso, con su viernes.
+- Lista (§1), ficha (§2) y resumen (§6) comparten esa ventana: con la misma fecha dan el mismo `desde`/`hasta`, el mismo `color` y
+  el mismo `porcentaje` para la misma persona, porque la regla del semáforo se lee del mismo lugar sobre los mismos 7 días
+  (`MismaVentanaEnLasTresPantallasTest`).
+- «Hoy» es el de la persona (`participantes_programa.timezone`) en la ficha y el de la zona del grupo en la lista, nunca el del
+  servidor.
+- `cerrada` es `true` solo si el último día cae en una semana ya cerrada **según el calendario** (el viernes ya pasó); `semanaEnCurso`
+  es `!cerrada`. La vigente de un lunes (12 al 18) no está cerrada; la de un sábado (17 al viernes 23) sí. No depende de que cada
+  persona tenga su foto del cierre (E-629). El resumen no cambia: su `periodo.cerrada` sigue diciendo `false` para la ventana
+  vigente, también un sábado; la app solo rotula con `cerrada` una semana elegida con ‹ ›, nunca la vigente («Últimos 7 días»).
+- **Ninguna ventana llega al futuro.** Un viernes posterior a hoy (la semana que corre incluida) es 400, igual que una fecha
+  que no es viernes. El viernes de hoy sí se acepta: la ventana llega hasta hoy y hoy dice `EN_CURSO`.
+- La app abre la lista y después la ficha en la misma ventana que se miraba en el resumen, y las flechas ‹ › mueven la ventana
+  de la misma manera en las tres: desde la vigente a la última semana cerrada y de ahí de 7 en 7 días hacia atrás; ninguna llega
+  al futuro.
 
 ## 1. `GET /leadership/groups/{groupId}/semaforo?semanaHasta=YYYY-MM-DD`
 
-Es la misma forma que `TablaDelSemaforoResponse` (contrato del semáforo §4.3), con estas diferencias:
+Es la misma forma que `TablaDelSemaforoResponse` (contrato del semáforo §4.3), en la ventana de arriba, con estas diferencias:
 
 - `aprendices[]` viene con el orden del líder (FR-007): `ROJO`, `AMARILLO`, `SIN_DATOS`, `VERDE`, `NO_SE_MIDE`; dentro de
   cada color, el menor `porcentaje` primero (los nulos, al final), después el nombre (castellano) y el id.
@@ -54,12 +66,12 @@ Es la misma forma que `TablaDelSemaforoResponse` (contrato del semáforo §4.3),
 
 ```json
 {
-  "grupoId": "…", "grupoNombre": "Grupo Fénix", "desde": "2026-10-10", "hasta": "2026-10-16", "cerrada": true,
+  "grupoId": "…", "grupoNombre": "Grupo Fénix", "desde": "2026-10-12", "hasta": "2026-10-18", "cerrada": false,
   "resumen": { "verde": 1, "amarillo": 0, "rojo": 1, "sinDatos": 0, "total": 2 },
   "aprendices": [
     { "aprendizId": "…", "nombre": "Beto Paz", "avatarUrl": null, "rol": "TRAINEE", "porcentaje": 40.0,
       "color": "ROJO", "etiqueta": "Con problemas", "diasConDatos": 7, "motivo": null,
-      "dias": [{ "fecha": "2026-10-10", "estado": "MEDIDO", "porcentaje": 40, "color": "ROJO", "etiqueta": "Con problemas" }] },
+      "dias": [{ "fecha": "2026-10-12", "estado": "MEDIDO", "porcentaje": 40, "color": "ROJO", "etiqueta": "Con problemas" }] },
     { "aprendizId": "…", "nombre": "Luisa Rojas", "avatarUrl": null, "rol": "MENTOR", "porcentaje": 75.0,
       "color": "NO_SE_MIDE", "etiqueta": "No se mide en el semáforo", "diasConDatos": 7, "motivo": null, "dias": [] }
   ]
@@ -73,14 +85,14 @@ Es la misma forma que `TablaDelSemaforoResponse` (contrato del semáforo §4.3),
 ```json
 {
   "grupoId": "…", "personaId": "…", "nombre": "Ana Pérez", "avatarUrl": null, "rol": "TRAINEE",
-  "desde": "2026-10-17", "hasta": "2026-10-23", "zona": "America/Lima",
+  "desde": "2026-10-12", "hasta": "2026-10-18", "zona": "America/Lima",
   "semanaEnCurso": true, "cerrada": false, "primeraSemana": "2026-08-15",
   "mentor": { "id": "…", "nombre": "Luisa" },
   "resumen": { "obligaciones": 35, "cumplidas": 30, "conEntrega": 12, "pendientes": 3, "sinCumplir": 2 },
   "color": "AMARILLO", "etiqueta": "Requiere atención", "porcentaje": 74.5,
   "dias": [
     {
-      "fecha": "2026-10-17", "diaDePrograma": 49, "motivo": null,
+      "fecha": "2026-10-12", "diaDePrograma": 44, "motivo": null,
       "obligaciones": [
         {
           "registroId": "…", "titulo": "Ritual de la mañana", "estadoHabito": "COMPLETADO",
@@ -91,26 +103,31 @@ Es la misma forma que `TablaDelSemaforoResponse` (contrato del semáforo §4.3),
         }
       ],
       "acciones": [{ "id": "…", "titulo": "Llamar a 3 clientes", "estado": "COMPLETADA", "evidenciaId": "…" }]
-    },
-    { "fecha": "2026-10-20", "diaDePrograma": null, "motivo": "FUTURO", "obligaciones": [], "acciones": [] }
+    }
   ]
 }
 ```
 
-- **`dias[]` siempre trae los siete días** de la ventana, de sábado a viernes, aunque vengan vacíos.
-- **Días futuros de la semana en curso** (decisión 2026-10-19): están presentes, con `motivo: "FUTURO"`,
-  `diaDePrograma: null`, `obligaciones: []` y `acciones: []`. Aunque la persona ya haya planificado acciones para
-  mañana, no se muestran. **Hoy** trae sus obligaciones y acciones tal cual, con `motivo: "EN_CURSO"` si el semáforo no
-  lo midió (el semáforo solo mide los días cerrados).
+- **`dias[]` siempre trae los siete días** de la ventana (`desde` a `hasta`), aunque vengan vacíos. Con la ventana vigente
+  son los siete días que terminan ayer; con un viernes, de sábado a viernes.
+- **No hay días futuros** (decisión del dueño, 2026-10-19): la ventana termina a lo sumo hoy. **Hoy** solo aparece al pedir el
+  viernes de hoy y trae sus obligaciones y acciones tal cual, con `motivo: "EN_CURSO"` si el semáforo no lo midió (el semáforo
+  solo mide los días cerrados).
 - `motivo` del día, cuando no hay nada que medir. **Nunca se lo cuenta como incumplido.** Valores posibles:
   `SIN_NADA_PLANIFICADO`, `NO_ACTIVADO` (el semáforo no mide a la persona: todavía no activó su programa),
-  `PENDIENTE_DE_CALCULO`, `CUENTA_SUSPENDIDA`, `PAUSADO`, `FUERA_DEL_PROGRAMA` (antes del Día 1 o después del 90),
-  `FUTURO` y `EN_CURSO`. Es `null` si el día se midió.
+  `PENDIENTE_DE_CALCULO`, `CUENTA_SUSPENDIDA`, `PAUSADO`, `FUERA_DEL_PROGRAMA` (antes del Día 1 o después del 90) y
+  `EN_CURSO`. Es `null` si el día se midió.
 - `acciones[].estado`: **solo `COMPLETADA` o `PENDIENTE`**. Una acción se completa únicamente entregando evidencia, así
   que `COMPLETADA` trae `evidenciaId`; `PENDIENTE`, `evidenciaId: null`.
-- `primeraSemana`: **el sábado que abre la semana del Día 1 de la persona** (la semana en la que empezó su programa);
-  no hay semanas anteriores a esa. `null` mientras no eligió su Día 1.
-- `semanaEnCurso` es `!cerrada`: `true` mientras la semana no cerró.
+- `primeraSemana`: **el sábado que abre la semana del Día 1 de la persona** (la semana en la que empezó su programa); es el
+  tope hacia atrás: ninguna ventana que termine antes del viernes de esa semana (`primeraSemana + 6`) tiene nada que mostrar,
+  así que la app no ofrece ir más atrás. `null` mientras no eligió su Día 1.
+- `semanaEnCurso` es `!cerrada`: `true` mientras la semana en la que cae el último día de la ventana no haya cerrado.
+
+> **Corregido 2026-10-19.** Este contrato decía que la semana en curso traía los días que faltaban con `motivo: "FUTURO"`, vacíos
+> y sin las acciones que la persona ya hubiera planificado, y que `GET …/week` sin `semanaHasta` devolvía esa semana en curso.
+> Con la ventana única del resumen ya no hay días futuros: el motivo `FUTURO` se retiró del servidor. La app todavía lo tolera
+> (lo lee como un motivo más), pero ningún servidor lo manda.
 - `color` es el de la lista (`ROJO`…, `SIN_DATOS` si el semáforo no mide a la persona) o `NO_SE_MIDE` para quien lleva su
   propio programa en el grupo; va con su `etiqueta`. `porcentaje` es de la semana, 1 decimal, null si ningún día se midió.
 - `mentor` es `null` en un grupo sin mentor vigente y cuando la persona **es** el mentor del grupo: ahí la app esconde

@@ -25,9 +25,9 @@ import java.time.Instant;
  * muestra la ficha. Una consulta equivocada no se registra: una semana futura o una persona de otro grupo se rechazan
  * antes.
  *
- * <p>La semana es la del semáforo (R-2), de sábado a viernes, no la de lunes a domingo del mentor: la ventana la fija
- * {@link VentanaDeLaFicha} con el «hoy» de la persona (sin fecha, la semana en curso), y {@code mentoring} arma la
- * semana con ella.
+ * <p>La ventana es la del resumen por grupos (R-2, decisión del dueño del 2026-10-19), no la de lunes a domingo del
+ * mentor: la fija {@link VentanaDeLaFicha} con el «hoy» de la persona (sin fecha, los siete días que terminan ayer; con
+ * un viernes, esa semana de sábado a viernes), y {@code mentoring} arma la semana con ella.
  */
 @Service
 public class SemanaDePersonaService implements ConsultarSemanaDePersonaUseCase {
@@ -56,9 +56,9 @@ public class SemanaDePersonaService implements ConsultarSemanaDePersonaUseCase {
         Instant ahora = clock.now();
         GrupoAcompanado grupo = personas.requireGrupoConMentor(consulta.grupoId(), ahora);
         Miembro miembro = personas.requireMiembro(grupo, UserId.of(consulta.personaId()), ahora);
-        // El «hoy» de la persona, no el del servidor (regla 02): sin fecha, la semana en curso; rechaza un dia que no
-        // es viernes o una semana futura.
-        VentanaDeLaFicha ventana = VentanaDeLaFicha.paraLaFicha(consulta.semanaHasta(),
+        // El «hoy» de la persona, no el del servidor (regla 02): sin fecha, la ventana vigente del resumen; rechaza un
+        // dia que no es viernes o una semana futura.
+        VentanaDeLaFicha ventana = VentanaDeLaFicha.de(consulta.semanaHasta(),
                 ahora.atZone(miembro.participacion().zona()).toLocalDate());
         Lectura lectura = lecturas.leer(miembro, grupo, ventana);
         registrar(consulta.actorId(), rol, miembro, new Registro(grupo, ventana));

@@ -8,26 +8,25 @@ import java.time.temporal.TemporalAdjusters;
 import java.util.Objects;
 
 /**
- * Los siete días que el líder mira: UNA semana del semáforo, de sábado a viernes (spec 005, R-2). Siempre es una semana
- * entera y nunca una que todavía no empezó; no hay «los últimos 7 días» sueltos.
- *
- * <p>Sin fecha pedida, cada vista tiene su propio punto de partida (decisión del dueño del 2026-10-19):
+ * Los siete días que el líder mira, y son SIEMPRE los del resumen «Semáforo por grupos» (spec 005, R-2; decisión del
+ * dueño del 2026-10-19: «la ventana del resumen manda en todo»). Así el resumen, la lista del grupo y la ficha de la
+ * persona hablan de los mismos días, con el mismo color y el mismo porcentaje:
  * <ul>
- *   <li>la LISTA del grupo abre en la última semana ya cerrada ({@link #paraLaLista}): es la que tiene color y
- *       porcentaje definitivos;</li>
- *   <li>la FICHA de una persona abre en la semana en curso ({@link #paraLaFicha}), con los días que faltan marcados
- *       como futuros.</li>
+ *   <li>sin fecha, la ventana VIGENTE: los siete días que terminan ayer ({@code desde = hasta − 6}), aunque ayer no
+ *       sea viernes;</li>
+ *   <li>con un viernes, la semana del semáforo de sábado a viernes que termina ese día.</li>
  * </ul>
- * La app, al abrir una ficha desde la lista, pasa el {@code hasta} de la lista, así que las dos hablan de los mismos
- * días (SC-002).
+ * Ninguna llega al futuro: pedir un viernes que todavía no llegó es un error.
  *
  * <p>El «hoy» es el de la persona (o el del grupo, para la lista), no el del servidor (.claude/rules/02): lo resuelve
  * quien llama con {@code clock.now().atZone(zona).toLocalDate()}.
  *
- * @param cerrada  true solo si es una semana ya cerrada el sábado (su resultado ya no cambia)
- * @param hoyLocal el día de hoy en la zona de quien se mira; de él sale qué días son futuros
+ * @param vigente  true si se pidió sin fecha: el semáforo se lee como la ventana vigente y no como una semana
+ * @param cerrada  true solo si el último día cae en una semana ya cerrada el sábado (su resultado ya no cambia); sale
+ *                 del calendario, no de que cada persona tenga su foto del cierre
+ * @param hoyLocal el día de hoy en la zona de quien se mira
  */
-public record VentanaDeLaFicha(LocalDate desde, LocalDate hasta, boolean cerrada, LocalDate hoyLocal) {
+public record VentanaDeLaFicha(LocalDate desde, LocalDate hasta, boolean vigente, boolean cerrada, LocalDate hoyLocal) {
 
     public VentanaDeLaFicha {
         Objects.requireNonNull(desde, "desde es obligatorio");
@@ -36,21 +35,18 @@ public record VentanaDeLaFicha(LocalDate desde, LocalDate hasta, boolean cerrada
     }
 
     /**
-     * @param semanaHasta null = la última semana ya cerrada; si viene, tiene que ser un viernes
-     * @throws IllegalArgumentException si no es viernes o si esa semana todavía no empezó
+     * @param semanaHasta null = la ventana vigente (los 7 días que terminan ayer); si viene, tiene que ser un viernes
+     * @throws IllegalArgumentException si no es viernes o si todavía no llegó
      */
-    public static VentanaDeLaFicha paraLaLista(LocalDate semanaHasta, LocalDate hoyLocal) {
+    public static VentanaDeLaFicha de(LocalDate semanaHasta, LocalDate hoyLocal) {
         Objects.requireNonNull(hoyLocal, "hoyLocal es obligatorio");
-        return de(semanaHasta != null ? semanaHasta : SemanaDelSemaforo.ultimaCerradaAl(hoyLocal), hoyLocal);
-    }
-
-    /**
-     * @param semanaHasta null = la semana en curso (la que contiene a hoy); si viene, tiene que ser un viernes
-     * @throws IllegalArgumentException si no es viernes o si esa semana todavía no empezó
-     */
-    public static VentanaDeLaFicha paraLaFicha(LocalDate semanaHasta, LocalDate hoyLocal) {
-        Objects.requireNonNull(hoyLocal, "hoyLocal es obligatorio");
-        return de(semanaHasta != null ? semanaHasta : SemanaDelSemaforo.cierreDe(hoyLocal), hoyLocal);
+        boolean vigente = semanaHasta == null;
+        LocalDate hasta = vigente ? hoyLocal.minusDays(1) : semanaHasta;
+        if (!vigente) {
+            exigirQueSeaUnaSemanaQueLlego(hasta, hoyLocal);
+        }
+        boolean cerrada = !hasta.isAfter(SemanaDelSemaforo.ultimaCerradaAl(hoyLocal));
+        return new VentanaDeLaFicha(hasta.minusDays(SemanaDelSemaforo.DIAS - 1L), hasta, vigente, cerrada, hoyLocal);
     }
 
     /** El sábado que abre la semana que contiene {@code fecha}: de ahí sale cuál fue la primera semana de alguien. */
@@ -59,22 +55,15 @@ public record VentanaDeLaFicha(LocalDate desde, LocalDate hasta, boolean cerrada
         return fecha.with(TemporalAdjusters.previousOrSame(DayOfWeek.SATURDAY));
     }
 
-    /** Un día que todavía no llegó: la semana en curso lo trae para que se vea completa, pero no tiene nada. */
-    public boolean esFutura(LocalDate dia) {
-        return dia.isAfter(hoyLocal);
-    }
-
     /** Hoy: el día corre y todavía no se cierra, así que el semáforo no lo mide. */
     public boolean esHoy(LocalDate dia) {
         return dia.equals(hoyLocal);
     }
 
-    private static VentanaDeLaFicha de(LocalDate semanaHasta, LocalDate hoyLocal) {
-        LocalDate desde = SemanaDelSemaforo.desde(semanaHasta);
-        if (desde.isAfter(hoyLocal)) {
-            throw new IllegalArgumentException("No hay semanas futuras: la del " + desde + " todavia no empezo");
+    private static void exigirQueSeaUnaSemanaQueLlego(LocalDate viernes, LocalDate hoyLocal) {
+        SemanaDelSemaforo.exigirCierreValido(viernes);
+        if (viernes.isAfter(hoyLocal)) {
+            throw new IllegalArgumentException("No hay semanas futuras: la que termina el " + viernes + " todavia no llego");
         }
-        return new VentanaDeLaFicha(desde, semanaHasta, !semanaHasta.isAfter(SemanaDelSemaforo.ultimaCerradaAl(hoyLocal)),
-                hoyLocal);
     }
 }

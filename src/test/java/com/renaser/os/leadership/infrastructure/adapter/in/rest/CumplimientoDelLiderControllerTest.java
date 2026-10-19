@@ -19,13 +19,12 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
-import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.DESDE_EN_CURSO;
 import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.DESDE_SEMANA_CERRADA;
-import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.HASTA_EN_CURSO;
+import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.DESDE_VIGENTE;
 import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.FENIX;
 import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.SEMANA_CERRADA;
 import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.SIN_MENTOR;
-import static com.renaser.os.mentoring.application.services.VentanasDePrueba.ventana;
+import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.VIERNES_FUTURO;
 import static com.renaser.os.mentoring.application.services.VentanasDePrueba.ventanaPareja;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -72,12 +71,15 @@ class CumplimientoDelLiderControllerTest {
         banco.grupoConMentor(FENIX, "Grupo Fénix", MENTORA, "Luisa Rojas");
         banco.aprendiz(FENIX, ANA, "Ana Pérez");
         banco.aprendiz(FENIX, BETO, "Beto Paz");
-        // La lista abre en la ultima semana cerrada (10 al 16); la ficha, en la semana en curso (17 al 23).
+        // La lista y la ficha abren en la misma ventana que el resumen: los 7 dias que terminan ayer (12 al 18).
+        banco.vigente(ANA, ventanaPareja(DESDE_VIGENTE, false, 90));
+        banco.vigente(BETO, ventanaPareja(DESDE_VIGENTE, false, 40));
+        banco.programa(MENTORA, UserRole.MENTOR, LocalDate.of(2026, 9, 1), true);
+        banco.vigente(MENTORA, ventanaPareja(DESDE_VIGENTE, false, 75));
+        // Y con un viernes, esa semana de sabado a viernes (la ultima cerrada: 10 al 16).
         banco.semana(SEMANA_CERRADA, ANA, ventanaPareja(DESDE_SEMANA_CERRADA, true, 90));
         banco.semana(SEMANA_CERRADA, BETO, ventanaPareja(DESDE_SEMANA_CERRADA, true, 40));
-        banco.programa(MENTORA, UserRole.MENTOR, LocalDate.of(2026, 9, 1), true);
         banco.semana(SEMANA_CERRADA, MENTORA, ventanaPareja(DESDE_SEMANA_CERRADA, true, 75));
-        banco.semana(HASTA_EN_CURSO, ANA, ventana(DESDE_EN_CURSO, false, 90, 90, null, null, null, null, null));
     }
 
     private ResultActions pedir(String ruta, UserId actor) throws Exception {
@@ -95,16 +97,16 @@ class CumplimientoDelLiderControllerTest {
     // ── la lista ────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("lista: sin fecha es la ultima semana cerrada; el contrato del semaforo del grupo, con el orden del lider y «no se mide» al final, sin cache")
+    @DisplayName("lista: sin fecha es la ventana vigente del resumen; el contrato del semaforo del grupo, con el orden del lider y «no se mide» al final, sin cache")
     void lista() throws Exception {
         pedir(grupo(), LIDER)
                 .andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control", containsString("no-store")))
                 .andExpect(jsonPath("$.grupoId").value(FENIX.toString()))
                 .andExpect(jsonPath("$.grupoNombre").value("Grupo Fénix"))
-                .andExpect(jsonPath("$.desde").value("2026-10-10"))
-                .andExpect(jsonPath("$.hasta").value("2026-10-16"))
-                .andExpect(jsonPath("$.cerrada").value(true))
+                .andExpect(jsonPath("$.desde").value("2026-10-12"))
+                .andExpect(jsonPath("$.hasta").value("2026-10-18"))
+                .andExpect(jsonPath("$.cerrada").value(false))
                 .andExpect(jsonPath("$.resumen.verde").value(1))
                 .andExpect(jsonPath("$.resumen.rojo").value(1))
                 .andExpect(jsonPath("$.resumen.total").value(2))
@@ -133,7 +135,7 @@ class CumplimientoDelLiderControllerTest {
     }
 
     @Test
-    @DisplayName("lista: la semana pedida es un viernes; otro dia o una semana futura es 400")
+    @DisplayName("lista: la semana pedida es un viernes; otro dia, la semana que corre o una futura es 400")
     void listaConSemana() throws Exception {
         banco.semana(LocalDate.of(2026, 10, 9), ANA, ventanaPareja(LocalDate.of(2026, 10, 3), true, 55));
 
@@ -141,6 +143,7 @@ class CumplimientoDelLiderControllerTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.cerrada").value(true))
                 .andExpect(jsonPath("$.desde").value("2026-10-03"));
         pedir(grupo() + "?semanaHasta=2026-10-15", LIDER).andExpect(status().isBadRequest());
+        pedir(grupo() + "?semanaHasta=" + VIERNES_FUTURO, LIDER).andExpect(status().isBadRequest());
         pedir(grupo() + "?semanaHasta=2026-10-30", LIDER).andExpect(status().isBadRequest());
     }
 
@@ -154,7 +157,7 @@ class CumplimientoDelLiderControllerTest {
     // ── la ficha ────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("ficha: sin fecha es la semana en curso; el contrato de la semana de una persona, sin cache, y deja una consulta registrada")
+    @DisplayName("ficha: sin fecha es la misma ventana de la lista; el contrato de la semana de una persona, sin cache, y deja una consulta registrada")
     void ficha() throws Exception {
         pedir(semana(ANA), LIDER)
                 .andExpect(status().isOk())
@@ -162,8 +165,8 @@ class CumplimientoDelLiderControllerTest {
                 .andExpect(jsonPath("$.grupoId").value(FENIX.toString()))
                 .andExpect(jsonPath("$.personaId").value(ANA.toString()))
                 .andExpect(jsonPath("$.nombre").value("Ana Pérez"))
-                .andExpect(jsonPath("$.desde").value("2026-10-17"))
-                .andExpect(jsonPath("$.hasta").value("2026-10-23"))
+                .andExpect(jsonPath("$.desde").value("2026-10-12"))
+                .andExpect(jsonPath("$.hasta").value("2026-10-18"))
                 .andExpect(jsonPath("$.zona").value("America/Lima"))
                 .andExpect(jsonPath("$.semanaEnCurso").value(true))
                 .andExpect(jsonPath("$.cerrada").value(false))
@@ -174,12 +177,10 @@ class CumplimientoDelLiderControllerTest {
                 .andExpect(jsonPath("$.porcentaje").value(90.0))
                 .andExpect(jsonPath("$.resumen.obligaciones").value(0))
                 .andExpect(jsonPath("$.dias", hasSize(7)))
-                .andExpect(jsonPath("$.dias[0].fecha").value("2026-10-17"))
+                .andExpect(jsonPath("$.dias[0].fecha").value("2026-10-12"))
                 .andExpect(jsonPath("$.dias[0].obligaciones", hasSize(0)))
                 .andExpect(jsonPath("$.dias[0].acciones", hasSize(0)))
-                .andExpect(jsonPath("$.dias[2].motivo").value("EN_CURSO"))
-                .andExpect(jsonPath("$.dias[3].motivo").value("FUTURO"))
-                .andExpect(jsonPath("$.dias[6].fecha").value("2026-10-23"));
+                .andExpect(jsonPath("$.dias[6].fecha").value("2026-10-18"));
         assertThat(banco.consultas).hasSize(1);
     }
 
@@ -198,8 +199,9 @@ class CumplimientoDelLiderControllerTest {
     }
 
     @Test
-    @DisplayName("ficha: una semana futura es 400, una persona de otro grupo es 404, y ninguna deja registro")
+    @DisplayName("ficha: la semana que corre o una futura es 400, una persona de otro grupo es 404, y ninguna deja registro")
     void fichaQueNoSeAbre() throws Exception {
+        pedir(semana(ANA) + "?semanaHasta=" + VIERNES_FUTURO, LIDER).andExpect(status().isBadRequest());
         pedir(semana(ANA) + "?semanaHasta=2026-10-30", LIDER).andExpect(status().isBadRequest());
         pedir(semana(id("b9")), LIDER).andExpect(status().isNotFound());
         pedir("/api/v1/leadership/groups/" + SIN_MENTOR + "/people/" + ANA + "/week", LIDER)

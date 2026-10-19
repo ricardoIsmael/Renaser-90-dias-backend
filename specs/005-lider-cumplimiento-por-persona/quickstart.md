@@ -27,10 +27,10 @@ avisar a las otras sesiones y turnarse: la máquina no aguanta dos backends con 
 | # | Pasos | Resultado esperado | Requisitos |
 |---|---|---|---|
 | 1 | Líder: Hoy → Semáforo por grupos → grupo | Lista ordenada de rojo a verde, «no se mide» al final; la guía aparece; la cuenta de prueba no aparece | FR-001, 002, 006, 007; SC-006 |
-| 2 | Tocar a la aprendiz | Semana de sábado a viernes; el día en pausa dice «En pausa», no ✗ | FR-009, 019 |
+| 2 | Tocar a la aprendiz | Los mismos 7 días y el mismo rótulo que el resumen y la lista, con el mismo % que en la lista; el día en pausa dice «En pausa», no ✗ | FR-009, 019 |
 | 3 | Abrir cada evidencia | Foto con su texto, respuestas de la Pastilla, texto de la Audioterapia, publicación del Muro y foto de la acción | FR-011, 012; US2 |
 | 4 | Comparar día por día con Administración → ficha de la misma persona | Mismos estados y mismas evidencias | SC-002 |
-| 5 | Semana anterior y volver | Semana histórica; no hay flecha hacia el futuro | FR-010 |
+| 5 | ‹ y › en el resumen, la lista y la ficha | Las tres mueven la ventana igual (vigente → última semana cerrada → de 7 en 7); ninguna llega al futuro | FR-010 |
 | 6 | «Avisar a su mentor», con alerta enviada por chat | La observación nombra a la persona y la semana; el mentor la recibe en el chat | FR-014 |
 | 7 | «Escribirle» | Abre el 1 a 1 vacío | FR-015 |
 | 8 | Con `curl` como líder: completar un registro ajeno, revisar una evidencia, reasignar, cambiar el rol | 403 en todo | FR-003; SC-003 |
@@ -45,3 +45,7 @@ avisar a las otras sesiones y turnarse: la máquina no aguanta dos backends con 
 - Backend: `TZ=UTC ./mvnw -B clean verify`, leyendo las líneas `Tests run:` de surefire y failsafe.
 - App: `node node_modules/typescript/bin/tsc --noEmit` y `node node_modules/jest/bin/jest.js`.
 - E2E: la suite de Maestro y mobile-mcp en el emulador, con capturas en `specs/005-lider-cumplimiento-por-persona/e2e.md`.
+
+> **Corregido 2026-10-19.** Los escenarios 2 y 5 decían «semana de sábado a viernes» y «semana histórica». Tras el E2E, el
+> dueño decidió que la ventana del resumen manda en las tres pantallas (E-629 d). Hay que repetir en el emulador los
+> escenarios 1, 2 y 5 (ver `e2e.md`).

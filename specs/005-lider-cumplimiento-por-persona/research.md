@@ -28,7 +28,7 @@ Investigación sobre master (`9f387b78`) y sobre la rama `claude/fase2-integraci
 > la marca `usuarios.es_cuenta_de_prueba` (V107): `CuentasDePruebaFinder` sigue devolviendo «ninguna». La migración
 > sigue en **V109** (mayor que la más alta de `origin/master`; quien integre después renumera).
 
-## R-2 · La semana: de sábado a viernes, no de lunes a domingo
+## R-2 · La ventana: la del resumen (antes: de sábado a viernes), no de lunes a domingo
 
 - **Hallazgo**: el semáforo mide de sábado a viernes, pero `weekly-progress` (la ficha del mentor y la de
   administración) arma la semana de lunes a domingo en la zona de la persona (`SeguimientoService.armarSemana`).
@@ -39,6 +39,19 @@ Investigación sobre master (`9f387b78`) y sobre la rama `claude/fase2-integraci
   día da los mismos estados y las mismas evidencias. Las semanas no coinciden en sus bordes.
 - **Descartado**: pasar todas las fichas a sábado–viernes, porque cambia lo que ven el mentor y el administrador
   sin que nadie lo haya pedido.
+
+> **Corregido 2026-10-19 (decisión del dueño tras el E2E: «la ventana del resumen manda en todo»; E-629 d).** Esta decisión
+> decía que el líder usaba **la semana del semáforo, de sábado a viernes**, con la lista en la última semana cerrada y la ficha
+> en la semana en curso, y que eso era distinto del resumen solo en los bordes. En el emulador se vio que no eran bordes: el
+> resumen («Últimos 7 días · lunes 12 al domingo 18») y la lista («Semana cerrada · sábado 10 al viernes 16») eran dos ventanas
+> distintas y la misma persona salía con otro porcentaje (Rocío, 50 % y 47,6 %). Ahora el resumen, la lista y la ficha leen la
+> **misma ventana**: sin `semanaHasta`, la vigente (`desde = hasta − 6`, `hasta = hoy − 1`, `SemaforoFinder.vigenteDe`); con un
+> viernes que ya llegó, esa semana (`SemaforoFinder.semanaDe`). `armarSemana` sigue recibiendo `desde` y `hasta`, así que no
+> cambia; lo que cambió es quién los fija (`VentanaDeLaFicha.de`) y que la lista pasa a la tabla del semáforo lo mismo que se pidió
+> (`null` = vigente), como ya lo hace Administración. No hay semanas en curso ni días futuros, y `primeraSemana` sigue siendo el
+> tope hacia atrás (ninguna ventana que termine antes de `primeraSemana + 6`). Las fichas del mentor y de administración siguen de
+> lunes a domingo. **Consecuencia para SC-002:** sin cambios; se compara día por día. **Se agrega** la prueba que faltó:
+> `MismaVentanaEnLasTresPantallasTest` pone el resumen real, la lista y la ficha sobre los mismos datos del semáforo.
 
 ## R-3 · Lista del grupo: reutilizar la tabla del semáforo con nombres
 

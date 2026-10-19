@@ -20,16 +20,20 @@ import java.util.NoSuchElementException;
 import java.util.UUID;
 
 import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.DESDE_SEMANA_CERRADA;
+import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.DESDE_VIGENTE;
 import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.FENIX;
+import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.HASTA_VIGENTE;
 import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.SEMANA_CERRADA;
 import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.SIN_MENTOR;
+import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.VIERNES_FUTURO;
 import static com.renaser.os.mentoring.application.services.VentanasDePrueba.ventanaPareja;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * La lista de un grupo para el líder (spec 005, US1): quiénes, con qué color y en qué orden, contra los dobles de las
- * APIs de los otros módulos.
+ * APIs de los otros módulos. Sin fecha lee la MISMA ventana que el resumen por grupos (los 7 días que terminan ayer);
+ * con un viernes, esa semana.
  */
 class GrupoDelLiderServiceTest {
 
@@ -60,10 +64,11 @@ class GrupoDelLiderServiceTest {
         banco.grupoConMentor(FENIX, "Grupo Fénix", MENTORA, "Luisa Rojas");
     }
 
+    /** Un aprendiz con ese % en la ventana vigente (la que la lista lee sin fecha); sin %, el semáforo no lo mide. */
     private void aprendiz(UserId id, String nombre, Integer porcentajeParejo) {
         banco.aprendiz(FENIX, id, nombre);
         if (porcentajeParejo != null) {
-            banco.semana(SEMANA_CERRADA, id, ventanaPareja(DESDE_SEMANA_CERRADA, true, porcentajeParejo));
+            banco.vigente(id, ventanaPareja(DESDE_VIGENTE, false, porcentajeParejo));
         }
     }
 
@@ -120,7 +125,7 @@ class GrupoDelLiderServiceTest {
         aprendiz(DORA, "Dora Vega", null);
         aprendiz(ELSA, "Elsa Mora", 20);
         banco.programa(MENTORA, UserRole.MENTOR, LocalDate.of(2026, 9, 1), true);
-        banco.semana(SEMANA_CERRADA, MENTORA, ventanaPareja(DESDE_SEMANA_CERRADA, true, 75));
+        banco.vigente(MENTORA, ventanaPareja(DESDE_VIGENTE, false, 75));
 
         List<PersonaDeLaLista> personas = delLider(null).personas();
 
@@ -136,7 +141,7 @@ class GrupoDelLiderServiceTest {
     void mentorConProgramaPropio() {
         aprendiz(ANA, "Ana Pérez", 90);
         banco.programa(MENTORA, UserRole.MENTOR, LocalDate.of(2026, 9, 1), true);
-        banco.semana(SEMANA_CERRADA, MENTORA, ventanaPareja(DESDE_SEMANA_CERRADA, true, 75));
+        banco.vigente(MENTORA, ventanaPareja(DESDE_VIGENTE, false, 75));
 
         PersonaDeLaLista luisa = delLider(null).personas().getLast();
 
@@ -227,44 +232,76 @@ class GrupoDelLiderServiceTest {
     }
 
     @Test
-    @DisplayName("sin fecha abre en la ultima semana cerrada del semaforo (de sabado a viernes); la pasada, cerrada tambien")
+    @DisplayName("sin fecha abre en la ventana vigente del resumen: los 7 dias que terminan ayer; la tabla se lee sin fecha")
     void encabezado() {
         aprendiz(ANA, "Ana Pérez", 90);
 
         GrupoDelLider sinFecha = delLider(null);
 
         assertThat(sinFecha.grupoNombre()).isEqualTo("Grupo Fénix");
-        assertThat(sinFecha.desde()).isEqualTo(DESDE_SEMANA_CERRADA);
-        assertThat(sinFecha.hasta()).isEqualTo(SEMANA_CERRADA);
-        assertThat(sinFecha.cerrada()).isTrue();
+        assertThat(sinFecha.desde()).isEqualTo(DESDE_VIGENTE);
+        assertThat(sinFecha.hasta()).isEqualTo(HASTA_VIGENTE);
+        // Hoy es lunes 19: la semana del 17 al 23 sigue abierta, asi que la ventana vigente no esta cerrada.
+        assertThat(sinFecha.cerrada()).isFalse();
+        assertThat(banco.lecturasDelSemaforo).first().isEqualTo("tabla:vigente");
+    }
+
+    @Test
+    @DisplayName("con un viernes abre esa semana, de sabado a viernes, cerrada; la tabla se lee con ese viernes")
+    void conUnViernes() {
+        aprendiz(ANA, "Ana Pérez", 90);
+        banco.semana(SEMANA_CERRADA, ANA, ventanaPareja(DESDE_SEMANA_CERRADA, true, 60));
+
+        GrupoDelLider pasada = delLider(SEMANA_CERRADA);
+
+        assertThat(pasada.desde()).isEqualTo(DESDE_SEMANA_CERRADA);
+        assertThat(pasada.hasta()).isEqualTo(SEMANA_CERRADA);
+        assertThat(pasada.cerrada()).isTrue();
+        assertThat(pasada.personas().getFirst().porcentaje()).isEqualByComparingTo("60");
         assertThat(banco.lecturasDelSemaforo).first().isEqualTo("tabla:" + SEMANA_CERRADA);
         assertThat(delLider(LocalDate.of(2026, 10, 9)).hasta()).isEqualTo(LocalDate.of(2026, 10, 9));
     }
 
     @Test
-    @DisplayName("E-629: la ultima semana cerrada es «cerrada» aunque alguien del grupo haya empezado despues y no tenga su foto")
+    @DisplayName("E-629: una semana ya cerrada es «cerrada» aunque alguien del grupo haya empezado despues y no tenga su foto")
     void unaPersonaNuevaNoDejaLaSemanaCerradaSinCerrar() {
         aprendiz(ANA, "Ana Pérez", 90);
+        banco.semana(SEMANA_CERRADA, ANA, ventanaPareja(DESDE_SEMANA_CERRADA, true, 90));
         // Dora empezo su programa despues de esa semana: el cierre semanal no le dejo foto y su ventana no esta cerrada.
         aprendiz(DORA, "Dora Vega", null);
 
-        GrupoDelLider lista = delLider(null);
+        GrupoDelLider lista = delLider(SEMANA_CERRADA);
 
         assertThat(lista.hasta()).isEqualTo(SEMANA_CERRADA);
         assertThat(lista.cerrada()).as("la semana ya paso: no depende de que cada persona tenga su foto").isTrue();
         assertThat(delLider(LocalDate.of(2026, 10, 9)).cerrada()).isTrue();
     }
 
+    @Test
+    @DisplayName("cerrada sale del calendario tambien sin fecha: el sabado la vigente es la semana que acaba de cerrar")
+    void laVigenteDeUnSabadoEstaCerrada() {
+        aprendiz(ANA, "Ana Pérez", 90);
+        // Sabado 24, 10:00 en Lima: la vigente va del 17 al viernes 23, que cerro hace unas horas.
+        banco.ahora = Instant.parse("2026-10-24T15:00:00Z");
+
+        GrupoDelLider lista = delLider(null);
+
+        assertThat(lista.desde()).isEqualTo(LocalDate.of(2026, 10, 17));
+        assertThat(lista.hasta()).isEqualTo(LocalDate.of(2026, 10, 23));
+        assertThat(lista.cerrada()).isTrue();
+    }
+
     // ── la semana pedida ────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("la semana pedida llega a la tabla y al programa propio del acompanante; sin fecha, la ultima cerrada")
+    @DisplayName("la semana pedida llega a la tabla y al programa propio del acompanante; sin fecha, la ventana vigente")
     void laSemanaPedidaLlegaATodos() {
         LocalDate anterior = LocalDate.of(2026, 10, 9);
         aprendiz(ANA, "Ana Pérez", null);
         banco.semana(anterior, ANA, ventanaPareja(LocalDate.of(2026, 10, 3), true, 55));
         banco.programa(MENTORA, UserRole.MENTOR, LocalDate.of(2026, 9, 1), true);
         banco.semana(anterior, MENTORA, ventanaPareja(LocalDate.of(2026, 10, 3), true, 85));
+        banco.vigente(MENTORA, ventanaPareja(DESDE_VIGENTE, false, 65));
 
         GrupoDelLider pasada = delLider(anterior);
 
@@ -273,31 +310,38 @@ class GrupoDelLiderServiceTest {
         assertThat(pasada.personas().getLast().porcentaje()).isEqualByComparingTo("85");
 
         banco.lecturasDelSemaforo.clear();
-        delLider(null);
-        assertThat(banco.lecturasDelSemaforo).contains("tabla:" + SEMANA_CERRADA);
-        assertThat(banco.lecturasDelSemaforo).anyMatch(l -> l.startsWith("semana:" + SEMANA_CERRADA + " ["));
+        GrupoDelLider vigente = delLider(null);
+        assertThat(banco.lecturasDelSemaforo).contains("tabla:vigente");
+        assertThat(banco.lecturasDelSemaforo).anyMatch(l -> l.startsWith("vigente ["));
+        assertThat(banco.lecturasDelSemaforo).noneMatch(l -> l.startsWith("semana:"));
+        assertThat(vigente.personas().getLast().porcentaje()).isEqualByComparingTo("65");
     }
 
     @Test
-    @DisplayName("un dia que no es viernes o una semana que no empezo es 400, y no se lee el semaforo")
+    @DisplayName("un dia que no es viernes o un viernes que todavia no llego es 400, y no se lee el semaforo")
     void semanaInvalida() {
         assertThatThrownBy(() -> delLider(LocalDate.of(2026, 10, 15))).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> delLider(LocalDate.of(2026, 10, 18))).isInstanceOf(IllegalArgumentException.class);
+        // La semana que corre (17 al 23) ya no se ofrece: la ventana del resumen no llega al futuro.
+        assertThatThrownBy(() -> delLider(VIERNES_FUTURO)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("futuras");
         assertThatThrownBy(() -> delLider(LocalDate.of(2026, 10, 30))).isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("futuras");
-        // La semana en curso (la del 17 al 23) tampoco es «futura», pero la lista solo muestra semanas con resultado.
         assertThat(banco.lecturasDelSemaforo).isEmpty();
     }
 
     @Test
-    @DisplayName("regla 02: con el reloj en la madrugada UTC la semana que empieza «manana» en UTC aun es futura en Lima")
+    @DisplayName("regla 02: con el reloj en la madrugada UTC la ventana vigente es la de Lima, no la de UTC")
     void madrugadaUtc() {
-        // 03:00 UTC del sabado 17 = 22:00 del viernes 16 en Lima. La semana que cierra el 23 abre el 17: en UTC ya
-        // empezo, en Lima todavia no.
+        // 03:00 UTC del sabado 17 = 22:00 del viernes 16 en Lima: para el grupo hoy es el 16 y la vigente termina el 15.
         banco.ahora = Instant.parse("2026-10-17T03:00:00Z");
 
-        assertThatThrownBy(() -> delLider(LocalDate.of(2026, 10, 23))).isInstanceOf(IllegalArgumentException.class);
-        // Sin fecha: la ultima cerrada para Lima (viernes 16 todavia corre) es la del 3 al 9, no la del 10 al 16.
-        assertThat(delLider(null).hasta()).isEqualTo(LocalDate.of(2026, 10, 9));
+        GrupoDelLider vigente = delLider(null);
+
+        assertThat(vigente.hasta()).isEqualTo(LocalDate.of(2026, 10, 15));
+        assertThat(vigente.desde()).isEqualTo(LocalDate.of(2026, 10, 9));
+        // El viernes 16 es hoy en Lima: se puede pedir; el 23, no, aunque en UTC ya sea sabado.
         assertThat(delLider(LocalDate.of(2026, 10, 16)).hasta()).isEqualTo(LocalDate.of(2026, 10, 16));
+        assertThatThrownBy(() -> delLider(LocalDate.of(2026, 10, 23))).isInstanceOf(IllegalArgumentException.class);
     }
 }

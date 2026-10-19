@@ -475,6 +475,16 @@ enaserPlayStore\src\lib\supabase.ts` sigue existiendo en el frontend — mismo p
 
 > **Corregido 2026-10-19 (D-274, decisión de la sesión supervisora).** La fila decía que el barrido corría una vez por hora (minuto 10) y que un fallo de esa corrida perdía el aviso del día. Ahora corre en los minutos 10 y 40 (`0 10,40 * * * *`): cada ventana local de 20:00–20:59 tiene dos intentos, la clave `consultas-lider:<mentor>:<día>` impide el aviso doble y la segunda corrida recupera el fallo de la primera (`ResumenDeConsultasServiceTest.laSegundaCorridaRecuperaElFallo`). Además, una lectura de consultas que falla ya no tumba la corrida entera: se aísla por lote como ya se aislaba por mentor. | 2026-10-19 | `leadership/**` (`CumplimientoDelLiderController`, `GrupoDelLiderService`, `SemanaDePersonaService`, `ResumenDeConsultasService`, `ReglaDelResumenDeConsultas`, `ResumirConsultasDelLiderScheduler`); `mentoring.api.SemanaDeSeguimientoFinder`, `TablaDelSemaforoFinder`, `ArmadoDeLaSemana`; `community.api.PublicacionMuroFinder.delAutorEntre`, `PublicacionDelMuroController`; `rocks.api.AccionesDelDiaFinder`; `evidence.api.EvidenciasDeRocasFinder`; `users.api.CuentasDePruebaFinder`; `V109__consultas_del_lider_y_observacion_sobre_persona.sql`; `EntradasDelCatalogo`; pruebas `ReglaDelResumenDeConsultasTest`, `ResumenDeConsultasServiceTest`, `GrupoDelLiderServiceTest`, `SemanaDePersonaServiceTest`, `CumplimientoDelLiderControllerTest`, `ConsultarPublicacionServiceTest`, `PublicacionDelMuroControllerTest`, `EvidenciaServiceLectorLiderTest`, `FichaYObservacionesServiceTest`, `RevisionDelLiderNotificationListenerTest`, `CumplimientoDelLiderIT`, `ResumirConsultasDelLiderSchedulerIT`; spec `specs/005-lider-cumplimiento-por-persona/`; E-628 |
 
+> **Corregido 2026-10-19 (D-274, decisión del dueño tras el E2E: «la ventana del resumen manda en todo»; E-629 d).** La fila de D-274
+> decía que la lista del líder, sin `semanaHasta`, devolvía **la última semana cerrada**, que la ficha devolvía **la semana en curso**
+> con sus días futuros como `FUTURO`, y que la semana del líder era «la del semáforo, sábado→viernes» (`SemanaDelSemaforo`). Ahora el
+> resumen por grupos, la lista y la ficha leen **la misma ventana de 7 días**: sin `semanaHasta`, la vigente (los 7 días que terminan
+> ayer en la zona de la persona o del grupo, `SemaforoFinder.vigenteDe`); con un viernes que ya llegó, esa semana de sábado a viernes
+> (`semanaDe`). Un viernes que todavía no llegó (la semana que corre incluida) es 400, no hay días `FUTURO` y `cerrada` sale del
+> calendario. `primeraSemana` sigue siendo el tope hacia atrás. Las fichas del mentor y de administración siguen de lunes a domingo.
+> Sin migración ni endpoint nuevo. Código: `VentanaDeLaFicha.de`, `GrupoDelLiderService`, `SemaforoDeLaPersona`, `ArmadoDeLaFicha`;
+> prueba: `MismaVentanaEnLasTresPantallasTest`.
+
 ### D-267 · agente B — circuito automático e interruptores de SER (2026-10-13)
 
 Parte de D-267 (spec 002, US2, FR-015 a FR-017; plan.md §D7; contrato §10). Rama `claude/plataforma-ia`, sobre el núcleo.

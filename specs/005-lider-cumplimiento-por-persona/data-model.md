@@ -65,6 +65,9 @@ Va después de V98..V108 de la fase 2 de Soporte TI (research R-1). La cabecera 
 ## Estados y validaciones
 
 - Persona fuera del grupo hoy → 404 (RL-08). Grupo de recepción o sin mentor → 404.
-- `semanaHasta` posterior a la semana en curso → 400. Una semana anterior al Día 1 de la persona → la semana
-  vacía, con el motivo `NO_ACTIVADO`.
+- `semanaHasta` que no es viernes, o un viernes que todavía no llegó → 400. Una ventana anterior al Día 1 de la persona → la
+  ventana vacía, con el motivo `NO_ACTIVADO`.
+
+> **Corregido 2026-10-19.** Decía «`semanaHasta` posterior a la semana en curso → 400». Ahora tampoco se acepta la semana que
+> corre (la ventana del resumen termina ayer): ver el contrato, «La ventana: la misma del resumen en las tres pantallas».
 - Observación con `personId` de alguien que no está en un grupo de ese mentor → 400.

@@ -23,12 +23,13 @@ import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.UUID;
 
-import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.DESDE_EN_CURSO;
 import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.DESDE_SEMANA_CERRADA;
+import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.DESDE_VIGENTE;
 import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.FENIX;
-import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.HASTA_EN_CURSO;
+import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.HASTA_VIGENTE;
 import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.SEMANA_CERRADA;
 import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.SIN_MENTOR;
+import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.VIERNES_FUTURO;
 import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.conDia;
 import static com.renaser.os.mentoring.application.services.VentanasDePrueba.ventana;
 import static com.renaser.os.mentoring.application.services.VentanasDePrueba.ventanaPareja;
@@ -36,8 +37,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * La ficha de una persona para el líder (spec 005, US1 y FR-016): la ventana que pide, lo que devuelve y, sobre todo,
- * lo que registra.
+ * La ficha de una persona para el líder (spec 005, US1 y FR-016): la ventana que pide —la MISMA del resumen por grupos,
+ * decisión del dueño del 2026-10-19—, lo que devuelve y, sobre todo, lo que registra.
  */
 class SemanaDePersonaServiceTest {
 
@@ -62,8 +63,8 @@ class SemanaDePersonaServiceTest {
         banco.usuario(ADMIN, "Admin", UserRole.ADMIN, UserStatus.ACTIVE);
         banco.grupoConMentor(FENIX, "Grupo Fénix", MENTORA, "Luisa Rojas");
         banco.aprendiz(FENIX, ANA, "Ana Pérez");
-        // La semana en curso (sabado 17 a viernes 23): el semaforo solo mide los dias cerrados, 17 y 18; hoy es el 19.
-        banco.semana(HASTA_EN_CURSO, ANA, ventana(DESDE_EN_CURSO, false, 70, 70, null, null, null, null, null));
+        // La ventana vigente (lunes 12 a domingo 18; hoy es el lunes 19) y la ultima semana cerrada (10 al 16).
+        banco.vigente(ANA, ventanaPareja(DESDE_VIGENTE, false, 70));
         banco.semana(SEMANA_CERRADA, ANA, ventanaPareja(DESDE_SEMANA_CERRADA, true, 55));
     }
 
@@ -79,18 +80,28 @@ class SemanaDePersonaServiceTest {
     // ── la ventana ──────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("sin fecha abre en la semana en curso del semaforo, de sabado a viernes, y devuelve siete dias")
-    void semanaEnCursoPorDefecto() {
+    @DisplayName("sin fecha abre en la ventana vigente del resumen: los 7 dias que terminan ayer, y devuelve siete dias")
+    void ventanaVigentePorDefecto() {
         SemanaDeLaPersona semana = delLider(ANA, null);
 
         assertThat(banco.ventanasPedidasALaSemana).singleElement()
-                .isEqualTo(new LocalDate[]{DESDE_EN_CURSO, HASTA_EN_CURSO});
-        assertThat(semana.desde()).isEqualTo(DESDE_EN_CURSO);
-        assertThat(semana.hasta()).isEqualTo(HASTA_EN_CURSO);
+                .isEqualTo(new LocalDate[]{DESDE_VIGENTE, HASTA_VIGENTE});
+        assertThat(semana.desde()).isEqualTo(DESDE_VIGENTE);
+        assertThat(semana.hasta()).isEqualTo(HASTA_VIGENTE);
+        // Hoy es lunes 19: la semana del 17 al 23 sigue abierta, asi que la ventana vigente no esta cerrada.
         assertThat(semana.cerrada()).isFalse();
         assertThat(semana.dias()).hasSize(7);
-        assertThat(semana.dias().getFirst().fecha()).isEqualTo(DESDE_EN_CURSO);
+        assertThat(semana.dias().getFirst().fecha()).isEqualTo(DESDE_VIGENTE);
+        assertThat(semana.dias().getLast().fecha()).isEqualTo(HASTA_VIGENTE);
         assertThat(semana.zona()).isEqualTo("America/Lima");
+    }
+
+    @Test
+    @DisplayName("sin fecha el semaforo se lee como lo lee el resumen (la ventana vigente), no como una semana")
+    void sinFechaLeeLaVentanaVigente() {
+        delLider(ANA, null);
+
+        assertThat(banco.lecturasDelSemaforo).singleElement().asString().startsWith("vigente ");
     }
 
     @Test
@@ -103,30 +114,45 @@ class SemanaDePersonaServiceTest {
         assertThat(semana.cerrada()).isTrue();
         assertThat(semana.color()).isEqualTo(ColorDeLaFila.ROJO);
         assertThat(semana.porcentaje()).isEqualByComparingTo("55");
+        assertThat(semana.dias()).extracting(DiaDeLaFicha::fecha).extracting(LocalDate::getDayOfWeek)
+                .first().isEqualTo(java.time.DayOfWeek.SATURDAY);
         assertThat(banco.lecturasDelSemaforo).singleElement().asString().startsWith("semana:" + SEMANA_CERRADA);
     }
 
     @Test
-    @DisplayName("regla 02: el «hoy» es el de la persona; con el reloj en la madrugada UTC la semana en curso es la de Lima")
+    @DisplayName("regla 02: el «hoy» es el de la persona; con el reloj en la madrugada UTC la vigente es la de Lima")
     void madrugadaUtc() {
-        // 03:00 UTC del sabado 17 = 22:00 del viernes 16 en Lima: para ella todavia corre la semana del 10 al 16.
+        // 03:00 UTC del sabado 17 = 22:00 del viernes 16 en Lima: para ella hoy es el 16 y la vigente termina el 15.
         banco.ahora = Instant.parse("2026-10-17T03:00:00Z");
 
         SemanaDeLaPersona semana = delLider(ANA, null);
 
-        assertThat(semana.desde()).isEqualTo(LocalDate.of(2026, 10, 10));
-        assertThat(semana.hasta()).isEqualTo(LocalDate.of(2026, 10, 16));
+        assertThat(semana.desde()).isEqualTo(LocalDate.of(2026, 10, 9));
+        assertThat(semana.hasta()).isEqualTo(LocalDate.of(2026, 10, 15));
         assertThat(semana.cerrada()).isFalse();
     }
 
     @Test
-    @DisplayName("un dia que no es viernes o una semana que no empezo es 400 y no deja registro")
+    @DisplayName("un dia que no es viernes o un viernes que todavia no llego es 400 y no deja registro")
     void semanaInvalida() {
         assertThatThrownBy(() -> delLider(ANA, LocalDate.of(2026, 10, 15))).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> delLider(ANA, LocalDate.of(2026, 10, 18))).isInstanceOf(IllegalArgumentException.class);
+        // La semana que corre (17 al 23) ya no se ofrece: la ventana del resumen no llega al futuro.
+        assertThatThrownBy(() -> delLider(ANA, VIERNES_FUTURO)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> delLider(ANA, LocalDate.of(2026, 10, 30))).isInstanceOf(IllegalArgumentException.class);
 
         assertThat(banco.consultas).isEmpty();
         assertThat(banco.ventanasPedidasALaSemana).isEmpty();
+    }
+
+    @Test
+    @DisplayName("regla 02: un viernes que ya es hoy en UTC pero no en Lima sigue siendo futuro y es 400")
+    void viernesFuturoEnLima() {
+        // 03:00 UTC del viernes 23 = 22:00 del jueves 22 en Lima.
+        banco.ahora = Instant.parse("2026-10-23T03:00:00Z");
+
+        assertThatThrownBy(() -> delLider(ANA, VIERNES_FUTURO)).isInstanceOf(IllegalArgumentException.class);
+        assertThat(banco.consultas).isEmpty();
     }
 
     // ── lo que trae ─────────────────────────────────────────────────────────
@@ -140,6 +166,7 @@ class SemanaDePersonaServiceTest {
         assertThat(semana.grupoId()).isEqualTo(FENIX);
         assertThat(semana.nombre()).isEqualTo("Ana Pérez");
         assertThat(semana.rol()).isEqualTo(UserRole.TRAINEE);
+        // El color y el % son los de la ventana vigente: los mismos que el resumen lee para Ana.
         assertThat(semana.color()).isEqualTo(ColorDeLaFila.AMARILLO);
         assertThat(semana.porcentaje()).isEqualByComparingTo("70");
         assertThat(semana.mentor().id()).isEqualTo(MENTORA.value());
@@ -161,43 +188,38 @@ class SemanaDePersonaServiceTest {
     }
 
     @Test
-    @DisplayName("la semana en curso: hoy dice «en curso»; los dias que vienen estan, con motivo FUTURO y sin nada adentro")
-    void semanaEnCursoConDiasFuturos() {
-        ObligacionDelDia deHoy = obligacion("Lectura", "PENDIENTE");
-        ObligacionDelDia delSabado = obligacion("Caminar", "COMPLETADO");
-        ObligacionDelDia adelantada = obligacion("No deberia verse", "PENDIENTE");
-        banco.obligacion(ANA, LocalDate.of(2026, 10, 17), delSabado);
+    @DisplayName("la ventana vigente no trae dias futuros ni hoy: los siete dias ya cerraron y las acciones de despues no se ven")
+    void laVigenteNoTraeFuturo() {
+        ObligacionDelDia delDomingo = obligacion("Caminar", "COMPLETADO");
+        ObligacionDelDia deHoy = obligacion("No es de esta ventana", "PENDIENTE");
+        banco.obligacion(ANA, LocalDate.of(2026, 10, 18), delDomingo);
         banco.obligacion(ANA, LocalDate.of(2026, 10, 19), deHoy);
-        banco.obligacion(ANA, LocalDate.of(2026, 10, 21), adelantada);
         banco.accion(ANA, new AccionDelDia(UUID.randomUUID(), LocalDate.of(2026, 10, 21), "Planificada para el 21",
                 false, null));
 
         List<DiaDeLaFicha> dias = delLider(ANA, null).dias();
 
-        assertThat(dias).extracting(DiaDeLaFicha::fecha).extracting(LocalDate::toString).containsExactly("2026-10-17",
-                "2026-10-18", "2026-10-19", "2026-10-20", "2026-10-21", "2026-10-22", "2026-10-23");
-        assertThat(dias).extracting(DiaDeLaFicha::motivo).containsExactly(null, null, "EN_CURSO", "FUTURO", "FUTURO",
-                "FUTURO", "FUTURO");
-        assertThat(dias.get(0).obligaciones()).containsExactly(delSabado);
-        assertThat(dias.get(2).obligaciones()).containsExactly(deHoy);
-        assertThat(dias.subList(3, 7)).allSatisfy(dia -> {
-            assertThat(dia.obligaciones()).isEmpty();
-            assertThat(dia.acciones()).isEmpty();
-            assertThat(dia.diaDePrograma()).isNull();
-        });
+        assertThat(dias).extracting(DiaDeLaFicha::fecha).extracting(LocalDate::toString).containsExactly("2026-10-12",
+                "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16", "2026-10-17", "2026-10-18");
+        assertThat(dias).extracting(DiaDeLaFicha::motivo).containsOnlyNulls();
+        assertThat(dias.getLast().obligaciones()).containsExactly(delDomingo);
+        assertThat(dias).flatExtracting(DiaDeLaFicha::acciones).isEmpty();
     }
 
     @Test
-    @DisplayName("regla 02: «hoy» y «futuro» se deciden con el dia de la persona, no con el de UTC")
-    void futuroSegunLaZonaDeLaPersona() {
-        // 03:00 UTC del domingo 18 = 22:00 del sabado 17 en Lima: el 18 todavia es futuro para ella.
-        banco.ahora = Instant.parse("2026-10-18T03:00:00Z");
-        banco.semana(HASTA_EN_CURSO, ANA, ventana(DESDE_EN_CURSO, false, null, null, null, null, null, null, null));
+    @DisplayName("el viernes de hoy se puede pedir: su ultimo dia es hoy y dice «en curso»; nada llega mas alla")
+    void elViernesDeHoyDiceEnCurso() {
+        // Viernes 23, 10:00 en Lima: la semana del 17 al 23 llega hasta hoy.
+        banco.ahora = Instant.parse("2026-10-23T15:00:00Z");
+        banco.semana(VIERNES_FUTURO, ANA, ventana(LocalDate.of(2026, 10, 17), false, 70, 70, 70, 70, 70, 70, null));
 
-        List<DiaDeLaFicha> dias = delLider(ANA, null).dias();
+        SemanaDeLaPersona semana = delLider(ANA, VIERNES_FUTURO);
 
-        assertThat(dias.get(0).motivo()).isEqualTo("EN_CURSO");
-        assertThat(dias.get(1).motivo()).isEqualTo("FUTURO");
+        assertThat(semana.cerrada()).isFalse();
+        assertThat(semana.dias()).hasSize(7);
+        assertThat(semana.dias().getLast().fecha()).isEqualTo(VIERNES_FUTURO);
+        assertThat(semana.dias().getLast().motivo()).isEqualTo("EN_CURSO");
+        assertThat(semana.dias().subList(0, 6)).extracting(DiaDeLaFicha::motivo).containsOnlyNulls();
     }
 
     @Test
@@ -211,15 +233,14 @@ class SemanaDePersonaServiceTest {
         assertThat(semana.color()).isEqualTo(ColorDeLaFila.SIN_DATOS);
         assertThat(semana.porcentaje()).isNull();
         assertThat(semana.primeraSemana()).isNull();
-        assertThat(semana.dias()).extracting(DiaDeLaFicha::motivo).containsExactly("NO_ACTIVADO", "NO_ACTIVADO",
-                "NO_ACTIVADO", "FUTURO", "FUTURO", "FUTURO", "FUTURO");
+        assertThat(semana.dias()).extracting(DiaDeLaFicha::motivo).containsOnly("NO_ACTIVADO").hasSize(7);
     }
 
     @Test
     @DisplayName("el mentor con programa propio sale «No se mide» con su %, y sin boton para avisar a su propio mentor")
     void elMentorTambienSeVe() {
         banco.programa(MENTORA, UserRole.MENTOR, LocalDate.of(2026, 9, 1), true);
-        banco.semana(HASTA_EN_CURSO, MENTORA, ventanaPareja(DESDE_EN_CURSO, false, 85));
+        banco.vigente(MENTORA, ventanaPareja(DESDE_VIGENTE, false, 85));
 
         SemanaDeLaPersona semana = delLider(MENTORA, null);
 
@@ -330,7 +351,7 @@ class SemanaDePersonaServiceTest {
             assertThat(c.personaId()).isEqualTo(ANA);
             assertThat(c.grupoId()).isEqualTo(FENIX);
             assertThat(c.mentorId()).isEqualTo(MENTORA);
-            assertThat(c.semanaDesde()).isEqualTo(DESDE_EN_CURSO);
+            assertThat(c.semanaDesde()).isEqualTo(DESDE_VIGENTE);
             assertThat(c.consultadaEn()).isEqualTo(BancoDeCumplimiento.AHORA);
         });
     }
@@ -343,7 +364,7 @@ class SemanaDePersonaServiceTest {
         delLider(ANA, SEMANA_CERRADA);
 
         assertThat(banco.consultas).extracting(ConsultaDeFicha::semanaDesde)
-                .containsExactly(DESDE_EN_CURSO, DESDE_SEMANA_CERRADA, DESDE_SEMANA_CERRADA);
+                .containsExactly(DESDE_VIGENTE, DESDE_SEMANA_CERRADA, DESDE_SEMANA_CERRADA);
         assertThat(banco.consultas).extracting(ConsultaDeFicha::id).doesNotHaveDuplicates();
     }
 

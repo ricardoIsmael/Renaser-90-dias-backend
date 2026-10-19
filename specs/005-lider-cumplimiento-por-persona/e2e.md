@@ -83,6 +83,13 @@ un número propio para cada uno, es solo renumerar la bitácora.
 1. **SC-006 y la «cuenta de prueba»** no se pueden comprobar en esta rama (T046 espera a la fase 2: `es_cuenta_de_prueba`, V107). Hoy una cuenta de prueba **sí aparece** en la lista del líder.
 2. **Admin sin entrada a la vista nueva** (escenario 10): hay que decidir si FR-020 incluye abrir los grupos del Semáforo de Administración con esta vista, o si el registro de consultas del ADMIN/Alquimista queda solo para quien llame al endpoint.
 3. **Dos ventanas distintas a la vista**: la tarjeta del resumen de Hoy dice «Últimos 7 días, del lunes 12 al domingo 18» y la lista de cada grupo, «Semana cerrada, del sábado 10 al viernes 16». Por eso Rocío dice 50 % en un lado y 47,6 % en el otro. Es lo que dice el contrato (R-2, solo el líder va de sábado a viernes), pero se nota.
+
+   > **Corregido 2026-10-19 (E-629 d).** Esta observación quedó como «lo dice el contrato, pero se nota». El dueño decidió que
+   > **la ventana del resumen manda en todo**: el resumen, la lista y la ficha leen los mismos 7 días (sin `semanaHasta`, los
+   > que terminan ayer; con un viernes, esa semana), con el mismo rótulo y las mismas flechas. Resuelto en el backend
+   > (`VentanaDeLaFicha.de`, la lista y la ficha leen lo que lee el resumen) y en la app (`useLecturaPorSemana` y
+   > `NavegacionDeSemanas` para las tres). Prueba: `MismaVentanaEnLasTresPantallasTest`. **Falta repetir en el emulador** los
+   > escenarios 1, 2 y 5 (ver abajo); las capturas `01a`–`01d`, `02a`, `05a`–`05c` y `12a` son de la ventana anterior.
 4. **La ficha de administración no muestra la respuesta de la Pastilla** («no pedía evidencia»): no es de la 005 (FR-011 es del líder).
 5. El **barrido del semáforo** recalculó, al arrancar, los días de las cuentas E2E viejas del clon («19 con problemas» en el resumen): no tiene que ver con la 005.
 
@@ -131,3 +138,15 @@ Backend: no se repitió `clean verify` (ya estaba en verde, 6588 de surefire y 4
 - **Los 4 flujos de `.maestro/interruptores/`** (ver arriba).
 - **Una cuenta de Alquimista** abriendo la vista: solo se probó con líder y con admin (por API, los tres roles comparten el guard y su prueba).
 - **Producción**: nada se probó contra producción (regla del dueño).
+
+## Qué repetir en el emulador tras E-629 (d)
+
+> **Corregido 2026-10-19.** Los escenarios 1, 2 y 5 se grabaron con la lista en «Semana cerrada · sábado 10 al viernes 16» y la
+> ficha en la semana en curso. Con la ventana única hay que repetirlos, con el backend y el APK de esta rama:
+
+| # | Qué comprobar ahora |
+|---|---|
+| 1 | Resumen «Últimos 7 días · Del lunes 12 al domingo 18 de octubre» → tocar «Fénix 005»: la lista dice **lo mismo** (mismo título, mismo rango) y Rocío sale con **el mismo %** que el resumen cuenta para ella; «No se mide» sigue al final |
+| 2 | Tocar a Ana: la ficha dice **«Últimos 7 días · Del lunes 12 al domingo 18»**, con los siete días y el mismo % y color que en la lista; sin «Hoy», sin días por venir, sin «La semana sigue en curso» |
+| 5 | ‹ en la ficha: «Semana cerrada · Del sábado 10 al viernes 16»; otro ‹: del 3 al 9 (la primera de Ana: ‹ apagada); › vuelve hasta «Últimos 7 días» y se apaga. Las mismas flechas, con el mismo texto, en el resumen y en la lista. Mover ‹ en la lista antes de tocar a una persona: la ficha abre en esa semana |
+| 11, 12 | Sin cambios de comportamiento; repetirlos de paso si la máquina lo permite |

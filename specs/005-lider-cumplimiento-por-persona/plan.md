@@ -10,6 +10,9 @@ El líder abre un grupo desde el semáforo por grupos y ve a sus personas con el
 verde. Toca a una persona y ve su semana de sábado a viernes con **todas** sus evidencias. Desde ahí avisa a su
 mentor o le escribe a la persona.
 
+> **Corregido 2026-10-19.** Decía «su semana de sábado a viernes». Tras el E2E, el resumen, la lista y la ficha leen la misma
+> ventana de 7 días (la vigente del resumen, o la semana que se eligió con ‹ ›): ver `contracts/` y E-629 (d).
+
 El backend suma tres lecturas bajo `/leadership/` que **reutilizan** lo que ya existe:
 
 - la tabla del semáforo del grupo (`armarTabla`);

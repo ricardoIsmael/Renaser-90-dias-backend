@@ -15454,3 +15454,25 @@ junto a «Ver publicación»; el mentor entendía que tenía algo que revisar. *
 `revision`; el post diario llega con `revision: null` (su entrega es la publicación, E-628) y caía en el «pendiente» por defecto.
 **Solución.** `mentor/utils/etiquetaDeEntrega.ts` recibe `publicacionId` y, sin revisión, dice «Publicado en el Muro» (como la
 ficha del líder). **Para que no vuelva.** `etiquetaDeEntrega.test.ts`. La ficha de administración ya decía «con evidencia».
+
+**E-629 (d) · El resumen, la lista y la ficha del líder miraban tres ventanas distintas (backend y app, spec 005, RESUELTO, 19/10).**
+Hallazgo del mismo E2E (observación 3 de `specs/005-lider-cumplimiento-por-persona/e2e.md`).
+**Síntoma literal.** El resumen decía «Últimos 7 días · Del lunes 12 al domingo 18 de octubre»; al tocar un grupo, la lista decía «Semana
+cerrada · Del sábado 10 al viernes 16 de octubre», y los porcentajes cambiaban: Rocío, 50 % en un lado y 47,6 % en el otro (capturas
+`12a-backend-anterior-resumen.png` y `01d-lista-fenix-despues-del-arreglo.png`). La ficha abría una tercera: la semana en curso.
+**Causa real.** Cada pantalla tenía su propio «sin fecha»: el resumen leía `SemaforoFinder.vigenteDe` (7 días que terminan ayer); la lista,
+`VentanaDeLaFicha.paraLaLista` (última semana cerrada, con `semanaDe(viernes)`); la ficha, `paraLaFicha` (la semana en curso). El contrato
+(R-2) lo había decidido así («solo el líder va de sábado a viernes») y la app lo tapaba pasándole a la ficha el `hasta` de la lista, pero
+no hay un `hasta` que haga coincidir una semana de sábado a viernes con unos «últimos 7 días». Ninguna prueba ponía las tres pantallas
+sobre los mismos datos.
+**Solución (decisión del dueño: «la ventana del resumen manda en todo»).** `VentanaDeLaFicha.de(semanaHasta, hoy)`: sin fecha, la vigente
+(`hasta = hoy − 1`, `desde = hasta − 6`) leída con `vigenteDe`; con un viernes que ya llegó, esa semana leída con `semanaDe`; un viernes
+futuro es 400; `cerrada` del calendario. La lista pasa a la tabla del semáforo lo mismo que se pidió (`null` = vigente), como
+Administración. En la app, la lista abre con el `InicioSemanal` del resumen, la ficha con el de la lista, y las tres usan
+`useLecturaPorSemana` y `NavegacionDeSemanas` (mismo rótulo, mismas flechas, de 7 en 7 días, sin futuro). Se retiraron el motivo `FUTURO`,
+«Volver a esta semana» y el aviso «La semana sigue en curso».
+**Para que no vuelva.** `MismaVentanaEnLasTresPantallasTest` (el resumen real, la tabla real y los servicios del líder sobre los mismos
+datos: mismos días, mismo % y mismo color, con la vigente, con un viernes, en la madrugada UTC y un sábado; falla con el comportamiento
+viejo), `VentanaDeLaFichaTest`, `GrupoDelLiderServiceTest`, `SemanaDePersonaServiceTest`, `CumplimientoDelLiderControllerTest` y, en la app,
+`lecturaDelLider.test.ts`, `delGrupoALaPersona.test.ts` y `semanasDelSemaforo.test.ts`. **Regla general:** dos pantallas que se abren una
+desde la otra hablan de los mismos días; si el «por defecto» de cada una es distinto, el usuario ve dos números para lo mismo.

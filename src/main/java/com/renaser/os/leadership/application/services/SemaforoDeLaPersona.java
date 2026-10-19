@@ -11,9 +11,10 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Lo que el semáforo dice de UNA persona en la semana que el líder está mirando (spec 005). No calcula nada: el color,
- * el porcentaje y el estado de cada día salen de la misma lectura de {@code points} que usan la tabla del mentor y la
- * del administrador (FR-008). Una semana que todavía corre trae solo los días ya cerrados.
+ * Lo que el semáforo dice de UNA persona en la ventana que el líder está mirando (spec 005). No calcula nada: el color,
+ * el porcentaje y el estado de cada día salen de la misma lectura de {@code points} que usan el resumen por grupos, la
+ * tabla del mentor y la del administrador (FR-008): sin fecha la ventana vigente ({@code vigenteDe}) y con un viernes
+ * esa semana ({@code semanaDe}). Por eso la ficha y el resumen no pueden darle números distintos a la misma persona.
  */
 @Component
 class SemaforoDeLaPersona {
@@ -26,7 +27,9 @@ class SemaforoDeLaPersona {
 
     /** Vacío si el semáforo no la mide (por ejemplo, todavía no activó su programa): ni cero ni verde. */
     Optional<VentanaDelSemaforo> ventanaDe(UserId persona, VentanaDeLaFicha ventana) {
-        Map<UserId, VentanaDelSemaforo> leidas = semaforo.semanaDe(List.of(persona), ventana.hasta());
+        Map<UserId, VentanaDelSemaforo> leidas = ventana.vigente()
+                ? semaforo.vigenteDe(List.of(persona))
+                : semaforo.semanaDe(List.of(persona), ventana.hasta());
         return Optional.ofNullable(leidas.get(persona));
     }
 }

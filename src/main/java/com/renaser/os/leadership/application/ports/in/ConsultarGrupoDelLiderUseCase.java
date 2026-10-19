@@ -20,7 +20,10 @@ public interface ConsultarGrupoDelLiderUseCase {
 
     GrupoDelLider grupoDe(ConsultaGrupoDelLider consulta);
 
-    /** @param semanaHasta null = la última semana cerrada del semáforo; si viene, un viernes (y no una semana que no empezó) */
+    /**
+     * @param semanaHasta null = la ventana vigente del resumen por grupos (los 7 días que terminan ayer); si viene, un
+     *                    viernes que ya llegó: la semana de sábado a viernes que termina ese día
+     */
     record ConsultaGrupoDelLider(UserId actorId, UUID grupoId, LocalDate semanaHasta) {
 
         public ConsultaGrupoDelLider {
@@ -30,7 +33,7 @@ public interface ConsultarGrupoDelLiderUseCase {
     }
 
     /**
-     * @param cerrada true solo si es una semana ya cerrada el sábado
+     * @param cerrada true solo si la ventana termina en una semana ya cerrada el sábado (sale del calendario)
      * @param resumen cuántos hay en cada color; no cuenta a quien no se mide
      */
     record GrupoDelLider(UUID grupoId, String grupoNombre, LocalDate desde, LocalDate hasta, boolean cerrada,

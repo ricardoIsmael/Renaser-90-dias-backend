@@ -63,6 +63,20 @@ Respuestas del dueño del producto, en la conversación de diseño:
 - Q: (plan) ¿«Avisar a su mentor» es una observación nueva o la de siempre? → A: La de siempre, con la persona y la
   semana (confirmado por el dueño, R-7).
 
+### Session 2026-10-19 (post-E2E)
+
+- Q: En el E2E el resumen decía «Últimos 7 días · del lunes 12 al domingo 18» y, al tocar un grupo, la lista decía «Semana
+  cerrada · del sábado 10 al viernes 16»; los porcentajes cambiaban (Rocío: 50 % y 47,6 %). ¿Qué ventana manda? → A: **La
+  ventana del resumen manda en todo.** Al tocar un grupo, la lista y después la ficha de la persona abren en los MISMOS 7 días
+  que mostraba el resumen. Las flechas ‹ › mueven la ventana igual en las tres pantallas, de 7 en 7 días, y ninguna llega al
+  futuro. Es lo que ya hace Administración (`SemaforoGrupoAdminScreen`: «abre en la misma semana que se estaba mirando en el
+  resumen»). Las fichas del mentor y de Administración (lunes a domingo) no cambian.
+
+> **Corregido 2026-10-19.** Las respuestas de «Session 2026-10-19» decían «La **semana del semáforo** (de sábado a viernes)»
+> como período de la ficha y R-2 decía que solo el líder iba de sábado a viernes. Esa semana ya no es el período por defecto:
+> lo es la ventana vigente del resumen (los 7 días que terminan ayer); la semana de sábado a viernes sigue existiendo, pero como
+> una de las ventanas a las que se llega con ‹ desde ahí.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Del grupo a la persona (Priority: P1)
@@ -86,11 +100,14 @@ administrador ve en la ficha de esa misma persona.
    cada color, de menor a mayor %.
 2. **Given** la lista del grupo, **When** toca a una persona, **Then** ve la semana seleccionada día por día con
    el estado de cada hábito, en palabras y en forma (no solo en color), igual que la ficha de administración.
-3. **Given** la ficha de una persona, **When** pasa a la semana anterior, **Then** ve esa semana tal como fue
-   (los hábitos que tenía ese día, no los de hoy), y no puede pasar de la semana en curso hacia el futuro.
-4. **Given** un mentor o una guía con su propio programa en ese grupo, **When** el líder abre el grupo, **Then**
+3. **Given** la ficha de una persona, **When** pasa a la ventana anterior, **Then** ve esos días tal como fueron
+   (los hábitos que tenía ese día, no los de hoy), y no puede pasar de la ventana del resumen hacia el futuro.
+4. **Given** el resumen «Semáforo por grupos» abierto en una ventana, **When** el líder toca un grupo y luego una persona,
+   **Then** el resumen, la lista y la ficha muestran los mismos 7 días con el mismo rótulo, y la misma persona tiene el mismo
+   color y el mismo % en la lista y en la ficha (y cuenta igual en el resumen).
+5. **Given** un mentor o una guía con su propio programa en ese grupo, **When** el líder abre el grupo, **Then**
    aparece en la lista con su % y con «No se mide en el semáforo» en lugar de un color.
-5. **Given** un grupo sin nadie que mostrar, **When** el líder lo abre, **Then** ve «Este grupo todavía no tiene
+6. **Given** un grupo sin nadie que mostrar, **When** el líder lo abre, **Then** ve «Este grupo todavía no tiene
    personas» y no una lista vacía muda.
 
 ---
@@ -218,10 +235,17 @@ un solo aviso con solo sus personas, y que un día sin consultas no genera aviso
 
 **Ficha de la persona**
 
-- **FR-009**: La ficha MUST mostrar la semana del semáforo (de sábado a viernes) día por día, con el estado de
-  cada hábito que la persona tenía ese día, en palabras y no solo en color.
-- **FR-010**: El líder MUST poder ir a semanas anteriores hasta el inicio del programa de la persona, y volver a
-  la semana en curso. No hay semanas futuras.
+- **FR-009**: La ficha MUST mostrar, día por día, la **misma ventana de 7 días que mostraba el resumen «Semáforo por grupos»**
+  desde el que se llegó (la vigente, o una semana de sábado a viernes), con el estado de cada hábito que la persona tenía ese
+  día, en palabras y no solo en color. La lista del grupo MUST abrir en esa misma ventana y MUST rotularla con el mismo texto.
+  Con la misma fecha, el resumen, la lista y la ficha MUST dar el mismo color y el mismo % para la misma persona.
+- **FR-010**: Las flechas ‹ › MUST mover la ventana igual en las tres pantallas (de la vigente a la última semana cerrada y de
+  ahí de 7 en 7 días hacia atrás), hasta el inicio del programa de la persona. Ninguna llega al futuro: el servidor responde 400
+  a un viernes que todavía no llegó.
+
+> **Corregido 2026-10-19.** FR-009 decía «la semana del semáforo (de sábado a viernes)» y FR-010 «volver a la semana en
+> curso». El dueño decidió tras el E2E que la ventana del resumen manda en todo (ver «Session 2026-10-19 (post-E2E)»): ya no
+> hay «semana en curso» que mostrar, porque la ventana vigente termina ayer.
 - **FR-011**: La ficha MUST mostrar, para cada hábito cumplido con evidencia, una forma de abrirla: foto, texto,
   audio, video, «¿Qué sentiste?», respuestas de la Pastilla y la Audioterapia, la publicación del Muro del post
   diario y la foto de las acciones de objetivos del día.
@@ -263,9 +287,9 @@ un solo aviso con solo sus personas, y que un día sin consultas no genera aviso
 
 - **Persona del grupo**: alguien que pertenece a un grupo y hace el programa (aprendiz, mentor o guía con
   programa propio). Lleva nombre, foto, color de la semana (o «no se mide») y % cumplido.
-- **Semana de cumplimiento**: los siete días (sábado a viernes, como el semáforo) con los hábitos que la persona
-  tenía cada día, su estado y su evidencia. Cada día coincide con el que ven el mentor y el administrador; sus
-  fichas siguen mostrando la semana de lunes a domingo.
+- **Ventana de cumplimiento**: los siete días del resumen «Semáforo por grupos» (los que terminan ayer, o una semana de
+  sábado a viernes) con los hábitos que la persona tenía cada día, su estado y su evidencia. Cada día coincide con el que ven
+  el mentor y el administrador; sus fichas siguen mostrando la semana de lunes a domingo.
 - **Evidencia**: lo que respalda un cumplimiento: archivo (foto, audio, video), texto, respuestas guiadas, o la
   publicación del Muro.
 - **Consulta del líder**: quién consultó a quién, de qué grupo y cuándo. Alimenta el resumen diario.
@@ -289,8 +313,8 @@ un solo aviso con solo sus personas, y que un día sin consultas no genera aviso
 
 ## Assumptions
 
-- **El % de la lista** es el de la semana seleccionada en la ficha (la vigente al entrar) y el color es el del
-  semáforo de esa misma semana.
+- **El % de la lista** es el de la ventana que se está mirando (la del resumen al entrar) y el color es el del semáforo de
+  esa misma ventana; la ficha de la persona abre en la misma, con la misma cifra.
 - **Mentor y guía con programa propio** no tienen color porque el semáforo solo mide aprendices; su % sí se
   muestra.
 - **El chat 1 a 1** usa la regla vigente de quién puede escribirle a quién (cuentas activas). Si el servidor no

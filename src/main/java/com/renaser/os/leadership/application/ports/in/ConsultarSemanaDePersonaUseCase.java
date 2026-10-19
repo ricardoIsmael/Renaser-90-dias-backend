@@ -24,7 +24,10 @@ public interface ConsultarSemanaDePersonaUseCase {
 
     SemanaDeLaPersona semanaDe(ConsultaSemanaDePersona consulta);
 
-    /** @param semanaHasta null = la semana en curso (la que contiene a hoy); si viene, un viernes (y no una semana que no empezó) */
+    /**
+     * @param semanaHasta null = la ventana vigente del resumen por grupos (los 7 días que terminan ayer); si viene, un
+     *                    viernes que ya llegó: la semana de sábado a viernes que termina ese día
+     */
     record ConsultaSemanaDePersona(UserId actorId, UUID grupoId, UUID personaId, LocalDate semanaHasta) {
 
         public ConsultaSemanaDePersona {
@@ -35,9 +38,11 @@ public interface ConsultarSemanaDePersonaUseCase {
     }
 
     /**
-     * @param cerrada       true solo si la semana ya cerró el sábado (su resultado ya no cambia); false en la semana en curso
+     * @param cerrada       true solo si la ventana termina en una semana ya cerrada el sábado (su resultado ya no
+     *                      cambia); false mientras esa semana siga abierta, como la vigente de un lunes
      * @param primeraSemana el sábado que abre la primera semana de su programa; null si todavía no eligió su Día 1.
-     *                      No hay semanas anteriores a esa
+     *                      Ninguna ventana que termine antes del viernes de esa semana (su sábado + 6) tiene nada
+     *                      que mostrar: es el tope hacia atrás
      * @param mentor        el mentor vigente del grupo; null si no tiene (la app esconde «Avisar a su mentor»)
      * @param color         el del semáforo de esa ventana; {@code NO_SE_MIDE} para quien lleva su propio programa
      * @param porcentaje    1 decimal; null si ningún día se midió
@@ -57,7 +62,7 @@ public interface ConsultarSemanaDePersonaUseCase {
 
     /**
      * @param motivo el nombre de {@code MotivoDelDia} si el día no tiene nada que medir; null si se midió. Nunca es
-     *               un incumplimiento. {@code FUTURO}: el día no llegó y viene sin obligaciones ni acciones
+     *               un incumplimiento. {@code EN_CURSO}: hoy, que solo aparece al pedir el viernes de hoy
      */
     record DiaDeLaFicha(LocalDate fecha, Integer diaDePrograma, String motivo, List<ObligacionDelDia> obligaciones,
                         List<AccionDelDia> acciones) {

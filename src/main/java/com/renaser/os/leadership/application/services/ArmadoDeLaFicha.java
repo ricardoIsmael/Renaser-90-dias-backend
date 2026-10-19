@@ -68,11 +68,6 @@ final class ArmadoDeLaFicha {
 
     private static DiaDeLaFicha dia(DiaDelAlumno dia, VentanaDeLaFicha ventana, DiaDelSemaforo delSemaforo,
                                     List<AccionDelDia> acciones, boolean sinSemaforo) {
-        if (ventana.esFutura(dia.fecha())) {
-            // Un dia que no llego se muestra para que la semana se vea entera, pero no tiene nada: ni las acciones
-            // que la persona ya planifico para manana.
-            return new DiaDeLaFicha(dia.fecha(), null, MotivoDelDia.FUTURO.name(), List.of(), List.of());
-        }
         List<AccionDelDia> delDia = acciones.stream().filter(accion -> accion.fecha().equals(dia.fecha())).toList();
         return new DiaDeLaFicha(dia.fecha(), dia.diaDePrograma(), motivo(dia.fecha(), ventana, delSemaforo, sinSemaforo),
                 dia.obligaciones(), delDia);

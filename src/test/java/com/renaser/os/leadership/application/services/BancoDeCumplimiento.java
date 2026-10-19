@@ -61,9 +61,11 @@ public class BancoDeCumplimiento {
     /** La última semana sábado→viernes cerrada a {@link #AHORA}: del 10 al 16 de octubre. */
     public static final LocalDate DESDE_SEMANA_CERRADA = LocalDate.of(2026, 10, 10);
     public static final LocalDate SEMANA_CERRADA = LocalDate.of(2026, 10, 16);
-    /** La semana en curso a {@link #AHORA}: del sábado 17 al viernes 23; hoy es el lunes 19. */
-    public static final LocalDate DESDE_EN_CURSO = LocalDate.of(2026, 10, 17);
-    public static final LocalDate HASTA_EN_CURSO = LocalDate.of(2026, 10, 23);
+    /** La ventana vigente del resumen a {@link #AHORA}: los 7 días que terminan ayer, del lunes 12 al domingo 18. */
+    public static final LocalDate DESDE_VIGENTE = LocalDate.of(2026, 10, 12);
+    public static final LocalDate HASTA_VIGENTE = LocalDate.of(2026, 10, 18);
+    /** El viernes de la semana que corre a {@link #AHORA} (hoy es el lunes 19): todavía no llegó. */
+    public static final LocalDate VIERNES_FUTURO = LocalDate.of(2026, 10, 23);
 
     public static final UUID FENIX = UUID.fromString("00000000-0000-0000-0000-00000000f001");
     /** Un grupo en curso sin mentor y la recepción: ninguno aparece entre los «con mentor». */
@@ -80,7 +82,12 @@ public class BancoDeCumplimiento {
     final Set<UserId> cuentasDePrueba = new HashSet<>();
 
     final Map<LocalDate, Map<UserId, VentanaDelSemaforo>> ventanasPorSemana = new LinkedHashMap<>();
-    /** Cada lectura del semáforo, en orden: «semana:2026-10-16 [quiénes]» o «tabla:2026-10-16». */
+    /** La ventana vigente de cada persona: la que el resumen lee sin fecha. */
+    final Map<UserId, VentanaDelSemaforo> ventanasVigentes = new LinkedHashMap<>();
+    /**
+     * Cada lectura del semáforo, en orden: «semana:2026-10-16 [quiénes]», «vigente [quiénes]», «tabla:2026-10-16» o
+     * «tabla:vigente».
+     */
     public final List<String> lecturasDelSemaforo = new ArrayList<>();
 
     final Map<UserId, Map<LocalDate, List<ObligacionDelDia>>> obligacionesPorDia = new LinkedHashMap<>();
@@ -240,10 +247,12 @@ public class BancoDeCumplimiento {
         return deLaPrueba;
     };
 
-    final SemaforoFinder semaforo = new SemaforoFinder() {
+    /** Reemplazable: {@link #compartirElSemaforoCon} lo cambia por el del resumen para comparar las tres pantallas. */
+    SemaforoFinder semaforo = new SemaforoFinder() {
         @Override
         public Map<UserId, VentanaDelSemaforo> vigenteDe(Collection<UserId> participantes) {
-            throw new UnsupportedOperationException("El lider mira semanas de sabado a viernes, no la ventana vigente");
+            lecturasDelSemaforo.add("vigente " + participantes);
+            return deLos(participantes, ventanasVigentes);
         }
 
         @Override
@@ -258,17 +267,16 @@ public class BancoDeCumplimiento {
         }
     };
 
-    final TablaDelSemaforoFinder tabla = (grupoId, semanaHasta) -> {
+    /** Como {@code SemaforoDelGrupoService.tablaDe}: sin fecha la ventana vigente, con un viernes esa semana. */
+    TablaDelSemaforoFinder tabla = (grupoId, semanaHasta) -> {
         GrupoAcompanado grupo = gruposConMentor.get(grupoId);
         if (grupo == null) {
             throw new java.util.NoSuchElementException("Grupo no encontrado");
         }
-        if (semanaHasta == null) {
-            throw new IllegalStateException("La lista del lider siempre pide una semana concreta");
-        }
-        lecturasDelSemaforo.add("tabla:" + semanaHasta);
-        VentanaDeLaFicha ventana = VentanaDeLaFicha.paraLaLista(semanaHasta, ahora.atZone(LIMA).toLocalDate());
-        Map<UserId, VentanaDelSemaforo> ventanas = ventanasPorSemana.getOrDefault(semanaHasta, Map.of());
+        lecturasDelSemaforo.add("tabla:" + (semanaHasta == null ? "vigente" : semanaHasta));
+        VentanaDeLaFicha ventana = VentanaDeLaFicha.de(semanaHasta, ahora.atZone(LIMA).toLocalDate());
+        Map<UserId, VentanaDelSemaforo> ventanas = semanaHasta == null ? ventanasVigentes
+                : ventanasPorSemana.getOrDefault(semanaHasta, Map.of());
         List<TablaDelSemaforoFinder.FilaDeLaTabla> filas = aprendicesPorGrupo.getOrDefault(grupoId, List.of())
                 .stream().filter(id -> usuarios.get(id) != null && usuarios.get(id).status().allowsAccess())
                 .map(id -> fila(id, ventanas.get(id))).toList();
@@ -313,6 +321,7 @@ public class BancoDeCumplimiento {
         aprendicesPorGrupo.clear();
         cuentasDePrueba.clear();
         ventanasPorSemana.clear();
+        ventanasVigentes.clear();
         lecturasDelSemaforo.clear();
         obligacionesPorDia.clear();
         accionesPorPersona.clear();
@@ -344,6 +353,20 @@ public class BancoDeCumplimiento {
 
     public void semana(LocalDate semanaHasta, UserId id, VentanaDelSemaforo ventana) {
         ventanasPorSemana.computeIfAbsent(semanaHasta, s -> new LinkedHashMap<>()).put(id, ventana);
+    }
+
+    /** Lo que el semáforo dice de la persona en la ventana vigente (los 7 días que terminan ayer). */
+    public void vigente(UserId id, VentanaDelSemaforo ventana) {
+        ventanasVigentes.put(id, ventana);
+    }
+
+    /**
+     * Usa el semáforo y la tabla de OTRO banco (los del resumen por grupos): la lista y la ficha leen entonces
+     * exactamente lo mismo que el resumen, y una prueba puede comparar las tres pantallas con los mismos datos.
+     */
+    public void compartirElSemaforoCon(SemaforoFinder semaforoCompartido, TablaDelSemaforoFinder tablaCompartida) {
+        this.semaforo = semaforoCompartido;
+        this.tabla = tablaCompartida;
     }
 
     public void obligacion(UserId id, LocalDate fecha, ObligacionDelDia obligacion) {

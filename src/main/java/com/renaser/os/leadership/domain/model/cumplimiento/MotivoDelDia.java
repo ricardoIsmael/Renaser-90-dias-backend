@@ -8,8 +8,8 @@ import java.util.Optional;
  * Por qué un día de la ficha no tiene nada que medir, dicho en palabras (spec 005, FR-019): la falta de datos no es
  * incumplimiento y nunca se presenta como tal. Los nombres son los de {@code MotivoSinDatos} del semáforo, para que la
  * app los lea con las mismas palabras que ya usa en la tabla del grupo; {@link #NO_ACTIVADO} cubre a quien el semáforo
- * ni siquiera mide (todavía no activó su programa). {@link #FUTURO} y {@link #EN_CURSO} son de la semana en curso: el
- * día todavía no llegó, o llegó y no ha cerrado.
+ * ni siquiera mide (todavía no activó su programa). {@link #EN_CURSO} es de hoy, que llega solo cuando se pide el
+ * viernes de hoy: la ventana del resumen termina ayer y no tiene días por venir.
  */
 public enum MotivoDelDia {
     SIN_NADA_PLANIFICADO,
@@ -18,8 +18,6 @@ public enum MotivoDelDia {
     CUENTA_SUSPENDIDA,
     PAUSADO,
     FUERA_DEL_PROGRAMA,
-    /** El día no llegó: la semana en curso se muestra completa, pero lo que falta no tiene obligaciones ni acciones. */
-    FUTURO,
     /** Hoy: el día corre y el semáforo solo mide los días cerrados. */
     EN_CURSO;
 

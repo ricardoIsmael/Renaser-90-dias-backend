@@ -516,14 +516,20 @@ todos, igual que en §4.3.
 Contrato completo: `specs/005-lider-cumplimiento-por-persona/contracts/leadership-cumplimiento.md`. En breve:
 
 - `GET /api/v1/leadership/groups/{g}/semaforo` — la tabla del grupo (la forma de §4.3, orden del líder: rojo, amarillo, sin
-  datos, verde, no se mide). **Sin `semanaHasta` = la última semana cerrada.** Quien lleva su propio programa en el grupo
-  (su mentor o guía) sale como `NO_SE_MIDE`, sin barras.
-- `GET /api/v1/leadership/groups/{g}/people/{p}/week` — la ficha: siete días de sábado a viernes con las obligaciones, la
-  respuesta escrita, las evidencias, la publicación del post diario y las acciones del día. **Sin `semanaHasta` = la semana
-  en curso**; sus días futuros salen con `motivo: FUTURO` y vacíos, aunque la persona ya haya planificado acciones.
-- La semana es **la del semáforo (sábado→viernes)**, con el «hoy» de la zona de la persona. Los días sin color traen su
-  `motivo` y **nunca** se cuentan como incumplidos (`SIN_NADA_PLANIFICADO`, `NO_ACTIVADO`, `PENDIENTE_DE_CALCULO`,
-  `CUENTA_SUSPENDIDA`, `PAUSADO`, `FUERA_DEL_PROGRAMA`, `FUTURO`, `EN_CURSO`).
+  datos, verde, no se mide). **Sin `semanaHasta` = la ventana vigente, la misma del resumen §4.4.** Quien lleva su propio
+  programa en el grupo (su mentor o guía) sale como `NO_SE_MIDE`, sin barras.
+- `GET /api/v1/leadership/groups/{g}/people/{p}/week` — la ficha: los siete días de esa misma ventana con las obligaciones, la
+  respuesta escrita, las evidencias, la publicación del post diario y las acciones del día. **Sin `semanaHasta` = la ventana
+  vigente**; no hay días futuros.
+- La ventana es **la del resumen en las tres pantallas** (decisión del dueño, 2026-10-19): sin fecha, los 7 días que terminan
+  ayer en la zona de la persona (`vigenteDe`); con un viernes que ya llegó, esa semana de sábado a viernes (`semanaDe`). Los días
+  sin color traen su `motivo` y **nunca** se cuentan como incumplidos (`SIN_NADA_PLANIFICADO`, `NO_ACTIVADO`,
+  `PENDIENTE_DE_CALCULO`, `CUENTA_SUSPENDIDA`, `PAUSADO`, `FUERA_DEL_PROGRAMA`, `EN_CURSO`).
+
+> **Corregido 2026-10-19 (E-629 d).** Esta sección decía que la lista abría en la última semana cerrada, la ficha en la semana
+> en curso (con los días que faltan como `FUTURO`) y que la semana del líder era «la del semáforo, sábado→viernes». Eran dos
+> ventanas distintas a la vista (resumen «lunes 12 al domingo 18» contra lista «sábado 10 al viernes 16») y la misma persona
+> salía con otro porcentaje. `MismaVentanaEnLasTresPantallasTest` fija que no vuelva a pasar.
 - Persona fuera del grupo, grupo sin mentor o de recepción, y cuentas suspendidas, cerradas o de prueba: 404. Cada apertura de
   la ficha queda registrada (`consultas_de_ficha`, append-only).
 - `GET /semaforo/groups` (§4.4) suma `puedeAbrirse` por grupo: la app abre la tarjeta solo si viene `true`.

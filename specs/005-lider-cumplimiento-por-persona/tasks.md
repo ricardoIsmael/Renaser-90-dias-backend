@@ -141,6 +141,18 @@ antes a las otras sesiones.
   > **Hecho 2026-10-19.** 13 de 13 escenarios pasan (tres hallazgos arreglados: E-629, (b) y (c)); Maestro 11 de 11; jest 362 suites en verde. Ver `e2e.md`. Quedan fuera SC-006 (T046) y los flujos `interruptores/`.
 - [ ] T051 Un commit por repo y por bloque coherente en la rama `005-lider-cumplimiento-por-persona`; `graphify update .` en los dos repos
 
+## Phase 9: Una sola ventana de 7 días en las tres pantallas (post-E2E, 2026-10-19)
+
+> **Corregido 2026-10-19.** Lo agrega la decisión del dueño tras el E2E: «la ventana del resumen manda en todo» (spec,
+> «Session 2026-10-19 (post-E2E)»; E-629 d). Cambia T004/T020/T028 (la semana de sábado a viernes con su propio por defecto).
+
+- [x] T052 Prueba que falle y cambio: `VentanaDeLaFicha.de(semanaHasta, hoy)`: sin fecha la ventana vigente (`hasta = hoy − 1`, `desde = hasta − 6`), con un viernes esa semana, `cerrada` del calendario, viernes futuro → 400; se borran `paraLaLista`, `paraLaFicha`, `esFutura` y el motivo `FUTURO`, en `B/leadership/domain/model/cumplimiento/` y `BT/…/VentanaDeLaFichaTest.java`
+- [x] T053 La lista (`GrupoDelLiderService`) pide la tabla con lo que se pidió (`null` = vigente) y la ficha (`SemaforoDeLaPersona`) lee `vigenteDe` sin fecha y `semanaDe` con un viernes: la misma lectura del resumen. Pruebas en `GrupoDelLiderServiceTest`, `SemanaDePersonaServiceTest` y `CumplimientoDelLiderControllerTest`
+- [x] T054 `MismaVentanaEnLasTresPantallasTest`: el resumen real, la tabla real y los servicios del líder sobre los mismos datos del semáforo dan los mismos días, el mismo % y el mismo color (con la fecha vigente, con un viernes, en la madrugada UTC y un sábado)
+- [x] T055 App: `useLecturaPorSemana` con tope hacia atrás (`primerViernesDelPrograma`), `useSemanaDePersona` sobre él, la ficha con `NavegacionDeSemanas` y el `InicioSemanal` de la lista, la lista con el de la ficha del resumen; se borran `inicioDeLaLista`, `navegacionDeLaSemana`, `NavegacionDeLaSemana` y `comoSemana`. Pruebas en `lecturaDelLider`, `delGrupoALaPersona` y `semanasDelSemaforo`
+- [x] T056 Documentos: spec (FR-009/FR-010 y «Session 2026-10-19 (post-E2E)»), research R-2, contrato, data-model, quickstart, plan, `docs/arquitectura/SEMAFORO_DEL_APRENDIZ.md` §4.7, D-274 y E-629 (d), y `AGENTS.md` del frontend
+- [ ] T057 Repetir en el emulador los escenarios 1, 2 y 5 (ver `e2e.md`, «Qué repetir en el emulador») y un `clean verify` completo del backend antes del merge
+
 ## Dependencies & Execution Order
 
 - Setup → Foundational (T003–T009) → US1 (MVP) → US2 → US3 → US4. US3 y US4 dependen de US1 (la ficha y el registro de consultas). US2 depende de T007 y de la ficha de US1.

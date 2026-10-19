@@ -54,19 +54,22 @@ public class GrupoDelLiderService implements ConsultarGrupoDelLiderUseCase {
         this.clock = clock;
     }
 
-    /** Sin {@code semanaHasta}, la ultima semana cerrada del semaforo; la ficha de una persona abre en la en curso. */
+    /**
+     * Sin {@code semanaHasta}, la ventana vigente del resumen por grupos (los siete dias que terminan ayer); con un
+     * viernes, esa semana. La ficha de una persona abre en la misma ventana que se esta mirando.
+     */
     @Override
     @Transactional(readOnly = true)
     public GrupoDelLider grupoDe(ConsultaGrupoDelLider consulta) {
         acceso.requireLiderazgoActivo(consulta.actorId());
         Instant ahora = clock.now();
         GrupoAcompanado grupo = personas.requireGrupoConMentor(consulta.grupoId(), ahora);
-        // Hoy en la zona del GRUPO (regla 02): sin fecha, la ultima semana cerrada; rechaza un dia que no es viernes y
-        // una semana que todavia no empezo.
-        VentanaDeLaFicha ventana = VentanaDeLaFicha.paraLaLista(consulta.semanaHasta(), hoyDelGrupo(grupo, ahora));
-        TablaDeGrupo tabla = tablaDelSemaforo.tablaDe(grupo.grupoId(), ventana.hasta());
+        // Hoy en la zona del GRUPO (regla 02): rechaza un dia que no es viernes y una semana que todavia no llego. La
+        // tabla recibe lo que se pidio (null = la vigente), igual que el resumen: la misma lectura del semaforo.
+        VentanaDeLaFicha ventana = VentanaDeLaFicha.de(consulta.semanaHasta(), hoyDelGrupo(grupo, ahora));
+        TablaDeGrupo tabla = tablaDelSemaforo.tablaDe(grupo.grupoId(), consulta.semanaHasta());
         List<PersonaDeLaLista> lista = armarLista(grupo, tabla, ventana);
-        // `cerrada` es de la SEMANA, no de cada persona (E-629): la tabla del semaforo solo la da por cerrada si TODOS
+        // `cerrada` es de la VENTANA, no de cada persona (E-629): la tabla del semaforo solo la da por cerrada si TODOS
         // tienen la foto del cierre, y quien empezo despues de esa semana no la tiene, asi que un grupo con un
         // integrante nuevo mostraba «todavia sin cerrar» en una semana que ya paso. Se toma del calendario, igual que
         // la ficha de la persona.
