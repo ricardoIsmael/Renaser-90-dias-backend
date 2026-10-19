@@ -15,7 +15,7 @@ antes a las otras sesiones.
 
 ## Phase 1: Setup
 
-- [ ] T001 Crear el worktree de la app `Renaser-90-dias-frontend-/.claude/worktrees/lider-cumplimiento` en la rama `005-lider-cumplimiento-por-persona` desde `master`, y referenciar la spec en `A/../specs/README.md`
+- [x] T001 Crear el worktree de la app `Renaser-90-dias-frontend-/.claude/worktrees/lider-cumplimiento` en la rama `005-lider-cumplimiento-por-persona` desde `master`, y referenciar la spec en `A/../specs/README.md`
 - [x] T002 Aplicar `Renaser-90-dias-backend/.claude/worktrees/post-diario-ligar-publicacion.patch` en el worktree del backend y revisar que compile (`./mvnw -q -DskipTests compile`)
 
 ## Phase 2: Foundational (bloquea todas las historias)
@@ -58,12 +58,12 @@ antes a las otras sesiones.
 
 ### App
 
-- [ ] T024 [P] [US1] Esquemas zod tolerantes (`passthrough`, campos nuevos opcionales) en `A/features/lider-mentores/api/cumplimientoDelLiderSchemas.ts` y llamadas en `cumplimientoDelLiderApi.ts`, con prueba
-- [ ] T025 [P] [US1] `puedeAbrirse` opcional en `A/features/semaforo/api/semaforoSchemas.ts`, sin reordenar campos (coordinado con la sesión 006)
-- [ ] T026 [US1] `useGrupoDelLider` y `useSemanaDePersona` en `A/features/lider-mentores/hooks/`: lectura vigente (una respuesta vieja no pisa a una nueva), estados de carga, error con reintento y vacío; al cambiar de persona o de semana, ningún dato anterior. Prueba en `__tests__/lecturaDelLider.test.ts`
-- [ ] T027 [US1] `A/features/lider-mentores/screens/GrupoDelLiderScreen.tsx` con `VistaSemaforoDelGrupo`, «No se mide en el semáforo», vacío «Este grupo todavía no tiene personas», `useSystemBackHandler`, un solo scroll
-- [ ] T028 [US1] `A/features/lider-mentores/screens/PersonaDelLiderScreen.tsx` y `components/DiaDeLaPersona.tsx`: semana sábado–viernes con ‹ › (sin futuro, hasta `primeraSemana`), estados en palabras y con forma, `motivo` en palabras sin ✗, `useSystemBackHandler`
-- [ ] T029 [US1] `A/features/semaforo/screens/SemaforoGruposScreen.tsx`: tarjeta `Presionable` solo si `puedeAbrirse === true`; si no, como hoy. Vistas en el estado de Hoy (`A/screens/HoyScreen.tsx`) para el grupo y la persona
+- [x] T024 [P] [US1] Esquemas zod tolerantes (`passthrough`, campos nuevos opcionales) en `A/features/lider-mentores/api/cumplimientoDelLiderSchemas.ts` y llamadas en `cumplimientoDelLiderApi.ts`, con prueba
+- [x] T025 [P] [US1] `puedeAbrirse` opcional en `A/features/semaforo/api/semaforoSchemas.ts`, sin reordenar campos (coordinado con la sesión 006)
+- [x] T026 [US1] `useGrupoDelLider` y `useSemanaDePersona` en `A/features/lider-mentores/hooks/`: lectura vigente (una respuesta vieja no pisa a una nueva), estados de carga, error con reintento y vacío; al cambiar de persona o de semana, ningún dato anterior. Prueba en `__tests__/lecturaDelLider.test.ts`
+- [x] T027 [US1] `A/features/lider-mentores/screens/GrupoDelLiderScreen.tsx` con `VistaSemaforoDelGrupo`, «No se mide en el semáforo», vacío «Este grupo todavía no tiene personas», `useSystemBackHandler`, un solo scroll
+- [x] T028 [US1] `A/features/lider-mentores/screens/PersonaDelLiderScreen.tsx` y `components/DiaDeLaPersona.tsx`: semana sábado–viernes con ‹ › (sin futuro, hasta `primeraSemana`), estados en palabras y con forma, `motivo` en palabras sin ✗, `useSystemBackHandler`
+- [x] T029 [US1] `A/features/semaforo/screens/SemaforoGruposScreen.tsx`: tarjeta `Presionable` solo si `puedeAbrirse === true`; si no, como hoy. Vistas en el estado de Hoy (`A/screens/HoyScreen.tsx`) para el grupo y la persona
 
 **Checkpoint**: el MVP se demuestra con los escenarios 1, 2, 4, 5, 11 y 12 del quickstart.
 
@@ -81,9 +81,9 @@ antes a las otras sesiones.
   > `GET /api/v1/wall/{id}` (`PublicacionDelMuroController`, `@Funcionalidad("muro")`), porque «Ver publicación» también está en la ficha
   > del mentor y en la de administración: lo lee su autor, el liderazgo, o el mentor/guía que acompaña hoy al autor
   > (`ConsultarPublicacionService`, en `community`). No usa `paraCompartir`, que no trae la fecha ni deja ver lo oculto.
-- [ ] T034 [US2] `A/features/lider-mentores/components/EvidenciaDeObligacion.tsx`: foto (URL al abrir, `expo-image`), texto, audio y video, `respuestaTexto` debajo, «Cumplido · sin evidencia» sin botón, «Ya no está disponible» si da 404
-- [ ] T035 [US2] `A/features/lider-mentores/components/VisorDePublicacion.tsx` (en `HojaDesdeAbajo`) y la foto de las acciones del día en `DiaDeLaPersona.tsx`
-- [ ] T036 [US2] «Ver publicación» del post diario en `A/features/mentor/screens/AlumnoScreen.tsx` y `A/features/admin/screens/FichaAprendizScreen.tsx`, usando `publicacionId` (opcional en `A/features/mentor/api/mentorSchemas.ts`)
+- [x] T034 [US2] `A/features/lider-mentores/components/EvidenciaDeObligacion.tsx`: foto (URL al abrir, `expo-image`), texto, audio y video, `respuestaTexto` debajo, «Cumplido · sin evidencia» sin botón, «Ya no está disponible» si da 404
+- [x] T035 [US2] `A/features/lider-mentores/components/VisorDePublicacion.tsx` (en `HojaDesdeAbajo`) y la foto de las acciones del día en `DiaDeLaPersona.tsx`
+- [x] T036 [US2] «Ver publicación» del post diario en `A/features/mentor/screens/AlumnoScreen.tsx` y `A/features/admin/screens/FichaAprendizScreen.tsx`, usando `publicacionId` (opcional en `A/features/mentor/api/mentorSchemas.ts`)
 
 ## Phase 5: User Story 3 — Avisar al mentor o escribirle a la persona (P2)
 
@@ -95,8 +95,8 @@ antes a las otras sesiones.
   > `ObservacionesDeMentorServiceTest`), en `ObservacionDeMentorTest`, `LeadershipControllersTest` y, contra Postgres, en
   > `ObservacionMentorPersistenceAdapterTest` (escrita, no corrida) y `BorradoDeCuentaEnLosModulosIT` (idem). `personId` se valida contra
   > `AcompanamientoFinder` (aprendiz vigente de un grupo de ESE mentor), no contra la tabla de otro módulo.
-- [ ] T039 [US3] «Avisar a su mentor» en `PersonaDelLiderScreen.tsx`: reutiliza `ObservarScreen` con la persona y la semana; el texto del chat empieza con el nombre (`utils/textoDeObservacion.ts`, con prueba); se esconde si `mentor` es `null`
-- [ ] T040 [US3] «Escribirle» en `PersonaDelLiderScreen.tsx` con `abrirConversacionDirecta` + `irAPestana('Comunidad', …)`, como `AlumnoScreen`, sin enviar nada
+- [x] T039 [US3] «Avisar a su mentor» en `PersonaDelLiderScreen.tsx`: reutiliza `ObservarScreen` con la persona y la semana; el texto del chat empieza con el nombre (`utils/textoDeObservacion.ts`, con prueba); se esconde si `mentor` es `null`
+- [x] T040 [US3] «Escribirle» en `PersonaDelLiderScreen.tsx` con `abrirConversacionDirecta` + `irAPestana('Comunidad', …)`, como `AlumnoScreen`, sin enviar nada
 
 ## Phase 6: User Story 4 — Resumen diario al mentor (P3)
 
@@ -114,7 +114,7 @@ antes a las otras sesiones.
   > (`DiaDelMentor`), no lo adivina de las consultas. El scheduler se apaga por `renaser.scheduling.resumen-consultas-lider.activo` (la suite
   > lo apaga) y respeta el interruptor `lider.cumplimiento` (`saltaEsteTurno`). Las cuentas que ya no existen no se nombran. La IT del
   > scheduler (`ResumirConsultasDelLiderSchedulerIT`) está escrita y no corrida (sin Testcontainers en esta máquina).
-- [ ] T045 [US4] Interruptor «Revisiones de tu líder» (tema `REVISION_DEL_LIDER`) en Yo → Notificaciones, solo para quien acompaña un grupo, en `A/screens/YoScreen.tsx` o en su sub-vista de notificaciones, y la apertura de la ruta del aviso en `A/navigation/rutaDeAviso.ts`
+- [x] T045 [US4] Interruptor «Revisiones de tu líder» (tema `REVISION_DEL_LIDER`) en Yo → Notificaciones, solo para quien acompaña un grupo, en `A/screens/YoScreen.tsx` o en su sub-vista de notificaciones, y la apertura de la ruta del aviso en `A/navigation/rutaDeAviso.ts`
 
 ## Phase 7: Integración con la fase 2 de Soporte TI (cuando esté en master)
 
@@ -134,7 +134,7 @@ antes a las otras sesiones.
   > reservados), `docs/arquitectura/SEMAFORO_DEL_APRENDIZ.md` (§4.7 y las dos notas `Corregido` de la fila del líder y de §4.6) y la fila 21 de
   > `docs/informes/auditoria-fixes/C-5.md`. **Queda pendiente la corrección de RL-07 en la spec del líder**: esa spec vive en el repo del
   > frontend (`specs/002-lider-de-mentores/spec.md`, línea RL-07), que este agente no toca; la hace quien tenga ese repo.
-- [ ] T048 [P] `AGENTS.md` del frontend: «Cambio por pedido del dueño — 2026-10-19 — Hoy (semáforo por grupos del líder), fichas del mentor y de administración, Yo → Notificaciones», con lo que cambia y nada más
+- [x] T048 [P] `AGENTS.md` del frontend: «Cambio por pedido del dueño — 2026-10-19 — Hoy (semáforo por grupos del líder), fichas del mentor y de administración, Yo → Notificaciones», con lo que cambia y nada más
 - [ ] T049 Verificación completa con la máquina libre: backend `TZ=UTC ./mvnw -B clean verify` (leer `Tests run:` de surefire y failsafe); app `tsc --noEmit` y jest completo
 - [ ] T050 E2E en el emulador con Maestro y mobile-mcp contra el backend local y la base clonada `renaser_lider005`: los 13 escenarios del quickstart, con capturas en `specs/005-lider-cumplimiento-por-persona/e2e.md`. Avisar antes a las otras sesiones
 - [ ] T051 Un commit por repo y por bloque coherente en la rama `005-lider-cumplimiento-por-persona`; `graphify update .` en los dos repos
