@@ -15239,3 +15239,40 @@ primera no confirmó. Falla con el adaptador anterior con este mismo mensaje (co
 `AprobarConRolIT.aprobarComoAdministrador`, que exige el outbox vacío al terminar. **Regla general:** un «¿existe? →
 INSERT» solo es idempotente si nadie más inserta a la vez; cuando dos oyentes del mismo hecho escriben la misma fila,
 la idempotencia la pone la base (`ON CONFLICT`), no un `exists` previo.
+
+## E-627 · «Se publica, pero el post diario sigue sin ✓ en la ficha del administrador y "Ver evidencia" queda vacío» (backend, NO REPRODUCIDO en local, 19/10)
+
+**Síntoma.** Reporte del dueño en producción: un aprendiz publica desde Comunidad → Muro → Nueva publicación y, en
+Administración → ficha del aprendiz, la celda de «Post diario en comunidad» (`COMMUNITY_POST`) de la rejilla semanal
+no sale ni con ✓ ni con ✗. Tampoco hay nada que ver como evidencia: el cierre automático no deja ninguna ligada a la
+publicación. Que solo cuente la primera publicación del día es correcto. Es la misma forma que E-438.
+
+**Lo que se probó en local (no se reprodujo).** Rama `master` (9f387b78), backend propio en el puerto 8095 y una base
+clonada aparte (`renaser_postdiario`, copia de `renaser_habitos_rol` migrada a V97), con las cuentas E2E de
+hábitos por rol:
+- Con el registro del día ya creado, `POST /api/v1/wall` (texto y una foto) lo deja `COMPLETADO` con 10 puntos en unos
+  50 ms. El log dice «post diario en comunidad cerrado por publicacion del 2026-10-19» y la fila de
+  `PublicacionCreadaEvent` no queda en `event_publication` (`completion-mode: DELETE`).
+- Sin registro del día (el caso de E-438), publicando y pidiendo a la vez `GET /habit-tracks/today` y `GET /habits`
+  como hace la app: el oyente genera la jornada y lo cierra igual.
+- `GET /api/v1/admin/trainees/{id}/weekly-progress` como ADMIN devuelve `estadoHabito=COMPLETADO`,
+  `entrega=NO_REQUERIDA` y `evidenciaId=null`, así que la rejilla pinta ✓. `SeguimientoService` lee la misma fila de
+  `registros_habito` (`obligacionesEntre`), sin vista materializada ni caché.
+- En las bases locales de otras ramas, todos los post diarios con una publicación ese día (según la zona del
+  participante) están `COMPLETADO`, salvo el caso viejo de E-438.
+
+**Hipótesis para producción (sin confirmar; no se leyeron ni sus logs ni su base).**
+1. **El oyente llega tarde.** Todos los `@ApplicationModuleListener` comparten el ejecutor `eventos-` de 4 hilos
+   (`renaser.eventos.concurrencia`), que tiene la cola sin tope. Si otros oyentes la tienen ocupada (avisos de hábitos,
+   push, reintentos del outbox cada 5 min), el cierre del post diario se ejecuta tarde. Si se ejecuta después de la
+   medianoche del participante, la guarda D-259 lo descarta («llego con ese dia ya cerrado»). Si el oyente falla, el
+   `catch` del oyente solo deja un `log.warn` («no pudo cerrar el habito de post diario») y el registro sigue
+   `PENDIENTE`. Mientras la cola no llegue a él, la ficha muestra el círculo vacío.
+2. **El hábito no tiene registro ese día.** Una audiencia por rol (D-264, `audiencias_habito`) o una pausa del hábito
+   hace que no se genere el registro. Entonces el oyente no tiene nada que cerrar, ni siquiera generando la jornada
+   (E-438), y la rejilla dibuja «—» («no programado»), que tampoco es ✓ ni ✗.
+
+**Para cerrarlo.** El dueño lo revisará en producción. Primero hay que buscar en los logs las dos frases de arriba y
+«post diario en comunidad cerrado» en los días del reporte, y mirar si ese día existe el registro de `COMMUNITY_POST`
+de la persona, y en qué estado. Ligar la publicación como evidencia («Ver publicación» en la ficha del administrador y
+en la del mentor) pasa a la spec 005.
