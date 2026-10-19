@@ -361,6 +361,40 @@ class EvidenciaPersistenceAdapterTest {
                         org.assertj.core.groups.Tuple.tuple(texto.id().value(), TipoEvidencia.TEXTO));
     }
 
+    @Test
+    @DisplayName("spec 005: de cada accion del dia sale la evidencia PRINCIPAL; sin principal, la mas temprana; sin nada, no aparece")
+    void evidenciasPrincipalesDeRocas() {
+        Evidencia primeraSinPrincipal = adapter.save(evidenciaRocaTextoEn(Instant.parse("2026-08-25T09:00:00Z"), false));
+        Evidencia principal = adapter.save(evidenciaRocaTextoEn(Instant.parse("2026-08-25T09:30:00Z"), true));
+        UUID otraRoca = seedRocaDiaria();
+        Evidencia deOtra = adapter.save(Evidencia.registrar(nuevoId(), participanteId,
+                new DestinoEvidencia.RocaDiaria(otraRoca), TipoEvidencia.TEXTO, null, null, "listo", null, null, null,
+                false, Instant.parse("2026-08-25T10:00:00Z"), FixedClock.at(Instant.parse("2026-08-25T10:00:00Z"))));
+        UUID sinEvidencia = seedRocaDiaria();
+
+        var resultado = adapter.evidenciasPrincipalesDeRocas(List.of(rocaDiariaId, otraRoca, sinEvidencia));
+
+        assertThat(primeraSinPrincipal.id()).isNotEqualTo(principal.id());
+        assertThat(resultado).containsOnlyKeys(rocaDiariaId, otraRoca);
+        assertThat(resultado.get(rocaDiariaId)).isEqualTo(principal.id().value());
+        assertThat(resultado.get(otraRoca)).isEqualTo(deOtra.id().value());
+        assertThat(adapter.evidenciasPrincipalesDeRocas(List.of())).isEmpty();
+    }
+
+    private UUID seedRocaDiaria() {
+        UUID id = UUID.randomUUID();
+        entityManager.createNativeQuery("""
+                        INSERT INTO renaser.rocas_diarias
+                            (id, participante_id, fecha, posicion, titulo, color, puntaje_impacto, eje)
+                        VALUES (:id, :pid, CURRENT_DATE, 2, 'otra', CAST('AMARILLO' AS renaser.color_pareto), 5,
+                                CAST('CUERPO' AS renaser.eje_objetivo))
+                        """)
+                .setParameter("id", id)
+                .setParameter("pid", participanteId.value())
+                .executeUpdate();
+        return id;
+    }
+
     // ---- CHECKs de la tabla real, probados con INSERT nativo (el dominio no permite construirlos) ----
 
     @Test

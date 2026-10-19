@@ -129,6 +129,19 @@ class EvidenciaPersistenceAdapter implements LoadEvidenciaPort, SaveEvidenciaPor
                 archivos);
     }
 
+    @Override
+    public Map<UUID, UUID> evidenciasPrincipalesDeRocas(Collection<UUID> rocasDiariasIds) {
+        if (rocasDiariasIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, UUID> porRoca = new LinkedHashMap<>();
+        for (Object[] fila : repository.evidenciasDeRocas(rocasDiariasIds)) {
+            // La lectura viene ordenada con la principal primero: la primera fila de cada roca es la que cuenta.
+            porRoca.putIfAbsent((UUID) fila[0], (UUID) fila[1]);
+        }
+        return porRoca;
+    }
+
     private static EstadoValidacion traducirEstadoValidacion(Object valor) {
         return EstadoValidacion.valueOf(String.valueOf(valor));
     }

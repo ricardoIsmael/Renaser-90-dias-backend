@@ -45,5 +45,14 @@ public interface ConsultarSemaforoPorGruposUseCase {
      */
     record GrupoDelResumen(UUID grupoId, String grupoNombre, String mentorNombre, ResumenDelGrupo resumen,
                            boolean sinMentor) {
+
+        /**
+         * Spec 005 (FR-001, R-10): el líder baja a las personas de un grupo solo si tiene mentor; el de bienvenida y un
+         * grupo sin mentor quedan fuera. La app abre la tarjeta únicamente si esto viene en {@code true}, así que contra
+         * un backend anterior —sin el campo— las tarjetas siguen sin abrirse (FR-021).
+         */
+        public boolean puedeAbrirse() {
+            return !sinMentor;
+        }
     }
 }

@@ -71,4 +71,11 @@ public interface LoadEvidenciaPort {
 
     /** Una entrada por registro con al menos una evidencia; la entrega mas temprana de cada uno. */
     Map<UUID, EntregaDeEvidencia> entregasDeRegistros(Collection<UUID> registrosHabitoIds);
+
+    /**
+     * De {@code rocasDiariasIds}, el id de la evidencia que cumplio cada una: la principal o, si no hay, la mas
+     * temprana. Una sola consulta sobre {@code evidencias_roca_idx}. Alimenta
+     * {@link com.renaser.os.evidence.api.EvidenciasDeRocasFinder} (spec 005).
+     */
+    Map<UUID, UUID> evidenciasPrincipalesDeRocas(Collection<UUID> rocasDiariasIds);
 }

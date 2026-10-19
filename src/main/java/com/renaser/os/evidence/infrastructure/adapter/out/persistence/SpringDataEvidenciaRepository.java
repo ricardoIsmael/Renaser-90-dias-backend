@@ -82,4 +82,16 @@ interface SpringDataEvidenciaRepository extends JpaRepository<EvidenciaJpaEntity
             ORDER BY e.registroHabitoId, e.subidaEn ASC
             """)
     List<Object[]> entregasDeRegistros(@Param("ids") Collection<UUID> ids);
+
+    /**
+     * Las evidencias de esas rocas, la principal primero y despues la mas temprana: la reduccion a «una por roca» se
+     * hace en el adaptador, sobre una lectura ordenada. Se resuelve contra {@code evidencias_roca_idx}.
+     */
+    @Query("""
+            SELECT e.rocaDiariaId, e.id
+            FROM EvidenciaJpaEntity e
+            WHERE e.rocaDiariaId IN :ids
+            ORDER BY e.rocaDiariaId, e.esPrincipal DESC, e.subidaEn ASC
+            """)
+    List<Object[]> evidenciasDeRocas(@Param("ids") Collection<UUID> ids);
 }

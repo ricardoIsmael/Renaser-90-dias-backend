@@ -244,6 +244,9 @@ class SemaforoPorGruposServiceTest {
 
         GrupoDelResumen brisa = grupo(resumen, BRISA);
         assertThat(brisa.sinMentor()).isTrue();
+        // Spec 005 (FR-001, R-10): solo se baja a un grupo con mentor; sin el, la tarjeta no se abre.
+        assertThat(brisa.puedeAbrirse()).isFalse();
+        assertThat(grupo(resumen, FENIX).puedeAbrirse()).isTrue();
         assertThat(brisa.mentorNombre()).isNull();
         assertThat(brisa.resumen().conteo()).isEqualTo(new ConteoPorColor(1, 0, 0, 0));
         assertThat(grupo(resumen, FENIX).sinMentor()).isFalse();

@@ -38,23 +38,23 @@ antes a las otras sesiones.
 
 ### Tests (primero, deben fallar)
 
-- [ ] T010 [P] [US1] Unitaria de `OrdenDeLaListaDelLider`: ROJO, AMARILLO, SIN_DATOS, VERDE, NO_SE_MIDE; % ascendente con nulos al final; después nombre y id, en `BT/leadership/domain/model/cumplimiento/OrdenDeLaListaDelLiderTest.java`
-- [ ] T011 [P] [US1] Unitaria de `ConsultaDeFicha.registrar` (sin métodos de modificación; reloj en la madrugada UTC) en `BT/leadership/domain/model/consulta/ConsultaDeFichaTest.java`
-- [ ] T012 [P] [US1] Servicio `GrupoDelLiderService`: grupo de recepción o sin mentor → 404; cuentas de prueba y cerradas fuera; acompañante con programa propio como `NO_SE_MIDE` con su %, en `BT/leadership/application/services/GrupoDelLiderServiceTest.java`
-- [ ] T013 [P] [US1] Servicio `SemanaDePersonaService`: semana sábado–viernes en la zona de la persona; persona fuera del grupo hoy → 404; semana futura → 400; registra una consulta por llamada con `rol_consultor` y `mentor_id`, en `BT/leadership/application/services/SemanaDePersonaServiceTest.java`
-- [ ] T014 [P] [US1] `@WebMvcTest` de `CumplimientoDelLiderController`: TRAINEE, MENTOR y `SUSPENDED` → 403; MENTOR_LEAD, ADMIN y ALCHEMIST → 200; `Cache-Control: no-store`, en `BT/leadership/infrastructure/adapter/in/rest/CumplimientoDelLiderControllerTest.java`
+- [x] T010 [P] [US1] Unitaria de `OrdenDeLaListaDelLider`: ROJO, AMARILLO, SIN_DATOS, VERDE, NO_SE_MIDE; % ascendente con nulos al final; después nombre y id, en `BT/leadership/domain/model/cumplimiento/OrdenDeLaListaDelLiderTest.java`
+- [x] T011 [P] [US1] Unitaria de `ConsultaDeFicha.registrar` (sin métodos de modificación; reloj en la madrugada UTC) en `BT/leadership/domain/model/consulta/ConsultaDeFichaTest.java`
+- [x] T012 [P] [US1] Servicio `GrupoDelLiderService`: grupo de recepción o sin mentor → 404; cuentas de prueba y cerradas fuera; acompañante con programa propio como `NO_SE_MIDE` con su %, en `BT/leadership/application/services/GrupoDelLiderServiceTest.java`
+- [x] T013 [P] [US1] Servicio `SemanaDePersonaService`: semana sábado–viernes en la zona de la persona; persona fuera del grupo hoy → 404; semana futura → 400; registra una consulta por llamada con `rol_consultor` y `mentor_id`, en `BT/leadership/application/services/SemanaDePersonaServiceTest.java`
+- [x] T014 [P] [US1] `@WebMvcTest` de `CumplimientoDelLiderController`: TRAINEE, MENTOR y `SUSPENDED` → 403; MENTOR_LEAD, ADMIN y ALCHEMIST → 200; `Cache-Control: no-store`, en `BT/leadership/infrastructure/adapter/in/rest/CumplimientoDelLiderControllerTest.java`
 
 ### Backend
 
-- [ ] T015 [P] [US1] `B/leadership/domain/model/cumplimiento/OrdenDeLaListaDelLider.java`
-- [ ] T016 [P] [US1] `B/leadership/domain/model/consulta/ConsultaDeFicha.java`
-- [ ] T017 [US1] Puertos `ConsultarGrupoDelLiderUseCase` y `ConsultarSemanaDePersonaUseCase` en `B/leadership/application/ports/in/`, y `SaveConsultaDeFichaPort` y `LoadConsultasDeFichaPort` en `B/leadership/application/ports/out/`
-- [ ] T018 [US1] `B/leadership/infrastructure/adapter/out/persistence/ConsultasDeFichaJdbcAdapter.java` (JdbcClient, solo INSERT y SELECT)
-- [ ] T019 [US1] `B/leadership/application/services/GrupoDelLiderService.java`: `requireLiderazgoActivo` + `TablaDelSemaforoFinder` + acompañantes con programa propio (`AcompanamientoFinder.acompanantesVigentes` + `ParticipacionProgramaFinder`) + `CuentasDePruebaFinder` + orden
-- [ ] T020 [US1] `B/leadership/application/services/SemanaDePersonaService.java`: ventana del semáforo (sábado–viernes) en la zona de la persona, `SemanaDeSeguimientoFinder`, color y % de la semana, mentor vigente, `SaveConsultaDeFichaPort`
-- [ ] T021 [US1] `B/leadership/infrastructure/adapter/in/rest/CumplimientoDelLiderController.java`: `GET /api/v1/leadership/groups/{groupId}/semaforo` y `GET /api/v1/leadership/groups/{groupId}/people/{personId}/week`, `@RequiresPermission(VIEW_MENTOR_CORPS)` y respuestas según `contracts/leadership-cumplimiento.md` §1–2
-- [ ] T022 [US1] `puedeAbrirse` en cada grupo de `GET /semaforo/groups` (verdadero si tiene mentor) en `B/mentoring/infrastructure/adapter/in/rest/semaforo/ResumenPorGruposResponse.java`, con su prueba
-- [ ] T023 [US1] IT con Testcontainers: lista y semana contra Postgres real, trigger append-only (UPDATE y DELETE fallan), en `BT/leadership/infrastructure/CumplimientoDelLiderIT.java`
+- [x] T015 [P] [US1] `B/leadership/domain/model/cumplimiento/OrdenDeLaListaDelLider.java`
+- [x] T016 [P] [US1] `B/leadership/domain/model/consulta/ConsultaDeFicha.java`
+- [x] T017 [US1] Puertos `ConsultarGrupoDelLiderUseCase` y `ConsultarSemanaDePersonaUseCase` en `B/leadership/application/ports/in/`, y `SaveConsultaDeFichaPort` y `LoadConsultasDeFichaPort` en `B/leadership/application/ports/out/`
+- [x] T018 [US1] `B/leadership/infrastructure/adapter/out/persistence/ConsultasDeFichaJdbcAdapter.java` (JdbcClient, solo INSERT y SELECT)
+- [x] T019 [US1] `B/leadership/application/services/GrupoDelLiderService.java`: `requireLiderazgoActivo` + `TablaDelSemaforoFinder` + acompañantes con programa propio (`AcompanamientoFinder.acompanantesVigentes` + `ParticipacionProgramaFinder`) + `CuentasDePruebaFinder` + orden
+- [x] T020 [US1] `B/leadership/application/services/SemanaDePersonaService.java`: ventana del semáforo (sábado–viernes) en la zona de la persona, `SemanaDeSeguimientoFinder`, color y % de la semana, mentor vigente, `SaveConsultaDeFichaPort`
+- [x] T021 [US1] `B/leadership/infrastructure/adapter/in/rest/CumplimientoDelLiderController.java`: `GET /api/v1/leadership/groups/{groupId}/semaforo` y `GET /api/v1/leadership/groups/{groupId}/people/{personId}/week`, `@RequiresPermission(VIEW_MENTOR_CORPS)` y respuestas según `contracts/leadership-cumplimiento.md` §1–2
+- [x] T022 [US1] `puedeAbrirse` en cada grupo de `GET /semaforo/groups` (verdadero si tiene mentor) en `B/mentoring/infrastructure/adapter/in/rest/semaforo/ResumenPorGruposResponse.java`, con su prueba
+- [x] T023 [US1] IT con Testcontainers: lista y semana contra Postgres real, trigger append-only (UPDATE y DELETE fallan), en `BT/leadership/infrastructure/CumplimientoDelLiderIT.java`
 
 ### App
 
@@ -75,7 +75,7 @@ antes a las otras sesiones.
 
 - [ ] T030 [P] [US2] Prueba que falle: MENTOR_LEAD activo lee `GET /evidence/{id}` y `/url`; revisar (aprobar o rechazar) → 403; MENTOR_LEAD `SUSPENDED` → 403, en `BT/evidence/application/services/EvidenciaServiceLectorLiderTest.java`
 - [ ] T031 [US2] Regla de lector para el liderazgo activo en `requireDuenoOAdmin` (solo detalle y URL, sin `MANAGE_EVIDENCE`) en `B/evidence/application/services/EvidenciaService.java`
-- [ ] T032 [P] [US2] Prueba que falle y finder `EvidenciasDeRocasFinder.accionesDelDia(persona, desde, hasta)` (`id`, `titulo`, `estado`, `evidenciaId`) en `B/rocks/api/` con su adaptador, y `acciones[]` en cada día de la semana del líder
+- [x] T032 [P] [US2] Prueba que falle y finder `EvidenciasDeRocasFinder.accionesDelDia(persona, desde, hasta)` (`id`, `titulo`, `estado`, `evidenciaId`) en `B/rocks/api/` con su adaptador, y `acciones[]` en cada día de la semana del líder
 - [ ] T033 [P] [US2] `GET /api/v1/leadership/publications/{publicationId}` con `PublicacionMuroFinder.paraCompartir`; 404 si no existe; prueba en el controller test
 - [ ] T034 [US2] `A/features/lider-mentores/components/EvidenciaDeObligacion.tsx`: foto (URL al abrir, `expo-image`), texto, audio y video, `respuestaTexto` debajo, «Cumplido · sin evidencia» sin botón, «Ya no está disponible» si da 404
 - [ ] T035 [US2] `A/features/lider-mentores/components/VisorDePublicacion.tsx` (en `HojaDesdeAbajo`) y la foto de las acciones del día en `DiaDeLaPersona.tsx`

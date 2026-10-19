@@ -1,0 +1,418 @@
+package com.renaser.os.leadership.application.services;
+
+import com.renaser.os.community.api.AcompanamientoFinder;
+import com.renaser.os.community.api.AcompanamientoFinder.GrupoAcompanado;
+import com.renaser.os.leadership.application.ports.out.GuardarConsultaDeFichaPort;
+import com.renaser.os.leadership.domain.model.consulta.ConsultaDeFicha;
+import com.renaser.os.leadership.domain.model.cumplimiento.VentanaDeLaFicha;
+import com.renaser.os.mentoring.api.DiaDelAlumno;
+import com.renaser.os.mentoring.api.ObligacionDelDia;
+import com.renaser.os.mentoring.api.ResumenSemana;
+import com.renaser.os.mentoring.api.SemanaDelAlumno;
+import com.renaser.os.mentoring.api.SemanaDeSeguimientoFinder;
+import com.renaser.os.mentoring.api.TablaDelSemaforoFinder;
+import com.renaser.os.points.api.ColorSemaforo;
+import com.renaser.os.points.api.DetalleDelSemaforo;
+import com.renaser.os.points.api.DiaDelSemaforo;
+import com.renaser.os.points.api.EstadoDiaSemaforo;
+import com.renaser.os.points.api.SemaforoFinder;
+import com.renaser.os.points.api.VentanaDelSemaforo;
+import com.renaser.os.rocks.api.AccionesDelDiaFinder;
+import com.renaser.os.rocks.api.AccionesDelDiaFinder.AccionDelDia;
+import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.IdGenerator;
+import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.CuentasDePruebaFinder;
+import com.renaser.os.users.api.FasePrograma;
+import com.renaser.os.users.api.FichaDeMentorFinder;
+import com.renaser.os.users.api.ParticipacionPrograma;
+import com.renaser.os.users.api.ParticipacionProgramaFinder;
+import com.renaser.os.users.api.UserRole;
+import com.renaser.os.users.api.UserStatus;
+import com.renaser.os.users.api.UserSummary;
+import com.renaser.os.users.api.UserSummaryFinder;
+
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+
+/**
+ * Dobles de las fuentes de la ficha del líder (spec 005) y fábrica de sus servicios REALES. Lo usan las pruebas de
+ * servicio y, por {@link CumplimientoDePrueba}, las del controller.
+ *
+ * <p>Se doblan solo las APIs públicas de los otros módulos: el semáforo, la semana de seguimiento, las acciones, el
+ * acompañamiento y las cuentas. Lo que se prueba es lo del líder: a quién deja ver, qué ventana pide, cómo ordena y
+ * qué registra.
+ */
+public class BancoDeCumplimiento {
+
+    public static final ZoneId LIMA = ZoneId.of("America/Lima");
+    /** Lunes 19 de octubre de 2026, 15:00 UTC = 10:00 en Lima. */
+    public static final Instant AHORA = Instant.parse("2026-10-19T15:00:00Z");
+    /** La última semana sábado→viernes cerrada a {@link #AHORA}: del 10 al 16 de octubre. */
+    public static final LocalDate DESDE_SEMANA_CERRADA = LocalDate.of(2026, 10, 10);
+    public static final LocalDate SEMANA_CERRADA = LocalDate.of(2026, 10, 16);
+    /** La semana en curso a {@link #AHORA}: del sábado 17 al viernes 23; hoy es el lunes 19. */
+    public static final LocalDate DESDE_EN_CURSO = LocalDate.of(2026, 10, 17);
+    public static final LocalDate HASTA_EN_CURSO = LocalDate.of(2026, 10, 23);
+
+    public static final UUID FENIX = UUID.fromString("00000000-0000-0000-0000-00000000f001");
+    /** Un grupo en curso sin mentor y la recepción: ninguno aparece entre los «con mentor». */
+    public static final UUID SIN_MENTOR = UUID.fromString("00000000-0000-0000-0000-00000000f002");
+    private static final UUID COHORTE = UUID.fromString("00000000-0000-0000-0000-0000000c0001");
+
+    /** El «ahora» de la prueba: se puede mover para el caso de la madrugada UTC. */
+    public Instant ahora = AHORA;
+
+    final Map<UserId, UserSummary> usuarios = new LinkedHashMap<>();
+    final Map<UserId, ParticipacionPrograma> participaciones = new LinkedHashMap<>();
+    final Map<UUID, GrupoAcompanado> gruposConMentor = new LinkedHashMap<>();
+    final Map<UUID, List<UserId>> aprendicesPorGrupo = new LinkedHashMap<>();
+    final Set<UserId> cuentasDePrueba = new HashSet<>();
+
+    final Map<LocalDate, Map<UserId, VentanaDelSemaforo>> ventanasPorSemana = new LinkedHashMap<>();
+    /** Cada lectura del semáforo, en orden: «semana:2026-10-16 [quiénes]» o «tabla:2026-10-16». */
+    public final List<String> lecturasDelSemaforo = new ArrayList<>();
+
+    final Map<UserId, Map<LocalDate, List<ObligacionDelDia>>> obligacionesPorDia = new LinkedHashMap<>();
+    final Map<UserId, List<AccionDelDia>> accionesPorPersona = new LinkedHashMap<>();
+    /** Cada ventana que se le pidió a la semana de seguimiento: {desde, hasta}. */
+    public final List<LocalDate[]> ventanasPedidasALaSemana = new ArrayList<>();
+
+    public final List<ConsultaDeFicha> consultas = new ArrayList<>();
+    private int siguienteId = 1;
+
+    public final Clock reloj = new Clock() {
+        @Override
+        public Instant now() {
+            return ahora;
+        }
+
+        @Override
+        public LocalDate today() {
+            return ahora.atZone(ZoneId.of("UTC")).toLocalDate();
+        }
+    };
+
+    public final IdGenerator ids = () -> UUID.fromString(String.format("00000000-0000-0000-0000-%012d", siguienteId++));
+
+    public final UserSummaryFinder usuariosFinder = new UserSummaryFinder() {
+        @Override
+        public Optional<UserSummary> findById(UserId id) {
+            return Optional.ofNullable(usuarios.get(id));
+        }
+
+        @Override
+        public Map<UserId, UserSummary> findByIds(Collection<UserId> pedidos) {
+            Map<UserId, UserSummary> encontrados = new LinkedHashMap<>();
+            pedidos.forEach(id -> findById(id).ifPresent(u -> encontrados.put(id, u)));
+            return encontrados;
+        }
+
+        @Override
+        public List<UserSummary> aprendicesActivos() {
+            return List.of();
+        }
+
+        @Override
+        public Optional<UserSummary> findByEmail(String email) {
+            return Optional.empty();
+        }
+    };
+
+    final ParticipacionProgramaFinder participacionFinder = new ParticipacionProgramaFinder() {
+        @Override
+        public Optional<ParticipacionPrograma> deParticipante(UserId id) {
+            return Optional.ofNullable(participaciones.get(id));
+        }
+
+        @Override
+        public List<UserId> miembrosActivosDeCelula(UUID celulaId) {
+            return List.of();
+        }
+
+        @Override
+        public List<UserId> miembrosDeCelula(UUID celulaId) {
+            return List.of();
+        }
+
+        @Override
+        public List<UserId> usuariosActivosConRol(Set<UserRole> roles) {
+            return List.of();
+        }
+
+        @Override
+        public List<UsuarioConDiaPrograma> usuariosActivosConDiaPrograma(Set<UserRole> roles) {
+            return List.of();
+        }
+
+        @Override
+        public List<UserId> participantesInscritosActivos() {
+            return List.of();
+        }
+
+        @Override
+        public int contarMiembrosDeCelula(UUID celulaId) {
+            return 0;
+        }
+    };
+
+    final AcompanamientoFinder acompanamiento = new AcompanamientoFinder() {
+        @Override
+        public List<TramoDeAcompanamiento> tramosDeMentor(UserId mentorId, Instant desde, Instant hasta) {
+            return List.of();
+        }
+
+        @Override
+        public List<UserId> aprendicesVigentes(UUID grupoId, Instant instante) {
+            return aprendicesPorGrupo.getOrDefault(grupoId, List.of());
+        }
+
+        @Override
+        public List<TramoDeAprendiz> tramosDeAprendices(UUID grupoId, Instant desde, Instant hasta) {
+            return List.of();
+        }
+
+        @Override
+        public List<UserId> integrantesVigentes(UUID grupoId, Instant instante) {
+            return aprendicesVigentes(grupoId, instante);
+        }
+
+        @Override
+        public List<UserId> acompanantesVigentes(UUID grupoId, Instant instante) {
+            return List.of();
+        }
+
+        @Override
+        public boolean esIntegranteVigente(UUID grupoId, UserId usuarioId, Instant instante) {
+            return aprendicesVigentes(grupoId, instante).contains(usuarioId);
+        }
+
+        @Override
+        public boolean acompanaVigente(UserId actorId, UUID grupoId, Instant instante) {
+            return false;
+        }
+
+        @Override
+        public boolean grupoOperativo(UUID grupoId, Instant instante) {
+            return gruposConMentor.containsKey(grupoId);
+        }
+
+        @Override
+        public Optional<GrupoBasico> grupo(UUID grupoId) {
+            return Optional.ofNullable(gruposConMentor.get(grupoId))
+                    .map(g -> new GrupoBasico(g.grupoId(), g.nombre(), g.cohorteId(), g.zonaHoraria()));
+        }
+
+        @Override
+        public List<GrupoAcompanado> gruposConMentorVigente(Instant instante) {
+            return List.copyOf(gruposConMentor.values());
+        }
+
+        @Override
+        public List<GrupoAcompanado> gruposRegularesEnCurso(Instant instante) {
+            return gruposConMentorVigente(instante);
+        }
+
+        @Override
+        public List<GrupoAcompanado> gruposRegularesEnCursoEntre(LocalDate desde, LocalDate hasta) {
+            return gruposConMentorVigente(ahora);
+        }
+
+        @Override
+        public List<GrupoConAprendices> gruposOperativos(Instant instante) {
+            return List.of();
+        }
+    };
+
+    final CuentasDePruebaFinder pruebas = ids -> {
+        Set<UserId> deLaPrueba = new HashSet<>(ids);
+        deLaPrueba.retainAll(cuentasDePrueba);
+        return deLaPrueba;
+    };
+
+    final SemaforoFinder semaforo = new SemaforoFinder() {
+        @Override
+        public Map<UserId, VentanaDelSemaforo> vigenteDe(Collection<UserId> participantes) {
+            throw new UnsupportedOperationException("El lider mira semanas de sabado a viernes, no la ventana vigente");
+        }
+
+        @Override
+        public Map<UserId, VentanaDelSemaforo> semanaDe(Collection<UserId> participantes, LocalDate semanaHasta) {
+            lecturasDelSemaforo.add("semana:" + semanaHasta + " " + participantes);
+            return deLos(participantes, ventanasPorSemana.getOrDefault(semanaHasta, Map.of()));
+        }
+
+        @Override
+        public DetalleDelSemaforo detalleDe(UserId participante, int semanas) {
+            throw new UnsupportedOperationException("La ficha del lider no pide el detalle");
+        }
+    };
+
+    final TablaDelSemaforoFinder tabla = (grupoId, semanaHasta) -> {
+        GrupoAcompanado grupo = gruposConMentor.get(grupoId);
+        if (grupo == null) {
+            throw new java.util.NoSuchElementException("Grupo no encontrado");
+        }
+        if (semanaHasta == null) {
+            throw new IllegalStateException("La lista del lider siempre pide una semana concreta");
+        }
+        lecturasDelSemaforo.add("tabla:" + semanaHasta);
+        VentanaDeLaFicha ventana = VentanaDeLaFicha.paraLaLista(semanaHasta, ahora.atZone(LIMA).toLocalDate());
+        Map<UserId, VentanaDelSemaforo> ventanas = ventanasPorSemana.getOrDefault(semanaHasta, Map.of());
+        List<TablaDelSemaforoFinder.FilaDeLaTabla> filas = aprendicesPorGrupo.getOrDefault(grupoId, List.of())
+                .stream().filter(id -> usuarios.get(id) != null && usuarios.get(id).status().allowsAccess())
+                .map(id -> fila(id, ventanas.get(id))).toList();
+        return new TablaDelSemaforoFinder.TablaDeGrupo(grupoId, grupo.nombre(), ventana.desde(), ventana.hasta(),
+                ventana.cerrada(), filas);
+    };
+
+    final SemanaDeSeguimientoFinder seguimiento = (personaId, grupoId, desde, hasta) -> {
+        ventanasPedidasALaSemana.add(new LocalDate[]{desde, hasta});
+        List<DiaDelAlumno> dias = new ArrayList<>();
+        for (LocalDate fecha = desde; !fecha.isAfter(hasta); fecha = fecha.plusDays(1)) {
+            dias.add(new DiaDelAlumno(fecha, null, obligacionesPorDia.getOrDefault(personaId, Map.of())
+                    .getOrDefault(fecha, List.of())));
+        }
+        int total = dias.stream().mapToInt(d -> d.obligaciones().size()).sum();
+        return new SemanaDelAlumno(grupoId, personaId.value(), usuarios.get(personaId).fullName(), desde, hasta, 24,
+                LIMA.getId(), dias, new ResumenSemana(total, total, 0, 0, 0), "COMPLETA", ahora);
+    };
+
+    final AccionesDelDiaFinder accionesFinder = (aprendiz, desde, hasta) -> accionesPorPersona
+            .getOrDefault(aprendiz, List.of()).stream()
+            .filter(a -> !a.fecha().isBefore(desde) && !a.fecha().isAfter(hasta)).toList();
+
+    final GuardarConsultaDeFichaPort guardarConsulta = consulta -> {
+        consultas.add(consulta);
+        return consulta;
+    };
+
+    // ── Preparación ─────────────────────────────────────────────────────
+
+    /** Vuelve al estado de recién creado: el banco del controller es un bean que comparten todas las pruebas. */
+    public void limpiar() {
+        ahora = AHORA;
+        usuarios.clear();
+        participaciones.clear();
+        gruposConMentor.clear();
+        aprendicesPorGrupo.clear();
+        cuentasDePrueba.clear();
+        ventanasPorSemana.clear();
+        lecturasDelSemaforo.clear();
+        obligacionesPorDia.clear();
+        accionesPorPersona.clear();
+        ventanasPedidasALaSemana.clear();
+        consultas.clear();
+    }
+
+    /** Un grupo con mentor vigente (que es una cuenta de mentor activa, sin programa propio hasta que se le dé). */
+    public void grupoConMentor(UUID grupoId, String nombre, UserId mentor, String nombreDelMentor) {
+        gruposConMentor.put(grupoId, new GrupoAcompanado(grupoId, nombre, mentor, COHORTE, LIMA.getId(), 3));
+        usuario(mentor, nombreDelMentor, UserRole.MENTOR, UserStatus.ACTIVE);
+    }
+
+    public void usuario(UserId id, String nombre, UserRole rol, UserStatus estado) {
+        usuarios.put(id, new UserSummary(id, nombre, null, rol, estado));
+    }
+
+    /** Un aprendiz del grupo con su programa activado (Día 1 el 17 de agosto) y la zona de Lima. */
+    public void aprendiz(UUID grupoId, UserId id, String nombre) {
+        usuario(id, nombre, UserRole.TRAINEE, UserStatus.ACTIVE);
+        aprendicesPorGrupo.computeIfAbsent(grupoId, g -> new ArrayList<>()).add(id);
+        programa(id, UserRole.TRAINEE, LocalDate.of(2026, 8, 17), true);
+    }
+
+    public void programa(UserId id, UserRole rol, LocalDate diaUno, boolean activado) {
+        participaciones.put(id, new ParticipacionPrograma(id, true, activado ? 63 : 0, diaUno, LIMA,
+                FasePrograma.PHASE_3_ALCHEMIST_WARRIOR, FENIX, null, rol, false, activado));
+    }
+
+    public void semana(LocalDate semanaHasta, UserId id, VentanaDelSemaforo ventana) {
+        ventanasPorSemana.computeIfAbsent(semanaHasta, s -> new LinkedHashMap<>()).put(id, ventana);
+    }
+
+    public void obligacion(UserId id, LocalDate fecha, ObligacionDelDia obligacion) {
+        obligacionesPorDia.computeIfAbsent(id, p -> new LinkedHashMap<>())
+                .computeIfAbsent(fecha, f -> new ArrayList<>()).add(obligacion);
+    }
+
+    public void accion(UserId id, AccionDelDia accion) {
+        accionesPorPersona.computeIfAbsent(id, p -> new ArrayList<>()).add(accion);
+    }
+
+    /** La misma ventana con un día cambiado a otro estado, sin porcentaje (pausa, suspensión…). */
+    public static VentanaDelSemaforo conDia(VentanaDelSemaforo base, LocalDate fecha, EstadoDiaSemaforo estado) {
+        List<DiaDelSemaforo> dias = base.dias().stream()
+                .map(d -> d.fecha().equals(fecha) ? DiaDelSemaforo.sinPorcentaje(fecha, estado) : d).toList();
+        return new VentanaDelSemaforo(base.desde(), base.hasta(), base.porcentaje(), base.color(),
+                base.diasConDatos(), base.cerrada(), dias);
+    }
+
+    private static Map<UserId, VentanaDelSemaforo> deLos(Collection<UserId> pedidos,
+                                                         Map<UserId, VentanaDelSemaforo> ventanas) {
+        Map<UserId, VentanaDelSemaforo> leidas = new LinkedHashMap<>();
+        pedidos.forEach(id -> {
+            if (ventanas.containsKey(id)) {
+                leidas.put(id, ventanas.get(id));
+            }
+        });
+        return leidas;
+    }
+
+    private TablaDelSemaforoFinder.FilaDeLaTabla fila(UserId id, VentanaDelSemaforo ventana) {
+        UserSummary perfil = usuarios.get(id);
+        if (ventana == null) {
+            return new TablaDelSemaforoFinder.FilaDeLaTabla(id.value(), perfil.fullName(), perfil.avatarUrl(), null,
+                    ColorSemaforo.SIN_DATOS, 0, List.of(), "NO_ACTIVADO");
+        }
+        return new TablaDelSemaforoFinder.FilaDeLaTabla(id.value(), perfil.fullName(), perfil.avatarUrl(),
+                ventana.porcentaje(), ventana.color(), ventana.diasConDatos(), ventana.dias(),
+                ventana.color() == ColorSemaforo.SIN_DATOS ? "SIN_NADA_PLANIFICADO" : null);
+    }
+
+    // ── Servicios reales ───────────────────────────────────────────────
+
+    /** Esta ficha no lee el perfil de ningun mentor: el finder de fichas va vacio. */
+    private final FichaDeMentorFinder fichas = new FichaDeMentorFinder() {
+        @Override
+        public List<FichaDeMentor> mentoresActivos() {
+            return List.of();
+        }
+
+        @Override
+        public Optional<FichaDeMentor> mentor(UserId usuarioId) {
+            return Optional.empty();
+        }
+    };
+
+    public AccesoDeLiderazgo acceso() {
+        return new AccesoDeLiderazgo(usuariosFinder, fichas);
+    }
+
+    PersonasDelGrupo personas() {
+        return new PersonasDelGrupo(acompanamiento, participacionFinder, usuariosFinder, pruebas);
+    }
+
+    SemaforoDeLaPersona semaforoDeLaPersona() {
+        return new SemaforoDeLaPersona(semaforo);
+    }
+
+    public GrupoDelLiderService grupoService() {
+        return new GrupoDelLiderService(acceso(), personas(), semaforoDeLaPersona(), tabla, usuariosFinder, reloj);
+    }
+
+    public SemanaDePersonaService semanaService() {
+        return new SemanaDePersonaService(acceso(), personas(), new LecturaDeLaFicha(seguimiento, semaforoDeLaPersona(),
+                accionesFinder, usuariosFinder), guardarConsulta, ids, reloj);
+    }
+}
