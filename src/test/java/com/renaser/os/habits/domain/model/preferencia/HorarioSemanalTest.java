@@ -141,4 +141,72 @@ class HorarioSemanalTest {
         assertThat(HorarioSemanal.dejaAlgoPropio(true, null, RecordatorioDelDia.sinAviso())).isTrue();
         assertThat(HorarioSemanal.dejaAlgoPropio(false, null, null)).isTrue();
     }
+
+    // ─── Spec 009 (V112, D-283): la combinacion de alarma propia del dia ────────────────────
+
+    /** Una fila puede traer solo como suena: hereda la hora y el aviso generales. */
+    @Test
+    void unDiaEncendidoPuedeTenerSoloLaCombinacionDeAlarma() {
+        var sabado = new HorarioSemanal(DayOfWeek.SATURDAY, preferencia(null, null), true, null,
+                AjusteDeAlarma.de(CombinacionDeAlarma.de(false, true, false, false)));
+
+        assertThat(sabado.tieneHoraPropia()).isFalse();
+        assertThat(sabado.recordatorio()).isNull();
+        assertThat(sabado.alarma()).isEqualTo(AjusteDeAlarma.de(CombinacionDeAlarma.de(false, true, false, false)));
+    }
+
+    @Test
+    void encendidoSinHoraAvisoNiAlarmaSigueRechazado() {
+        assertThatThrownBy(() -> new HorarioSemanal(DayOfWeek.SATURDAY, preferencia(null, null), true, null, null))
+                .isInstanceOf(NullPointerException.class).hasMessageContaining("horaDisparo");
+    }
+
+    /** Un ajuste que no dice nada no es «algo propio»: heredarlo todo es no tener nada. */
+    @Test
+    void unAjusteVacioNoCuentaComoAlgoPropio() {
+        assertThatThrownBy(() -> new HorarioSemanal(DayOfWeek.SATURDAY, preferencia(null, null), true, null,
+                AjusteDeAlarma.hereda())).isInstanceOf(NullPointerException.class);
+        assertThat(HorarioSemanal.dejaAlgoPropio(true, null, null, AjusteDeAlarma.hereda())).isFalse();
+        assertThat(new HorarioSemanal(DayOfWeek.SATURDAY, preferencia(LocalTime.of(9, 0), null), true, null,
+                AjusteDeAlarma.hereda()).alarma()).as("un ajuste vacio se guarda como ninguno").isNull();
+    }
+
+    @Test
+    void dejaAlgoPropioCuentaLaAlarma() {
+        var propia = AjusteDeAlarma.de(CombinacionDeAlarma.de(true, false, false, true));
+
+        assertThat(HorarioSemanal.dejaAlgoPropio(true, null, null, propia)).isTrue();
+        assertThat(HorarioSemanal.dejaAlgoPropio(true, null, null, null)).isFalse();
+        assertThat(HorarioSemanal.dejaAlgoPropio(false, null, null, null)).isTrue();
+    }
+
+    @Test
+    void lasFirmasAnterioresNoTienenAlarmaPropia() {
+        assertThat(new HorarioSemanal(DayOfWeek.MONDAY, preferencia(LocalTime.of(5, 0), null)).alarma()).isNull();
+        assertThat(new HorarioSemanal(DayOfWeek.MONDAY, preferencia(null, null), false).alarma()).isNull();
+        assertThat(new HorarioSemanal(DayOfWeek.MONDAY, preferencia(null, null), true,
+                RecordatorioDelDia.sinAviso()).alarma()).isNull();
+    }
+
+    @Test
+    void conAlarmaDevuelveOtroDiaConEsaAlarmaSinTocarLoDemasYQuitarlaLaDeja() {
+        var lunes = new HorarioSemanal(DayOfWeek.MONDAY, preferencia(LocalTime.of(5, 0), null), true,
+                RecordatorioDelDia.sinAviso());
+        var propia = AjusteDeAlarma.de(CombinacionDeAlarma.de(false, true, false, false));
+
+        var conAlarma = lunes.conAlarma(propia);
+
+        assertThat(conAlarma.alarma()).isEqualTo(propia);
+        assertThat(conAlarma.preferencia().horaDisparo()).isEqualTo(LocalTime.of(5, 0));
+        assertThat(conAlarma.recordatorio()).isEqualTo(RecordatorioDelDia.sinAviso());
+        assertThat(conAlarma.conAlarma(null).alarma()).isNull();
+    }
+
+    @Test
+    void conRecordatorioConservaLaAlarma() {
+        var propia = AjusteDeAlarma.de(CombinacionDeAlarma.de(false, true, false, false));
+        var lunes = new HorarioSemanal(DayOfWeek.MONDAY, preferencia(LocalTime.of(5, 0), null), true, null, propia);
+
+        assertThat(lunes.conRecordatorio(RecordatorioDelDia.sinAviso()).alarma()).isEqualTo(propia);
+    }
 }

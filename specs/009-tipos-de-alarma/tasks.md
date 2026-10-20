@@ -12,15 +12,19 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 Traer a la rama 009 lo último de la 008, en el backend y en la app. Confirmar V112, D-283 y E-641 libres.
+- [x] T001 Traer a la rama 009 lo último de la 008, en el backend y en la app. Confirmar V112, D-283 y E-641 libres.
+  - Hecho en el backend (2026-10-20): la rama 009 ya contiene la 008 (merge `05723a63`). V112, D-283 y E-641 estan libres (grep en todas las ramas locales y de origin y en los worktrees). La parte de la app la trae su agente.
 
 ## Phase 2: Foundational (backend)
 
-- [ ] T002 `back:V112__combinacion_de_alarma.sql`: las 4 columnas nulas en las dos tablas, el CHECK de sonido o vibración y el CHECK ampliado de la fila semanal (data-model). Con cabecera.
-- [ ] T003 [P] Prueba de `CombinacionDeAlarma`: herencia por campo, sonido y vibración no pueden ir los dos apagados, voz sin sonido → apagada, y el valor por defecto como hoy.
-- [ ] T004 Dominio `CombinacionDeAlarma`. `PreferenciaHorario` y `HorarioSemanal` la llevan opcional (la fila semanal encendida acepta solo combinación).
-- [ ] T005 [P] Prueba del adaptador: resolución por capas de la combinación, fila de solo combinación, y que hora y aviso de la 008 sigan igual.
-- [ ] T006 Persistencia: entidades, mapper y adaptador. La combinación igual a la general queda en `NULL`, y la fila vacía se borra.
+- [x] T002 `back:V112__combinacion_de_alarma.sql`: las 4 columnas nulas en las dos tablas, el CHECK de sonido o vibración y el CHECK ampliado de la fila semanal (data-model). Con cabecera.
+  - Ademas de lo pedido: CHECK `..._alarma_voz_con_sonido` en las dos tablas (la voz es un sonido; mira solo la fila). El de la mezcla entre capas lo resuelve el dominio.
+- [x] T003 [P] Prueba de `CombinacionDeAlarma`: herencia por campo, sonido y vibración no pueden ir los dos apagados, voz sin sonido → apagada, y el valor por defecto como hoy.
+- [x] T004 Dominio `CombinacionDeAlarma`. `PreferenciaHorario` y `HorarioSemanal` la llevan opcional (la fila semanal encendida acepta solo combinación).
+  - Dos tipos: `CombinacionDeAlarma` (resuelta, siempre valida) y `AjusteDeAlarma` (lo que una capa fija; campo en `null` = hereda). `HorarioSemanal` y `PreferenciaHorario` llevan el ajuste. Valor por defecto = sonido si, vibracion si, voz no, repetir no (el tono de Yo -> Alarmas es del telefono; el servidor no lo conoce).
+- [x] T005 [P] Prueba del adaptador: resolución por capas de la combinación, fila de solo combinación, y que hora y aviso de la 008 sigan igual.
+- [x] T006 Persistencia: entidades, mapper y adaptador. La combinación igual a la general queda en `NULL`, y la fila vacía se borra.
+  - La combinacion se guarda ENTERA y, si es igual a la general, queda en NULL (lo decide el servicio, T008). Una fila nueva solo para la alarma general nace sin hora ni aviso (hora del catalogo intacta) y con `recordatorio_activo = true` como `PreferenciaHorario.crear`: `false` apagaria el push (`EntregaDelAvisoDeHabito`).
 
 ## Phase 3: US3 — Guardar y leer la combinación (P2, base de las demás)
 

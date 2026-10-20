@@ -51,4 +51,20 @@ public class HorarioSemanalJpaEntity {
     @JdbcTypeCode(SqlTypes.ARRAY)
     @Column(name = "antelaciones_recordatorio")
     private Short[] antelacionesRecordatorio;
+
+    /** V112 (spec 009): como suena la alarma ese dia; {@code null} en un campo = como la general. */
+    private Boolean alarmaSonido;
+
+    private Boolean alarmaVibracion;
+
+    private Boolean alarmaVoz;
+
+    private Boolean alarmaRepetir;
+
+    /** Una fila con hora y apagado y sin aviso ni alarma propios: la forma de antes de V111. */
+    public HorarioSemanalJpaEntity(UUID participanteId, UUID habitoId, Short diaSemana, LocalTime horaDisparo,
+                                   boolean activo, LocalTime horaLimite, Instant creadoEn, Instant actualizadoEn) {
+        this(participanteId, habitoId, diaSemana, horaDisparo, activo, horaLimite, creadoEn, actualizadoEn,
+                null, null, null, null, null, null);
+    }
 }

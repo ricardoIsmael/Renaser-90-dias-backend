@@ -125,4 +125,89 @@ class SemanaDelHabitoTest {
         assertThat(del(semana, DayOfWeek.MONDAY).horaDisparo()).isNull();
         assertThat(del(semana, DayOfWeek.MONDAY).recordatorio().activo()).isFalse();
     }
+
+    // ─── Spec 009 (V112, D-283): como suena la alarma de cada dia ───────────────────────────
+
+    private static final CombinacionDeAlarma ALARMA_GENERAL = CombinacionDeAlarma.de(true, true, true, false);
+
+    private HorarioSemanal diaConAlarma(DayOfWeek dia, AjusteDeAlarma alarma) {
+        return new HorarioSemanal(dia, PreferenciaHorario.crear(actor, habito, null, null, AHORA), true, null, alarma);
+    }
+
+    @Test
+    void unDiaSinFilaHeredaLaAlarmaGeneral() {
+        var lunes = del(SemanaDelHabito.resolver(List.of(), SIETE, null, GENERAL, ALARMA_GENERAL), DayOfWeek.MONDAY);
+
+        assertThat(lunes.alarma()).isEqualTo(ALARMA_GENERAL);
+        assertThat(lunes.alarmaPropia()).isFalse();
+    }
+
+    @Test
+    void unDiaConAlarmaPropiaLaTraeYLoDemasSigueGeneral() {
+        var solaVibracion = CombinacionDeAlarma.de(false, true, false, false);
+        var semana = SemanaDelHabito.resolver(
+                List.of(diaConAlarma(DayOfWeek.SATURDAY, AjusteDeAlarma.de(solaVibracion))),
+                SIETE, null, GENERAL, ALARMA_GENERAL);
+
+        var sabado = del(semana, DayOfWeek.SATURDAY);
+        assertThat(sabado.alarma()).isEqualTo(solaVibracion);
+        assertThat(sabado.alarmaPropia()).isTrue();
+        assertThat(sabado.horaDisparo()).as("una fila de solo alarma no trae hora").isEqualTo(SIETE);
+        assertThat(sabado.horaPropia()).isFalse();
+        assertThat(sabado.recordatorio()).as("ni aviso").isEqualTo(GENERAL);
+        assertThat(sabado.recordatorioPropio()).isFalse();
+        assertThat(del(semana, DayOfWeek.FRIDAY).alarma()).isEqualTo(ALARMA_GENERAL);
+        assertThat(del(semana, DayOfWeek.FRIDAY).alarmaPropia()).isFalse();
+    }
+
+    /** La herencia es por campo: una fila que solo trae «repetir» sigue al general en lo demas. */
+    @Test
+    void unaFilaParcialHeredaPorCampo() {
+        var semana = SemanaDelHabito.resolver(
+                List.of(diaConAlarma(DayOfWeek.SUNDAY, new AjusteDeAlarma(null, null, null, true))),
+                SIETE, null, GENERAL, ALARMA_GENERAL);
+
+        assertThat(del(semana, DayOfWeek.SUNDAY).alarma()).isEqualTo(CombinacionDeAlarma.de(true, true, true, true));
+        assertThat(del(semana, DayOfWeek.SUNDAY).alarmaPropia()).isTrue();
+    }
+
+    /** La alarma, la hora y el aviso del mismo dia se resuelven cada uno por su lado. */
+    @Test
+    void horaAvisoYAlarmaPropiasConviven() {
+        var vibrar = CombinacionDeAlarma.de(false, true, false, true);
+        var fila = new HorarioSemanal(DayOfWeek.SATURDAY,
+                PreferenciaHorario.crear(actor, habito, LocalTime.of(9, 0), null, AHORA), true,
+                RecordatorioDelDia.con(List.of(30)), AjusteDeAlarma.de(vibrar));
+
+        var sabado = del(SemanaDelHabito.resolver(List.of(fila), SIETE, null, GENERAL, ALARMA_GENERAL),
+                DayOfWeek.SATURDAY);
+
+        assertThat(sabado.horaDisparo()).isEqualTo(LocalTime.of(9, 0));
+        assertThat(sabado.recordatorio()).isEqualTo(RecordatorioDelDia.con(List.of(30)));
+        assertThat(sabado.alarma()).isEqualTo(vibrar);
+    }
+
+    /** Un dia apagado igual muestra su alarma resuelta; el dia deja de ir, no pierde lo guardado. */
+    @Test
+    void unDiaApagadoConservaSuAlarmaPropia() {
+        var vibrar = CombinacionDeAlarma.de(false, true, false, false);
+        var fila = new HorarioSemanal(DayOfWeek.TUESDAY,
+                PreferenciaHorario.crear(actor, habito, null, null, AHORA), false, null, AjusteDeAlarma.de(vibrar));
+
+        var martes = del(SemanaDelHabito.resolver(List.of(fila), SIETE, null, GENERAL, ALARMA_GENERAL),
+                DayOfWeek.TUESDAY);
+
+        assertThat(martes.activo()).isFalse();
+        assertThat(martes.alarma()).isEqualTo(vibrar);
+        assertThat(martes.alarmaPropia()).isTrue();
+    }
+
+    /** La firma de la 008 (sin alarma general) resuelve con la de hoy: no cambia lo que ya andaba. */
+    @Test
+    void sinAlarmaGeneralRigeLaDeHoy() {
+        var lunes = del(SemanaDelHabito.resolver(List.of(), SIETE, null, GENERAL), DayOfWeek.MONDAY);
+
+        assertThat(lunes.alarma()).isEqualTo(CombinacionDeAlarma.COMO_HOY);
+        assertThat(lunes.alarmaPropia()).isFalse();
+    }
 }
