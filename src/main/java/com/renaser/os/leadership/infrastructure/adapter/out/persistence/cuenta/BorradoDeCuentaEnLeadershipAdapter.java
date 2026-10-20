@@ -10,8 +10,9 @@ import java.util.Map;
 
 /**
  * Lo que {@code leadership} borra de una persona cuando su cuenta se borra para siempre (D-243): las
- * observaciones del Líder de Mentores SOBRE ella ({@code mentor_id}) y también las que ella ESCRIBIÓ
- * ({@code autor_id}).
+ * observaciones del Líder de Mentores SOBRE ella ({@code mentor_id}), las que ella ESCRIBIÓ ({@code autor_id}) y,
+ * desde la spec 005 (V109), las que tratan DE ella ({@code persona_id}): su texto la nombra aunque el destinatario sea
+ * su mentor. {@code consultas_de_ficha} no se toca: es un registro de auditoría de solo ids, sin FK y de solo agregar.
  *
  * <p><b>Por qué se borran las que escribió y no solo pierden el autor.</b> Decisión de D-243: son texto
  * suyo, y {@code autor_id} es {@code NOT NULL} con FK {@code ON DELETE RESTRICT} (V89) que la app del Líder
@@ -30,7 +31,7 @@ class BorradoDeCuentaEnLeadershipAdapter implements BorradoDeDatosDeCuenta {
 
     @Override
     public void borrarDatosDe(UserId cuenta) {
-        jdbc.update("DELETE FROM renaser.observaciones_mentor WHERE mentor_id = :id OR autor_id = :id",
+        jdbc.update("DELETE FROM renaser.observaciones_mentor WHERE mentor_id = :id OR autor_id = :id OR persona_id = :id",
                 Map.of("id", cuenta.value()));
     }
 }

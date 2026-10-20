@@ -10,7 +10,9 @@ import java.util.UUID;
 
 /**
  * La tarjeta del semáforo de UN aprendiz para UN día (D-223): la imagen del color y la línea «Hoy llevas
- * 85 % de tus hábitos.», como dos mensajes del programa en su chat de soporte.
+ * 85 % de tus hábitos.», como dos mensajes del programa en su chat de soporte. Desde D-281 la línea puede llevar
+ * debajo un mensaje personalizado del catálogo del semáforo (<b>porcentaje + mensaje</b>; la imagen del color no
+ * cambia y no se manda sticker).
  *
  * <p><b>Dos mensajes y no una foto con texto</b>, por lo mismo que la bienvenida (D-174): el APK publicado
  * muestra el texto de una foto solo cuando la foto no carga.
@@ -36,6 +38,17 @@ public record TarjetaDelSemaforo(UserId aprendiz, LocalDate fecha, ColorDeTarjet
     /** El texto que pidió el dueño, con el entero del día. */
     public String texto() {
         return "Hoy llevas " + porcentaje + " % de tus hábitos.";
+    }
+
+    /**
+     * El texto del día con un mensaje personalizado debajo (D-281): el porcentaje de siempre, una línea en blanco y el
+     * mensaje. Sin mensaje (nulo o en blanco) es el texto de siempre: la tarjeta nunca sale incompleta por esto.
+     *
+     * <p>No cambia el id del texto ({@link #idDelTexto()}): sigue siendo aprendiz + fecha, así que el reintento de
+     * las 23:55 no duplica nada aunque el mensaje del día se haya elegido entre una corrida y la otra.
+     */
+    public String textoCon(String mensaje) {
+        return mensaje == null || mensaje.isBlank() ? texto() : texto() + "\n\n" + mensaje.strip();
     }
 
     public MensajeId idDeLaImagen() {

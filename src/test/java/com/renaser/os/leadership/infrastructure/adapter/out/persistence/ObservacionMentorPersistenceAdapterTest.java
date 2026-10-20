@@ -4,6 +4,7 @@ import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.leadership.domain.model.observacion.ObservacionDeMentor;
 import com.renaser.os.leadership.domain.model.observacion.ObservacionDeMentor.Contenido;
 import com.renaser.os.leadership.domain.model.observacion.ObservacionDeMentor.Envio;
+import com.renaser.os.leadership.domain.model.observacion.ObservacionDeMentor.SobrePersona;
 import com.renaser.os.leadership.domain.model.observacion.TipoObservacion;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
@@ -16,6 +17,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -76,6 +78,43 @@ class ObservacionMentorPersistenceAdapterTest {
         assertThatThrownBy(() -> adapter.insertar(
                 nueva(mentor, lider, TipoObservacion.SUGERENCIA, "k1", Instant.parse("2026-09-11T15:00:00Z"))))
                 .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    @DisplayName("V109: guarda la persona y la semana de la observacion y las devuelve; las de antes quedan en NULL")
+    void sobreUnaPersona() {
+        UserId mentor = usuario("MENTOR");
+        UserId lider = usuario("LIDER_MENTORES");
+        UserId ana = usuario("APRENDIZ");
+        adapter.insertar(ObservacionDeMentor.registrar(UUID.randomUUID(), new Contenido(mentor, lider,
+                TipoObservacion.ALERTA, "Ana lleva tres dias sin el ritual", Envio.SIN_ENVIAR, "p1",
+                new SobrePersona(ana, LocalDate.of(2026, 10, 10))), FixedClock.at(Instant.parse("2026-10-19T15:00:00Z"))));
+        adapter.insertar(nueva(mentor, lider, TipoObservacion.SUGERENCIA, "p2", Instant.parse("2026-10-18T15:00:00Z")));
+
+        assertThat(adapter.porAutorYClave(lider, "p1")).get().satisfies(o -> {
+            assertThat(o.personaId()).isEqualTo(ana);
+            assertThat(o.semanaDesde()).isEqualTo(LocalDate.of(2026, 10, 10));
+        });
+        assertThat(adapter.porAutorYClave(lider, "p2")).get().satisfies(o -> {
+            assertThat(o.personaId()).isNull();
+            assertThat(o.semanaDesde()).isNull();
+        });
+    }
+
+    @Test
+    @DisplayName("V109: la base rechaza una semana sin persona, y la persona tiene que existir")
+    void semanaSinPersonaOPersonaInexistente() {
+        UserId mentor = usuario("MENTOR");
+        UserId lider = usuario("LIDER_MENTORES");
+
+        assertThatThrownBy(() -> jdbc.update("insert into renaser.observaciones_mentor (id, mentor_id, autor_id, tipo, "
+                + "texto, clave_operacion, creado_en, semana_desde) values (?, ?, ?, 'ALERTA', 'x', 'q1', now(), "
+                + "DATE '2026-10-10')", UUID.randomUUID(), mentor.value(), lider.value()))
+                .hasMessageContaining("observaciones_mentor_semana_con_persona");
+        assertThatThrownBy(() -> jdbc.update("insert into renaser.observaciones_mentor (id, mentor_id, autor_id, tipo, "
+                + "texto, clave_operacion, creado_en, persona_id) values (?, ?, ?, 'ALERTA', 'x', 'q2', now(), ?)",
+                UUID.randomUUID(), mentor.value(), lider.value(), UUID.randomUUID()))
+                .hasMessageContaining("persona_id");
     }
 
     private static final String INSERT = "insert into renaser.observaciones_mentor (id, mentor_id, autor_id, tipo, "

@@ -9,6 +9,8 @@ import com.renaser.os.chat.application.ports.out.mensaje.LoadMensajePort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.mensaje.ContenidoDelPrograma;
 import com.renaser.os.chat.domain.model.semaforo.TarjetaDelSemaforo;
+import com.renaser.os.points.api.ColorSemaforo;
+import com.renaser.os.points.api.MensajeDelChatFinder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -19,7 +21,8 @@ import java.util.Optional;
 
 /**
  * La tarjeta del día de UN aprendiz en su chat de soporte (D-223): la imagen del color y, después, la línea
- * con el porcentaje. Las dos firmadas por el programa y a nombre del aprendiz, como la bienvenida (D-199).
+ * con el porcentaje seguida (D-281) de un mensaje personalizado del catálogo del semáforo. Las dos firmadas por el
+ * programa y a nombre del aprendiz, como la bienvenida (D-199).
  *
  * <p><b>Push solo al aprendiz.</b> El texto avisa únicamente a quien se refiere; la imagen no avisa (va con
  * el texto). Sin esto, cada Admin y Alquimista del soporte recibiría un push por cada aprendiz, todas las
@@ -28,6 +31,10 @@ import java.util.Optional;
  * <p><b>Si el texto ya salió, la de hoy está hecha</b> y no se mira nada más, ni el almacenamiento. Así el
  * reintento de las 23:55 no agrega una imagen DESPUÉS del texto cuando a las 23:50 S3 falló y salió solo la
  * línea.
+ *
+ * <p><b>El mensaje personalizado es un adorno</b> (D-281): se pide recién cuando se sabe que el texto va a salir (no
+ * se elige ni se guarda nada para una tarjeta que ya está) y, si no hay mensaje o elegirlo falla, sale el texto de
+ * siempre. El chat nunca falla ni se atrasa por el mensaje.
  */
 @Component
 class TarjetaEnSoporte {
@@ -38,13 +45,16 @@ class TarjetaEnSoporte {
     private final LoadMensajePort mensajes;
     private final TarjetasDelSemaforoPublicadas tarjetas;
     private final EnviarMensajeDelProgramaUseCase delPrograma;
+    private final MensajeDelChatFinder mensajesPersonalizados;
 
     TarjetaEnSoporte(LoadConversacionPort conversaciones, LoadMensajePort mensajes,
-                     TarjetasDelSemaforoPublicadas tarjetas, EnviarMensajeDelProgramaUseCase delPrograma) {
+                     TarjetasDelSemaforoPublicadas tarjetas, EnviarMensajeDelProgramaUseCase delPrograma,
+                     MensajeDelChatFinder mensajesPersonalizados) {
         this.conversaciones = conversaciones;
         this.mensajes = mensajes;
         this.tarjetas = tarjetas;
         this.delPrograma = delPrograma;
+        this.mensajesPersonalizados = mensajesPersonalizados;
     }
 
     /** @return si salió algo ahora ({@code false}: ya estaba, o el aprendiz no tiene soporte) */
@@ -64,8 +74,24 @@ class TarjetaEnSoporte {
         List<PiezaDelPrograma> piezas = new ArrayList<>();
         tarjetas.imagenDe(tarjeta.color()).ifPresent(imagen ->
                 piezas.add(new PiezaDelPrograma(tarjeta.idDeLaImagen(), imagen, AvisoDeLaPieza.SIN_AVISO)));
-        piezas.add(new PiezaDelPrograma(tarjeta.idDelTexto(), ContenidoDelPrograma.texto(tarjeta.texto()),
+        piezas.add(new PiezaDelPrograma(tarjeta.idDelTexto(), ContenidoDelPrograma.texto(textoDe(tarjeta)),
                 AvisoDeLaPieza.SOLO_A_QUIEN_SE_REFIERE));
         return piezas;
+    }
+
+    /**
+     * «Hoy llevas N % de tus hábitos.» y, debajo, el mensaje del catálogo para el color del día de la tarjeta. Sin
+     * mensaje, o si pedirlo falla por lo que sea, el texto de siempre (se registra y sigue).
+     */
+    private String textoDe(TarjetaDelSemaforo tarjeta) {
+        try {
+            ColorSemaforo color = ColorSemaforo.valueOf(tarjeta.color().name());
+            return mensajesPersonalizados.delDia(tarjeta.aprendiz(), tarjeta.fecha(), color)
+                    .map(tarjeta::textoCon).orElseGet(tarjeta::texto);
+        } catch (RuntimeException e) {
+            log.warn("[chat.semaforo] el mensaje personalizado de {} del {} no se pudo armar; sale el texto de siempre. causa={}",
+                    tarjeta.aprendiz(), tarjeta.fecha(), e.toString());
+            return tarjeta.texto();
+        }
     }
 }

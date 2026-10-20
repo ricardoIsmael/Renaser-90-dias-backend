@@ -1,5 +1,7 @@
 package com.renaser.os.community.infrastructure.adapter.out.persistence.publicacion;
 
+import com.renaser.os.community.api.PublicacionMuroFinder;
+
 import com.renaser.os.community.application.ports.out.publicacion.EliminarPublicacionPort;
 import com.renaser.os.community.application.ports.out.publicacion.LoadPublicacionPort;
 import com.renaser.os.community.application.ports.out.publicacion.SavePublicacionPort;
@@ -91,6 +93,13 @@ class PublicacionPersistenceAdapter implements LoadPublicacionPort, SavePublicac
     @Override
     public boolean existeDeAutorEntre(UserId autorId, Instant desde, Instant hasta) {
         return repository.existsByAutorIdAndCreadoEnGreaterThanEqualAndCreadoEnLessThan(autorId.value(), desde, hasta);
+    }
+
+    @Override
+    public List<PublicacionMuroFinder.PublicacionDelAutor> deAutorEntre(UserId autorId, Instant desde, Instant hasta) {
+        return repository.idsDeAutorEntre(autorId.value(), desde, hasta).stream()
+                .map(fila -> new PublicacionMuroFinder.PublicacionDelAutor((UUID) fila[0], (Instant) fila[1]))
+                .toList();
     }
 
     @Override

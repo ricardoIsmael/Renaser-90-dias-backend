@@ -28,6 +28,11 @@ public record CalendarioDeMedicion(LocalDate primeraFecha, LocalDate ultimaFecha
         return !fecha.isBefore(primeraFecha) && !fecha.isAfter(ultimaFecha);
     }
 
+    /** Si esa fecha ya es posterior al día 90: el programa terminó (el 90 todavía es del programa). */
+    public boolean terminadoEl(LocalDate fecha) {
+        return fecha.isAfter(ultimaFecha);
+    }
+
     /** Lo cubre una pausa que pidió la persona. */
     public boolean pausado(LocalDate fecha) {
         return cubiertoPor(MotivoDePausa.PEDIDA_POR_LA_PERSONA, fecha);

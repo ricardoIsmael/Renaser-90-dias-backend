@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.politica;
 
+import com.renaser.os.habits.api.ObligacionHabito;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.politica.ContextoCompletar;
 import com.renaser.os.habits.domain.model.politica.DecisionPolitica;
@@ -38,7 +39,7 @@ public class PoliticaPostDiarioComunidad implements PoliticaHabito {
      * La misma cadena que la fila ya llevaba en `icono_clave` y que V24 copio a
      * `clave_sistema`. Publica para que una prueba pueda referirse a ella sin retipearla.
      */
-    public static final String CLAVE_SISTEMA = "COMMUNITY_POST";
+    public static final String CLAVE_SISTEMA = ObligacionHabito.CLAVE_POST_DIARIO_COMUNIDAD;
 
     @Override
     public SelectorHabito selector() {

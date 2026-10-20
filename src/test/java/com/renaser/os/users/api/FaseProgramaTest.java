@@ -52,4 +52,17 @@ class FaseProgramaTest {
     void diaNoventaSigueSiendoFaseCuatro() {
         assertThat(FasePrograma.paraDiaPrograma(90)).isEqualTo(FasePrograma.PHASE_4_ASCENSION);
     }
+
+    /**
+     * D-277: el mensaje del semaforo dice en que fase esta la persona con el nombre que ya muestra la app
+     * ({@code FASES_EN_ORDEN} de {@code useResumenHome}). La app tiene su propia lista: si cambia un nombre alla,
+     * hay que cambiarlo aca y en esta prueba.
+     */
+    @Test
+    void cadaFaseTieneElNombreQueMuestraLaApp() {
+        assertThat(FasePrograma.PHASE_1_REBIRTH.nombreVisible()).isEqualTo("El Espejo");
+        assertThat(FasePrograma.PHASE_2_DEVELOPMENT.nombreVisible()).isEqualTo("El Ciclo Alquímico");
+        assertThat(FasePrograma.PHASE_3_ALCHEMIST_WARRIOR.nombreVisible()).isEqualTo("El Maestro Interno");
+        assertThat(FasePrograma.PHASE_4_ASCENSION.nombreVisible()).isEqualTo("Sistema de Alto Rendimiento");
+    }
 }

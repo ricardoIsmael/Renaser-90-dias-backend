@@ -154,7 +154,18 @@ class ConsultaYPausaDelSemaforoTest {
         assertThat(pausado.pausa().desde()).isEqualTo(HOY);
         List<PausaDeMedicion> suyas = tablas.pausas.get(mentor);
         assertThat(suyas).singleElement().satisfies(p -> assertThat(p.hasta()).isEqualTo(HOY.plusDays(10)));
-        assertThat(consulta.resumenParaHoy(mentor)).get().satisfies(r -> assertThat(r.pausado()).isTrue());
+        assertThat(consulta.resumenParaHoy(mentor)).get().satisfies(r -> {
+            assertThat(r.pausado()).isTrue();
+            assertThat(r.seMideHoy()).as("en pausa, hoy no se mide").isFalse();
+        });
+    }
+
+    @Test
+    void elResumenDeHoyDiceSiHoySeMide() {
+        assertThat(consulta.resumenParaHoy(aprendiz)).get().satisfies(r -> {
+            assertThat(r.seMideHoy()).as("dentro del programa y sin pausa").isTrue();
+            assertThat(r.programaTerminado()).isFalse();
+        });
     }
 
     @Test

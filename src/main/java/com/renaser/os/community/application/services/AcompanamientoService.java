@@ -13,6 +13,7 @@ import com.renaser.os.community.domain.model.celula.Celula;
 import com.renaser.os.community.domain.model.celula.CelulaId;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
+import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.CuentasCerradasFinder;
 import com.renaser.os.users.api.UserStatus;
@@ -122,7 +123,7 @@ public class AcompanamientoService
         boolean acompana = !asignaciones.isEmpty();
         return new ContextoAcompanamiento(participa, diaDePrograma, acompana,
                 new Capacidades(rol == UserRole.TRAINEE, esStaff(rol) && !participa, acompana,
-                        esAdministrador(rol) && !suspendido),
+                        esAdministrador(rol) && !suspendido, rol.can(Permission.EXPORT_RANKING) && !suspendido),
                 asignaciones);
     }
 

@@ -1,0 +1,10 @@
+# Escenario 4 / SC-002: la misma persona y los mismos dias, vistos por el lider (sab 10 a vie 16) y por Administracion (lun 12 a dom 18)
+lider 200 | admin 200
+obligaciones de los dias comunes (lun 12 a vie 16): 24
+con diferencias (estado, entrega, respuesta, evidencias, publicacion o evidenciaId): []
+   ('2026-10-12', 'AGUA TIBIA CON LIMÓN') ('COMPLETADO', 'ENTREGADA', False, 1, False) evidenciaId igual
+   ('2026-10-12', 'DESPERTAR') ('COMPLETADO', 'NO_REQUERIDA', False, 0, False) evidenciaId igual
+   ('2026-10-12', 'JUGO VERDE') ('EXPIRADO', 'SIN_ENTREGA', False, 0, False) evidenciaId igual
+   ('2026-10-12', 'POST DIARIO EN COMUNIDAD') ('EXPIRADO', 'NO_REQUERIDA', False, 0, False) evidenciaId igual
+   ('2026-10-12', 'Pastilla Renacer') ('COMPLETADO', 'NO_REQUERIDA', True, 0, False) evidenciaId igual
+   ('2026-10-12', 'RITUAL TIERRA - AGUA - FUEGO (mañana)') ('COMPLETADO', 'ENTREGADA', True, 1, False) evidenciaId igual

@@ -42,7 +42,9 @@ class ObligacionesHistoricasPersistenceAdapter implements ConsultarObligacionesH
                 (String) fila[4],
                 traducir((EstadoRegistroJpa) fila[5]),
                 fila[6] == ExigenciaEvidenciaJpa.OBLIGATORIA,
-                Boolean.TRUE.equals(fila[7]));
+                Boolean.TRUE.equals(fila[7]),
+                (String) fila[8],
+                (String) fila[9]);
     }
 
     private static EstadoObligacion traducir(EstadoRegistroJpa estado) {

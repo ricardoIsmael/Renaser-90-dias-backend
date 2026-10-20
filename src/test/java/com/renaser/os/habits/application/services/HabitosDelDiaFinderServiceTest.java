@@ -90,4 +90,26 @@ class HabitosDelDiaFinderServiceTest {
         assertThat(resumen.tituloHabito()).isEqualTo("Meditar");
         assertThat(resumen.estado()).isEqualTo("PENDIENTE");
     }
+
+    @Test
+    void unOpcionalSinCompletarNoCuentaParaElDia() {
+        UserId participante = UserId.of(UUID.randomUUID());
+        Habito habito = habito("Meditar");
+        RegistroHabito opcionalPendiente = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), participante,
+                habito.id(), FECHA, 5, TipoDia.DISCIPLINA, true, AHORA);
+        RegistroHabito opcionalCumplido = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), participante,
+                habito.id(), FECHA, 5, TipoDia.DISCIPLINA, true, AHORA);
+        opcionalCumplido.completar(10, "listo", null, null, AHORA);
+        RegistroHabito obligatorioPendiente = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()),
+                participante, habito.id(), FECHA, 5, TipoDia.DISCIPLINA, false, AHORA);
+        when(consultarTracksUseCase.consultar(participante, participante, FECHA))
+                .thenReturn(List.of(opcionalPendiente, opcionalCumplido, obligatorioPendiente));
+        when(loadHabitoPort.porIds(any())).thenReturn(List.of(habito));
+
+        List<HabitoDelDiaResumen> resultado = service.deHoy(participante, FECHA);
+
+        assertThat(resultado).extracting(HabitoDelDiaResumen::cuentaParaElDia)
+                .as("opcional pendiente, opcional cumplido, obligatorio pendiente")
+                .containsExactly(false, true, true);
+    }
 }

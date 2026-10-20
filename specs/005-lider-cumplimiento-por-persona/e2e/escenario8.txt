@@ -1,0 +1,15 @@
+registro ajeno b97a96f1-586e-99e1-4219-547662fc7342 | evidencia 0e715df8-12d9-4977-3afd-40894d34e436
+403 Completar un registro ajeno -> {'message': 'Solo el propio participante puede operar sobre sus habitos'}
+403 Revisar (aprobar) una evidencia -> {'message': 'Solo ADMIN/ALCHEMIST administran evidencia ajena'}
+403 Anular el veredicto de una evidencia -> {'message': 'Solo ADMIN/ALCHEMIST administran evidencia ajena'}
+400 Reasignar: cambiar el mentor del grupo -> {'message': 'leaderUserId: no debe ser nulo'}
+403 Reasignar: pasar a Ana a otro grupo -> {'message': 'Solo ADMIN/ALCHEMIST administran celulas'}
+403 Reasignar: sacar a Ana de su grupo -> {'message': 'Solo ADMIN/ALCHEMIST administran celulas'}
+403 Cambiar el rol de Ana -> {'message': 'Solo ADMIN/ALCHEMIST cambian roles'}
+--- control: lo que SI puede (lectura)
+200 GET /evidence/{id} (lector)
+200 GET /evidence/{id}/url (lector)
+--- verificacion en la base: nada cambio
+PENDIENTE VALIDA APRENDIZ 1 e2e00500-0000-4000-8000-0000000000a1
+403 Reasignar: cambiar el mentor del grupo (cuerpo correcto) -> Solo ADMIN/ALCHEMIST administran celulas
+e2e00500-0000-4000-8000-000000000002 (mentor de Loto sigue siendo Pedro ...0002)

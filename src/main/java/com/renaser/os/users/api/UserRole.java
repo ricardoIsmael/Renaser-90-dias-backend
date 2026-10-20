@@ -99,6 +99,9 @@ public enum UserRole {
      * {@code MODERATE_WALL}. Gestionar el cuerpo de mentores no es administrar la plataforma
      * (SDD 002, CL-04).
      *
+     * <p>{@link Permission#EXPORT_RANKING} (D-278): descargar la imagen del podio; el dueño nombró al líder de
+     * mentores, al alquimista, al administrador y a Soporte TI.
+     *
      * <p><b>Tampoco {@code USE_MENTOR_TICKETS}, {@code OPEN_MENTOR_TICKET},
      * {@code ANSWER_MENTOR_TICKET}, {@code VIEW_OWN_PHASE_CONTRACTS} ni
      * {@code SIGN_PHASE_CONTRACT}</b>: hoy sus guards excluyen a MENTOR_LEAD
@@ -118,7 +121,8 @@ public enum UserRole {
             Permission.VIEW_MENTOR_CORPS,
             Permission.VIEW_MENTOR_REPORT,
             Permission.FOLLOW_UP_MENTOR,
-            Permission.SET_MENTOR_OPERATIONAL_STATUS);
+            Permission.SET_MENTOR_OPERATIONAL_STATUS,
+            Permission.EXPORT_RANKING);
 
     /**
      * Nombre para mostrar en español (spec 001 de hábitos por rol, D-264). Vive junto al enum para que un rol nuevo
@@ -158,6 +162,10 @@ public enum UserRole {
      * {@code case MENTOR, MENTOR_LEAD, ADMIN, ALCHEMIST -> true}. MENTOR_LEAD salio de ahi por
      * la decision DL-08 del SDD 002.</blockquote>
      *
+     * <p><b>Una excepcion, a la vista (D-278):</b> {@link Permission#EXPORT_RANKING} es estricto tambien para
+     * MENTOR y TRAINEE_GUIDE. El dueño nombro cuatro roles para descargar el podio (MENTOR_LEAD, ADMIN, ALCHEMIST e
+     * IT_SUPPORT) y el falla-abierto se lo daria al mentor sin que nadie lo decidiera.
+     *
      * <p><b>Devolver {@code false} aca no significa 403 todavia para MENTOR_LEAD:</b> quien
      * decide si se deniega es {@code PermissionEnforcementInterceptor}, que para este rol
      * arranca en <i>modo sombra</i> (registra lo que denegaria, sin denegar) hasta que el
@@ -171,7 +179,10 @@ public enum UserRole {
         return switch (this) {
             case TRAINEE -> PERMISOS_TRAINEE.contains(permission);
             case MENTOR_LEAD -> PERMISOS_MENTOR_LEAD.contains(permission);
-            case MENTOR, TRAINEE_GUIDE, ADMIN, ALCHEMIST -> true;
+            // D-278: EXPORT_RANKING es la excepcion al falla-abierto. Ni el mentor ni el guia pueden descargar el
+            // podio (el dueño nombro cuatro roles), asi que para ellos la matriz es estricta en ese permiso.
+            case MENTOR, TRAINEE_GUIDE -> permission != Permission.EXPORT_RANKING;
+            case ADMIN, ALCHEMIST -> true;
             // Soporte TI tiene todos los permisos de todos los roles más la consola (FR-023). Ojo: los guards de
             // Administración de los servicios todavía preguntan ADMIN/ALCHEMIST literal (D-267, pendiente).
             case IT_SUPPORT -> true;

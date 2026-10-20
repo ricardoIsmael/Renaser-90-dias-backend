@@ -3,6 +3,7 @@ package com.renaser.os.community.api;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -88,4 +89,20 @@ public interface PublicacionMuroFinder {
      * para volver a mostrarlo.
      */
     Optional<PublicacionParaCompartir> paraCompartir(UUID publicacionId);
+
+    /**
+     * Las publicaciones propias de {@code autorId} creadas en {@code [desde, hasta)}, de la más vieja a la más
+     * nueva. Misma ventana y mismo criterio que {@link #publicoEntre} (cuentan las ocultas): es el detalle de ese
+     * mismo sí/no.
+     *
+     * <p><b>Su consumidor es `mentoring`</b> (E-628): la semana del aprendiz liga el post diario a la PRIMERA
+     * publicación de su día, que es la que lo cerró, para que la ficha del administrador y la del mentor puedan
+     * mostrarla en vez de un «sin evidencia». Solo identidad e instante: el contenido se lee en el Muro, con sus
+     * propias reglas de quién puede verlo.
+     */
+    List<PublicacionDelAutor> delAutorEntre(UserId autorId, Instant desde, Instant hasta);
+
+    /** Una publicación del autor: cuál y cuándo. */
+    record PublicacionDelAutor(UUID id, Instant creadaEn) {
+    }
 }

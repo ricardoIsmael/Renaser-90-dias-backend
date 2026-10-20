@@ -1,5 +1,7 @@
 package com.renaser.os.mentoring.application.services;
 
+import com.renaser.os.mentoring.api.TablaDelSemaforoFinder.FilaDeLaTabla;
+import com.renaser.os.mentoring.api.TablaDelSemaforoFinder.TablaDeGrupo;
 import com.renaser.os.mentoring.application.ports.in.ConsultarSemaforoDelGrupoAdministrativoUseCase.ConsultaTablaAdministrativa;
 import com.renaser.os.mentoring.application.ports.in.ConsultarSemaforoDelGrupoUseCase.ConsultaTablaDelGrupo;
 import com.renaser.os.mentoring.application.ports.in.ConsultarSemaforoDelGrupoUseCase.FilaDelSemaforo;
@@ -172,6 +174,37 @@ class SemaforoDelGrupoServiceTest {
         assertThat(tabla.aprendices()).extracting(FilaDelSemaforo::aprendizId).containsExactly(ANA.value());
         assertThat(tabla.resumen().total()).isEqualTo(1);
         assertThat(banco.lecturasDelSemaforo).containsExactly(List.of(ANA));
+    }
+
+    @Test
+    @DisplayName("spec 005: el finder para otros modulos entrega la misma tabla, con nombres, sin pedir un actor")
+    void finderParaOtrosModulos() {
+        aprendiz(ANA, "Ana Pérez", 85);
+        aprendiz(CARLA, "Carla Soto", 40);
+        aprendiz(ELSA, "Elsa Mora", null);
+
+        TablaDeGrupo tabla = servicio.tablaDe(FENIX, null);
+
+        assertThat(tabla.grupoNombre()).isEqualTo("Grupo Fénix");
+        assertThat(tabla.desde()).isEqualTo(DESDE_VIGENTE);
+        assertThat(tabla.hasta()).isEqualTo(HASTA_VIGENTE);
+        assertThat(tabla.filas()).extracting(FilaDeLaTabla::nombre).containsExactly("Carla Soto", "Elsa Mora",
+                "Ana Pérez");
+        assertThat(tabla.filas()).extracting(FilaDeLaTabla::color).containsExactly(ColorSemaforo.ROJO,
+                ColorSemaforo.SIN_DATOS, ColorSemaforo.VERDE);
+        assertThat(tabla.filas().get(1).motivo()).isEqualTo("NO_ACTIVADO");
+        assertThat(tabla.filas().getFirst().motivo()).isNull();
+        assertThat(tabla.filas().getFirst().dias()).hasSize(7);
+    }
+
+    @Test
+    @DisplayName("spec 005: el finder rechaza un dia que no es viernes, igual que las otras dos puertas, y un grupo que no existe es 404")
+    void finderValidaLaSemana() {
+        assertThatThrownBy(() -> servicio.tablaDe(FENIX, LocalDate.of(2026, 9, 17)))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> servicio.tablaDe(UUID.randomUUID(), null))
+                .isInstanceOf(NoSuchElementException.class);
+        assertThat(servicio.tablaDe(FENIX, SEMANA_CERRADA).hasta()).isEqualTo(SEMANA_CERRADA);
     }
 
     @Test

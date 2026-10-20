@@ -1,0 +1,285 @@
+▶ 01-kilometros-con-foto.yaml
+ > Flow 01-kilometros-con-foto
+    Wait for animation to end within 4000 ms... COMPLETED
+      Tap on "Allow"... COMPLETED
+    Run flow when "Allow" is visible... COMPLETED
+      Tap on "Posponer la guía de SER"... COMPLETED
+    Run flow when "Posponer la guía de SER" is visible... COMPLETED
+    Run cerrar-aviso-dev.yaml... COMPLETED
+  Run despejar-capas.yaml... COMPLETED
+  Assert that "TRAINING" is visible... COMPLETED
+Run ../comun/ya-adentro.yaml... COMPLETED
+  Tap on "TRAINING"... COMPLETED
+  Tap on "Cuerpo: .*"... COMPLETED
+  Assert that "Prácticas activas.*" is visible... COMPLETED
+Run ../comun/abrir-cuerpo.yaml... COMPLETED
+Scrolling DOWN until "Subir: KILÓMETROS DIARIOS" is visible with speed 40, visibility percentage 100%, timeout 20000 ms, with centering enabled... COMPLETED
+Tap on "Subir: KILÓMETROS DIARIOS"... COMPLETED
+    Tap on "While using the app"... COMPLETED
+  Run flow when "While using the app" is visible... COMPLETED
+  Assert that id: com.android.camera2:id/shutter_button is visible... COMPLETED
+  Tap on id: com.android.camera2:id/shutter_button... COMPLETED
+  Assert that id: com.android.camera2:id/done_button is visible... COMPLETED
+  Tap on id: com.android.camera2:id/done_button... COMPLETED
+Run ../comun/tomar-foto.yaml... COMPLETED
+Assert that "¿Cuántos km recorriste hoy?" is visible... COMPLETED
+Copy text from element with "Total recorrido: .* km"... COMPLETED
+Run ${output.totalAntes = parseFloat(maestro.copiedText.replace(/[^0-9,]/g, '').replace(',', '.')) || 0}... COMPLETED
+Tap on "¿Cuántos km recorriste hoy?"... COMPLETED
+Input text 3,5... COMPLETED
+Hide Keyboard... COMPLETED
+Copy text from element with "Total recorrido: .* km"... COMPLETED
+El total sube 3,5 km... COMPLETED
+Take screenshot 01a-kilometros-escritos... COMPLETED
+Tap on "REGISTRAR"... COMPLETED
+    Tap on point (92%,92%)... COMPLETED
+  Run flow when "Open debugger to view warnings." is visible... COMPLETED
+Run ../comun/cerrar-aviso-dev.yaml... COMPLETED
+Scrolling DOWN until "KILÓMETROS DIARIOS, cumplido" is visible with speed 40, visibility percentage 100%, timeout 30000 ms, with centering disabled... COMPLETED
+Take screenshot 01b-kilometros-cumplido... COMPLETED
+✔ 01-kilometros-con-foto.yaml
+▶ 03-publicar-en-el-muro.yaml
+  (reintento de entrada)
+ > Flow 03-publicar-en-el-muro
+    Wait for animation to end within 4000 ms... COMPLETED
+      Tap on "Allow"... COMPLETED
+    Run flow when "Allow" is visible... COMPLETED
+      Tap on "Posponer la guía de SER"... COMPLETED
+    Run flow when "Posponer la guía de SER" is visible... COMPLETED
+    Run cerrar-aviso-dev.yaml... COMPLETED
+  Run despejar-capas.yaml... COMPLETED
+  Assert that "TRAINING" is visible... COMPLETED
+Run ../comun/ya-adentro.yaml... COMPLETED
+Tap on "COMUNIDAD"... COMPLETED
+Tap on "Muro"... COMPLETED
+Tap on "Crear una publicación"... COMPLETED
+Assert that "Nueva publicación" is visible... COMPLETED
+Tap on "Texto de la publicación"... COMPLETED
+Input text M-ok-1... COMPLETED
+Hide Keyboard... COMPLETED
+Tap on "Agregar una foto"... COMPLETED
+Assert that "Photo taken on.*" is visible... COMPLETED
+Tap on "Photo taken on.*", Index: 0... COMPLETED
+  Tap on "Done"... COMPLETED
+Run flow when "Done" is visible... COMPLETED
+Assert that "Quitar la foto 1" is visible... COMPLETED
+Take screenshot 03a-publicacion-lista... COMPLETED
+Tap on "Publicar"... COMPLETED
+Assert that (Optional) "Más tarde" is visible... COMPLETED
+  Tap on "Más tarde"... COMPLETED
+Run flow when "Más tarde" is visible... COMPLETED
+Assert that "M-ok-1" is visible... COMPLETED
+Take screenshot 03b-post-en-el-muro... COMPLETED
+✔ 03-publicar-en-el-muro.yaml
+▶ 05-chats-admin.yaml
+ > Flow 05-chats-admin
+    Wait for animation to end within 4000 ms... COMPLETED
+      Tap on "Allow"... COMPLETED
+    Run flow when "Allow" is visible... COMPLETED
+        Tap on point (92%,92%)... COMPLETED
+      Run flow when "Open debugger to view warnings." is visible... COMPLETED
+    Run cerrar-aviso-dev.yaml... COMPLETED
+  Run despejar-capas.yaml... COMPLETED
+  Assert that "TRAINING" is visible... COMPLETED
+Run ../comun/ya-adentro.yaml... COMPLETED
+Tap on "COMUNIDAD"... COMPLETED
+Tap on "Tribu"... COMPLETED
+Assert that "Formación Renaser" is visible... COMPLETED
+Take screenshot 05a-lista-admin... COMPLETED
+Scrolling DOWN until "Formación Renaser Global" is visible with speed 40, visibility percentage 100%, timeout 60000 ms, with centering disabled... FAILED
+✘ 05-chats-admin.yaml
+▶ 06-chats-aprendiz.yaml
+ > Flow 06-chats-aprendiz
+    Wait for animation to end within 4000 ms... COMPLETED
+      Tap on "Allow"... COMPLETED
+    Run flow when "Allow" is visible... COMPLETED
+      Tap on "Posponer la guía de SER"... COMPLETED
+    Run flow when "Posponer la guía de SER" is visible... COMPLETED
+    Run cerrar-aviso-dev.yaml... COMPLETED
+  Run despejar-capas.yaml... COMPLETED
+  Assert that "TRAINING" is visible... COMPLETED
+Run ../comun/ya-adentro.yaml... COMPLETED
+Tap on "COMUNIDAD"... COMPLETED
+Tap on "Tribu"... COMPLETED
+Assert that "Formación Renaser" is visible... COMPLETED
+Take screenshot 06a-lista-aprendiz... COMPLETED
+Scrolling DOWN until "Formación Renaser Global" is visible with speed 40, visibility percentage 100%, timeout 60000 ms, with centering disabled... FAILED
+✘ 06-chats-aprendiz.yaml
+▶ 07-yo-y-ajustes.yaml
+ > Flow 07-yo-y-ajustes
+    Wait for animation to end within 4000 ms... COMPLETED
+      Tap on "Allow"... COMPLETED
+    Run flow when "Allow" is visible... COMPLETED
+      Tap on "Posponer la guía de SER"... COMPLETED
+    Run flow when "Posponer la guía de SER" is visible... COMPLETED
+    Run cerrar-aviso-dev.yaml... COMPLETED
+  Run despejar-capas.yaml... COMPLETED
+  Assert that "TRAINING" is visible... COMPLETED
+Run ../comun/ya-adentro.yaml... COMPLETED
+Tap on "YO"... COMPLETED
+Assert that "Tu evolución" is visible... COMPLETED
+Take screenshot 07a-yo... COMPLETED
+Tap on "Ajustes"... COMPLETED
+Assert that "Perfil" is visible... COMPLETED
+Assert that "Tu proceso" is visible... COMPLETED
+Assert that "Mi onboarding" is visible... COMPLETED
+Take screenshot 07b-ajustes... COMPLETED
+Scrolling DOWN until "Cerrar sesión" is visible with speed 40, visibility percentage 100%, timeout 20000 ms, with centering disabled... COMPLETED
+Assert that "Eliminar mi cuenta" is visible... COMPLETED
+Take screenshot 07c-ajustes-final... COMPLETED
+✔ 07-yo-y-ajustes.yaml
+▶ 08-planificar-despertar.yaml
+ > Flow 08-planificar-despertar
+    Wait for animation to end within 4000 ms... COMPLETED
+      Tap on "Allow"... COMPLETED
+    Run flow when "Allow" is visible... COMPLETED
+      Tap on "Posponer la guía de SER"... COMPLETED
+    Run flow when "Posponer la guía de SER" is visible... COMPLETED
+    Run cerrar-aviso-dev.yaml... COMPLETED
+  Run despejar-capas.yaml... COMPLETED
+  Assert that "TRAINING" is visible... COMPLETED
+Run ../comun/ya-adentro.yaml... COMPLETED
+  Tap on "TRAINING"... COMPLETED
+  Tap on "Cuerpo: .*"... COMPLETED
+  Assert that "Prácticas activas.*" is visible... COMPLETED
+Run ../comun/abrir-cuerpo.yaml... COMPLETED
+Tap on "Planificar Cuerpo"... COMPLETED
+Assert that "Planificar Cuerpo" is visible... COMPLETED
+Tap on "DESPERTAR, (sin hora|a las .*)"... COMPLETED
+Assert that "Guardar .*" is visible... COMPLETED
+  Swipe from (26%,28%) to (26%,23%) in 400 ms... COMPLETED
+Repeat while "Guardar 22:00.*" is not visible (up to 24 times)... COMPLETED
+Assert that "Guardar 22:00.*" is visible... COMPLETED
+Take screenshot 08a-despertar-22... COMPLETED
+Tap on "Guardar 22:00.*"... COMPLETED
+Assert that "Guardar 22:00.*" is not visible... COMPLETED
+Take screenshot 08b-despertar-guardado... COMPLETED
+✔ 08-planificar-despertar.yaml
+▶ 10-gimnasio-con-foto.yaml
+ > Flow 10-gimnasio-con-foto
+    Wait for animation to end within 4000 ms... COMPLETED
+      Tap on "Allow"... COMPLETED
+    Run flow when "Allow" is visible... COMPLETED
+    Run cerrar-aviso-dev.yaml... COMPLETED
+  Run despejar-capas.yaml... COMPLETED
+  Assert that "TRAINING" is visible... COMPLETED
+Run ../comun/ya-adentro.yaml... COMPLETED
+  Tap on "TRAINING"... COMPLETED
+  Tap on "Cuerpo: .*"... COMPLETED
+  Assert that "Prácticas activas.*" is visible... COMPLETED
+Run ../comun/abrir-cuerpo.yaml... COMPLETED
+Scrolling DOWN until "Subir: GIMNASIO" is visible with speed 40, visibility percentage 100%, timeout 20000 ms, with centering enabled... COMPLETED
+Assert that "Opcional", Above "Subir: GIMNASIO" is visible... COMPLETED
+Take screenshot 10a-gimnasio-opcional... COMPLETED
+Tap on "Subir: GIMNASIO"... COMPLETED
+    Tap on "While using the app"... COMPLETED
+  Run flow when "While using the app" is visible... COMPLETED
+  Assert that id: com.android.camera2:id/shutter_button is visible... COMPLETED
+  Tap on id: com.android.camera2:id/shutter_button... COMPLETED
+  Assert that id: com.android.camera2:id/done_button is visible... COMPLETED
+  Tap on id: com.android.camera2:id/done_button... COMPLETED
+Run ../comun/tomar-foto.yaml... COMPLETED
+Assert that ".*sentiste.*" is not visible... COMPLETED
+    Tap on point (92%,92%)... COMPLETED
+  Run flow when "Open debugger to view warnings." is visible... COMPLETED
+Run ../comun/cerrar-aviso-dev.yaml... COMPLETED
+Scrolling DOWN until "GIMNASIO, cumplido" is visible with speed 40, visibility percentage 100%, timeout 30000 ms, with centering disabled... COMPLETED
+Assert that "Ver: GIMNASIO" is visible... COMPLETED
+Take screenshot 10c-gimnasio-cumplido... COMPLETED
+✔ 10-gimnasio-con-foto.yaml
+▶ 11-ranking-gimnasio.yaml
+ > Flow 11-ranking-gimnasio
+    Wait for animation to end within 4000 ms... COMPLETED
+      Tap on "Allow"... COMPLETED
+    Run flow when "Allow" is visible... COMPLETED
+      Tap on "Posponer la guía de SER"... COMPLETED
+    Run flow when "Posponer la guía de SER" is visible... COMPLETED
+    Run cerrar-aviso-dev.yaml... COMPLETED
+  Run despejar-capas.yaml... COMPLETED
+  Assert that "TRAINING" is visible... COMPLETED
+Run ../comun/ya-adentro.yaml... COMPLETED
+Tap on "COMUNIDAD"... COMPLETED
+Tap on "Ranking"... COMPLETED
+Assert that "General" is visible... COMPLETED
+Assert that "Coherencia" is visible... COMPLETED
+Assert that "Kilómetros" is visible... COMPLETED
+Tap on "Gimnasio: Días de gimnasio desde tu Día 1"... COMPLETED
+Assert that "Días de gimnasio desde tu Día 1" is visible... COMPLETED
+Assert that "[0-9]+ días?" is visible... FAILED
+✘ 11-ranking-gimnasio.yaml
+▶ 20-admin-entrar-y-volver.yaml
+  (reintento de entrada)
+ > Flow 20-admin-entrar-y-volver
+    Wait for animation to end within 4000 ms... COMPLETED
+      Tap on "Allow"... COMPLETED
+    Run flow when "Allow" is visible... COMPLETED
+        Tap on point (92%,92%)... COMPLETED
+      Run flow when "Open debugger to view warnings." is visible... COMPLETED
+    Run cerrar-aviso-dev.yaml... COMPLETED
+  Run despejar-capas.yaml... COMPLETED
+  Assert that "TRAINING" is visible... COMPLETED
+Run ../comun/ya-adentro.yaml... COMPLETED
+Tap on "HOY"... COMPLETED
+Scrolling DOWN until "Abrir Administración" is visible with speed 40, visibility percentage 100%, timeout 20000 ms, with centering disabled... COMPLETED
+Tap on "Abrir Administración"... COMPLETED
+Assert that "Operación del programa" is visible... COMPLETED
+Take screenshot 20a-administracion... COMPLETED
+Press back... COMPLETED
+Assert that "Abrir Administración" is visible... COMPLETED
+Assert that "TRAINING" is visible... COMPLETED
+✔ 20-admin-entrar-y-volver.yaml
+▶ 21-admin-personas-y-volver.yaml
+ > Flow 21-admin-personas-y-volver
+    Wait for animation to end within 4000 ms... COMPLETED
+      Tap on "Allow"... COMPLETED
+    Run flow when "Allow" is visible... COMPLETED
+        Tap on point (92%,92%)... COMPLETED
+      Run flow when "Open debugger to view warnings." is visible... COMPLETED
+    Run cerrar-aviso-dev.yaml... COMPLETED
+  Run despejar-capas.yaml... COMPLETED
+  Assert that "TRAINING" is visible... COMPLETED
+Run ../comun/ya-adentro.yaml... COMPLETED
+Tap on "HOY"... COMPLETED
+Scrolling DOWN until "Abrir Administración" is visible with speed 40, visibility percentage 100%, timeout 20000 ms, with centering disabled... COMPLETED
+Tap on "Abrir Administración"... COMPLETED
+Assert that "Operación del programa" is visible... COMPLETED
+Scrolling DOWN until "Personas" is visible with speed 40, visibility percentage 100%, timeout 20000 ms, with centering disabled... COMPLETED
+Tap on "Personas"... COMPLETED
+Assert that "Buscar por nombre o correo" is visible... COMPLETED
+Tap on "Abrir ficha de .*"... COMPLETED
+Take screenshot 21a-ficha... COMPLETED
+Press back... COMPLETED
+Assert that "Buscar por nombre o correo" is visible... COMPLETED
+Press back... COMPLETED
+Assert that "Operación del programa" is visible... COMPLETED
+Press back... COMPLETED
+Assert that "Abrir Administración" is visible... COMPLETED
+✔ 21-admin-personas-y-volver.yaml
+▶ 22-admin-crear-grupo-teclado.yaml
+ > Flow 22-admin-crear-grupo-teclado
+    Wait for animation to end within 4000 ms... COMPLETED
+      Tap on "Allow"... COMPLETED
+    Run flow when "Allow" is visible... COMPLETED
+        Tap on point (92%,92%)... COMPLETED
+      Run flow when "Open debugger to view warnings." is visible... COMPLETED
+    Run cerrar-aviso-dev.yaml... COMPLETED
+  Run despejar-capas.yaml... COMPLETED
+  Assert that "TRAINING" is visible... COMPLETED
+Run ../comun/ya-adentro.yaml... COMPLETED
+Tap on "HOY"... COMPLETED
+Scrolling DOWN until "Abrir Administración" is visible with speed 40, visibility percentage 100%, timeout 20000 ms, with centering disabled... COMPLETED
+Tap on "Abrir Administración"... COMPLETED
+Assert that "Operación del programa" is visible... COMPLETED
+Scrolling DOWN until "Grupos" is visible with speed 40, visibility percentage 100%, timeout 20000 ms, with centering disabled... COMPLETED
+Tap on "Grupos"... COMPLETED
+Tap on "Crear"... COMPLETED
+Tap on "Fénix"... COMPLETED
+Input text GrupoM... COMPLETED
+Take screenshot 22a-teclado-abierto... COMPLETED
+Hide Keyboard... COMPLETED
+Assert that "Crear grupo" is visible... COMPLETED
+Press back... COMPLETED
+Press back... COMPLETED
+Assert that "Operación del programa" is visible... COMPLETED
+✔ 22-admin-crear-grupo-teclado.yaml
+Resultado: 8 bien, 3 mal 05-chats-admin.yaml 06-chats-aprendiz.yaml 11-ranking-gimnasio.yaml

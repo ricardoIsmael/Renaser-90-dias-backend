@@ -15395,3 +15395,126 @@ dos hechos seguidos tienen el mismo instante; si la prueba ordena por tiempo, ti
 **Causa.** `PermissionEnforcementInterceptor` deja al caso de uso rechazar un actor inexistente; los mocks del controller devolvían null. La primera variante también suponía que INACTIVE era una denegación del interceptor, cuando este comprueba la suspensión. No era una ejecución de los guards reales del caso de uso.
 
 **Solución y prevención.** El test negativo simula `NotAuthorizedException` desde el caso de uso y comprueba el 403 sin contexto. La prueba separada usa una cuenta SUSPENDED y comprueba que ni se invoque el caso de uso. `DiaDeHabitosIT` comprueba sin sesión y suspendido con filtros, base y sesión reales. No se modifican los permisos ni la política de cuentas. El resultado final de la batería se guarda en la spec de D-268.
+
+## E-628 · La ficha del mentor mostraba el post diario sin nada que ver (backend, spec 005, RESUELTO, 19/10)
+
+**Síntoma literal.** Al revisar la semana de una persona en la ficha del mentor (`…/weekly-progress`), el hábito «Post diario
+en la comunidad» salía `COMPLETADO` con `entrega: NO_REQUERIDA` y sin `evidenciaId` ni forma de abrir lo que la persona
+había publicado. Para el líder, que desde la spec 005 también necesita ver con qué se cumplió cada día, era un hábito
+cumplido «sin prueba».
+
+**Causa real.** El post diario no sube evidencia: `habits` lo cierra solo al publicar en el Muro (la política únicamente
+pregunta si publicó ese día) y `mentoring` solo sabía de evidencias. La publicación existía, pero ningún camino la ligaba
+al registro del hábito.
+
+**Solución.** La ficha deriva la entrega: la **primera** publicación del Muro de ese día en la zona de la persona (la que
+lo cerró; las siguientes no cuentan) pasa a ser `publicacionId` y la entrega, `ENTREGADA` a la hora de esa publicación,
+sin archivo ni revisión. Se deriva y no se guarda, así que vale también para los días anteriores al arreglo. Una sola
+consulta por semana y solo si hay un post diario (`PublicacionMuroFinder.delAutorEntre`, incluye las ocultas: lo que
+cerró el hábito cuenta aunque después se oculte; `GET /api/v1/wall/{id}` decide si quien mira puede abrirla).
+
+**Para que no vuelva.** `SeguimientoServiceTest` (el post diario trae la primera publicación de su día y la de otro día no;
+un hábito común no se liga a una publicación aunque ese día haya publicado), `PublicacionPersistenceAdapterTest`,
+`ObligacionesHistoricasPersistenceAdapterTest` y `CumplimientoDelLiderIT`. **Regla general:** un hábito que se cumple
+sin evidencia tiene que decir con qué se cumplió; si no, «cumplido» y «sin entrega» conviven y nadie sabe cuál creer.
+
+## E-629 · La lista del líder decía «Semana todavía sin cerrar» en una semana que ya había pasado (backend, spec 005, RESUELTO, 19/10)
+
+**Síntoma literal.** En el E2E del emulador, el líder abrió el grupo «Fénix 005» y el encabezado de la lista decía «Semana
+todavía sin cerrar · Del sábado 10 al viernes 16 de octubre», siendo hoy lunes 19. `GET /api/v1/leadership/groups/{id}/semaforo`
+devolvía `"cerrada": false` para ese grupo y `true` para los otros dos de la misma base, con la misma semana.
+
+**Causa real.** `cerrada` salía de `TablaDelSemaforoFinder.tablaDe(...)`, que la arma con `PeriodoDelSemaforo.de(ventanas)`: «cerrada» solo si
+**todas** las ventanas de los aprendices lo están, y una ventana solo es cerrada si existe la foto del cierre semanal
+(`semaforo_semanas`). Quien empezó su programa después de esa semana (aquí, Inés, con el Día 1 el 17/10) no tiene foto de esa
+semana, así que bastaba **un integrante nuevo** para que todo el grupo mostrara la última semana cerrada como abierta. Ocurre
+en cualquier grupo que haya recibido a alguien en los últimos días. Las pruebas no lo vieron porque el doble de la tabla
+devolvía la fecha de calendario y no la regla de la tabla real.
+
+**Solución.** La lista del líder toma `cerrada` del calendario (`VentanaDeLaFicha.cerrada()`: la semana ya terminó), igual que la ficha
+de la persona. No se toca `PeriodoDelSemaforo`: las tablas del mentor y de administración siguen como estaban.
+
+**Para que no vuelva.** `GrupoDelLiderServiceTest.unaPersonaNuevaNoDejaLaSemanaCerradaSinCerrar`, y el doble de la tabla en
+`BancoDeCumplimiento` ahora aplica la misma regla que la real (todas las ventanas cerradas), para que una prueba así falle
+con el código viejo. **Regla general:** un dato de calendario (¿ya pasó esta semana?) se decide con el calendario, no
+agregando el estado de cada persona del grupo.
+
+**E-629 (b) · El texto de una evidencia salía dos veces en la hoja del líder (app, spec 005, RESUELTO, 19/10).** Hallazgo del mismo E2E.
+**Síntoma.** Al abrir la Audioterapia de una persona, la hoja mostraba el párrafo y, debajo de «Lo que escribió», el mismo párrafo.
+**Causa.** `EvidenciaHabitoModal` entrega un texto con `confirmarEvidencia({ tipo: 'TEXTO', contenidoTexto })` **y**
+`completarRegistro(id, textoUtil)`: la evidencia y `respuestaTexto` son las mismas palabras, y la hoja pintaba las dos.
+**Solución.** `respuestaYaLeidaComoEvidencia` (`features/lider-mentores/utils/respuestaRepetida.ts`): si lo leído como evidencia de
+texto es igual a `respuestaTexto` (sin espacios en los bordes), «Lo que escribió» no se repite; si dice otra cosa (foto con
+«¿Qué sentiste?», un resumen distinto) salen las dos. **Para que no vuelva.** `respuestaRepetida.test.ts`. **Regla general:** un
+dato que el cliente manda por dos caminos se muestra por uno; al leerlo hay que saber que puede venir repetido.
+
+**E-629 (c) · «Pendiente de revisión» en una publicación del Muro (app, spec 005, RESUELTO, 19/10).** Hallazgo del mismo E2E.
+**Síntoma.** En la ficha del mentor (`AlumnoScreen`), el post diario cumplido decía «Evidencia entregada · pendiente de revisión»
+junto a «Ver publicación»; el mentor entendía que tenía algo que revisar. **Causa.** `etiquetaDeEntrega` solo miraba `entrega` y
+`revision`; el post diario llega con `revision: null` (su entrega es la publicación, E-628) y caía en el «pendiente» por defecto.
+**Solución.** `mentor/utils/etiquetaDeEntrega.ts` recibe `publicacionId` y, sin revisión, dice «Publicado en el Muro» (como la
+ficha del líder). **Para que no vuelva.** `etiquetaDeEntrega.test.ts`. La ficha de administración ya decía «con evidencia».
+
+**E-629 (d) · El resumen, la lista y la ficha del líder miraban tres ventanas distintas (backend y app, spec 005, RESUELTO, 19/10).**
+Hallazgo del mismo E2E (observación 3 de `specs/005-lider-cumplimiento-por-persona/e2e.md`).
+**Síntoma literal.** El resumen decía «Últimos 7 días · Del lunes 12 al domingo 18 de octubre»; al tocar un grupo, la lista decía «Semana
+cerrada · Del sábado 10 al viernes 16 de octubre», y los porcentajes cambiaban: Rocío, 50 % en un lado y 47,6 % en el otro (capturas
+`12a-backend-anterior-resumen.png` y `01d-lista-fenix-despues-del-arreglo.png` de la primera pasada; el 19/10 se reemplazaron por las de la
+ventana alineada). La ficha abría una tercera: la semana en curso.
+**Causa real.** Cada pantalla tenía su propio «sin fecha»: el resumen leía `SemaforoFinder.vigenteDe` (7 días que terminan ayer); la lista,
+`VentanaDeLaFicha.paraLaLista` (última semana cerrada, con `semanaDe(viernes)`); la ficha, `paraLaFicha` (la semana en curso). El contrato
+(R-2) lo había decidido así («solo el líder va de sábado a viernes») y la app lo tapaba pasándole a la ficha el `hasta` de la lista, pero
+no hay un `hasta` que haga coincidir una semana de sábado a viernes con unos «últimos 7 días». Ninguna prueba ponía las tres pantallas
+sobre los mismos datos.
+**Solución (decisión del dueño: «la ventana del resumen manda en todo»).** `VentanaDeLaFicha.de(semanaHasta, hoy)`: sin fecha, la vigente
+(`hasta = hoy − 1`, `desde = hasta − 6`) leída con `vigenteDe`; con un viernes que ya llegó, esa semana leída con `semanaDe`; un viernes
+futuro es 400; `cerrada` del calendario. La lista pasa a la tabla del semáforo lo mismo que se pidió (`null` = vigente), como
+Administración. En la app, la lista abre con el `InicioSemanal` del resumen, la ficha con el de la lista, y las tres usan
+`useLecturaPorSemana` y `NavegacionDeSemanas` (mismo rótulo, mismas flechas, de 7 en 7 días, sin futuro). Se retiraron el motivo `FUTURO`,
+«Volver a esta semana» y el aviso «La semana sigue en curso».
+**Para que no vuelva.** `MismaVentanaEnLasTresPantallasTest` (el resumen real, la tabla real y los servicios del líder sobre los mismos
+datos: mismos días, mismo % y mismo color, con la vigente, con un viernes, en la madrugada UTC y un sábado; falla con el comportamiento
+viejo), `VentanaDeLaFichaTest`, `GrupoDelLiderServiceTest`, `SemanaDePersonaServiceTest`, `CumplimientoDelLiderControllerTest` y, en la app,
+`lecturaDelLider.test.ts`, `delGrupoALaPersona.test.ts` y `semanasDelSemaforo.test.ts`. **Regla general:** dos pantallas que se abren una
+desde la otra hablan de los mismos días; si el «por defecto» de cada una es distinto, el usuario ve dos números para lo mismo.
+
+**E-629 (e) · El resumen rotulaba «Semana todavía sin cerrar» una semana que ya había pasado, mientras la lista y la ficha decían «Semana cerrada» (backend, spec 005, RESUELTO, 19/10).**
+Hallazgo de la pasada final del E2E (`specs/005-lider-cumplimiento-por-persona/e2e.md`, «Pasada final con la 006 y el Código Renaser»).
+**Síntoma literal.** En el emulador, con ‹ en «Semáforo por grupos»: «Semana todavía sin cerrar · Del sábado 10 al viernes 16 de octubre»;
+al tocar «Fénix 005», la lista decía «Semana cerrada · Del sábado 10 al viernes 16 de octubre» y la ficha de Ana, lo mismo. Los mismos siete
+días y los mismos porcentajes, con dos rótulos. `GET /api/v1/semaforo/groups?semanaHasta=2026-10-16` devolvía `"periodo": { "cerrada": false }` y
+`GET /api/v1/leadership/groups/{id}/semaforo?semanaHasta=2026-10-16`, `"cerrada": true` (captura `05e-resumen-semana-10-al-16-sin-cerrar-antes-del-arreglo.png`).
+**Causa real.** La misma de E-629: `SemaforoPorGruposService` armaba el encabezado con `PeriodoDelSemaforo.de(ventanas, esperado)`, «cerrada» solo si
+**todas** las ventanas lo están, y una ventana es cerrada solo si existe la foto del cierre (`semaforo_semanas`). 15 de los 67 aprendices activos
+del clon no tenían la foto de la semana del 10 al 16 (quien empezó después, como Inés con el Día 1 el 17/10); en producción pasa con cualquiera que
+active su programa después de un cierre. La corrección de E-629 solo tocó la lista del líder (decía «las tablas del mentor y de administración siguen
+como estaban»); al alinear las tres pantallas en E-629 (d) el resumen quedó con su propio criterio.
+**Solución.** `SemaforoPorGruposService.periodo(...)`: con un viernes pedido, `cerrada` es la del calendario (`PeriodoDelSemaforo.esperado`: el viernes
+ya pasó), como la lista y la ficha. Sin fecha (la ventana vigente) no cambia: sigue `false` y la app no la rotula con eso («Últimos 7 días»). No se
+toca `PeriodoDelSemaforo.de`, que siguen usando las tablas del mentor y de administración.
+**Para que no vuelva.** `SemaforoPorGruposServiceTest.unaPersonaNuevaNoDejaLaSemanaCerradaSinCerrar` y `laVigenteNoSeDiceCerrada`, y
+`MismaVentanaEnLasTresPantallasTest.conUnaPersonaSinFotoDelCierre` (el resumen, la lista y la ficha con una persona sin foto: mismo `cerrada`; falla con
+el código anterior). **Regla general:** la de E-629, ahora en las tres pantallas: un dato de calendario (¿ya pasó esta semana?) se decide con el
+calendario, no agregando el estado de cada persona del grupo. **Pendiente, fuera de la 005:** las tablas del mentor y de administración
+(`SemaforoDelGrupoService` con `PeriodoDelSemaforo.de`) conservan el criterio de «todas las fotos»; con una persona nueva en el grupo dirán «todavía sin cerrar»
+para una semana pasada.
+
+## E-630 · El plan de la spec 006 ponía `CumplimientoPorHabitoFinder` en `habits/api`: points no puede importar habits (plan, RESUELTO, 19/10)
+
+**Síntoma literal (antes de escribir código).** El plan y la tarea T013 decían «`CumplimientoPorHabitoFinder` en `backend:…/habits/api/`» y que `points` lo consumiría para elegir el hábito más flojo y el más fuerte del mensaje del semáforo. `grep -rn "import com.renaser.os.habits" points` no da nada, y `habits` importa `points.api` en ocho servicios (otorga puntos, racha, kilómetros): un `import habits.api.*` desde `points` cierra un ciclo `points ↔ habits` que `ApplicationModules.verify()` rechaza.
+
+**Causa.** El plan copió el patrón «el finder vive en el módulo que lo implementa» sin mirar la dirección de la dependencia. Para `habits` el repo ya tenía la regla contraria (DIP): lo que `points` necesita de `habits` se declara en `points.api` y lo implementa `habits` (`ConteoDiarioHabitosFinder`, `PorcentajeHabitosFinder`, `HabitosDelDiaFinder`).
+
+**Solución.** `points.api.CumplimientoPorHabitoFinder` + `points.api.CumplimientoDeHabito`; lo implementa `habits.application.services.CumplimientoPorHabitoFinderService` sobre `ContarCumplimientoPorHabitoPort` (JDBC, una consulta por persona). La regla de «el hábito contaba» no se copió: `ConteoDiarioHabitos.calificables(total, opcionalesNoCompletados)` pasó a ser estática y la usan el conteo diario y el nuevo.
+
+**Prevención.** Antes de poner un finder en `<modulo>/api/`, mirar quién importa a quién (`grep -rn "import com.renaser.os.<A>" <B>`). `ArchitectureTest` ya rompe el build si se cuela el ciclo. Nota en el plan de la spec 006 y en D-277.
+
+## E-631 · La spec 006 daba por hecho que `/home` podía mandar `semaforo: null` a quien terminó los 90 días y que `programa_completado` marca «después del día 90» (plan, RESUELTO, 19/10)
+
+**Síntoma literal (antes de escribir código).** research R3 y T029: «Programa completado (`programaCompletado`, día > 90) → GRADUADO» y «si `/home` manda `semaforo: null` después del día 90, el servidor manda igual un `semaforo` SIN_DATOS». Ninguna de las dos premisas se cumple.
+
+**Causa.** (1) `ParticipacionPrograma.graduarSiLlegoAlDiaNoventa` marca `programa_completado` **al llegar** al día 90 («se gradúa al llegar al día 90, sin condiciones»), cuando ese día todavía se mide; y `dia_programa` queda acotado en 90, así que no distingue el 90 del 91. (2) `ProgramasActivadosService.deVarios` solo filtra por programa activado, no por completado: `ConsultaDelSemaforoService.resumenParaHoy` devuelve la ventana de siempre y `/home` sigue mandando `semaforo` (con SIN_DATOS cuando pasan siete días de FUERA_DEL_PROGRAMA).
+
+**Solución.** «Terminó el programa» = `hoy local > ultimaFecha` del calendario del semáforo (`CalendarioDeMedicion.terminadoEl`, expuesto en `ResumenParaHoy.programaTerminado`): el 90 sigue siendo del programa y el 91 ya no, con el ajuste de día incluido. No se fabrica un semáforo SIN_DATOS: la tarjeta de quien terminó ya existe. Pruebas: `MedicionDeLaPersonaTest.elProgramaTerminaDespuesDelDiaNoventa`, `GrupoDelDiaTest`, `HomeMensajeDelSemaforoIT.despuesDelDiaNoventa` / `elDiaNoventaSigueEnElPrograma`.
+
+**Prevención.** Una bandera que el reloj marca «al llegar» no sirve para decir «después de». Para preguntas de calendario, derivar de las fechas (`.claude/rules/02` §2), no de columnas materializadas.

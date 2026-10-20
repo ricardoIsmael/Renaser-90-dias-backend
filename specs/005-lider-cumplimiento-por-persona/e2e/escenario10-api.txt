@@ -1,0 +1,14 @@
+admin abre la ficha de Beto (grupo de Pedro): 200
+ consultor | rol_consultor |  persona   |   grupo   |       mentor        | semana_desde | hora  
+-----------+---------------+------------+-----------+---------------------+--------------+-------
+ E2E LIDER | MENTOR_LEAD   | Ana Pérez  | Fénix 005 | Luisa Rojas Mentora | 2026-10-10   | 14:01
+ E2E LIDER | MENTOR_LEAD   | Rocío Roja | Fénix 005 | Luisa Rojas Mentora | 2026-10-10   | 14:05
+ E2E LIDER | MENTOR_LEAD   | Ana Pérez  | Fénix 005 | Luisa Rojas Mentora | 2026-10-10   | 14:06
+ E2E LIDER | MENTOR_LEAD   | Ana Pérez  | Fénix 005 | Luisa Rojas Mentora | 2026-10-10   | 14:08
+ E2E LIDER | MENTOR_LEAD   | Ana Pérez  | Fénix 005 | Luisa Rojas Mentora | 2026-10-03   | 14:08
+ E2E LIDER | MENTOR_LEAD   | Ana Pérez  | Fénix 005 | Luisa Rojas Mentora | 2026-10-17   | 14:09
+ E2E LIDER | MENTOR_LEAD   | Ana Pérez  | Fénix 005 | Luisa Rojas Mentora | 2026-10-17   | 14:11
+ E2E ADMIN | ADMIN         | Beto Paz   | Loto 005  | Pedro Mentor Loto   | 2026-10-10   | 14:11
+(8 rows)
+
+

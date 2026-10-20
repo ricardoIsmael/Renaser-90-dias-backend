@@ -1,6 +1,6 @@
 package com.renaser.os.mentoring.application.ports.in;
 
-import com.renaser.os.mentoring.application.ports.in.ConsultarSeguimientoSemanalUseCase.SemanaDelAlumno;
+import com.renaser.os.mentoring.api.SemanaDelAlumno;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.LocalDate;
