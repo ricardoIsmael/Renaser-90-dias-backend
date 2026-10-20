@@ -7,7 +7,16 @@
 
 ## Clarifications
 
-### Session 2026-10-20
+### Session 2026-10-20 (corrección del dueño tras verlo en el emulador)
+
+> **Corregido 2026-10-20.** El dueño vio la primera versión en el emulador: cuatro interruptores debajo del recordatorio. Respondió: «esa configuración no iba el interruptor, era para escoger el sonido que quieren o la alarma que quería… y esa configuración creo que en Ajustes… para mejor UX/IA ocupa toda la pantalla». Quedó así:
+> - **Planificar un hábito pasa a pantalla completa** («‹ GIMNASIO» arriba, Guardar fijo abajo, el atrás vuelve a la lista).
+> - **Debajo del Recordatorio va «Sonido de la alarma»**: se elige el tono (los mismos de Yo → Alarmas: el del teléfono, campana, voz que dice el hábito, solo vibrar, para alertar, para relajar), con ▶ para escuchar. Va **por día**, igual que la hora y el aviso. Sin elección, hereda el tono de Yo → Alarmas.
+> - **Los interruptores grandes y dorados van a Yo → Ajustes → Alarmas**, como configuración general de todas las alarmas de hábitos: **Vibración** y **Repetir si no la atiendo**. La voz ya es un tono. «Sin sonido» es el tono «Solo vibrar».
+> - **Vibrar por defecto** (respuesta en consola): hoy las alarmas de hábitos no vibran, porque su canal se creó sin vibración (E-641). Desde ahora vibran salvo que la persona apague la vibración.
+> - Lo de abajo, sobre los interruptores por día y la combinación {sonido, vibración, voz, repetir}, queda reemplazado por esto.
+
+### Session 2026-10-20 (primera versión, reemplazada)
 
 - Q: ¿Qué opciones van con interruptor? → A: **Sonido**, **Vibración**, **Voz que dice el hábito** y **Repetir si no la atiendo**. Se descartó «subir el volumen poco a poco».
 - Q: ¿Color del interruptor encendido? → A: **dorado de Renaser**, grande, con sombra suave como la referencia (alto ~40 px, ancho ~72 px), y el rótulo a 17 px.
