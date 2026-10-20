@@ -10,6 +10,7 @@ import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public interface LoadPreferenciaHorarioPort {
 
@@ -21,8 +22,34 @@ public interface LoadPreferenciaHorarioPort {
     Optional<PreferenciaHorario> porParticipanteHabitoYFecha(UserId participanteId, HabitoId habitoId,
                                                            LocalDate fecha);
 
+    /**
+     * Igual que {@link #porParticipanteHabitoYFecha}, en lote. Spec 008 (D-282): la capa del dia de la
+     * semana pisa POR CAMPO, la hora si la fila trae hora y el aviso (activo, antelaciones, minutos) si
+     * trae aviso propio, de modo que una fila de solo aviso deja la hora de abajo.
+     */
     List<PreferenciaHorario> porParticipanteHabitosYFecha(UserId participanteId, Collection<HabitoId> habitoIds,
                                                         LocalDate fecha);
+
+    /**
+     * Lo mismo que {@link #porParticipanteHabitosYFecha} pero SIN el aviso propio del dia de la semana
+     * (la hora de ese dia si cuenta). Es lo que muestra el listado de preferencias como aviso GENERAL del
+     * habito: el APK anterior lo lee y reescribe como el general, y el editor nuevo lo necesita para
+     * saber que heredan los dias sin aviso propio. Con aviso por dia, mezclarlo haria que el general
+     * "cambiara" segun el dia que se consulta.
+     */
+    List<PreferenciaHorario> porParticipanteHabitosYFechaSinAvisoDelDia(UserId participanteId,
+                                                                        Collection<HabitoId> habitoIds,
+                                                                        LocalDate fecha);
+
+    /** Las filas de dia de la semana de varios habitos en UNA consulta (hora, apagado y aviso propios). */
+    List<HorarioSemanal> horariosSemanalesDe(UserId participanteId, Collection<HabitoId> habitoIds);
+
+    /**
+     * Los habitos que tienen AL MENOS UNA fila de dia de la semana, sea por hora propia, aviso propio o dia
+     * apagado: los que usan el esquema por dia (spec 008, R6). El push de inicio lleva la etiqueta del dia
+     * solo para ellos, la misma regla con la que la app decide su esquema de alarmas.
+     */
+    Set<HabitoId> habitosConEsquemaPorDia(UserId participanteId, Collection<HabitoId> habitoIds);
 
     List<HabitoId> habitosConHorarioEntre(UserId participanteId, LocalDate desde, LocalDate hasta);
 

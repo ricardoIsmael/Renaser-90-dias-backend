@@ -15,6 +15,10 @@ import java.util.List;
  * <p>{@code active} es {@code false} cuando el aprendiz apago ese dia de la semana (V40). Viene con
  * la hora igual: el dia esta apagado, no sin horario, y encenderlo lo devuelve a esa hora.
  *
+ * <p><b>Spec 008 (D-282).</b> Cada dia suma su aviso RESUELTO: {@code reminderEnabled} y
+ * {@code reminderMinutesList} son el propio del dia o, si no tiene, el general; {@code customReminder} es
+ * {@code true} solo cuando el aviso es propio. Campos aditivos: el APK anterior los ignora.
+ *
  * <p>{@code weekday} como nombre de {@link java.time.DayOfWeek} ({@code "MONDAY"}..{@code "SUNDAY"}),
  * igual que {@code activeWeekdays} en {@code GET /api/v1/habits}: mismo vocabulario en todo el cable.
  */
@@ -26,11 +30,12 @@ public record WeekdayScheduleResponse(List<WeekdayScheduleItemResponse> weekdays
 
     /** {@code custom}: {@code true} si ese dia tiene hora propia; {@code false} si hereda la general. */
     public record WeekdayScheduleItemResponse(String weekday, LocalTime triggerTime, LocalTime limitTime,
-                                               boolean custom, boolean active) {
+                                               boolean custom, boolean active, boolean reminderEnabled,
+                                               List<Integer> reminderMinutesList, boolean customReminder) {
 
         static WeekdayScheduleItemResponse from(DiaDeLaSemana d) {
             return new WeekdayScheduleItemResponse(d.diaSemana().name(), d.horaDisparo(), d.horaLimite(),
-                    d.propio(), d.activo());
+                    d.propio(), d.activo(), d.recordatorioActivo(), d.antelaciones(), d.recordatorioPropio());
         }
     }
 }

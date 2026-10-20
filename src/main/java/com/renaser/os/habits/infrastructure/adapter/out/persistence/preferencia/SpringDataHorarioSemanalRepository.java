@@ -17,6 +17,12 @@ interface SpringDataHorarioSemanalRepository
     List<HorarioSemanalJpaEntity> findByParticipanteIdAndHabitoIdInAndDiaSemana(
             UUID participanteId, Collection<UUID> habitoIds, Short diaSemana);
 
+    /**
+     * Las filas de varios habitos de un participante, en UNA consulta: el listado de preferencias y el
+     * barrido de avisos recorren todos los habitos de la persona (spec 008, sin un pedido por habito).
+     */
+    List<HorarioSemanalJpaEntity> findByParticipanteIdAndHabitoIdIn(UUID participanteId, Collection<UUID> habitoIds);
+
     /** Los siete dias de un habito, para pintar la pantalla de una sola vez. */
     List<HorarioSemanalJpaEntity> findByParticipanteIdAndHabitoId(UUID participanteId, UUID habitoId);
 

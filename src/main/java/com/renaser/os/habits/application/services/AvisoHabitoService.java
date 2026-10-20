@@ -145,7 +145,8 @@ public class AvisoHabitoService implements DespacharAvisosHabitoUseCase {
                 .toList();
         PuntosEnJuego puntos = PuntosEnJuego.de(ventana, ahora);
         for (AvisoHabito aviso : debidos) {
-            events.publishEvent(eventoDe(registro, aviso, puntos, new DatosDelHabito(habito, preferencia, zona)));
+            events.publishEvent(eventoDe(registro, aviso, puntos, new DatosDelHabito(habito, preferencia, zona,
+                    agenda.conEsquemaPorDia().contains(habito.id()))));
         }
         return debidos.size();
     }
@@ -192,7 +193,17 @@ public class AvisoHabitoService implements DespacharAvisosHabitoUseCase {
                 aviso.tipo().claveIdempotencia(registro.id(), aviso.momento()),
                 preferencia == null ? null : preferencia.recordatorioActivo(),
                 preferencia == null ? null : preferencia.minutosRecordatorio(), clock.now(),
-                datos.habito().id().value(), datos.habito().categoriaClave(), aviso.momento(), datos.zona().getId());
+                datos.habito().id().value(), datos.habito().categoriaClave(), aviso.momento(), datos.zona().getId(),
+                diaDelAviso(registro, datos.usaEsquemaPorDia()));
+    }
+
+    /**
+     * Spec 008, R6: el dia de la semana (ISO) de la fecha del registro, que ya viene en la zona del aprendiz,
+     * solo si el habito usa el esquema de alarmas por dia. Con el esquema diario va {@code null} y el push
+     * conserva su etiqueta de siempre.
+     */
+    private static Integer diaDelAviso(RegistroHabito registro, boolean usaEsquemaPorDia) {
+        return usaEsquemaPorDia ? registro.fechaEjecucion().getDayOfWeek().getValue() : null;
     }
 
     /** Una consulta por coleccion y no una por registro: este barrido recorre todo el padron. */
@@ -207,15 +218,20 @@ public class AvisoHabitoService implements DespacharAvisosHabitoUseCase {
         Map<HabitoId, PreferenciaHorario> preferencias = loadPreferenciaPort
                 .porParticipanteHabitosYFecha(participanteId, habitoIds, registros.getFirst().fechaEjecucion()).stream()
                 .collect(Collectors.toMap(PreferenciaHorario::habitoId, preferencia -> preferencia));
-        return new AgendaDelDia(habitos, horarios, preferencias);
+        return new AgendaDelDia(habitos, horarios, preferencias,
+                loadPreferenciaPort.habitosConEsquemaPorDia(participanteId, habitoIds));
     }
 
     /** Lo que el evento necesita saber del habito de un registro, agrupado para no pasar seis parametros. */
-    private record DatosDelHabito(Habito habito, PreferenciaHorario preferencia, ZoneId zona) {
+    private record DatosDelHabito(Habito habito, PreferenciaHorario preferencia, ZoneId zona,
+                                  boolean usaEsquemaPorDia) {
     }
 
-    /** El catalogo del dia ya resuelto en lote, para no repetir consultas por registro. */
+    /**
+     * El catalogo del dia ya resuelto en lote, para no repetir consultas por registro. {@code conEsquemaPorDia}
+     * son los habitos con alguna fila de dia de la semana (spec 008): se piden UNA vez por barrido.
+     */
     private record AgendaDelDia(Map<HabitoId, Habito> habitos, Map<HabitoId, List<HorarioHabito>> horarios,
-                                 Map<HabitoId, PreferenciaHorario> preferencias) {
+                                 Map<HabitoId, PreferenciaHorario> preferencias, Set<HabitoId> conEsquemaPorDia) {
     }
 }

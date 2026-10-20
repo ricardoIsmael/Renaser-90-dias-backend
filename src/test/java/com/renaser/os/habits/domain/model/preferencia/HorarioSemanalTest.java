@@ -76,4 +76,69 @@ class HorarioSemanalTest {
                 .isInstanceOf(NullPointerException.class)
                 .hasMessageContaining("diaSemana");
     }
+
+    // ─── Spec 008 (V111, D-282): el aviso propio del dia ────────────────────────────────────
+
+    /** Un dia puede traer solo su aviso y heredar la hora general: la fila de «solo aviso». */
+    @Test
+    void unDiaEncendidoPuedeTenerSoloAvisoPropioSinHora() {
+        var sabado = new HorarioSemanal(DayOfWeek.SATURDAY, preferencia(null, null), true,
+                RecordatorioDelDia.con(java.util.List.of(30)));
+
+        assertThat(sabado.preferencia().horaDisparo()).isNull();
+        assertThat(sabado.tieneHoraPropia()).isFalse();
+        assertThat(sabado.recordatorio()).isEqualTo(RecordatorioDelDia.con(java.util.List.of(30)));
+    }
+
+    /** «Sin aviso ese dia» tambien es algo propio: no se confunde con heredar. */
+    @Test
+    void sinAvisoPropioCuentaComoAlgoPropio() {
+        var sabado = new HorarioSemanal(DayOfWeek.SATURDAY, preferencia(null, null), true,
+                RecordatorioDelDia.sinAviso());
+
+        assertThat(sabado.recordatorio().activo()).isFalse();
+    }
+
+    /** Encendido sin hora y sin aviso no dice nada que lo general no diga: se rechaza como siempre. */
+    @Test
+    void encendidoSinHoraNiAvisoSigueRechazado() {
+        assertThatThrownBy(() -> new HorarioSemanal(DayOfWeek.SATURDAY, preferencia(null, null), true, null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessageContaining("horaDisparo");
+    }
+
+    @Test
+    void apagadoSinNadaSigueSiendoValidoYConservaSuAviso() {
+        var apagado = new HorarioSemanal(DayOfWeek.TUESDAY, preferencia(null, null), false,
+                RecordatorioDelDia.con(java.util.List.of(10)));
+
+        assertThat(apagado.activo()).isFalse();
+        assertThat(apagado.recordatorio()).isNotNull();
+    }
+
+    @Test
+    void lasFirmasHistoricasNoTienenAvisoPropio() {
+        assertThat(new HorarioSemanal(DayOfWeek.MONDAY, preferencia(LocalTime.of(5, 0), null)).recordatorio())
+                .isNull();
+        assertThat(new HorarioSemanal(DayOfWeek.MONDAY, preferencia(null, null), false).recordatorio()).isNull();
+    }
+
+    @Test
+    void conRecordatorioDevuelveOtroDiaConEseAvisoYQuitarlo() {
+        var lunes = new HorarioSemanal(DayOfWeek.MONDAY, preferencia(LocalTime.of(5, 0), null));
+
+        var conAviso = lunes.conRecordatorio(RecordatorioDelDia.sinAviso());
+        assertThat(conAviso.recordatorio()).isEqualTo(RecordatorioDelDia.sinAviso());
+        assertThat(conAviso.preferencia().horaDisparo()).isEqualTo(LocalTime.of(5, 0));
+        assertThat(conAviso.conRecordatorio(null).recordatorio()).isNull();
+    }
+
+    /** La regla que el adaptador usa para decidir si borra la fila que se quedo sin nada propio. */
+    @Test
+    void dejaAlgoPropioEsLaMismaReglaDelConstructor() {
+        assertThat(HorarioSemanal.dejaAlgoPropio(true, null, null)).isFalse();
+        assertThat(HorarioSemanal.dejaAlgoPropio(true, LocalTime.of(5, 0), null)).isTrue();
+        assertThat(HorarioSemanal.dejaAlgoPropio(true, null, RecordatorioDelDia.sinAviso())).isTrue();
+        assertThat(HorarioSemanal.dejaAlgoPropio(false, null, null)).isTrue();
+    }
 }

@@ -56,13 +56,20 @@ class AvisoHabitoNotificationListenerTest {
     private static AvisoHabitoDebidoEvent avisoDe(String tipo, Boolean activo, Integer minutos, UUID habitoId,
                                                   String categoria) {
         return new AvisoHabitoDebidoEvent(UUID.randomUUID(), UserId.of(UUID.randomUUID()), "Meditar", tipo, 10, 10,
-                UUID.randomUUID(), activo, minutos, EMITIDO, habitoId, categoria, A_LAS_21_EN_LIMA, "America/Lima");
+                UUID.randomUUID(), activo, minutos, EMITIDO, habitoId, categoria, A_LAS_21_EN_LIMA, "America/Lima",
+                null);
+    }
+
+    /** Spec 008: el hábito usa el esquema por día y el aviso es de ese día de la semana (ISO). */
+    private static AvisoHabitoDebidoEvent avisoDelDia(String tipo, int diaIso) {
+        return new AvisoHabitoDebidoEvent(UUID.randomUUID(), UserId.of(UUID.randomUUID()), "Gimnasio", tipo, 10, 10,
+                UUID.randomUUID(), true, 30, EMITIDO, HABITO, "BODY", A_LAS_21_EN_LIMA, "America/Lima", diaIso);
     }
 
     /** Un evento publicado antes de la spec 007: sin momento ni zona. */
     private static AvisoHabitoDebidoEvent avisoViejo(String tipo) {
         return new AvisoHabitoDebidoEvent(UUID.randomUUID(), UserId.of(UUID.randomUUID()), "Meditar", tipo, 10, 10,
-                UUID.randomUUID(), null, null, EMITIDO, HABITO, "BODY", null, null);
+                UUID.randomUUID(), null, null, EMITIDO, HABITO, "BODY", null, null, null);
     }
 
     private EmitirNotificacionCommand comandoEmitido() {
@@ -75,6 +82,30 @@ class AvisoHabitoNotificationListenerTest {
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
         verify(emitirNotificacionUseCase).emitir(any(), any(), captor.capture());
         return captor.getValue();
+    }
+
+    @Test
+    @DisplayName("spec 008 R6: con el esquema por dia el push de inicio lleva la etiqueta del dia, la de la alarma local")
+    void inicioPorDiaLlevaLaEtiquetaDelDia() {
+        listener().on(avisoDelDia("INICIO", 6));
+
+        assertThat(etiquetaEmitida()).isEqualTo("habito-" + HABITO + "-d6-0");
+    }
+
+    @Test
+    @DisplayName("spec 008 R6: sin esquema por dia el push de inicio lleva la etiqueta de siempre")
+    void inicioSinEsquemaPorDiaLlevaLaEtiquetaDeSiempre() {
+        listener().on(aviso("INICIO", true, 30));
+
+        assertThat(etiquetaEmitida()).isEqualTo("habito-" + HABITO + "-inicio");
+    }
+
+    @Test
+    @DisplayName("spec 008 R6: el de vencimiento no cambia con el esquema por dia")
+    void vencimientoPorDiaConservaSuEtiqueta() {
+        listener().on(avisoDelDia("POR_VENCER", 6));
+
+        assertThat(etiquetaEmitida()).isEqualTo("habito-" + HABITO + "-por-vencer");
     }
 
     @Test

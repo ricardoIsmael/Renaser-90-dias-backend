@@ -27,11 +27,11 @@ class AvisoDeHabitoTest {
     private static final Instant EMITIDO = Instant.parse("2026-09-06T01:50:00Z");
 
     private static AvisoDeHabito inicio(Instant momento, String zona) {
-        return new AvisoDeHabito("INICIO", "Meditación nocturna", 10, 10, HABITO, EMITIDO, momento, zona);
+        return new AvisoDeHabito("INICIO", "Meditación nocturna", 10, 10, HABITO, EMITIDO, momento, zona, null);
     }
 
     private static AvisoDeHabito porVencer(Instant momento, String zona) {
-        return new AvisoDeHabito("POR_VENCER", "Meditación nocturna", 25, 10, HABITO, EMITIDO, momento, zona);
+        return new AvisoDeHabito("POR_VENCER", "Meditación nocturna", 25, 10, HABITO, EMITIDO, momento, zona, null);
     }
 
     // ─── Texto: tildes y tuteo (FR-016) ────────────────────────────────────────────────────
@@ -94,7 +94,44 @@ class AvisoDeHabitoTest {
     @Test
     @DisplayName("sin habito (evento anterior a D-218) no hay etiqueta: cada aviso es uno aparte")
     void sinHabitoNoHayEtiqueta() {
-        AvisoDeHabito viejo = new AvisoDeHabito("INICIO", "Meditación nocturna", 10, 10, null, EMITIDO, null, null);
+        AvisoDeHabito viejo = new AvisoDeHabito("INICIO", "Meditación nocturna", 10, 10, null, EMITIDO, null, null, null);
+
+        assertThat(viejo.etiqueta()).isNull();
+    }
+
+    // ─── Etiqueta por dia de la semana (spec 008, R6) ──────────────────────────────────────
+
+    private static AvisoDeHabito inicioDelDia(Integer diaIso) {
+        return new AvisoDeHabito("INICIO", "Gimnasio", 10, 10, HABITO, EMITIDO, A_LAS_21_EN_LIMA, LIMA, diaIso);
+    }
+
+    @Test
+    @DisplayName("spec 008 R6: con el esquema por dia, el inicio lleva habito-{id}-d{iso}-0 (la alarma mas temprana de ese dia)")
+    void etiquetaDelInicioPorDia() {
+        // El 5 de septiembre de 2026 es sabado en Lima (d6), aunque en UTC ya sea domingo.
+        assertThat(inicioDelDia(6).etiqueta()).isEqualTo("habito-" + HABITO + "-d6-0");
+        assertThat(inicioDelDia(1).etiqueta()).isEqualTo("habito-" + HABITO + "-d1-0");
+    }
+
+    @Test
+    @DisplayName("spec 008 R6: sin dia (el habito usa el esquema diario) la etiqueta es la de siempre")
+    void sinDiaLaEtiquetaEsLaDeSiempre() {
+        assertThat(inicioDelDia(null).etiqueta()).isEqualTo("habito-" + HABITO + "-inicio");
+    }
+
+    @Test
+    @DisplayName("spec 008 R6: el aviso de vencimiento conserva su etiqueta aunque el habito use el esquema por dia")
+    void elVencimientoNoCambiaConElEsquemaPorDia() {
+        var porVencer = new AvisoDeHabito("POR_VENCER", "Gimnasio", 25, 10, HABITO, EMITIDO, A_LAS_22_30_EN_LIMA,
+                LIMA, 6);
+
+        assertThat(porVencer.etiqueta()).isEqualTo("habito-" + HABITO + "-por-vencer");
+    }
+
+    @Test
+    @DisplayName("spec 008: sin habito (evento viejo) no hay etiqueta, venga o no el dia")
+    void sinHabitoNoHayEtiquetaAunqueVengaElDia() {
+        var viejo = new AvisoDeHabito("INICIO", "Gimnasio", 10, 10, null, EMITIDO, null, null, 6);
 
         assertThat(viejo.etiqueta()).isNull();
     }
@@ -116,7 +153,7 @@ class AvisoDeHabitoTest {
     void vigenciaSinMomento() {
         // Emitido a las 01:50:20 faltando "10 min" (redondeado hacia arriba): el momento real era 02:00:00.
         AvisoDeHabito viejo = new AvisoDeHabito("INICIO", "Meditación nocturna", 10, 10, HABITO,
-                Instant.parse("2026-09-06T01:50:20Z"), null, null);
+                Instant.parse("2026-09-06T01:50:20Z"), null, null, null);
 
         assertThat(viejo.yaNoSirve(Instant.parse("2026-09-06T01:59:59Z"))).isFalse();
         assertThat(viejo.yaNoSirve(Instant.parse("2026-09-06T02:00:00Z"))).isTrue();
@@ -127,7 +164,7 @@ class AvisoDeHabitoTest {
     void elMomentoManda() {
         // 10 min despues de la emision serian las 02:00, pero el momento real del habito es 02:10.
         AvisoDeHabito aviso = new AvisoDeHabito("INICIO", "Meditación nocturna", 10, 10, HABITO, EMITIDO,
-                Instant.parse("2026-09-06T02:10:00Z"), LIMA);
+                Instant.parse("2026-09-06T02:10:00Z"), LIMA, null);
 
         assertThat(aviso.yaNoSirve(Instant.parse("2026-09-06T02:05:00Z"))).isFalse();
     }
