@@ -42,6 +42,10 @@ de semana. Los dos scripts SQL están en `e2e/siembra-005.sql` y `e2e/fotos-sema
 
 ## Los 13 escenarios
 
+> **Actualizado 2026-10-19 (pasada final).** Esta tabla es el registro de la primera pasada, con la ventana anterior a E-629 (d). Las capturas de
+> los escenarios 1, 2, 5, 11 y 12 (`01*`, `02a`, `05*`, `11*`, `12*`) se reemplazaron por las de la pasada final (sección del final): los nombres
+> `01a`, `01b`, `01c`, `01d`, `02a`, `05a`–`05c` de esta tabla ya no existen.
+
 Capturas en `e2e/` (`NN-*.png`, 540 a 1000 px de ancho). Las pruebas por `curl` dejan su salida en `e2e/*.txt`.
 
 | # | Escenario | Resultado | Evidencia y notas |
@@ -141,6 +145,8 @@ Backend: no se repitió `clean verify` (ya estaba en verde, 6588 de surefire y 4
 
 ## Qué repetir en el emulador tras E-629 (d)
 
+> **Hecho 2026-10-19.** Los escenarios 1, 2, 5, 11 y 12 se repitieron en la pasada final (sección siguiente).
+
 > **Corregido 2026-10-19.** Los escenarios 1, 2 y 5 se grabaron con la lista en «Semana cerrada · sábado 10 al viernes 16» y la
 > ficha en la semana en curso. Con la ventana única hay que repetirlos, con el backend y el APK de esta rama:
 
@@ -150,3 +156,83 @@ Backend: no se repitió `clean verify` (ya estaba en verde, 6588 de surefire y 4
 | 2 | Tocar a Ana: la ficha dice **«Últimos 7 días · Del lunes 12 al domingo 18»**, con los siete días y el mismo % y color que en la lista; sin «Hoy», sin días por venir, sin «La semana sigue en curso» |
 | 5 | ‹ en la ficha: «Semana cerrada · Del sábado 10 al viernes 16»; otro ‹: del 3 al 9 (la primera de Ana: ‹ apagada); › vuelve hasta «Últimos 7 días» y se apaga. Las mismas flechas, con el mismo texto, en el resumen y en la lista. Mover ‹ en la lista antes de tocar a una persona: la ficha abre en esa semana |
 | 11, 12 | Sin cambios de comportamiento; repetirlos de paso si la máquina lo permite |
+
+
+## Pasada final con la 006 y el Código Renaser (2026-10-19)
+
+**Fecha:** lunes 19/10/2026, de las 18:28 a las 20:20 (Lima). **Todo local**: nunca producción ni AWS.
+
+### Entorno
+
+| Pieza | Valor |
+|---|---|
+| Backend | rama `005-lider-cumplimiento-por-persona` con la 006 juntada (HEAD `c765aa3d`), jar de las 18:18, puerto **8095**, `TZ=UTC`, correo e IA `noop`. Al final, el jar reconstruido con el arreglo E-629 (e) (`f048330b`) |
+| Base | `renaser_lider005` (siembra de la 005) más la V110, que el arranque aplicó. Copia de seguridad antes de tocarla: `renaser_lider005_pre` |
+| Siembra de la 006 | las 14 cuentas `e2e-sem-*` con los dos scripts de la sesión de la 006 (`antes-del-arranque.sql` y `despues-del-arranque.sql`), aplicados **sobre mi clon**; `renaser_semaforo` no se modificó (solo se leyó el hash de contraseña de una de sus cuentas para sembrar la misma clave en mi clon) |
+| App | worktree `lider-cumplimiento`, JavaScript de Metro con `EXPO_PUBLIC_API_URL=http://10.0.2.2:8095`. `git diff origin/master..HEAD -- package.json app.json android ios modules plugins` sale **vacío**: ni la 006 ni el arreglo del Código Renaser traen nada nativo, no se compiló ningún APK |
+| Emulador | `Pixel_6`, arranque en frío (`-no-snapshot-load`); la app instalada es el build debug del 12/10 (`lastUpdateTime` 2026-10-12) |
+| Máquina | la RAM llegó a menos de 500 MB libres con 10 GB de swap: el backend quedó parado unos 10 minutos y se saltó las corridas de las 23:50 y 23:55 UTC (ver el flujo 33). Algunas entradas por `adb` perdieron letras al escribir la contraseña (ver Maestro) |
+
+Ajustes de datos en mi clon (ninguno es un hallazgo de la app ni del backend):
+
+- La zona de **Luisa** (mentora de Fénix 005) había quedado en `Europe/London` del escenario 9 de la primera pasada, y su ficha abría la ventana del 13 al 19. Vuelta a `America/Lima`.
+- Los 7 aprendices `e2e-sem-*` con color y los demás tienen sus registros relativos al 19/10, así que la prueba quedó atada a ese día de Lima (pasada la medianoche de Lima la ventana se corre).
+- El flujo 40 y el radar de `e2e-sem-inicio`: ver Maestro.
+
+### Escenarios 1, 2 y 5 con la ventana alineada (mobile-mcp)
+
+Cuenta: el líder `habrol-lider`. Hoy 19/10 (Lima). Las cifras de la app coinciden con las de la API (`GET /semaforo/groups`, `GET /leadership/groups/{id}/semaforo` y `…/people/{id}/week`, mismas fechas) para las tres ventanas.
+
+| # | Qué se comprobó | Resultado | Capturas |
+|---|---|---|---|
+| 1 | Hoy → «Semáforo por grupos»: **«Últimos 7 días · Del lunes 12 al domingo 18 de octubre»**. Al tocar «Fénix 005»: la lista dice **lo mismo** (mismo título y mismo rango) y las mismas personas con el mismo %: Rocío 50 %, Pruebas QA Cuenta 71,6 %, Ana 74,3 %, Inés sin datos, Valeria 95,1 %, y **Luisa al final con «Mentor · No se mide en el semáforo»**. La tarjeta de Fénix en el resumen (1 al día, 2 requieren atención, 1 con problemas, 1 sin actividad; promedio 72,8 % de 5 aprendices) cuadra con la lista. «Cedro 005» muestra a la guía de aprendiz como «No se mide». La cuenta cerrada (Cecilia) no aparece. «Pruebas QA Cuenta» **sí aparece** (SC-006 sigue sin poder verificarse: T046, fase 2) | **Pasa** | `01a`, `01b`, `01c`, `01d`, `01e` |
+| 2 | Tocar a Ana: **«Últimos 7 días · Del lunes 12 al domingo 18 de octubre»**, 74,3 % «Requiere atención» (el mismo % y color que en la lista), siete días, el martes 13 dice **«En pausa»** y el domingo 18 trae sus evidencias; sin «Hoy», sin días por venir y sin «La semana sigue en curso» | **Pasa** | `02a`, `02b` |
+| 5 | **Ficha:** ‹ lleva a «Semana cerrada · Del sábado 10 al viernes 16» (74,3 %), otro ‹ al 3 al 9 (81,3 %, «Al día»; es la primera semana de Ana: la flecha queda apagada y tocarla no hace nada); › › vuelve a «Últimos 7 días» y › se apaga. **Lista:** ‹ lleva a «Semana cerrada · 10 al 16» con Rocío 47,6 %, QA 73,9 %, Ana 74,3 % (los de la API); al tocar a Ana, **la ficha abre en esa misma semana**. **Resumen:** ‹ lleva al 10 al 16 y al 3 al 9, y al tocar «Fénix 005» la lista abre en la semana que se miraba. Ninguna llega al futuro | **Pasa en fechas, porcentajes y flechas.** El rótulo del resumen decía «Semana todavía sin cerrar» donde la lista y la ficha decían «Semana cerrada»: **E-629 (e)**, arreglado (abajo) | `05a`, `05b`, `05c`, `05d`, `05e` (antes del arreglo), `05f`, `05g` (después) |
+| 11 | Sin red (wifi y datos apagados): al pasar de semana en la lista, «No pudimos conectar · Revisa tu conexión» con «Reintentar» y **ningún dato de la semana ni de la persona anterior** (solo el rango nuevo); al abrir a Rocío sin red, su cabecera con el error y «Escribirle», nada de Ana. Con red, «Reintentar» trae los datos (Rocío 45,8 %) | **Pasa** | `11a`, `11b`, `11c` |
+| 12 | Backend anterior = el jar de `subida-fase1` (03d855a1, la base de la rama 005) sobre la misma base (V110 aplicada, `SPRING_FLYWAY_VALIDATE_ON_MIGRATE=false`): `GET /semaforo/groups` sin `puedeAbrirse`, la lista del líder responde 404. En la app: «Últimos 7 días», el texto de siempre («Solo cantidades: a cada aprendiz lo acompaña y lo ve su mentor.»), **tarjetas sin chevron** que no se abren al tocarlas; nada se rompe | **Pasa** | `12a`, `12b` |
+
+### Hallazgo E-629 (e): el resumen rotulaba distinto una semana cerrada (backend, spec 005)
+
+Con ‹ en el resumen, «Semana todavía sin cerrar · Del sábado 10 al viernes 16 de octubre»; la lista y la ficha de esa misma semana, «Semana cerrada».
+`GET /semaforo/groups?semanaHasta=2026-10-16` devolvía `periodo.cerrada: false` porque `PeriodoDelSemaforo.de` pide que **todas** las personas tengan la foto
+del cierre (15 de los 67 aprendices activos del clon no la tienen: empezaron después), la misma causa de E-629. Arreglo con TDD (rojo: 2 pruebas fallaban;
+verde: 115 pruebas de `SemaforoPorGruposServiceTest`, `MismaVentanaEnLasTresPantallasTest`, las del grupo y la ficha del líder, las de las tablas del semáforo y
+`ArchitectureTest`): con un viernes pedido el resumen toma `cerrada` del calendario; sin fecha no cambia. Reconstruido el jar y repetido en el emulador: el resumen del
+10 al 16 dice «Semana cerrada» (`05g`) y la API da `cerrada: true` para el 16 y el 9 y `false` para la vigente. Commit `f048330b` del backend (bitácora E-629 (e),
+contrato y `SEMAFORO_DEL_APRENDIZ.md` al día). **No se tocaron** las tablas del mentor y de administración (`SemaforoDelGrupoService`): conservan el criterio de «todas
+las fotos» y, con una persona nueva en el grupo, dicen «todavía sin cerrar» de una semana pasada; queda anotado como pendiente fuera de la 005.
+
+### Maestro: los flujos que se corrieron, uno por uno
+
+`.maestro/correr.sh` contra el backend de la rama en 8095 y la app con Metro. Las cuentas por `-e` (nunca en el repo). Resultado: **28 de 28 flujos corridos pasan**, 4 de ellos
+tras repetirse por un motivo de datos o de entrada (no de la app ni del backend), y uno con un reintento interno de entrada.
+
+| Flujo | Cuenta | Resultado | Motivo y arreglo si no pasó a la primera |
+|---|---|---|---|
+| `codigo-renaser/40-hora-ya-registrada` | `e2e-sem-inicio` | pasa (2.ª) | La siembra de la 006 puso registros del Código Renaser en **todas** las horas 8–19 del día, también las futuras; `GET /radar/latest` devolvía el de las 19:10 y la app, con razón, no daba por respondida la hora de las 18:00. Se borró el registro futuro: el último queda en la hora en curso |
+| `semaforo-podio/30-hoy-mensaje-del-semaforo` ×8 | VERDE, AMARILLO, ROJO, INICIO, SIN_PROGRAMA, CUENTA_PAUSADA, GRADUADO, PAUSA | pasan | |
+| `semaforo-podio/31-ranking-descargar-podio` ×4 | ADMIN, ALQUIMISTA, LIDER_MENTORES, SOPORTE_TI | pasan | |
+| `semaforo-podio/32-ranking-sin-descargar` ×3 | MENTOR, GUIA_APRENDIZ, VERDE | pasan (MENTOR en la 2.ª) | MENTOR: «no entró» dos veces seguidas con «Correo o contraseña incorrectos» (la contraseña llegó con letras perdidas al teclear por `adb`; la API entra bien con esa cuenta) |
+| `semaforo-podio/33-chat-tarjeta-diaria` | VERDE | pasa | La tarjeta la manda el barrido real de las 23:50 locales. Con la zona de VERDE en `UTC` el barrido de las 23:50 y 23:55 UTC no corrió (la máquina estaba en swap y el backend parado); se puso `Etc/GMT+1` y el barrido de las 00:50 UTC mandó la imagen y «Hoy llevas 67 % de tus hábitos.» con el mensaje personalizado. Después se devolvió a `America/Lima` |
+| `regresion/01-kilometros-con-foto` | `habrol-aprendiz1` | pasa | `habrol-aprendiz2` ya había registrado esos hábitos hoy en la primera pasada: se usó la otra cuenta |
+| `regresion/03-publicar-en-el-muro` | `habrol-aprendiz1` | pasa | |
+| `regresion/05-chats-admin` | `habrol-admin` | pasa (2.ª) | «no entró» (letras perdidas al teclear); repetido solo |
+| `regresion/06-chats-aprendiz` | `habrol-aprendiz1` | pasa | un reintento de entrada interno de `correr.sh` |
+| `regresion/07-yo-y-ajustes` | `habrol-aprendiz1` | pasa | |
+| `regresion/08-planificar-despertar` | `habrol-aprendiz1` | pasa | |
+| `regresion/10-gimnasio-con-foto` | `habrol-aprendiz1` | pasa | |
+| `regresion/11-ranking-gimnasio` | `habrol-aprendiz1` | pasa (2.ª) | El corte del ranking se hizo (`POST /admin/ranking/snapshots`) después de que el 10 registrara el día de gimnasio |
+| `regresion/20-admin-entrar-y-volver` | `habrol-admin` | pasa | |
+| `regresion/21-admin-personas-y-volver` | `habrol-admin` | pasa | |
+| `regresion/22-admin-crear-grupo-teclado` | `habrol-admin` | pasa | |
+
+Los flujos se corrieron con el jar anterior al arreglo E-629 (e), que solo cambia el rótulo del resumen de una semana pasada. Salida de cada flujo en `e2e/` no se
+guardó: los resultados están en esta tabla.
+
+### Lo que no se corrió
+
+- **Los 4 de `.maestro/interruptores/` (30 a 33):** piden apagar antes una funcionalidad con la contraseña de Soporte TI (tres son críticas) y volver a prenderla. Siguen sin correrse; el apagado de `lider.cumplimiento` se probó por API en la primera pasada.
+- **`jest` completo y `tsc`:** no se repitieron (3198 pruebas en verde del juntado, según el coordinador). Del backend se corrieron solo las 115 pruebas focalizadas del arreglo; **no se repitió `clean verify`** (6776 unitarias y 503 de integración del juntado, sin repetir): cambió `SemaforoPorGruposService` y tres archivos de documentación, y queda para quien integre.
+- **Escenario 14 (modo oscuro y letra grande), 3, 4, 6, 7, 8, 9, 10 y 13:** no se repitieron; no los toca la ventana alineada (siguen como en la primera pasada).
+- **Web y la descarga real del PNG del podio** de la 006: Maestro solo comprueba que se abre la hoja de compartir en el emulador; la imagen se mira en la sesión de la 006.
+- **Producción:** nada se probó contra producción.
