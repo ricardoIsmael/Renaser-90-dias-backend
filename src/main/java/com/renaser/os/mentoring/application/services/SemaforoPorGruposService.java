@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -80,8 +81,21 @@ public class SemaforoPorGruposService implements ConsultarSemaforoPorGruposUseCa
         List<GrupoDelResumen> resumenes = resumir(grupos, new Lectura(aprendicesPorGrupo, ventanas, cumplimientoPrendido));
         PeriodoDelSemaforo esperado = PeriodoDelSemaforo.esperado(
                 ahora.atZone(zonaDeReferencia(grupos)).toLocalDate(), consulta.semanaHasta());
-        return new ResumenPorGrupos(PeriodoDelSemaforo.de(ventanas.values(), esperado), totales(resumenes),
+        return new ResumenPorGrupos(periodo(ventanas.values(), esperado, consulta.semanaHasta()), totales(resumenes),
                 resumenes);
+    }
+
+    /**
+     * El encabezado del resumen. Con un viernes pedido, si esa semana ya terminó está CERRADA por el calendario y así lo
+     * dicen la lista y la ficha del líder: no depende de que cada persona tenga la foto de su cierre, porque quien
+     * empezó su programa después de esa semana no la tiene y bastaba una para que todo el padrón rotulara una semana
+     * pasada como «todavía sin cerrar» (E-629 e). Sin fecha (la ventana vigente) sigue como siempre: la app no la rotula
+     * con eso («Últimos 7 días»).
+     */
+    private static PeriodoDelSemaforo periodo(Collection<VentanaDelSemaforo> ventanas, PeriodoDelSemaforo esperado,
+                                              LocalDate semanaHasta) {
+        PeriodoDelSemaforo leido = PeriodoDelSemaforo.de(ventanas, esperado);
+        return semanaHasta == null ? leido : new PeriodoDelSemaforo(leido.desde(), leido.hasta(), esperado.cerrada());
     }
 
     /**

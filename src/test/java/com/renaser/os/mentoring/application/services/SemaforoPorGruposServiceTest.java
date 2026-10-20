@@ -224,6 +224,28 @@ class SemaforoPorGruposServiceTest {
     }
 
     @Test
+    @DisplayName("E-629 (e): una persona sin foto del cierre (empezó después) no deja la semana ya pasada «sin cerrar»")
+    void unaPersonaNuevaNoDejaLaSemanaCerradaSinCerrar() {
+        banco.semana(SEMANA_CERRADA, ANA, ventana(LocalDate.of(2026, 9, 12), true, 60, 60, 60, 60, 60, 60, 60));
+        // Mario empezó su programa después de que esa semana cerrara: el barrido no le escribió su foto (cerrada = false).
+        banco.semana(SEMANA_CERRADA, MARIO,
+                ventana(LocalDate.of(2026, 9, 12), false, null, null, null, null, null, null, null));
+
+        ResumenPorGrupos resumen = servicio.resumenDe(new ConsultaResumenPorGrupos(LIDER, SEMANA_CERRADA));
+
+        // El viernes 18 de septiembre ya pasó: «cerrada» es del calendario, no de cuántas fotos haya.
+        assertThat(resumen.periodo().cerrada()).isTrue();
+    }
+
+    @Test
+    @DisplayName("E-629 (e): la ventana vigente sigue diciendo cerrada = false (la app no la rotula con eso)")
+    void laVigenteNoSeDiceCerrada() {
+        ResumenPorGrupos resumen = resumenDelLider();
+
+        assertThat(resumen.periodo().cerrada()).isFalse();
+    }
+
+    @Test
     @DisplayName("semanaHasta tiene que ser viernes")
     void semanaHastaNoViernes() {
         assertThatThrownBy(() -> new ConsultaResumenPorGrupos(LIDER, LocalDate.of(2026, 9, 19)))

@@ -39,8 +39,11 @@ Errores, con la convención de siempre:
   servidor.
 - `cerrada` es `true` solo si el último día cae en una semana ya cerrada **según el calendario** (el viernes ya pasó); `semanaEnCurso`
   es `!cerrada`. La vigente de un lunes (12 al 18) no está cerrada; la de un sábado (17 al viernes 23) sí. No depende de que cada
-  persona tenga su foto del cierre (E-629). El resumen no cambia: su `periodo.cerrada` sigue diciendo `false` para la ventana
+  persona tenga su foto del cierre (E-629). El resumen: su `periodo.cerrada` sigue diciendo `false` para la ventana
   vigente, también un sábado; la app solo rotula con `cerrada` una semana elegida con ‹ ›, nunca la vigente («Últimos 7 días»).
+  > **Corregido 2026-10-19 (E-629 e).** Esta frase seguía con «El resumen no cambia» y, con un viernes pedido, el resumen decía `cerrada: false`
+  > para una semana ya pasada si una sola persona no tenía su foto del cierre (lista y ficha decían `true`). Ahora, con `semanaHasta`, el
+  > `periodo.cerrada` del resumen también sale del calendario: las tres pantallas rotulan igual la misma semana.
 - **Ninguna ventana llega al futuro.** Un viernes posterior a hoy (la semana que corre incluida) es 400, igual que una fecha
   que no es viernes. El viernes de hoy sí se acepta: la ventana llega hasta hoy y hoy dice `EN_CURSO`.
 - La app abre la lista y después la ficha en la misma ventana que se miraba en el resumen, y las flechas ‹ › mueven la ventana

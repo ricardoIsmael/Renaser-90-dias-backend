@@ -158,6 +158,21 @@ class MismaVentanaEnLasTresPantallasTest {
     }
 
     @Test
+    @DisplayName("E-629 (e): con una persona sin foto del cierre, las tres rotulan igual la semana que ya pasó: cerrada")
+    void conUnaPersonaSinFotoDelCierre() {
+        armar(BancoDeCumplimiento.AHORA);
+        cargarElSemaforo(LocalDate.of(2026, 10, 19));
+        // Beto empezó su programa después de ese viernes: el barrido no le escribió la foto de la semana (cerrada = false).
+        LocalDate viernes = LocalDate.of(2026, 10, 16);
+        semaforo.semana(viernes, BETO, ventanaPareja(viernes.minusDays(6), false, 55));
+
+        lasTresPantallasDicenLoMismo(viernes);
+
+        ResumenPorGrupos resumen = semaforo.servicioPorGrupos().resumenDe(new ConsultaResumenPorGrupos(LIDER, viernes));
+        assertThat(resumen.periodo().cerrada()).isTrue();
+    }
+
+    @Test
     @DisplayName("regla 02: con el reloj en la madrugada UTC las tres leen la ventana vigente de Lima, no la de UTC")
     void madrugadaUtc() {
         // 03:00 UTC del lunes 19 = 22:00 del domingo 18 en Lima: para ella la ventana vigente termina el sabado 17.

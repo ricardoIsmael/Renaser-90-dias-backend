@@ -561,6 +561,11 @@ Contrato completo: `specs/005-lider-cumplimiento-por-persona/contracts/leadershi
 > en curso (con los días que faltan como `FUTURO`) y que la semana del líder era «la del semáforo, sábado→viernes». Eran dos
 > ventanas distintas a la vista (resumen «lunes 12 al domingo 18» contra lista «sábado 10 al viernes 16») y la misma persona
 > salía con otro porcentaje. `MismaVentanaEnLasTresPantallasTest` fija que no vuelva a pasar.
+>
+> **Corregido 2026-10-19 (E-629 e).** Con un viernes pedido, `GET /semaforo/groups` (§4.4) rotulaba `periodo.cerrada` con «todas las personas tienen su
+> foto del cierre»; quien empezó después no la tiene, y una semana pasada salía «todavía sin cerrar» en el resumen mientras la lista y la ficha del líder
+> decían «cerrada». Ahora, con `semanaHasta`, el resumen toma `cerrada` del calendario (el viernes ya pasó). Sin fecha sigue `false`. Las tablas del
+> mentor y de administración (§4.3) conservan el criterio anterior.
 - Persona fuera del grupo, grupo sin mentor o de recepción, y cuentas suspendidas, cerradas o de prueba: 404. Cada apertura de
   la ficha queda registrada (`consultas_de_ficha`, append-only).
 - `GET /semaforo/groups` (§4.4) suma `puedeAbrirse` por grupo: la app abre la tarjeta solo si viene `true`.

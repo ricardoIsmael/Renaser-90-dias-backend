@@ -15459,7 +15459,8 @@ ficha del líder). **Para que no vuelva.** `etiquetaDeEntrega.test.ts`. La ficha
 Hallazgo del mismo E2E (observación 3 de `specs/005-lider-cumplimiento-por-persona/e2e.md`).
 **Síntoma literal.** El resumen decía «Últimos 7 días · Del lunes 12 al domingo 18 de octubre»; al tocar un grupo, la lista decía «Semana
 cerrada · Del sábado 10 al viernes 16 de octubre», y los porcentajes cambiaban: Rocío, 50 % en un lado y 47,6 % en el otro (capturas
-`12a-backend-anterior-resumen.png` y `01d-lista-fenix-despues-del-arreglo.png`). La ficha abría una tercera: la semana en curso.
+`12a-backend-anterior-resumen.png` y `01d-lista-fenix-despues-del-arreglo.png` de la primera pasada; el 19/10 se reemplazaron por las de la
+ventana alineada). La ficha abría una tercera: la semana en curso.
 **Causa real.** Cada pantalla tenía su propio «sin fecha»: el resumen leía `SemaforoFinder.vigenteDe` (7 días que terminan ayer); la lista,
 `VentanaDeLaFicha.paraLaLista` (última semana cerrada, con `semanaDe(viernes)`); la ficha, `paraLaFicha` (la semana en curso). El contrato
 (R-2) lo había decidido así («solo el líder va de sábado a viernes») y la app lo tapaba pasándole a la ficha el `hasta` de la lista, pero
@@ -15476,6 +15477,27 @@ datos: mismos días, mismo % y mismo color, con la vigente, con un viernes, en l
 viejo), `VentanaDeLaFichaTest`, `GrupoDelLiderServiceTest`, `SemanaDePersonaServiceTest`, `CumplimientoDelLiderControllerTest` y, en la app,
 `lecturaDelLider.test.ts`, `delGrupoALaPersona.test.ts` y `semanasDelSemaforo.test.ts`. **Regla general:** dos pantallas que se abren una
 desde la otra hablan de los mismos días; si el «por defecto» de cada una es distinto, el usuario ve dos números para lo mismo.
+
+**E-629 (e) · El resumen rotulaba «Semana todavía sin cerrar» una semana que ya había pasado, mientras la lista y la ficha decían «Semana cerrada» (backend, spec 005, RESUELTO, 19/10).**
+Hallazgo de la pasada final del E2E (`specs/005-lider-cumplimiento-por-persona/e2e.md`, «Pasada final con la 006 y el Código Renaser»).
+**Síntoma literal.** En el emulador, con ‹ en «Semáforo por grupos»: «Semana todavía sin cerrar · Del sábado 10 al viernes 16 de octubre»;
+al tocar «Fénix 005», la lista decía «Semana cerrada · Del sábado 10 al viernes 16 de octubre» y la ficha de Ana, lo mismo. Los mismos siete
+días y los mismos porcentajes, con dos rótulos. `GET /api/v1/semaforo/groups?semanaHasta=2026-10-16` devolvía `"periodo": { "cerrada": false }` y
+`GET /api/v1/leadership/groups/{id}/semaforo?semanaHasta=2026-10-16`, `"cerrada": true` (captura `05e-resumen-semana-10-al-16-sin-cerrar-antes-del-arreglo.png`).
+**Causa real.** La misma de E-629: `SemaforoPorGruposService` armaba el encabezado con `PeriodoDelSemaforo.de(ventanas, esperado)`, «cerrada» solo si
+**todas** las ventanas lo están, y una ventana es cerrada solo si existe la foto del cierre (`semaforo_semanas`). 15 de los 67 aprendices activos
+del clon no tenían la foto de la semana del 10 al 16 (quien empezó después, como Inés con el Día 1 el 17/10); en producción pasa con cualquiera que
+active su programa después de un cierre. La corrección de E-629 solo tocó la lista del líder (decía «las tablas del mentor y de administración siguen
+como estaban»); al alinear las tres pantallas en E-629 (d) el resumen quedó con su propio criterio.
+**Solución.** `SemaforoPorGruposService.periodo(...)`: con un viernes pedido, `cerrada` es la del calendario (`PeriodoDelSemaforo.esperado`: el viernes
+ya pasó), como la lista y la ficha. Sin fecha (la ventana vigente) no cambia: sigue `false` y la app no la rotula con eso («Últimos 7 días»). No se
+toca `PeriodoDelSemaforo.de`, que siguen usando las tablas del mentor y de administración.
+**Para que no vuelva.** `SemaforoPorGruposServiceTest.unaPersonaNuevaNoDejaLaSemanaCerradaSinCerrar` y `laVigenteNoSeDiceCerrada`, y
+`MismaVentanaEnLasTresPantallasTest.conUnaPersonaSinFotoDelCierre` (el resumen, la lista y la ficha con una persona sin foto: mismo `cerrada`; falla con
+el código anterior). **Regla general:** la de E-629, ahora en las tres pantallas: un dato de calendario (¿ya pasó esta semana?) se decide con el
+calendario, no agregando el estado de cada persona del grupo. **Pendiente, fuera de la 005:** las tablas del mentor y de administración
+(`SemaforoDelGrupoService` con `PeriodoDelSemaforo.de`) conservan el criterio de «todas las fotos»; con una persona nueva en el grupo dirán «todavía sin cerrar»
+para una semana pasada.
 
 ## E-630 · El plan de la spec 006 ponía `CumplimientoPorHabitoFinder` en `habits/api`: points no puede importar habits (plan, RESUELTO, 19/10)
 
