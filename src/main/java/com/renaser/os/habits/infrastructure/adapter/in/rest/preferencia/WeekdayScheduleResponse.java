@@ -19,6 +19,9 @@ import java.util.List;
  * {@code reminderMinutesList} son el propio del dia o, si no tiene, el general; {@code customReminder} es
  * {@code true} solo cuando el aviso es propio. Campos aditivos: el APK anterior los ignora.
  *
+ * <p><b>Spec 009 (D-283).</b> Lo mismo con como suena la alarma: {@code alarm} es la combinacion RESUELTA del
+ * dia (la propia o, si no tiene, la general) y {@code customAlarm} es {@code true} solo cuando es propia.
+ *
  * <p>{@code weekday} como nombre de {@link java.time.DayOfWeek} ({@code "MONDAY"}..{@code "SUNDAY"}),
  * igual que {@code activeWeekdays} en {@code GET /api/v1/habits}: mismo vocabulario en todo el cable.
  */
@@ -31,11 +34,13 @@ public record WeekdayScheduleResponse(List<WeekdayScheduleItemResponse> weekdays
     /** {@code custom}: {@code true} si ese dia tiene hora propia; {@code false} si hereda la general. */
     public record WeekdayScheduleItemResponse(String weekday, LocalTime triggerTime, LocalTime limitTime,
                                                boolean custom, boolean active, boolean reminderEnabled,
-                                               List<Integer> reminderMinutesList, boolean customReminder) {
+                                               List<Integer> reminderMinutesList, boolean customReminder,
+                                               AlarmCombinationResponse alarm, boolean customAlarm) {
 
         static WeekdayScheduleItemResponse from(DiaDeLaSemana d) {
             return new WeekdayScheduleItemResponse(d.diaSemana().name(), d.horaDisparo(), d.horaLimite(),
-                    d.propio(), d.activo(), d.recordatorioActivo(), d.antelaciones(), d.recordatorioPropio());
+                    d.propio(), d.activo(), d.recordatorioActivo(), d.antelaciones(), d.recordatorioPropio(),
+                    AlarmCombinationResponse.from(d.alarma()), d.alarmaPropia());
         }
     }
 }

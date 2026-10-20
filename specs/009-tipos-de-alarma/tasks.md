@@ -28,11 +28,16 @@
 
 ## Phase 3: US3 — Guardar y leer la combinación (P2, base de las demás)
 
-- [ ] T007 [P] [US3] Prueba del servicio: guardar la combinación general y la del día sin cupo, y las lecturas con `alarm` y `customAlarm`.
-- [ ] T008 [US3] Casos de uso: `fijarCombinacion` (general y por día) y la consulta.
-- [ ] T009 [P] [US3] Prueba del controller: `PUT …/alarm` y `PUT …/weekdays/{wd}/alarm` con 204, 400 y **403**; los GET con los campos nuevos.
-- [ ] T010 [US3] REST: `AlarmCombinationRequest`, los endpoints y las respuestas (contracts/habit-preferences-alarm.md).
-- [ ] T011 [US3] D-283 en `back:docs/MODULOS_A_AVANZAR.md`. Pruebas puntuales en verde. Commit: «Guardar cómo suena la alarma de cada hábito y de cada día (spec 009, D-283)».
+- [x] T007 [P] [US3] Prueba del servicio: guardar la combinación general y la del día sin cupo, y las lecturas con `alarm` y `customAlarm`.
+  - Servicio `PreferenciaHorarioService` (pruebas en `CombinacionDeAlarmaServiceTest` y `ConsultaPreferenciasHorarioServiceTest`): sin cupo, igual a la general hereda, y las mismas guardas del aviso (hábito inexistente, personal ajeno, cuenta suspendida).
+- [x] T008 [US3] Casos de uso: `fijarCombinacion` (general y por día) y la consulta.
+  - Los casos de uso son `EditarPreferenciaHorarioUseCase#fijarCombinacion` (general) y `EditarHorarioSemanalUseCase#fijarCombinacion` (día); la consulta suma `alarma` a `HorarioDeHabito` y a `DiaDeLaSemana`. Se agregaron a los casos de uso existentes y no a uno nuevo, para no tocar los tres controller tests de la 008 (un `@MockitoBean` más en cada uno). Desvío menor: `HorarioDeHabito.personalizado` (`customized`) deja de contar la fila que existe solo para la alarma.
+- [x] T009 [P] [US3] Prueba del controller: `PUT …/alarm` y `PUT …/weekdays/{wd}/alarm` con 204, 400 y **403**; los GET con los campos nuevos.
+  - Cubre 204, 400 (sonido y vibración apagados, voz sin sonido, campo omitido, día inexistente), 403 (cuenta suspendida y hábito ajeno), 404, y la prueba con la cadena de seguridad real (sin sesión → 403) en `HabitPreferenceControllerRecordatorioAutenticacionTest`.
+- [x] T010 [US3] REST: `AlarmCombinationRequest`, los endpoints y las respuestas (contracts/habit-preferences-alarm.md).
+  - Los cuatro campos del cuerpo son obligatorios (`@NotNull Boolean`): omitir uno es 400 y no un `false` silencioso. Las lecturas siempre traen los cuatro campos de `alarm` (lo que nadie eligió es la combinación de hoy).
+- [x] T011 [US3] D-283 en `back:docs/MODULOS_A_AVANZAR.md`. Pruebas puntuales en verde. Commit: «Guardar cómo suena la alarma de cada hábito y de cada día (spec 009, D-283)».
+  - D-283 anotado después de D-282 (misma tabla). Pruebas puntuales: 53 clases, 539 pruebas, 0 fallos (habits, 008, rag que usa `HorarioSemanal`, `ArchitectureTest`). No se corrió `verify` completo (lo corre la sesión supervisora).
 
 ## Phase 4: US1 + US2 — La alarma suena según la combinación del día (P1)
 

@@ -16,7 +16,9 @@ import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabitoId;
+import com.renaser.os.habits.domain.model.preferencia.AjusteDeAlarma;
 import com.renaser.os.habits.domain.model.preferencia.CambioHorarioPendiente;
+import com.renaser.os.habits.domain.model.preferencia.CombinacionDeAlarma;
 import com.renaser.os.habits.domain.model.preferencia.HorarioSemanal;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
 import com.renaser.os.habits.domain.model.preferencia.RecordatorioDelDia;
@@ -394,5 +396,81 @@ class ConsultaPreferenciasHorarioServiceTest {
         verify(loadPreferenciaPort, times(1)).horariosSemanalesDe(any(), any());
         verify(loadPreferenciaPort, times(1)).porParticipanteYHabitos(any(), any());
         verify(loadPreferenciaPort, never()).horarioSemanalDe(any(), any());
+    }
+
+    // ---- Spec 009 (D-283): como suena la alarma de cada habito y de cada dia --------------------
+
+    private static final CombinacionDeAlarma SOLO_VIBRAR = CombinacionDeAlarma.de(false, true, false, false);
+    private static final CombinacionDeAlarma CON_VOZ = CombinacionDeAlarma.de(true, true, true, true);
+
+    private PreferenciaHorario conAlarma(PreferenciaHorario preferencia, CombinacionDeAlarma alarma) {
+        preferencia.actualizarAlarma(AjusteDeAlarma.de(alarma), CLOCK.now());
+        return preferencia;
+    }
+
+    @Test
+    void cadaHabitoTraeSuAlarmaGeneralResueltaYLaDeHoyCuandoNadieEligioNada() {
+        Habito gimnasio = habito("Gimnasio");
+        Habito yoga = habito("Yoga");
+        conProgreso(3, false);
+        when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(gimnasio, yoga));
+        when(loadHorarioPort.porHabitos(any())).thenReturn(List.of());
+        var generalDeGimnasio = conAlarma(generalConAviso(gimnasio, 7, 10), SOLO_VIBRAR);
+        when(loadPreferenciaPort.porParticipanteHabitosYFechaSinAvisoDelDia(any(), any(), any()))
+                .thenReturn(List.of(generalDeGimnasio));
+        when(loadPreferenciaPort.porParticipanteYHabitos(any(), any())).thenReturn(List.of(generalDeGimnasio));
+        when(loadPreferenciaPort.horariosSemanalesDe(any(), any())).thenReturn(List.of());
+        when(loadCambioPendientePort.deParticipante(actor)).thenReturn(List.of());
+
+        var habitos = service.consultar(actor).habitos();
+
+        assertThat(habitos.stream().filter(h -> h.titulo().equals("Gimnasio")).findFirst().orElseThrow().alarma())
+                .isEqualTo(SOLO_VIBRAR);
+        assertThat(habitos.stream().filter(h -> h.titulo().equals("Yoga")).findFirst().orElseThrow().alarma())
+                .isEqualTo(CombinacionDeAlarma.COMO_HOY);
+    }
+
+    /** La alarma de cada dia: la propia o la general; una fila de solo alarma no cambia la hora ni el aviso. */
+    @Test
+    void losDiasTraenSuAlarmaPropiaOLaGeneral() {
+        Habito gimnasio = habito("Gimnasio");
+        var general = conAlarma(generalConAviso(gimnasio, 7, 10), CON_VOZ);
+        var sabado = new HorarioSemanal(DayOfWeek.SATURDAY,
+                PreferenciaHorario.crear(actor, gimnasio.id(), null, null, CLOCK.now()), true, null,
+                AjusteDeAlarma.de(SOLO_VIBRAR));
+        listadoDe(gimnasio, general, sabado);
+
+        var dias = service.consultar(actor).habitos().getFirst().diasDeLaSemana();
+
+        var delSabado = del(dias, DayOfWeek.SATURDAY);
+        assertThat(delSabado.alarma()).isEqualTo(SOLO_VIBRAR);
+        assertThat(delSabado.alarmaPropia()).isTrue();
+        assertThat(delSabado.horaDisparo()).isEqualTo(LocalTime.of(7, 0));
+        assertThat(delSabado.recordatorio().antelaciones()).containsExactly(10);
+        assertThat(del(dias, DayOfWeek.MONDAY).alarma()).isEqualTo(CON_VOZ);
+        assertThat(del(dias, DayOfWeek.MONDAY).alarmaPropia()).isFalse();
+    }
+
+    /** La fila que existe solo para la alarma no vuelve «personalizado» a un horario que viene del catalogo. */
+    @Test
+    void unaPreferenciaSoloDeAlarmaNoEsUnHorarioPersonalizado() {
+        conProgreso(3, false);
+        Habito habito = habito("Meditar");
+        when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(habito));
+        when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(
+                HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), habito.id(), 1, null, TipoDia.TODOS,
+                        LocalTime.of(6, 0), LocalTime.of(8, 0), CLOCK.now())));
+        var soloAlarma = conAlarma(PreferenciaHorario.crear(actor, habito.id(), null, null, CLOCK.now()), SOLO_VIBRAR);
+        when(loadPreferenciaPort.porParticipanteHabitosYFechaSinAvisoDelDia(any(), any(), any()))
+                .thenReturn(List.of(soloAlarma));
+        when(loadPreferenciaPort.porParticipanteYHabitos(any(), any())).thenReturn(List.of(soloAlarma));
+        when(loadPreferenciaPort.horariosSemanalesDe(any(), any())).thenReturn(List.of());
+        when(loadCambioPendientePort.deParticipante(actor)).thenReturn(List.of());
+
+        var vista = service.consultar(actor).habitos().get(0);
+
+        assertThat(vista.personalizado()).isFalse();
+        assertThat(vista.horaDisparo()).as("la hora sigue siendo la del catalogo").isEqualTo(LocalTime.of(6, 0));
+        assertThat(vista.alarma()).isEqualTo(SOLO_VIBRAR);
     }
 }

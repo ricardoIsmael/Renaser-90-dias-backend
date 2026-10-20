@@ -18,9 +18,11 @@ import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.habits.domain.model.horario.HorariosDelHabito;
+import com.renaser.os.habits.domain.model.preferencia.AjusteDeAlarma;
 import com.renaser.os.habits.domain.model.preferencia.AntelacionDelRecordatorio;
 import com.renaser.os.habits.domain.model.preferencia.AntelacionesDelRecordatorio;
 import com.renaser.os.habits.domain.model.preferencia.CambioHorarioPendiente;
+import com.renaser.os.habits.domain.model.preferencia.CombinacionDeAlarma;
 import com.renaser.os.habits.domain.model.preferencia.CuotaEdicionHorario;
 import com.renaser.os.habits.domain.model.preferencia.HorarioPorFecha;
 import com.renaser.os.habits.domain.model.preferencia.HorarioSemanal;
@@ -445,6 +447,48 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
     }
 
     /**
+     * Como suena la alarma del habito, general (spec 009, D-283). No pasa por la cuota ni toca la hora ni el
+     * aviso. Sin preferencia previa nace una fila SIN hora (la hora sigue siendo la del catalogo, que puede
+     * cambiar con el dia del programa) y solo si hay algo que guardar: lo de hoy no crea una fila vacia.
+     */
+    @Override
+    @Transactional
+    public void fijarCombinacion(UserId actorId, HabitoId habitoId, CombinacionDeAlarma combinacion) {
+        requireEditable(actorId, requireHabito(habitoId));
+        AjusteDeAlarma ajuste = combinacion.equals(CombinacionDeAlarma.COMO_HOY) ? null : AjusteDeAlarma.de(combinacion);
+        Instant ahora = clock.now();
+        Optional<PreferenciaHorario> existente = loadPreferenciaPort.porParticipanteYHabito(actorId, habitoId);
+        if (existente.isEmpty() && ajuste == null) {
+            return;
+        }
+        PreferenciaHorario preferencia = existente
+                .orElseGet(() -> PreferenciaHorario.crear(actorId, habitoId, null, null, ahora));
+        preferencia.actualizarAlarma(ajuste, ahora);
+        savePreferenciaPort.save(preferencia);
+    }
+
+    /**
+     * Como suena la alarma de UN dia de la semana (spec 009, D-283). Misma regla que el aviso de la 008: sin
+     * cupo, el pedido ya viene validado por el dominio, y uno igual a la combinacion general se guarda como
+     * «hereda» para que un cambio de la general siga llegando a ese dia mientras no tenga la suya.
+     */
+    @Override
+    @Transactional
+    public void fijarCombinacion(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana,
+                                 CombinacionDeAlarma combinacion) {
+        requireEditable(actorId, requireHabito(habitoId));
+        CombinacionDeAlarma general = alarmaGeneralDe(loadPreferenciaPort.porParticipanteYHabito(actorId, habitoId)
+                .orElse(null));
+        savePreferenciaPort.fijarAlarmaParaDiaSemana(actorId, habitoId, diaSemana,
+                combinacion.equals(general) ? null : AjusteDeAlarma.de(combinacion));
+    }
+
+    /** La combinacion general ya resuelta: la elegida o, si nadie eligio nada, la de hoy. */
+    private static CombinacionDeAlarma alarmaGeneralDe(PreferenciaHorario general) {
+        return CombinacionDeAlarma.COMO_HOY.con(general != null ? general.alarma() : null);
+    }
+
+    /**
      * Cobra el cupo semanal por fijar la hora de un dia (V39).
      *
      * > **Agregado 2026-09-07, cerrando un agujero que yo mismo habia dejado abierto.** El caso de
@@ -519,7 +563,8 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
         // Spec 008: el aviso general sale de la preferencia del habito. El cambio pendiente (D-91) no lo
         // mueve: el recordatorio se aplica HOY y la promocion reescribe los mismos valores (E-159).
         return SemanaDelHabito.resolver(propios.values(), disparoGeneral, limiteGeneral,
-                RecordatorioDelDia.delGeneral(general)).stream().map(DiaDeLaSemana::de).toList();
+                RecordatorioDelDia.delGeneral(general), alarmaGeneralDe(general)).stream()
+                .map(DiaDeLaSemana::de).toList();
     }
 
     private Habito requireHabito(HabitoId id) {

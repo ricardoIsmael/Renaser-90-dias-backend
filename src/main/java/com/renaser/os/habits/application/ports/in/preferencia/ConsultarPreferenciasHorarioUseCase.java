@@ -1,6 +1,7 @@
 package com.renaser.os.habits.application.ports.in.preferencia;
 
 import com.renaser.os.habits.domain.model.habito.HabitoId;
+import com.renaser.os.habits.domain.model.preferencia.CombinacionDeAlarma;
 import com.renaser.os.habits.domain.model.preferencia.SemanaDelHabito;
 import com.renaser.os.shared.domain.UserId;
 
@@ -51,18 +52,30 @@ public interface ConsultarPreferenciasHorarioUseCase {
      * {@code antelacionesRecordatorio} son el aviso GENERAL del habito (con la excepcion de la fecha
      * consultada, si la hay), nunca el del dia de la semana: el APK anterior los reescribe como general y el
      * editor los necesita para saber que heredan los dias sin aviso propio.
+     *
+     * <p>{@code alarma} (spec 009, D-283): como suena la alarma del habito, la GENERAL ya resuelta ({@link
+     * CombinacionDeAlarma#COMO_HOY} si nadie eligio nada). La de cada dia va en {@code diasDeLaSemana}.
      */
     record HorarioDeHabito(HabitoId habitoId, String titulo, LocalTime horaDisparo, LocalTime horaLimite,
                             boolean personalizado, boolean recordatorioActivo, Integer minutosRecordatorio,
                             CambioProgramado cambioProgramado, List<Integer> antelacionesRecordatorio,
-                            List<SemanaDelHabito.Dia> diasDeLaSemana) {
+                            List<SemanaDelHabito.Dia> diasDeLaSemana, CombinacionDeAlarma alarma) {
+
+        /** Sin la alarma: la forma de antes de la spec 009; rige la de hoy. */
+        public HorarioDeHabito(HabitoId habitoId, String titulo, LocalTime horaDisparo, LocalTime horaLimite,
+                               boolean personalizado, boolean recordatorioActivo, Integer minutosRecordatorio,
+                               CambioProgramado cambioProgramado, List<Integer> antelacionesRecordatorio,
+                               List<SemanaDelHabito.Dia> diasDeLaSemana) {
+            this(habitoId, titulo, horaDisparo, horaLimite, personalizado, recordatorioActivo, minutosRecordatorio,
+                    cambioProgramado, antelacionesRecordatorio, diasDeLaSemana, CombinacionDeAlarma.COMO_HOY);
+        }
 
         /** Sin los dias: la forma de antes de la spec 008. */
         public HorarioDeHabito(HabitoId habitoId, String titulo, LocalTime horaDisparo, LocalTime horaLimite,
                                boolean personalizado, boolean recordatorioActivo, Integer minutosRecordatorio,
                                CambioProgramado cambioProgramado, List<Integer> antelacionesRecordatorio) {
             this(habitoId, titulo, horaDisparo, horaLimite, personalizado, recordatorioActivo, minutosRecordatorio,
-                    cambioProgramado, antelacionesRecordatorio, List.of());
+                    cambioProgramado, antelacionesRecordatorio, List.of(), CombinacionDeAlarma.COMO_HOY);
         }
 
         /** Sin el conjunto: la forma de antes de D-217. */
@@ -70,7 +83,7 @@ public interface ConsultarPreferenciasHorarioUseCase {
                                boolean personalizado, boolean recordatorioActivo, Integer minutosRecordatorio,
                                CambioProgramado cambioProgramado) {
             this(habitoId, titulo, horaDisparo, horaLimite, personalizado, recordatorioActivo, minutosRecordatorio,
-                    cambioProgramado, null, List.of());
+                    cambioProgramado, null, List.of(), CombinacionDeAlarma.COMO_HOY);
         }
     }
 

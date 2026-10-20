@@ -125,6 +125,30 @@ public class HabitPreferenceController {
     }
 
     /**
+     * Como suena la alarma del hábito para toda la semana (spec 009, D-283): sonido, vibración, voz y repetir.
+     * {@code 204}; {@code 400} con sonido y vibración apagados, o con voz sin sonido; no consume cupo semanal.
+     */
+    @RequiresPermission(Permission.USE_APP)
+    @PutMapping("/{habitId}/alarm")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void fijarAlarma(@ActorAutenticado UserId actor, @PathVariable UUID habitId,
+            @RequestBody @Valid AlarmCombinationRequest request) {
+        editarUseCase.fijarCombinacion(actor, HabitoId.of(habitId), request.toCombination());
+    }
+
+    /**
+     * Como suena la alarma de ESE día de la semana, todas las semanas (spec 009, D-283). Mismas respuestas que
+     * la general; hora, aviso y alarma son tres escrituras separadas y guardar una no borra las otras.
+     */
+    @RequiresPermission(Permission.USE_APP)
+    @PutMapping("/{habitId}/weekdays/{weekday}/alarm")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void fijarAlarmaDelDia(@ActorAutenticado UserId actor, @PathVariable UUID habitId,
+            @PathVariable DayOfWeek weekday, @RequestBody @Valid AlarmCombinationRequest request) {
+        horarioSemanalUseCase.fijarCombinacion(actor, HabitoId.of(habitId), weekday, request.toCombination());
+    }
+
+    /**
      * Apaga el hábito ESE día de la semana, todas las semanas (V40). `409` si es obligatorio del
      * programa, con el mismo criterio que la pausa: no es un permiso, la operación no aplica.
      */

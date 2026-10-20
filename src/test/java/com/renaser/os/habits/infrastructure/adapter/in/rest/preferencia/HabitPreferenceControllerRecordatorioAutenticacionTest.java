@@ -45,4 +45,20 @@ class HabitPreferenceControllerRecordatorioAutenticacionTest {
 
         verifyNoInteractions(horarioSemanal);
     }
+
+    /** Spec 009: las dos rutas de la alarma quedan detras de la misma cadena de seguridad. */
+    @Test
+    void guardarLaAlarmaSinSesionEsRechazadoAunqueVengaElHeaderDeActor() throws Exception {
+        String cuerpo = "{\"sound\":true,\"vibration\":true,\"voice\":false,\"repeat\":true}";
+        var habito = UUID.randomUUID();
+
+        mvc.perform(put("/api/v1/habit-preferences/" + habito + "/alarm")
+                .header("X-Actor-Id", UUID.randomUUID().toString()).contentType("application/json").content(cuerpo))
+                .andExpect(status().isForbidden());
+        mvc.perform(put("/api/v1/habit-preferences/" + habito + "/weekdays/SATURDAY/alarm")
+                .header("X-Actor-Id", UUID.randomUUID().toString()).contentType("application/json").content(cuerpo))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(editar, horarioSemanal);
+    }
 }

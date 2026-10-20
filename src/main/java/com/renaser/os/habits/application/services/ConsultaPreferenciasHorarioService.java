@@ -16,6 +16,7 @@ import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.habits.domain.model.horario.VentanaDelDia;
 import com.renaser.os.habits.domain.model.horario.HorariosDelHabito;
 import com.renaser.os.habits.domain.model.preferencia.CambioHorarioPendiente;
+import com.renaser.os.habits.domain.model.preferencia.CombinacionDeAlarma;
 import com.renaser.os.habits.domain.model.preferencia.CuotaEdicionHorario;
 import com.renaser.os.habits.domain.model.preferencia.HorarioSemanal;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
@@ -135,7 +136,8 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
                     HorarioHabito catalogo = vigenteDeCatalogo(horarios.getOrDefault(habito.id(), SIN_HORARIOS),
                             diaPrograma, tipoDia, yaGenerados.get(habito.id()));
                     return construirVista(habito, catalogo, preferencias.get(habito.id()),
-                            programados.get(habito.id()), base.semanaDe(habito.id(), catalogo));
+                            programados.get(habito.id()), base.semanaDe(habito.id(), catalogo),
+                            base.alarmaGeneral(habito.id()));
                 })
                 .toList();
     }
@@ -171,7 +173,16 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
             LocalTime limite = primera(cambio != null ? cambio.horaLimite() : null,
                     general != null ? general.horaLimite() : null, catalogo != null ? catalogo.horaLimite() : null);
             return SemanaDelHabito.resolver(filas.getOrDefault(habitoId, List.of()), disparo, limite,
-                    RecordatorioDelDia.delGeneral(general));
+                    RecordatorioDelDia.delGeneral(general), alarmaGeneral(habitoId));
+        }
+
+        /**
+         * Como suena la alarma del habito, resuelta (spec 009): la de la preferencia GENERAL o, si nadie eligio
+         * nada, la de hoy. Sale de la fila general y no de la resuelta por fecha, que puede venir de otra capa.
+         */
+        CombinacionDeAlarma alarmaGeneral(HabitoId habitoId) {
+            PreferenciaHorario general = generales.get(habitoId);
+            return CombinacionDeAlarma.COMO_HOY.con(general != null ? general.alarma() : null);
         }
 
         private static LocalTime primera(LocalTime delCambio, LocalTime delGeneral, LocalTime delCatalogo) {
@@ -198,7 +209,8 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
     private static HorarioDeHabito construirVista(Habito habito, HorarioHabito catalogo,
                                                     PreferenciaHorario preferencia,
                                                     CambioHorarioPendiente programado,
-                                                    List<SemanaDelHabito.Dia> diasDeLaSemana) {
+                                                    List<SemanaDelHabito.Dia> diasDeLaSemana,
+                                                    CombinacionDeAlarma alarma) {
         LocalTime horaDisparo = primeraNoNula(preferencia != null ? preferencia.horaDisparo() : null,
                 catalogo != null ? catalogo.horaDisparo() : null);
         LocalTime horaLimite = primeraNoNula(preferencia != null ? preferencia.horaLimite() : null,
@@ -206,11 +218,13 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
         CambioProgramado cambio = programado == null ? null
                 : new CambioProgramado(programado.horaDisparo(), programado.horaLimite(),
                         programado.fechaEfectiva());
+        // Una fila que existe solo para guardar como suena la alarma (spec 009) no eligio ningun horario.
+        boolean eligioHorario = preferencia != null && !preferencia.esSoloDeAlarma();
         return new HorarioDeHabito(habito.id(), habito.titulo(), horaDisparo,
-                VentanaDelDia.limiteQueSigueAlDisparo(horaDisparo, horaLimite), preferencia != null,
+                VentanaDelDia.limiteQueSigueAlDisparo(horaDisparo, horaLimite), eligioHorario,
                 preferencia != null && preferencia.recordatorioActivo(),
                 preferencia != null ? preferencia.minutosRecordatorio() : null,
-                cambio, preferencia != null ? preferencia.antelacionesRecordatorio() : null, diasDeLaSemana);
+                cambio, preferencia != null ? preferencia.antelacionesRecordatorio() : null, diasDeLaSemana, alarma);
     }
 
     /**
