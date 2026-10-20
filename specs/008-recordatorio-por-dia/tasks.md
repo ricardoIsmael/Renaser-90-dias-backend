@@ -112,11 +112,11 @@
 **Independent Test**: un hábito con el jueves a las 09:00 «a la hora» y el resto a las 07:00 «10 min antes». `dumpsys alarm` muestra el jueves a las 09:00 y los demás días a las 06:50, todas tipo despertador (quickstart E4, E5, E6).
 
   - Nota: D-282 queda en `MODULOS_A_AVANZAR.md` (tabla de decisiones, después de D-280). El `clean verify` completo no lo corrió el agente backend: lo corre la sesión supervisora al final. Pruebas corridas por clase: las de este trabajo y las de los paquetes afectados (1085 pruebas de surefire, 0 fallos).
-- [ ] T017 [P] [US2] Tipos y API en `app:src/features/habits/api/habitsApi.ts`:
+- [x] T017 [P] [US2] Tipos y API en `app:src/features/habits/api/habitsApi.ts`:
   - Tipos de `weekdays` en la preferencia (opcionales: un backend anterior no los manda).
   - Nueva `fijarAvisoDelDia(habitId, weekday, activo, antelaciones)` → `PUT …/weekdays/{wd}/reminder`.
   - `obtenerHorarioSemanal` lee los campos nuevos, todos opcionales.
-- [ ] T018 [P] [US2] Prueba pura `app:src/features/habits/notificaciones/__tests__/alarmasPorDia.test.ts` de `planDeAlarmas(habito, diasResueltos, general)`:
+- [x] T018 [P] [US2] Prueba pura `app:src/features/habits/notificaciones/__tests__/alarmasPorDia.test.ts` de `planDeAlarmas(habito, diasResueltos, general)`:
   - Sin días distintos: `{esquema:'diario', ...}`, igual que hoy.
   - Con días distintos: un pedido `WEEKLY` por día encendido × antelación, con hora = hora del día − antelación.
   - Cruce de medianoche: un aviso de 30 min de las 00:10 del jueves va al miércoles a las 23:40.
@@ -124,22 +124,22 @@
   - Identificadores `habito-{id}-d{iso}-{n}` estables entre corridas; el más temprano de cada día es `-0`, que es la etiqueta que manda el servidor (R6).
   - La regla de esquema es la misma que la del servidor: el esquema por día va si algún día de `weekdays` tiene `customTime`, `customReminder` o `active = false`.
   - Sin `weekdays` (backend anterior): diario.
-- [ ] T019 [US2] Implementar `app:src/features/habits/notificaciones/utils/alarmasPorDia.ts`, puro. T018 en verde.
-- [ ] T020 [P] [US2] Prueba de `programar`, `cancelar` y `ajustarRecordatoriosAlServidor` en `app:src/features/habits/notificaciones/__tests__/recordatoriosPorDia.test.ts`, con expo-notifications falso:
+- [x] T019 [US2] Implementar `app:src/features/habits/notificaciones/utils/alarmasPorDia.ts`, puro. T018 en verde.
+- [x] T020 [P] [US2] Prueba de `programar`, `cancelar` y `ajustarRecordatoriosAlServidor` en `app:src/features/habits/notificaciones/__tests__/recordatoriosPorDia.test.ts`, con expo-notifications falso:
   - Programa `WEEKLY` con el canal del hábito.
   - Al cambiar un día, cancela los del hábito y no deja duplicados.
   - `recordatoriosPorHabito` guarda los ids nuevos.
   - El esquema diario sigue poniendo `habito-{id}-inicio`.
   - `cancelar` y cerrar sesión borran también los `WEEKLY`.
-- [ ] T021 [US2] `app:src/features/habits/notificaciones/recordatoriosDeHabito.ts`:
+- [x] T021 [US2] `app:src/features/habits/notificaciones/recordatoriosDeHabito.ts`:
   - `programar` y `ajustarRecordatoriosAlServidor` usan `planDeAlarmas` con los `weekdays` de la lista de preferencias (research R4, R5).
   - Se conservan sonido y canal por hábito (voz Dora), la ruta `/habitos/{id}` y `cambioDiferido`.
   - T020 en verde.
-- [ ] T022 [P] [US2] Prueba de rearmado y agrupado:
+- [x] T022 [P] [US2] Prueba de rearmado y agrupado:
   - `app:src/features/alarmas/__tests__/rearmarAlarmas.test.ts` ya rearma `weekly` (agregar un caso con id por día).
   - `app:src/features/alarmas/__tests__/avisosJuntos.test.ts`: dos `WEEKLY` del mismo día y la misma hora se agrupan; si no es seguro, quedan separados sin perder ninguno.
-- [ ] T023 [US2] Ajustar `app:src/features/alarmas/avisosJuntos.ts` y, solo si hace falta, `rearmarAlarmas.ts`. T022 en verde.
-- [ ] T024 [US2] Docs: E-640 en `back:docs/BITACORA_ERRORES.md` («la alarma del teléfono ignoraba la hora propia de cada día»: síntoma, causa `DAILY` a la hora general, corrección, prevención). Jest de `src/features/habits` y `src/features/alarmas`, más `tsc` en verde. Commit en la app: «Programar la alarma del teléfono con la hora y el aviso de cada día (spec 008, E-640)»; en el backend, commit solo de la bitácora.
+- [x] T023 [US2] Ajustar `app:src/features/alarmas/avisosJuntos.ts` y, solo si hace falta, `rearmarAlarmas.ts`. T022 en verde.
+- [x] T024 [US2] Docs: E-640 en `back:docs/BITACORA_ERRORES.md` («la alarma del teléfono ignoraba la hora propia de cada día»: síntoma, causa `DAILY` a la hora general, corrección, prevención). Jest de `src/features/habits` y `src/features/alarmas`, más `tsc` en verde. Commit en la app: «Programar la alarma del teléfono con la hora y el aviso de cada día (spec 008, E-640)»; en el backend, commit solo de la bitácora.
 
 ---
 
@@ -149,19 +149,19 @@
 **Independent Test**: quickstart E1, E2, E3, E7 y E8 en el emulador.
 
   - Nota (2026-10-20, agente backend): la parte backend, E-640 en `docs/BITACORA_ERRORES.md`, está escrita (commit aparte). Quedan Jest, `tsc` y el commit de la app, que son del agente de la app. Si el agente de la app cambia algo de lo que E-640 dice de la app, se corrige ese texto en el mismo cambio.
-- [ ] T025 [P] [US1] Prueba pura `app:src/features/training/utils/__tests__/avisoDeLosDias.test.ts`:
+- [x] T025 [P] [US1] Prueba pura `app:src/features/training/utils/__tests__/avisoDeLosDias.test.ts`:
   - `avisoInicialDeLosMarcados(dias)`: el común o `'distintos'`.
   - `queGuardar({movioLaRueda, cambioElAviso})`: `'hora' | 'aviso' | 'ambos'`.
   - `textoDelBoton`: «Guardar aviso · S, D», «Guardar 07:00 · S, D», o «Guardar 07:00 · todos los días» sin días marcados.
   - `resumenDelAvisoDelDia(dia, general)`: `null` si es igual al general; `'30′'`, `'a la hora'` o `'sin aviso'`.
-- [ ] T026 [US1] Implementar `app:src/features/training/utils/avisoDeLosDias.ts`, puro, en español de Perú con tuteo. T025 en verde.
-- [ ] T027 [P] [US1] Iconos: confirmar si existen `bell` y `bellOff` en `app:src/components/Icon.tsx`. Si no, dibujarlos con la forma de Lucide en caja de 24 y `s24`, en un bloque `/* Planificar */`. Correr `grosorDeIconos.test.ts`.
-- [ ] T028 [US1] `app:src/features/habits/components/FilaDeDiasDelPlan.tsx`:
+- [x] T026 [US1] Implementar `app:src/features/training/utils/avisoDeLosDias.ts`, puro, en español de Perú con tuteo. T025 en verde.
+- [x] T027 [P] [US1] Iconos: confirmar si existen `bell` y `bellOff` en `app:src/components/Icon.tsx`. Si no, dibujarlos con la forma de Lucide en caja de 24 y `s24`, en un bloque `/* Planificar */`. Correr `grosorDeIconos.test.ts`.
+- [x] T028 [US1] `app:src/features/habits/components/FilaDeDiasDelPlan.tsx`:
   - Prop **opcional** `avisoDelDia?: (dia) => string | null`.
   - Si devuelve texto, debajo de la hora va `Icon` campana de 16 con el texto, o la campana tachada si es «sin aviso». Tipografía Jost 12–13 px y color del tema.
   - Sin la prop, la fila queda idéntica: Plan no la pasa.
   - Prueba de render sin la prop, igual a hoy, y con la prop.
-- [ ] T029 [US1] `app:src/features/training/components/PlanificarDimensionModal.tsx`:
+- [x] T029 [US1] `app:src/features/training/components/PlanificarDimensionModal.tsx`:
   - Con días marcados, mostrar la sección Recordatorio y quitar la línea «El recordatorio se elige sin días marcados» (E-408).
   - Estado inicial con `avisoInicialDeLosMarcados`; con «distintos», ningún chip marcado y la línea «Estos días tienen avisos distintos».
   - Registrar si se movió la rueda y si se tocó el aviso.
@@ -172,12 +172,12 @@
   - Backend anterior (sin `customReminder` en la respuesta): no se ofrece el aviso con días marcados y se mantiene la línea E-408.
   - `Presionable` y `tacto.seleccion()` como en el resto del editor; áreas de toque de 44 px o más; sin animaciones nuevas.
   - Dejar un contenedor vacío, sin nada visible, debajo del recordatorio para los futuros tipos de alarma (FR-015).
-- [ ] T030 [US1] Prueba de integración del editor `app:src/features/training/__tests__/planificarAvisoPorDia.test.tsx`, con la API falsa:
+- [x] T030 [US1] Prueba de integración del editor `app:src/features/training/__tests__/planificarAvisoPorDia.test.tsx`, con la API falsa:
   - Marcar S y D, elegir 30 min sin mover la rueda: solo se llama a `fijarAvisoDelDia` dos veces.
   - Mover la rueda y cambiar el aviso: hora y aviso.
   - Avisos distintos: la línea correspondiente.
   - Backend anterior: comportamiento de hoy.
-- [ ] T031 [US1] `app:AGENTS.md`: entrada «Cambio por pedido del dueño — 2026-10-20 — tab `Training` → Planificar: el recordatorio por día» (lo que cambia y nada más, sin APK nuevo, backend con V111 antes). Jest de `src/features/training` y `src/features/habits`, más `tsc` en verde. Commit: «Elegir el recordatorio de cada día al planificar un hábito (spec 008, D-282)».
+- [x] T031 [US1] `app:AGENTS.md`: entrada «Cambio por pedido del dueño — 2026-10-20 — tab `Training` → Planificar: el recordatorio por día» (lo que cambia y nada más, sin APK nuevo, backend con V111 antes). Jest de `src/features/training` y `src/features/habits`, más `tsc` en verde. Commit: «Elegir el recordatorio de cada día al planificar un hábito (spec 008, D-282)».
 
 ---
 
