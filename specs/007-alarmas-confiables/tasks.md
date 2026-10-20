@@ -191,10 +191,18 @@ Ninguna. Las tres historias son independientes: US1 y US2 solo tocan la app y US
   - la hoja global al abrir tras una detención forzada;
   - las alarmas tipo despertador (próxima alarma e ícono en la barra);
   - que hace falta un APK nuevo y el backend nuevo.
-- [ ] T043 Pedir turno y correr `TZ=UTC ./mvnw clean verify` en `back:`; leer `Tests run:` de surefire y failsafe; liberar el turno avisando.
-- [ ] T044 Pedir turno y, en `app:`, correr `tsc --noEmit` y la suite de Jest completa; liberar el turno.
-- [ ] T045 Pedir turno de emulador y backend. Compilar el APK debug del worktree (lleva el parche y el módulo), backend `back:` en 8097 con `renaser_alarmas`, y correr los escenarios A1–A6 (con A3b), B1–B5 y C1–C5 de `quickstart.md` con mobile-mcp, con captura por caso en `~/Imágenes/e2e-2026-10-19/` o la fecha del día.
-- [ ] T046 Con el mismo turno, correr la suite completa de Maestro (`.maestro/`), actualizando en el mismo trabajo los flujos que hayan quedado viejos. Liberar el emulador y avisar.
+- [x] T043 Pedir turno y correr `TZ=UTC ./mvnw clean verify` en `back:`; leer `Tests run:` de surefire y failsafe; liberar el turno avisando.
+- [x] T044 Pedir turno y, en `app:`, correr `tsc --noEmit` y la suite de Jest completa; liberar el turno.
+- [x] T045 Pedir turno de emulador y backend. Compilar el APK debug del worktree (lleva el parche y el módulo), backend `back:` en 8097 con `renaser_alarmas`, y correr los escenarios A1–A6 (con A3b), B1–B5 y C1–C5 de `quickstart.md` con mobile-mcp, con captura por caso en `~/Imágenes/e2e-2026-10-19/` o la fecha del día.
+- [x] T046 Con el mismo turno, correr la suite completa de Maestro (`.maestro/`), actualizando en el mismo trabajo los flujos que hayan quedado viejos. Liberar el emulador y avisar.
+> **Validación 2026-10-19 (T043–T046).** `clean verify` en verde (6818 unitarias + 503 de integración), Jest completo (3370) y
+> `tsc` en verde sobre master con las specs 005 y 006 ya juntas. Escenarios del quickstart en emulador Android 17 y Android 14
+> con capturas en `~/Imágenes/e2e-2026-10-19/007-*`: A1, A2 (21:05:00.038 y 21:07:00.018 con la pantalla apagada), A3, A4, A5,
+> A6, B1–B5, C1–C3 en la base clonada; C4 y C5 por las pruebas de integración. A3b: esta SystemUI no ofrece tocar la próxima
+> alarma; se comprobó el ícono «Alarm set for 9:18 PM» de Renaser. La validación encontró y corrigió E-637, E-638 y E-639.
+> Maestro (regla del dueño al juntar ramas): solo los flujos de las pantallas que toca la 007, 07 (Yo y Ajustes) y
+> 08 (Planificar), en verde. T047 (Honor real) sigue pendiente: no hay equipo.
+
 - [ ] T047 Prueba en un Honor real (quickstart, sección Honor) con build de prueba apuntando al backend local por la red; registrar el `motivo` del módulo en la bitácora. Si Honor no reporta la detención, aplicar el plan B de research R2 (avisar ante cualquier `REASON_USER_REQUESTED` en esas marcas) con su prueba.
 - [ ] T048 `graphify update .` en los dos worktrees y dejar los commits listos por funcionalidad (backend y app por separado, en español, sin coautoría). Commit solo cuando el usuario lo pida.
 

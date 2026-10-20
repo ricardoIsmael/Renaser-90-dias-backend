@@ -54,7 +54,7 @@ Valor sin Spring construido desde el evento.
 
 | Clave | Valor | Uso |
 |---|---|---|
-| `renaser.alarmas.detencionRevisada.<userId>` | epoch ms | Último instante revisado del historial de salidas |
+| `renaser.alarmas.detencionRevisada.<userId>` | epoch ms | Último instante revisado del historial (siempre «ahora» al revisar, E-638) |
 | `renaser.alarmas.avisoDetencion.<userId>` | fecha `AAAA-MM-DD` | Última vez que se mostró el aviso (una por día) |
 
 Se borran al cerrar sesión junto con lo demás de alarmas (`alarmasDeLaCuenta.ts`, prefijos).

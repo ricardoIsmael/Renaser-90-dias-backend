@@ -7,7 +7,7 @@
 
 Tres frentes, cada uno se puede entregar solo:
 
-1. **App · alarma tipo despertador** (P1): un parche de `postinstall` a `expo-notifications` hace que toda alarma programada (salvo la prueba de sonido) use `AlarmManager.setAlarmClock` cuando hay permiso de alarmas exactas. El rearmado que ya corre al abrir la app convierte las instaladas. Ver [research R1](./research.md#r1-cómo-hacer-que-el-recordatorio-sea-una-alarma-tipo-despertador).
+1. **App · alarma tipo despertador** (P1): un parche de `postinstall` a `expo-notifications` hace que toda alarma programada (salvo la prueba de sonido) use `AlarmManager.setAlarmClock` cuando hay permiso de alarmas exactas. Como Expo 57 enlaza ese módulo precompilado, `package.json` lo declara en `expo.autolinking.android.buildFromSource` para que se compile el código parchado (E-637). El rearmado que ya corre al abrir la app convierte las instaladas. Ver [research R1](./research.md#r1-cómo-hacer-que-el-recordatorio-sea-una-alarma-tipo-despertador).
 2. **App · detención forzada y guía por marca** (P1): el módulo nativo `renaser-alarmas` suma dos funciones (detectar la detención forzada; abrir la pantalla de la marca). Un componente global, montado junto a `RearmadorDeAlarmas`, muestra una hoja corta una vez por día, y la guía de Yo → Alarmas pasa a ser por marca. Ver R2 y R3.
 3. **Backend · avisos sin cruces** (P2):
    - no avisar hábitos apagados para el día;
