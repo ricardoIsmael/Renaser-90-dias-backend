@@ -35,9 +35,12 @@ import java.util.UUID;
  * @param momentoAvisado la hora de disparo (inicio) o el plazo de entrega (vencimiento), o {@code null}
  *                      en un evento anterior a la spec 007
  * @param zonaHoraria   la zona en que se dice esa hora ({@code America/Lima}), o {@code null} igual que arriba
+ * @param diaDeLaSemanaDelAviso el dia de la semana ISO (1 = lunes) del aviso cuando el habito usa el esquema por dia
+ *                      (spec 008, R6); {@code null} si usa el diario o en un evento anterior a la spec 008
  */
 public record AvisoDeHabito(String tipoAviso, String tituloHabito, long minutosQueFaltan, int puntosEnJuego,
-                            UUID habitoId, Instant emitidoEn, Instant momentoAvisado, String zonaHoraria) {
+                            UUID habitoId, Instant emitidoEn, Instant momentoAvisado, String zonaHoraria,
+                            Integer diaDeLaSemanaDelAviso) {
 
     private static final Locale ESPANOL = Locale.forLanguageTag("es-PE");
     private static final DateTimeFormatter HORA = DateTimeFormatter.ofPattern("HH:mm", ESPANOL);
@@ -65,12 +68,20 @@ public record AvisoDeHabito(String tipoAviso, String tituloHabito, long minutosQ
      * habito y momento (FR-014): la app programa la antelacion mas temprana con este mismo identificador.
      * El aviso de vencimiento tiene la suya para no reemplazar al de inicio. {@code null} sin habito
      * (evento anterior a D-218): cada aviso es uno aparte, como hasta ahora.
+     *
+     * <p><b>Spec 008 (R6).</b> Si el habito usa el esquema por dia, la app nombra la alarma mas temprana de
+     * cada dia {@code habito-{id}-d{iso}-0}, y el push de INICIO de ese dia lleva la misma. Sin dia (esquema
+     * diario) sigue siendo {@code habito-{id}-inicio}. El de vencimiento no cambia: la app no programa
+     * ninguna alarma para el plazo de entrega.
      */
     public String etiqueta() {
         if (habitoId == null) {
             return null;
         }
-        return "habito-" + habitoId + (esInicio() ? "-inicio" : "-por-vencer");
+        if (!esInicio()) {
+            return "habito-" + habitoId + "-por-vencer";
+        }
+        return "habito-" + habitoId + (diaDeLaSemanaDelAviso == null ? "-inicio" : "-d" + diaDeLaSemanaDelAviso + "-0");
     }
 
     /**

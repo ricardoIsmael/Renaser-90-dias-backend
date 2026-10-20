@@ -17,7 +17,10 @@ import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabitoId;
 import com.renaser.os.habits.domain.model.preferencia.CambioHorarioPendiente;
+import com.renaser.os.habits.domain.model.preferencia.HorarioSemanal;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
+import com.renaser.os.habits.domain.model.preferencia.RecordatorioDelDia;
+import com.renaser.os.habits.domain.model.preferencia.SemanaDelHabito;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -27,6 +30,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -112,7 +116,7 @@ class ConsultaPreferenciasHorarioServiceTest {
         when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(
                 HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), habito.id(), 1, null, TipoDia.TODOS,
                         LocalTime.of(6, 0), LocalTime.of(8, 0), CLOCK.now())));
-        when(loadPreferenciaPort.porParticipanteHabitosYFecha(any(), any(), any())).thenReturn(List.of());
+        when(loadPreferenciaPort.porParticipanteHabitosYFechaSinAvisoDelDia(any(), any(), any())).thenReturn(List.of());
         when(loadCambioPendientePort.deParticipante(actor)).thenReturn(List.of());
 
         var vista = service.consultar(actor).habitos().get(0);
@@ -138,7 +142,7 @@ class ConsultaPreferenciasHorarioServiceTest {
         when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(
                 HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), habito.id(), 30, null, TipoDia.TODOS,
                         LocalTime.of(6, 0), LocalTime.of(8, 0), CLOCK.now())));
-        when(loadPreferenciaPort.porParticipanteHabitosYFecha(any(), any(), any())).thenReturn(List.of());
+        when(loadPreferenciaPort.porParticipanteHabitosYFechaSinAvisoDelDia(any(), any(), any())).thenReturn(List.of());
         when(loadCambioPendientePort.deParticipante(actor)).thenReturn(List.of());
         when(loadRegistroPort.diaProgramaMasAltoGeneradoPorHabito(actor, List.of(habito.id())))
                 .thenReturn(java.util.Map.of(habito.id(), 32));
@@ -164,7 +168,7 @@ class ConsultaPreferenciasHorarioServiceTest {
         when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(
                 HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), propio.id(), 30, null, TipoDia.TODOS,
                         LocalTime.of(6, 0), null, CLOCK.now())));
-        when(loadPreferenciaPort.porParticipanteHabitosYFecha(any(), any(), any())).thenReturn(List.of());
+        when(loadPreferenciaPort.porParticipanteHabitosYFechaSinAvisoDelDia(any(), any(), any())).thenReturn(List.of());
         when(loadCambioPendientePort.deParticipante(actor)).thenReturn(List.of());
 
         var vista = service.consultar(actor).habitos().get(0);
@@ -181,7 +185,7 @@ class ConsultaPreferenciasHorarioServiceTest {
         when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(
                 HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), habito.id(), 30, null, TipoDia.TODOS,
                         LocalTime.of(6, 0), LocalTime.of(8, 0), CLOCK.now())));
-        when(loadPreferenciaPort.porParticipanteHabitosYFecha(any(), any(), any())).thenReturn(List.of());
+        when(loadPreferenciaPort.porParticipanteHabitosYFechaSinAvisoDelDia(any(), any(), any())).thenReturn(List.of());
         when(loadCambioPendientePort.deParticipante(actor)).thenReturn(List.of());
 
         var vista = service.consultar(actor).habitos().get(0);
@@ -198,7 +202,7 @@ class ConsultaPreferenciasHorarioServiceTest {
         when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(
                 HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), habito.id(), 1, null, TipoDia.TODOS,
                         LocalTime.of(6, 0), LocalTime.of(8, 0), CLOCK.now())));
-        when(loadPreferenciaPort.porParticipanteHabitosYFecha(any(), any(), any())).thenReturn(
+        when(loadPreferenciaPort.porParticipanteHabitosYFechaSinAvisoDelDia(any(), any(), any())).thenReturn(
                 List.of(PreferenciaHorario.crear(actor, habito.id(), LocalTime.of(7, 30), LocalTime.of(9, 30),
                         CLOCK.now())));
         when(loadCambioPendientePort.deParticipante(actor)).thenReturn(List.of());
@@ -216,7 +220,7 @@ class ConsultaPreferenciasHorarioServiceTest {
         Habito habito = habito("Meditar");
         when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(habito));
         when(loadHorarioPort.porHabitos(any())).thenReturn(List.of());
-        when(loadPreferenciaPort.porParticipanteHabitosYFecha(any(), any(), any())).thenReturn(List.of());
+        when(loadPreferenciaPort.porParticipanteHabitosYFechaSinAvisoDelDia(any(), any(), any())).thenReturn(List.of());
         when(loadCambioPendientePort.deParticipante(actor)).thenReturn(
                 List.of(CambioHorarioPendiente.programar(actor, habito.id(), LocalTime.of(5, 0), LocalTime.of(7, 0),
                         true, 10, LocalDate.of(2026, 8, 25), CLOCK.now())));
@@ -260,14 +264,135 @@ class ConsultaPreferenciasHorarioServiceTest {
         conProgreso(3, false);
         when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(habito("uno"), habito("dos"), habito("tres")));
         when(loadHorarioPort.porHabitos(any())).thenReturn(List.of());
-        when(loadPreferenciaPort.porParticipanteHabitosYFecha(any(), any(), any())).thenReturn(List.of());
+        when(loadPreferenciaPort.porParticipanteHabitosYFechaSinAvisoDelDia(any(), any(), any())).thenReturn(List.of());
         when(loadCambioPendientePort.deParticipante(actor)).thenReturn(List.of());
 
         assertThat(service.consultar(actor).habitos()).hasSize(3);
 
         verify(loadHorarioPort, times(1)).porHabitos(any());
-        verify(loadPreferenciaPort, times(1)).porParticipanteHabitosYFecha(any(), any(), any());
+        verify(loadPreferenciaPort, times(1)).porParticipanteHabitosYFechaSinAvisoDelDia(any(), any(), any());
         verify(loadCambioPendientePort, times(1)).deParticipante(actor);
         verify(loadHorarioPort, never()).porHabito(any());
+    }
+
+    // ---- Spec 008 (D-282): los siete dias de cada habito ya resueltos -------------------------------
+
+    private PreferenciaHorario generalConAviso(Habito habito, int hora, Integer... antelaciones) {
+        var general = PreferenciaHorario.crear(actor, habito.id(), LocalTime.of(hora, 0), null, CLOCK.now());
+        general.actualizarRecordatorioConAntelaciones(true, List.of(antelaciones), CLOCK.now());
+        return general;
+    }
+
+    private void listadoDe(Habito habito, PreferenciaHorario general, HorarioSemanal... filas) {
+        conProgreso(3, false);
+        when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(habito));
+        when(loadHorarioPort.porHabitos(any())).thenReturn(List.of(
+                HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), habito.id(), 1, null, TipoDia.TODOS,
+                        LocalTime.of(6, 0), null, CLOCK.now())));
+        when(loadPreferenciaPort.porParticipanteHabitosYFechaSinAvisoDelDia(any(), any(), any()))
+                .thenReturn(general == null ? List.of() : List.of(general));
+        when(loadPreferenciaPort.porParticipanteYHabitos(any(), any()))
+                .thenReturn(general == null ? List.of() : List.of(general));
+        when(loadPreferenciaPort.horariosSemanalesDe(any(), any())).thenReturn(List.of(filas));
+        when(loadCambioPendientePort.deParticipante(actor)).thenReturn(List.of());
+    }
+
+    private HorarioSemanal fila(Habito habito, DayOfWeek dia, LocalTime hora, RecordatorioDelDia aviso) {
+        return new HorarioSemanal(dia, PreferenciaHorario.crear(actor, habito.id(), hora, null, CLOCK.now()), true,
+                aviso);
+    }
+
+    private static SemanaDelHabito.Dia del(List<SemanaDelHabito.Dia> dias, DayOfWeek dia) {
+        return dias.stream().filter(d -> d.diaSemana() == dia).findFirst().orElseThrow();
+    }
+
+    @Test
+    void cadaHabitoTraeSusSieteDiasConLaHoraYElAvisoDeCadaUno() {
+        Habito gimnasio = habito("Gimnasio");
+        listadoDe(gimnasio, generalConAviso(gimnasio, 7, 10),
+                fila(gimnasio, DayOfWeek.SATURDAY, LocalTime.of(9, 0), RecordatorioDelDia.con(List.of(30))),
+                fila(gimnasio, DayOfWeek.SUNDAY, null, RecordatorioDelDia.sinAviso()));
+
+        var dias = service.consultar(actor).habitos().getFirst().diasDeLaSemana();
+
+        assertThat(dias).hasSize(7);
+        var sabado = del(dias, DayOfWeek.SATURDAY);
+        assertThat(sabado.horaDisparo()).isEqualTo(LocalTime.of(9, 0));
+        assertThat(sabado.horaPropia()).isTrue();
+        assertThat(sabado.recordatorio().antelaciones()).containsExactly(30);
+        assertThat(sabado.recordatorioPropio()).isTrue();
+        var domingo = del(dias, DayOfWeek.SUNDAY);
+        assertThat(domingo.horaDisparo()).as("fila de solo aviso: la hora es la general").isEqualTo(LocalTime.of(7, 0));
+        assertThat(domingo.horaPropia()).isFalse();
+        assertThat(domingo.recordatorio().activo()).isFalse();
+        var lunes = del(dias, DayOfWeek.MONDAY);
+        assertThat(lunes.horaDisparo()).isEqualTo(LocalTime.of(7, 0));
+        assertThat(lunes.recordatorio().antelaciones()).containsExactly(10);
+        assertThat(lunes.recordatorioPropio()).isFalse();
+    }
+
+    /**
+     * Los campos de siempre del hábito son el aviso GENERAL: lo que lee el APK anterior para reescribirlo
+     * por el PATCH general, y lo que hereda un dia sin aviso propio. Los pide la variante SIN el aviso del
+     * dia de la semana, no la que lo mezcla.
+     */
+    @Test
+    void elAvisoDelItemEsElGeneralYNoElDelDiaConsultado() {
+        Habito gimnasio = habito("Gimnasio");
+        var general = generalConAviso(gimnasio, 7, 10);
+        listadoDe(gimnasio, general,
+                fila(gimnasio, DayOfWeek.MONDAY, null, RecordatorioDelDia.con(List.of(30))));
+
+        var vista = service.consultar(actor).habitos().getFirst();
+
+        assertThat(vista.recordatorioActivo()).isTrue();
+        assertThat(vista.minutosRecordatorio()).isEqualTo(10);
+        assertThat(vista.antelacionesRecordatorio()).containsExactly(10);
+        verify(loadPreferenciaPort, never()).porParticipanteHabitosYFecha(any(), any(), any());
+    }
+
+    @Test
+    void sinNingunaPreferenciaLosSieteDiasHeredanElCatalogoYNoAvisan() {
+        Habito gimnasio = habito("Gimnasio");
+        listadoDe(gimnasio, null);
+
+        var dias = service.consultar(actor).habitos().getFirst().diasDeLaSemana();
+
+        assertThat(dias).hasSize(7).allSatisfy(d -> {
+            assertThat(d.horaDisparo()).isEqualTo(LocalTime.of(6, 0));
+            assertThat(d.recordatorio().activo()).isFalse();
+            assertThat(d.horaPropia()).isFalse();
+        });
+    }
+
+    @Test
+    void elCambioGeneralYaVigenteMandaEnLaHoraDeLosDiasQueHeredan() {
+        Habito gimnasio = habito("Gimnasio");
+        listadoDe(gimnasio, generalConAviso(gimnasio, 7, 10));
+        when(loadCambioPendientePort.deParticipante(actor)).thenReturn(List.of(CambioHorarioPendiente.programar(actor,
+                gimnasio.id(), LocalTime.of(8, 0), null, false, null, LocalDate.of(2026, 8, 24), CLOCK.now())));
+
+        var dias = service.consultar(actor).habitos().getFirst().diasDeLaSemana();
+
+        assertThat(del(dias, DayOfWeek.TUESDAY).horaDisparo()).isEqualTo(LocalTime.of(8, 0));
+    }
+
+    /** Spec 008, T012: los siete dias de TODOS los habitos salen de UNA consulta, no de una por habito. */
+    @Test
+    void losDiasDeTodosLosHabitosSalenDeUnaSolaConsultaPorParticipante() {
+        conProgreso(3, false);
+        when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(habito("uno"), habito("dos"), habito("tres")));
+        when(loadHorarioPort.porHabitos(any())).thenReturn(List.of());
+        when(loadPreferenciaPort.porParticipanteHabitosYFechaSinAvisoDelDia(any(), any(), any())).thenReturn(List.of());
+        when(loadPreferenciaPort.porParticipanteYHabitos(any(), any())).thenReturn(List.of());
+        when(loadPreferenciaPort.horariosSemanalesDe(any(), any())).thenReturn(List.of());
+        when(loadCambioPendientePort.deParticipante(actor)).thenReturn(List.of());
+
+        assertThat(service.consultar(actor).habitos()).hasSize(3)
+                .allSatisfy(h -> assertThat(h.diasDeLaSemana()).hasSize(7));
+
+        verify(loadPreferenciaPort, times(1)).horariosSemanalesDe(any(), any());
+        verify(loadPreferenciaPort, times(1)).porParticipanteYHabitos(any(), any());
+        verify(loadPreferenciaPort, never()).horarioSemanalDe(any(), any());
     }
 }

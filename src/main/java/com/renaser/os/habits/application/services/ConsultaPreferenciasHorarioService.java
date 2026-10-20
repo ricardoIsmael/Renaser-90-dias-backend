@@ -17,7 +17,10 @@ import com.renaser.os.habits.domain.model.horario.VentanaDelDia;
 import com.renaser.os.habits.domain.model.horario.HorariosDelHabito;
 import com.renaser.os.habits.domain.model.preferencia.CambioHorarioPendiente;
 import com.renaser.os.habits.domain.model.preferencia.CuotaEdicionHorario;
+import com.renaser.os.habits.domain.model.preferencia.HorarioSemanal;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
+import com.renaser.os.habits.domain.model.preferencia.RecordatorioDelDia;
+import com.renaser.os.habits.domain.model.preferencia.SemanaDelHabito;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -113,20 +116,67 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
         Set<HabitoId> ids = habitos.stream().map(Habito::id).collect(Collectors.toSet());
         // D-216 (TZ-15): con el habito al lado, porque el primer dia de uno PERSONAL ya esta alcanzado.
         Map<HabitoId, HorariosDelHabito> horarios = HorariosDelHabito.porHabito(habitos, loadHorarioPort.porHabitos(ids));
-        Map<HabitoId, PreferenciaHorario> preferencias = loadPreferenciaPort.porParticipanteHabitosYFecha(actorId, ids, hoy)
+        // Spec 008: el aviso del listado es el GENERAL del habito (sin el del dia de la semana consultado),
+        // porque el APK anterior lo reescribe como general y el editor nuevo lo toma como lo que heredan los
+        // dias sin aviso propio. El de cada dia va aparte, en `diasDeLaSemana`.
+        Map<HabitoId, PreferenciaHorario> preferencias = loadPreferenciaPort
+                .porParticipanteHabitosYFechaSinAvisoDelDia(actorId, ids, hoy)
                 .stream().collect(Collectors.toMap(PreferenciaHorario::habitoId, p -> p));
-        Map<HabitoId, CambioHorarioPendiente> programados = loadCambioPendientePort.deParticipante(actorId).stream()
+        List<CambioHorarioPendiente> cambios = loadCambioPendientePort.deParticipante(actorId);
+        Map<HabitoId, CambioHorarioPendiente> programados = cambios.stream()
                 .filter(c -> c.fechaEfectiva().isAfter(hoy))
                 .collect(Collectors.toMap(CambioHorarioPendiente::habitoId, c -> c));
         TipoDia tipoDia = TipoDia.delDia(hoy);
         Map<HabitoId, Integer> yaGenerados = diasMasAltosYaGenerados(actorId, diaPrograma, tipoDia, horarios);
+        BaseDeLaSemana base = baseDeLaSemana(actorId, ids, cambios, hoy);
 
         return habitos.stream()
-                .map(habito -> construirVista(habito,
-                        vigenteDeCatalogo(horarios.getOrDefault(habito.id(), SIN_HORARIOS), diaPrograma, tipoDia,
-                                yaGenerados.get(habito.id())),
-                        preferencias.get(habito.id()), programados.get(habito.id())))
+                .map(habito -> {
+                    HorarioHabito catalogo = vigenteDeCatalogo(horarios.getOrDefault(habito.id(), SIN_HORARIOS),
+                            diaPrograma, tipoDia, yaGenerados.get(habito.id()));
+                    return construirVista(habito, catalogo, preferencias.get(habito.id()),
+                            programados.get(habito.id()), base.semanaDe(habito.id(), catalogo));
+                })
                 .toList();
+    }
+
+    /**
+     * Lo que rige POR DEBAJO de los dias de la semana, para resolver los siete dias de cada habito sin una
+     * consulta por habito: la preferencia general, el cambio general ya vigente (D-91) y las filas de dia de
+     * la semana, cada una pedida UNA vez por el conjunto completo.
+     */
+    private BaseDeLaSemana baseDeLaSemana(UserId actorId, Set<HabitoId> ids, List<CambioHorarioPendiente> cambios,
+                                          LocalDate consultada) {
+        Map<HabitoId, PreferenciaHorario> generales = loadPreferenciaPort.porParticipanteYHabitos(actorId, ids)
+                .stream().collect(Collectors.toMap(PreferenciaHorario::habitoId, p -> p));
+        Map<HabitoId, CambioHorarioPendiente> vigentes = cambios.stream()
+                .filter(c -> !c.fechaEfectiva().isAfter(consultada))
+                .collect(Collectors.toMap(CambioHorarioPendiente::habitoId, c -> c));
+        Map<HabitoId, List<HorarioSemanal>> filas = loadPreferenciaPort.horariosSemanalesDe(actorId, ids).stream()
+                .collect(Collectors.groupingBy(f -> f.preferencia().habitoId()));
+        return new BaseDeLaSemana(generales, vigentes, filas);
+    }
+
+    /** Los tres mapas de {@link #baseDeLaSemana}, y como se mezclan en la semana de UN habito. */
+    private record BaseDeLaSemana(Map<HabitoId, PreferenciaHorario> generales,
+                                  Map<HabitoId, CambioHorarioPendiente> vigentes,
+                                  Map<HabitoId, List<HorarioSemanal>> filas) {
+
+        /** Misma precedencia que `GET /weekdays`: cambio vigente > preferencia general > catalogo. */
+        List<SemanaDelHabito.Dia> semanaDe(HabitoId habitoId, HorarioHabito catalogo) {
+            PreferenciaHorario general = generales.get(habitoId);
+            CambioHorarioPendiente cambio = vigentes.get(habitoId);
+            LocalTime disparo = primera(cambio != null ? cambio.horaDisparo() : null,
+                    general != null ? general.horaDisparo() : null, catalogo != null ? catalogo.horaDisparo() : null);
+            LocalTime limite = primera(cambio != null ? cambio.horaLimite() : null,
+                    general != null ? general.horaLimite() : null, catalogo != null ? catalogo.horaLimite() : null);
+            return SemanaDelHabito.resolver(filas.getOrDefault(habitoId, List.of()), disparo, limite,
+                    RecordatorioDelDia.delGeneral(general));
+        }
+
+        private static LocalTime primera(LocalTime delCambio, LocalTime delGeneral, LocalTime delCatalogo) {
+            return delCambio != null ? delCambio : delGeneral != null ? delGeneral : delCatalogo;
+        }
     }
 
     /**
@@ -147,7 +197,8 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
 
     private static HorarioDeHabito construirVista(Habito habito, HorarioHabito catalogo,
                                                     PreferenciaHorario preferencia,
-                                                    CambioHorarioPendiente programado) {
+                                                    CambioHorarioPendiente programado,
+                                                    List<SemanaDelHabito.Dia> diasDeLaSemana) {
         LocalTime horaDisparo = primeraNoNula(preferencia != null ? preferencia.horaDisparo() : null,
                 catalogo != null ? catalogo.horaDisparo() : null);
         LocalTime horaLimite = primeraNoNula(preferencia != null ? preferencia.horaLimite() : null,
@@ -159,7 +210,7 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
                 VentanaDelDia.limiteQueSigueAlDisparo(horaDisparo, horaLimite), preferencia != null,
                 preferencia != null && preferencia.recordatorioActivo(),
                 preferencia != null ? preferencia.minutosRecordatorio() : null,
-                cambio, preferencia != null ? preferencia.antelacionesRecordatorio() : null);
+                cambio, preferencia != null ? preferencia.antelacionesRecordatorio() : null, diasDeLaSemana);
     }
 
     /**

@@ -54,6 +54,9 @@ import java.nio.charset.StandardCharsets;
  * {@code habito-{id}-inicio} / {@code -por-vencer} para reemplazar, y no apilar, al aviso de la alarma local
  * del mismo habito y momento (FR-014). Y un aviso que llega con su momento ya pasado —backend caido, outbox
  * que reintenta tarde— no se guarda ni se empuja (FR-015): diria «te toca a las 07:00» de algo que ya empezo.
+ *
+ * <p><b>Spec 008 (R6).</b> Si el habito usa el esquema de alarmas por dia, el push de inicio lleva la etiqueta
+ * {@code habito-{id}-d{iso}-0} de ese dia, la misma de la alarma local, y no {@code -inicio}.
  */
 @Component
 class AvisoHabitoNotificationListener {
@@ -87,7 +90,7 @@ class AvisoHabitoNotificationListener {
     private static AvisoDeHabito avisoDe(AvisoHabitoDebidoEvent event) {
         return new AvisoDeHabito(event.tipoAviso(), event.tituloHabito(), event.minutosQueFaltan(),
                 event.puntosEnJuego(), event.habitoId(), event.occurredAt(), event.momentoAvisado(),
-                event.zonaHoraria());
+                event.zonaHoraria(), event.diaDeLaSemanaDelAviso());
     }
 
     /**

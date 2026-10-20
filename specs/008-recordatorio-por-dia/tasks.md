@@ -66,39 +66,43 @@
 **Goal**: el endpoint del aviso, los días en la lista y el barrido con el aviso del día.
 **Independent Test**: con la base clonada, `PUT …/SATURDAY/reminder {true,[30]}`: el `GET …/weekdays` lo devuelve con `customReminder: true`, y el barrido de un sábado genera el aviso de inicio 30 min antes (quickstart S1 y S2).
 
-- [ ] T008 [P] [US3] Prueba del servicio `back:src/test/java/.../application/services/HorarioSemanalRecordatorioServiceTest.java`:
+- [x] T008 [P] [US3] Prueba del servicio `back:src/test/java/.../application/services/HorarioSemanalRecordatorioServiceTest.java`:
   - `fijarRecordatorio` no consume cupo: con el cupo semanal lleno, igual guarda.
   - Hábito ajeno: excepción de permiso. Hábito inexistente: 404.
   - Aviso igual al general: hereda.
   - `consultar` devuelve los 7 días con `recordatorioActivo`, `antelaciones` y `recordatorioPropio` resueltos.
-- [ ] T009 [US3] Caso de uso:
+- [x] T009 [US3] Caso de uso:
   - `EditarHorarioSemanalUseCase.java`: `fijarRecordatorio(UserId, HabitoId, DayOfWeek, boolean activo, List<Integer> antelaciones)`; `DiaDeLaSemana` suma `recordatorioActivo`, `antelaciones` y `recordatorioPropio`.
   - Su implementación en `back:src/main/java/com/renaser/os/habits/application/services/` (buscar `implements EditarHorarioSemanalUseCase`).
   - Javadoc: no cobra cupo, por decisión del dueño del 2026-10-20 (D-282).
   - T008 en verde.
-- [ ] T010 [P] [US3] Prueba del controller `back:src/test/java/.../rest/preferencia/HabitPreferenceControllerRecordatorioTest.java`:
+- [x] T010 [P] [US3] Prueba del controller `back:src/test/java/.../rest/preferencia/HabitPreferenceControllerRecordatorioTest.java`:
   - `PUT /api/v1/habit-preferences/{id}/weekdays/{wd}/reminder`: 204; 400 fuera de rango; **403 sin `USE_APP`** (prueba negativa obligatoria).
   - `GET …/weekdays` con los campos nuevos.
   - `PUT …/weekdays/{wd}` (hora) no borra el aviso (FR-013).
-- [ ] T011 [US3] REST:
+- [x] T011 [US3] REST:
   - Nuevo `WeekdayReminderRequest.java` con `@NotNull Boolean reminderEnabled` y `List<Integer> reminderMinutesList`.
   - Endpoint en `HabitPreferenceController.java` con `@RequiresPermission(Permission.USE_APP)`.
   - `WeekdayScheduleResponse.java` suma `reminderEnabled`, `reminderMinutesList` y `customReminder`.
   - Todo según `contracts/habit-preferences-weekdays.md`. T010 en verde.
-- [ ] T012 [P] [US3] Prueba de la lista: `GET /api/v1/habit-preferences` trae por hábito `weekdays` (7 entradas resueltas: `weekday`, `triggerTime`, `active`, `reminderEnabled`, `reminderMinutesList`, `customTime`, `customReminder`), armadas con **una** consulta por participante.
-- [ ] T013 [US3] Implementar `weekdays` en `HabitPreferencesResponse.java` y en el caso de uso de consulta de preferencias, con una consulta por participante a `horario_semanal_habito`. T012 en verde.
-- [ ] T014 [P] [US3] Prueba del barrido en `back:src/test/java/.../application/services/AvisoHabitoServiceTest.java`: un sábado con aviso propio de 30 min genera INICIO a 30 min; con «sin aviso» propio, no genera INICIO ese día, pero sí el resto de la semana. Usar `FixedClock` en madrugada UTC.
-- [ ] T015 [US3] Ajustar `AvisoHabitoService` solo si T014 falla. Por R3 debería pasar sin cambios, porque usa lo resuelto.
-- [ ] T015b [P] [US3] Prueba de la etiqueta del push (research R6):
+- [x] T012 [P] [US3] Prueba de la lista: `GET /api/v1/habit-preferences` trae por hábito `weekdays` (7 entradas resueltas: `weekday`, `triggerTime`, `active`, `reminderEnabled`, `reminderMinutesList`, `customTime`, `customReminder`), armadas con **una** consulta por participante.
+- [x] T013 [US3] Implementar `weekdays` en `HabitPreferencesResponse.java` y en el caso de uso de consulta de preferencias, con una consulta por participante a `horario_semanal_habito`. T012 en verde.
+  - Nota (2026-10-20, agente backend): `weekdays` sale de `ConsultaPreferenciasHorarioService` con tres lecturas por participante (`porParticipanteYHabitos`, `horariosSemanalesDe` y el cambio pendiente que ya se leía), nunca una por hábito. La resolución vive en el dominio (`SemanaDelHabito.resolver`) y la comparten este listado y `GET …/weekdays`. `customTime` y `custom` significan lo mismo: el día tiene hora propia **o está apagado** (V40 ya lo contaba como propio); una fila de solo aviso no cuenta como hora propia.
+  - Nota (desvío menor, conservador): los campos `reminder…` de cada ítem del listado son el aviso **general** (llama a `porParticipanteHabitosYFechaSinAvisoDelDia`), no el del día consultado. Con el aviso del día mezclado, el APK anterior habría reescrito el general con el del sábado (y `AjusteDeHorarioHabitoService` igual), y el editor nuevo no tendría de dónde leer lo que heredan los días sin aviso propio. Sin avisos por día el resultado es idéntico al de antes. Se actualizaron los stubs de `ConsultaPreferenciasHorarioServiceTest` al método nuevo.
+- [x] T014 [P] [US3] Prueba del barrido en `back:src/test/java/.../application/services/AvisoHabitoServiceTest.java`: un sábado con aviso propio de 30 min genera INICIO a 30 min; con «sin aviso» propio, no genera INICIO ese día, pero sí el resto de la semana. Usar `FixedClock` en madrugada UTC.
+  - Nota (2026-10-20, agente backend): el plan decía que un día con «sin aviso» propio «no genera INICIO». El comportamiento vigente (D-184, `EntregaDelAvisoDeHabito`) es que un hábito con el recordatorio apagado **sí publica el evento** (queda la fila en la bandeja) y `notifications` no empuja. Para no cambiar D-184 en silencio, el día con «sin aviso» propio sale con `recordatorioActivo = false` y **no hay push ni alarma** (lo que pide US1-6); la prueba fija eso. Si el dueño quiere que tampoco quede la fila de la bandeja, es una decisión aparte para el aviso general también.
+- [x] T015 [US3] Ajustar `AvisoHabitoService` solo si T014 falla. Por R3 debería pasar sin cambios, porque usa lo resuelto.
+  - Nota: por R3 el barrido no necesitó cambios para la antelación del día: `calculadoraPara` ya usa la preferencia resuelta por el adaptador.
+- [x] T015b [P] [US3] Prueba de la etiqueta del push (research R6):
   - Sin filas semanales: `tag = habito-{id}-inicio`, como hoy (no romper `AvisoDeHabitoTest`, `ExpoPushTransporteTest` ni `WebPushAdapterTest`).
   - Con alguna fila semanal: `tag = habito-{id}-d{iso}-0`, con `iso` = día de la semana de la fecha del registro en la zona de la persona.
   - Probar con reloj en madrugada UTC: un sábado de Lima a las 21:00 es domingo en UTC y tiene que dar `d6`.
   - El aviso «por vencer» sigue con su etiqueta de hoy.
-- [ ] T015c [US3] Implementar:
+- [x] T015c [US3] Implementar:
   - `AvisoHabitoService` marca en `AvisoHabitoDebidoEvent` un campo nuevo al final, `Integer diaDeLaSemanaDelAviso` (ISO 1–7). Va solo si el hábito tiene alguna fila en `horario_semanal_habito`; si no, `null`. Usar una sola consulta por barrido y participante.
   - `notifications/domain/model/habito/AvisoDeHabito.etiqueta()` usa `habito-{id}-d{iso}-0` cuando el campo viene.
   - T015b en verde.
-- [ ] T016 [US3] Docs backend: D-282 en `back:docs/MODULOS_A_AVANZAR.md`, en la tabla de decisiones (aviso por día de la semana, sin cupo, endpoint nuevo, compatibilidad). `TZ=UTC ./mvnw clean verify` en verde, con turno avisado. Commit: «Elegir el aviso de cada día de la semana sin gastar cupo y usarlo en el aviso de inicio (spec 008, D-282)».
+- [x] T016 [US3] Docs backend: D-282 en `back:docs/MODULOS_A_AVANZAR.md`, en la tabla de decisiones (aviso por día de la semana, sin cupo, endpoint nuevo, compatibilidad). `TZ=UTC ./mvnw clean verify` en verde, con turno avisado. Commit: «Elegir el aviso de cada día de la semana sin gastar cupo y usarlo en el aviso de inicio (spec 008, D-282)».
 
 ---
 
@@ -107,6 +111,7 @@
 **Goal**: la alarma suena a la hora y con el aviso de cada día. Corrige el bug de la hora general (E-640).
 **Independent Test**: un hábito con el jueves a las 09:00 «a la hora» y el resto a las 07:00 «10 min antes». `dumpsys alarm` muestra el jueves a las 09:00 y los demás días a las 06:50, todas tipo despertador (quickstart E4, E5, E6).
 
+  - Nota: D-282 queda en `MODULOS_A_AVANZAR.md` (tabla de decisiones, después de D-280). El `clean verify` completo no lo corrió el agente backend: lo corre la sesión supervisora al final. Pruebas corridas por clase: las de este trabajo y las de los paquetes afectados (1085 pruebas de surefire, 0 fallos).
 - [ ] T017 [P] [US2] Tipos y API en `app:src/features/habits/api/habitsApi.ts`:
   - Tipos de `weekdays` en la preferencia (opcionales: un backend anterior no los manda).
   - Nueva `fijarAvisoDelDia(habitId, weekday, activo, antelaciones)` → `PUT …/weekdays/{wd}/reminder`.
@@ -143,6 +148,7 @@
 **Goal**: con días marcados se elige el aviso; los chips muestran la campana; se guarda solo lo tocado.
 **Independent Test**: quickstart E1, E2, E3, E7 y E8 en el emulador.
 
+  - Nota (2026-10-20, agente backend): la parte backend, E-640 en `docs/BITACORA_ERRORES.md`, está escrita (commit aparte). Quedan Jest, `tsc` y el commit de la app, que son del agente de la app. Si el agente de la app cambia algo de lo que E-640 dice de la app, se corrige ese texto en el mismo cambio.
 - [ ] T025 [P] [US1] Prueba pura `app:src/features/training/utils/__tests__/avisoDeLosDias.test.ts`:
   - `avisoInicialDeLosMarcados(dias)`: el común o `'distintos'`.
   - `queGuardar({movioLaRueda, cambioElAviso})`: `'hora' | 'aviso' | 'ambos'`.

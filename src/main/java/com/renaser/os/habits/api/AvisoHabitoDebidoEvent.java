@@ -54,11 +54,18 @@ import java.util.UUID;
  *                            spec 007 que el outbox reentregue: esas se redactan con los minutos de siempre
  * @param zonaHoraria         la zona del participante ({@code America/Lima}) en que se dice la hora de
  *                            {@code momentoAvisado}. {@code null} en publicaciones viejas, por lo mismo
+ * @param diaDeLaSemanaDelAviso el dia de la semana ISO (1 = lunes ... 7 = domingo) de la fecha del registro, en la
+ *                            zona del participante, SOLO si el habito usa el esquema por dia (tiene alguna fila en
+ *                            {@code horario_semanal_habito}: hora propia, aviso propio o dia apagado); {@code null}
+ *                            si no. Es lo que le permite a `notifications` poner al push la misma etiqueta que la
+ *                            app le pone a la alarma local de ese dia ({@code habito-{id}-d{iso}-0}), para que el
+ *                            telefono reemplace y no apile los dos avisos (spec 008, R6). {@code null} tambien en
+ *                            publicaciones anteriores a la spec 008 que el outbox reentregue
  */
 public record AvisoHabitoDebidoEvent(UUID registroId, UserId participanteId, String tituloHabito, String tipoAviso,
                                       long minutosQueFaltan, int puntosEnJuego, UUID claveEvento,
                                       Boolean recordatorioActivo, Integer minutosRecordatorio,
                                       Instant occurredAt, UUID habitoId, String categoriaHabito,
-                                      Instant momentoAvisado, String zonaHoraria)
+                                      Instant momentoAvisado, String zonaHoraria, Integer diaDeLaSemanaDelAviso)
         implements DomainEvent {
 }

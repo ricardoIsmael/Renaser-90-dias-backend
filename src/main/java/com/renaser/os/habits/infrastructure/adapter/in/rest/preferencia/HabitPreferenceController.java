@@ -111,6 +111,20 @@ public class HabitPreferenceController {
     }
 
     /**
+     * El AVISO de ese día de la semana, todas las semanas (spec 008, D-282). {@code 204}; {@code 400} con un
+     * valor inválido; no consume cupo semanal. La hora tiene su propia ruta y no se mezclan: guardar la hora
+     * desde un APK anterior no puede borrar el aviso.
+     */
+    @RequiresPermission(Permission.USE_APP)
+    @PutMapping("/{habitId}/weekdays/{weekday}/reminder")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void fijarAvisoDelDia(@ActorAutenticado UserId actor, @PathVariable UUID habitId,
+            @PathVariable DayOfWeek weekday, @RequestBody @Valid WeekdayReminderRequest request) {
+        horarioSemanalUseCase.fijarRecordatorio(actor, HabitoId.of(habitId), weekday, request.reminderEnabled(),
+                request.reminderMinutesList());
+    }
+
+    /**
      * Apaga el hábito ESE día de la semana, todas las semanas (V40). `409` si es obligatorio del
      * programa, con el mismo criterio que la pausa: no es un permiso, la operación no aplica.
      */
