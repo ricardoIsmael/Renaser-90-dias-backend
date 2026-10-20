@@ -15588,3 +15588,39 @@ para una semana pasada.
 **Corrección.** Con alarmas exactas (permiso concedido o Android que no lo pide) el margen es de 30 s (`margenDeRecienVencida`); sin permiso o sin saber, siguen las 2 h. Verificado en Android 14: tras el force-stop vuelven las de mañana (21:27 y 21:28, `flags=0x3`). Queda: una detención dentro de esos 30 s recupera la de mañana en la próxima puesta al día (≥ 10 min).
 
 **Para que no vuelva.** `rearmarAlarmas.test.ts` («una diaria que sonó hace 30 min se rearma con alarmas exactas y se deja con inexactas»).
+
+## E-640 · La alarma del teléfono ignoraba la hora propia de cada día (app + backend, 20/10)
+
+**Síntoma literal.** Pedido del dueño sobre la captura de Training → Planificar → GIMNASIO: «los recordatorios también deben de ser por día, no en general». Al revisarlo apareció el error de fondo: con el jueves a las 09:00 y el resto de los días a las 07:00, el teléfono sonaba igual a las 07:00 el jueves. El aviso del servidor sí usaba la hora del jueves, así que un teléfono sin alarma confirmada recibía el push a las 09:00 y uno con alarma sonaba dos horas antes.
+
+**Causa.** La app programaba **una sola alarma `DAILY`** por antelación, a la hora **general** del hábito (la de `GET /habit-preferences`), sin mirar los días de `GET …/weekdays` (V39, V40). Además el aviso (`recordatorio_activo`, antelaciones) vivía solo en `preferencias_horario`: no había dónde guardar el de un día, y el editor decía «El recordatorio se elige sin días marcados» (E-408).
+
+**Corrección.** Spec 008, D-282. Backend: V111 guarda el aviso propio de cada día en `horario_semanal_habito` (`NULL` hereda el general) y el adaptador lo resuelve por campo, aparte de la hora; `PUT …/weekdays/{weekday}/reminder` lo escribe sin gastar cupo y sin tocar la hora, y guardar la hora no borra el aviso (FR-013); `GET …/weekdays` y `GET /habit-preferences` devuelven los siete días ya resueltos (una consulta por participante). El push de inicio de un hábito con filas por día lleva el `tag` `habito-{id}-d{iso}-0`, el mismo nombre que la app le pone a la alarma más temprana de cada día, para que el teléfono muestre un solo aviso. App: un `WEEKLY` por día encendido y antelación, a la hora de ese día menos la antelación (cruzando la medianoche si hace falta); sin días distintos conserva la alarma diaria y su identificador `habito-{id}-inicio`. Las dos protecciones de la 007 contra el aviso doble (confirmación por teléfono y etiqueta) siguen en los dos esquemas. La verificación en el emulador se hace en T033 de la spec.
+
+**Para que no vuelva.** Backend: `PreferenciaHorarioPersistenceAdapterRecordatorioTest` (hora y aviso por campo, fila de solo aviso, día apagado, fecha puntual, guardar la hora conserva el aviso, el CHECK de V111), `HorarioSemanalRecordatorioServiceTest` (sin cupo, hereda si es igual al general), `HabitPreferenceControllerRecordatorioTest` (204, 400, 403 y el contrato JSON), `ConsultaPreferenciasHorarioServiceTest` (siete días, una consulta), `AvisoHabitoServiceTest` y `AvisoDeHabitoTest` (la etiqueta del día con el reloj en la madrugada UTC: sábado de Lima es domingo en UTC y da `d6`). App: pruebas de `alarmasPorDia` y `recordatoriosPorHabito` (spec 008, T018 y T020).
+
+## E-641 · Las alarmas de hábitos no vibraban (app, 20/10)
+
+**Síntoma literal.** `adb shell dumpsys notification`, emulador Android 17: `recordatorios-habitos … mVibrationEnabled=false` y `recordatorios-habitos-campana … false`. Solo «Solo vibrar» vibraba. Con la 009, el interruptor «Vibración: Sí» habría dicho algo falso.
+
+**Causa.** Los canales de Android de las alarmas se crearon sin `enableVibrate`. Un canal no se puede cambiar después de creado y, por defecto, no vibra.
+
+**Corrección.** Decisión del dueño: vibrar por defecto. Con vibración encendida, los hábitos usan canales nuevos `…-vib` con `enableVibrate: true`; sin vibración, `…-sinvib` con `false`. La puesta al día pasa a su canal las alarmas ya programadas, sin cambiar hora ni id. Verificado en el emulador: `recordatorios-habitos-vib vibra=true` y las alarmas de las 11:54, 11:59 y 12:04 salieron por ese canal.
+
+**Para que no vuelva.** Pruebas de canal por combinación: todo canal de hábitos declara si vibra.
+
+## E-642 · Con hora propia hoy, los demás días tomaban esa hora (app, 20/10)
+
+**Síntoma literal.** Kilómetros con el martes a las 11:29 y aviso de 30 min el sábado: el sábado quedó a las 10:59 en vez de las 06:30.
+
+**Causa.** La app tomaba como hora general la `triggerTime` del ítem de `GET /habit-preferences`, que es la hora **resuelta para hoy**. Los días sin hora propia heredaban la de hoy.
+
+**Corrección.** Cada día usa `weekdays[i].triggerTime`, la hora que el servidor resuelve para ese día. Verificado: sábado 06:30 y viernes 06:30, 06:50 y 07:00.
+
+**Para que no vuelva.** Prueba de regresión: hoy con hora propia y los demás días con la suya.
+
+## E-643 · El chip del día se deformaba con varios avisos (app, 20/10)
+
+**Síntoma literal.** Captura del dueño: con 30, 10 y 5 min antes y a la hora, el chip del día crecía y se desalineaba.
+
+**Corrección.** El chip reserva el mismo bloque en todos los días. La campana y el reloj van en una fila y el texto en una sola línea: el aviso más temprano y cuántos más, «30′ +2». La lista completa va en la etiqueta del lector. Verificado en el emulador.

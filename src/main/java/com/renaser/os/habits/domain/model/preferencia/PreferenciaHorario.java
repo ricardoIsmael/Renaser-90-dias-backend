@@ -41,6 +41,12 @@ public final class PreferenciaHorario {
      * (D-217, {@link AntelacionesDelRecordatorio}).
      */
     private List<Integer> antelacionesRecordatorio;
+    /**
+     * Como suena la alarma de este habito (spec 009, D-283); {@code null} = no eligio nada, rige
+     * {@link CombinacionDeAlarma#COMO_HOY}. Es la combinacion GENERAL: cada dia de la semana puede traer la suya
+     * ({@link HorarioSemanal#alarma()}).
+     */
+    private AjusteDeAlarma alarma;
     private final Instant creadoEn;
     private Instant actualizadoEn;
 
@@ -50,7 +56,7 @@ public final class PreferenciaHorario {
         Objects.requireNonNull(habitoId, "habitoId es obligatorio");
         LocalTime disparo = VentanaDelDia.requireHoraDisparoDentroDelDia(horaDisparo);
         return new PreferenciaHorario(participanteId, habitoId, disparo,
-                VentanaDelDia.horaLimiteAjustada(disparo, horaLimite), true, null, null, ahora, ahora);
+                VentanaDelDia.horaLimiteAjustada(disparo, horaLimite), true, null, null, null, ahora, ahora);
     }
 
     /** Solo para el adaptador de persistencia. */
@@ -66,9 +72,18 @@ public final class PreferenciaHorario {
                                                 LocalTime horaLimite, boolean recordatorioActivo,
                                                 Integer minutosRecordatorio, List<Integer> antelacionesRecordatorio,
                                                 Instant creadoEn, Instant actualizadoEn) {
+        return rehydrate(participanteId, habitoId, horaDisparo, horaLimite, recordatorioActivo, minutosRecordatorio,
+                antelacionesRecordatorio, null, creadoEn, actualizadoEn);
+    }
+
+    /** Solo para el adaptador de persistencia, con la alarma general (V112). */
+    public static PreferenciaHorario rehydrate(UserId participanteId, HabitoId habitoId, LocalTime horaDisparo,
+                                                LocalTime horaLimite, boolean recordatorioActivo,
+                                                Integer minutosRecordatorio, List<Integer> antelacionesRecordatorio,
+                                                AjusteDeAlarma alarma, Instant creadoEn, Instant actualizadoEn) {
         return new PreferenciaHorario(participanteId, habitoId, horaDisparo, horaLimite, recordatorioActivo,
                 minutosRecordatorio, antelacionesRecordatorio == null ? null : List.copyOf(antelacionesRecordatorio),
-                creadoEn, actualizadoEn);
+                alarma == null || alarma.esVacio() ? null : alarma, creadoEn, actualizadoEn);
     }
 
     public void aplicarAhora(LocalTime horaDisparo, LocalTime horaLimite, Instant ahora) {
@@ -100,6 +115,25 @@ public final class PreferenciaHorario {
         this.antelacionesRecordatorio = activo && !normalizadas.isEmpty() ? normalizadas : null;
         this.recordatorioActivo = activo;
         this.actualizadoEn = ahora;
+    }
+
+    /**
+     * Como suena la alarma de este habito (spec 009, D-283). {@code null}, o un ajuste que no dice nada, la
+     * devuelve a lo de hoy; no toca la hora ni el aviso.
+     */
+    public void actualizarAlarma(AjusteDeAlarma nueva, Instant ahora) {
+        this.alarma = nueva == null || nueva.esVacio() ? null : nueva;
+        this.actualizadoEn = ahora;
+    }
+
+    /**
+     * {@code true} si esta fila existe solo para guardar como suena la alarma: no eligio hora, ni hora limite,
+     * ni aviso. No es un horario «personalizado»: la hora sigue siendo la del catalogo. Las filas de antes de
+     * la 009 (sin alarma) nunca lo son.
+     */
+    public boolean esSoloDeAlarma() {
+        return alarma != null && horaDisparo == null && horaLimite == null && recordatorioActivo
+                && minutosRecordatorio == null && antelacionesRecordatorio == null;
     }
 
     @Override

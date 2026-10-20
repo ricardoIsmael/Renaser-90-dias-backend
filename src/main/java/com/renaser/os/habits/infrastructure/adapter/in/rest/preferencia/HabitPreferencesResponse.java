@@ -3,6 +3,7 @@ package com.renaser.os.habits.infrastructure.adapter.in.rest.preferencia;
 import com.renaser.os.habits.application.ports.in.preferencia.ConsultarPreferenciasHorarioUseCase.CambioProgramado;
 import com.renaser.os.habits.application.ports.in.preferencia.ConsultarPreferenciasHorarioUseCase.HorarioDeHabito;
 import com.renaser.os.habits.application.ports.in.preferencia.ConsultarPreferenciasHorarioUseCase.ResumenPreferenciasHorario;
+import com.renaser.os.habits.domain.model.preferencia.SemanaDelHabito;
 import com.renaser.os.habits.infrastructure.adapter.in.rest.preferencia.HabitPreferenceResponse.ScheduleEditQuotaResponse;
 
 import java.time.LocalDate;
@@ -32,17 +33,46 @@ public record HabitPreferencesResponse(List<HabitPreferenceItemResponse> habits,
      * {@code reminderMinutesList} (D-217, aditivo): todas las antelaciones, de la más temprana a la más
      * tardía; {@code null} = no se conocen (fila anterior a V81). {@code reminderMinutesBefore} sigue
      * siendo la más temprana, para el APK de producción.
+     *
+     * <p>{@code weekdays} (spec 008, D-282, aditivo): los siete días ya resueltos. Los {@code reminder…} del
+     * ítem son el aviso GENERAL del hábito, no el del día de la semana consultado; el de cada día está en su
+     * entrada de {@code weekdays}.
+     *
+     * <p>{@code alarm} (spec 009, D-283, aditivo): como suena la alarma del hábito, la GENERAL ya resuelta; la
+     * de cada día va en su entrada de {@code weekdays}.
      */
     public record HabitPreferenceItemResponse(UUID habitId, String title, LocalTime triggerTime, LocalTime limitTime,
                                                boolean customized, boolean reminderEnabled,
                                                Integer reminderMinutesBefore,
                                                PendingScheduleChangeResponse pendingChange,
-                                               List<Integer> reminderMinutesList) {
+                                               List<Integer> reminderMinutesList,
+                                               List<HabitWeekdayResponse> weekdays,
+                                               AlarmCombinationResponse alarm) {
 
         static HabitPreferenceItemResponse from(HorarioDeHabito h) {
             return new HabitPreferenceItemResponse(h.habitoId().value(), h.titulo(), h.horaDisparo(), h.horaLimite(),
                     h.personalizado(), h.recordatorioActivo(), h.minutosRecordatorio(),
-                    PendingScheduleChangeResponse.from(h.cambioProgramado()), h.antelacionesRecordatorio());
+                    PendingScheduleChangeResponse.from(h.cambioProgramado()), h.antelacionesRecordatorio(),
+                    h.diasDeLaSemana().stream().map(HabitWeekdayResponse::from).toList(),
+                    AlarmCombinationResponse.from(h.alarma()));
+        }
+    }
+
+    /**
+     * Un día de la semana de un hábito, ya resuelto. {@code customTime}: el día tiene hora propia (o está
+     * apagado); {@code customReminder}: el aviso es propio y no el general. Sin {@code limitTime}: la lista
+     * solo sirve para armar las alarmas. Spec 009: {@code alarm} es como suena ese día ya resuelto y
+     * {@code customAlarm} dice si esa combinación es propia del día y no la general.
+     */
+    public record HabitWeekdayResponse(String weekday, LocalTime triggerTime, boolean active,
+                                       boolean reminderEnabled, List<Integer> reminderMinutesList,
+                                       boolean customTime, boolean customReminder,
+                                       AlarmCombinationResponse alarm, boolean customAlarm) {
+
+        static HabitWeekdayResponse from(SemanaDelHabito.Dia d) {
+            return new HabitWeekdayResponse(d.diaSemana().name(), d.horaDisparo(), d.activo(),
+                    d.recordatorio().activo(), d.recordatorio().antelaciones(), d.horaPropia(),
+                    d.recordatorioPropio(), AlarmCombinationResponse.from(d.alarma()), d.alarmaPropia());
         }
     }
 

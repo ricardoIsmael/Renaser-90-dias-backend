@@ -1,6 +1,7 @@
 package com.renaser.os.habits.infrastructure.adapter.out.persistence.preferencia;
 
 import com.renaser.os.habits.domain.model.habito.HabitoId;
+import com.renaser.os.habits.domain.model.preferencia.AjusteDeAlarma;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
@@ -15,14 +16,28 @@ class PreferenciaHorarioPersistenceMapper {
         return PreferenciaHorario.rehydrate(UserId.of(e.getParticipanteId()), HabitoId.of(e.getHabitoId()),
                 e.getHoraDisparo(), e.getHoraLimite(), e.isRecordatorioActivo(),
                 e.getMinutosRecordatorio() != null ? e.getMinutosRecordatorio().intValue() : null,
-                aLista(e.getAntelacionesRecordatorio()), e.getCreadoEn(), e.getActualizadoEn());
+                aLista(e.getAntelacionesRecordatorio()),
+                alarmaDe(e.getAlarmaSonido(), e.getAlarmaVibracion(), e.getAlarmaVoz(), e.getAlarmaRepetir()),
+                e.getCreadoEn(), e.getActualizadoEn());
     }
 
     PreferenciaHorarioJpaEntity toEntity(PreferenciaHorario p) {
+        AjusteDeAlarma alarma = p.alarma();
         return new PreferenciaHorarioJpaEntity(p.participanteId().value(), p.habitoId().value(), p.horaDisparo(),
                 p.horaLimite(), p.recordatorioActivo(),
                 p.minutosRecordatorio() != null ? p.minutosRecordatorio().shortValue() : null,
-                aArreglo(p.antelacionesRecordatorio()), p.creadoEn(), p.actualizadoEn());
+                aArreglo(p.antelacionesRecordatorio()), p.creadoEn(), p.actualizadoEn(),
+                alarma == null ? null : alarma.sonido(), alarma == null ? null : alarma.vibracion(),
+                alarma == null ? null : alarma.voz(), alarma == null ? null : alarma.repetir());
+    }
+
+    /**
+     * Las cuatro columnas de la combinacion (V112) a lo que dice esa capa. Las cuatro en {@code null} es «no
+     * dice nada» y se lee como {@code null}, no como un ajuste vacio.
+     */
+    static AjusteDeAlarma alarmaDe(Boolean sonido, Boolean vibracion, Boolean voz, Boolean repetir) {
+        AjusteDeAlarma ajuste = new AjusteDeAlarma(sonido, vibracion, voz, repetir);
+        return ajuste.esVacio() ? null : ajuste;
     }
 
     /** {@code smallint[]} ↔ lista de minutos (D-217). {@code null} se conserva: es «no se conocen». */

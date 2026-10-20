@@ -40,11 +40,13 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -403,6 +405,84 @@ class AvisoHabitoServiceTest {
         servicioCon(MADRUGADA_UTC).despacharDe(PARTICIPANTE);
 
         assertThat(eventoPublicado().recordatorioActivo()).isNull();
+    }
+
+    // ─── Spec 008 (D-282): el aviso de cada dia de la semana ──────────────────────────────────
+
+    /** El habito usa el esquema por dia: tiene al menos una fila en `horario_semanal_habito`. */
+    private void conEsquemaPorDia() {
+        when(loadPreferenciaPort.habitosConEsquemaPorDia(eq(PARTICIPANTE), anyCollection())).thenReturn(Set.of(HABITO));
+    }
+
+    @Test
+    @DisplayName("spec 008: el sabado con aviso propio de 30 min sale a 30 min de su hora (aunque el general sea de 10)")
+    void elAvisoPropioDelDiaMarcaLaFranja() {
+        participanteEnLima(false);
+        habitoNocturnoPendiente();
+        // Lo que el adaptador resuelve para ese sabado: la capa del dia pisa el aviso general.
+        conPreferencia(true, 30);
+        conEsquemaPorDia();
+
+        // 20:35 en Lima del sabado 5: faltan 25 min; con la antelacion global (15) todavia no tocaba.
+        int publicados = servicioCon(Instant.parse("2026-09-06T01:35:00Z")).despacharDe(PARTICIPANTE);
+
+        assertThat(publicados).isEqualTo(1);
+        AvisoHabitoDebidoEvent evento = eventoPublicado();
+        assertThat(evento.tipoAviso()).isEqualTo(TipoAvisoHabito.INICIO.name());
+        assertThat(evento.minutosRecordatorio()).isEqualTo(30);
+    }
+
+    @Test
+    @DisplayName("spec 008: un dia con «sin aviso» propio sale con recordatorioActivo=false, asi `notifications` no empuja (D-184)")
+    void unDiaSinAvisoPropioNoEmpuja() {
+        participanteEnLima(false);
+        habitoNocturnoPendiente();
+        conPreferencia(false, null);
+        conEsquemaPorDia();
+
+        servicioCon(MADRUGADA_UTC).despacharDe(PARTICIPANTE);
+
+        AvisoHabitoDebidoEvent evento = eventoPublicado();
+        assertThat(evento.recordatorioActivo()).isFalse();
+        assertThat(evento.minutosRecordatorio()).isNull();
+    }
+
+    @Test
+    @DisplayName("spec 008 R6: el habito con esquema por dia lleva el dia ISO de Lima (sabado = 6), no el de UTC (domingo = 7)")
+    void conEsquemaPorDiaElEventoLlevaElDiaDeLaSemanaDeLima() {
+        participanteEnLima(false);
+        habitoNocturnoPendiente();
+        conEsquemaPorDia();
+
+        servicioCon(MADRUGADA_UTC).despacharDe(PARTICIPANTE);
+
+        // MADRUGADA_UTC es domingo 6 en UTC; en Lima todavia es el sabado 5.
+        assertThat(DIA_EN_EL_SERVIDOR.getDayOfWeek()).isEqualTo(DayOfWeek.SUNDAY);
+        assertThat(DIA_EN_LIMA.getDayOfWeek()).isEqualTo(DayOfWeek.SATURDAY);
+        assertThat(eventoPublicado().diaDeLaSemanaDelAviso()).isEqualTo(6);
+    }
+
+    @Test
+    @DisplayName("spec 008 R6: sin filas por dia el evento lleva null y el push conserva la etiqueta -inicio")
+    void sinEsquemaPorDiaElDiaViajaNull() {
+        participanteEnLima(false);
+        habitoNocturnoPendiente();
+
+        servicioCon(MADRUGADA_UTC).despacharDe(PARTICIPANTE);
+
+        assertThat(eventoPublicado().diaDeLaSemanaDelAviso()).isNull();
+    }
+
+    @Test
+    @DisplayName("spec 008 R6: los habitos con esquema por dia se piden UNA vez por barrido y participante")
+    void elEsquemaPorDiaSePideUnaSolaVez() {
+        participanteEnLima(false);
+        habitoNocturnoPendiente();
+        conEsquemaPorDia();
+
+        servicioCon(MADRUGADA_UTC).despacharDe(PARTICIPANTE);
+
+        verify(loadPreferenciaPort, times(1)).habitosConEsquemaPorDia(eq(PARTICIPANTE), anyCollection());
     }
 
     private AvisoHabitoDebidoEvent eventoPublicado() {

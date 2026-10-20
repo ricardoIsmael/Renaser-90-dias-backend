@@ -45,4 +45,13 @@ public class PreferenciaHorarioJpaEntity {
     private Instant creadoEn;
 
     private Instant actualizadoEn;
+
+    /** V112 (spec 009): como suena la alarma del habito; {@code null} en un campo = lo de hoy. */
+    private Boolean alarmaSonido;
+
+    private Boolean alarmaVibracion;
+
+    private Boolean alarmaVoz;
+
+    private Boolean alarmaRepetir;
 }

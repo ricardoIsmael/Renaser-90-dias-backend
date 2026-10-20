@@ -3,21 +3,27 @@ package com.renaser.os.habits.infrastructure.adapter.out.persistence.preferencia
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
 import com.renaser.os.habits.application.ports.out.preferencia.SavePreferenciaHorarioPort;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
+import com.renaser.os.habits.domain.model.preferencia.AjusteDeAlarma;
 import com.renaser.os.habits.domain.model.preferencia.HorarioPorFecha;
 import com.renaser.os.habits.domain.model.preferencia.HorarioSemanal;
 import com.renaser.os.habits.domain.model.preferencia.AntelacionesDelRecordatorio;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
+import com.renaser.os.habits.domain.model.preferencia.RecordatorioDelDia;
+import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Component
 class PreferenciaHorarioPersistenceAdapter implements LoadPreferenciaHorarioPort, SavePreferenciaHorarioPort {
@@ -27,17 +33,20 @@ class PreferenciaHorarioPersistenceAdapter implements LoadPreferenciaHorarioPort
     private final SpringDataHorarioPorFechaRepository fechasRepository;
     private final SpringDataHorarioSemanalRepository semanalRepository;
     private final SpringDataCambioHorarioPendienteRepository pendientesRepository;
+    private final Clock clock;
 
     PreferenciaHorarioPersistenceAdapter(SpringDataPreferenciaHorarioRepository repository,
                                           PreferenciaHorarioPersistenceMapper mapper,
                                           SpringDataHorarioPorFechaRepository fechasRepository,
                                           SpringDataHorarioSemanalRepository semanalRepository,
-                                          SpringDataCambioHorarioPendienteRepository pendientesRepository) {
+                                          SpringDataCambioHorarioPendienteRepository pendientesRepository,
+                                          Clock clock) {
         this.repository = repository;
         this.mapper = mapper;
         this.fechasRepository = fechasRepository;
         this.semanalRepository = semanalRepository;
         this.pendientesRepository = pendientesRepository;
+        this.clock = clock;
     }
 
     @Override
@@ -69,6 +78,23 @@ class PreferenciaHorarioPersistenceAdapter implements LoadPreferenciaHorarioPort
     @Override
     public List<PreferenciaHorario> porParticipanteHabitosYFecha(UserId participanteId, Collection<HabitoId> habitoIds,
                                                                LocalDate fecha) {
+        return resolverPorCapas(participanteId, habitoIds, fecha, true);
+    }
+
+    @Override
+    public List<PreferenciaHorario> porParticipanteHabitosYFechaSinAvisoDelDia(UserId participanteId,
+                                                                               Collection<HabitoId> habitoIds,
+                                                                               LocalDate fecha) {
+        return resolverPorCapas(participanteId, habitoIds, fecha, false);
+    }
+
+    /**
+     * Las capas, de la mas general a la mas especifica: preferencia general, cambio general ya vigente
+     * (D-91), dia de la semana y fecha exacta. {@code conAvisoDelDia = false} deja fuera SOLO el aviso
+     * propio de la capa del dia de la semana (spec 008): lo demas, hora incluida, es igual.
+     */
+    private List<PreferenciaHorario> resolverPorCapas(UserId participanteId, Collection<HabitoId> habitoIds,
+                                                      LocalDate fecha, boolean conAvisoDelDia) {
         if (habitoIds.isEmpty()) return List.of();
         Map<HabitoId, PreferenciaHorario> efectivos = new HashMap<>();
         porParticipanteYHabitos(participanteId, habitoIds).forEach(p -> efectivos.put(p.habitoId(), p));
@@ -82,7 +108,7 @@ class PreferenciaHorarioPersistenceAdapter implements LoadPreferenciaHorarioPort
                 boolean activo = p.getRecordatorioActivo() != null ? p.getRecordatorioActivo()
                         : anterior != null && anterior.recordatorioActivo();
                 efectivos.put(id, PreferenciaHorario.rehydrate(participanteId, id, p.getHoraDisparo(), p.getHoraLimite(),
-                        activo, minutos, conjuntoTras(anterior, activo, minutos),
+                        activo, minutos, conjuntoTras(anterior, activo, minutos), alarmaDe(anterior),
                         p.getCreadoEn(), p.getCreadoEn()));
             }
         }
@@ -94,22 +120,22 @@ class PreferenciaHorarioPersistenceAdapter implements LoadPreferenciaHorarioPort
         // El respaldo es POR CAMPO y no por objeto: una fila que solo fija la hora de disparo
         // conserva la hora limite de la capa de abajo. Reemplazar el objeto entero le borraria la
         // hora limite a los habitos que si vencen dentro del dia.
+        //
+        // V111 (spec 008): el AVISO del dia es otro campo y se resuelve igual, por separado de la hora.
+        // Una fila de solo aviso deja la hora de abajo; una de solo hora deja el aviso de abajo.
         short diaIso = (short) fecha.getDayOfWeek().getValue();
         for (var p : semanalRepository.findByParticipanteIdAndHabitoIdInAndDiaSemana(
                 participanteId.value(), ids, diaIso)) {
             HabitoId id = HabitoId.of(p.getHabitoId());
+            boolean conHora = p.getHoraDisparo() != null;
+            // Un dia APAGADO no avisa: si trae un aviso guardado, queda ahi y no se aplica.
+            boolean conAviso = conAvisoDelDia && p.isActivo() && p.getRecordatorioActivo() != null;
             // V40: una fila que solo APAGA el día no trae hora, y no tiene que pisar la que regía.
             // Sin este corte, apagar los martes le borraría el horario a los martes.
-            if (p.getHoraDisparo() == null) {
+            if (!conHora && !conAviso) {
                 continue;
             }
-            var anterior = efectivos.get(id);
-            efectivos.put(id, PreferenciaHorario.rehydrate(participanteId, id, p.getHoraDisparo(),
-                    p.getHoraLimite() != null ? p.getHoraLimite() : (anterior != null ? anterior.horaLimite() : null),
-                    anterior != null && anterior.recordatorioActivo(),
-                    anterior != null ? anterior.minutosRecordatorio() : null,
-                    anterior != null ? anterior.antelacionesRecordatorio() : null,
-                    p.getCreadoEn(), p.getActualizadoEn()));
+            efectivos.put(id, conCapaDelDia(efectivos.get(id), p, conHora, conAviso));
         }
         for (var p : fechasRepository.findByParticipanteIdAndHabitoIdInAndFecha(participanteId.value(), ids, fecha)) {
             HabitoId id = HabitoId.of(p.getHabitoId());
@@ -122,9 +148,63 @@ class PreferenciaHorarioPersistenceAdapter implements LoadPreferenciaHorarioPort
             efectivos.put(id, PreferenciaHorario.rehydrate(participanteId, id, p.getHoraDisparo(), p.getHoraLimite(),
                     p.isRecordatorioActivo(), minutosDelDia,
                     conjuntoTras(efectivos.get(id), p.isRecordatorioActivo(), minutosDelDia),
-                    p.getCreadoEn(), p.getActualizadoEn()));
+                    alarmaDe(efectivos.get(id)), p.getCreadoEn(), p.getActualizadoEn()));
         }
         return List.copyOf(efectivos.values());
+    }
+
+    /** La capa del dia de la semana sobre lo que ya regia, campo por campo (hora y aviso por separado). */
+    private static PreferenciaHorario conCapaDelDia(PreferenciaHorario anterior, HorarioSemanalJpaEntity fila,
+                                                    boolean conHora, boolean conAviso) {
+        LocalTime horaLimiteDeAbajo = anterior != null ? anterior.horaLimite() : null;
+        LocalTime disparo = conHora ? fila.getHoraDisparo() : (anterior != null ? anterior.horaDisparo() : null);
+        LocalTime limite = conHora && fila.getHoraLimite() != null ? fila.getHoraLimite() : horaLimiteDeAbajo;
+        boolean activo = anterior != null && anterior.recordatorioActivo();
+        Integer minutos = anterior != null ? anterior.minutosRecordatorio() : null;
+        List<Integer> antelaciones = anterior != null ? anterior.antelacionesRecordatorio() : null;
+        if (conAviso) {
+            RecordatorioDelDia propio = recordatorioDe(fila);
+            activo = propio.activo();
+            // D-217: los minutos son la antelacion mas temprana; sin aviso no hay minutos ni conjunto.
+            minutos = propio.minutosMasTemprana();
+            antelaciones = propio.activo() ? propio.antelaciones() : null;
+        }
+        return PreferenciaHorario.rehydrate(UserId.of(fila.getParticipanteId()), HabitoId.of(fila.getHabitoId()),
+                disparo, limite, activo, minutos, antelaciones, alarmaDe(anterior), fila.getCreadoEn(),
+                fila.getActualizadoEn());
+    }
+
+    /**
+     * La alarma GENERAL que arrastra la preferencia resuelta (spec 009): las capas de fecha y de dia solo
+     * deciden hora y aviso, asi que la combinacion pasa tal cual. La del dia de la semana va aparte, en
+     * {@link HorarioSemanal#alarma()}.
+     */
+    private static AjusteDeAlarma alarmaDe(PreferenciaHorario anterior) {
+        return anterior == null ? null : anterior.alarma();
+    }
+
+    /** {@code null} = la fila no trae alarma propia: el dia hereda la general. */
+    private static AjusteDeAlarma alarmaDe(HorarioSemanalJpaEntity fila) {
+        return PreferenciaHorarioPersistenceMapper.alarmaDe(fila.getAlarmaSonido(), fila.getAlarmaVibracion(),
+                fila.getAlarmaVoz(), fila.getAlarmaRepetir());
+    }
+
+    /** {@code null} = la fila no trae aviso propio: el dia hereda el general. */
+    private static RecordatorioDelDia recordatorioDe(HorarioSemanalJpaEntity fila) {
+        if (fila.getRecordatorioActivo() == null) {
+            return null;
+        }
+        return fila.getRecordatorioActivo()
+                ? RecordatorioDelDia.con(PreferenciaHorarioPersistenceMapper.aLista(fila.getAntelacionesRecordatorio()))
+                : RecordatorioDelDia.sinAviso();
+    }
+
+    private static HorarioSemanal aHorarioSemanal(HorarioSemanalJpaEntity fila) {
+        var preferencia = PreferenciaHorario.rehydrate(UserId.of(fila.getParticipanteId()),
+                HabitoId.of(fila.getHabitoId()), fila.getHoraDisparo(), fila.getHoraLimite(), false, null,
+                fila.getCreadoEn(), fila.getActualizadoEn());
+        return new HorarioSemanal(DayOfWeek.of(fila.getDiaSemana()), preferencia, fila.isActivo(),
+                recordatorioDe(fila), alarmaDe(fila));
     }
 
     /**
@@ -162,11 +242,26 @@ class PreferenciaHorarioPersistenceAdapter implements LoadPreferenciaHorarioPort
     @Override
     public List<HorarioSemanal> horarioSemanalDe(UserId participanteId, HabitoId habitoId) {
         return semanalRepository.findByParticipanteIdAndHabitoId(participanteId.value(), habitoId.value()).stream()
-                .map(p -> new HorarioSemanal(DayOfWeek.of(p.getDiaSemana()),
-                        PreferenciaHorario.rehydrate(participanteId, habitoId, p.getHoraDisparo(), p.getHoraLimite(),
-                                false, null, p.getCreadoEn(), p.getActualizadoEn()),
-                        p.isActivo()))
+                .map(PreferenciaHorarioPersistenceAdapter::aHorarioSemanal)
                 .toList();
+    }
+
+    @Override
+    public List<HorarioSemanal> horariosSemanalesDe(UserId participanteId, Collection<HabitoId> habitoIds) {
+        if (habitoIds.isEmpty()) {
+            return List.of();
+        }
+        var ids = habitoIds.stream().map(HabitoId::value).toList();
+        return semanalRepository.findByParticipanteIdAndHabitoIdIn(participanteId.value(), ids).stream()
+                .map(PreferenciaHorarioPersistenceAdapter::aHorarioSemanal)
+                .toList();
+    }
+
+    @Override
+    public Set<HabitoId> habitosConEsquemaPorDia(UserId participanteId, Collection<HabitoId> habitoIds) {
+        return horariosSemanalesDe(participanteId, habitoIds).stream()
+                .map(h -> h.preferencia().habitoId())
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     @Override
@@ -174,10 +269,97 @@ class PreferenciaHorarioPersistenceAdapter implements LoadPreferenciaHorarioPort
         var p = horario.preferencia();
         var key = new HorarioSemanalPk(participanteId.value(), habitoId.value(),
                 (short) horario.diaSemana().getValue());
-        var creadoEn = semanalRepository.findById(key).map(HorarioSemanalJpaEntity::getCreadoEn).orElse(p.creadoEn());
-        semanalRepository.saveAndFlush(new HorarioSemanalJpaEntity(participanteId.value(), habitoId.value(),
+        var existente = semanalRepository.findById(key);
+        var creadoEn = existente.map(HorarioSemanalJpaEntity::getCreadoEn).orElse(p.creadoEn());
+        // FR-013 y spec 009: sin aviso o sin alarma en el agregado, lo propio que el dia ya tenia no se toca.
+        RecordatorioDelDia aviso = horario.recordatorio() != null ? horario.recordatorio()
+                : existente.map(PreferenciaHorarioPersistenceAdapter::recordatorioDe).orElse(null);
+        AjusteDeAlarma alarma = horario.alarma() != null ? horario.alarma()
+                : existente.map(PreferenciaHorarioPersistenceAdapter::alarmaDe).orElse(null);
+        var fila = new HorarioSemanalJpaEntity(participanteId.value(), habitoId.value(),
                 (short) horario.diaSemana().getValue(), p.horaDisparo(), horario.activo(), p.horaLimite(),
-                creadoEn, p.actualizadoEn()));
+                creadoEn, p.actualizadoEn());
+        ponerAviso(fila, aviso);
+        ponerAlarma(fila, alarma);
+        semanalRepository.saveAndFlush(fila);
+    }
+
+    @Override
+    public void fijarRecordatorioParaDiaSemana(UserId participanteId, HabitoId habitoId, DayOfWeek diaSemana,
+                                               RecordatorioDelDia recordatorio) {
+        var key = new HorarioSemanalPk(participanteId.value(), habitoId.value(), (short) diaSemana.getValue());
+        var ahora = clock.now();
+        var existente = semanalRepository.findById(key);
+        if (existente.isEmpty()) {
+            if (recordatorio != null) {
+                // Fila de solo aviso: sin hora propia, asi la hora de ese dia sigue a la general.
+                var nueva = new HorarioSemanalJpaEntity(participanteId.value(), habitoId.value(),
+                        (short) diaSemana.getValue(), null, true, null, ahora, ahora);
+                ponerAviso(nueva, recordatorio);
+                semanalRepository.saveAndFlush(nueva);
+            }
+            return;
+        }
+        var fila = existente.get();
+        if (!HorarioSemanal.dejaAlgoPropio(fila.isActivo(), fila.getHoraDisparo(), recordatorio, alarmaDe(fila))) {
+            semanalRepository.deleteById(key);
+            semanalRepository.flush();
+            return;
+        }
+        ponerAviso(fila, recordatorio);
+        fila.setActualizadoEn(ahora);
+        semanalRepository.saveAndFlush(fila);
+    }
+
+    @Override
+    public void fijarAlarmaParaDiaSemana(UserId participanteId, HabitoId habitoId, DayOfWeek diaSemana,
+                                         AjusteDeAlarma alarma) {
+        var key = new HorarioSemanalPk(participanteId.value(), habitoId.value(), (short) diaSemana.getValue());
+        var ahora = clock.now();
+        var existente = semanalRepository.findById(key);
+        AjusteDeAlarma propia = alarma == null || alarma.esVacio() ? null : alarma;
+        if (existente.isEmpty()) {
+            if (propia != null) {
+                // Fila de solo alarma: sin hora ni aviso propios, asi siguen a los generales.
+                var nueva = new HorarioSemanalJpaEntity(participanteId.value(), habitoId.value(),
+                        (short) diaSemana.getValue(), null, true, null, ahora, ahora);
+                ponerAlarma(nueva, propia);
+                semanalRepository.saveAndFlush(nueva);
+            }
+            return;
+        }
+        var fila = existente.get();
+        if (!HorarioSemanal.dejaAlgoPropio(fila.isActivo(), fila.getHoraDisparo(), recordatorioDe(fila), propia)) {
+            semanalRepository.deleteById(key);
+            semanalRepository.flush();
+            return;
+        }
+        ponerAlarma(fila, propia);
+        fila.setActualizadoEn(ahora);
+        semanalRepository.saveAndFlush(fila);
+    }
+
+    private static void ponerAviso(HorarioSemanalJpaEntity fila, RecordatorioDelDia aviso) {
+        fila.setRecordatorioActivo(activoDe(aviso));
+        fila.setAntelacionesRecordatorio(antelacionesDe(aviso));
+    }
+
+    /** Las cuatro columnas de la combinacion (V112); {@code null} deja las cuatro en NULL: hereda. */
+    private static void ponerAlarma(HorarioSemanalJpaEntity fila, AjusteDeAlarma alarma) {
+        fila.setAlarmaSonido(alarma == null ? null : alarma.sonido());
+        fila.setAlarmaVibracion(alarma == null ? null : alarma.vibracion());
+        fila.setAlarmaVoz(alarma == null ? null : alarma.voz());
+        fila.setAlarmaRepetir(alarma == null ? null : alarma.repetir());
+    }
+
+    private static Boolean activoDe(RecordatorioDelDia recordatorio) {
+        return recordatorio == null ? null : recordatorio.activo();
+    }
+
+    /** Solo un aviso ACTIVO guarda antelaciones (el CHECK de V111). */
+    private static Short[] antelacionesDe(RecordatorioDelDia recordatorio) {
+        return recordatorio == null || !recordatorio.activo() ? null
+                : PreferenciaHorarioPersistenceMapper.aArreglo(recordatorio.antelaciones());
     }
 
     @Override
