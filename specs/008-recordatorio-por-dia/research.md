@@ -58,15 +58,25 @@ La fecha puntual sigue por encima. El barrido (`AvisoHabitoService.calculadoraPa
 
 **Rationale**: la puesta al día corre al abrir la app. Un `GET …/weekdays` por hábito serían ~18 pedidos.
 
-## R6. Cruce con el push del servidor
+## R6. Cruce con el push del servidor: no se pierde nada
 
-**Decision**:
-- **En el esquema por día:** la alarma más temprana de cada día lleva el identificador `habito-{id}-d{iso}-0` y ya no comparte la etiqueta `habito-{id}-inicio` con el push. El cruce lo evita la confirmación por teléfono de la 007: el servidor no le manda el push de inicio a un token que confirmó sus alarmas en las últimas 26 h (`EntregaPush.RESPALDO_DE_ALARMA_LOCAL`).
-- **En el esquema sin diferencias:** se mantiene también la etiqueta.
+**Verificado en el código (2026-10-20):**
+- En Android, la etiqueta de una alarma local es su identificador (`ExpoPresentationDelegate`: `notify(identifier, …)`).
+- La etiqueta de un push es `data.tag` (`FirebaseMessagingDelegate`).
+- Dos avisos con la misma etiqueta se reemplazan: el teléfono muestra uno solo (así lo dejó la 007).
 
-**Rationale**: Android usa el identificador de expo como etiqueta. Siete alarmas semanales no pueden tener el mismo identificador. La confirmación ya es la protección principal de la 007; la etiqueta era la segunda capa (FR-012).
+**Decision**: la app y el servidor aplican **la misma regla** para saber qué esquema usa un hábito, y el servidor manda la etiqueta de ese esquema:
 
-**Riesgo aceptado**: un teléfono que no confirmó (permiso de avisos denegado al confirmar, o sin red al abrir) puede ver dos avisos en el esquema por día. Es lo mismo que pasaba antes de la 007, y solo en hábitos con días distintos.
+- **Regla común**: un hábito usa el **esquema por día** si tiene al menos una fila en `horario_semanal_habito`, sea por hora propia, aviso propio o día apagado. En la app, lo mismo: algún día de `weekdays` con `customTime`, `customReminder` o `active = false`. Si no tiene ninguna, usa el **esquema diario**, como hoy.
+- **Esquema diario**: la alarma más temprana se llama `habito-{id}-inicio` y el push lleva `tag = habito-{id}-inicio`. Es lo de hoy, sin cambios.
+- **Esquema por día**: la alarma más temprana de cada día se llama `habito-{id}-d{iso}-0` y el push de ese día lleva `tag = habito-{id}-d{iso}-0`, donde `iso` es el día de la semana del hábito en la zona de la persona.
+- Se mantiene además la confirmación por teléfono de la 007: el servidor no le manda el push de inicio a un teléfono que confirmó sus alarmas en las últimas 26 h.
+
+**Resultado**: las dos protecciones de la 007, la confirmación y la etiqueta, siguen en los dos esquemas.
+
+**Único caso borde, y ya existe hoy**: el APK publicado con un hábito que **ya** tiene horas por día. Ese APK programa la alarma diaria a la hora general, que es el bug E-640: ya suena a la hora equivocada. El push del servidor llegaría con la etiqueta del día y no reemplazaría esa alarma. Solo se vería doble si ese teléfono no confirmó sus alarmas. Se corrige al instalar el APK nuevo.
+
+**Alternatives considered**: perder la etiqueta en el esquema por día y quedarse solo con la confirmación. Rechazado por el dueño (2026-10-20): no se resigna ninguna protección.
 
 ## R7. Agrupar avisos que coinciden (E-410)
 

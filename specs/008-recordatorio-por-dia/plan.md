@@ -10,7 +10,7 @@ El recordatorio de un hábito pasa a elegirse por día de la semana, igual que l
 **Backend:**
 - V111 suma el aviso (`recordatorio_activo`, `antelaciones_recordatorio`) a `horario_semanal_habito`.
 - Endpoint nuevo `PUT …/weekdays/{wd}/reminder`, que no cobra cupo.
-- El barrido resuelve el aviso por capas, campo por campo.
+- El barrido resuelve el aviso por capas, campo por campo, y el push lleva la etiqueta del día cuando el hábito usa el esquema por día (R6).
 - La lista de preferencias suma los 7 días ya resueltos.
 
 **App (solo JavaScript, sin APK):**
@@ -47,7 +47,7 @@ Ver [research](./research.md).
 | VI. Tabs | Cambia el editor de Training → Planificar, autorizado («arregla eso para continuar», 2026-10-20). `FilaDeDiasDelPlan` suma una prop opcional y Plan no cambia. Va una nota en `AGENTS.md`. | ✅ con nota |
 | VII. Documentar | D-282 (aviso por día, sin cupo) y E-640 (la alarma diaria ignora la hora del día) en el mismo cambio, con contrato y quickstart. | ✅ |
 
-**Re-check después del diseño**: sin cambios. La única concesión es R6: en el esquema por día la alarma pierde la etiqueta compartida con el push, y la protección contra el aviso doble queda en la confirmación de la 007.
+**Re-check después del diseño**: sin cambios y sin concesiones. La programación semanal (horas por día y días apagados) se conserva entera, y las dos protecciones de la 007 contra el aviso doble (confirmación y etiqueta) siguen en los dos esquemas (R6).
 
 ## Project Structure
 
@@ -114,4 +114,4 @@ AGENTS.md                                                    # nota del cambio e
 
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 |---|---|---|
-| Dos esquemas de alarma (diario y por día) | Mantener la etiqueta compartida de la 007 y no mover las alarmas de quien no usa días distintos | Usar siempre `WEEKLY` reprogramaría todas las alarmas de todos al actualizar y perdería la etiqueta en el caso común |
+| Dos esquemas de alarma (diario y por día), con la misma regla en la app y el servidor | Quien no usa días distintos no ve ningún cambio, ni en las alarmas ni en los identificadores. Quien sí los usa pasa a sonar a la hora correcta. Las etiquetas coinciden en los dos esquemas | Usar siempre `WEEKLY` reprogramaría las alarmas de todos al actualizar y obligaría a cambiar la etiqueta del push para todos |

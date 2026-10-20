@@ -86,6 +86,15 @@
 - [ ] T013 [US3] Implementar `weekdays` en `HabitPreferencesResponse.java` y en el caso de uso de consulta de preferencias, con una consulta por participante a `horario_semanal_habito`. T012 en verde.
 - [ ] T014 [P] [US3] Prueba del barrido en `back:src/test/java/.../application/services/AvisoHabitoServiceTest.java`: un sábado con aviso propio de 30 min genera INICIO a 30 min; con «sin aviso» propio, no genera INICIO ese día, pero sí el resto de la semana. Usar `FixedClock` en madrugada UTC.
 - [ ] T015 [US3] Ajustar `AvisoHabitoService` solo si T014 falla. Por R3 debería pasar sin cambios, porque usa lo resuelto.
+- [ ] T015b [P] [US3] Prueba de la etiqueta del push (research R6):
+  - Sin filas semanales: `tag = habito-{id}-inicio`, como hoy (no romper `AvisoDeHabitoTest`, `ExpoPushTransporteTest` ni `WebPushAdapterTest`).
+  - Con alguna fila semanal: `tag = habito-{id}-d{iso}-0`, con `iso` = día de la semana de la fecha del registro en la zona de la persona.
+  - Probar con reloj en madrugada UTC: un sábado de Lima a las 21:00 es domingo en UTC y tiene que dar `d6`.
+  - El aviso «por vencer» sigue con su etiqueta de hoy.
+- [ ] T015c [US3] Implementar:
+  - `AvisoHabitoService` marca en `AvisoHabitoDebidoEvent` un campo nuevo al final, `Integer diaDeLaSemanaDelAviso` (ISO 1–7). Va solo si el hábito tiene alguna fila en `horario_semanal_habito`; si no, `null`. Usar una sola consulta por barrido y participante.
+  - `notifications/domain/model/habito/AvisoDeHabito.etiqueta()` usa `habito-{id}-d{iso}-0` cuando el campo viene.
+  - T015b en verde.
 - [ ] T016 [US3] Docs backend: D-282 en `back:docs/MODULOS_A_AVANZAR.md`, en la tabla de decisiones (aviso por día de la semana, sin cupo, endpoint nuevo, compatibilidad). `TZ=UTC ./mvnw clean verify` en verde, con turno avisado. Commit: «Elegir el aviso de cada día de la semana sin gastar cupo y usarlo en el aviso de inicio (spec 008, D-282)».
 
 ---
@@ -104,7 +113,8 @@
   - Con días distintos: un pedido `WEEKLY` por día encendido × antelación, con hora = hora del día − antelación.
   - Cruce de medianoche: un aviso de 30 min de las 00:10 del jueves va al miércoles a las 23:40.
   - Días apagados y «sin aviso»: sin pedidos.
-  - Identificadores `habito-{id}-d{iso}-{n}` estables entre corridas.
+  - Identificadores `habito-{id}-d{iso}-{n}` estables entre corridas; el más temprano de cada día es `-0`, que es la etiqueta que manda el servidor (R6).
+  - La regla de esquema es la misma que la del servidor: el esquema por día va si algún día de `weekdays` tiene `customTime`, `customReminder` o `active = false`.
   - Sin `weekdays` (backend anterior): diario.
 - [ ] T019 [US2] Implementar `app:src/features/habits/notificaciones/utils/alarmasPorDia.ts`, puro. T018 en verde.
 - [ ] T020 [P] [US2] Prueba de `programar`, `cancelar` y `ajustarRecordatoriosAlServidor` en `app:src/features/habits/notificaciones/__tests__/recordatoriosPorDia.test.ts`, con expo-notifications falso:

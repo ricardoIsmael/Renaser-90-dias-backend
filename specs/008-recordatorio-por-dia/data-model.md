@@ -56,5 +56,7 @@ Capas, de la más general a la más específica: preferencia general → cambio 
 
 | Esquema | Cuándo | Disparadores | Identificadores |
 |---|---|---|---|
-| Diario (hoy) | Ningún día con hora o aviso propios ni apagado | `DAILY` por antelación | `habito-{id}-inicio` + otros (como hoy) |
-| Por día | Algún día distinto | `WEEKLY` por día encendido × antelación | `habito-{id}-d{1..7}-{n}` |
+| Diario (hoy) | El hábito no tiene ninguna fila en `horario_semanal_habito` | `DAILY` por antelación | `habito-{id}-inicio` + otros (como hoy). Push: `tag = habito-{id}-inicio` |
+| Por día | El hábito tiene alguna fila (hora propia, aviso propio o día apagado) | `WEEKLY` por día encendido × antelación | `habito-{id}-d{1..7}-{n}`; la más temprana de cada día es `-0`. Push del día: `tag = habito-{id}-d{iso}-0` |
+
+La regla es **la misma** en la app y en el servidor (research R6): así la etiqueta del push siempre coincide con la de la alarma local.
