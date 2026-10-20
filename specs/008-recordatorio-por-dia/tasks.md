@@ -18,7 +18,8 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 Confirmar que la próxima migración libre en `back:src/main/resources/db/migration/` es V111 y que D-282 y E-640 siguen libres en `back:docs/MODULOS_A_AVANZAR.md` y `back:docs/BITACORA_ERRORES.md` (grep en todas las ramas de origin). Si no, tomar los siguientes y anotarlo en este archivo.
+- [x] T001 Confirmar que la próxima migración libre en `back:src/main/resources/db/migration/` es V111 y que D-282 y E-640 siguen libres en `back:docs/MODULOS_A_AVANZAR.md` y `back:docs/BITACORA_ERRORES.md` (grep en todas las ramas de origin). Si no, tomar los siguientes y anotarlo en este archivo.
+  - Nota (2026-10-20, agente backend): verificado en todas las ramas locales y de `origin`: la última migración es V110, la última decisión D-281 y el último error E-639. V111, D-282 y E-640 siguen libres; no hubo que renumerar.
 
 ---
 
@@ -26,27 +27,27 @@
 
 **Purpose**: la columna, el dominio y la resolución por capas. Bloquean a US1 y a US3.
 
-- [ ] T002 Migración `back:src/main/resources/db/migration/V111__recordatorio_por_dia_de_la_semana.sql`, con cabecera al estilo de V39 (qué resuelve, por qué columnas y no tabla, compatibilidad):
+- [x] T002 Migración `back:src/main/resources/db/migration/V111__recordatorio_por_dia_de_la_semana.sql`, con cabecera al estilo de V39 (qué resuelve, por qué columnas y no tabla, compatibilidad):
   - `ALTER TABLE horario_semanal_habito ADD COLUMN recordatorio_activo boolean NULL, ADD COLUMN antelaciones_recordatorio smallint[] NULL`.
   - Reemplazar el CHECK de V40 por `NOT activo OR hora_disparo IS NOT NULL OR recordatorio_activo IS NOT NULL`.
   - Sumar `recordatorio_activo IS DISTINCT FROM true OR cardinality(antelaciones_recordatorio) >= 1`.
   - Leer V40 para el nombre exacto del CHECK actual.
-- [ ] T003 [P] Prueba de dominio `back:src/test/java/com/renaser/os/habits/domain/model/preferencia/RecordatorioDelDiaTest.java` y `HorarioSemanalTest.java`:
+- [x] T003 [P] Prueba de dominio `back:src/test/java/com/renaser/os/habits/domain/model/preferencia/RecordatorioDelDiaTest.java` y `HorarioSemanalTest.java`:
   - `RecordatorioDelDia(activo, antelaciones)`: activo con 1 o más antelaciones en el rango de `AntelacionesDelRecordatorio`; inactivo ignora la lista; normaliza el orden de la más temprana a la más tardía.
   - `HorarioSemanal` encendido acepta hora propia **o** aviso propio, y rechaza «encendido sin nada propio».
-- [ ] T004 Dominio, hasta poner T003 en verde:
+- [x] T004 Dominio, hasta poner T003 en verde:
   - Nuevo `back:src/main/java/com/renaser/os/habits/domain/model/preferencia/RecordatorioDelDia.java`.
   - `HorarioSemanal.java`: aviso propio opcional, por ejemplo `Optional<RecordatorioDelDia>` o un campo nullable documentado. «Hereda» ≠ «sin aviso».
   - Validación «activo ⇒ hora o aviso».
   - Sin Spring ni JPA.
-- [ ] T005 [P] Prueba del adaptador `back:src/test/java/.../persistence/preferencia/PreferenciaHorarioPersistenceAdapterRecordatorioTest.java` (Testcontainers, como las pruebas de V39 y V40). Para `porParticipanteHabitosYFecha`:
+- [x] T005 [P] Prueba del adaptador `back:src/test/java/.../persistence/preferencia/PreferenciaHorarioPersistenceAdapterRecordatorioTest.java` (Testcontainers, como las pruebas de V39 y V40). Para `porParticipanteHabitosYFecha`:
   - (a) fila con hora y sin aviso: hora propia y aviso general, como hoy;
   - (b) fila con hora y aviso: los dos propios;
   - (c) fila de solo aviso (hora `NULL`, activa): hora general y aviso propio;
   - (d) fila apagada: igual que hoy;
   - (e) fecha puntual por encima de todo;
   - (f) `recordatorio_activo=false`: el día sin aviso.
-- [ ] T006 Persistencia:
+- [x] T006 Persistencia:
   - `HorarioSemanalJpaEntity.java` (+2 columnas, `smallint[]` como en V81).
   - El mapper.
   - `PreferenciaHorarioPersistenceAdapter.java`, por campo (research R3): la fila de solo aviso ya no se salta y aplica `recordatorioActivo`, las antelaciones y `minutosRecordatorio` = la más temprana (D-217).
@@ -54,7 +55,9 @@
   - Nuevo método de guardado del aviso, que conserva la hora: si el aviso es igual al general, lo pone en `NULL`; si la fila queda encendida sin nada propio, la borra.
   - Puertos `SavePreferenciaHorarioPort` y `LoadPreferenciaHorarioPort`.
   - T005 en verde.
-- [ ] T007 Commit backend: «Guardar el aviso propio de cada día de la semana y resolverlo por capas (spec 008)».
+  - Nota (2026-10-20, agente backend): el guardado de la hora (`saveParaDiaSemana`) **no toca** el aviso del día cuando el agregado no trae `recordatorio` (FR-013, lo hace el adaptador y así cubre a todo llamador: Mis hábitos, el acompañante y la API). El aviso se escribe solo por `fijarRecordatorioParaDiaSemana`, que borra la fila si queda encendida sin hora ni aviso. El adaptador recibe el `Clock` para las marcas de tiempo de la fila de solo aviso.
+  - Nota: se agregaron al puerto de lectura tres métodos que el plan no nombraba pero que T012, T013 y T015c necesitan: `horariosSemanalesDe` (filas de varios hábitos en una consulta), `habitosConEsquemaPorDia` (R6) y `porParticipanteHabitosYFechaSinAvisoDelDia`. Esta última existe para que el aviso **general** del listado (`GET /habit-preferences`, que el APK publicado reescribe como general por el PATCH y que el editor nuevo necesita para saber qué heredan los días) no cambie según el día que se consulta: con el aviso del día mezclado, el general de un sábado con aviso propio saldría como el del sábado. Sin avisos por día es idéntica a `porParticipanteHabitosYFecha`.
+- [x] T007 Commit backend: «Guardar el aviso propio de cada día de la semana y resolverlo por capas (spec 008)».
 
 ---
 
