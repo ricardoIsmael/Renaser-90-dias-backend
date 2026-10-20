@@ -15518,3 +15518,73 @@ para una semana pasada.
 **Solución.** «Terminó el programa» = `hoy local > ultimaFecha` del calendario del semáforo (`CalendarioDeMedicion.terminadoEl`, expuesto en `ResumenParaHoy.programaTerminado`): el 90 sigue siendo del programa y el 91 ya no, con el ajuste de día incluido. No se fabrica un semáforo SIN_DATOS: la tarjeta de quien terminó ya existe. Pruebas: `MedicionDeLaPersonaTest.elProgramaTerminaDespuesDelDiaNoventa`, `GrupoDelDiaTest`, `HomeMensajeDelSemaforoIT.despuesDelDiaNoventa` / `elDiaNoventaSigueEnElPrograma`.
 
 **Prevención.** Una bandera que el reloj marca «al llegar» no sirve para decir «después de». Para preguntas de calendario, derivar de las fechas (`.claude/rules/02` §2), no de columnas materializadas.
+
+## E-632 · En Honor las alarmas de los hábitos no suenan (app, 19/10)
+
+**Síntoma literal.** «Los usuarios dicen que sus alarmas no suenan» (teléfonos Honor); en Xiaomi funcionan.
+
+**Causa confirmada en local (19/10, emulador Android 17, base `renaser_alarmas`).** Forzar la detención de la app borró sus alarmas (`dumpsys alarm`: 2 → 0) hasta volver a abrirla; quitar de recientes en un Android sin capa no las borra. Honor (MagicOS), como Huawei, aplica una detención forzada al quitar de recientes o al ahorrar batería cuando la app está en «Gestionar automáticamente» (soporte oficial de Honor). Además, las alarmas usaban `setExactAndAllowWhileIdle`, que Doze limita a una cada 9 min por app. Pendiente: confirmar en un Honor real el motivo de salida que registra.
+
+**Corrección.** D-279: alarmas tipo despertador, detección de la detención forzada y guía por marca.
+
+**Para que no vuelva.** `alarmasTipoDespertador.test.ts`, `detencionForzada.test.ts`, `guiasPorMarca.test.ts`; quickstart de la spec 007 (A1–A6, B1–B5).
+
+## E-633 · Aviso de inicio de un hábito apagado solo por hoy (backend, 19/10)
+
+**Síntoma literal.** En local, «RITUAL TIERRA - AGUA - FUEGO (noche)» apagado para el 19/10 recibió a las 11:30 «…empieza en 14 min».
+
+**Causa.** Apagar el día (V38 por fecha, V40 por día de la semana) no retira el registro ya generado, y `AvisoHabitoService` no miraba los apagados.
+
+**Corrección y prevención.** D-280 (1). `AvisoHabitoServiceTest`: apagado por fecha, por día de la semana y con el día en Lima.
+
+## E-634 · Sin aviso para la hora nueva tras cambiar la hora de un hábito (backend, 19/10)
+
+**Síntoma literal.** «PRIMERA COMIDA» tenía su aviso de las 10:45 (hora 11:00); pasada a 11:33, ningún barrido creó otro.
+
+**Causa.** La clave de idempotencia era solo registro + tipo; la fila vieja bloqueaba la nueva.
+
+**Corrección y prevención.** D-280 (4). `CalculadoraAvisosHabitoTest`: otra hora, otra clave; misma hora, misma clave.
+
+## E-635 · El push de inicio y la alarma del teléfono se cruzan (backend + app, 19/10)
+
+**Síntoma literal.** El servidor creó a las 11:15 «…empieza en 2 min» mientras el teléfono avisó 11:16 «En 1 min» y 11:17; sin etiqueta común, un teléfono sin confirmar veía los dos.
+
+**Causa.** El texto contaba minutos desde el barrido de 5 min (con antelación mínima de 5) y el push no compartía identidad con la alarma local.
+
+**Corrección y prevención.** D-280 (3), (5) y (6). `AvisoDeHabitoTest`, `AvisoHabitoNotificationListenerTest`, `ExpoPushTransporteTest`, `identificadorDelAvisoDeInicio.test.ts`.
+
+## E-636 · Avisos de hábitos sin tildes (backend, 19/10)
+
+**Síntoma literal.** «Tu habito esta por empezar», «Se te vence un habito».
+
+**Corrección y prevención.** D-280 (3); `AvisoDeHabitoTest` fija los textos.
+
+## E-637 · El parche de alarmas tipo despertador no llegaba al APK (app, 19/10)
+
+**Síntoma literal.** Con el APK debug de la 007 instalado, `adb shell dumpsys alarm` mostraba las alarmas de Renaser con `flags=0x5` (`setExactAndAllowWhileIdle`) y «Next alarm clock information» vacío, aunque `node_modules/expo-notifications/…/ExpoSchedulingDelegate.kt` estaba parchado y su prueba en verde.
+
+**Causa.** Expo 57 trae `expo-notifications` (y otros 21 módulos de Expo) como `.aar` precompilado en `local-maven-repo`; gradle enlaza ese binario y nunca compila el Kotlin de `node_modules`. Un parche de `postinstall` sobre el código fuente de esos módulos no tiene efecto.
+
+**Corrección.** `package.json` → `expo.autolinking.android.buildFromSource: ["expo-notifications"]`: gradle compila el módulo desde el código parchado (`:expo-notifications:compileDebugKotlin`). Con eso las alarmas salen con `flags=0x3` y Renaser aparece como próxima alarma.
+
+**Para que no vuelva.** `alarmasTipoDespertador.test.ts` exige que `expo-notifications` esté en `buildFromSource`. Regla: todo parche nativo a un módulo de Expo con `local-maven-repo` necesita `buildFromSource`, y se comprueba en el APK (`dumpsys`), no solo en `node_modules`.
+
+## E-638 · La hoja «Tu teléfono cerró Renaser» no salía en Android 15+ (app, 19/10)
+
+**Síntoma literal.** Emulador Android 17: `am force-stop` dejó las alarmas en 0, al abrir la app volvieron, pero la hoja no apareció y el log no tenía ninguna línea `arranque …`. `dumpsys activity start-info` sí mostraba `wasForceStopped=true`.
+
+**Causa.** (1) `detencionEnElArranque` filtraba `getHistoricalProcessStartReasons` por `it.pid == Process.myPid()`, y los arranques en frío quedan con `pid=0` en el historial: nunca encontraba el arranque forzado. (2) Ya corregido eso, un arranque tibio o caliente del mismo proceso (tocar un aviso con la app viva) hereda `wasForceStopped=true` y contaba la misma detención otra vez. (3) La app guardaba como «revisado hasta» el instante del arranque (`lectura.cuando`), que el módulo recalcula con unos ms de diferencia en cada lectura: la misma detención volvía a quedar «después». (2) y (3) habrían dado un aviso falso al día siguiente.
+
+**Corrección.** El módulo ubica cada arranque por `START_TIMESTAMP_LAUNCH` pasado a hora de reloj y solo cuenta los `START_TYPE_COLD`; `detencionForzada.ts` guarda siempre «ahora» como revisado. Verificado en Android 17 (force-stop → hoja; segundo force-stop el mismo día → sin hoja; quitar de recientes → sin hoja) y en Android 14 (salida `FORCE STOP` → hoja; `REMOVE TASK` descartada en marca Google).
+
+**Para que no vuelva.** `moduloNativoDeAlarmas.test.ts` (sin filtro por pid, `START_TIMESTAMP_LAUNCH`, `START_TYPE_COLD`) y `detencionForzada.test.ts` (lo revisado es «ahora»).
+
+## E-639 · Tras una detención forzada no volvía la alarma de mañana de un hábito que acababa de sonar (app, 19/10)
+
+**Síntoma literal.** Emulador Android 14: la alarma de las 21:28 sonó, `am force-stop` a las 21:28, al abrir la app la hoja decía «Ya las volvimos a poner» y `dumpsys alarm` tenía 0 alarmas de Renaser.
+
+**Causa.** `rearmarAlarmasProgramadas` saltaba toda diaria o semanal cuya hora fue hace menos de 2 h (`MARGEN_RECIEN_VENCIDA_MS`), pensado para las inexactas, que pueden sonar hasta 1 h tarde. Si el teléfono (Honor) detenía Renaser poco después de una alarma, al abrir la app no se volvía a poner la de mañana y el paso del servidor tampoco la arma (la librería la sigue teniendo guardada). En Android 15+ no se ve porque el sistema manda `BOOT_COMPLETED` al relanzar y `expo-notifications` rearma todo; en 11–14 sí.
+
+**Corrección.** Con alarmas exactas (permiso concedido o Android que no lo pide) el margen es de 30 s (`margenDeRecienVencida`); sin permiso o sin saber, siguen las 2 h. Verificado en Android 14: tras el force-stop vuelven las de mañana (21:27 y 21:28, `flags=0x3`). Queda: una detención dentro de esos 30 s recupera la de mañana en la próxima puesta al día (≥ 10 min).
+
+**Para que no vuelva.** `rearmarAlarmas.test.ts` («una diaria que sonó hace 30 min se rearma con alarmas exactas y se deja con inexactas»).

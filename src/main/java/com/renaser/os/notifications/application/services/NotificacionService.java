@@ -107,6 +107,13 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
     @Override
     @Transactional
     public Optional<Notificacion> emitir(EmitirNotificacionCommand command, EntregaPush entregaPush) {
+        return emitir(command, entregaPush, null);
+    }
+
+    @Override
+    @Transactional
+    public Optional<Notificacion> emitir(EmitirNotificacionCommand command, EntregaPush entregaPush,
+                                         String etiquetaDelPush) {
         // Spec 002: lo llaman solo los oyentes de eventos de otros modulos. Con las notificaciones apagadas, el oyente
         // falla a proposito y el outbox lo reentrega cada 5 min hasta que se prendan; la fila es idempotente (C-7).
         // El aviso de operacion de la plataforma sale igual: es el que cuenta que se apagaron (D-267).
@@ -128,7 +135,7 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
                     command.origenEventoId(), command.tipo());
             return Optional.empty();
         }
-        pushDespuesDelCommit(command, entregaPush);
+        pushDespuesDelCommit(command, entregaPush, etiquetaDelPush);
         return guardada;
     }
 
@@ -192,19 +199,20 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
      * <p>Si no hay transacción activa —una llamada directa en una prueba— se envía en el momento.
      * Registrar la sincronización sin transacción lanza, y perder el push por eso sería peor.
      */
-    private void pushDespuesDelCommit(EmitirNotificacionCommand command, EntregaPush entregaPush) {
+    private void pushDespuesDelCommit(EmitirNotificacionCommand command, EntregaPush entregaPush,
+                                      String etiquetaDelPush) {
         if (entregaPush == EntregaPush.NINGUNO) {
             // D-184: solo bandeja. Ni se consultan los tokens.
             return;
         }
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            intentarPush(command, entregaPush);
+            intentarPush(command, entregaPush, etiquetaDelPush);
             return;
         }
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                intentarPush(command, entregaPush);
+                intentarPush(command, entregaPush, etiquetaDelPush);
             }
         });
     }
@@ -227,7 +235,7 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
      * {@code DespachadorPush.enviar} ya devolvia lista vacia para una lista vacia, asi que cortar
      * antes no cambia el resultado.
      */
-    private void intentarPush(EmitirNotificacionCommand command, EntregaPush entregaPush) {
+    private void intentarPush(EmitirNotificacionCommand command, EntregaPush entregaPush, String etiquetaDelPush) {
         try {
             var tokens = entregaPush.filtrar(loadTokenPushPort.tokensDe(command.usuarioId()), clock.now());
             if (tokens.isEmpty()) {
@@ -240,7 +248,7 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
                 return;
             }
             List<ResultadoEnvioPush> resultados = pushPort.enviar(tokens, new MensajePush(command.tipo(),
-                    command.titulo(), command.cuerpo(), command.rutaApp()));
+                    command.titulo(), command.cuerpo(), command.rutaApp(), etiquetaDelPush));
             procesarResultados(command, resultados);
         } catch (RuntimeException e) {
             log.warn("[notifications.NotificacionService] push best-effort fallo para tipo {}: {}", command.tipo(),

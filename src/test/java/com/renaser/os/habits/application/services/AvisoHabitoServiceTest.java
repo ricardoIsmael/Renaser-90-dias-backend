@@ -33,6 +33,7 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.context.ApplicationEventPublisher;
 
+import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -45,6 +46,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -64,6 +66,8 @@ class AvisoHabitoServiceTest {
     private static final Instant MADRUGADA_UTC = Instant.parse("2026-09-06T01:50:00Z");
     private static final LocalDate DIA_EN_LIMA = LocalDate.of(2026, 9, 5);
     private static final LocalDate DIA_EN_EL_SERVIDOR = LocalDate.of(2026, 9, 6);
+    /** 21:00 del 5 en Lima: la hora de disparo del habito de estas pruebas. */
+    private static final Instant INICIO_DE_LAS_21_EN_LIMA = Instant.parse("2026-09-06T02:00:00Z");
 
     private static final UserId PARTICIPANTE = UserId.of(UUID.randomUUID());
     private static final HabitoId HABITO = HabitoId.of(UUID.randomUUID());
@@ -96,8 +100,12 @@ class AvisoHabitoServiceTest {
 
     /** Habito de 21:00 a 22:00 hora de Lima, con un track PENDIENTE del dia local del aprendiz. */
     private void habitoNocturnoPendiente() {
+        habitoNocturnoEn(EstadoRegistro.PENDIENTE);
+    }
+
+    private void habitoNocturnoEn(EstadoRegistro estado) {
         RegistroHabito registro = RegistroHabito.rehydrate(REGISTRO, PARTICIPANTE, HABITO, DIA_EN_LIMA, 5,
-                TipoDia.TODOS, false, EstadoRegistro.PENDIENTE, 0, null, null, null, null, MADRUGADA_UTC,
+                TipoDia.TODOS, false, estado, 0, null, null, null, null, MADRUGADA_UTC,
                 MADRUGADA_UTC);
         when(loadRegistroPort.porParticipanteYFecha(PARTICIPANTE, DIA_EN_LIMA)).thenReturn(List.of(registro));
         when(loadRegistroPort.porParticipanteYFecha(PARTICIPANTE, DIA_EN_EL_SERVIDOR)).thenReturn(List.of());
@@ -150,7 +158,128 @@ class AvisoHabitoServiceTest {
 
         servicioCon(MADRUGADA_UTC).despacharDe(PARTICIPANTE);
 
-        assertThat(eventoPublicado().claveEvento()).isEqualTo(TipoAvisoHabito.INICIO.claveIdempotencia(REGISTRO));
+        assertThat(eventoPublicado().claveEvento())
+                .isEqualTo(TipoAvisoHabito.INICIO.claveIdempotencia(REGISTRO, INICIO_DE_LAS_21_EN_LIMA));
+    }
+
+    @Test
+    @DisplayName("FR-012: el evento lleva la hora del habito (no la del barrido) y la zona del aprendiz")
+    void elEventoLlevaElMomentoYLaZona() {
+        participanteEnLima(false);
+        habitoNocturnoPendiente();
+
+        servicioCon(MADRUGADA_UTC).despacharDe(PARTICIPANTE);
+
+        AvisoHabitoDebidoEvent evento = eventoPublicado();
+        assertThat(evento.momentoAvisado()).isEqualTo(INICIO_DE_LAS_21_EN_LIMA);
+        assertThat(evento.zonaHoraria()).isEqualTo("America/Lima");
+    }
+
+    @Test
+    @DisplayName("FR-013: barridos distintos dentro de la misma franja dan la MISMA clave (no avisa dos veces)")
+    void dosBarridosDeLaMismaFranjaNoCambianLaClave() {
+        participanteEnLima(false);
+        habitoNocturnoPendiente();
+        servicioCon(Instant.parse("2026-09-06T01:45:00Z")).despacharDe(PARTICIPANTE);
+        servicioCon(Instant.parse("2026-09-06T01:50:00Z")).despacharDe(PARTICIPANTE);
+
+        ArgumentCaptor<AvisoHabitoDebidoEvent> captor = ArgumentCaptor.forClass(AvisoHabitoDebidoEvent.class);
+        verify(events, times(2)).publishEvent(captor.capture());
+        assertThat(captor.getAllValues().get(0).claveEvento()).isEqualTo(captor.getAllValues().get(1).claveEvento());
+    }
+
+    @Test
+    @DisplayName("FR-013: si cambia la hora del habito, el aviso de la hora nueva tiene otra clave")
+    void unaHoraNuevaTieneOtraClave() {
+        participanteEnLima(false);
+        habitoNocturnoPendiente();
+        servicioCon(MADRUGADA_UTC).despacharDe(PARTICIPANTE);
+        // Mismo registro, pero ahora el aprendiz lo paso de las 21:00 a las 21:10 (02:10 UTC).
+        conPreferenciaDeHora(LocalTime.of(21, 10));
+        servicioCon(Instant.parse("2026-09-06T02:00:00Z")).despacharDe(PARTICIPANTE);
+
+        ArgumentCaptor<AvisoHabitoDebidoEvent> captor = ArgumentCaptor.forClass(AvisoHabitoDebidoEvent.class);
+        verify(events, times(2)).publishEvent(captor.capture());
+        AvisoHabitoDebidoEvent original = captor.getAllValues().get(0);
+        AvisoHabitoDebidoEvent nuevo = captor.getAllValues().get(1);
+        assertThat(nuevo.momentoAvisado()).isEqualTo(Instant.parse("2026-09-06T02:10:00Z"));
+        assertThat(nuevo.claveEvento()).isNotEqualTo(original.claveEvento());
+    }
+
+    // ─── FR-011: un habito apagado para el dia no se avisa, aunque su registro ya exista ──────
+
+    @Test
+    @DisplayName("FR-011: apagado para esa FECHA -> no publica ningun aviso")
+    void apagadoPorFechaNoSeAvisa() {
+        participanteEnLima(false);
+        habitoNocturnoPendiente();
+        when(loadPreferenciaPort.habitosApagadosEn(PARTICIPANTE, DIA_EN_LIMA)).thenReturn(List.of(HABITO));
+
+        assertThat(servicioCon(MADRUGADA_UTC).despacharDe(PARTICIPANTE)).isZero();
+        verify(events, never()).publishEvent(any(Object.class));
+    }
+
+    @Test
+    @DisplayName("FR-011: apagado para ese DIA DE LA SEMANA -> no publica ningun aviso")
+    void apagadoPorDiaDeLaSemanaNoSeAvisa() {
+        participanteEnLima(false);
+        habitoNocturnoPendiente();
+        when(loadPreferenciaPort.habitosApagadosEnDiaSemana(PARTICIPANTE, DIA_EN_LIMA.getDayOfWeek()))
+                .thenReturn(List.of(HABITO));
+
+        assertThat(servicioCon(MADRUGADA_UTC).despacharDe(PARTICIPANTE)).isZero();
+        verify(events, never()).publishEvent(any(Object.class));
+    }
+
+    @Test
+    @DisplayName("FR-011: otro habito apagado ese dia no frena el aviso de este")
+    void soloSeSaltaElHabitoApagado() {
+        participanteEnLima(false);
+        habitoNocturnoPendiente();
+        when(loadPreferenciaPort.habitosApagadosEn(PARTICIPANTE, DIA_EN_LIMA))
+                .thenReturn(List.of(HabitoId.of(UUID.randomUUID())));
+
+        assertThat(servicioCon(MADRUGADA_UTC).despacharDe(PARTICIPANTE)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("FR-011: los apagados se buscan con el dia (fecha y dia de la semana) del aprendiz en Lima, no el del servidor")
+    void losApagadosSeBuscanConElDiaDelAprendiz() {
+        participanteEnLima(false);
+        habitoNocturnoPendiente();
+
+        servicioCon(MADRUGADA_UTC).despacharDe(PARTICIPANTE);
+
+        verify(loadPreferenciaPort).habitosApagadosEn(PARTICIPANTE, DIA_EN_LIMA);
+        verify(loadPreferenciaPort).habitosApagadosEnDiaSemana(PARTICIPANTE, DayOfWeek.SATURDAY);
+        verify(loadPreferenciaPort, never()).habitosApagadosEn(PARTICIPANTE, DIA_EN_EL_SERVIDOR);
+        verify(loadPreferenciaPort, never()).habitosApagadosEnDiaSemana(PARTICIPANTE, DayOfWeek.SUNDAY);
+    }
+
+    // ─── FR-015b: un habito en curso no empieza otra vez ──────────────────────────────────────
+
+    @Test
+    @DisplayName("FR-015b: un registro EN_CURSO (sesion abierta) no recibe el aviso de INICIO")
+    void enCursoNoRecibeAvisoDeInicio() {
+        participanteEnLima(false);
+        habitoNocturnoEn(EstadoRegistro.EN_CURSO);
+
+        assertThat(servicioCon(MADRUGADA_UTC).despacharDe(PARTICIPANTE)).isZero();
+        verify(events, never()).publishEvent(any(Object.class));
+    }
+
+    @Test
+    @DisplayName("FR-015b: un registro EN_CURSO SI recibe el de vencimiento cuando le toca")
+    void enCursoSiRecibeElAvisoDeVencimiento() {
+        participanteEnLima(false);
+        habitoNocturnoEn(EstadoRegistro.EN_CURSO);
+        // 04:40 UTC = 23:40 del 5 en Lima: faltan 20 min para el plazo (medianoche de Lima).
+        int publicados = servicioCon(Instant.parse("2026-09-06T04:40:00Z")).despacharDe(PARTICIPANTE);
+
+        assertThat(publicados).isEqualTo(1);
+        AvisoHabitoDebidoEvent evento = eventoPublicado();
+        assertThat(evento.tipoAviso()).isEqualTo(TipoAvisoHabito.POR_VENCER.name());
+        assertThat(evento.momentoAvisado()).isEqualTo(Instant.parse("2026-09-06T05:00:00Z"));
     }
 
     @Test
@@ -225,6 +354,13 @@ class AvisoHabitoServiceTest {
         when(loadPreferenciaPort.porParticipanteHabitosYFecha(any(), anyCollection(), any())).thenReturn(List.of(
                 PreferenciaHorario.rehydrate(PARTICIPANTE, HABITO, LocalTime.of(21, 0), LocalTime.of(22, 0),
                         recordatorioActivo, minutos, MADRUGADA_UTC, MADRUGADA_UTC)));
+    }
+
+    /** El aprendiz cambio la hora de disparo de hoy (misma hora limite): la preferencia manda sobre el catalogo. */
+    private void conPreferenciaDeHora(LocalTime horaDeDisparo) {
+        when(loadPreferenciaPort.porParticipanteHabitosYFecha(any(), anyCollection(), any())).thenReturn(List.of(
+                PreferenciaHorario.rehydrate(PARTICIPANTE, HABITO, horaDeDisparo, LocalTime.of(22, 0), false, null,
+                        MADRUGADA_UTC, MADRUGADA_UTC)));
     }
 
     @Test

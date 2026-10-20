@@ -34,7 +34,7 @@ class AvisoHabitoEnChatListenerTest {
         UUID clave = UUID.randomUUID();
         Instant calculadoEn = Instant.parse("2026-09-23T01:59:30Z");
         var event = new AvisoHabitoDebidoEvent(UUID.randomUUID(), aprendiz, "Meditar", "POR_VENCER", 30, 10, clave,
-                false, null, calculadoEn, UUID.randomUUID(), "BODY");
+                false, null, calculadoEn, UUID.randomUUID(), "BODY", calculadoEn.plusSeconds(1800), "America/Lima");
 
         new AvisoHabitoEnChatListener(useCase, InterruptoresDePrueba.conApagadas()).on(event);
 
@@ -47,7 +47,8 @@ class AvisoHabitoEnChatListenerTest {
     @Test
     void conSerApagadaElAvisoSalta() {
         var event = new AvisoHabitoDebidoEvent(UUID.randomUUID(), UserId.of(UUID.randomUUID()), "Meditar", "POR_VENCER",
-                30, 10, UUID.randomUUID(), false, null, Instant.parse("2026-09-23T01:59:30Z"), UUID.randomUUID(), "BODY");
+                30, 10, UUID.randomUUID(), false, null, Instant.parse("2026-09-23T01:59:30Z"), UUID.randomUUID(), "BODY",
+                null, null);
 
         new AvisoHabitoEnChatListener(useCase, InterruptoresDePrueba.conApagadas("ia")).on(event);
 

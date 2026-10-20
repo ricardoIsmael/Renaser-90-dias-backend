@@ -11,6 +11,10 @@ import java.util.Optional;
  * que está a la vista), {@code threadId} (iOS: los agrupa) y {@code tag} del navegador. Se deriva de
  * la ruta, que ya identifica el chat ({@code /chat/{id}} → {@code chat-{id}}): así no hace falta
  * sumar un campo al comando de emisión que usan los veintitantos listeners de siempre.
+ *
+ * <p>Spec 007: el aviso de un hábito NO se deriva de la ruta (no dice si es el de inicio o el de
+ * vencimiento): trae su etiqueta propia ({@code MensajePush.etiquetaPropia}, {@code habito-{id}-inicio}).
+ * Esta clase no cambia: sigue resolviendo solo la de chat.
  */
 public final class EtiquetaDelAviso {
 

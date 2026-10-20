@@ -1,5 +1,6 @@
 package com.renaser.os.habits.domain.model.aviso;
 
+import com.renaser.os.habits.domain.model.registro.EstadoRegistro;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.habits.domain.model.registro.VentanaEntrega;
 import org.junit.jupiter.api.DisplayName;
@@ -27,6 +28,9 @@ class CalculadoraAvisosHabitoTest {
 
     private static final LocalDate FECHA = LocalDate.of(2026, 9, 5);
     private static final ZoneId LIMA = ZoneId.of("America/Lima");
+
+    /** 21:00 del 5 en Lima: el momento de las claves de abajo, en la madrugada UTC del dia siguiente. */
+    private static final Instant MOMENTO = Instant.parse("2026-09-06T02:00:00Z");
 
     private static final CalculadoraAvisosHabito CALCULADORA =
             new CalculadoraAvisosHabito(Duration.ofMinutes(15), Duration.ofMinutes(30));
@@ -132,21 +136,61 @@ class CalculadoraAvisosHabitoTest {
     }
 
     @Test
-    @DisplayName("los dos avisos tienen claves de deduplicacion distintas para el mismo registro")
+    @DisplayName("los dos avisos tienen claves de deduplicacion distintas para el mismo registro y momento")
     void losDosAvisosNoSePisanEnLaDeduplicacion() {
         RegistroHabitoId registroId = RegistroHabitoId.of(UUID.randomUUID());
 
-        assertThat(TipoAvisoHabito.INICIO.claveIdempotencia(registroId))
-                .isNotEqualTo(TipoAvisoHabito.POR_VENCER.claveIdempotencia(registroId));
+        assertThat(TipoAvisoHabito.INICIO.claveIdempotencia(registroId, MOMENTO))
+                .isNotEqualTo(TipoAvisoHabito.POR_VENCER.claveIdempotencia(registroId, MOMENTO));
     }
 
     @Test
-    @DisplayName("la clave de deduplicacion es deterministica: dos calculos del mismo aviso dan lo mismo")
+    @DisplayName("la clave de deduplicacion es deterministica: mismo registro y mismo momento dan lo mismo")
     void laClaveEsDeterministica() {
         RegistroHabitoId registroId = RegistroHabitoId.of(UUID.randomUUID());
 
-        assertThat(TipoAvisoHabito.INICIO.claveIdempotencia(registroId))
-                .isEqualTo(TipoAvisoHabito.INICIO.claveIdempotencia(registroId));
+        assertThat(TipoAvisoHabito.INICIO.claveIdempotencia(registroId, MOMENTO))
+                .isEqualTo(TipoAvisoHabito.INICIO.claveIdempotencia(registroId, MOMENTO));
+    }
+
+    @Test
+    @DisplayName("FR-013: otro momento (la persona cambio la hora) da otra clave y se vuelve a avisar")
+    void otroMomentoDaOtraClave() {
+        RegistroHabitoId registroId = RegistroHabitoId.of(UUID.randomUUID());
+
+        assertThat(TipoAvisoHabito.INICIO.claveIdempotencia(registroId, MOMENTO))
+                .isNotEqualTo(TipoAvisoHabito.INICIO.claveIdempotencia(registroId, MOMENTO.plusSeconds(600)));
+    }
+
+    @Test
+    @DisplayName("la clave solo mira el segundo del momento: milisegundos distintos del mismo instante no la cambian")
+    void laClaveIgnoraLaFraccionDeSegundo() {
+        RegistroHabitoId registroId = RegistroHabitoId.of(UUID.randomUUID());
+
+        assertThat(TipoAvisoHabito.INICIO.claveIdempotencia(registroId, MOMENTO))
+                .isEqualTo(TipoAvisoHabito.INICIO.claveIdempotencia(registroId, MOMENTO.plusMillis(400)));
+    }
+
+    @Test
+    @DisplayName("otro registro con el mismo momento tiene su propia clave")
+    void otroRegistroDaOtraClave() {
+        assertThat(TipoAvisoHabito.INICIO.claveIdempotencia(RegistroHabitoId.of(UUID.randomUUID()), MOMENTO))
+                .isNotEqualTo(TipoAvisoHabito.INICIO.claveIdempotencia(RegistroHabitoId.of(UUID.randomUUID()),
+                        MOMENTO));
+    }
+
+    @Test
+    @DisplayName("FR-015b: el aviso de inicio solo corresponde a un registro que todavia puede iniciar")
+    void elInicioNoCorrespondeAUnRegistroEnCurso() {
+        assertThat(TipoAvisoHabito.INICIO.correspondeA(EstadoRegistro.PENDIENTE)).isTrue();
+        assertThat(TipoAvisoHabito.INICIO.correspondeA(EstadoRegistro.EN_CURSO)).isFalse();
+    }
+
+    @Test
+    @DisplayName("FR-015b: el de vencimiento corresponde tambien a un registro en curso")
+    void elVencimientoSiCorrespondeAUnRegistroEnCurso() {
+        assertThat(TipoAvisoHabito.POR_VENCER.correspondeA(EstadoRegistro.PENDIENTE)).isTrue();
+        assertThat(TipoAvisoHabito.POR_VENCER.correspondeA(EstadoRegistro.EN_CURSO)).isTrue();
     }
 
     @Test
