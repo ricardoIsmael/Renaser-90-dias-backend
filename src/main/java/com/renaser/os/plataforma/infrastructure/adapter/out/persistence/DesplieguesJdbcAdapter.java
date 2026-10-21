@@ -21,7 +21,7 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * {@code funcionalidades_despliegue} y {@code funcionalidades_probadores} (V103) con {@code JdbcClient}: dos tablas
+ * {@code funcionalidades_despliegue} y {@code funcionalidades_probadores} (V113) con {@code JdbcClient}: dos tablas
  * chicas que se leen enteras cada 30 s y en cada cambio. El bloqueo optimista va en el SQL ({@code WHERE version =}),
  * así que dos consolas que mueven el escalón a la vez no se pisan: la segunda no toca ninguna fila y es un 409.
  */

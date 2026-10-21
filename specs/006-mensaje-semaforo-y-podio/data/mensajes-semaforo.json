@@ -1,0 +1,1075 @@
+[
+ {
+  "id": "v001",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "{nombre}, tu constancia está dando frutos. Mantén el ritmo y demuestra que puedes sostenerlo.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "dorado-orgulloso"
+ },
+ {
+  "id": "v002",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "Vas por buen camino. Lo que haces cada día está construyendo tu nueva versión.",
+  "variables": [],
+  "sticker": "dorado-sereno"
+ },
+ {
+  "id": "v003",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "{nombre}, hoy tienes motivos para sentir orgullo. Mañana tendrás otros si sigues cumpliendo.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "dorado-celebrando"
+ },
+ {
+  "id": "v004",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "Tu disciplina está hablando por ti. No bajes la guardia cuando las cosas empiezan a salir bien.",
+  "variables": [],
+  "sticker": "dorado-orgulloso"
+ },
+ {
+  "id": "v005",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "{nombre}, estás cumpliendo contigo. Ese compromiso vale más que cualquier aplauso.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "dorado-trofeo"
+ },
+ {
+  "id": "v006",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "Buen trabajo. Ahora demuestra que tu avance no depende de tener un día fácil.",
+  "variables": [],
+  "sticker": "dorado-guino"
+ },
+ {
+  "id": "v007",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "{nombre}, llegaste al día {dia} con un ritmo sólido. Sigue haciendo lo que te trajo hasta aquí.",
+  "variables": [
+   "nombre",
+   "dia"
+  ],
+  "sticker": "dorado-celebrando"
+ },
+ {
+  "id": "v008",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "La constancia se nota en tus resultados. Disfruta el avance sin perder el enfoque.",
+  "variables": [],
+  "sticker": "dorado-sereno"
+ },
+ {
+  "id": "v009",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "{nombre}, tu esfuerzo está dejando huella. Que el orgullo de hoy impulse tus decisiones de mañana.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "dorado-orgulloso"
+ },
+ {
+  "id": "v010",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "Estás demostrando de qué eres capaz. El siguiente reto es mantenerlo incluso sin motivación.",
+  "variables": [],
+  "sticker": "dorado-trofeo"
+ },
+ {
+  "id": "v011",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "{nombre}, ya sabes cómo se siente cumplir. Convierte esa sensación en tu nueva normalidad.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "dorado-guino"
+ },
+ {
+  "id": "v012",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "No necesitas hacerlo perfecto para avanzar. Tu compromiso sostenido está marcando la diferencia.",
+  "variables": [],
+  "sticker": "dorado-sereno"
+ },
+ {
+  "id": "v013",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "{nombre}, celebra lo conseguido, pero conserva el hambre de crecer. Todavía tienes mucho por descubrir.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "dorado-celebrando"
+ },
+ {
+  "id": "v014",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "Cada hábito cumplido refuerza tu palabra. Sigue convirtiendo tus decisiones en resultados.",
+  "variables": [],
+  "sticker": "dorado-trofeo"
+ },
+ {
+  "id": "v015",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "{nombre}, tu mejor argumento es lo que haces. Continúa construyendo pruebas de tu transformación.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "dorado-orgulloso"
+ },
+ {
+  "id": "v016",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "Qué bien se siente avanzar con intención. Conserva esa energía y úsala para cumplir hoy.",
+  "variables": [],
+  "sticker": "dorado-guino"
+ },
+ {
+  "id": "v017",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "{nombre}, estás en {fase} y tu constancia te acompaña. Sigue honrando el proceso.",
+  "variables": [
+   "nombre",
+   "fase"
+  ],
+  "sticker": "dorado-sereno"
+ },
+ {
+  "id": "v018",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "Tus acciones están alineadas con tus metas. Ese equilibrio merece celebrarse y protegerse.",
+  "variables": [],
+  "sticker": "dorado-celebrando"
+ },
+ {
+  "id": "v019",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "{nombre}, estás ganando confianza con hechos. Que cada logro sea combustible, no una excusa para detenerte.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "dorado-trofeo"
+ },
+ {
+  "id": "v020",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "El avance que ves nació de decisiones pequeñas. Sigue eligiendo bien incluso cuando nadie te mire.",
+  "variables": [],
+  "sticker": "dorado-orgulloso"
+ },
+ {
+  "id": "v021",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "{nombre}, vas firme. Tu desafío ahora es cuidar la disciplina que te está llevando tan lejos.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "dorado-guino"
+ },
+ {
+  "id": "v022",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "Mantenerte al día también es una victoria. Reconócela y sigue trabajando por la siguiente.",
+  "variables": [],
+  "sticker": "dorado-celebrando"
+ },
+ {
+  "id": "v023",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "{nombre}, estás aprendiendo a confiar en ti porque cumples lo que prometes. Sigue así.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "dorado-sereno"
+ },
+ {
+  "id": "v024",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "Hay progreso real en tu camino. No permitas que la comodidad frene lo que tanto te ha costado construir.",
+  "variables": [],
+  "sticker": "dorado-trofeo"
+ },
+ {
+  "id": "v025",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "{nombre}, hoy tu disciplina merece reconocimiento. Mantén los pies en la tierra y la mirada adelante.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "dorado-orgulloso"
+ },
+ {
+  "id": "v026",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "Cumplir está empezando a formar parte de quien eres. Fortalece esa identidad con tus acciones.",
+  "variables": [],
+  "sticker": "dorado-sereno"
+ },
+ {
+  "id": "v027",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "{nombre}, tienes razones para sonreír. No fue suerte: fueron tus decisiones sostenidas.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "dorado-guino"
+ },
+ {
+  "id": "v028",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "Tu esfuerzo merece este reconocimiento. Celebra sin desconectarte de tus próximos compromisos.",
+  "variables": [],
+  "sticker": "dorado-celebrando"
+ },
+ {
+  "id": "v029",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "{nombre}, {habitoFuerte} es una fortaleza en tu rutina. Sigue cuidando ese hábito y fortalece los demás.",
+  "variables": [
+   "nombre",
+   "habitoFuerte"
+  ],
+  "sticker": "dorado-trofeo"
+ },
+ {
+  "id": "v030",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "Seguir cumpliendo cuando todo marcha bien también requiere carácter. Tú lo estás demostrando.",
+  "variables": [],
+  "sticker": "dorado-orgulloso"
+ },
+ {
+  "id": "v031",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "{nombre}, estás cosechando disciplina. Siembras cada día cuando decides actuar en lugar de postergar.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "dorado-sereno"
+ },
+ {
+  "id": "v032",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "Disfruta tu progreso. La verdadera recompensa será convertir estos hábitos en parte de tu vida.",
+  "variables": [],
+  "sticker": "dorado-guino"
+ },
+ {
+  "id": "v033",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "{nombre}, este avance tiene tu firma. Sigue haciendo que tus resultados reflejen tus valores.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "dorado-trofeo"
+ },
+ {
+  "id": "v034",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "Tu compromiso está más fuerte que tus excusas. Conserva esa ventaja con humildad y determinación.",
+  "variables": [],
+  "sticker": "dorado-celebrando"
+ },
+ {
+  "id": "v035",
+  "color": "VERDE",
+  "caso": null,
+  "texto": "{nombre}, hoy puedes mirar atrás con orgullo. Pero tu mejor versión todavía se sigue construyendo.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "dorado-guino"
+ },
+ {
+  "id": "a001",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "{nombre}, todavía puedes levantar el ritmo. Haz espacio hoy para {habitoFlojo} y vuelve a enfocarte.",
+  "variables": [
+   "nombre",
+   "habitoFlojo"
+  ],
+  "sticker": "azul-animando"
+ },
+ {
+  "id": "a002",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "Te faltan {faltan} para subir al siguiente color. Elige una tarea pendiente y empieza ahora.",
+  "variables": [
+   "faltan"
+  ],
+  "sticker": "azul-reloj"
+ },
+ {
+  "id": "a003",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "{nombre}, el macaco quiere que lo dejes para mañana. Véncelo dedicando tiempo hoy a {habitoFlojo}.",
+  "variables": [
+   "nombre",
+   "habitoFlojo"
+  ],
+  "sticker": "azul-vs-macaco"
+ },
+ {
+  "id": "a004",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "Hoy necesitas menos vueltas y más acción. Reserva un momento concreto para cumplir un hábito pendiente.",
+  "variables": [],
+  "sticker": "azul-firme"
+ },
+ {
+  "id": "a005",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "{nombre}, tu semáforo pide atención. Revisa lo pendiente y cumple una tarea antes de que termine el día.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-pensativo"
+ },
+ {
+  "id": "a006",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "Aún puedes mejorar tu semana. Dedica un espacio de tu agenda a {habitoFlojo} hoy.",
+  "variables": [
+   "habitoFlojo"
+  ],
+  "sticker": "azul-reloj"
+ },
+ {
+  "id": "a007",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "{nombre}, no necesitas esperar el momento perfecto. Escoge un hábito pendiente y ponte en marcha.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-entrenando"
+ },
+ {
+  "id": "a008",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "El macaco negocia descansos antes de empezar. No le sigas el juego: cumple una tarea hoy.",
+  "variables": [],
+  "sticker": "azul-vs-macaco"
+ },
+ {
+  "id": "a009",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "{nombre}, el progreso necesita una decisión tuya. Dedica hoy unos minutos a tus objetivos pendientes.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-animando"
+ },
+ {
+  "id": "a010",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "Mira lo que falta sin agobiarte. Elige lo más importante y dale un espacio real en tu día.",
+  "variables": [],
+  "sticker": "azul-pensativo"
+ },
+ {
+  "id": "a011",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "{nombre}, faltan {faltan} para avanzar de color. Empieza por lo más sencillo y recupera movimiento.",
+  "variables": [
+   "nombre",
+   "faltan"
+  ],
+  "sticker": "azul-reloj"
+ },
+ {
+  "id": "a012",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "Si el macaco insiste en postergar, respóndele con hechos. Haz tu siguiente hábito ahora.",
+  "variables": [],
+  "sticker": "azul-vs-macaco"
+ },
+ {
+  "id": "a013",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "{nombre}, un día distraído no tiene que convertirse en una semana perdida. Retoma un compromiso hoy.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-ofrece-ala"
+ },
+ {
+  "id": "a014",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "Tienes margen para recuperar terreno. Revisa {habitoFlojo} y decide cuándo le dedicarás tiempo hoy.",
+  "variables": [
+   "habitoFlojo"
+  ],
+  "sticker": "azul-pensativo"
+ },
+ {
+  "id": "a015",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "{nombre}, tu esfuerzo necesita dirección. Abre tu lista y completa una tarea que vienes postergando.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-firme"
+ },
+ {
+  "id": "a016",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "No dejes que un pendiente se convierta en costumbre. Resuelve hoy algo que está bajo tu control.",
+  "variables": [],
+  "sticker": "azul-despertando"
+ },
+ {
+  "id": "a017",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "{nombre}, estás a tiempo de corregir el rumbo. Programa hoy un espacio para {habitoFlojo}.",
+  "variables": [
+   "nombre",
+   "habitoFlojo"
+  ],
+  "sticker": "azul-reloj"
+ },
+ {
+  "id": "a018",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "Ese macaco sabe inventar excusas convincentes. Demuéstrale quién decide cumpliendo una tarea hoy.",
+  "variables": [],
+  "sticker": "azul-vs-macaco"
+ },
+ {
+  "id": "a019",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "{nombre}, tienes más capacidad de la que estás usando. Demuéstratelo hoy con una acción pendiente.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-entrenando"
+ },
+ {
+  "id": "a020",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "La diferencia empieza cuando actúas. Dedica tiempo hoy a {habitoFlojo}, aunque no tengas ganas.",
+  "variables": [
+   "habitoFlojo"
+  ],
+  "sticker": "azul-firme"
+ },
+ {
+  "id": "a021",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "{nombre}, estás en el día {dia}. Haz que cuente completando algo importante antes de descansar.",
+  "variables": [
+   "nombre",
+   "dia"
+  ],
+  "sticker": "azul-animando"
+ },
+ {
+  "id": "a022",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "Puedes cambiar la dirección de hoy. Deja preparada tu siguiente tarea y empieza sin distracciones.",
+  "variables": [],
+  "sticker": "azul-despertando"
+ },
+ {
+  "id": "a023",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "{nombre}, al macaco le encanta decir después. Tú responde ahora y completa un hábito pendiente.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-vs-macaco"
+ },
+ {
+  "id": "a024",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "Un pequeño ajuste puede mejorar tu día. Revisa tus pendientes y atiende primero el más importante.",
+  "variables": [],
+  "sticker": "azul-pensativo"
+ },
+ {
+  "id": "a025",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "{nombre}, faltan {faltan} para alcanzar el siguiente color. Organízate y cumple lo que puedas hoy.",
+  "variables": [
+   "nombre",
+   "faltan"
+  ],
+  "sticker": "azul-reloj"
+ },
+ {
+  "id": "a026",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "Recupera el control de tu agenda. Aparta un momento hoy para avanzar con {habitoFlojo}.",
+  "variables": [
+   "habitoFlojo"
+  ],
+  "sticker": "azul-entrenando"
+ },
+ {
+  "id": "a027",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "{nombre}, no confundas estar ocupado con avanzar. Prioriza un compromiso y complétalo hoy.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-firme"
+ },
+ {
+  "id": "a028",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "Que el macaco no dirija tu rutina. Cierra una distracción y comienza una tarea pendiente.",
+  "variables": [],
+  "sticker": "azul-vs-macaco"
+ },
+ {
+  "id": "a029",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "{nombre}, {habitoFuerte} demuestra que puedes sostener compromisos. Usa esa confianza para cumplir otro hoy.",
+  "variables": [
+   "nombre",
+   "habitoFuerte"
+  ],
+  "sticker": "azul-animando"
+ },
+ {
+  "id": "a030",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "Detén la postergación con una decisión concreta. Elige ahora cuándo realizarás tu siguiente hábito.",
+  "variables": [],
+  "sticker": "azul-despertando"
+ },
+ {
+  "id": "a031",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "{nombre}, tu avance no está perdido. Revisa {habitoFlojo} y da hoy un paso para fortalecerlo.",
+  "variables": [
+   "nombre",
+   "habitoFlojo"
+  ],
+  "sticker": "azul-ofrece-ala"
+ },
+ {
+  "id": "a032",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "Hay compromisos esperando tu atención. Ordena tus prioridades y cumple uno antes de cerrar el día.",
+  "variables": [],
+  "sticker": "azul-pensativo"
+ },
+ {
+  "id": "a033",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "{nombre}, estás en {fase}. Haz que esta etapa tenga sentido recuperando hoy un hábito pendiente.",
+  "variables": [
+   "nombre",
+   "fase"
+  ],
+  "sticker": "azul-entrenando"
+ },
+ {
+  "id": "a034",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "No permitas que la comodidad decida por ti. Levántate y cumple una acción que vienes evitando.",
+  "variables": [],
+  "sticker": "azul-firme"
+ },
+ {
+  "id": "a035",
+  "color": "AMARILLO",
+  "caso": null,
+  "texto": "{nombre}, hoy puedes recuperar impulso. Revisa tu lista, elige una tarea y termínala.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-sorprendido"
+ },
+ {
+  "id": "r001",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "{nombre}, tus compromisos están quedando pendientes. No los ignores: retoma un hábito ahora y cambia el día.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-firme"
+ },
+ {
+  "id": "r002",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "El semáforo está en rojo y necesitas actuar. Empieza con una tarea sencilla y recupera el rumbo hoy.",
+  "variables": [],
+  "sticker": "azul-despertando"
+ },
+ {
+  "id": "r003",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "{nombre}, el macaco está ganando terreno. No le entregues otra jornada: cumple un hábito ahora.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-vs-macaco"
+ },
+ {
+  "id": "r004",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "Tus hábitos necesitan atención urgente, no excusas. Elige uno y haz lo necesario para cumplirlo hoy.",
+  "variables": [],
+  "sticker": "azul-decepcionado"
+ },
+ {
+  "id": "r005",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "{nombre}, no estás cumpliendo como te propusiste. Reconócelo sin castigarte y vuelve a empezar hoy.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-ofrece-ala"
+ },
+ {
+  "id": "r006",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "Seguir postergando tiene consecuencias. Recupera el control dedicando tiempo hoy a {habitoFlojo}.",
+  "variables": [
+   "habitoFlojo"
+  ],
+  "sticker": "azul-firme"
+ },
+ {
+  "id": "r007",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "{nombre}, faltan {faltan} para subir de color. Deja de aplazar lo importante y completa una tarea hoy.",
+  "variables": [
+   "nombre",
+   "faltan"
+  ],
+  "sticker": "azul-reloj"
+ },
+ {
+  "id": "r008",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "El macaco está cómodo con tus pendientes. Rómpelo con acción: empieza un hábito ahora mismo.",
+  "variables": [],
+  "sticker": "azul-vs-macaco"
+ },
+ {
+  "id": "r009",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "{nombre}, tus resultados reflejan compromisos sin cumplir. No te quedes mirando: hoy puedes cambiar el rumbo.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-despertando"
+ },
+ {
+  "id": "r010",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "La rutina se está alejando de tus objetivos. Detén esa distancia: completa un hábito pendiente hoy.",
+  "variables": [],
+  "sticker": "azul-pensativo"
+ },
+ {
+  "id": "r011",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "{nombre}, necesitas recuperar disciplina, no castigarte. Empieza ahora por una acción que sí puedas terminar.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-entrenando"
+ },
+ {
+  "id": "r012",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "Tus pendientes siguen creciendo y el tiempo avanza. Haz espacio hoy para {habitoFlojo} y retoma el control.",
+  "variables": [
+   "habitoFlojo"
+  ],
+  "sticker": "azul-reloj"
+ },
+ {
+  "id": "r013",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "{nombre}, el macaco te quiere inmóvil. Demuéstrale que no manda: levántate y cumple una tarea hoy.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-vs-macaco"
+ },
+ {
+  "id": "r014",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "No estás sosteniendo tus hábitos y eso merece atención. Hazte cargo con una acción concreta hoy.",
+  "variables": [],
+  "sticker": "azul-decepcionado"
+ },
+ {
+  "id": "r015",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "{nombre}, no basta con querer cambiar. Tu siguiente decisión importa: cumple un hábito pendiente ahora.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-firme"
+ },
+ {
+  "id": "r016",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "Evitar tus compromisos no hará que desaparezcan. Mira tu lista y empieza por lo que puedas resolver hoy.",
+  "variables": [],
+  "sticker": "azul-pensativo"
+ },
+ {
+  "id": "r017",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "{nombre}, estás dejando pasar oportunidades de avanzar. Hoy recuperas terreno cumpliendo un hábito.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-entrenando"
+ },
+ {
+  "id": "r018",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "El macaco celebra cada postergación. Córtale la fiesta: cumple una tarea y vuelve a tomar el mando hoy.",
+  "variables": [],
+  "sticker": "azul-vs-macaco"
+ },
+ {
+  "id": "r019",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "{nombre}, tu esfuerzo está por debajo de tus compromisos. Puedes corregirlo: empieza con algo concreto hoy.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-ofrece-ala"
+ },
+ {
+  "id": "r020",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "Los pendientes no se resolverán solos. Aparta un momento para {habitoFlojo} y vuelve a actuar hoy.",
+  "variables": [
+   "habitoFlojo"
+  ],
+  "sticker": "azul-reloj"
+ },
+ {
+  "id": "r021",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "{nombre}, hoy necesitas una respuesta distinta a la postergación. Abre tu lista y cumple un hábito ahora.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-firme"
+ },
+ {
+  "id": "r022",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "Reconoce lo que no has cumplido sin esconderlo ni castigarte. Elige un compromiso y retómalo hoy.",
+  "variables": [],
+  "sticker": "azul-pensativo"
+ },
+ {
+  "id": "r023",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "{nombre}, el macaco aprovecha cada excusa. No lo alimentes con otra: cumple lo pendiente que puedas hoy.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-vs-macaco"
+ },
+ {
+  "id": "r024",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "No estás avanzando al ritmo que buscas. Eso puede cambiar: vuelve a tu rutina con una acción hoy.",
+  "variables": [],
+  "sticker": "azul-despertando"
+ },
+ {
+  "id": "r025",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "{nombre}, aunque estés en rojo, todavía tienes capacidad de respuesta. Completa un hábito y empieza a recuperarte hoy.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-ofrece-ala"
+ },
+ {
+  "id": "r026",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "Te has alejado de tus compromisos, pero puedes regresar. Empieza hoy dedicando tiempo a {habitoFlojo}.",
+  "variables": [
+   "habitoFlojo"
+  ],
+  "sticker": "azul-animando"
+ },
+ {
+  "id": "r027",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "{nombre}, hoy el macaco no puede tener la última palabra. Haz una tarea pendiente y recupera tu dirección.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-vs-macaco"
+ },
+ {
+  "id": "r028",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "Tu disciplina necesita reconstruirse con acciones. No esperes al día ideal: vuelve a comenzar hoy.",
+  "variables": [],
+  "sticker": "azul-entrenando"
+ },
+ {
+  "id": "r029",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "{nombre}, lo que falta por cumplir es real. También lo es tu capacidad de reaccionar: haz un hábito ahora.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-firme"
+ },
+ {
+  "id": "r030",
+  "color": "ROJO",
+  "caso": null,
+  "texto": "Estar en rojo es una señal para cambiar tus decisiones. Escoge un pendiente y retoma tu camino hoy.",
+  "variables": [],
+  "sticker": "azul-ofrece-ala"
+ },
+ {
+  "id": "s001",
+  "color": "SIN_COLOR",
+  "caso": "INICIO",
+  "texto": "{nombre}, te damos la bienvenida a Renaser. Tu transformación comienza con una decisión: elige tu primer hábito y empieza hoy.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-animando"
+ },
+ {
+  "id": "s002",
+  "color": "SIN_COLOR",
+  "caso": "INICIO",
+  "texto": "Este es tu punto de partida. Define lo que quieres construir y da hoy tu primer paso con intención.",
+  "variables": [],
+  "sticker": "azul-despertando"
+ },
+ {
+  "id": "s003",
+  "color": "SIN_COLOR",
+  "caso": "INICIO",
+  "texto": "{nombre}, todavía no hay resultados que medir, pero ya tienes una oportunidad. Comienza con una acción sencilla.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-ofrece-ala"
+ },
+ {
+  "id": "s004",
+  "color": "SIN_COLOR",
+  "caso": "SIN_PROGRAMA",
+  "texto": "{nombre}, esta semana no tienes hábitos ni objetivos programados. Define una meta y organiza cómo empezar.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-pensativo"
+ },
+ {
+  "id": "s005",
+  "color": "SIN_COLOR",
+  "caso": "SIN_PROGRAMA",
+  "texto": "Tu semáforo necesita un plan para acompañarte. Programa tus hábitos y establece objetivos alcanzables.",
+  "variables": [],
+  "sticker": "azul-reloj"
+ },
+ {
+  "id": "s006",
+  "color": "SIN_COLOR",
+  "caso": "SIN_PROGRAMA",
+  "texto": "{nombre}, una buena semana empieza con dirección. Elige los compromisos que quieres trabajar y anótalos.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-entrenando"
+ },
+ {
+  "id": "s007",
+  "color": "SIN_COLOR",
+  "caso": "PAUSA",
+  "texto": "{nombre}, tu proceso está en pausa y puedes darte ese espacio. Cuídate; retomarás cuando sea posible.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-ofrece-ala"
+ },
+ {
+  "id": "s008",
+  "color": "SIN_COLOR",
+  "caso": "PAUSA",
+  "texto": "Descansar también puede ser necesario. Atiende lo que estás viviendo y vuelve a tu ritmo cuando puedas.",
+  "variables": [],
+  "sticker": "azul-pensativo"
+ },
+ {
+  "id": "s009",
+  "color": "SIN_COLOR",
+  "caso": "PAUSA",
+  "texto": "{nombre}, tu avance no pierde valor por hacer una pausa. Date tiempo y regresa cuando sea tu momento.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-animando"
+ },
+ {
+  "id": "s010",
+  "color": "SIN_COLOR",
+  "caso": "CUENTA_PAUSADA",
+  "texto": "{nombre}, qué bueno tenerte de vuelta. Tu semáforo se reanuda con lo que hagas desde hoy: empieza con un hábito.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-pensativo"
+ },
+ {
+  "id": "s011",
+  "color": "SIN_COLOR",
+  "caso": "CUENTA_PAUSADA",
+  "texto": "Volviste y eso ya cuenta. Los días en pausa no te restan; enfócate en lo que puedes cumplir hoy.",
+  "variables": [],
+  "sticker": "azul-reloj"
+ },
+ {
+  "id": "s012",
+  "color": "SIN_COLOR",
+  "caso": "CUENTA_PAUSADA",
+  "texto": "{nombre}, retomas tu camino. Elige un compromiso sencillo para hoy y vuelve a encender tu semáforo.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "azul-ofrece-ala"
+ },
+ {
+  "id": "s013",
+  "color": "SIN_COLOR",
+  "caso": "GRADUADO",
+  "texto": "{nombre}, completaste Renaser. Celebra este logro y sigue cuidando los hábitos que te trajeron hasta aquí.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "dorado-trofeo"
+ },
+ {
+  "id": "s014",
+  "color": "SIN_COLOR",
+  "caso": "GRADUADO",
+  "texto": "Terminaste el programa, pero tu crecimiento continúa. Lleva tu disciplina a cada nueva etapa de tu vida.",
+  "variables": [],
+  "sticker": "dorado-celebrando"
+ },
+ {
+  "id": "s015",
+  "color": "SIN_COLOR",
+  "caso": "GRADUADO",
+  "texto": "{nombre}, tu graduación es un logro y un nuevo comienzo. Sigue eligiendo cada día la persona que quieres ser.",
+  "variables": [
+   "nombre"
+  ],
+  "sticker": "dorado-orgulloso"
+ }
+]

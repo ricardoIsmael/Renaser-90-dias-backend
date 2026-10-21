@@ -21,7 +21,7 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * {@code roles_personalizados}, sus funcionalidades y {@code usuarios.rol_personalizado_id} (V105, D-272), con
+ * {@code roles_personalizados}, sus funcionalidades y {@code usuarios.rol_personalizado_id} (V115, D-272), con
  * {@link JdbcClient}: tablas chicas (hasta 20 roles activos) que se leen enteras para la consola y para la copia en
  * memoria de la plataforma.
  *
@@ -73,7 +73,7 @@ class RolesPersonalizadosJdbcAdapter implements CargarRolesPersonalizadosPort, G
     }
 
     /*
-     * Las personas de un rol NO cuentan la cuenta de prueba de «ver como» (V107, D-273): con ella, un rol que nadie usa
+     * Las personas de un rol NO cuentan la cuenta de prueba de «ver como» (V117, D-273): con ella, un rol que nadie usa
      * no se podría borrar (409) ni cambiar de base. Sí la incluye `asignacionesVigentes` (VIGENTES): la regla de
      * disponibilidad la tiene que restringir igual que a cualquiera, porque eso es lo que se quiere ver.
      */

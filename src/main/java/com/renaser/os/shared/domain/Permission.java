@@ -207,6 +207,21 @@ public enum Permission {
     /** Guard: {@code PuntajeService.ajustarManualmente} -> "Solo ADMIN/ALCHEMIST activos hacen ajustes manuales de puntos". */
     ADJUST_POINTS,
 
+    /**
+     * Descargar la imagen del podio del ranking para compartirla (D-278, spec 006, pedido del dueño del
+     * 2026-10-19). La imagen se arma en el teléfono con el ranking que todos ya leen; este permiso solo decide
+     * si la app muestra el botón «Descargar» ({@code capabilities.canExportRanking} de
+     * {@code GET /api/v1/mentor/context}). No hay endpoint de exportación que proteger.
+     *
+     * <p>Roles que lo satisfacen: <b>MENTOR_LEAD, ADMIN, ALCHEMIST e IT_SUPPORT</b>, y nadie más (respuesta del
+     * dueño: «Líder de mentores, Alquimista, Administrador y Soporte TI»). Ni MENTOR, ni TRAINEE_GUIDE, ni TRAINEE.
+     *
+     * <p><b>Es de matriz explícita aunque la matriz de MENTOR y TRAINEE_GUIDE falle abierta (A-1):</b> sin el
+     * tratamiento de {@code UserRole.can}, un permiso nuevo pasaría solo para ellos y el mentor vería un botón que
+     * el dueño no le dio.
+     */
+    EXPORT_RANKING,
+
     // ---------------------------------------------------------------------------------
     // rag
     // ---------------------------------------------------------------------------------

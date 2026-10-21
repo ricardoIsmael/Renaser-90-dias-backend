@@ -5,8 +5,10 @@ import com.renaser.os.chat.application.ports.in.semaforo.EnviarTarjetasDelSemafo
 import com.renaser.os.chat.application.ports.in.semaforo.EnviarTarjetasDelSemaforoUseCase.ResultadoDeTarjetas;
 import com.renaser.os.notifications.application.ports.out.push.PushPort;
 import com.renaser.os.notifications.domain.model.tokenpush.TokenPush;
+import com.renaser.os.points.application.ports.out.semaforo.mensaje.AzarPort;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.users.api.FasePrograma;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -43,6 +45,10 @@ import static org.mockito.Mockito.when;
  *
  * <p>Reloj a las 04:52 UTC del 29: en Lima son las 23:52 del 28 (regla 02 §3). Ana tiene registros el 28
  * (7 de 8, 88 % → verde) y el 29 (0 de 2): si el barrido usara la fecha del servidor, diría 0 %.
+ *
+ * <p><b>D-281, el mensaje personalizado.</b> El texto de la noche es «Hoy llevas 88 % de tus hábitos.», una línea en
+ * blanco y un mensaje VERDE del catálogo real de V110, guardado con canal {@code CHAT} y la fecha de Lima. El azar
+ * está fijado en el primero (la prueba es determinista): sin eso «distinto del de Hoy» pasaría por suerte.
  */
 @SpringBootTest
 @Import({TestcontainersConfiguration.class, TarjetaDelSemaforoIT.RelojDeLas2352DeLima.class})
@@ -58,6 +64,13 @@ class TarjetaDelSemaforoIT {
         @Primary
         Clock relojDeLas2352DeLima() {
             return FixedClock.at(LAS_2352_DEL_28_EN_LIMA);
+        }
+
+        /** Siempre el primer candidato (ordenados por id): el mensaje de la noche deja de depender de la suerte. */
+        @Bean
+        @Primary
+        AzarPort azarSiempreElPrimero() {
+            return n -> 0;
         }
     }
 
@@ -106,9 +119,18 @@ class TarjetaDelSemaforoIT {
         assertThat(deAna).as("una sola, sin imagen (noop), del programa a nombre de Ana").singleElement().satisfies(m -> {
             assertThat(m.get("tipo")).isEqualTo("SISTEMA");
             assertThat(m.get("emisor_id")).isEqualTo(ana);
-            assertThat(m.get("texto")).isEqualTo("Hoy llevas 88 % de tus hábitos.");
+            assertThat(m.get("texto")).asString().startsWith(BASE_DE_ANA);
             assertThat(m.get("media_ruta")).isNull();
         });
+        assertThat(textoDe(soporteDeAna)).as("porcentaje de siempre + línea en blanco + mensaje del catálogo")
+                .isEqualTo(BASE_DE_ANA + "\n\n" + elMensajeEscritoParaAna(idDelChatDe(ana)));
+        assertThat(filasDeLaEleccion(ana)).as("una sola fila: canal CHAT, grupo del color del día, fecha de LIMA")
+                .singleElement().satisfies(fila -> {
+                    assertThat(fila.get("canal")).isEqualTo("CHAT");
+                    assertThat(fila.get("grupo")).isEqualTo("VERDE");
+                    assertThat(fila.get("fecha").toString()).isEqualTo("2026-09-28");
+                    assertThat(fila.get("mensaje_id").toString()).startsWith("v");
+                });
         assertThat(jdbc.queryForObject("SELECT count(*) FROM renaser.mensajes WHERE conversacion_id = ?", Integer.class,
                 soporteDeBeto)).as("cuenta suspendida").isZero();
         // La base de este contexto puede traer a otros aprendices: se mira que la de Ana saliera y que la
@@ -120,7 +142,78 @@ class TarjetaDelSemaforoIT {
                 .containsExactly(ana);
     }
 
+    @Test
+    @DisplayName("D-281: el mensaje de la noche es distinto del que la aprendiz vio en Hoy ese mismo día")
+    void distintoDelQueVioEnHoy() throws InterruptedException {
+        String elPrimero = candidatosVerdesDelChat().get(0);
+        String elSegundo = candidatosVerdesDelChat().get(1);
+        jdbc.update("""
+                INSERT INTO renaser.mensajes_semaforo_elegidos (participante_id, fecha, canal, grupo, mensaje_id, elegido_en)
+                VALUES (?, ?, 'HOY', 'VERDE', ?, now())
+                """, ana, DIA_28, elPrimero);
+
+        tarjetas.enviarLasQueTocan();
+        esperarQueElOutboxTermine();
+
+        assertThat(filasDeLaEleccion(ana)).extracting(f -> f.get("canal") + ":" + f.get("mensaje_id"))
+                .as("Hoy conserva el suyo y el chat toma el siguiente, aunque el azar apunte al primero")
+                .containsExactlyInAnyOrder("HOY:" + elPrimero, "CHAT:" + elSegundo);
+        assertThat(textoDe(soporteDeAna)).isEqualTo(BASE_DE_ANA + "\n\n" + elMensajeEscritoParaAna(elSegundo));
+    }
+
+    @Test
+    @DisplayName("D-281: lo que la aprendiz vio ayer en Hoy tampoco se repite en el chat (14 días entre los dos canales)")
+    void noRepiteLoVistoAyerEnHoy() throws InterruptedException {
+        String elPrimero = candidatosVerdesDelChat().get(0);
+        jdbc.update("""
+                INSERT INTO renaser.mensajes_semaforo_elegidos (participante_id, fecha, canal, grupo, mensaje_id, elegido_en)
+                VALUES (?, ?, 'HOY', 'VERDE', ?, now())
+                """, ana, DIA_28.minusDays(1), elPrimero);
+
+        tarjetas.enviarLasQueTocan();
+        esperarQueElOutboxTermine();
+
+        assertThat(textoDe(soporteDeAna)).doesNotContain(elMensajeEscritoParaAna(elPrimero));
+        assertThat(filasDeLaEleccion(ana)).filteredOn(f -> "CHAT".equals(f.get("canal")))
+                .singleElement().satisfies(f -> assertThat(f.get("mensaje_id")).isNotEqualTo(elPrimero));
+    }
+
     // ── Apoyo ───────────────────────────────────────────────────────────────
+
+    private static final String BASE_DE_ANA = "Hoy llevas 88 % de tus hábitos.";
+
+    /** Los VERDES que el chat puede usar con lo que sabe de Ana (sin cuánto falta ni hábitos), en el orden del azar. */
+    private List<String> candidatosVerdesDelChat() {
+        return jdbc.queryForList("""
+                SELECT id FROM renaser.mensajes_semaforo
+                WHERE grupo = 'VERDE' AND activo
+                  AND texto NOT LIKE '%{faltan}%' AND texto NOT LIKE '%{habitoFlojo}%' AND texto NOT LIKE '%{habitoFuerte}%'
+                ORDER BY id""", String.class);
+    }
+
+    private List<Map<String, Object>> filasDeLaEleccion(UUID aprendiz) {
+        return jdbc.queryForList("""
+                SELECT fecha, canal, grupo, mensaje_id FROM renaser.mensajes_semaforo_elegidos
+                WHERE participante_id = ? ORDER BY canal, fecha""", aprendiz);
+    }
+
+    private String textoDe(UUID soporte) {
+        return jdbc.queryForObject("SELECT texto FROM renaser.mensajes WHERE conversacion_id = ?", String.class, soporte);
+    }
+
+    /** El texto del catálogo con los datos de Ana (día 9): lo que la aprendiz debe leer. */
+    private String elMensajeEscritoParaAna(String mensajeId) {
+        String texto = jdbc.queryForObject("SELECT texto FROM renaser.mensajes_semaforo WHERE id = ?", String.class,
+                mensajeId);
+        return texto.replace("{nombre}", "Ana").replace("{dia}", "9")
+                .replace("{fase}", FasePrograma.paraDiaPrograma(9).nombreVisible());
+    }
+
+    private String idDelChatDe(UUID aprendiz) {
+        return jdbc.queryForObject("""
+                SELECT mensaje_id FROM renaser.mensajes_semaforo_elegidos WHERE participante_id = ? AND canal = 'CHAT'""",
+                String.class, aprendiz);
+    }
 
     private UUID persona(String rol, String estado, String nombre) {
         UUID id = UUID.randomUUID();

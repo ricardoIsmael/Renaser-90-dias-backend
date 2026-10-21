@@ -30,6 +30,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -50,6 +51,12 @@ import java.util.stream.Collectors;
  * <p><b>Sin cola propia y sin migracion</b>: ver el javadoc de {@code TipoAvisoHabito}. El aviso
  * es derivable del calendario, y la deduplicacion la hace {@code notificaciones} por
  * {@code origen_evento_id} (C-7/V16).
+ *
+ * <p><b>Lo que NO se avisa (spec 007).</b> Un habito que la persona apago para hoy —por fecha (V38) o por
+ * dia de la semana (V40)— no recibe ni el aviso de inicio ni el de vencimiento aunque su registro del dia ya
+ * exista (FR-011): es el mismo par de consultas con el que {@code RegistroService} decide no generar el
+ * registro de un dia. Y un registro {@code EN_CURSO} (sesion especial abierta) no recibe el de inicio
+ * (FR-015b): no tiene sentido anunciar que va a empezar lo que ya empezo.
  */
 @Service
 public class AvisoHabitoService implements DespacharAvisosHabitoUseCase {
@@ -98,11 +105,31 @@ public class AvisoHabitoService implements DespacharAvisosHabitoUseCase {
         return publicados;
     }
 
-    /** Solo lo que todavia se puede hacer: un COMPLETADO/EXPIRADO/FALLIDO no tiene nada que avisar. */
+    /**
+     * Solo lo que todavia se puede hacer: un COMPLETADO/EXPIRADO/FALLIDO no tiene nada que avisar, y
+     * tampoco un habito que la persona apago para ESTE dia (FR-011). Los apagados se leen una sola vez por
+     * barrido y solo si queda algun registro vivo: quien ya completo todo no suma consultas.
+     */
     private List<RegistroHabito> registrosVivosDe(UserId participanteId, LocalDate fechaEnSuZona) {
-        return loadRegistroPort.porParticipanteYFecha(participanteId, fechaEnSuZona).stream()
+        List<RegistroHabito> sinTerminar = loadRegistroPort.porParticipanteYFecha(participanteId, fechaEnSuZona)
+                .stream()
                 .filter(registro -> !registro.estado().esTerminal())
                 .toList();
+        if (sinTerminar.isEmpty()) {
+            return sinTerminar;
+        }
+        Set<HabitoId> apagados = apagadosEl(participanteId, fechaEnSuZona);
+        return sinTerminar.stream().filter(registro -> !apagados.contains(registro.habitoId())).toList();
+    }
+
+    /**
+     * Los habitos que el aprendiz apago para esa fecha (V38) o para ese dia de la semana (V40). La fecha
+     * ya viene en SU zona, y el dia de la semana sale de ella: no se recalcula con la del servidor.
+     */
+    private Set<HabitoId> apagadosEl(UserId participanteId, LocalDate fechaEnSuZona) {
+        Set<HabitoId> apagados = new HashSet<>(loadPreferenciaPort.habitosApagadosEn(participanteId, fechaEnSuZona));
+        apagados.addAll(loadPreferenciaPort.habitosApagadosEnDiaSemana(participanteId, fechaEnSuZona.getDayOfWeek()));
+        return apagados;
     }
 
     private int publicarAvisosDe(RegistroHabito registro, AgendaDelDia agenda, ZoneId zona) {
@@ -113,10 +140,13 @@ public class AvisoHabitoService implements DespacharAvisosHabitoUseCase {
         Instant ahora = clock.now();
         VentanaEntrega ventana = ventanaDe(registro, habito, agenda, zona);
         PreferenciaHorario preferencia = agenda.preferencias().get(habito.id());
-        List<AvisoHabito> debidos = calculadoraPara(preferencia).debidosAhora(ventana, ahora);
+        List<AvisoHabito> debidos = calculadoraPara(preferencia).debidosAhora(ventana, ahora).stream()
+                .filter(aviso -> aviso.tipo().correspondeA(registro.estado()))
+                .toList();
         PuntosEnJuego puntos = PuntosEnJuego.de(ventana, ahora);
         for (AvisoHabito aviso : debidos) {
-            events.publishEvent(eventoDe(registro, habito, aviso, puntos, preferencia));
+            events.publishEvent(eventoDe(registro, aviso, puntos, new DatosDelHabito(habito, preferencia, zona,
+                    agenda.conEsquemaPorDia().contains(habito.id()))));
         }
         return debidos.size();
     }
@@ -150,15 +180,30 @@ public class AvisoHabitoService implements DespacharAvisosHabitoUseCase {
      * El evento se publica SIEMPRE, aunque el aprendiz haya apagado el recordatorio de ese habito:
      * apagarlo quita el push (lo decide `notifications`, D-184), no el aviso en la bandeja ni el
      * del chat del acompanante, que tiene su propio interruptor.
+     *
+     * <p>Spec 007: la clave lleva el momento avisado (FR-013) y el evento viaja con ese momento y la zona
+     * del aprendiz (FR-012), para que `notifications` escriba «te toca a las 07:00» —la hora del habito,
+     * no minutos contados desde este barrido— y descarte el aviso que llegue cuando su momento ya paso.
      */
-    private AvisoHabitoDebidoEvent eventoDe(RegistroHabito registro, Habito habito, AvisoHabito aviso,
-                                             PuntosEnJuego puntos, PreferenciaHorario preferencia) {
-        return new AvisoHabitoDebidoEvent(registro.id().value(), registro.participanteId(), habito.titulo(),
+    private AvisoHabitoDebidoEvent eventoDe(RegistroHabito registro, AvisoHabito aviso, PuntosEnJuego puntos,
+                                             DatosDelHabito datos) {
+        PreferenciaHorario preferencia = datos.preferencia();
+        return new AvisoHabitoDebidoEvent(registro.id().value(), registro.participanteId(), datos.habito().titulo(),
                 aviso.tipo().name(), aviso.minutosQueFaltan(), puntos.siCompletaAhora(),
-                aviso.tipo().claveIdempotencia(registro.id()),
+                aviso.tipo().claveIdempotencia(registro.id(), aviso.momento()),
                 preferencia == null ? null : preferencia.recordatorioActivo(),
                 preferencia == null ? null : preferencia.minutosRecordatorio(), clock.now(),
-                habito.id().value(), habito.categoriaClave());
+                datos.habito().id().value(), datos.habito().categoriaClave(), aviso.momento(), datos.zona().getId(),
+                diaDelAviso(registro, datos.usaEsquemaPorDia()));
+    }
+
+    /**
+     * Spec 008, R6: el dia de la semana (ISO) de la fecha del registro, que ya viene en la zona del aprendiz,
+     * solo si el habito usa el esquema de alarmas por dia. Con el esquema diario va {@code null} y el push
+     * conserva su etiqueta de siempre.
+     */
+    private static Integer diaDelAviso(RegistroHabito registro, boolean usaEsquemaPorDia) {
+        return usaEsquemaPorDia ? registro.fechaEjecucion().getDayOfWeek().getValue() : null;
     }
 
     /** Una consulta por coleccion y no una por registro: este barrido recorre todo el padron. */
@@ -173,11 +218,20 @@ public class AvisoHabitoService implements DespacharAvisosHabitoUseCase {
         Map<HabitoId, PreferenciaHorario> preferencias = loadPreferenciaPort
                 .porParticipanteHabitosYFecha(participanteId, habitoIds, registros.getFirst().fechaEjecucion()).stream()
                 .collect(Collectors.toMap(PreferenciaHorario::habitoId, preferencia -> preferencia));
-        return new AgendaDelDia(habitos, horarios, preferencias);
+        return new AgendaDelDia(habitos, horarios, preferencias,
+                loadPreferenciaPort.habitosConEsquemaPorDia(participanteId, habitoIds));
     }
 
-    /** El catalogo del dia ya resuelto en lote, para no repetir consultas por registro. */
+    /** Lo que el evento necesita saber del habito de un registro, agrupado para no pasar seis parametros. */
+    private record DatosDelHabito(Habito habito, PreferenciaHorario preferencia, ZoneId zona,
+                                  boolean usaEsquemaPorDia) {
+    }
+
+    /**
+     * El catalogo del dia ya resuelto en lote, para no repetir consultas por registro. {@code conEsquemaPorDia}
+     * son los habitos con alguna fila de dia de la semana (spec 008): se piden UNA vez por barrido.
+     */
     private record AgendaDelDia(Map<HabitoId, Habito> habitos, Map<HabitoId, List<HorarioHabito>> horarios,
-                                 Map<HabitoId, PreferenciaHorario> preferencias) {
+                                 Map<HabitoId, PreferenciaHorario> preferencias, Set<HabitoId> conEsquemaPorDia) {
     }
 }

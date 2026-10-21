@@ -87,5 +87,14 @@ interface SpringDataPublicacionRepository extends JpaRepository<PublicacionJpaEn
      */
     boolean existsByAutorIdAndCreadoEnGreaterThanEqualAndCreadoEnLessThan(UUID autorId, Instant desde, Instant hasta);
 
+    /** El detalle del de arriba (E-628): id e instante, de la más vieja a la más nueva. Usa {@code muro_autor_idx}. */
+    @Query("""
+            SELECT p.id, p.creadoEn FROM PublicacionJpaEntity p
+            WHERE p.autorId = :autorId AND p.creadoEn >= :desde AND p.creadoEn < :hasta
+            ORDER BY p.creadoEn ASC
+            """)
+    List<Object[]> idsDeAutorEntre(@Param("autorId") UUID autorId, @Param("desde") Instant desde,
+                                   @Param("hasta") Instant hasta);
+
     Optional<PublicacionJpaEntity> findFirstByOcultaFalseOrderByCreadoEnDesc();
 }

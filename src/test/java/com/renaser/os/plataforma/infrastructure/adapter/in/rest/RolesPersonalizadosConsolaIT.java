@@ -28,7 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * La consola de roles personalizados de punta a punta (contrato de la fase 2, §4.5 y §7; D-272): sesión real, los dos
- * interceptores, los servicios de plataforma y users, Postgres con V105/V106 y Redis para los tokens.
+ * interceptores, los servicios de plataforma y users, Postgres con V115/V116 y Redis para los tokens.
  *
  * <p>Autorización negativa en cada endpoint nuevo (ADMIN, ALQUIMISTA, MENTOR, GUÍA, LÍDER, APRENDIZ y un Soporte TI
  * suspendido → 403; sin desbloqueo → 423; crítico sin reautenticar → 428), las reglas que devuelven 400/409 y la

@@ -28,16 +28,18 @@ public record ResumenPorGruposResponse(LocalDate desde, LocalDate hasta, boolean
      * @param etiqueta la palabra de ese color: nunca viaja un color solo (RL-30)
      * @param sinMentor true si el grupo no tuvo mentor en el periodo (D-240): el líder lo ve marcado
      *                  en vez de no verlo. Campo agregado; la app instalada lo ignora
+     * @param puedeAbrirse true si el líder puede bajar a las personas del grupo (spec 005): tiene mentor. Campo
+     *                  agregado y opcional: con un backend anterior falta y la app no abre la tarjeta (FR-021)
      */
     public record GrupoResponse(UUID grupoId, String grupoNombre, String mentorNombre,
                                 ConteoPorColorResponse resumen, BigDecimal promedio, String color,
-                                String etiqueta, boolean sinMentor) {
+                                String etiqueta, boolean sinMentor, boolean puedeAbrirse) {
 
         static GrupoResponse from(GrupoDelResumen grupo) {
             ColorSemaforo color = grupo.resumen().colorDelPromedio();
             return new GrupoResponse(grupo.grupoId(), grupo.grupoNombre(), grupo.mentorNombre(),
                     ConteoPorColorResponse.from(grupo.resumen().conteo()), grupo.resumen().promedio(),
-                    color.name(), color.etiqueta(), grupo.sinMentor());
+                    color.name(), color.etiqueta(), grupo.sinMentor(), grupo.puedeAbrirse());
         }
     }
 }

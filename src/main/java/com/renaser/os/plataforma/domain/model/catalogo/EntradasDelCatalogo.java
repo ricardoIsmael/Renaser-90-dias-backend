@@ -25,6 +25,10 @@ import static com.renaser.os.users.api.UserRole.TRAINEE_GUIDE;
  *
  * <p>Soporte TI figura en todas las que no son de acompañar grupos: tiene lo de todos los roles (FR-023).
  *
+ * <p>{@code lider.cumplimiento} (spec 005, D-274) es la única que no está en la tabla de la spec 002: se sumó con la ficha
+ * de cumplimiento por persona del líder. Cuelga de {@code lider}, y su resumen diario al mentor corre en una ventana que
+ * pasa (20:00 a 20:59 de la zona del mentor), así que apagada se salta y no se pone al día.
+ *
  * <p><b>Agregar una funcionalidad</b> es una línea acá y un {@code @Funcionalidad} en sus endpoints. Una clave que
  * ya se usa no se renombra: la app y la base la guardan.
  */
@@ -85,6 +89,7 @@ final class EntradasDelCatalogo {
                 critica("notificaciones", "Notificaciones", "Notificaciones", "Los avisos push y la bandeja.", TODOS, POSPONE),
                 raiz("mentor.mi_grupo", "Mentoría", "Mi grupo", "«Mi grupo» y las fichas de los aprendices.", EnumSet.of(MENTOR, TRAINEE_GUIDE), SALTA),
                 normal("lider", "Mentoría", "Mis mentores", "La gestión del Líder de mentores.", EnumSet.of(MENTOR_LEAD, ADMIN, ALCHEMIST, IT_SUPPORT), NO_APLICA),
+                normal("lider.cumplimiento", "Mentoría", "Cumplimiento por persona", "Del semáforo por grupos a cada persona: su semana, sus evidencias, avisar a su mentor y el resumen diario al mentor.", EnumSet.of(MENTOR_LEAD, ADMIN, ALCHEMIST, IT_SUPPORT), SALTA),
                 normal("tickets", "Mentoría", "Tickets de mentoría", "Las consultas al mentor y la bandeja de tickets.", TODOS, NO_APLICA),
                 critica("admin", "Administración", "Administración", "Administración entera.", ADMINISTRACION, NO_APLICA),
                 normal("admin.solicitudes", "Administración", "Solicitudes", "Aprobar, rechazar y borrar solicitudes de alta.", ADMINISTRACION, NO_APLICA),

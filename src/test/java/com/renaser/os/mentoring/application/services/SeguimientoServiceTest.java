@@ -1,16 +1,21 @@
 package com.renaser.os.mentoring.application.services;
 
 import com.renaser.os.community.api.AcompanamientoFinder;
+import com.renaser.os.community.api.PublicacionMuroFinder;
+import com.renaser.os.community.api.PublicacionMuroFinder.PublicacionDelAutor;
 import com.renaser.os.evidence.api.EntregaDeEvidencia;
 import com.renaser.os.evidence.api.EntregasPorRegistroFinder;
 import com.renaser.os.evidence.api.EstadoValidacion;
+import com.renaser.os.evidence.api.TipoEvidencia;
 import com.renaser.os.habits.api.EstadoObligacion;
 import com.renaser.os.habits.api.ObligacionHabito;
 import com.renaser.os.habits.api.ObligacionesHistoricasFinder;
+import com.renaser.os.mentoring.api.EvidenciaDeObligacion;
+import com.renaser.os.mentoring.api.ObligacionDelDia;
+import com.renaser.os.mentoring.api.SemanaDelAlumno;
 import com.renaser.os.mentoring.application.ports.in.ConsultarEvaluacionPropiaUseCase.EvaluacionPropia;
 import com.renaser.os.mentoring.application.ports.in.ConsultarSeguimientoSemanalUseCase.ConsultaSemana;
-import com.renaser.os.mentoring.application.ports.in.ConsultarSeguimientoSemanalUseCase.ObligacionDelDia;
-import com.renaser.os.mentoring.application.ports.in.ConsultarSeguimientoSemanalUseCase.SemanaDelAlumno;
+import com.renaser.os.mentoring.application.ports.in.ConsultarSemanaAdministrativaUseCase.ConsultaSemanaAdministrativa;
 import com.renaser.os.points.api.CalculoCumplimientoPort;
 import com.renaser.os.points.api.EvaluacionCumplimiento;
 import com.renaser.os.points.api.ObligacionEvidencia;
@@ -63,6 +68,7 @@ class SeguimientoServiceTest {
     private static final UserId MENTOR = UserId.of(UUID.fromString("00000000-0000-0000-0000-0000000000a1"));
     private static final UserId ANA = UserId.of(UUID.fromString("00000000-0000-0000-0000-0000000000b1"));
     private static final UserId LUIS = UserId.of(UUID.fromString("00000000-0000-0000-0000-0000000000b2"));
+    private static final UserId ADMIN = UserId.of(UUID.fromString("00000000-0000-0000-0000-0000000000d1"));
     private static final UserId AJENO = UserId.of(UUID.fromString("00000000-0000-0000-0000-0000000000b9"));
 
     private final List<AcompanamientoFinder.TramoDeAcompanamiento> tramosDelMentor = new ArrayList<>();
@@ -70,8 +76,12 @@ class SeguimientoServiceTest {
     private final List<ObligacionHabito> obligaciones = new ArrayList<>();
     private final Map<UUID, EntregaDeEvidencia> entregas = new LinkedHashMap<>();
     private final Set<UserId> suspendidos = new java.util.HashSet<>();
+    /** Publicaciones del Muro por autor, para el post diario (E-628). */
+    private final Map<UserId, List<PublicacionDelAutor>> publicaciones = new LinkedHashMap<>();
 
     private SeguimientoService servicio;
+    /** El armado compartido, tambien por la puerta del lider (spec 005): la ventana la pone quien pide. */
+    private ArmadoDeLaSemana armado;
 
     @BeforeEach
     void preparar() {
@@ -219,7 +229,8 @@ class SeguimientoServiceTest {
 
             @Override
             public Optional<UserSummary> findById(UserId id) {
-                return Optional.of(new UserSummary(id, "Ana Perez", null, UserRole.TRAINEE,
+                return Optional.of(new UserSummary(id, "Ana Perez", null,
+                        id.equals(ADMIN) ? UserRole.ADMIN : UserRole.TRAINEE,
                         suspendidos.contains(id) ? UserStatus.SUSPENDED : UserStatus.ACTIVE));
             }
 
@@ -234,7 +245,30 @@ class SeguimientoServiceTest {
 
         };
 
-        servicio = new SeguimientoService(acompanamiento, obligacionesFinder, entregasFinder, calculo,
+        PublicacionMuroFinder muro = new PublicacionMuroFinder() {
+            @Override
+            public boolean publicoEntre(UserId autorId, Instant desde, Instant hasta) {
+                return !delAutorEntre(autorId, desde, hasta).isEmpty();
+            }
+
+            @Override
+            public java.util.Optional<com.renaser.os.community.api.PublicacionParaCompartir> paraCompartir(UUID id) {
+                return java.util.Optional.empty();
+            }
+
+            /** Mismo contrato que el real: media ventana [desde, hasta), de la mas vieja a la mas nueva. */
+            @Override
+            public List<PublicacionDelAutor> delAutorEntre(UserId autorId, Instant desde, Instant hasta) {
+                return publicaciones.getOrDefault(autorId, List.of()).stream()
+                        .filter(p -> !p.creadaEn().isBefore(desde) && p.creadaEn().isBefore(hasta))
+                        .sorted(java.util.Comparator.comparing(PublicacionDelAutor::creadaEn))
+                        .toList();
+            }
+        };
+
+        armado = new ArmadoDeLaSemana(obligacionesFinder, entregasFinder, participaciones, usuarios, muro,
+                FixedClock.at(AHORA));
+        servicio = new SeguimientoService(acompanamiento, armado, obligacionesFinder, entregasFinder, calculo,
                 participaciones, usuarios, FixedClock.at(AHORA));
     }
 
@@ -260,6 +294,20 @@ class SeguimientoServiceTest {
     private void entregada(ObligacionHabito o, LocalDate cuando, EstadoValidacion revision) {
         entregas.put(o.registroId(), new EntregaDeEvidencia(o.registroId(), UUID.randomUUID(),
                 cuando.atTime(12, 0).atZone(LIMA).toInstant(), revision, 1));
+    }
+
+    private UUID publico(UserId autor, String instante) {
+        UUID id = UUID.randomUUID();
+        publicaciones.computeIfAbsent(autor, a -> new ArrayList<>())
+                .add(new PublicacionDelAutor(id, Instant.parse(instante)));
+        return id;
+    }
+
+    private ObligacionHabito postDiario(UserId alumno, LocalDate fecha, EstadoObligacion estado) {
+        ObligacionHabito o = new ObligacionHabito(UUID.randomUUID(), alumno, fecha, 24, "POST DIARIO EN COMUNIDAD",
+                estado, false, false, ObligacionHabito.CLAVE_POST_DIARIO_COMUNIDAD, null);
+        obligaciones.add(o);
+        return o;
     }
 
     // ── autorización ────────────────────────────────────────────────────────
@@ -314,6 +362,124 @@ class SeguimientoServiceTest {
         assertThat(semana.dias()).hasSize(7);
         assertThat(semana.inicioDeSemana()).isEqualTo(LocalDate.of(2026, 9, 7));
         assertThat(semana.finDeSemana()).isEqualTo(LocalDate.of(2026, 9, 13));
+    }
+
+    @Test
+    @DisplayName("E-628: el post diario trae la PRIMERA publicacion de su dia como entrega, y la de otro dia no")
+    void postDiarioLigadoASuPublicacion() {
+        acompanaTodoElMes();
+        alumnoEnGrupo(ANA, Instant.parse("2026-09-01T05:00:00Z"), null);
+        ObligacionHabito martes = postDiario(ANA, LocalDate.of(2026, 9, 8), EstadoObligacion.COMPLETADO);
+        ObligacionHabito miercoles = postDiario(ANA, LocalDate.of(2026, 9, 9), EstadoObligacion.PENDIENTE);
+        // Martes 8 en Lima: 09:00 y 21:30 locales. La de las 23:30 del lunes 7 (04:30 UTC del 8) es del LUNES.
+        publico(ANA, "2026-09-08T04:30:00Z");
+        UUID primera = publico(ANA, "2026-09-08T14:00:00Z");
+        publico(ANA, "2026-09-09T02:30:00Z");
+        publico(LUIS, "2026-09-08T13:00:00Z");
+
+        SemanaDelAlumno semana = servicio.semanaDe(
+                new ConsultaSemana(MENTOR, MI_GRUPO, ANA.value(), LocalDate.of(2026, 9, 9)));
+
+        ObligacionDelDia delMartes = obligacionDe(semana, martes);
+        assertThat(delMartes.publicacionId()).isEqualTo(primera);
+        assertThat(delMartes.entrega()).isEqualTo("ENTREGADA");
+        assertThat(delMartes.entregadaEn()).isEqualTo(Instant.parse("2026-09-08T14:00:00Z"));
+        assertThat(delMartes.evidenciaId()).isNull();
+        // El miercoles todavia no publico: nada ligado y sigue sin pedir archivo.
+        ObligacionDelDia delMiercoles = obligacionDe(semana, miercoles);
+        assertThat(delMiercoles.publicacionId()).isNull();
+        assertThat(delMiercoles.entrega()).isEqualTo("NO_REQUERIDA");
+        assertThat(semana.resumen().conEntrega()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("E-628: un habito comun no se liga a una publicacion aunque ese dia haya publicado")
+    void habitoComunNoSeLigaAlMuro() {
+        acompanaTodoElMes();
+        alumnoEnGrupo(ANA, Instant.parse("2026-09-01T05:00:00Z"), null);
+        ObligacionHabito lectura = obligacion(ANA, LocalDate.of(2026, 9, 8), "Lectura", EstadoObligacion.COMPLETADO,
+                false);
+        publico(ANA, "2026-09-08T14:00:00Z");
+
+        SemanaDelAlumno semana = servicio.semanaDe(
+                new ConsultaSemana(MENTOR, MI_GRUPO, ANA.value(), LocalDate.of(2026, 9, 9)));
+
+        assertThat(obligacionDe(semana, lectura).publicacionId()).isNull();
+        assertThat(obligacionDe(semana, lectura).entrega()).isEqualTo("NO_REQUERIDA");
+    }
+
+    @Test
+    @DisplayName("R-2: la ventana la pone quien pide; la del lider va de sabado a viernes y no trae un dia mas")
+    void ventanaDeSabadoAViernes() {
+        obligacion(ANA, LocalDate.of(2026, 9, 4), "Agua", EstadoObligacion.COMPLETADO, false); // viernes anterior
+        obligacion(ANA, LocalDate.of(2026, 9, 5), "Caminar", EstadoObligacion.COMPLETADO, false); // sabado
+        obligacion(ANA, LocalDate.of(2026, 9, 11), "Lectura", EstadoObligacion.FALLIDO, false); // viernes
+        obligacion(ANA, LocalDate.of(2026, 9, 12), "Ayuno", EstadoObligacion.PENDIENTE, false); // sabado siguiente
+
+        SemanaDelAlumno semana = armado.semanaDe(ANA, MI_GRUPO, LocalDate.of(2026, 9, 5), LocalDate.of(2026, 9, 11));
+
+        assertThat(semana.inicioDeSemana()).isEqualTo(LocalDate.of(2026, 9, 5));
+        assertThat(semana.finDeSemana()).isEqualTo(LocalDate.of(2026, 9, 11));
+        assertThat(semana.dias()).extracting(d -> d.fecha().toString()).containsExactly("2026-09-05", "2026-09-06",
+                "2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11");
+        assertThat(semana.dias().stream().flatMap(d -> d.obligaciones().stream()).map(ObligacionDelDia::titulo))
+                .containsExactlyInAnyOrder("Caminar", "Lectura");
+        assertThat(semana.resumen().obligaciones()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("una ventana al reves se rechaza y la persona que no existe es 404, sin tocar a nadie mas")
+    void ventanaInvalida() {
+        assertThatThrownBy(() -> armado.semanaDe(ANA, MI_GRUPO, LocalDate.of(2026, 9, 11), LocalDate.of(2026, 9, 5)))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("spec 005: lo que la persona escribio y cada evidencia subida viajan con su obligacion, en las tres fichas")
+    void respuestaYEvidenciasViajan() {
+        acompanaTodoElMes();
+        alumnoEnGrupo(ANA, Instant.parse("2026-09-01T05:00:00Z"), null);
+        ObligacionHabito ritual = new ObligacionHabito(UUID.randomUUID(), ANA, LocalDate.of(2026, 9, 8), 24,
+                "Ritual de la manana", EstadoObligacion.COMPLETADO, true, false, null, "Me senti con energia");
+        obligaciones.add(ritual);
+        UUID foto = UUID.randomUUID();
+        UUID texto = UUID.randomUUID();
+        Instant subida = Instant.parse("2026-09-08T14:00:00Z");
+        entregas.put(ritual.registroId(), new EntregaDeEvidencia(ritual.registroId(), foto, subida,
+                EstadoValidacion.VALIDA, 2, List.of(
+                new EntregaDeEvidencia.ArchivoEntregado(foto, TipoEvidencia.FOTO, subida),
+                new EntregaDeEvidencia.ArchivoEntregado(texto, TipoEvidencia.TEXTO, subida.plusSeconds(60)))));
+
+        ObligacionDelDia delMentor = obligacionDe(servicio.semanaDe(
+                new ConsultaSemana(MENTOR, MI_GRUPO, ANA.value(), LocalDate.of(2026, 9, 9))), ritual);
+        ObligacionDelDia delAdmin = obligacionDe(servicio.semanaDe(
+                new ConsultaSemanaAdministrativa(ADMIN, ANA.value(), LocalDate.of(2026, 9, 9))), ritual);
+
+        for (ObligacionDelDia obligacion : List.of(delMentor, delAdmin)) {
+            assertThat(obligacion.respuestaTexto()).isEqualTo("Me senti con energia");
+            assertThat(obligacion.evidenciaId()).isEqualTo(foto);
+            assertThat(obligacion.evidencias()).extracting(EvidenciaDeObligacion::id, EvidenciaDeObligacion::tipo)
+                    .containsExactly(org.assertj.core.groups.Tuple.tuple(foto, "FOTO"),
+                            org.assertj.core.groups.Tuple.tuple(texto, "TEXTO"));
+        }
+    }
+
+    @Test
+    @DisplayName("spec 005: una obligacion sin respuesta ni archivos trae lista vacia, no null")
+    void sinRespuestaNiEvidencias() {
+        ObligacionHabito lectura = obligacion(ANA, LocalDate.of(2026, 9, 8), "Lectura", EstadoObligacion.PENDIENTE,
+                false);
+
+        ObligacionDelDia obligacion = obligacionDe(
+                armado.semanaDe(ANA, MI_GRUPO, LocalDate.of(2026, 9, 5), LocalDate.of(2026, 9, 11)), lectura);
+
+        assertThat(obligacion.respuestaTexto()).isNull();
+        assertThat(obligacion.evidencias()).isEmpty();
+    }
+
+    private static ObligacionDelDia obligacionDe(SemanaDelAlumno semana, ObligacionHabito o) {
+        return semana.dias().stream().flatMap(d -> d.obligaciones().stream())
+                .filter(x -> x.registroId().equals(o.registroId())).findFirst().orElseThrow();
     }
 
     @Test

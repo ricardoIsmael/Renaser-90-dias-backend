@@ -45,15 +45,15 @@ Todos los agentes salen de esta rama.
 
 | Agente | Migraciones | Contenido |
 |---|---|---|
-| A2 | **V103**, **V104** | despliegue y probadores; métricas por hora |
-| B2 | **V105**, **V106** | roles personalizados y `usuarios.rol_personalizado_id`; `ROL_PERSONALIZADO` en el `CHECK` de `cambios_auditados.tipo` |
-| B3 | **V107**, **V108** | `usuarios.es_cuenta_de_prueba`; `VER_COMO` en el `CHECK` de `cambios_auditados.tipo` |
+| A2 | **V113**, **V114** | despliegue y probadores; métricas por hora |
+| B2 | **V115**, **V116** | roles personalizados y `usuarios.rol_personalizado_id`; `ROL_PERSONALIZADO` en el `CHECK` de `cambios_auditados.tipo` |
+| B3 | **V117**, **V118** | `usuarios.es_cuenta_de_prueba`; `VER_COMO` en el `CHECK` de `cambios_auditados.tipo` |
 
 `ALTER TYPE … ADD VALUE` va solo en su migración (E-187). Un número que sobre se deja sin usar; no se renumera.
 
 ## 3. A2 — despliegue progresivo (US4; FR-018 a FR-021)
 
-### 3.1 Datos (V103, V104)
+### 3.1 Datos (V113, V114)
 
 ```sql
 CREATE TABLE renaser.funcionalidades_despliegue (
@@ -149,7 +149,7 @@ public interface GestionarRolesPersonalizadosUseCase { … crear, editar, desact
 record RolPersonalizadoCambiadoEvent(UUID rolId, Instant occurredAt) implements DomainEvent {}   // y al asignar
 ```
 
-### 4.2 Datos (V105, V106)
+### 4.2 Datos (V115, V116)
 
 `roles_personalizados (id uuid PK, clave text UNIQUE, nombre text UNIQUE, descripcion, rol_base rol_usuario NOT NULL,
 activo boolean, version bigint, creado_por/en, actualizado_por/en)`, `roles_personalizados_funcionalidades (rol_id, clave,
@@ -217,7 +217,7 @@ Asignación (Administración, como hoy: ADMIN y ALQUIMISTA; solo ADMIN asigna al
 
 ## 5. B3 — ver como rol (US5), segunda tanda, sobre B2
 
-- **Cuentas de prueba**: `usuarios.es_cuenta_de_prueba boolean NOT NULL DEFAULT false` (V107). Una por rol base y una
+- **Cuentas de prueba**: `usuarios.es_cuenta_de_prueba boolean NOT NULL DEFAULT false` (V117). Una por rol base y una
   por rol personalizado activo, creadas a pedido la primera vez: correo `ver-como+<rol|rp-id>@renaser.invalid`, nombre
   «Prueba · Mentor», **sin contraseña** (no se puede entrar con ellas por login). El aprendiz de prueba tiene su
   programa activo y está a mitad del programa. El mentor de prueba lidera un «Grupo de prueba (ver como)» con el

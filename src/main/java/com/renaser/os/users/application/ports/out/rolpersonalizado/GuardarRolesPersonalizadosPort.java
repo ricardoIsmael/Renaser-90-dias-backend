@@ -4,7 +4,7 @@ import com.renaser.os.users.domain.model.rolpersonalizado.RolPersonalizado;
 
 import java.util.UUID;
 
-/** Escribir roles personalizados (V105, D-272). Todo dentro de la transacción del caso de uso. */
+/** Escribir roles personalizados (V115, D-272). Todo dentro de la transacción del caso de uso. */
 public interface GuardarRolesPersonalizadosPort {
 
     /**

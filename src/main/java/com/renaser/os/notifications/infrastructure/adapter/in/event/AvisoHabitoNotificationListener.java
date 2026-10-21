@@ -3,8 +3,12 @@ package com.renaser.os.notifications.infrastructure.adapter.in.event;
 import com.renaser.os.habits.api.AvisoHabitoDebidoEvent;
 import com.renaser.os.notifications.application.ports.in.notificacion.EmitirNotificacionUseCase;
 import com.renaser.os.notifications.application.ports.in.notificacion.EmitirNotificacionUseCase.EmitirNotificacionCommand;
+import com.renaser.os.notifications.domain.model.habito.AvisoDeHabito;
 import com.renaser.os.notifications.domain.model.habito.EntregaDelAvisoDeHabito;
 import com.renaser.os.notifications.domain.model.notificacion.TipoNotificacion;
+import com.renaser.os.shared.domain.Clock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Component;
 
@@ -43,26 +47,50 @@ import java.nio.charset.StandardCharsets;
  * todos los dispositivos, ignorando el recordatorio que el aprendiz configuro en la app: con la
  * alarma local del telefono el aviso llegaba dos veces, y apagarlo no apagaba el push (E-302). Ahora
  * decide {@link EntregaDelAvisoDeHabito}; la fila de la bandeja se crea igual que siempre.
+ *
+ * <p><b>Spec 007 (2026-10-19).</b> El texto lo redacta {@link AvisoDeHabito} (dominio): dice la hora del
+ * habito en la zona del programa —«te toca a las 07:00»— en vez de minutos contados desde el barrido
+ * (FR-012), y lleva tildes (FR-016: salia «Tu habito esta por empezar»). El push lleva la etiqueta
+ * {@code habito-{id}-inicio} / {@code -por-vencer} para reemplazar, y no apilar, al aviso de la alarma local
+ * del mismo habito y momento (FR-014). Y un aviso que llega con su momento ya pasado —backend caido, outbox
+ * que reintenta tarde— no se guarda ni se empuja (FR-015): diria «te toca a las 07:00» de algo que ya empezo.
+ *
+ * <p><b>Spec 008 (R6).</b> Si el habito usa el esquema de alarmas por dia, el push de inicio lleva la etiqueta
+ * {@code habito-{id}-d{iso}-0} de ese dia, la misma de la alarma local, y no {@code -inicio}.
  */
 @Component
 class AvisoHabitoNotificationListener {
 
-    private static final String AVISO_INICIO = "INICIO";
+    private static final Logger log = LoggerFactory.getLogger(AvisoHabitoNotificationListener.class);
 
     private final EmitirNotificacionUseCase emitirNotificacionUseCase;
+    private final Clock clock;
 
-    AvisoHabitoNotificationListener(EmitirNotificacionUseCase emitirNotificacionUseCase) {
+    AvisoHabitoNotificationListener(EmitirNotificacionUseCase emitirNotificacionUseCase, Clock clock) {
         this.emitirNotificacionUseCase = emitirNotificacionUseCase;
+        this.clock = clock;
     }
 
     @ApplicationModuleListener
     void on(AvisoHabitoDebidoEvent event) {
-        boolean esInicio = AVISO_INICIO.equals(event.tipoAviso());
+        AvisoDeHabito aviso = avisoDe(event);
+        if (aviso.yaNoSirve(clock.now())) {
+            log.info("[notifications.AvisoHabitoNotificationListener] aviso {} del registro {} descartado: "
+                    + "su momento ya paso", event.tipoAviso(), event.registroId());
+            return;
+        }
         emitirNotificacionUseCase.emitir(new EmitirNotificacionCommand(event.participanteId(),
-                TipoNotificacion.RECORDATORIO_HABITO, esInicio ? "Tu habito esta por empezar" : "Se te vence un habito",
-                cuerpoDe(event, esInicio), rutaDe(event), event.claveEvento()),
+                TipoNotificacion.RECORDATORIO_HABITO, aviso.titulo(), aviso.cuerpo(), rutaDe(event),
+                event.claveEvento()),
                 EntregaDelAvisoDeHabito.para(event.tipoAviso(), event.recordatorioActivo(),
-                        event.minutosRecordatorio()));
+                        event.minutosRecordatorio()),
+                aviso.etiqueta());
+    }
+
+    private static AvisoDeHabito avisoDe(AvisoHabitoDebidoEvent event) {
+        return new AvisoDeHabito(event.tipoAviso(), event.tituloHabito(), event.minutosQueFaltan(),
+                event.puntosEnJuego(), event.habitoId(), event.occurredAt(), event.momentoAvisado(),
+                event.zonaHoraria(), event.diaDeLaSemanaDelAviso());
     }
 
     /**
@@ -80,17 +108,5 @@ class AvisoHabitoNotificationListener {
         return categoria == null || categoria.isBlank()
                 ? ruta
                 : ruta + "?dimension=" + URLEncoder.encode(categoria, StandardCharsets.UTF_8);
-    }
-
-    /**
-     * Los puntos en juego van en el texto por pedido explicito del dueno ("al mencionar un
-     * habito, decir cuantos puntos se ganan o se pierden"). El numero lo calcula `habits` con la
-     * escala real de D-97 y viaja en el evento: este modulo no lo recalcula ni lo redondea.
-     */
-    private static String cuerpoDe(AvisoHabitoDebidoEvent event, boolean esInicio) {
-        String cuando = esInicio
-                ? "empieza en " + event.minutosQueFaltan() + " min"
-                : "vence en " + event.minutosQueFaltan() + " min";
-        return event.tituloHabito() + " " + cuando + ". En juego: " + event.puntosEnJuego() + " puntos.";
     }
 }

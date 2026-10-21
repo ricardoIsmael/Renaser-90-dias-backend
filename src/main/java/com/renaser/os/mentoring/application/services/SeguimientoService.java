@@ -8,6 +8,7 @@ import com.renaser.os.evidence.api.EntregaDeEvidencia;
 import com.renaser.os.evidence.api.EntregasPorRegistroFinder;
 import com.renaser.os.habits.api.ObligacionHabito;
 import com.renaser.os.habits.api.ObligacionesHistoricasFinder;
+import com.renaser.os.mentoring.api.SemanaDelAlumno;
 import com.renaser.os.mentoring.application.ports.in.ConsultarEvaluacionPropiaUseCase;
 import com.renaser.os.mentoring.application.ports.in.ConsultarSeguimientoSemanalUseCase;
 import com.renaser.os.mentoring.application.ports.in.ConsultarSemanaAdministrativaUseCase;
@@ -55,16 +56,10 @@ import java.util.UUID;
 public class SeguimientoService implements ConsultarSeguimientoSemanalUseCase,
         ConsultarSemanaAdministrativaUseCase, ConsultarEvaluacionPropiaUseCase {
 
-    private static final String COBERTURA_COMPLETA = "COMPLETA";
-    private static final String COBERTURA_SIN_DATOS = "SIN_DATOS";
-
-    private static final String ENTREGA_NO_REQUERIDA = "NO_REQUERIDA";
-    private static final String ENTREGA_SIN_ENTREGA = "SIN_ENTREGA";
-    private static final String ENTREGA_ENTREGADA = "ENTREGADA";
-
     private static final ZoneId ZONA_POR_DEFECTO = ZoneId.of("America/Lima");
 
     private final AcompanamientoFinder acompanamientoFinder;
+    private final ArmadoDeLaSemana armadoDeLaSemana;
     private final ObligacionesHistoricasFinder obligacionesFinder;
     private final EntregasPorRegistroFinder entregasFinder;
     private final CalculoCumplimientoPort calculoCumplimiento;
@@ -72,13 +67,13 @@ public class SeguimientoService implements ConsultarSeguimientoSemanalUseCase,
     private final UserSummaryFinder userSummaryFinder;
     private final Clock clock;
 
-    public SeguimientoService(AcompanamientoFinder acompanamientoFinder,
-                               ObligacionesHistoricasFinder obligacionesFinder,
-                               EntregasPorRegistroFinder entregasFinder,
-                               CalculoCumplimientoPort calculoCumplimiento,
-                               ParticipacionProgramaFinder participacionProgramaFinder,
-                               UserSummaryFinder userSummaryFinder, Clock clock) {
+    SeguimientoService(AcompanamientoFinder acompanamientoFinder, ArmadoDeLaSemana armadoDeLaSemana,
+                       ObligacionesHistoricasFinder obligacionesFinder, EntregasPorRegistroFinder entregasFinder,
+                       CalculoCumplimientoPort calculoCumplimiento,
+                       ParticipacionProgramaFinder participacionProgramaFinder,
+                       UserSummaryFinder userSummaryFinder, Clock clock) {
         this.acompanamientoFinder = acompanamientoFinder;
+        this.armadoDeLaSemana = armadoDeLaSemana;
         this.obligacionesFinder = obligacionesFinder;
         this.entregasFinder = entregasFinder;
         this.calculoCumplimiento = calculoCumplimiento;
@@ -112,7 +107,8 @@ public class SeguimientoService implements ConsultarSeguimientoSemanalUseCase,
 
         ParticipacionPrograma delAlumno = participacionProgramaFinder.deParticipante(alumnoId)
                 .orElseThrow(() -> new NoSuchElementException("Alumno no encontrado"));
-        return armarSemana(alumnoId, delAlumno, grupo.grupoId(), consulta.inicioDeSemana(), ahora);
+        LocalDate lunes = lunesDe(consulta.inicioDeSemana(), delAlumno, ahora);
+        return armadoDeLaSemana.armar(alumnoId, delAlumno, grupo.grupoId(), lunes, lunes.plusDays(6), ahora);
     }
 
     /**
@@ -129,38 +125,18 @@ public class SeguimientoService implements ConsultarSeguimientoSemanalUseCase,
                 .orElseThrow(() -> new NoSuchElementException("Alumno no encontrado"));
         // Sin grupo vigente igual tiene semana: el administrador mira a la persona. El grupo viaja
         // null y la pantalla lo dice, en vez de fingir que no hay datos.
-        return armarSemana(alumnoId, delAlumno, delAlumno.celulaId(), consulta.inicioDeSemana(), clock.now());
+        Instant ahora = clock.now();
+        LocalDate lunes = lunesDe(consulta.inicioDeSemana(), delAlumno, ahora);
+        return armadoDeLaSemana.armar(alumnoId, delAlumno, delAlumno.celulaId(), lunes, lunes.plusDays(6), ahora);
     }
 
     /**
-     * El armado compartido. Que sea UNO solo es el requisito, no una comodidad: si el
-     * administrador y el mentor calcularan por su cuenta, verian dos versiones del mismo dia y
-     * ninguna pantalla podria decir cual es la buena (V22).
+     * Las fichas del mentor y de administración siguen mirando de lunes a domingo (R-2). La semana se ancla en la
+     * zona DEL ALUMNO, no en la del servidor ni en la de quien mira: sus días son los que se están mirando.
      */
-    private SemanaDelAlumno armarSemana(UserId alumnoId, ParticipacionPrograma participacion, UUID grupoId,
-                                         LocalDate inicioPedido, Instant ahora) {
-        // La semana se ancla en la zona DEL ALUMNO, no en la del servidor ni en la de quien mira:
-        // sus dias son los que se estan mirando.
-        ZoneId zona = participacion.zona();
-        LocalDate lunes = (inicioPedido != null
-                ? inicioPedido
-                : ahora.atZone(zona).toLocalDate()).with(DayOfWeek.MONDAY);
-        LocalDate domingo = lunes.plusDays(6);
-
-        List<ObligacionHabito> obligaciones =
-                obligacionesFinder.porParticipantesEntre(List.of(alumnoId), lunes, domingo);
-        Map<UUID, EntregaDeEvidencia> entregas =
-                entregasFinder.porRegistros(obligaciones.stream().map(ObligacionHabito::registroId).toList());
-
-        String nombre = userSummaryFinder.findById(alumnoId).map(UserSummary::fullName).orElse(null);
-        // Sin una sola obligacion en toda la semana no se afirma "no cumplio": puede que el
-        // padron de ese periodo no se haya generado. Es SIN_DATOS, que es otra cosa.
-        String cobertura = obligaciones.isEmpty() ? COBERTURA_SIN_DATOS : COBERTURA_COMPLETA;
-
-        return new SemanaDelAlumno(grupoId, alumnoId.value(), nombre, lunes, domingo,
-                participacion.inscrito() ? participacion.diaPrograma() : null, zona.getId(),
-                armarDias(lunes, domingo, obligaciones, entregas), resumir(obligaciones, entregas),
-                cobertura, ahora);
+    private static LocalDate lunesDe(LocalDate inicioPedido, ParticipacionPrograma participacion, Instant ahora) {
+        LocalDate dia = inicioPedido != null ? inicioPedido : ahora.atZone(participacion.zona()).toLocalDate();
+        return dia.with(DayOfWeek.MONDAY);
     }
 
     /**
@@ -181,50 +157,6 @@ public class SeguimientoService implements ConsultarSeguimientoSemanalUseCase,
             throw new NotAuthorizedException("La cuenta esta suspendida");
         }
         return actor;
-    }
-
-    private List<DiaDelAlumno> armarDias(LocalDate lunes, LocalDate domingo, List<ObligacionHabito> obligaciones,
-                                          Map<UUID, EntregaDeEvidencia> entregas) {
-        Map<LocalDate, List<ObligacionDelDia>> porFecha = new LinkedHashMap<>();
-        Map<LocalDate, Integer> diaDePrograma = new LinkedHashMap<>();
-        for (LocalDate fecha = lunes; !fecha.isAfter(domingo); fecha = fecha.plusDays(1)) {
-            // Los siete dias siempre estan, aunque vengan vacios: un dia sin obligaciones es un
-            // dato ("no habia nada programado"), no un hueco que la pantalla deba adivinar.
-            porFecha.put(fecha, new ArrayList<>());
-        }
-        for (ObligacionHabito obligacion : obligaciones) {
-            porFecha.computeIfAbsent(obligacion.fecha(), f -> new ArrayList<>())
-                    .add(aObligacionDelDia(obligacion, entregas.get(obligacion.registroId())));
-            diaDePrograma.putIfAbsent(obligacion.fecha(), obligacion.diaPrograma());
-        }
-        return porFecha.entrySet().stream()
-                .map(e -> new DiaDelAlumno(e.getKey(), diaDePrograma.get(e.getKey()), e.getValue()))
-                .toList();
-    }
-
-    private static ObligacionDelDia aObligacionDelDia(ObligacionHabito obligacion, EntregaDeEvidencia entrega) {
-        String estadoEntrega;
-        if (!obligacion.requiereEvidencia()) {
-            // Hay habitos que se acreditan de otro modo. Pedirles archivo seria inventar una
-            // obligacion que nunca existio (plan.md §7).
-            estadoEntrega = ENTREGA_NO_REQUERIDA;
-        } else {
-            estadoEntrega = entrega == null ? ENTREGA_SIN_ENTREGA : ENTREGA_ENTREGADA;
-        }
-        return new ObligacionDelDia(obligacion.registroId(), obligacion.titulo(), obligacion.estado().name(),
-                obligacion.requiereEvidencia(), estadoEntrega,
-                entrega == null ? null : entrega.primeraEntregaEn(),
-                entrega == null ? null : entrega.estadoRevision().name(),
-                entrega == null ? null : entrega.evidenciaId());
-    }
-
-    private static ResumenSemana resumir(List<ObligacionHabito> obligaciones,
-                                          Map<UUID, EntregaDeEvidencia> entregas) {
-        int cumplidas = (int) obligaciones.stream().filter(o -> o.estado().cumplido()).count();
-        int sinCumplir = (int) obligaciones.stream().filter(o -> o.estado().vencidoSinCumplir()).count();
-        int conEntrega = (int) obligaciones.stream().filter(o -> entregas.containsKey(o.registroId())).count();
-        return new ResumenSemana(obligaciones.size(), cumplidas, conEntrega,
-                obligaciones.size() - cumplidas - sinCumplir, sinCumplir);
     }
 
     // ── Evaluación mensual propia ───────────────────────────────────────────

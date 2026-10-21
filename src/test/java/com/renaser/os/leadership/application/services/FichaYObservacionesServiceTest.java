@@ -13,10 +13,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
+import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.UUID;
 
 import static com.renaser.os.leadership.application.services.PadronDeMentoresServiceTest.ANA;
+import static com.renaser.os.leadership.application.services.PadronDeMentoresServiceTest.LUIS;
 import static com.renaser.os.leadership.application.services.PadronDeMentoresServiceTest.LIDER;
 import static com.renaser.os.leadership.application.services.PadronDeMentoresServiceTest.LUISA;
 import static com.renaser.os.leadership.application.services.PadronDeMentoresServiceTest.RAUL;
@@ -114,6 +117,64 @@ class FichaYObservacionesServiceTest {
         assertThatThrownBy(() -> observaciones.registrar(comando(LIDER, LUISA, "k2")))
                 .isInstanceOf(NotAuthorizedException.class);
         assertThat(banco.observaciones).isEmpty();
+    }
+
+    private static RegistrarObservacionCommand sobre(UserId persona, LocalDate semana, String clave) {
+        return new RegistrarObservacionCommand(LIDER, LUISA, "ALERTA", "Ana lleva tres dias sin el ritual", false, null,
+                clave, persona, semana);
+    }
+
+    @Test
+    @DisplayName("spec 005 (R-7): «Avisar a su mentor» trae la persona y la semana, y se guarda con ellas")
+    void sobreUnaPersonaDelGrupoDelMentor() {
+        ObservacionDeMentor o = observaciones.registrar(sobre(ANA, LocalDate.of(2026, 10, 10), "k-1"));
+
+        assertThat(o.personaId()).isEqualTo(ANA);
+        assertThat(o.semanaDesde()).isEqualTo(LocalDate.of(2026, 10, 10));
+        assertThat(banco.observaciones).singleElement().isSameAs(o);
+    }
+
+    @Test
+    @DisplayName("spec 005: una persona que no esta hoy en un grupo de ESE mentor es 400 y no se guarda nada")
+    void personaDeOtroMentor() {
+        // Ana es de Fenix (Luisa); Raul lleva Aurora, que no la tiene.
+        assertThatThrownBy(() -> observaciones.registrar(new RegistrarObservacionCommand(LIDER, RAUL, "ALERTA", "x",
+                false, null, "k-2", ANA, null))).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("no esta en un grupo");
+        assertThatThrownBy(() -> observaciones.registrar(sobre(UserId.of(UUID.randomUUID()), null, "k-3")))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(banco.observaciones).isEmpty();
+    }
+
+    @Test
+    @DisplayName("spec 005: la semana sin persona no tiene sentido: el comando se rechaza al crearlo")
+    void semanaSinPersona() {
+        assertThatThrownBy(() -> new RegistrarObservacionCommand(LIDER, LUISA, "ALERTA", "x", false, null, "k-4", null,
+                LocalDate.of(2026, 10, 10))).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("spec 005: reintentar con la misma clave devuelve lo ya creado; la misma clave para OTRA persona es un error")
+    void claveConOtraPersona() {
+        ObservacionDeMentor primera = observaciones.registrar(sobre(ANA, LocalDate.of(2026, 10, 10), "k-5"));
+        ObservacionDeMentor repetida = observaciones.registrar(sobre(ANA, LocalDate.of(2026, 10, 10), "k-5"));
+
+        assertThat(repetida.id()).isEqualTo(primera.id());
+        assertThatThrownBy(() -> observaciones.registrar(sobre(LUIS, null, "k-5")))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(banco.observaciones).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("spec 005: la lista trae el nombre de la persona de cada observacion; las de antes no tienen")
+    void listaConNombres() {
+        observaciones.registrar(sobre(ANA, LocalDate.of(2026, 10, 10), "k-6"));
+        observaciones.registrar(comando(LIDER, LUISA, "k-7"));
+
+        PaginaDeObservaciones pagina = observaciones.observaciones(LIDER, LUISA, null);
+
+        assertThat(pagina.observaciones()).hasSize(2);
+        assertThat(pagina.nombresDePersonas()).containsOnlyKeys(ANA).containsEntry(ANA, "Ana Pérez");
     }
 
     @Test

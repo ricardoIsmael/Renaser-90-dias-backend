@@ -128,6 +128,22 @@ class BorradoDeCuentaEnLosModulosIT {
     }
 
     @Test
+    @DisplayName("spec 005 (V109): lo que el lider escribio SOBRE la persona (persona_id) se va con ella, aunque lo reciba otro mentor")
+    void lasObservacionesSobreLaPersonaSeVanConElla() {
+        UUID otra = semilla.nuevaPersona();
+        UUID persona = semilla.nuevaPersona();
+        jdbc.update("INSERT INTO renaser.observaciones_mentor (id, mentor_id, autor_id, tipo, texto, clave_operacion, "
+                + "creado_en, persona_id, semana_desde) VALUES (?, ?, ?, 'ALERTA', 'Sobre la persona', 'sobre-la-persona', "
+                + "now(), ?, DATE '2026-10-10')", UUID.randomUUID(), otra, otra, persona);
+        long deLaOtraAntes = semilla.filasCon("observaciones_mentor", "mentor_id", otra);
+
+        borrarEnUnaTransaccion(persona);
+
+        assertThat(semilla.filasCon("observaciones_mentor", "persona_id", persona)).isZero();
+        assertThat(semilla.filasCon("observaciones_mentor", "mentor_id", otra)).isEqualTo(deLaOtraAntes - 1);
+    }
+
+    @Test
     @DisplayName("sin claves compartidas, ningún módulo retiene un archivo de la persona")
     void sinClavesCompartidasNadaQuedaEnUso() {
         semilla.nuevaPersona();

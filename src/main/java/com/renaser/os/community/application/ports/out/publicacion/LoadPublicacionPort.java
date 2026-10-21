@@ -1,5 +1,7 @@
 package com.renaser.os.community.application.ports.out.publicacion;
 
+import com.renaser.os.community.api.PublicacionMuroFinder;
+
 import com.renaser.os.community.domain.model.publicacion.Publicacion;
 import com.renaser.os.community.domain.model.publicacion.PublicacionId;
 import com.renaser.os.shared.domain.UserId;
@@ -33,6 +35,9 @@ public interface LoadPublicacionPort {
      * puerto publico, que es donde vive esa decision.
      */
     boolean existeDeAutorEntre(UserId autorId, Instant desde, Instant hasta);
+
+    /** Las del autor en {@code [desde, hasta)}, ocultas incluidas, de la más vieja a la más nueva (E-628). */
+    List<PublicacionMuroFinder.PublicacionDelAutor> deAutorEntre(UserId autorId, Instant desde, Instant hasta);
 
     Optional<Publicacion> ultimaVisible();
 }

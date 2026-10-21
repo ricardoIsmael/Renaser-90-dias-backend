@@ -212,6 +212,47 @@ class MedicionDeLaPersonaTest {
         assertThat(semana.dias().getLast().porcentaje()).isZero();
     }
 
+    /**
+     * D-277: el mensaje de quien terminó el programa. El día 90 todavía es del programa (se mide); el 91 ya no. La
+     * bandeja {@code programa_completado} se marca al LLEGAR al 90, por eso no sirve para esto.
+     */
+    @Test
+    void elProgramaTerminaDespuesDelDiaNoventa() {
+        LocalDate dia90 = LocalDate.of(2026, 11, 29);
+
+        assertThat(new MedicionDeLaPersona(PROGRAMA_LARGO, Map.of(), dia90).programaTerminado()).isFalse();
+        assertThat(new MedicionDeLaPersona(PROGRAMA_LARGO, Map.of(), dia90.plusDays(1)).programaTerminado()).isTrue();
+        assertThat(new MedicionDeLaPersona(PROGRAMA_LARGO, Map.of(), HOY).programaTerminado()).isFalse();
+    }
+
+    /**
+     * D-277: {@code {faltan}} solo existe si hoy es un día medido. Hoy no se mide fuera del programa, en una pausa que
+     * pidió la persona ni el día en que se reactivó su cuenta suspendida (la persona lo vivió en parte sin app).
+     */
+    @Test
+    void hoyNoSeMideFueraDelProgramaNiEnPausaNiElDiaDeLaReactivacion() {
+        UserId persona = UserId.of(UUID.randomUUID());
+        PausaDeMedicion pausa = PausaDeMedicion.iniciar(PausaId.of(UUID.randomUUID()), persona, HOY,
+                HOY.plusDays(3), AHORA);
+        PausaDeMedicion suspension = PausaDeMedicion.porSuspension(PausaId.of(UUID.randomUUID()), persona,
+                HOY.minusDays(5), AHORA);
+        suspension.terminarSuspension(HOY, AHORA);
+        CalendarioDeMedicion conPausa = new CalendarioDeMedicion(LocalDate.of(2026, 9, 1), LocalDate.of(2026, 11, 29),
+                List.of(pausa));
+        CalendarioDeMedicion reactivada = new CalendarioDeMedicion(LocalDate.of(2026, 9, 1), LocalDate.of(2026, 11, 29),
+                List.of(suspension));
+
+        assertThat(new MedicionDeLaPersona(PROGRAMA_LARGO, Map.of(), HOY).seMideHoy()).as("dentro del programa").isTrue();
+        assertThat(new MedicionDeLaPersona(conPausa, Map.of(), HOY).seMideHoy()).as("en pausa").isFalse();
+        assertThat(new MedicionDeLaPersona(reactivada, Map.of(), HOY).seMideHoy()).as("reactivada hoy").isFalse();
+        assertThat(new MedicionDeLaPersona(reactivada, Map.of(), HOY.plusDays(1)).seMideHoy())
+                .as("al día siguiente de reactivarla").isTrue();
+        assertThat(new MedicionDeLaPersona(PROGRAMA_LARGO, Map.of(), LocalDate.of(2026, 8, 31)).seMideHoy())
+                .as("antes del Día 1").isFalse();
+        assertThat(new MedicionDeLaPersona(PROGRAMA_LARGO, Map.of(), LocalDate.of(2026, 11, 30)).seMideHoy())
+                .as("después del día 90").isFalse();
+    }
+
     private static List<EstadoDiaSemaforo> estados(VentanaDelSemaforo ventana) {
         return ventana.dias().stream().map(DiaDelSemaforo::estado).toList();
     }

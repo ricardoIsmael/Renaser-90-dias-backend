@@ -8,6 +8,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 /** Tabla {@code observaciones_mentor} (V89). Append-only: el adaptador solo inserta. */
@@ -37,4 +38,10 @@ public class ObservacionMentorJpaEntity {
     private String claveOperacion;
 
     private Instant creadoEn;
+
+    /** La persona de la que trata (V109, spec 005); NULL en las de antes. */
+    private UUID personaId;
+
+    /** El primer día de la semana que el líder miraba (V109); solo con {@code personaId}. */
+    private LocalDate semanaDesde;
 }

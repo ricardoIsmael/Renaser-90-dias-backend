@@ -1,8 +1,10 @@
 package com.renaser.os.habits.domain.model.aviso;
 
+import com.renaser.os.habits.domain.model.registro.EstadoRegistro;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -16,8 +18,8 @@ import java.util.UUID;
  * toca avisar, sin ningun estado propio. Lo unico que hace falta es no mandar el mismo aviso
  * dos veces, y para eso ya existe la deduplicacion de {@code notificaciones} por
  * {@code (usuario_id, tipo, origen_evento_id)} (C-7, V16). Esta clave es ese
- * {@code origen_evento_id}: un UUID DETERMINISTICO derivado del registro y del tipo de aviso,
- * asi que el segundo intento choca contra el indice unico y se descarta solo.
+ * {@code origen_evento_id}: un UUID DETERMINISTICO derivado del registro, del tipo de aviso y del
+ * momento avisado, asi que el segundo intento choca contra el indice unico y se descarta solo.
  *
  * <p>No se usa {@code registroId} pelado como clave porque los dos avisos comparten el mismo
  * {@code TipoNotificacion.RECORDATORIO_HABITO}: sin el prefijo, el aviso de vencimiento seria
@@ -25,6 +27,19 @@ import java.util.UUID;
  *
  * <p>{@code UUID.nameUUIDFromBytes} y no {@code randomUUID}: es una funcion pura del nombre,
  * lo que mantiene el dominio determinista (regla que {@code ArchitectureTest} verifica).
+ *
+ * <p><b>La clave lleva el MOMENTO avisado (spec 007, FR-013).</b> Antes era solo registro y tipo: el aviso
+ * de inicio salia una vez por dia y, si la persona movia la hora del habito DESPUES de enviado, el
+ * servidor jamas volvia a avisar (la clave ya existia). Ahora el mismo registro y el mismo momento dan la
+ * misma clave —los barridos de cada 5 minutos y las otras instancias no duplican— y una hora nueva da una
+ * clave nueva, o sea un aviso mas. El {@code momento} sale de la ventana calculada con la hora del habito
+ * ({@link AvisoHabito#momento()}), nunca del reloj del barrido: si saliera del reloj, cada vuelta daria una
+ * clave distinta y el aviso se repetiria cada 5 minutos.
+ *
+ * <p>Efecto del dia del despliegue: todas las claves cambian de una vez, asi que un aviso ya enviado y
+ * todavia dentro de su franja (15 min el de inicio, 30 el de vencimiento) saldria una vez mas. Por eso se
+ * despliega en la madrugada de Lima, cuando casi no hay habitos con hora (research R6 de la spec 007).
+ * Tampoco hay migracion: el indice unico {@code notificaciones_origen_evento_uk} (V16) no cambia.
  */
 public enum TipoAvisoHabito {
 
@@ -40,7 +55,23 @@ public enum TipoAvisoHabito {
         this.prefijoClave = prefijoClave;
     }
 
-    public UUID claveIdempotencia(RegistroHabitoId registroId) {
-        return UUID.nameUUIDFromBytes((prefijoClave + registroId.value()).getBytes(StandardCharsets.UTF_8));
+    /**
+     * Si este aviso tiene sentido para un registro en ese estado (FR-015b). El de inicio anuncia que algo
+     * VA a empezar: solo mientras puede iniciarse ({@code PENDIENTE}). Una sesion especial ya abierta
+     * ({@code EN_CURSO}) no lo recibe. El de vencimiento sirve en cualquier estado no terminal, y los
+     * terminales ni llegan hasta aca.
+     */
+    public boolean correspondeA(EstadoRegistro estado) {
+        return this != INICIO || estado.puedeIniciar();
+    }
+
+    /**
+     * @param momento el instante avisado (hora de disparo o plazo de entrega). Se usa a la precision de
+     *                SEGUNDOS: las horas de los habitos son {@code HH:mm}, y asi dos barridos nunca
+     *                discrepan por una fraccion de segundo
+     */
+    public UUID claveIdempotencia(RegistroHabitoId registroId, Instant momento) {
+        return UUID.nameUUIDFromBytes(
+                (prefijoClave + registroId.value() + ":" + momento.getEpochSecond()).getBytes(StandardCharsets.UTF_8));
     }
 }

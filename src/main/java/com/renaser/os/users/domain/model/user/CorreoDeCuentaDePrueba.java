@@ -13,7 +13,7 @@ import java.util.UUID;
  * un rol personalizado. El correo es la identidad estable de la cuenta: con él se la vuelve a encontrar la segunda vez.
  *
  * <p>{@code .invalid} es un dominio reservado (RFC 2606): no tiene buzón, nadie recibe un código de recuperación ni un
- * aviso, y no choca con el correo de ninguna persona real. La base exige el mismo patrón (V107).
+ * aviso, y no choca con el correo de ninguna persona real. La base exige el mismo patrón (V117).
  */
 public final class CorreoDeCuentaDePrueba {
 

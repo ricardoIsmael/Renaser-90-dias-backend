@@ -6,7 +6,7 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 
-/** Los contadores por hora de las funcionalidades en despliegue (V104; contrato fase 2 §3.3). */
+/** Los contadores por hora de las funcionalidades en despliegue (V114; contrato fase 2 §3.3). */
 public interface MetricasDeDesplieguePort {
 
     /**

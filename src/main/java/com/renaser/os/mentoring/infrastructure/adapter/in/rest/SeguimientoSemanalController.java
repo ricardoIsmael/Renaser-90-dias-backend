@@ -1,8 +1,8 @@
 package com.renaser.os.mentoring.infrastructure.adapter.in.rest;
 
+import com.renaser.os.mentoring.api.SemanaDelAlumno;
 import com.renaser.os.mentoring.application.ports.in.ConsultarSeguimientoSemanalUseCase;
 import com.renaser.os.mentoring.application.ports.in.ConsultarSeguimientoSemanalUseCase.ConsultaSemana;
-import com.renaser.os.mentoring.application.ports.in.ConsultarSeguimientoSemanalUseCase.SemanaDelAlumno;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;

@@ -15500,3 +15500,232 @@ y `VerComoDePuntaAPuntaIT` (lee el perfil con POST desde la sesión «ver como»
 
 **Cómo evitarlo.** Un endpoint nuevo que solo lee va con GET. Si alguno vuelve a leer con POST, hay que sumarlo a
 `FiltroDeSoloLectura.PERMITIDOS_AUNQUE_NO_SEAN_GET` o «ver como» lo rechaza.
+
+## E-628 · La ficha del mentor mostraba el post diario sin nada que ver (backend, spec 005, RESUELTO, 19/10)
+
+**Síntoma literal.** Al revisar la semana de una persona en la ficha del mentor (`…/weekly-progress`), el hábito «Post diario
+en la comunidad» salía `COMPLETADO` con `entrega: NO_REQUERIDA` y sin `evidenciaId` ni forma de abrir lo que la persona
+había publicado. Para el líder, que desde la spec 005 también necesita ver con qué se cumplió cada día, era un hábito
+cumplido «sin prueba».
+
+**Causa real.** El post diario no sube evidencia: `habits` lo cierra solo al publicar en el Muro (la política únicamente
+pregunta si publicó ese día) y `mentoring` solo sabía de evidencias. La publicación existía, pero ningún camino la ligaba
+al registro del hábito.
+
+**Solución.** La ficha deriva la entrega: la **primera** publicación del Muro de ese día en la zona de la persona (la que
+lo cerró; las siguientes no cuentan) pasa a ser `publicacionId` y la entrega, `ENTREGADA` a la hora de esa publicación,
+sin archivo ni revisión. Se deriva y no se guarda, así que vale también para los días anteriores al arreglo. Una sola
+consulta por semana y solo si hay un post diario (`PublicacionMuroFinder.delAutorEntre`, incluye las ocultas: lo que
+cerró el hábito cuenta aunque después se oculte; `GET /api/v1/wall/{id}` decide si quien mira puede abrirla).
+
+**Para que no vuelva.** `SeguimientoServiceTest` (el post diario trae la primera publicación de su día y la de otro día no;
+un hábito común no se liga a una publicación aunque ese día haya publicado), `PublicacionPersistenceAdapterTest`,
+`ObligacionesHistoricasPersistenceAdapterTest` y `CumplimientoDelLiderIT`. **Regla general:** un hábito que se cumple
+sin evidencia tiene que decir con qué se cumplió; si no, «cumplido» y «sin entrega» conviven y nadie sabe cuál creer.
+
+## E-629 · La lista del líder decía «Semana todavía sin cerrar» en una semana que ya había pasado (backend, spec 005, RESUELTO, 19/10)
+
+**Síntoma literal.** En el E2E del emulador, el líder abrió el grupo «Fénix 005» y el encabezado de la lista decía «Semana
+todavía sin cerrar · Del sábado 10 al viernes 16 de octubre», siendo hoy lunes 19. `GET /api/v1/leadership/groups/{id}/semaforo`
+devolvía `"cerrada": false` para ese grupo y `true` para los otros dos de la misma base, con la misma semana.
+
+**Causa real.** `cerrada` salía de `TablaDelSemaforoFinder.tablaDe(...)`, que la arma con `PeriodoDelSemaforo.de(ventanas)`: «cerrada» solo si
+**todas** las ventanas de los aprendices lo están, y una ventana solo es cerrada si existe la foto del cierre semanal
+(`semaforo_semanas`). Quien empezó su programa después de esa semana (aquí, Inés, con el Día 1 el 17/10) no tiene foto de esa
+semana, así que bastaba **un integrante nuevo** para que todo el grupo mostrara la última semana cerrada como abierta. Ocurre
+en cualquier grupo que haya recibido a alguien en los últimos días. Las pruebas no lo vieron porque el doble de la tabla
+devolvía la fecha de calendario y no la regla de la tabla real.
+
+**Solución.** La lista del líder toma `cerrada` del calendario (`VentanaDeLaFicha.cerrada()`: la semana ya terminó), igual que la ficha
+de la persona. No se toca `PeriodoDelSemaforo`: las tablas del mentor y de administración siguen como estaban.
+
+**Para que no vuelva.** `GrupoDelLiderServiceTest.unaPersonaNuevaNoDejaLaSemanaCerradaSinCerrar`, y el doble de la tabla en
+`BancoDeCumplimiento` ahora aplica la misma regla que la real (todas las ventanas cerradas), para que una prueba así falle
+con el código viejo. **Regla general:** un dato de calendario (¿ya pasó esta semana?) se decide con el calendario, no
+agregando el estado de cada persona del grupo.
+
+**E-629 (b) · El texto de una evidencia salía dos veces en la hoja del líder (app, spec 005, RESUELTO, 19/10).** Hallazgo del mismo E2E.
+**Síntoma.** Al abrir la Audioterapia de una persona, la hoja mostraba el párrafo y, debajo de «Lo que escribió», el mismo párrafo.
+**Causa.** `EvidenciaHabitoModal` entrega un texto con `confirmarEvidencia({ tipo: 'TEXTO', contenidoTexto })` **y**
+`completarRegistro(id, textoUtil)`: la evidencia y `respuestaTexto` son las mismas palabras, y la hoja pintaba las dos.
+**Solución.** `respuestaYaLeidaComoEvidencia` (`features/lider-mentores/utils/respuestaRepetida.ts`): si lo leído como evidencia de
+texto es igual a `respuestaTexto` (sin espacios en los bordes), «Lo que escribió» no se repite; si dice otra cosa (foto con
+«¿Qué sentiste?», un resumen distinto) salen las dos. **Para que no vuelva.** `respuestaRepetida.test.ts`. **Regla general:** un
+dato que el cliente manda por dos caminos se muestra por uno; al leerlo hay que saber que puede venir repetido.
+
+**E-629 (c) · «Pendiente de revisión» en una publicación del Muro (app, spec 005, RESUELTO, 19/10).** Hallazgo del mismo E2E.
+**Síntoma.** En la ficha del mentor (`AlumnoScreen`), el post diario cumplido decía «Evidencia entregada · pendiente de revisión»
+junto a «Ver publicación»; el mentor entendía que tenía algo que revisar. **Causa.** `etiquetaDeEntrega` solo miraba `entrega` y
+`revision`; el post diario llega con `revision: null` (su entrega es la publicación, E-628) y caía en el «pendiente» por defecto.
+**Solución.** `mentor/utils/etiquetaDeEntrega.ts` recibe `publicacionId` y, sin revisión, dice «Publicado en el Muro» (como la
+ficha del líder). **Para que no vuelva.** `etiquetaDeEntrega.test.ts`. La ficha de administración ya decía «con evidencia».
+
+**E-629 (d) · El resumen, la lista y la ficha del líder miraban tres ventanas distintas (backend y app, spec 005, RESUELTO, 19/10).**
+Hallazgo del mismo E2E (observación 3 de `specs/005-lider-cumplimiento-por-persona/e2e.md`).
+**Síntoma literal.** El resumen decía «Últimos 7 días · Del lunes 12 al domingo 18 de octubre»; al tocar un grupo, la lista decía «Semana
+cerrada · Del sábado 10 al viernes 16 de octubre», y los porcentajes cambiaban: Rocío, 50 % en un lado y 47,6 % en el otro (capturas
+`12a-backend-anterior-resumen.png` y `01d-lista-fenix-despues-del-arreglo.png` de la primera pasada; el 19/10 se reemplazaron por las de la
+ventana alineada). La ficha abría una tercera: la semana en curso.
+**Causa real.** Cada pantalla tenía su propio «sin fecha»: el resumen leía `SemaforoFinder.vigenteDe` (7 días que terminan ayer); la lista,
+`VentanaDeLaFicha.paraLaLista` (última semana cerrada, con `semanaDe(viernes)`); la ficha, `paraLaFicha` (la semana en curso). El contrato
+(R-2) lo había decidido así («solo el líder va de sábado a viernes») y la app lo tapaba pasándole a la ficha el `hasta` de la lista, pero
+no hay un `hasta` que haga coincidir una semana de sábado a viernes con unos «últimos 7 días». Ninguna prueba ponía las tres pantallas
+sobre los mismos datos.
+**Solución (decisión del dueño: «la ventana del resumen manda en todo»).** `VentanaDeLaFicha.de(semanaHasta, hoy)`: sin fecha, la vigente
+(`hasta = hoy − 1`, `desde = hasta − 6`) leída con `vigenteDe`; con un viernes que ya llegó, esa semana leída con `semanaDe`; un viernes
+futuro es 400; `cerrada` del calendario. La lista pasa a la tabla del semáforo lo mismo que se pidió (`null` = vigente), como
+Administración. En la app, la lista abre con el `InicioSemanal` del resumen, la ficha con el de la lista, y las tres usan
+`useLecturaPorSemana` y `NavegacionDeSemanas` (mismo rótulo, mismas flechas, de 7 en 7 días, sin futuro). Se retiraron el motivo `FUTURO`,
+«Volver a esta semana» y el aviso «La semana sigue en curso».
+**Para que no vuelva.** `MismaVentanaEnLasTresPantallasTest` (el resumen real, la tabla real y los servicios del líder sobre los mismos
+datos: mismos días, mismo % y mismo color, con la vigente, con un viernes, en la madrugada UTC y un sábado; falla con el comportamiento
+viejo), `VentanaDeLaFichaTest`, `GrupoDelLiderServiceTest`, `SemanaDePersonaServiceTest`, `CumplimientoDelLiderControllerTest` y, en la app,
+`lecturaDelLider.test.ts`, `delGrupoALaPersona.test.ts` y `semanasDelSemaforo.test.ts`. **Regla general:** dos pantallas que se abren una
+desde la otra hablan de los mismos días; si el «por defecto» de cada una es distinto, el usuario ve dos números para lo mismo.
+
+**E-629 (e) · El resumen rotulaba «Semana todavía sin cerrar» una semana que ya había pasado, mientras la lista y la ficha decían «Semana cerrada» (backend, spec 005, RESUELTO, 19/10).**
+Hallazgo de la pasada final del E2E (`specs/005-lider-cumplimiento-por-persona/e2e.md`, «Pasada final con la 006 y el Código Renaser»).
+**Síntoma literal.** En el emulador, con ‹ en «Semáforo por grupos»: «Semana todavía sin cerrar · Del sábado 10 al viernes 16 de octubre»;
+al tocar «Fénix 005», la lista decía «Semana cerrada · Del sábado 10 al viernes 16 de octubre» y la ficha de Ana, lo mismo. Los mismos siete
+días y los mismos porcentajes, con dos rótulos. `GET /api/v1/semaforo/groups?semanaHasta=2026-10-16` devolvía `"periodo": { "cerrada": false }` y
+`GET /api/v1/leadership/groups/{id}/semaforo?semanaHasta=2026-10-16`, `"cerrada": true` (captura `05e-resumen-semana-10-al-16-sin-cerrar-antes-del-arreglo.png`).
+**Causa real.** La misma de E-629: `SemaforoPorGruposService` armaba el encabezado con `PeriodoDelSemaforo.de(ventanas, esperado)`, «cerrada» solo si
+**todas** las ventanas lo están, y una ventana es cerrada solo si existe la foto del cierre (`semaforo_semanas`). 15 de los 67 aprendices activos
+del clon no tenían la foto de la semana del 10 al 16 (quien empezó después, como Inés con el Día 1 el 17/10); en producción pasa con cualquiera que
+active su programa después de un cierre. La corrección de E-629 solo tocó la lista del líder (decía «las tablas del mentor y de administración siguen
+como estaban»); al alinear las tres pantallas en E-629 (d) el resumen quedó con su propio criterio.
+**Solución.** `SemaforoPorGruposService.periodo(...)`: con un viernes pedido, `cerrada` es la del calendario (`PeriodoDelSemaforo.esperado`: el viernes
+ya pasó), como la lista y la ficha. Sin fecha (la ventana vigente) no cambia: sigue `false` y la app no la rotula con eso («Últimos 7 días»). No se
+toca `PeriodoDelSemaforo.de`, que siguen usando las tablas del mentor y de administración.
+**Para que no vuelva.** `SemaforoPorGruposServiceTest.unaPersonaNuevaNoDejaLaSemanaCerradaSinCerrar` y `laVigenteNoSeDiceCerrada`, y
+`MismaVentanaEnLasTresPantallasTest.conUnaPersonaSinFotoDelCierre` (el resumen, la lista y la ficha con una persona sin foto: mismo `cerrada`; falla con
+el código anterior). **Regla general:** la de E-629, ahora en las tres pantallas: un dato de calendario (¿ya pasó esta semana?) se decide con el
+calendario, no agregando el estado de cada persona del grupo. **Pendiente, fuera de la 005:** las tablas del mentor y de administración
+(`SemaforoDelGrupoService` con `PeriodoDelSemaforo.de`) conservan el criterio de «todas las fotos»; con una persona nueva en el grupo dirán «todavía sin cerrar»
+para una semana pasada.
+
+## E-630 · El plan de la spec 006 ponía `CumplimientoPorHabitoFinder` en `habits/api`: points no puede importar habits (plan, RESUELTO, 19/10)
+
+**Síntoma literal (antes de escribir código).** El plan y la tarea T013 decían «`CumplimientoPorHabitoFinder` en `backend:…/habits/api/`» y que `points` lo consumiría para elegir el hábito más flojo y el más fuerte del mensaje del semáforo. `grep -rn "import com.renaser.os.habits" points` no da nada, y `habits` importa `points.api` en ocho servicios (otorga puntos, racha, kilómetros): un `import habits.api.*` desde `points` cierra un ciclo `points ↔ habits` que `ApplicationModules.verify()` rechaza.
+
+**Causa.** El plan copió el patrón «el finder vive en el módulo que lo implementa» sin mirar la dirección de la dependencia. Para `habits` el repo ya tenía la regla contraria (DIP): lo que `points` necesita de `habits` se declara en `points.api` y lo implementa `habits` (`ConteoDiarioHabitosFinder`, `PorcentajeHabitosFinder`, `HabitosDelDiaFinder`).
+
+**Solución.** `points.api.CumplimientoPorHabitoFinder` + `points.api.CumplimientoDeHabito`; lo implementa `habits.application.services.CumplimientoPorHabitoFinderService` sobre `ContarCumplimientoPorHabitoPort` (JDBC, una consulta por persona). La regla de «el hábito contaba» no se copió: `ConteoDiarioHabitos.calificables(total, opcionalesNoCompletados)` pasó a ser estática y la usan el conteo diario y el nuevo.
+
+**Prevención.** Antes de poner un finder en `<modulo>/api/`, mirar quién importa a quién (`grep -rn "import com.renaser.os.<A>" <B>`). `ArchitectureTest` ya rompe el build si se cuela el ciclo. Nota en el plan de la spec 006 y en D-277.
+
+## E-631 · La spec 006 daba por hecho que `/home` podía mandar `semaforo: null` a quien terminó los 90 días y que `programa_completado` marca «después del día 90» (plan, RESUELTO, 19/10)
+
+**Síntoma literal (antes de escribir código).** research R3 y T029: «Programa completado (`programaCompletado`, día > 90) → GRADUADO» y «si `/home` manda `semaforo: null` después del día 90, el servidor manda igual un `semaforo` SIN_DATOS». Ninguna de las dos premisas se cumple.
+
+**Causa.** (1) `ParticipacionPrograma.graduarSiLlegoAlDiaNoventa` marca `programa_completado` **al llegar** al día 90 («se gradúa al llegar al día 90, sin condiciones»), cuando ese día todavía se mide; y `dia_programa` queda acotado en 90, así que no distingue el 90 del 91. (2) `ProgramasActivadosService.deVarios` solo filtra por programa activado, no por completado: `ConsultaDelSemaforoService.resumenParaHoy` devuelve la ventana de siempre y `/home` sigue mandando `semaforo` (con SIN_DATOS cuando pasan siete días de FUERA_DEL_PROGRAMA).
+
+**Solución.** «Terminó el programa» = `hoy local > ultimaFecha` del calendario del semáforo (`CalendarioDeMedicion.terminadoEl`, expuesto en `ResumenParaHoy.programaTerminado`): el 90 sigue siendo del programa y el 91 ya no, con el ajuste de día incluido. No se fabrica un semáforo SIN_DATOS: la tarjeta de quien terminó ya existe. Pruebas: `MedicionDeLaPersonaTest.elProgramaTerminaDespuesDelDiaNoventa`, `GrupoDelDiaTest`, `HomeMensajeDelSemaforoIT.despuesDelDiaNoventa` / `elDiaNoventaSigueEnElPrograma`.
+
+**Prevención.** Una bandera que el reloj marca «al llegar» no sirve para decir «después de». Para preguntas de calendario, derivar de las fechas (`.claude/rules/02` §2), no de columnas materializadas.
+
+## E-632 · En Honor las alarmas de los hábitos no suenan (app, 19/10)
+
+**Síntoma literal.** «Los usuarios dicen que sus alarmas no suenan» (teléfonos Honor); en Xiaomi funcionan.
+
+**Causa confirmada en local (19/10, emulador Android 17, base `renaser_alarmas`).** Forzar la detención de la app borró sus alarmas (`dumpsys alarm`: 2 → 0) hasta volver a abrirla; quitar de recientes en un Android sin capa no las borra. Honor (MagicOS), como Huawei, aplica una detención forzada al quitar de recientes o al ahorrar batería cuando la app está en «Gestionar automáticamente» (soporte oficial de Honor). Además, las alarmas usaban `setExactAndAllowWhileIdle`, que Doze limita a una cada 9 min por app. Pendiente: confirmar en un Honor real el motivo de salida que registra.
+
+**Corrección.** D-279: alarmas tipo despertador, detección de la detención forzada y guía por marca.
+
+**Para que no vuelva.** `alarmasTipoDespertador.test.ts`, `detencionForzada.test.ts`, `guiasPorMarca.test.ts`; quickstart de la spec 007 (A1–A6, B1–B5).
+
+## E-633 · Aviso de inicio de un hábito apagado solo por hoy (backend, 19/10)
+
+**Síntoma literal.** En local, «RITUAL TIERRA - AGUA - FUEGO (noche)» apagado para el 19/10 recibió a las 11:30 «…empieza en 14 min».
+
+**Causa.** Apagar el día (V38 por fecha, V40 por día de la semana) no retira el registro ya generado, y `AvisoHabitoService` no miraba los apagados.
+
+**Corrección y prevención.** D-280 (1). `AvisoHabitoServiceTest`: apagado por fecha, por día de la semana y con el día en Lima.
+
+## E-634 · Sin aviso para la hora nueva tras cambiar la hora de un hábito (backend, 19/10)
+
+**Síntoma literal.** «PRIMERA COMIDA» tenía su aviso de las 10:45 (hora 11:00); pasada a 11:33, ningún barrido creó otro.
+
+**Causa.** La clave de idempotencia era solo registro + tipo; la fila vieja bloqueaba la nueva.
+
+**Corrección y prevención.** D-280 (4). `CalculadoraAvisosHabitoTest`: otra hora, otra clave; misma hora, misma clave.
+
+## E-635 · El push de inicio y la alarma del teléfono se cruzan (backend + app, 19/10)
+
+**Síntoma literal.** El servidor creó a las 11:15 «…empieza en 2 min» mientras el teléfono avisó 11:16 «En 1 min» y 11:17; sin etiqueta común, un teléfono sin confirmar veía los dos.
+
+**Causa.** El texto contaba minutos desde el barrido de 5 min (con antelación mínima de 5) y el push no compartía identidad con la alarma local.
+
+**Corrección y prevención.** D-280 (3), (5) y (6). `AvisoDeHabitoTest`, `AvisoHabitoNotificationListenerTest`, `ExpoPushTransporteTest`, `identificadorDelAvisoDeInicio.test.ts`.
+
+## E-636 · Avisos de hábitos sin tildes (backend, 19/10)
+
+**Síntoma literal.** «Tu habito esta por empezar», «Se te vence un habito».
+
+**Corrección y prevención.** D-280 (3); `AvisoDeHabitoTest` fija los textos.
+
+## E-637 · El parche de alarmas tipo despertador no llegaba al APK (app, 19/10)
+
+**Síntoma literal.** Con el APK debug de la 007 instalado, `adb shell dumpsys alarm` mostraba las alarmas de Renaser con `flags=0x5` (`setExactAndAllowWhileIdle`) y «Next alarm clock information» vacío, aunque `node_modules/expo-notifications/…/ExpoSchedulingDelegate.kt` estaba parchado y su prueba en verde.
+
+**Causa.** Expo 57 trae `expo-notifications` (y otros 21 módulos de Expo) como `.aar` precompilado en `local-maven-repo`; gradle enlaza ese binario y nunca compila el Kotlin de `node_modules`. Un parche de `postinstall` sobre el código fuente de esos módulos no tiene efecto.
+
+**Corrección.** `package.json` → `expo.autolinking.android.buildFromSource: ["expo-notifications"]`: gradle compila el módulo desde el código parchado (`:expo-notifications:compileDebugKotlin`). Con eso las alarmas salen con `flags=0x3` y Renaser aparece como próxima alarma.
+
+**Para que no vuelva.** `alarmasTipoDespertador.test.ts` exige que `expo-notifications` esté en `buildFromSource`. Regla: todo parche nativo a un módulo de Expo con `local-maven-repo` necesita `buildFromSource`, y se comprueba en el APK (`dumpsys`), no solo en `node_modules`.
+
+## E-638 · La hoja «Tu teléfono cerró Renaser» no salía en Android 15+ (app, 19/10)
+
+**Síntoma literal.** Emulador Android 17: `am force-stop` dejó las alarmas en 0, al abrir la app volvieron, pero la hoja no apareció y el log no tenía ninguna línea `arranque …`. `dumpsys activity start-info` sí mostraba `wasForceStopped=true`.
+
+**Causa.** (1) `detencionEnElArranque` filtraba `getHistoricalProcessStartReasons` por `it.pid == Process.myPid()`, y los arranques en frío quedan con `pid=0` en el historial: nunca encontraba el arranque forzado. (2) Ya corregido eso, un arranque tibio o caliente del mismo proceso (tocar un aviso con la app viva) hereda `wasForceStopped=true` y contaba la misma detención otra vez. (3) La app guardaba como «revisado hasta» el instante del arranque (`lectura.cuando`), que el módulo recalcula con unos ms de diferencia en cada lectura: la misma detención volvía a quedar «después». (2) y (3) habrían dado un aviso falso al día siguiente.
+
+**Corrección.** El módulo ubica cada arranque por `START_TIMESTAMP_LAUNCH` pasado a hora de reloj y solo cuenta los `START_TYPE_COLD`; `detencionForzada.ts` guarda siempre «ahora» como revisado. Verificado en Android 17 (force-stop → hoja; segundo force-stop el mismo día → sin hoja; quitar de recientes → sin hoja) y en Android 14 (salida `FORCE STOP` → hoja; `REMOVE TASK` descartada en marca Google).
+
+**Para que no vuelva.** `moduloNativoDeAlarmas.test.ts` (sin filtro por pid, `START_TIMESTAMP_LAUNCH`, `START_TYPE_COLD`) y `detencionForzada.test.ts` (lo revisado es «ahora»).
+
+## E-639 · Tras una detención forzada no volvía la alarma de mañana de un hábito que acababa de sonar (app, 19/10)
+
+**Síntoma literal.** Emulador Android 14: la alarma de las 21:28 sonó, `am force-stop` a las 21:28, al abrir la app la hoja decía «Ya las volvimos a poner» y `dumpsys alarm` tenía 0 alarmas de Renaser.
+
+**Causa.** `rearmarAlarmasProgramadas` saltaba toda diaria o semanal cuya hora fue hace menos de 2 h (`MARGEN_RECIEN_VENCIDA_MS`), pensado para las inexactas, que pueden sonar hasta 1 h tarde. Si el teléfono (Honor) detenía Renaser poco después de una alarma, al abrir la app no se volvía a poner la de mañana y el paso del servidor tampoco la arma (la librería la sigue teniendo guardada). En Android 15+ no se ve porque el sistema manda `BOOT_COMPLETED` al relanzar y `expo-notifications` rearma todo; en 11–14 sí.
+
+**Corrección.** Con alarmas exactas (permiso concedido o Android que no lo pide) el margen es de 30 s (`margenDeRecienVencida`); sin permiso o sin saber, siguen las 2 h. Verificado en Android 14: tras el force-stop vuelven las de mañana (21:27 y 21:28, `flags=0x3`). Queda: una detención dentro de esos 30 s recupera la de mañana en la próxima puesta al día (≥ 10 min).
+
+**Para que no vuelva.** `rearmarAlarmas.test.ts` («una diaria que sonó hace 30 min se rearma con alarmas exactas y se deja con inexactas»).
+
+## E-640 · La alarma del teléfono ignoraba la hora propia de cada día (app + backend, 20/10)
+
+**Síntoma literal.** Pedido del dueño sobre la captura de Training → Planificar → GIMNASIO: «los recordatorios también deben de ser por día, no en general». Al revisarlo apareció el error de fondo: con el jueves a las 09:00 y el resto de los días a las 07:00, el teléfono sonaba igual a las 07:00 el jueves. El aviso del servidor sí usaba la hora del jueves, así que un teléfono sin alarma confirmada recibía el push a las 09:00 y uno con alarma sonaba dos horas antes.
+
+**Causa.** La app programaba **una sola alarma `DAILY`** por antelación, a la hora **general** del hábito (la de `GET /habit-preferences`), sin mirar los días de `GET …/weekdays` (V39, V40). Además el aviso (`recordatorio_activo`, antelaciones) vivía solo en `preferencias_horario`: no había dónde guardar el de un día, y el editor decía «El recordatorio se elige sin días marcados» (E-408).
+
+**Corrección.** Spec 008, D-282. Backend: V111 guarda el aviso propio de cada día en `horario_semanal_habito` (`NULL` hereda el general) y el adaptador lo resuelve por campo, aparte de la hora; `PUT …/weekdays/{weekday}/reminder` lo escribe sin gastar cupo y sin tocar la hora, y guardar la hora no borra el aviso (FR-013); `GET …/weekdays` y `GET /habit-preferences` devuelven los siete días ya resueltos (una consulta por participante). El push de inicio de un hábito con filas por día lleva el `tag` `habito-{id}-d{iso}-0`, el mismo nombre que la app le pone a la alarma más temprana de cada día, para que el teléfono muestre un solo aviso. App: un `WEEKLY` por día encendido y antelación, a la hora de ese día menos la antelación (cruzando la medianoche si hace falta); sin días distintos conserva la alarma diaria y su identificador `habito-{id}-inicio`. Las dos protecciones de la 007 contra el aviso doble (confirmación por teléfono y etiqueta) siguen en los dos esquemas. La verificación en el emulador se hace en T033 de la spec.
+
+**Para que no vuelva.** Backend: `PreferenciaHorarioPersistenceAdapterRecordatorioTest` (hora y aviso por campo, fila de solo aviso, día apagado, fecha puntual, guardar la hora conserva el aviso, el CHECK de V111), `HorarioSemanalRecordatorioServiceTest` (sin cupo, hereda si es igual al general), `HabitPreferenceControllerRecordatorioTest` (204, 400, 403 y el contrato JSON), `ConsultaPreferenciasHorarioServiceTest` (siete días, una consulta), `AvisoHabitoServiceTest` y `AvisoDeHabitoTest` (la etiqueta del día con el reloj en la madrugada UTC: sábado de Lima es domingo en UTC y da `d6`). App: pruebas de `alarmasPorDia` y `recordatoriosPorHabito` (spec 008, T018 y T020).
+
+## E-641 · Las alarmas de hábitos no vibraban (app, 20/10)
+
+**Síntoma literal.** `adb shell dumpsys notification`, emulador Android 17: `recordatorios-habitos … mVibrationEnabled=false` y `recordatorios-habitos-campana … false`. Solo «Solo vibrar» vibraba. Con la 009, el interruptor «Vibración: Sí» habría dicho algo falso.
+
+**Causa.** Los canales de Android de las alarmas se crearon sin `enableVibrate`. Un canal no se puede cambiar después de creado y, por defecto, no vibra.
+
+**Corrección.** Decisión del dueño: vibrar por defecto. Con vibración encendida, los hábitos usan canales nuevos `…-vib` con `enableVibrate: true`; sin vibración, `…-sinvib` con `false`. La puesta al día pasa a su canal las alarmas ya programadas, sin cambiar hora ni id. Verificado en el emulador: `recordatorios-habitos-vib vibra=true` y las alarmas de las 11:54, 11:59 y 12:04 salieron por ese canal.
+
+**Para que no vuelva.** Pruebas de canal por combinación: todo canal de hábitos declara si vibra.
+
+## E-642 · Con hora propia hoy, los demás días tomaban esa hora (app, 20/10)
+
+**Síntoma literal.** Kilómetros con el martes a las 11:29 y aviso de 30 min el sábado: el sábado quedó a las 10:59 en vez de las 06:30.
+
+**Causa.** La app tomaba como hora general la `triggerTime` del ítem de `GET /habit-preferences`, que es la hora **resuelta para hoy**. Los días sin hora propia heredaban la de hoy.
+
+**Corrección.** Cada día usa `weekdays[i].triggerTime`, la hora que el servidor resuelve para ese día. Verificado: sábado 06:30 y viernes 06:30, 06:50 y 07:00.
+
+**Para que no vuelva.** Prueba de regresión: hoy con hora propia y los demás días con la suya.
+
+## E-643 · El chip del día se deformaba con varios avisos (app, 20/10)
+
+**Síntoma literal.** Captura del dueño: con 30, 10 y 5 min antes y a la hora, el chip del día crecía y se desalineaba.
+
+**Corrección.** El chip reserva el mismo bloque en todos los días. La campana y el reloj van en una fila y el texto en una sola línea: el aviso más temprano y cuántos más, «30′ +2». La lista completa va en la etiqueta del lector. Verificado en el emulador.

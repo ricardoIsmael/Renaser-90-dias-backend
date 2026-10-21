@@ -37,7 +37,7 @@ import org.springframework.stereotype.Component;
 public class SmtpEnviarEmailAdapter implements EnviarEmailPort {
 
     private static final Logger log = LoggerFactory.getLogger(SmtpEnviarEmailAdapter.class);
-    /** El de las cuentas de prueba de «ver como» (V107, D-273). */
+    /** El de las cuentas de prueba de «ver como» (V117, D-273). */
     static final String DOMINIO_RESERVADO = "@renaser.invalid";
 
     private final JavaMailSender mailSender;

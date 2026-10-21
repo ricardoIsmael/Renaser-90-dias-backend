@@ -100,7 +100,7 @@ class ConsolaDeFuncionalidadesServiceTest {
     void listaElCatalogo() {
         var lista = service.listar(acceso());
 
-        assertThat(lista).hasSize(52);
+        assertThat(lista).hasSize(53); // 52 de la spec 002 + lider.cumplimiento (spec 005)
         FuncionalidadEnConsola chatGrupos = lista.stream().filter(f -> f.clave().equals("chat.grupos")).findFirst()
                 .orElseThrow();
         assertThat(chatGrupos.madre()).isEqualTo("chat");

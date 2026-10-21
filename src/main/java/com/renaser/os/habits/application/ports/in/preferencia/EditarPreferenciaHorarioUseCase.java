@@ -1,6 +1,7 @@
 package com.renaser.os.habits.application.ports.in.preferencia;
 
 import com.renaser.os.habits.domain.model.habito.HabitoId;
+import com.renaser.os.habits.domain.model.preferencia.CombinacionDeAlarma;
 import com.renaser.os.shared.application.SelfValidating;
 import com.renaser.os.shared.domain.UserId;
 import jakarta.validation.constraints.NotNull;
@@ -25,6 +26,14 @@ public interface EditarPreferenciaHorarioUseCase {
      * El dia actual y los anteriores no se editan (D-91).
      */
     ResultadoEdicionPreferencia editar(EditarPreferenciaHorarioCommand command);
+
+    /**
+     * Como suena la alarma de ese habito (sonido, vibracion, voz y repetir), para toda la semana (spec 009,
+     * D-283). Cada dia puede tener la suya ({@code EditarHorarioSemanalUseCase#fijarCombinacion}). NO consume
+     * el cupo semanal ni toca la hora ni el aviso: elegir si vibra o si hay voz no reacomoda ningun horario.
+     * Lo de hoy ({@link CombinacionDeAlarma#COMO_HOY}) se guarda como «nada elegido».
+     */
+    void fijarCombinacion(UserId actorId, HabitoId habitoId, CombinacionDeAlarma combinacion);
 
     /**
      * {@code antelacionesRecordatorio} (D-217, 2026-09-28): TODAS las antelaciones elegidas, o

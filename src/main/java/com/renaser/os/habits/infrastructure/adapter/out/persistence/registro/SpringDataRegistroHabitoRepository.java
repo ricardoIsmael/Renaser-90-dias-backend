@@ -116,8 +116,10 @@ interface SpringDataRegistroHabitoRepository extends JpaRepository<RegistroHabit
      * Obligaciones historicas de varios participantes en un rango de fechas, con la exigencia
      * de evidencia del habito al que pertenecen.
      *
-     * <p>Proyecta columnas y no entidades: la pregunta no necesita respuesta_texto, calificacion
-     * ni la entrada de diario, y traerlas seria cargar bytes para tirarlos. Se resuelve contra
+     * <p>Proyecta columnas y no entidades: la pregunta no necesita calificacion ni la entrada de
+     * diario, y traerlas seria cargar bytes para tirarlos. Si lleva {@code respuesta_texto} (spec 005):
+     * es lo que la persona escribio al cumplir, y las fichas del mentor, de administracion y del lider
+     * lo muestran como evidencia. Se resuelve contra
      * {@code registros_dia_idx} ({@code participante_id, fecha_ejecucion}), que ya existe desde
      * el baseline.
      *
@@ -128,7 +130,7 @@ interface SpringDataRegistroHabitoRepository extends JpaRepository<RegistroHabit
      */
     @Query("""
             SELECT r.id, r.participanteId, r.fechaEjecucion, r.diaPrograma, h.titulo, r.estado,
-                   h.exigenciaEvidencia, r.esOpcional
+                   h.exigenciaEvidencia, r.esOpcional, h.claveSistema, r.respuestaTexto
             FROM RegistroHabitoJpaEntity r
             JOIN HabitoJpaEntity h ON h.id = r.habitoId
             WHERE r.participanteId IN :participantes

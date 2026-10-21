@@ -224,6 +224,28 @@ class SemaforoPorGruposServiceTest {
     }
 
     @Test
+    @DisplayName("E-629 (e): una persona sin foto del cierre (empezó después) no deja la semana ya pasada «sin cerrar»")
+    void unaPersonaNuevaNoDejaLaSemanaCerradaSinCerrar() {
+        banco.semana(SEMANA_CERRADA, ANA, ventana(LocalDate.of(2026, 9, 12), true, 60, 60, 60, 60, 60, 60, 60));
+        // Mario empezó su programa después de que esa semana cerrara: el barrido no le escribió su foto (cerrada = false).
+        banco.semana(SEMANA_CERRADA, MARIO,
+                ventana(LocalDate.of(2026, 9, 12), false, null, null, null, null, null, null, null));
+
+        ResumenPorGrupos resumen = servicio.resumenDe(new ConsultaResumenPorGrupos(LIDER, SEMANA_CERRADA));
+
+        // El viernes 18 de septiembre ya pasó: «cerrada» es del calendario, no de cuántas fotos haya.
+        assertThat(resumen.periodo().cerrada()).isTrue();
+    }
+
+    @Test
+    @DisplayName("E-629 (e): la ventana vigente sigue diciendo cerrada = false (la app no la rotula con eso)")
+    void laVigenteNoSeDiceCerrada() {
+        ResumenPorGrupos resumen = resumenDelLider();
+
+        assertThat(resumen.periodo().cerrada()).isFalse();
+    }
+
+    @Test
     @DisplayName("semanaHasta tiene que ser viernes")
     void semanaHastaNoViernes() {
         assertThatThrownBy(() -> new ConsultaResumenPorGrupos(LIDER, LocalDate.of(2026, 9, 19)))
@@ -244,10 +266,29 @@ class SemaforoPorGruposServiceTest {
 
         GrupoDelResumen brisa = grupo(resumen, BRISA);
         assertThat(brisa.sinMentor()).isTrue();
+        // Spec 005 (FR-001, R-10): solo se baja a un grupo con mentor; sin el, la tarjeta no se abre.
+        assertThat(brisa.puedeAbrirse()).isFalse();
+        assertThat(grupo(resumen, FENIX).puedeAbrirse()).isTrue();
         assertThat(brisa.mentorNombre()).isNull();
         assertThat(brisa.resumen().conteo()).isEqualTo(new ConteoPorColor(1, 0, 0, 0));
         assertThat(grupo(resumen, FENIX).sinMentor()).isFalse();
         assertThat(resumen.totales().total()).isEqualTo(5);
+    }
+
+    @Test
+    @DisplayName("spec 005: con lider.cumplimiento apagada por Soporte TI ninguna tarjeta se puede abrir; el resumen sigue igual")
+    void funcionalidadApagadaNoDejaAbrirNingunGrupo() {
+        banco.grupo(BRISA, "Grupo Brisa");
+        aprendiz(BRISA, id("b6"), "Sin Mentor", 85);
+
+        assertThat(resumenDelLider().grupos()).extracting(GrupoDelResumen::puedeAbrirse)
+                .containsExactlyInAnyOrder(true, true, false);
+
+        banco.apagadas.add("lider.cumplimiento");
+        ResumenPorGrupos apagada = resumenDelLider();
+
+        assertThat(apagada.grupos()).extracting(GrupoDelResumen::puedeAbrirse).containsOnly(false);
+        assertThat(apagada.totales().total()).isEqualTo(5);
     }
 
     @Test

@@ -29,7 +29,7 @@ Todo módulo del sistema pregunta *"¿quién es este usuario y qué puede hacer?
 
 **Roles personalizados (D-272, spec 002 fase 2).** Encima de los seis roles que asigna la app, Soporte TI crea desde
 su consola roles que **heredan de uno base** y marcan un subconjunto de sus funcionalidades («Mentor junior»: un mentor
-sin eventos). Viven en `users` (`roles_personalizados`, V105) y la cuenta los referencia con
+sin eventos). Viven en `users` (`roles_personalizados`, V115) y la cuenta los referencia con
 `usuarios.rol_personalizado_id`; **`usuarios.rol` sigue siendo el rol base**, así que guards, rankings, padrones,
 espejos de rol y hábitos por rol los ven como su base. Solo la evaluación de interruptores (`plataforma`, regla
 `@Order(20)`) usa sus funcionalidades. `users.api` expone `GestionarRolesPersonalizadosUseCase` (crear, editar,

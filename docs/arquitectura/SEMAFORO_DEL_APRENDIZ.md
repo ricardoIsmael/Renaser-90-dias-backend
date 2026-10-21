@@ -38,9 +38,13 @@ contratos: backend, app y agentes trabajan contra lo que dice acá. Si algo camb
 |---|---|
 | Aprendiz (y staff con programa propio) | Su propio semáforo: vigente, sus días y sus semanas. |
 | Mentor | Cada aprendiz de los grupos que **acompaña vigentemente** (`community.api.AcompanamientoFinder`), con nombre. |
-| Líder de mentores | **Resumen por grupo, sin nombres**: cuántos verdes, amarillos, rojos y sin datos (RL-07 del SDD 002). |
+| Líder de mentores | **Resumen por grupo, sin nombres**: cuántos verdes, amarillos, rojos y sin datos (RL-07 del SDD 002; ver la nota de abajo y §4.7). |
 | Admin · Alquimista | Todo: resumen por grupo, el grupo con nombres y la persona. |
 | Compañeros de grupo | Solo el propio. |
+
+> **Corregido 2026-10-19 (D-274, spec 005).** La fila del líder decía «sin nombres». Para la vista de cumplimiento por persona,
+> el líder (y Administración y Alquimista) abre el grupo y ve a cada persona con nombre y su semana: §4.7. El resumen por
+> grupo de §4.4 sigue sin nombres.
 
 ### 1.2 Avisos del sábado (cierre de semana)
 
@@ -106,11 +110,16 @@ el PROGRAMA manda en su chat de soporte («<nombre> – Formación Renaser») la
 línea «Hoy llevas 85 % de tus hábitos.». Es **del día**, no de la semana: no cambia nada del cierre del sábado
 ni del vigente.
 
+> **Actualizado 2026-10-19 (D-281, spec 006).** El texto ya no es solo el porcentaje: es **«Hoy llevas N % de tus
+> hábitos.», una línea en blanco y un mensaje personalizado** del mismo catálogo que el de Hoy (D-277). La imagen del
+> color sigue igual y **no se manda sticker**. Ver la fila «Mensaje» de la tabla de abajo.
+
 | Regla | Qué significa |
 |---|---|
 | **% y color** | El del día con la regla de §1, calculado en vivo a las 23:50 (`points.api.SemaforoDelDiaFinder`, que usa `CumplimientoDelDia` y `CalendarioDeMedicion`, los mismos objetos del barrido): hábitos + objetivos, redondeado a entero, y verde ≥ 80, amarillo ≥ 60, rojo por debajo. El color se pinta sobre el entero, así que el número del texto y la tarjeta nunca se contradicen (un 79,6 real es «80 %» y verde). Lo completado después de las 23:50 lo toma el barrido para el semáforo; la tarjeta ya salió. |
 | **Quién** | Solo `APRENDIZ` con la cuenta `ACTIVA`, con chat de soporte y con el día `MEDIDO`: no hay tarjeta el día sin nada programado, antes del Día 1, después del 90, en pausa o con la cuenta suspendida ese día (D-209). El staff con programa propio no recibe tarjeta. |
 | **Cuándo** | Un barrido cada 5 minutos; manda a quien está entre las 23:50 y las 23:59 de su zona. En Lima eso son dos corridas (23:50 y 23:55): la segunda es el reintento. **Pasada la medianoche, la de ese día ya no sale** (diría «Hoy llevas…» de un día que terminó). |
+| **Mensaje** | *(D-281)* Debajo del porcentaje, un mensaje del catálogo `mensajes_semaforo` (V110) del **grupo del color DEL DÍA de la tarjeta** (verde, amarillo o rojo), con las variables `{nombre}`, `{dia}`, `{fase}`, `{habitoFlojo}` y `{habitoFuerte}` (los hábitos, de la ventana vigente: la misma regla que en Hoy). **`{faltan}` no existe en el chat**: a las 23:50 el día ya casi cerró, así que los mensajes que lo piden no son candidatos. Es **distinto del que la persona vio en Hoy ese día**, y la regla de no repetir en 14 días cuenta los dos canales (`mensajes_semaforo_elegidos.canal` = `HOY` \| `CHAT`). Lo elige `points` (`points.api.MensajeDelChatFinder`) y se guarda por persona, fecha local, canal y grupo, así que el reintento de las 23:55 usa el mismo. **Si no hay mensaje o elegirlo falla, sale el texto de siempre** y se registra un `warn`: el chat nunca falla por el mensaje. |
 | **Una sola vez** | Sin tablas nuevas: cada mensaje tiene un id calculado de aprendiz + fecha (`UUID.nameUUIDFromBytes`) y se inserta con `ON CONFLICT (id) DO NOTHING`. El mensaje es su propia marca. |
 | **Imagen** | Tres JPEG en `src/main/resources/semaforo/tarjetas/` (diseño de Operaciones). El servidor sube cada uno UNA vez a `semaforo/tarjetas/<color>-v1.jpg` si no está, y todos los mensajes apuntan ahí. Con `STORAGE_PROVEEDOR=noop` o si S3 falla, sale solo el texto. |
 | **Aviso** | Push solo al aprendiz, y solo por el texto (la imagen no avisa). El Admin y el Alquimista del soporte no reciben un push por cada aprendiz cada noche (`MensajeDeChatGuardadoEvent.soloPara`). |
@@ -118,6 +127,7 @@ ni del vigente.
 
 Detalle de implementación: `chat.TarjetasDelSemaforoService` (el barrido), `chat.TarjetaEnSoporte` (una persona),
 `chat.TarjetasDelSemaforoPublicadas` (la imagen) y `chat.HoraDeLaTarjeta` (la ventana, en la zona de cada uno).
+El mensaje (D-281) lo pide `TarjetaEnSoporte` a `points.api.MensajeDelChatFinder`, solo cuando el texto va a salir.
 
 ---
 
@@ -339,6 +349,31 @@ vigente, compactos: la tarjeta de Hoy dibuja sus barras con esto, **sin una segu
 2026-09-25 a pedido del frontend: con dos lecturas, el número y las barras podían diferir justo en el borde del
 barrido). El detalle con gráficos llama a `/me/semaforo`.
 
+> **Agregado 2026-10-19 (D-277, spec 006).** `semaforo.mensaje`: el mensaje del día que acompaña a la tarjeta de Hoy,
+> con el sticker del búho. Campo **aditivo**: el APK publicado lo ignora y la app nueva contra un backend anterior no lo
+> recibe y dibuja la tarjeta de siempre.
+>
+> ```json
+> "semaforo": { "color": "AMARILLO", "etiqueta": "Requiere atención", "porcentaje": 71.4, "diasConDatos": 6,
+>               "pausado": false, "dias": [ ... ],
+>               "mensaje": { "id": "a011",
+>                            "texto": "María, faltan 2 para avanzar de color. Empieza por lo más sencillo y recupera movimiento.",
+>                            "sticker": "azul-reloj" } }
+> ```
+>
+> - `mensaje` es `null` (o no viene) si no hay ningún mensaje posible para la persona o si elegirlo falló: `/home`
+>   nunca se rompe por esto. Solo viaja dentro de `semaforo`; quien no se mide sigue con `semaforo: null`.
+> - `texto` ya viene escrito: sin llaves, en tuteo, hasta 300 caracteres. La app no lo transforma.
+> - `sticker` es uno de los 15 nombres que lleva la app (`dorado-orgulloso`, `azul-firme`…). Un nombre desconocido se
+>   muestra solo con el texto.
+> - `id` es estable durante el día mientras no cambie el grupo; al día siguiente cambia y no repite los de los últimos
+>   14 días.
+> - El mensaje sale del color de la **ventana vigente** (el mismo de la tarjeta, nunca otro) o, cuando el día no tiene
+>   color, del caso: INICIO, SIN_PROGRAMA, PAUSA, CUENTA_PAUSADA o GRADUADO. Una persona que terminó los 90 días sigue
+>   recibiendo `semaforo` (no se fabrica uno): el programa termina cuando `hoy` es posterior al día 90.
+> - **El aviso del sábado y el detalle (`/me/semaforo`) no cambian**, ni las vistas del mentor, del líder y de
+>   administración (FR-009). El catálogo (`mensajes_semaforo`, V110) se corrige con SQL sin publicar nada.
+
 ### 4.3 Tabla de un grupo — mentor y admin
 
 | Ruta | Quién | Permiso | Guard |
@@ -470,7 +505,7 @@ La app instalada ignora rutas que no conoce y solo se abre: no rompe nada.
 ### 4.6 «¿A quién atiendo hoy?» — administración (S-4, 2026-09-26)
 
 `GET /api/v1/admin/semaforo/atencion` · permiso `MANAGE_TRAINEES` · guard: ADMIN o ALCHEMIST **y** cuenta
-activa (`AccesoAVistasDelSemaforo.requireAdminActivo`). MENTOR, MENTOR_LEAD (no ve nombres, RL-07),
+activa (`AccesoAVistasDelSemaforo.requireAdminActivo`). MENTOR, MENTOR_LEAD (no ve esta lista; sus nombres están en §4.7 desde D-274),
 TRAINEE y un admin suspendido reciben 403.
 
 **Por qué existe:** §4.4 mira solo grupos regulares con mentor vigente, así que un aprendiz de la
@@ -502,6 +537,41 @@ todos, igual que en §4.3.
 - Solo cuentas activas y solo rol TRAINEE: el staff con programa propio no entra en esta lista.
 
 ---
+
+### 4.7 Cumplimiento por persona — líder, admin, alquimista (spec 005, D-274, 2026-10-19)
+
+> **Corregido 2026-10-19.** RL-07 del SDD 002 decía que el líder veía cantidades y ningún aprendiz con nombre. El dueño lo
+> amplió para esta vista: el líder, Administración y Alquimista abren el grupo, ven a cada persona con su color y su semana, y
+> abren su ficha. Sigue sin leer los chats del grupo y sin poder cambiar nada de la persona (completar, revisar, reasignar).
+
+Contrato completo: `specs/005-lider-cumplimiento-por-persona/contracts/leadership-cumplimiento.md`. En breve:
+
+- `GET /api/v1/leadership/groups/{g}/semaforo` — la tabla del grupo (la forma de §4.3, orden del líder: rojo, amarillo, sin
+  datos, verde, no se mide). **Sin `semanaHasta` = la ventana vigente, la misma del resumen §4.4.** Quien lleva su propio
+  programa en el grupo (su mentor o guía) sale como `NO_SE_MIDE`, sin barras.
+- `GET /api/v1/leadership/groups/{g}/people/{p}/week` — la ficha: los siete días de esa misma ventana con las obligaciones, la
+  respuesta escrita, las evidencias, la publicación del post diario y las acciones del día. **Sin `semanaHasta` = la ventana
+  vigente**; no hay días futuros.
+- La ventana es **la del resumen en las tres pantallas** (decisión del dueño, 2026-10-19): sin fecha, los 7 días que terminan
+  ayer en la zona de la persona (`vigenteDe`); con un viernes que ya llegó, esa semana de sábado a viernes (`semanaDe`). Los días
+  sin color traen su `motivo` y **nunca** se cuentan como incumplidos (`SIN_NADA_PLANIFICADO`, `NO_ACTIVADO`,
+  `PENDIENTE_DE_CALCULO`, `CUENTA_SUSPENDIDA`, `PAUSADO`, `FUERA_DEL_PROGRAMA`, `EN_CURSO`).
+
+> **Corregido 2026-10-19 (E-629 d).** Esta sección decía que la lista abría en la última semana cerrada, la ficha en la semana
+> en curso (con los días que faltan como `FUTURO`) y que la semana del líder era «la del semáforo, sábado→viernes». Eran dos
+> ventanas distintas a la vista (resumen «lunes 12 al domingo 18» contra lista «sábado 10 al viernes 16») y la misma persona
+> salía con otro porcentaje. `MismaVentanaEnLasTresPantallasTest` fija que no vuelva a pasar.
+>
+> **Corregido 2026-10-19 (E-629 e).** Con un viernes pedido, `GET /semaforo/groups` (§4.4) rotulaba `periodo.cerrada` con «todas las personas tienen su
+> foto del cierre»; quien empezó después no la tiene, y una semana pasada salía «todavía sin cerrar» en el resumen mientras la lista y la ficha del líder
+> decían «cerrada». Ahora, con `semanaHasta`, el resumen toma `cerrada` del calendario (el viernes ya pasó). Sin fecha sigue `false`. Las tablas del
+> mentor y de administración (§4.3) conservan el criterio anterior.
+- Persona fuera del grupo, grupo sin mentor o de recepción, y cuentas suspendidas, cerradas o de prueba: 404. Cada apertura de
+  la ficha queda registrada (`consultas_de_ficha`, append-only).
+- `GET /semaforo/groups` (§4.4) suma `puedeAbrirse` por grupo: la app abre la tarjeta solo si viene `true`.
+- Aviso al mentor: `REVISION_DEL_LIDER` a las 20:00 de su zona con lo que miró **el líder** ese día (§4.5: la ruta es
+  la misma `/mentor/groups/{g}/semaforo`).
+- Apagable con la funcionalidad `lider.cumplimiento` de Soporte TI: 503 `FUNCIONALIDAD_APAGADA` en las dos lecturas.
 
 ## 5. Pautas de experiencia (app)
 

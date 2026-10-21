@@ -2,12 +2,14 @@ package com.renaser.os.mentoring.application.services;
 
 import com.renaser.os.community.api.AcompanamientoFinder;
 import com.renaser.os.community.api.AcompanamientoFinder.GrupoBasico;
+import com.renaser.os.mentoring.api.TablaDelSemaforoFinder;
 import com.renaser.os.mentoring.application.ports.in.ConsultarSemaforoDelGrupoAdministrativoUseCase;
 import com.renaser.os.mentoring.application.ports.in.ConsultarSemaforoDelGrupoUseCase;
 import com.renaser.os.mentoring.domain.model.semaforo.MedicionDelAprendiz;
 import com.renaser.os.mentoring.domain.model.semaforo.OrdenDelSemaforo;
 import com.renaser.os.mentoring.domain.model.semaforo.PeriodoDelSemaforo;
 import com.renaser.os.mentoring.domain.model.semaforo.ResumenDelGrupo;
+import com.renaser.os.points.api.SemanaDelSemaforo;
 import com.renaser.os.points.api.VentanaDelSemaforo;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
@@ -40,7 +42,7 @@ import java.util.UUID;
  */
 @Service
 public class SemaforoDelGrupoService implements ConsultarSemaforoDelGrupoUseCase,
-        ConsultarSemaforoDelGrupoAdministrativoUseCase {
+        ConsultarSemaforoDelGrupoAdministrativoUseCase, TablaDelSemaforoFinder {
 
     private final AccesoAVistasDelSemaforo acceso;
     private final MedicionDeGrupos medicion;
@@ -69,6 +71,29 @@ public class SemaforoDelGrupoService implements ConsultarSemaforoDelGrupoUseCase
     public TablaDelSemaforo tablaDe(ConsultaTablaAdministrativa consulta) {
         acceso.requireAdminActivo(consulta.actorId());
         return armarTabla(consulta.grupoId(), consulta.semanaHasta(), clock.now());
+    }
+
+    /**
+     * La misma tabla para otro módulo (spec 005): sin autorizar —quien llama ya lo hizo— y con los tipos de la API.
+     * Un día que no es viernes lo rechaza la misma regla de las otras dos puertas (400).
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public TablaDeGrupo tablaDe(UUID grupoId, LocalDate semanaHasta) {
+        if (semanaHasta != null) {
+            SemanaDelSemaforo.exigirCierreValido(semanaHasta);
+        }
+        TablaDelSemaforo tabla = armarTabla(grupoId, semanaHasta, clock.now());
+        return new TablaDeGrupo(tabla.grupoId(), tabla.grupoNombre(), tabla.periodo().desde(),
+                tabla.periodo().hasta(), tabla.periodo().cerrada(),
+                tabla.aprendices().stream().map(SemaforoDelGrupoService::aFilaDeLaApi).toList());
+    }
+
+    private static FilaDeLaTabla aFilaDeLaApi(FilaDelSemaforo fila) {
+        MedicionDelAprendiz medicion = fila.medicion();
+        return new FilaDeLaTabla(fila.aprendizId(), fila.nombre(), fila.avatarUrl(), medicion.porcentaje(),
+                medicion.color(), medicion.diasConDatos(), medicion.dias(),
+                medicion.motivo() == null ? null : medicion.motivo().name());
     }
 
     /** El armado compartido. Que sea UNO solo es el requisito, no una comodidad (V22). */

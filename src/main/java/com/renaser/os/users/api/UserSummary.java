@@ -12,7 +12,7 @@ import com.renaser.os.users.api.UserStatus;
  * de {@code role}), o {@code null}. Solo para mostrar su nombre: {@code role} sigue siendo el rol base, y es el que
  * decide todo lo demás. Va al final y con un constructor sin él, para no tocar a quien ya arma un resumen.
  *
- * <p>{@code esCuentaDePrueba} (spec 002, fase 2, US5; V107, D-273): una cuenta de prueba de «ver como rol». Quien arma
+ * <p>{@code esCuentaDePrueba} (spec 002, fase 2, US5; V117, D-273): una cuenta de prueba de «ver como rol». Quien arma
  * una lista entre personas con {@link UserSummaryFinder#findByIds} la deja afuera (o le niega lo que se ve «por rol»,
  * como los chats de todos los grupos); los padrones por rol de {@code users} ya no la traen. Mismo criterio que
  * {@code rolPersonalizado}: al final y con constructores sin él.

@@ -31,7 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Las métricas del despliegue de punta a punta (contrato fase 2 §3.3 y §7): los pedidos reales pasan por el interceptor,
- * se cuentan dentro (la probadora) y fuera (otra persona, con su 404), se escriben en lote sumando en Postgres (V104) y
+ * se cuentan dentro (la probadora) y fuera (otra persona, con su 404), se escriben en lote sumando en Postgres (V114) y
  * la consola los devuelve en las 24 h. Un 5xx se registra directo en el servicio: ningún endpoint da un 500 a pedido
  * (que el interceptor marque como error un 5xx lo prueba {@code InterruptoresInterceptorTest}).
  */

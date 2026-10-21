@@ -151,7 +151,7 @@ class ConsolaSoporteTiIT {
 
         assertThat(respuesta.statusCode()).isEqualTo(200);
         JsonNode lista = pedidos.json(respuesta);
-        assertThat(lista.size()).isEqualTo(52);
+        assertThat(lista.size()).isEqualTo(53); // 52 de la spec 002 + lider.cumplimiento (spec 005)
         JsonNode chat = buscar(lista, "chat");
         assertThat(chat.get("critica").asBoolean()).isTrue();
         assertThat(chat.get("prendidaGlobal").asBoolean()).isTrue();

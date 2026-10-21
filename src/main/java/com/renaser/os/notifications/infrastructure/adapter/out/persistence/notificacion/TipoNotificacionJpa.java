@@ -26,5 +26,7 @@ public enum TipoNotificacionJpa {
     /** V87. Espejo del valor homonimo del enum de Postgres. */
     ARMADO_DE_GRUPOS,
     /** V102. Espejo del valor homonimo del enum de Postgres. */
-    OPERACION_PLATAFORMA
+    OPERACION_PLATAFORMA,
+    /** V109. Espejo del valor homonimo del enum de Postgres. */
+    REVISION_DEL_LIDER
 }

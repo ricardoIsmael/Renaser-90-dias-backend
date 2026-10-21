@@ -42,8 +42,13 @@ public interface ConsultarSemaforoPorGruposUseCase {
     /**
      * @param mentorNombre null si el grupo no tiene mentor o si {@code users} no lo conoce
      * @param sinMentor    el grupo no tuvo mentor en el periodo (D-240)
+     * @param puedeAbrirse spec 005 (FR-001, R-10): el líder puede bajar a las personas del grupo. Solo si tiene mentor
+     *                     —el de bienvenida y un grupo sin mentor quedan fuera— y si la funcionalidad
+     *                     {@code lider.cumplimiento} está prendida para quien pregunta. La app abre la tarjeta
+     *                     únicamente si esto viene en {@code true}, así que contra un backend anterior, sin el campo,
+     *                     las tarjetas siguen sin abrirse (FR-021)
      */
     record GrupoDelResumen(UUID grupoId, String grupoNombre, String mentorNombre, ResumenDelGrupo resumen,
-                           boolean sinMentor) {
+                           boolean sinMentor, boolean puedeAbrirse) {
     }
 }

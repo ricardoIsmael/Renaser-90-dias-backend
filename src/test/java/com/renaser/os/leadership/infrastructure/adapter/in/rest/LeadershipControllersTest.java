@@ -63,6 +63,7 @@ class LeadershipControllersTest {
     void preparar() {
         banco.observaciones.clear();
         banco.pendientes.clear();
+        banco.limpiarGrupos();
         banco.usuario(LIDER, "Líder", UserRole.MENTOR_LEAD, UserStatus.ACTIVE);
         banco.usuario(ALQUIMISTA, "Alquimista", UserRole.ALCHEMIST, UserStatus.ACTIVE);
         banco.usuario(LUISA, "Luisa Rojas", UserRole.MENTOR, UserStatus.ACTIVE);
@@ -135,6 +136,48 @@ class LeadershipControllersTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].text").value("Muy buena respuesta"));
         assertThat(banco.observaciones).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("spec 005 (R-7): la observacion trae personId y weekStart, el listado devuelve ademas el nombre de la persona")
+    void observacionSobreUnaPersona() throws Exception {
+        banco.grupo(FENIX, "Grupo Fénix", LUISA, List.of(ANA));
+
+        observar(LIDER, LUISA, """
+                {"type":"ALERTA","text":"Ana lleva 3 dias sin el ritual","sentByChat":false,"operationKey":"k-p1",
+                 "personId":"%s","weekStart":"2026-10-10"}
+                """.formatted(ANA)).andExpect(status().isCreated())
+                .andExpect(jsonPath("$.personId").value(ANA.toString()))
+                .andExpect(jsonPath("$.weekStart").value("2026-10-10"));
+
+        pedir(PADRON + "/" + LUISA + "/observations", LIDER)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].personId").value(ANA.toString()))
+                .andExpect(jsonPath("$.items[0].personName").value("Ana Pérez"))
+                .andExpect(jsonPath("$.items[0].weekStart").value("2026-10-10"));
+    }
+
+    @Test
+    @DisplayName("spec 005: una persona que no es de un grupo de ese mentor, o una semana sin persona, es 400")
+    void observacionSobreUnaPersonaInvalida() throws Exception {
+        banco.grupo(FENIX, "Grupo Fénix", LUISA, List.of(ANA));
+
+        observar(LIDER, RAUL, """
+                {"type":"ALERTA","text":"x","sentByChat":false,"operationKey":"k-p2","personId":"%s"}
+                """.formatted(ANA)).andExpect(status().isBadRequest());
+        observar(LIDER, LUISA, """
+                {"type":"ALERTA","text":"x","sentByChat":false,"operationKey":"k-p3","weekStart":"2026-10-10"}
+                """).andExpect(status().isBadRequest());
+        assertThat(banco.observaciones).isEmpty();
+    }
+
+    @Test
+    @DisplayName("sin persona la observacion es la de siempre: personId, personName y weekStart van en null")
+    void observacionSinPersona() throws Exception {
+        observar(LIDER, LUISA, """
+                {"type":"RECONOCIMIENTO","text":"Muy bien","sentByChat":false,"operationKey":"k-p4"}
+                """).andExpect(status().isCreated()).andExpect(jsonPath("$.personId").value(nullValue()))
+                .andExpect(jsonPath("$.weekStart").value(nullValue()));
     }
 
     @Test

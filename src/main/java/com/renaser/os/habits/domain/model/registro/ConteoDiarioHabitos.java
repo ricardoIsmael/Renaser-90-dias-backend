@@ -39,7 +39,24 @@ public record ConteoDiarioHabitos(LocalDate fecha, int totalRegistros, int compl
      * antes de reportar, y nadie la copia afuera.
      */
     public int calificables() {
+        return calificables(totalRegistros, opcionalesNoCompletados);
+    }
+
+    /**
+     * La misma definicion para quien cuenta por otro agrupamiento (por habito en vez de por dia, D-277): una sola
+     * formula de "contaba", la que usan el semaforo, el ranking y el mensaje del semaforo.
+     */
+    public static int calificables(int totalRegistros, int opcionalesNoCompletados) {
         return totalRegistros - opcionalesNoCompletados;
+    }
+
+    /**
+     * La misma definicion mirada UN registro a la vez (D-277, el avance de hoy que {@code /home} le pasa al mensaje
+     * del semaforo): contaba todo menos el opcional sin completar. Es el complemento exacto de
+     * {@code opcionalesNoCompletados}: sumar {@code contaba} sobre los registros de un dia da {@link #calificables()}.
+     */
+    public static boolean contaba(boolean esOpcional, boolean completado) {
+        return !esOpcional || completado;
     }
 
     /**

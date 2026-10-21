@@ -29,7 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * El despliegue progresivo de punta a punta (spec 002, US4; contrato fase 2 §3 y §7): sesión real, los dos
- * interceptores, la regla {@code @Order(10)} sobre la copia en memoria, Postgres con V103 y Redis.
+ * interceptores, la regla {@code @Order(10)} sobre la copia en memoria, Postgres con V113 y Redis.
  *
  * <p>El escenario central: Soporte TI empieza un despliegue al 0 % (crítico: pide contraseña) y suma una probadora; la
  * probadora recibe 200, otra persona 404 {@code FUNCIONALIDAD_NO_DISPONIBLE} y la ve en {@code noDisponibles}; al

@@ -1,0 +1,10 @@
+404 grupo de recepcion Grupo no encontrado
+404 grupo sin mentor Grupo no encontrado
+404 persona de otro grupo (Hugo en Fenix) Esa persona no esta en ese grupo
+404 cuenta cerrada (Cecilia) Esa persona no esta en ese grupo
+400 semanaHasta que no es viernes La semana del semaforo termina en viernes: 2026-10-15
+400 semana futura en la ficha No hay semanas futuras: la del 2026-10-24 todavia no empezo
+200 semana en curso en la ficha (viernes 23) 
+403 aprendiz (Ana) pide la lista No autorizado
+403 mentor (Luisa) pide la lista Solo MENTOR_LEAD/ADMIN/ALCHEMIST gestionan el cuerpo de mentores
+200 admin pide la lista 

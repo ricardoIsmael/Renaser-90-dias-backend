@@ -1,0 +1,7 @@
+# Escenario 13 / contrato 4: GET /api/v1/wall/{id} de la publicacion del post diario de Ana (14/10, con foto)
+200 la autora |  foto firmada: 200 image/jpeg 13507 bytes
+200 el lider |  foto firmada: 200 image/jpeg 13507 bytes
+200 el admin |  foto firmada: 200 image/jpeg 13507 bytes
+200 la mentora de su grupo |  foto firmada: 200 image/jpeg 13507 bytes
+403 un mentor de OTRO grupo | Esta publicacion solo la lee su autor, el liderazgo o quien lo acompana 
+403 un aprendiz de OTRO grupo | Esta publicacion solo la lee su autor, el liderazgo o quien lo acompana 

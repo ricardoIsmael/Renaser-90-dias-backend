@@ -605,7 +605,8 @@ renaser:
     ranking-semanal:
       activo: ${RANKING_SEMANAL_ACTIVO:false}
   # D-223 (2026-09-29): la tarjeta diaria del semáforo en el chat de soporte (a las 23:50 de cada aprendiz,
-  # imagen del color de su día + «Hoy llevas N % de tus hábitos.»). PRENDIDA por defecto: la pidió el dueño
+  # imagen del color de su día + «Hoy llevas N % de tus hábitos.» y, desde D-281, un mensaje personalizado del
+  # catálogo del semáforo debajo; sin mensaje, el texto de siempre). PRENDIDA por defecto: la pidió el dueño
   # con las imágenes de Operaciones y el texto ya decididos. En el código el default es false, así las
   # pruebas (cuyo application.yaml reemplaza a este) no mandan nada solas. Apagarla en producción:
   # /renaser/prod/SEMAFORO_TARJETA_DIARIA_ACTIVA=false y reiniciar. Prenderla no manda tarjetas atrasadas.

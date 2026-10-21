@@ -390,13 +390,20 @@ public class EvidenciaService implements RegistrarEvidenciaPort, ConsultarEviden
     }
 
     /**
-     * Quién puede abrir UNA evidencia: su dueño, el mentor asignado a esa persona, o un
+     * Quién puede abrir UNA evidencia: su dueño, el mentor asignado a esa persona, el líder de mentores o un
      * administrador.
      *
      * <p>El mentor entró acá porque sin él la pantalla de seguimiento no puede abrir el archivo
      * que ella misma dice que existe: {@code listar} ya le devuelve la evidencia de su aprendiz,
      * y pedir el detalle daba 403. Es la misma comprobación de {@code listar} —estar asignado a
      * ese aprendiz, no "tener rol MENTOR"—, que es la distinción de E-38.
+     *
+     * <p><b>El líder de mentores LEE, no revisa</b> (spec 005, R-5; FR-011): su ficha de cada persona abre las
+     * evidencias de la semana, así que el detalle y el archivo firmado le responden como a un administrador. No es un
+     * permiso nuevo: {@link #revisar} y {@link #anular} siguen exigiendo ADMIN/ALCHEMIST ({@link #requireAdmin}), y
+     * el listado de evidencia ajena sigue siendo de quien ya lo tenía. La regla vale para cualquier evidencia por su
+     * id y no mira de qué grupo es la persona: es el mismo alcance de lectura que ya tiene Administración, y el líder
+     * ya ve a todos los grupos con mentor.
      */
     private void requireDuenoOAdmin(UserId actorId, Evidencia evidencia) {
         if (actorId.equals(evidencia.participanteId())) {
@@ -405,6 +412,9 @@ public class EvidenciaService implements RegistrarEvidenciaPort, ConsultarEviden
         UserSummary actor = requireActorActivo(actorId);
         if (actor.role().actuaComoMentor()) {
             requireMentorAsignado(actorId, evidencia.participanteId());
+            return;
+        }
+        if (actor.role() == UserRole.MENTOR_LEAD) {
             return;
         }
         requireAdmin(actorId);

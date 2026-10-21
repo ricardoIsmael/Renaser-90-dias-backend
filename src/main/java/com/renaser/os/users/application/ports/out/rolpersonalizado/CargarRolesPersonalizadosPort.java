@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
-/** Leer los roles personalizados y a quién están asignados (V105, D-272). */
+/** Leer los roles personalizados y a quién están asignados (V115, D-272). */
 public interface CargarRolesPersonalizadosPort {
 
     Optional<RolPersonalizado> porId(UUID id);

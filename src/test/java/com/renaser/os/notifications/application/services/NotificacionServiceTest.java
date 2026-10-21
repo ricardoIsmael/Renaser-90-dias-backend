@@ -470,4 +470,77 @@ class NotificacionServiceTest {
         verify(pushPort).enviar(eq(List.of(web)),
                 eq(new MensajePush(TipoNotificacion.RECORDATORIO_HABITO, "T", "C", null)));
     }
+
+    // ─── Spec 007, FR-014: la etiqueta del push viaja aparte del comando ──────────────────────
+
+    private static final String ETIQUETA_DE_HABITO = "habito-66507383-7219-43ab-aa42-2fbc76152b82-inicio";
+
+    @Test
+    @DisplayName("spec 007: la etiqueta de un aviso de habito llega al MensajePush (no va en el comando)")
+    void laEtiquetaDelAvisoLlegaAlPush() {
+        UserId usuario = usuario();
+        when(loadPreferenciasPort.habilitadaPara(usuario, TipoNotificacion.RECORDATORIO_HABITO))
+                .thenReturn(Optional.empty());
+        TokenPush android = token(usuario, PlataformaPush.ANDROID);
+        when(loadTokenPushPort.tokensDe(usuario)).thenReturn(List.of(android));
+        when(pushPort.enviar(anyList(), any())).thenReturn(List.of());
+
+        service.emitir(new EmitirNotificacionCommand(usuario, TipoNotificacion.RECORDATORIO_HABITO, "T", "C",
+                "/habitos/66507383-7219-43ab-aa42-2fbc76152b82?dimension=BODY", null), EntregaPush.TODOS,
+                ETIQUETA_DE_HABITO);
+
+        verify(pushPort).enviar(eq(List.of(android)), eq(new MensajePush(TipoNotificacion.RECORDATORIO_HABITO,
+                "T", "C", "/habitos/66507383-7219-43ab-aa42-2fbc76152b82?dimension=BODY", ETIQUETA_DE_HABITO)));
+    }
+
+    @Test
+    @DisplayName("spec 007: sin etiqueta explicita el mensaje es el de siempre (la de chat se sigue derivando de la ruta)")
+    void sinEtiquetaExplicitaNoCambiaNada() {
+        UserId usuario = usuario();
+        when(loadPreferenciasPort.habilitadaPara(usuario, TipoNotificacion.MENSAJE_CHAT))
+                .thenReturn(Optional.empty());
+        TokenPush android = token(usuario, PlataformaPush.ANDROID);
+        when(loadTokenPushPort.tokensDe(usuario)).thenReturn(List.of(android));
+        when(pushPort.enviar(anyList(), any())).thenReturn(List.of());
+
+        service.emitir(new EmitirNotificacionCommand(usuario, TipoNotificacion.MENSAJE_CHAT, "T", "C", "/chat/abc",
+                null), EntregaPush.TODOS, null);
+
+        verify(pushPort).enviar(eq(List.of(android)),
+                eq(new MensajePush(TipoNotificacion.MENSAJE_CHAT, "T", "C", "/chat/abc")));
+        assertThat(new MensajePush(TipoNotificacion.MENSAJE_CHAT, "T", "C", "/chat/abc").etiqueta())
+                .contains("chat-abc");
+    }
+
+    @Test
+    @DisplayName("spec 007: con EntregaPush.NINGUNO la etiqueta no cambia que solo se guarda la bandeja")
+    void laEtiquetaNoReviveElPushApagado() {
+        UserId usuario = usuario();
+        when(loadPreferenciasPort.habilitadaPara(usuario, TipoNotificacion.RECORDATORIO_HABITO))
+                .thenReturn(Optional.empty());
+        lenient().when(loadTokenPushPort.tokensDe(usuario)).thenReturn(List.of(token(usuario, PlataformaPush.ANDROID)));
+
+        Optional<Notificacion> emitida = service.emitir(new EmitirNotificacionCommand(usuario,
+                TipoNotificacion.RECORDATORIO_HABITO, "T", "C", null, null), EntregaPush.NINGUNO, ETIQUETA_DE_HABITO);
+
+        assertThat(emitida).isPresent();
+        verify(pushPort, never()).enviar(anyList(), any());
+    }
+
+    @Test
+    @DisplayName("spec 007: una emision duplicada (mismo origenEventoId) con etiqueta tampoco reenvia el push")
+    void duplicadaConEtiquetaNoReenvia() {
+        UserId usuario = usuario();
+        when(loadPreferenciasPort.habilitadaPara(usuario, TipoNotificacion.RECORDATORIO_HABITO))
+                .thenReturn(Optional.of(true));
+        doThrow(new DataIntegrityViolationException("notificaciones_origen_evento_uk"))
+                .when(saveNotificacionPort).guardar(any());
+
+        Optional<Notificacion> resultado = service.emitir(new EmitirNotificacionCommand(usuario,
+                TipoNotificacion.RECORDATORIO_HABITO, "T", "C", null, UUID.randomUUID()), EntregaPush.TODOS,
+                ETIQUETA_DE_HABITO);
+
+        assertThat(resultado).isEmpty();
+        verify(pushPort, never()).enviar(anyList(), any());
+    }
 }

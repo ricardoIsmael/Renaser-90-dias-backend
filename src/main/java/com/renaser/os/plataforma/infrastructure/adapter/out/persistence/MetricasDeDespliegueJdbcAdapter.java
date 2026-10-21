@@ -14,7 +14,7 @@ import java.util.Map;
 import java.util.StringJoiner;
 
 /**
- * {@code funcionalidades_metricas_hora} (V104). El lote de cada minuto va en UNA sentencia
+ * {@code funcionalidades_metricas_hora} (V114). El lote de cada minuto va en UNA sentencia
  * ({@code INSERT … VALUES (…), (…) ON CONFLICT DO UPDATE} sumando): o entra entero o no entra nada, y si falla el lote
  * vuelve a la memoria sin contar dos veces lo que ya se había escrito. Las celdas del lote son distintas entre sí (salen
  * de un mapa), así que la sentencia nunca toca dos veces la misma fila.

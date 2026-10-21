@@ -11,12 +11,12 @@ public enum TipoDeCambio {
     /** Alguien confirmó su contraseña para un cambio crítico (salió bien o no). */
     REAUTENTICACION,
     /**
-     * Soporte TI creó, editó, desactivó, borró o reemplazó en bloque un rol personalizado (spec 002, fase 2; V106,
+     * Soporte TI creó, editó, desactivó, borró o reemplazó en bloque un rol personalizado (spec 002, fase 2; V116,
      * D-272). La {@code clave} es la del rol, {@code rp:<id>}.
      */
     ROL_PERSONALIZADO,
     /**
-     * Soporte TI entró o salió de «ver como rol» (spec 002, fase 2, US5; V108, D-273). Al entrar, {@code antes} es
+     * Soporte TI entró o salió de «ver como rol» (spec 002, fase 2, US5; V118, D-273). Al entrar, {@code antes} es
      * {@code null} y {@code despues} {@code {rol}} o {@code {rolPersonalizado: {id, nombre}}}; al salir, al revés. Sin
      * {@code clave}: no toca ninguna funcionalidad.
      */

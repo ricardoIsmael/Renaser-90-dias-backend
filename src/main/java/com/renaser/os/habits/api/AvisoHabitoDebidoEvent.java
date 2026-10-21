@@ -23,7 +23,9 @@ import java.util.UUID;
  *                         {@code HabitoDelDiaResumen.estado}: no filtrar un tipo interno de
  *                         `habits` fuera de su {@code @NamedInterface}
  * @param minutosQueFaltan cuanto falta para el momento avisado, ya redondeado hacia arriba — es
- *                         el numero que va en el texto ("empieza en 15 minutos")
+ *                         el numero que iba en el texto ("empieza en 15 minutos"). Desde la spec 007 el
+ *                         texto dice la hora ({@code momentoAvisado}); los minutos quedan para redactar
+ *                         las publicaciones viejas que el outbox reentregue
  * @param puntosEnJuego    lo que el aprendiz gana si lo entrega ahora. Va en el evento y no lo
  *                         recalcula `notifications` porque el puntaje es una regla de `habits`
  *                         (D-97) y solo este modulo la conoce
@@ -45,10 +47,25 @@ import java.util.UUID;
  * @param categoriaHabito     la categoria del catalogo del habito ({@code BODY}, {@code MIND},
  *                            {@code CONSCIENCE}, {@code SPIRIT}…), que es la dimension que la app abre.
  *                            Tambien {@code null} en publicaciones viejas
+ * @param momentoAvisado      el instante al que se refiere el aviso: la hora de disparo del habito (inicio) o
+ *                            su plazo de entrega (vencimiento), calculado con la hora del habito y NO con el
+ *                            reloj del barrido (spec 007, FR-012). Con el se escribe «te toca a las 07:00» y se
+ *                            descarta un aviso que llega tarde. {@code null} en publicaciones anteriores a la
+ *                            spec 007 que el outbox reentregue: esas se redactan con los minutos de siempre
+ * @param zonaHoraria         la zona del participante ({@code America/Lima}) en que se dice la hora de
+ *                            {@code momentoAvisado}. {@code null} en publicaciones viejas, por lo mismo
+ * @param diaDeLaSemanaDelAviso el dia de la semana ISO (1 = lunes ... 7 = domingo) de la fecha del registro, en la
+ *                            zona del participante, SOLO si el habito usa el esquema por dia (tiene alguna fila en
+ *                            {@code horario_semanal_habito}: hora propia, aviso propio o dia apagado); {@code null}
+ *                            si no. Es lo que le permite a `notifications` poner al push la misma etiqueta que la
+ *                            app le pone a la alarma local de ese dia ({@code habito-{id}-d{iso}-0}), para que el
+ *                            telefono reemplace y no apile los dos avisos (spec 008, R6). {@code null} tambien en
+ *                            publicaciones anteriores a la spec 008 que el outbox reentregue
  */
 public record AvisoHabitoDebidoEvent(UUID registroId, UserId participanteId, String tituloHabito, String tipoAviso,
                                       long minutosQueFaltan, int puntosEnJuego, UUID claveEvento,
                                       Boolean recordatorioActivo, Integer minutosRecordatorio,
-                                      Instant occurredAt, UUID habitoId, String categoriaHabito)
+                                      Instant occurredAt, UUID habitoId, String categoriaHabito,
+                                      Instant momentoAvisado, String zonaHoraria, Integer diaDeLaSemanaDelAviso)
         implements DomainEvent {
 }

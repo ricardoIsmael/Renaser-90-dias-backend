@@ -12,9 +12,13 @@ import com.renaser.os.points.api.RocaDelDiaResumen;
 import com.renaser.os.points.api.PorcentajeRocasFinder;
 import com.renaser.os.points.api.RocasDelDiaFinder;
 import com.renaser.os.points.application.ports.in.home.ConsultarResumenHomeUseCase.ResumenHome;
+import com.renaser.os.points.application.ports.in.semaforo.ConsultarMensajeDelSemaforoUseCase;
+import com.renaser.os.points.application.ports.in.semaforo.ConsultarMensajeDelSemaforoUseCase.ConsultaDelMensaje;
+import com.renaser.os.points.application.ports.in.semaforo.ConsultarMensajeDelSemaforoUseCase.MensajeDelDia;
 import com.renaser.os.points.application.ports.in.puntaje.ConsultarPuntajeUseCase;
 import com.renaser.os.points.application.ports.in.semaforo.ConsultarMiSemaforoUseCase;
 import com.renaser.os.points.domain.model.puntaje.PuntajeParticipante;
+import com.renaser.os.points.domain.model.semaforo.CumplimientoDelDia;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -25,6 +29,7 @@ import com.renaser.os.users.api.UserRole;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -43,6 +48,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -72,19 +78,21 @@ class HomeAgregadoServiceTest {
     private PorcentajeRocasFinder porcentajeRocasFinder;
     @Mock
     private ConsultarMiSemaforoUseCase consultarMiSemaforo;
+    @Mock
+    private ConsultarMensajeDelSemaforoUseCase consultarMensajeDelSemaforo;
 
     private final UserId actor = UserId.of(UUID.randomUUID());
 
     private HomeAgregadoService nuevoServicio() {
         return new HomeAgregadoService(consultarPuntajeUseCase, participacionProgramaFinder, habitosDelDiaFinder,
                 diasConHabitoCumplidoFinder, rocasDelDiaFinder, proximoEventoFinder, notificacionesNoLeidasFinder,
-                porcentajeRocasFinder, consultarMiSemaforo, CLOCK);
+                porcentajeRocasFinder, consultarMiSemaforo, consultarMensajeDelSemaforo, CLOCK);
     }
 
     private HomeAgregadoService nuevoServicioCon(FixedClock reloj) {
         return new HomeAgregadoService(consultarPuntajeUseCase, participacionProgramaFinder, habitosDelDiaFinder,
                 diasConHabitoCumplidoFinder, rocasDelDiaFinder, proximoEventoFinder, notificacionesNoLeidasFinder,
-                porcentajeRocasFinder, consultarMiSemaforo, reloj);
+                porcentajeRocasFinder, consultarMiSemaforo, consultarMensajeDelSemaforo, reloj);
     }
 
     /**
@@ -124,6 +132,148 @@ class HomeAgregadoServiceTest {
         assertThat(resumen.semaforo().color()).isEqualTo(ColorSemaforo.VERDE);
         assertThat(resumen.semaforo().porcentaje()).isEqualByComparingTo("80.0");
         assertThat(resumen.semaforo().dias()).containsExactly(ayer);
+    }
+
+    /** D-277: el mensaje del día llega dentro del semáforo, el mismo objeto que armó el caso de uso. */
+    @Test
+    void elMensajeDelDiaViajaDentroDelSemaforo() {
+        HomeAgregadoService service = nuevoServicio();
+        prepararHoyConSemaforo();
+        when(consultarMensajeDelSemaforo.deHoy(any())).thenReturn(
+                Optional.of(new MensajeDelDia("v007", "Ana, llegaste al día 12.", "dorado-celebrando")));
+
+        ResumenHome resumen = service.consultar(actor);
+
+        assertThat(resumen.semaforo().mensaje()).isEqualTo(
+                new MensajeDelDia("v007", "Ana, llegaste al día 12.", "dorado-celebrando"));
+        assertThat(resumen.semaforo().color()).as("el mensaje no toca el resto de la tarjeta").isEqualTo(ColorSemaforo.VERDE);
+    }
+
+    /** D-277: sin ningún mensaje posible, la tarjeta es la de siempre. */
+    @Test
+    void sinMensajeLaTarjetaSaleComoAntes() {
+        HomeAgregadoService service = nuevoServicio();
+        prepararHoyConSemaforo();
+        when(consultarMensajeDelSemaforo.deHoy(any())).thenReturn(Optional.empty());
+
+        ResumenHome resumen = service.consultar(actor);
+
+        assertThat(resumen.semaforo().mensaje()).isNull();
+        assertThat(resumen.semaforo().dias()).hasSize(1);
+    }
+
+    /** D-277: el mensaje es un adorno. Si elegirlo falla, /home sigue respondiendo con la tarjeta sin él. */
+    @Test
+    void siElMensajeFallaHomeNoSeRompe() {
+        HomeAgregadoService service = nuevoServicio();
+        prepararHoyConSemaforo();
+        when(consultarMensajeDelSemaforo.deHoy(any())).thenThrow(new IllegalStateException("catalogo roto"));
+
+        ResumenHome resumen = service.consultar(actor);
+
+        assertThat(resumen.semaforo()).isNotNull();
+        assertThat(resumen.semaforo().mensaje()).isNull();
+        assertThat(resumen.semaforo().color()).isEqualTo(ColorSemaforo.VERDE);
+    }
+
+    /**
+     * D-277 (SC-004): el mensaje recibe lo de hoy con las listas que {@code /home} ya leyó para sus tarjetas, sin
+     * pedirlas otra vez. Un hábito opcional sin cumplir no cuenta (lo dice {@code habits} en el resumen), y la cifra
+     * de la tarjeta de hábitos sigue siendo la de siempre: todos los tracks.
+     */
+    @Test
+    void elMensajeRecibeLoDeHoyQueHomeYaLeyoSinPedirloOtraVez() {
+        HomeAgregadoService service = nuevoServicio();
+        prepararHoyConSemaforo();
+        when(habitosDelDiaFinder.deHoy(actor, HOY_LIMA)).thenReturn(List.of(
+                new HabitoDelDiaResumen(UUID.randomUUID(), "Meditar", "COMPLETADO", true),
+                new HabitoDelDiaResumen(UUID.randomUUID(), "Leer", "PENDIENTE", true),
+                new HabitoDelDiaResumen(UUID.randomUUID(), "Estirar", "PENDIENTE", false)));
+        when(rocasDelDiaFinder.deHoy(actor)).thenReturn(List.of(
+                new RocaDelDiaResumen(UUID.randomUUID(), "Roca 1", "desc", true),
+                new RocaDelDiaResumen(UUID.randomUUID(), "Roca 2", "desc", false)));
+        when(consultarMensajeDelSemaforo.deHoy(any())).thenReturn(Optional.empty());
+
+        ResumenHome resumen = service.consultar(actor);
+
+        ArgumentCaptor<ConsultaDelMensaje> consulta = ArgumentCaptor.forClass(ConsultaDelMensaje.class);
+        verify(consultarMensajeDelSemaforo).deHoy(consulta.capture());
+        CumplimientoDelDia deHoy = consulta.getValue().deHoy().orElseThrow();
+        assertThat(deHoy.fecha()).isEqualTo(HOY_LIMA);
+        assertThat(deHoy.habitosProgramados()).isEqualTo(2);
+        assertThat(deHoy.habitosCumplidos()).isEqualTo(1);
+        assertThat(deHoy.objetivosProgramados()).isEqualTo(2);
+        assertThat(deHoy.objetivosCumplidos()).isEqualTo(1);
+        assertThat(consulta.getValue().persona()).isEqualTo(actor);
+        assertThat(resumen.habitosHoy().total()).as("la tarjeta de hábitos cuenta todos los tracks").isEqualTo(3);
+        assertThat(resumen.habitosHoy().completados()).isEqualTo(1);
+        verify(habitosDelDiaFinder, times(1)).deHoy(actor, HOY_LIMA);
+        verify(rocasDelDiaFinder, times(1)).deHoy(actor);
+    }
+
+    /** Sin tarjeta de hábitos para este actor, el mensaje cuenta solo lo que sí tiene: sus objetivos. */
+    @Test
+    void sinHabitosParaElActorElMensajeCuentaSoloSusObjetivos() {
+        HomeAgregadoService service = nuevoServicio();
+        prepararHoyConSemaforo();
+        when(habitosDelDiaFinder.deHoy(actor, HOY_LIMA)).thenThrow(new NoSuchElementException("sin progreso"));
+        when(rocasDelDiaFinder.deHoy(actor)).thenReturn(List.of(
+                new RocaDelDiaResumen(UUID.randomUUID(), "Roca 1", "desc", false)));
+        when(consultarMensajeDelSemaforo.deHoy(any())).thenReturn(Optional.empty());
+
+        ResumenHome resumen = service.consultar(actor);
+
+        ArgumentCaptor<ConsultaDelMensaje> consulta = ArgumentCaptor.forClass(ConsultaDelMensaje.class);
+        verify(consultarMensajeDelSemaforo).deHoy(consulta.capture());
+        assertThat(resumen.habitosHoy()).isNull();
+        assertThat(consulta.getValue().deHoy().orElseThrow().habitosProgramados()).isZero();
+        assertThat(consulta.getValue().deHoy().orElseThrow().objetivosProgramados()).isEqualTo(1);
+    }
+
+    /** El día de «hoy» del mensaje es el de la zona de la persona, no el del servidor (regla 02 §1). */
+    @Test
+    void loDeHoyDelMensajeEsDelDiaLocalDeLaPersona() {
+        FixedClock madrugadaUtc = FixedClock.at(Instant.parse("2026-08-26T03:00:00Z"));
+        HomeAgregadoService service = nuevoServicioCon(madrugadaUtc);
+        prepararHoyConSemaforo(LocalDate.of(2026, 8, 25));
+        when(consultarMensajeDelSemaforo.deHoy(any())).thenReturn(Optional.empty());
+
+        service.consultar(actor);
+
+        ArgumentCaptor<ConsultaDelMensaje> consulta = ArgumentCaptor.forClass(ConsultaDelMensaje.class);
+        verify(consultarMensajeDelSemaforo).deHoy(consulta.capture());
+        assertThat(consulta.getValue().deHoy().orElseThrow().fecha()).as("03:00 UTC es el 25 a las 22:00 en Lima")
+                .isEqualTo(LocalDate.of(2026, 8, 25));
+        verify(habitosDelDiaFinder).deHoy(actor, LocalDate.of(2026, 8, 25));
+    }
+
+    /** Quien no se mide no tiene tarjeta ni mensaje: ni se intenta elegir uno. */
+    @Test
+    void quienNoSeMideNoRecibeMensaje() {
+        HomeAgregadoService service = nuevoServicio();
+        when(consultarPuntajeUseCase.consultar(actor, actor)).thenReturn(
+                PuntajeParticipante.rehydrate(actor, new BigDecimal("100.00"), 10, 0, 0, CLOCK.now()));
+        when(participacionProgramaFinder.deParticipante(actor)).thenReturn(Optional.of(participacionInscrita()));
+        when(porcentajeRocasFinder.porcentajePorParticipante(List.of(actor), HOY_LIMA)).thenReturn(Map.of());
+        when(consultarMiSemaforo.resumenParaHoy(actor)).thenReturn(Optional.empty());
+
+        assertThat(service.consultar(actor).semaforo()).isNull();
+        verify(consultarMensajeDelSemaforo, never()).deHoy(any());
+    }
+
+    private void prepararHoyConSemaforo() {
+        prepararHoyConSemaforo(HOY_LIMA);
+    }
+
+    private void prepararHoyConSemaforo(LocalDate hoy) {
+        when(consultarPuntajeUseCase.consultar(actor, actor)).thenReturn(
+                PuntajeParticipante.rehydrate(actor, new BigDecimal("100.00"), 10, 0, 0, CLOCK.now()));
+        when(participacionProgramaFinder.deParticipante(actor)).thenReturn(Optional.of(participacionInscrita()));
+        when(porcentajeRocasFinder.porcentajePorParticipante(List.of(actor), hoy)).thenReturn(Map.of());
+        DiaDelSemaforo ayer = new DiaDelSemaforo(hoy.minusDays(1), EstadoDiaSemaforo.MEDIDO, 80,
+                ColorSemaforo.VERDE, 4, 3, 1, 1);
+        when(consultarMiSemaforo.resumenParaHoy(actor)).thenReturn(Optional.of(new ConsultarMiSemaforoUseCase
+                .ResumenParaHoy(ColorSemaforo.VERDE, new BigDecimal("80.0"), 1, false, List.of(ayer))));
     }
 
     @Test

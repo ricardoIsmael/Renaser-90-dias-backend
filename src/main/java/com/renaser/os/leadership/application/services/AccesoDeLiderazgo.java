@@ -36,7 +36,8 @@ class AccesoDeLiderazgo {
         this.fichaDeMentorFinder = fichaDeMentorFinder;
     }
 
-    void requireLiderazgoActivo(UserId actorId) {
+    /** @return el rol con el que actua: la ficha de una persona lo registra junto con la consulta (spec 005, FR-016) */
+    UserRole requireLiderazgoActivo(UserId actorId) {
         UserSummary actor = userSummaryFinder.findById(actorId)
                 .orElseThrow(() -> new NoSuchElementException("Actor no encontrado: " + actorId));
         if (actor.status() != UserStatus.ACTIVE) {
@@ -45,6 +46,7 @@ class AccesoDeLiderazgo {
         if (!LIDERAZGO.contains(actor.role())) {
             throw new NotAuthorizedException("Solo MENTOR_LEAD/ADMIN/ALCHEMIST gestionan el cuerpo de mentores");
         }
+        return actor.role();
     }
 
     /**

@@ -27,7 +27,7 @@ class BusquedaDeUsuariosJdbcAdapter implements BuscarUsuariosPorTextoPort {
     private static final String CON_TILDE = "áàäâãéèëêíìïîóòöôõúùüûñçÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑÇ";
     private static final String SIN_TILDE = "aaaaaeeeeiiiiooooouuuuncaaaaaeeeeiiiiooooouuuunc";
 
-    /** Sin las cuentas de prueba de «ver como» (V107, D-273): ni la búsqueda de soportes ni la consola las encuentran. */
+    /** Sin las cuentas de prueba de «ver como» (V117, D-273): ni la búsqueda de soportes ni la consola las encuentran. */
     static final String CONSULTA = """
             SELECT id FROM renaser.usuarios
             WHERE (translate(lower(nombre_completo), '%1$s', '%2$s') LIKE :patron ESCAPE '\\'

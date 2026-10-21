@@ -31,7 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Los roles personalizados contra Postgres con V105 (D-272): el caso de uso de gestión con el adaptador real, la lectura
+ * Los roles personalizados contra Postgres con V115 (D-272): el caso de uso de gestión con el adaptador real, la lectura
  * para otros módulos, el nombre que la cuenta lee en su mismo SELECT ({@code @Formula}) y lo que la base defiende sola
  * (FK de la cuenta, CHECK del rol base).
  */
@@ -152,7 +152,7 @@ class RolesPersonalizadosPersistenciaIT {
                 + "WHERE rol_id = ?", Integer.class, rol)).isZero();
     }
 
-    /** Una cuenta de prueba de «ver como» (V107, D-273), como la deja {@code CuentasDePruebaService}. */
+    /** Una cuenta de prueba de «ver como» (V117, D-273), como la deja {@code CuentasDePruebaService}. */
     private UUID cuentaDePrueba(UUID rolPersonalizado) {
         UUID id = UUID.randomUUID();
         jdbc.update("INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado, es_cuenta_de_prueba, "
@@ -193,7 +193,7 @@ class RolesPersonalizadosPersistenciaIT {
     }
 
     @Test
-    @DisplayName("V107: una cuenta de prueba nunca es Soporte TI, siempre usa el correo reservado y no guarda contraseña")
+    @DisplayName("V117: una cuenta de prueba nunca es Soporte TI, siempre usa el correo reservado y no guarda contraseña")
     void laBaseDefiendeLasCuentasDePrueba() {
         String insertar = "INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado, es_cuenta_de_prueba, "
                 + "hash_contrasena) VALUES (?, ?, 'Prueba', CAST(? AS renaser.rol_usuario), 'ACTIVO', true, ?)";

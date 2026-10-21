@@ -15,14 +15,14 @@ class CatalogoDeFuncionalidadesTest {
 
     private final CatalogoDeFuncionalidades catalogo = CatalogoDeFuncionalidades.inicial();
 
-    /** Las 52 claves de la tabla de la spec, en su orden. Una clave nueva se suma acá y en el catálogo. */
+    /** Las 52 claves de la tabla de la spec 002 y las que se sumaron después, en su orden. Una clave nueva se suma acá y en el catálogo. */
     private static final List<String> CLAVES_DE_LA_SPEC = List.of("registro", "onboarding", "dia_uno", "radar",
             "mapa", "plan", "habitos", "habitos.foto", "habitos.km", "habitos.gimnasio", "habitos.espiritu",
             "habitos.ajustes", "clase_diaria", "muro", "muro.publicar", "muro.comentarios", "muro.reacciones", "chat",
             "chat.grupos", "chat.global", "chat.soporte", "chat.directos", "chat.audio", "chat.fotos", "eventos",
             "eventos.gestion", "eventos.asistencia", "cursos", "ranking", "ranking.podio_semanal", "semaforo", "ia",
             "ia.chat", "ia.voz", "ia.propuestas", "evidencias", "caja", "emergencia", "cuenta.eliminar",
-            "notificaciones", "mentor.mi_grupo", "lider", "tickets", "admin", "admin.solicitudes", "admin.equipo",
+            "notificaciones", "mentor.mi_grupo", "lider", "lider.cumplimiento", "tickets", "admin", "admin.solicitudes", "admin.equipo",
             "admin.grupos", "admin.personas", "admin.habitos", "admin.bienvenida", "admin.fases", "perfil");
 
     @Test
@@ -61,6 +61,7 @@ class CatalogoDeFuncionalidadesTest {
                 Map.entry("cuenta.eliminar", PoliticaDeProcesos.NO_APLICA),
                 Map.entry("notificaciones", PoliticaDeProcesos.POSPONE),
                 Map.entry("mentor.mi_grupo", PoliticaDeProcesos.SALTA),
+                Map.entry("lider.cumplimiento", PoliticaDeProcesos.SALTA),
                 Map.entry("admin.grupos", PoliticaDeProcesos.SALTA),
                 Map.entry("admin.bienvenida", PoliticaDeProcesos.SALTA));
         esperadas.forEach((clave, politica) ->

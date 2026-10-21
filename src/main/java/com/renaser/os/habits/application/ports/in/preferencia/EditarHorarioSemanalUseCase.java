@@ -1,6 +1,8 @@
 package com.renaser.os.habits.application.ports.in.preferencia;
 
 import com.renaser.os.habits.domain.model.habito.HabitoId;
+import com.renaser.os.habits.domain.model.preferencia.CombinacionDeAlarma;
+import com.renaser.os.habits.domain.model.preferencia.SemanaDelHabito;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.DayOfWeek;
@@ -25,6 +27,15 @@ import java.util.List;
  *
  * <p>{@link #apagar} sigue siendo gratis, y eso si es deliberado: apagar un dia es hermano de la
  * pausa de {@code habit-unlocks}, que nunca cobro cupo, y no es "reacomodar el horario".
+ *
+ * <p><b>Spec 008 (D-282, 2026-10-20).</b> Cada dia tambien puede tener su AVISO propio ({@link
+ * #fijarRecordatorio}). Cambiarlo NO consume el cupo semanal, por decision del dueno: el cupo existe
+ * para frenar el reacomodo de horarios, y elegir cuanto antes suena el aviso no reacomoda nada, igual que
+ * apagar un dia. La hora (fijar) sigue cobrando cupo como siempre y guardarla NO borra el aviso del dia.
+ *
+ * <p><b>Spec 009 (D-283, 2026-10-20).</b> Cada dia tambien puede tener su COMBINACION de alarma —sonido,
+ * vibracion, voz y repetir— ({@link #fijarCombinacion}). Tampoco consume cupo, y hora, aviso y combinacion
+ * son tres escrituras separadas: guardar una no borra las otras.
  */
 public interface EditarHorarioSemanalUseCase {
 
@@ -42,16 +53,58 @@ public interface EditarHorarioSemanalUseCase {
      */
     void apagar(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana);
 
-    /** Quita la hora propia o el apagado de ese dia: vuelve al horario general. Idempotente. */
+    /**
+     * El aviso propio de ese dia de la semana, todas las semanas (V111). Con {@code activo = false} ese
+     * dia va SIN aviso aunque el general avise; con {@code activo = true} avisa con esas antelaciones, en
+     * minutos (al menos una). Si el aviso pedido es IGUAL al general, el dia vuelve a heredarlo y no se
+     * guarda como propio. Conserva la hora del dia. No cobra cupo.
+     *
+     * @throws IllegalArgumentException si un aviso activo no trae antelaciones o alguna esta fuera de rango
+     */
+    void fijarRecordatorio(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana, boolean activo,
+                           List<Integer> antelaciones);
+
+    /**
+     * Como suena la alarma de ese dia de la semana, todas las semanas (V112). Si la combinacion pedida es
+     * IGUAL a la general (la del habito o, si nadie eligio nada, la de hoy), el dia vuelve a heredarla y no se
+     * guarda como propia. Conserva la hora y el aviso del dia. No cobra cupo.
+     */
+    void fijarCombinacion(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana, CombinacionDeAlarma combinacion);
+
+    /**
+     * Quita la hora propia, el aviso propio, la combinacion propia o el apagado de ese dia: vuelve al horario
+     * general. Idempotente.
+     */
     void quitar(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana);
 
     /** Los SIETE dias ya resueltos, para que la pantalla no reimplemente la precedencia. */
     List<DiaDeLaSemana> consultar(UserId actorId, HabitoId habitoId);
 
     /**
-     * @param propio {@code true} si ese dia tiene hora propia; {@code false} si hereda la general.
+     * @param propio            {@code true} si ese dia tiene hora propia (o esta apagado); {@code false} si
+     *                          hereda la general.
+     * @param recordatorioActivo el aviso RESUELTO del dia: el propio o, si no hay, el general (spec 008)
+     * @param antelaciones      sus antelaciones en minutos, de la mas temprana a la mas tardia; vacio sin aviso
+     * @param recordatorioPropio {@code true} solo si ese aviso es propio del dia (no heredado)
+     * @param alarma             como suena ese dia, ya resuelto: lo propio o, si no hay, lo general (spec 009)
+     * @param alarmaPropia       {@code true} solo si esa combinacion es propia del dia (no heredada)
      */
     record DiaDeLaSemana(DayOfWeek diaSemana, LocalTime horaDisparo, LocalTime horaLimite, boolean propio,
-                          boolean activo) {
+                          boolean activo, boolean recordatorioActivo, List<Integer> antelaciones,
+                          boolean recordatorioPropio, CombinacionDeAlarma alarma, boolean alarmaPropia) {
+
+        /** Forma de la 008: sin la alarma, rige la de hoy. */
+        public DiaDeLaSemana(DayOfWeek diaSemana, LocalTime horaDisparo, LocalTime horaLimite, boolean propio,
+                             boolean activo, boolean recordatorioActivo, List<Integer> antelaciones,
+                             boolean recordatorioPropio) {
+            this(diaSemana, horaDisparo, horaLimite, propio, activo, recordatorioActivo, antelaciones,
+                    recordatorioPropio, CombinacionDeAlarma.COMO_HOY, false);
+        }
+
+        public static DiaDeLaSemana de(SemanaDelHabito.Dia dia) {
+            return new DiaDeLaSemana(dia.diaSemana(), dia.horaDisparo(), dia.horaLimite(), dia.horaPropia(),
+                    dia.activo(), dia.recordatorio().activo(), dia.recordatorio().antelaciones(),
+                    dia.recordatorioPropio(), dia.alarma(), dia.alarmaPropia());
+        }
     }
 }

@@ -65,7 +65,7 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
             """;
 
     /**
-     * Sin las cuentas de prueba de «ver como» (V107, D-273): de acá salen los destinatarios de los avisos por rol
+     * Sin las cuentas de prueba de «ver como» (V117, D-273): de acá salen los destinatarios de los avisos por rol
      * (Admin, Alquimista, Líder), el staff que entra a cada chat de soporte, los mentores disponibles para un grupo, la
      * rotación y el total del panel de onboarding. Una cuenta de prueba no recibe avisos ni entra a chats reales.
      */
@@ -124,7 +124,7 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
      * contigua. Salio en la pantalla de Personas, no en las pruebas: el doble del EntityManager no
      * valida etiquetas.</blockquote>
      */
-    // Sin las cuentas de prueba de «ver como» (V107, D-273): el panel «Personas» y su conteo no las muestran.
+    // Sin las cuentas de prueba de «ver como» (V117, D-273): el panel «Personas» y su conteo no las muestran.
     private static final String FILTRO_PADRON = """
             FROM renaser.usuarios u
             LEFT JOIN renaser.participantes_programa pp ON pp.usuario_id = u.id

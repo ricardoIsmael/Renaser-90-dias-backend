@@ -336,6 +336,66 @@ class EvidenciaPersistenceAdapterTest {
         assertThat(adapter.registrosHabitoConEvidencia(List.of())).isEmpty();
     }
 
+    @Test
+    @DisplayName("spec 005: la entrega de un registro trae la primera subida y cada archivo, con su tipo, en orden")
+    void entregasDeRegistrosTraeCadaArchivoConSuTipo() {
+        UUID registroId = seedRegistroHabito();
+        UUID sinEntrega = seedRegistroHabito();
+        Evidencia texto = adapter.save(Evidencia.registrar(nuevoId(), participanteId,
+                new DestinoEvidencia.RegistroHabito(registroId), TipoEvidencia.TEXTO, null, null, "hecho", null, null,
+                null, false, Instant.parse("2026-08-25T09:05:00Z"), FixedClock.at(Instant.parse("2026-08-25T09:05:00Z"))));
+        Evidencia foto = adapter.save(Evidencia.registrar(nuevoId(), participanteId,
+                new DestinoEvidencia.RegistroHabito(registroId), TipoEvidencia.FOTO, "evidencias",
+                "evidencia-habitos/" + participanteId + "/foto.jpg", null, null, null, null, false,
+                Instant.parse("2026-08-25T09:00:00Z"), FixedClock.at(Instant.parse("2026-08-25T09:00:00Z"))));
+
+        var entregas = adapter.entregasDeRegistros(List.of(registroId, sinEntrega));
+
+        assertThat(entregas).containsOnlyKeys(registroId);
+        var entrega = entregas.get(registroId);
+        assertThat(entrega.evidenciaId()).isEqualTo(foto.id().value());
+        assertThat(entrega.primeraEntregaEn()).isEqualTo(Instant.parse("2026-08-25T09:00:00Z"));
+        assertThat(entrega.archivos()).isEqualTo(2);
+        assertThat(entrega.evidencias()).extracting(a -> a.evidenciaId(), a -> a.tipo())
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(foto.id().value(), TipoEvidencia.FOTO),
+                        org.assertj.core.groups.Tuple.tuple(texto.id().value(), TipoEvidencia.TEXTO));
+    }
+
+    @Test
+    @DisplayName("spec 005: de cada accion del dia sale la evidencia PRINCIPAL; sin principal, la mas temprana; sin nada, no aparece")
+    void evidenciasPrincipalesDeRocas() {
+        Evidencia primeraSinPrincipal = adapter.save(evidenciaRocaTextoEn(Instant.parse("2026-08-25T09:00:00Z"), false));
+        Evidencia principal = adapter.save(evidenciaRocaTextoEn(Instant.parse("2026-08-25T09:30:00Z"), true));
+        UUID otraRoca = seedRocaDiaria(2);
+        Evidencia deOtra = adapter.save(Evidencia.registrar(nuevoId(), participanteId,
+                new DestinoEvidencia.RocaDiaria(otraRoca), TipoEvidencia.TEXTO, null, null, "listo", null, null, null,
+                false, Instant.parse("2026-08-25T10:00:00Z"), FixedClock.at(Instant.parse("2026-08-25T10:00:00Z"))));
+        UUID sinEvidencia = seedRocaDiaria(3);
+
+        var resultado = adapter.evidenciasPrincipalesDeRocas(List.of(rocaDiariaId, otraRoca, sinEvidencia));
+
+        assertThat(primeraSinPrincipal.id()).isNotEqualTo(principal.id());
+        assertThat(resultado).containsOnlyKeys(rocaDiariaId, otraRoca);
+        assertThat(resultado.get(rocaDiariaId)).isEqualTo(principal.id().value());
+        assertThat(resultado.get(otraRoca)).isEqualTo(deOtra.id().value());
+        assertThat(adapter.evidenciasPrincipalesDeRocas(List.of())).isEmpty();
+    }
+
+    private UUID seedRocaDiaria(int posicion) {
+        UUID id = UUID.randomUUID();
+        entityManager.createNativeQuery("""
+                        INSERT INTO renaser.rocas_diarias
+                            (id, participante_id, fecha, posicion, titulo, color, puntaje_impacto, eje)
+                        VALUES (:id, :pid, CURRENT_DATE, :posicion, 'otra', CAST('AMARILLA' AS renaser.color_pareto), 5,
+                                CAST('CUERPO' AS renaser.eje_objetivo))
+                        """)
+                .setParameter("id", id)
+                .setParameter("pid", participanteId.value())
+                .setParameter("posicion", posicion)
+                .executeUpdate();
+        return id;
+    }
+
     // ---- CHECKs de la tabla real, probados con INSERT nativo (el dominio no permite construirlos) ----
 
     @Test

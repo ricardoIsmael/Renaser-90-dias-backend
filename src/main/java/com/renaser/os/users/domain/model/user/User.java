@@ -55,7 +55,7 @@ public final class User {
      */
     private Instant bajaSolicitadaEn;
     /**
-     * El rol personalizado asignado ({@code usuarios.rol_personalizado_id}, V105; spec 002, US7; D-272), o
+     * El rol personalizado asignado ({@code usuarios.rol_personalizado_id}, V115; spec 002, US7; D-272), o
      * {@code null}. <b>{@link #role} sigue siendo el rol base</b>: todos los guards, rankings y padrones lo ven igual, y
      * este dato solo lo lee la evaluación de interruptores y lo que muestra el nombre. Se conserva aunque el rol se
      * desactive (quienes lo tienen lo vuelven a tener si se reactiva); {@link #changeRole} lo borra.
@@ -67,7 +67,7 @@ public final class User {
      */
     private String nombreDelRolPersonalizado;
     /**
-     * Si es una cuenta de prueba de «ver como rol» ({@code usuarios.es_cuenta_de_prueba}, V107; spec 002, fase 2, US5;
+     * Si es una cuenta de prueba de «ver como rol» ({@code usuarios.es_cuenta_de_prueba}, V117; spec 002, fase 2, US5;
      * D-273): una por rol, sin contraseña, que Soporte TI recorre en solo lectura. No figura en rankings, padrones,
      * semáforos, listas de Administración, chats ni avisos. Nace así y nunca deja de serlo (la columna no se actualiza).
      */
@@ -149,7 +149,7 @@ public final class User {
     }
 
     /**
-     * Con el rol personalizado (V105, D-272).
+     * Con el rol personalizado (V115, D-272).
      *
      * @param nombreDelRolPersonalizado {@code null} si no tiene, o si el suyo está desactivado o no hereda de
      *                                  {@code role}
@@ -163,7 +163,7 @@ public final class User {
                 bajaSolicitadaEn, rolPersonalizadoId, nombreDelRolPersonalizado, false);
     }
 
-    /** Con la marca de cuenta de prueba (V107, D-273). */
+    /** Con la marca de cuenta de prueba (V117, D-273). */
     @SuppressWarnings("java:S107") // es la fila entera
     public static User rehydrate(UserId id, Email email, UserRole role, UserStatus status,
                                  String fullName, String avatarUrl, String bio, String department,

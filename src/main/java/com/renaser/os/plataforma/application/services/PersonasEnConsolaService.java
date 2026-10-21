@@ -20,7 +20,7 @@ import java.util.Set;
  * Buscar a quién sumar como probadora (contrato fase 2 §3.4, {@code GET /soporte-ti/personas?q=}). La búsqueda sin
  * tildes ni mayúsculas es la de {@code users} (D-249); acá se dejan las cuentas activas, ordenadas por nombre, hasta 20.
  *
- * <p>Sin las cuentas de prueba de «ver como» (V107, D-273): la búsqueda de {@code users} ya no las encuentra, y acá se
+ * <p>Sin las cuentas de prueba de «ver como» (V117, D-273): la búsqueda de {@code users} ya no las encuentra, y acá se
  * vuelve a filtrar por la marca de cada resumen (una probadora de prueba no mediría nada: sus pedidos no se cuentan).
  */
 @Service
