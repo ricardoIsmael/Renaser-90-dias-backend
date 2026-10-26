@@ -1,5 +1,6 @@
 package com.renaser.os.users.infrastructure.adapter.out.persistence.user;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -9,6 +10,7 @@ import jakarta.persistence.Transient;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Formula;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 import org.springframework.data.domain.Persistable;
@@ -70,6 +72,25 @@ public class UserJpaEntity implements Persistable<UUID> {
     /** `usuarios.baja_solicitada_en` - baja de cuenta autogestionada (soft-delete diferido,
      * D-XX cuenta con purga por cron). Nullable: la inmensa mayoria de las filas no la tiene. */
     private Instant bajaSolicitadaEn;
+
+    /** `usuarios.rol_personalizado_id` (V115, D-272): el rol personalizado asignado, o null. */
+    private UUID rolPersonalizadoId;
+
+    /**
+     * `usuarios.es_cuenta_de_prueba` (V117, D-273): una cuenta de prueba de «ver como». Se escribe al crearla y nunca
+     * se actualiza ({@code updatable = false}): un {@code save} de la cuenta no puede convertirla ni desconvertirla.
+     */
+    @Column(name = "es_cuenta_de_prueba", updatable = false)
+    private boolean esCuentaDePrueba;
+
+    /**
+     * El nombre del rol personalizado <b>vigente</b>: activo y que hereda del rol de la cuenta; null si no. Solo de
+     * lectura ({@code @Formula} no entra en INSERT ni UPDATE): se calcula en el mismo SELECT que carga la cuenta, así
+     * las listas no hacen una consulta por fila. Un rol desactivado conserva la referencia (arriba) pero no se muestra.
+     */
+    @Formula("(SELECT rp.nombre FROM renaser.roles_personalizados rp "
+            + "WHERE rp.id = rol_personalizado_id AND rp.activo AND rp.rol_base = rol)")
+    private String nombreRolPersonalizado;
 
     /**
      * Solo en memoria, nunca en la base: {@code true} cuando esta fila es una cuenta que se esta

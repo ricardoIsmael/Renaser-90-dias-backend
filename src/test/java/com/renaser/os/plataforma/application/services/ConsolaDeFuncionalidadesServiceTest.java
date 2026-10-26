@@ -6,6 +6,7 @@ import com.renaser.os.plataforma.application.ports.in.CambiarFuncionalidadUseCas
 import com.renaser.os.plataforma.application.ports.in.FuncionalidadEnConsola;
 import com.renaser.os.plataforma.domain.model.auditoria.CambioAuditado;
 import com.renaser.os.plataforma.domain.model.auditoria.TipoDeCambio;
+import com.renaser.os.plataforma.domain.model.estado.ReglaDeDisponibilidad;
 import com.renaser.os.shared.application.EstadoAutomaticoDeFuncionalidades;
 import com.renaser.os.shared.domain.ConsolaBloqueadaException;
 import com.renaser.os.shared.domain.FixedClock;
@@ -66,9 +67,12 @@ class ConsolaDeFuncionalidadesServiceTest {
                 new UserSummary(soporte, "Dueño", null, UserRole.IT_SUPPORT, UserStatus.ACTIVE)));
         ObjectProvider<EstadoAutomaticoDeFuncionalidades> sinAutomaticos = mock(ObjectProvider.class);
         when(sinAutomaticos.orderedStream()).thenReturn(Stream.empty());
-        EstadoVigente estado = new EstadoVigente(new CopiaDeEstados(base), sinAutomaticos);
+        ObjectProvider<ReglaDeDisponibilidad> sinReglas = mock(ObjectProvider.class);
+        when(sinReglas.orderedStream()).thenReturn(Stream.empty());
+        EstadoVigente estado = new EstadoVigente(new CopiaDeEstados(base), sinAutomaticos, sinReglas);
         GuardiaDeSoporteTi guardia = new GuardiaDeSoporteTi(usuarios, tokens, Duration.ofMinutes(15));
-        service = new ConsolaDeFuncionalidadesService(guardia, new FuncionalidadesEnConsola(estado, base, usuarios),
+        service = new ConsolaDeFuncionalidadesService(guardia, new FuncionalidadesEnConsola(estado, base, usuarios,
+                new Dobles.Despliegues()),
                 estado, base, auditoria, tokens, events, UUID::randomUUID, CLOCK);
         tokenDeConsola = tokens.emitirDeConsola(soporte, SESION, Duration.ofMinutes(15));
     }

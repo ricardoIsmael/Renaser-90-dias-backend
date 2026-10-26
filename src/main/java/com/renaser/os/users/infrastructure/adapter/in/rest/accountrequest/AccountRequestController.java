@@ -142,7 +142,8 @@ public class AccountRequestController {
     public ResponseEntity<Void> approve(@PathVariable UUID id, @ActorAutenticado UserId actor,
                                          @RequestBody(required = false) ApproveAccountRequestRequest request) {
         UserRole rol = request == null || request.role() == null ? UserRole.defaultForSelfRegistration() : request.role();
-        approveUseCase.approve(new ApproveAccountRequestCommand(AccountRequestId.of(id), actor, rol));
+        approveUseCase.approve(new ApproveAccountRequestCommand(AccountRequestId.of(id), actor, rol,
+                request == null ? null : request.rolPersonalizadoId()));
         return ResponseEntity.noContent().build();
     }
 

@@ -1,5 +1,6 @@
 package com.renaser.os.chat.infrastructure.adapter.in.websocket;
 
+import com.renaser.os.shared.web.security.SesionDeSoloLectura;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
@@ -68,14 +69,28 @@ class ActorHandshakeInterceptor implements HandshakeInterceptor {
     public boolean beforeHandshake(ServerHttpRequest request, ServerHttpResponse response,
                                    WebSocketHandler wsHandler, Map<String, Object> attributes) {
         String idSesion = idDeSesion(request);
-        UUID actorId = idSesion == null ? null : actorDeLaSesion(idSesion);
+        Session sesion = idSesion == null ? null : sesionVigente(idSesion);
+        UUID actorId = sesion == null ? null : actorDeLaSesion(sesion);
         if (actorId == null) {
             response.setStatusCode(HttpStatus.FORBIDDEN);
             return false;
         }
         attributes.put(ATRIBUTO_ACTOR_ID, actorId);
         attributes.put(ATRIBUTO_ID_SESION, idSesion);
+        marcarSiEsDeSoloLectura(sesion, attributes);
         return true;
+    }
+
+    /**
+     * «Ver como rol» (spec 002, fase 2; D-273): una sesión de solo lectura puede abrir el socket y suscribirse (leer),
+     * pero no mandar nada. La marca se copia a los atributos del socket para que
+     * {@link SubscripcionAutorizadaInterceptor} rechace el {@code SEND} sin volver a Redis en cada frame.
+     */
+    private static void marcarSiEsDeSoloLectura(Session sesion, Map<String, Object> attributes) {
+        Object abiertaPor = sesion.getAttribute(SesionDeSoloLectura.ABIERTA_POR);
+        if (abiertaPor instanceof String) {
+            attributes.put(SesionDeSoloLectura.ABIERTA_POR, abiertaPor);
+        }
     }
 
     @Override
@@ -98,12 +113,13 @@ class ActorHandshakeInterceptor implements HandshakeInterceptor {
         return valores.getFirst().trim();
     }
 
-    /** El UUID del usuario autenticado en esa sesion, o {@code null} si no hay sesion valida. */
-    private UUID actorDeLaSesion(String idSesion) {
+    private Session sesionVigente(String idSesion) {
         Session sesion = sessionRepository.findById(idSesion);
-        if (sesion == null || sesion.isExpired()) {
-            return null;
-        }
+        return sesion == null || sesion.isExpired() ? null : sesion;
+    }
+
+    /** El UUID del usuario autenticado en esa sesion, o {@code null} si no hay sesion valida. */
+    private static UUID actorDeLaSesion(Session sesion) {
         Object contexto = sesion.getAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY);
         if (!(contexto instanceof SecurityContext securityContext)) {
             return null;

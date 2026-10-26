@@ -6,7 +6,10 @@ import com.renaser.os.onboarding.domain.model.estado.EstadoOnboarding;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * {@code usuarioId} es la PK de la tabla (no un id autogenerado) — {@code save()} de Spring
@@ -31,9 +34,16 @@ class EstadoOnboardingPersistenceAdapter implements LoadEstadoOnboardingPort, Sa
     }
 
     @Override
-    public ResumenEstadosOnboarding contarResumen() {
-        return new ResumenEstadosOnboarding(repository.count(), repository.countByCompletadoTrue(),
-                repository.countByPactoFirmadoEnIsNotNull());
+    public ResumenEstadosOnboarding contarResumen(Set<UserId> sinContar) {
+        if (sinContar.isEmpty()) {
+            // Un NOT IN vacío no es portable entre versiones de Hibernate: sin nada que restar, las de siempre.
+            return new ResumenEstadosOnboarding(repository.count(), repository.countByCompletadoTrue(),
+                    repository.countByPactoFirmadoEnIsNotNull());
+        }
+        List<UUID> ids = sinContar.stream().map(UserId::value).toList();
+        return new ResumenEstadosOnboarding(repository.countByUsuarioIdNotIn(ids),
+                repository.countByCompletadoTrueAndUsuarioIdNotIn(ids),
+                repository.countByPactoFirmadoEnIsNotNullAndUsuarioIdNotIn(ids));
     }
 
     @Override

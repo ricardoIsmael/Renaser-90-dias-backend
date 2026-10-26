@@ -23,7 +23,11 @@ import com.renaser.os.users.domain.model.participante.ParticipacionPrograma;
 import com.renaser.os.users.domain.model.user.Credencial;
 import com.renaser.os.users.domain.model.user.Email;
 import com.renaser.os.users.domain.model.user.User;
+import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.users.api.RolDeUsuarioCambiadoEvent;
+import com.renaser.os.users.api.RolPersonalizadoCambiadoEvent;
+import com.renaser.os.users.application.ports.out.rolpersonalizado.CargarRolesPersonalizadosPort;
+import com.renaser.os.users.domain.model.rolpersonalizado.RolPersonalizado;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UsuarioRegistradoEvent;
 import org.slf4j.Logger;
@@ -42,6 +46,7 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Casos de uso de User que no son alta/aprobacion (eso vive en AccountRequestService).
@@ -77,6 +82,7 @@ public class UserAccountService implements InviteAndCreateUserUseCase, GetMyProf
     private final Clock clock;
     private final IdGenerator idGenerator;
     private final TransactionTemplate transactionTemplate;
+    private final CargarRolesPersonalizadosPort cargarRolesPersonalizados;
 
     public UserAccountService(LoadUserPort loadUserPort, SaveUserPort saveUserPort,
                                LoadMentorProfilePort loadMentorProfilePort,
@@ -85,7 +91,8 @@ public class UserAccountService implements InviteAndCreateUserUseCase, GetMyProf
                                RequireActiveUserGuard requireActiveUserGuard, SaveCredencialPort saveCredencialPort,
                                EnviarEmailPort enviarEmailPort, PasswordEncoder passwordEncoder,
                                ApplicationEventPublisher events, Clock clock, IdGenerator idGenerator,
-                               TransactionTemplate transactionTemplate) {
+                               TransactionTemplate transactionTemplate,
+                               CargarRolesPersonalizadosPort cargarRolesPersonalizados) {
         this.loadUserPort = loadUserPort;
         this.saveUserPort = saveUserPort;
         this.loadMentorProfilePort = loadMentorProfilePort;
@@ -99,6 +106,7 @@ public class UserAccountService implements InviteAndCreateUserUseCase, GetMyProf
         this.clock = clock;
         this.idGenerator = idGenerator;
         this.transactionTemplate = transactionTemplate;
+        this.cargarRolesPersonalizados = cargarRolesPersonalizados;
     }
 
     /**
@@ -275,11 +283,39 @@ public class UserAccountService implements InviteAndCreateUserUseCase, GetMyProf
         User target = requireUser(command.targetUserId());
         User actor = requireActiveUserGuard.of(command.actorId());
         UserRole rolAnterior = target.role();
-        target.changeRole(command.newRole(), actor);
+        UUID rolPersonalizadoAnterior = target.rolPersonalizadoId();
+        if (command.rolPersonalizadoId() != null) {
+            target.asignarRolPersonalizado(rolPersonalizadoParaAsignar(command.rolPersonalizadoId(), actor), actor);
+        } else {
+            target.changeRole(command.newRole(), actor);
+        }
         User saved = saveUserPort.save(target);
         ensureMentorProfileIfNeeded(saved);
         if (rolAnterior != saved.role()) {
             events.publishEvent(new RolDeUsuarioCambiadoEvent(saved.id(), rolAnterior, saved.role(), clock.now()));
+        }
+        avisarSiCambioElRolPersonalizado(rolPersonalizadoAnterior, saved.rolPersonalizadoId());
+    }
+
+    /**
+     * El rol personalizado a asignar (D-272). Quien no administra roles recibe su 403 ANTES de saber si el id existe
+     * (mismo criterio que E-365 al invitar); uno que no existe es 400: la cuenta sí existe, lo inválido es el cuerpo.
+     */
+    private RolPersonalizado rolPersonalizadoParaAsignar(UUID id, User actor) {
+        if (!actor.canManageRoles()) {
+            throw new NotAuthorizedException("Solo ADMIN/ALCHEMIST cambian roles");
+        }
+        return cargarRolesPersonalizados.porId(id)
+                .orElseThrow(() -> new IllegalArgumentException("El rol personalizado no existe"));
+    }
+
+    /**
+     * La plataforma recarga su copia en memoria con este aviso: sin él, quien recibe o pierde un rol personalizado lo
+     * notaría recién en la recarga de 30 s. Solo si cambió de verdad, como el aviso del rol base.
+     */
+    private void avisarSiCambioElRolPersonalizado(UUID anterior, UUID nuevo) {
+        if (!java.util.Objects.equals(anterior, nuevo)) {
+            events.publishEvent(new RolPersonalizadoCambiadoEvent(nuevo != null ? nuevo : anterior, clock.now()));
         }
     }
 
@@ -348,7 +384,8 @@ public class UserAccountService implements InviteAndCreateUserUseCase, GetMyProf
      * obligaria a redescargar todos los avatares del muro cada vez (E-57).
      */
     private static UserSummary aResumen(User user) {
-        return new UserSummary(user.id(), user.fullName(), user.avatarUrl(), user.role(), user.status());
+        return new UserSummary(user.id(), user.fullName(), user.avatarUrl(), user.role(), user.status(),
+                user.rolPersonalizado().orElse(null), user.esCuentaDePrueba());
     }
 
     /** Sin chequeo de {@code hasAccess()}: usado solo para cargar el OBJETIVO de un cambio de rol

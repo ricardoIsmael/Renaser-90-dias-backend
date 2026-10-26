@@ -2,7 +2,7 @@
 
 ## Migración `V109__consultas_del_lider_y_observacion_sobre_persona.sql`
 
-Va después de V98..V108 de la fase 2 de Soporte TI (research R-1). La cabecera explica qué resuelve cada parte.
+Va después de V98..V118 de la fase 2 de Soporte TI (research R-1). La cabecera explica qué resuelve cada parte.
 
 1. **Tabla nueva `renaser.consultas_de_ficha`** (append-only; FR-016)
 

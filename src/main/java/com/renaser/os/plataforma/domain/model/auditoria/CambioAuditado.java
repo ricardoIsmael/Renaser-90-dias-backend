@@ -47,6 +47,45 @@ public record CambioAuditado(UUID id, TipoDeCambio tipo, UserId actor, String cl
         return new CambioAuditado(id, TipoDeCambio.AUTOMATICO, null, clave, antes, despues, causa, null, en);
     }
 
+    /**
+     * Un cambio de un rol personalizado (fase 2, D-272): {@code clave} es {@code rp:<id>} y las fotos llevan
+     * {@code nombre}, {@code rolBase}, {@code activo} y {@code funcionalidades} ({@code null} antes de crearlo o
+     * después de borrarlo).
+     */
+    public static CambioAuditado deRolPersonalizado(UUID id, UserId actor, String clave, Map<String, Object> antes,
+                                                    Map<String, Object> despues, String motivo, String dispositivo,
+                                                    Instant en) {
+        if (clave == null || !clave.startsWith("rp:")) {
+            throw new IllegalArgumentException("La clave de un rol personalizado es rp:<id>");
+        }
+        return new CambioAuditado(id, TipoDeCambio.ROL_PERSONALIZADO, Objects.requireNonNull(actor), clave, antes,
+                despues, motivo, dispositivo, en);
+    }
+
+    /**
+     * Soporte TI entró a «ver como rol» (fase 2, D-273): {@code antes} {@code null} y {@code despues} el rol que eligió
+     * ({@code {rol: "MENTOR"}} o {@code {rolPersonalizado: {id, nombre}}}). {@code actor} es quien la abrió.
+     */
+    public static CambioAuditado entradaAVerComo(UUID id, UserId actor, Map<String, Object> rol, String dispositivo,
+                                                 Instant en) {
+        return new CambioAuditado(id, TipoDeCambio.VER_COMO, Objects.requireNonNull(actor), null, null,
+                requerirRol(rol), null, dispositivo, en);
+    }
+
+    /** Y salió: {@code antes} el rol que estaba viendo y {@code despues} {@code null}. {@code actor} sigue siendo quien la abrió. */
+    public static CambioAuditado salidaDeVerComo(UUID id, UserId actor, Map<String, Object> rol, String dispositivo,
+                                                 Instant en) {
+        return new CambioAuditado(id, TipoDeCambio.VER_COMO, Objects.requireNonNull(actor), null, requerirRol(rol),
+                null, null, dispositivo, en);
+    }
+
+    private static Map<String, Object> requerirRol(Map<String, Object> rol) {
+        if (rol == null || rol.size() != 1 || !(rol.containsKey("rol") || rol.containsKey("rolPersonalizado"))) {
+            throw new IllegalArgumentException("Ver como guarda {rol} o {rolPersonalizado}, uno solo");
+        }
+        return rol;
+    }
+
     /** Un intento de desbloqueo o de reautenticación; {@code resultado} es «OK» o «CONTRASENA_INCORRECTA». */
     public static CambioAuditado acceso(UUID id, TipoDeCambio tipo, UserId actor, String resultado,
                                         String dispositivo, Instant en) {

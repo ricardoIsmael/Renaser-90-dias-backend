@@ -68,6 +68,16 @@ class AccesoAChatsDeGrupoTest {
     }
 
     @Test
+    @DisplayName("«ver como» (D-273): el Admin de prueba no lee los chats de los grupos reales (Soporte TI no lee chats)")
+    void elAdminDePruebaNoVeGruposAjenos() {
+        when(usuarios.findById(usuario)).thenReturn(Optional.of(new UserSummary(usuario, "Prueba · Administrador",
+                null, UserRole.ADMIN, UserStatus.ACTIVE, null, true)));
+
+        assertThat(acceso.puedeVer(GRUPO, usuario)).isFalse();
+        assertThat(acceso.gruposQueVePorSuRol(usuario)).isEmpty();
+    }
+
+    @Test
     @DisplayName("D-225: un grupo vencido o cerrado queda oculto también para el Admin")
     void elAdminNoVeUnGrupoQueNoEstaEnCurso() {
         esUn(UserRole.ADMIN, UserStatus.ACTIVE);

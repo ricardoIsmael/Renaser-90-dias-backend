@@ -3,6 +3,7 @@ package com.renaser.os.community.application.ports.in.celula;
 import com.renaser.os.community.domain.model.celula.CelulaId;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.EspecialidadMentor;
+import com.renaser.os.users.api.RolPersonalizadoAsignado;
 import com.renaser.os.users.api.UserRole;
 
 import java.util.List;
@@ -63,9 +64,20 @@ public interface ConsultarCandidatosCelulaUseCase {
      *                         grupo?" da una respuesta equivocada en cuanto el que busca no es el
      *                         primero. Para eso esta {@code celulasActuales}.
      */
-    /** @param rol MENTOR o TRAINEE_GUIDE (D-265): la lista de mentores incluye a los guías y la pantalla los rotula. */
+    /**
+     * @param rol              MENTOR o TRAINEE_GUIDE (D-265): la lista de mentores incluye a los guías y la pantalla los
+     *                         rotula.
+     * @param rolPersonalizado su rol personalizado vigente (spec 002, fase 2; D-272), o {@code null}
+     */
     record MentorCandidato(UserId userId, String nombreCompleto, String avatarUrl, CelulaId celulaActual,
-                            List<CelulaId> celulasActuales, EspecialidadMentor especialidad, UserRole rol) {
+                            List<CelulaId> celulasActuales, EspecialidadMentor especialidad, UserRole rol,
+                            RolPersonalizadoAsignado rolPersonalizado) {
+
+        /** Sin rol personalizado (firma anterior a D-272). */
+        public MentorCandidato(UserId userId, String nombreCompleto, String avatarUrl, CelulaId celulaActual,
+                               List<CelulaId> celulasActuales, EspecialidadMentor especialidad, UserRole rol) {
+            this(userId, nombreCompleto, avatarUrl, celulaActual, celulasActuales, especialidad, rol, null);
+        }
     }
 
     /**

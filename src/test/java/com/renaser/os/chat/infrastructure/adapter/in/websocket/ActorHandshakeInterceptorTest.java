@@ -1,5 +1,6 @@
 package com.renaser.os.chat.infrastructure.adapter.in.websocket;
 
+import com.renaser.os.shared.web.security.SesionDeSoloLectura;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -127,5 +128,36 @@ class ActorHandshakeInterceptorTest {
                 new ServletServerHttpResponse(new MockHttpServletResponse()), handler, new HashMap<>());
 
         assertThat(permitido).isFalse();
+    }
+
+    @Test
+    @DisplayName("«ver como» (D-273): una sesión de solo lectura abre el socket y queda marcada para rechazar el SEND")
+    void sesionDeSoloLecturaQuedaMarcada() {
+        MapSession sesion = sesionAutenticadaDe(ACTOR);
+        sesion.setAttribute(SesionDeSoloLectura.ABIERTA_POR, UUID.randomUUID().toString());
+        when(sessionRepository.findById("sesion-valida")).thenReturn(sesion);
+        MockHttpServletRequest peticion = new MockHttpServletRequest("GET", "/ws");
+        peticion.addHeader("X-Auth-Token", "sesion-valida");
+        Map<String, Object> atributos = new HashMap<>();
+
+        boolean permitido = interceptor().beforeHandshake(new ServletServerHttpRequest(peticion),
+                new ServletServerHttpResponse(new MockHttpServletResponse()), handler, atributos);
+
+        assertThat(permitido).as("leer en vivo sí").isTrue();
+        assertThat(SesionDeSoloLectura.loEs(atributos)).isTrue();
+    }
+
+    @Test
+    @DisplayName("una sesión común no queda marcada como de solo lectura")
+    void sesionComunSinMarca() {
+        when(sessionRepository.findById("sesion-valida")).thenReturn(sesionAutenticadaDe(ACTOR));
+        MockHttpServletRequest peticion = new MockHttpServletRequest("GET", "/ws");
+        peticion.addHeader("X-Auth-Token", "sesion-valida");
+        Map<String, Object> atributos = new HashMap<>();
+
+        interceptor().beforeHandshake(new ServletServerHttpRequest(peticion),
+                new ServletServerHttpResponse(new MockHttpServletResponse()), handler, atributos);
+
+        assertThat(SesionDeSoloLectura.loEs(atributos)).isFalse();
     }
 }

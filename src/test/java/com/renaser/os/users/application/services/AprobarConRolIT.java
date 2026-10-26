@@ -3,6 +3,7 @@ package com.renaser.os.users.application.services;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.GestionarRolesPersonalizadosUseCase;
 import com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase;
 import com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase.SubmitAccountRequestCommand;
 import com.renaser.os.users.application.ports.out.autenticacion.TokenVerificacionEmailPort;
@@ -61,6 +62,8 @@ class AprobarConRolIT {
     private TokenVerificacionEmailPort tokens;
     @Autowired
     private BorradoDefinitivoService borrado;
+    @Autowired
+    private GestionarRolesPersonalizadosUseCase gestion;
 
     private final HttpClient http = HttpClient.newHttpClient();
     private final ObjectMapper json = new ObjectMapper();
@@ -168,6 +171,39 @@ class AprobarConRolIT {
         assertThat(respuesta.statusCode()).isEqualTo(204);
         assertThat(rolYEstado(solicitud.usuario())).containsEntry("rol", "GUIA_APRENDIZ");
         assertThat(contar("perfiles_mentor", solicitud.usuario())).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("D-272: aprobar con un rol personalizado entra con su rol base y la referencia; uno que hereda de "
+            + "ADMIN no lo aprueba un ALQUIMISTA (403) y la solicitud sigue pendiente")
+    void aprobarConRolPersonalizado() throws Exception {
+        UserId soporte = UserId.of(usuario("SOPORTE_TI"));
+        UUID guiaInicial = gestion.crear(new GestionarRolesPersonalizadosUseCase.CrearRolPersonalizadoCommand(soporte,
+                "Guía inicial", null, com.renaser.os.users.api.UserRole.TRAINEE_GUIDE, java.util.Set.of("muro")))
+                .despues().id();
+        UUID adminAcotado = gestion.crear(new GestionarRolesPersonalizadosUseCase.CrearRolPersonalizadoCommand(
+                soporte, "Admin acotado", null, com.renaser.os.users.api.UserRole.ADMIN, java.util.Set.of("admin")))
+                .despues().id();
+        try {
+            Solicitud solicitud = solicitud("Guia Personalizada");
+            assertThat(aprobar(solicitud.id(), sesionDe(usuario("ADMIN")),
+                    Map.of("role", "MENTOR", "rolPersonalizadoId", guiaInicial.toString())).statusCode())
+                    .isEqualTo(204);
+            assertThat(rolYEstado(solicitud.usuario())).containsEntry("rol", "GUIA_APRENDIZ")
+                    .containsEntry("estado", "ACTIVO");
+            assertThat(jdbc.queryForObject("SELECT rol_personalizado_id FROM renaser.usuarios WHERE id = ?",
+                    UUID.class, solicitud.usuario())).isEqualTo(guiaInicial);
+
+            Solicitud otra = solicitud("Admin Personalizado");
+            assertThat(aprobar(otra.id(), sesionDe(usuario("ALQUIMISTA")),
+                    Map.of("rolPersonalizadoId", adminAcotado.toString())).statusCode()).isEqualTo(403);
+            assertThat(rolYEstado(otra.usuario())).containsEntry("rol", "APRENDIZ").containsEntry("estado", "INACTIVO");
+        } finally {
+            esperarLosAvisosDeEstaPrueba();
+            jdbc.update("UPDATE renaser.usuarios SET rol_personalizado_id = NULL WHERE rol_personalizado_id IN (?, ?)",
+                    guiaInicial, adminAcotado);
+            jdbc.update("DELETE FROM renaser.roles_personalizados WHERE id IN (?, ?)", guiaInicial, adminAcotado);
+        }
     }
 
     // ── Semilla y pedidos ──────────────────────────────────────────────────

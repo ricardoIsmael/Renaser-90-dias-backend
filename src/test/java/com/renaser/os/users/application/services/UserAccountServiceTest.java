@@ -17,6 +17,7 @@ import com.renaser.os.users.application.ports.out.autenticacion.SaveCredencialPo
 import com.renaser.os.users.application.ports.out.mentorprofile.LoadMentorProfilePort;
 import com.renaser.os.users.application.ports.out.mentorprofile.SaveMentorProfilePort;
 import com.renaser.os.users.application.ports.out.participante.LoadParticipacionProgramaPort;
+import com.renaser.os.users.application.ports.out.rolpersonalizado.CargarRolesPersonalizadosPort;
 import com.renaser.os.users.application.ports.out.user.LoadUserPort;
 import com.renaser.os.users.application.ports.out.user.SaveUserPort;
 import com.renaser.os.users.domain.model.participante.ParticipacionPrograma;
@@ -81,6 +82,8 @@ class UserAccountServiceTest {
     private org.springframework.context.ApplicationEventPublisher events;
     @Mock
     private IdGenerator idGenerator;
+    @Mock
+    private CargarRolesPersonalizadosPort cargarRolesPersonalizados;
 
     private UserAccountService service;
 
@@ -94,7 +97,8 @@ class UserAccountServiceTest {
                 ((TransactionCallback<?>) inv.getArgument(0)).doInTransaction(new SimpleTransactionStatus()));
         service = new UserAccountService(loadUserPort, saveUserPort, loadMentorProfilePort, saveMentorProfilePort,
                 loadParticipacionProgramaPort, new RequireActiveUserGuard(loadUserPort), saveCredencialPort,
-                enviarEmailPort, passwordEncoder, events, CLOCK, idGenerator, transactionTemplate);
+                enviarEmailPort, passwordEncoder, events, CLOCK, idGenerator, transactionTemplate,
+                cargarRolesPersonalizados);
         lenient().when(saveUserPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveUserPort.registrarNueva(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(passwordEncoder.encode(org.mockito.ArgumentMatchers.anyString())).thenReturn("{bcrypt}hash");

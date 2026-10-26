@@ -50,7 +50,7 @@ componentes propios (`VistaSemaforoDelGrupo`, `HojaDesdeAbajo`, `ControlSegmenta
 - El resumen horario recorre solo los mentores con consultas del día.
 
 **Constraints**:
-- Integrar **después** de la fase 2 de Soporte TI (V98..V108; research R-1).
+- Integrar **después** de la fase 2 de Soporte TI (V98..V118; research R-1).
 - Campos nuevos opcionales y aditivos para los APK anteriores.
 - El día es el de cada persona y el resumen va a la hora del mentor.
 - El registro de consultas no se edita ni se borra.

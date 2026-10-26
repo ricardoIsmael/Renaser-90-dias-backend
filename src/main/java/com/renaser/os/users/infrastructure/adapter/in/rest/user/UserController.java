@@ -88,7 +88,8 @@ public class UserController {
     @PatchMapping("/{id}/role")
     public ResponseEntity<Void> updateRole(@PathVariable UUID id, @ActorAutenticado UserId actor,
                                             @RequestBody @Valid UpdateUserRoleRequest request) {
-        updateUserRoleUseCase.updateRole(new UpdateUserRoleCommand(UserId.of(id), request.newRole(), actor));
+        updateUserRoleUseCase.updateRole(new UpdateUserRoleCommand(UserId.of(id), request.newRole(), actor,
+                request.rolPersonalizadoId()));
         return ResponseEntity.noContent().build();
     }
 

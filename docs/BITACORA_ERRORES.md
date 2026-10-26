@@ -15395,6 +15395,111 @@ dos hechos seguidos tienen el mismo instante; si la prueba ordena por tiempo, ti
 **Causa.** `PermissionEnforcementInterceptor` deja al caso de uso rechazar un actor inexistente; los mocks del controller devolvían null. La primera variante también suponía que INACTIVE era una denegación del interceptor, cuando este comprueba la suspensión. No era una ejecución de los guards reales del caso de uso.
 
 **Solución y prevención.** El test negativo simula `NotAuthorizedException` desde el caso de uso y comprueba el 403 sin contexto. La prueba separada usa una cuenta SUSPENDED y comprueba que ni se invoque el caso de uso. `DiaDeHabitosIT` comprueba sin sesión y suspendido con filtros, base y sesión reales. No se modifican los permisos ni la política de cuentas. El resultado final de la batería se guarda en la spec de D-268.
+---
+
+## E-617 · Cientos de `cannot find symbol` de Lombok en módulos que no se tocaron escondían un método repetido (back, RESUELTO, 14/10)
+
+**Síntoma literal.** `./mvnw -o -q compile` en `claude/fase2-despliegue` terminó con una pantalla de errores como
+`[ERROR] …/calendar/application/services/AccesoEventoService.java:[95,30] cannot find symbol` / `symbol: method
+tipoAudiencia()` y otros tantos en `academy` (`AsignacionCursoPersistenceMapper`, `CursoPersistenceAdapter`), archivos que no
+se habían tocado. El error real era UNO solo, arriba de todo: `[ERROR] …/plataforma/domain/model/despliegue/FotoDeDespliegues.java:[36,20]
+method vacia() is already defined in class …FotoDeDespliegues`.
+
+**Causa real.** `FotoDeDespliegues` tenía la fábrica estática `vacia()` y un método de instancia `vacia()` (sin parámetros los
+dos): Java no los distingue. Con un error de compilación, javac corta el procesamiento de anotaciones, Lombok no genera los
+accesores y TODO lo que los usa en el resto del proyecto aparece como `cannot find symbol`. Es la misma familia que E-610 (un
+nombre que choca dentro de una clase), con la diferencia de que acá la cascada tapaba la causa.
+
+**Solución.** El método de instancia se llama `sinDespliegues()`.
+
+**Para que no vuelva.** Si un compilado muestra muchos `cannot find symbol` de accesores de Lombok en módulos que no se tocaron,
+el error está en otro lado: filtrar la cascada con `./mvnw -o -q compile 2>&1 | grep ERROR | grep -v 'symbol:\|location:'` y
+leer el primero que no sea `cannot find symbol`. **Regla general:** en una clase, una fábrica estática sin parámetros no puede
+llamarse como un método de instancia sin parámetros (ni, en un record, como un componente: E-610).
+
+---
+
+## E-620 · El catálogo de funcionalidades no lista a MENTOR ni a la Guía en `caja`, aunque el mentor la usa (back, RESUELTO, 14/10)
+
+**Síntoma.** Hallado leyendo el código al diseñar la regla de los roles personalizados (D-272), no en producción: con la
+letra del contrato de la fase 2 («si su clave o una madre no está marcada, no disponible»), un «Mentor junior» con
+**todo** lo de MENTOR marcado habría recibido `404 FUNCIONALIDAD_NO_DISPONIBLE` en
+`GET /api/v1/mentor/trainees/{aprendizId}/caja` (el chip de la caja en la ficha del aprendiz, D-219), que un mentor sin
+rol personalizado ve con 200. En la consola, además, `caja` no muestra el interruptor de MENTOR.
+
+**Causa real.** `EntradasDelCatalogo` declara `caja` con `rolesQueLaUsan = {TRAINEE, ADMIN, IT_SUPPORT}`, pero
+`CajaDelMentorController` (`@Funcionalidad("caja")`) es para el mentor del aprendiz (MENTOR y TRAINEE_GUIDE). El campo es
+informativo en la fase 1 («no restringe nada»), así que nadie lo notó; un rol personalizado solo puede marcar claves que
+su base usa según ese campo, y la letra del contrato dejaba fuera lo que la base usa por los guards pero el catálogo omite.
+
+**Solución.** En la regla, lo que el rol base no usa según el catálogo no lo decide el rol personalizado (desvío anotado en
+D-272): con todo marcado, un rol personalizado equivale a su base. **El catálogo no se tocó** (es de la fase 1 y cambia lo
+que muestra la consola): queda propuesto sumar MENTOR y TRAINEE_GUIDE a `caja`.
+
+> **Corregido 2026-10-14 (respuesta del dueño).** El catálogo ya lista `caja` con TRAINEE, MENTOR, TRAINEE_GUIDE, ADMIN e
+> IT_SUPPORT (`EntradasDelCatalogo`; el Alquimista no gestiona cajas, `GuardiaDeCaja`). Para `caja`, el desvío de la regla
+> ya no hace falta: un «Mentor junior» la marca o la pierde como cualquier otra. El desvío se conserva por `registro` (la
+> usa el alta sin cuenta) y como resguardo ante otra omisión del catálogo. Pruebas: `CatalogoDeFuncionalidadesTest.
+> rolesQueLaUsan` y `DisponibilidadPorRolPersonalizadoTest.cajaEsDelMentor`.
+
+**Cómo evitarlo.** Una clave nueva en el catálogo se declara con los roles que pasan los guards de TODOS sus endpoints,
+no con los de la pantalla principal. Prueba que lo cubre: `DisponibilidadPorRolPersonalizadoTest.todoMarcadoEsLaBase`.
+
+## E-621 · `SelfValidating` valida el primer constructor que da la reflexión, y en un record con dos no es el canónico (back, ANOTADO, 14/10)
+
+**Síntoma literal.** Sonda en esta laptop (Temurin 25.0.4) sobre `record Dos(@NotNull String a, @NotNull String b)` con un
+constructor extra `Dos(String a)`: `Dos.class.getDeclaredConstructors()` devolvió primero el de **1** parámetro y después
+el canónico de **2**. `validateConstructorParameters(<el de 1>, new Object[]{"a", "b"})` no lanzó nada ni reportó
+violaciones.
+
+**Causa real.** `SelfValidating.validateConstructorArgs` usa `recordClass.getDeclaredConstructors()[0]`, y el javadoc de
+`getDeclaredConstructors` dice que el orden no está garantizado. En un record con un constructor de conveniencia, el
+`[0]` puede ser ese, que no tiene las anotaciones: la validación pasa sin mirar nada. Pasaba en
+`ApproveAccountRequestCommand` (canónico de 3 + uno de 2): su `@NotNull` no se evaluaba.
+
+**Solución.** Los dos comandos que tocó D-272 (`UpdateUserRoleCommand`, `ApproveAccountRequestCommand`) validan a mano en
+el constructor compacto. **No se cambió `SelfValidating`**: hacerlo encendería de golpe validaciones que hoy no corren en
+otros comandos con constructores extra (`ActualizarCelulaCommand`, `CrearCelulaCommand`, `CambiarEstadoHabitoCommand`,
+`ActualizarHabitoCommand`, `CrearHabitoCommand`, `CompletarRegistroCommand`, `FirmarContratoCommand`,
+`UpdateMentorProfileCommand`), y cada uno hay que revisarlo con sus pruebas.
+
+**Cómo evitarlo.** Arreglo propuesto: en un record, validar el canónico
+(`getDeclaredConstructor(Arrays.stream(recordClass.getRecordComponents()).map(RecordComponent::getType).toArray(Class[]::new))`),
+y revisar los ocho comandos de arriba. Mientras tanto, un record con más de un constructor no usa `SelfValidating`.
+
+## E-625 · El chat de un grupo que nace con integrantes quedaba sin participantes (back, RESUELTO, 14/10)
+
+**Síntoma.** Hallado al diseñar el grupo de prueba de «ver como» (D-273), no en producción: el grupo nace con mentor,
+aprendiz y guía en una sola transacción, y su conversación podía quedar creada pero vacía (`participantes_conversacion` sin
+filas). El mentor de prueba no veía el chat de su grupo en Tribu, aunque el acceso por asignación sí lo dejaba abrir.
+
+**Causa real.** `CelulaCreadaEvent` y `ComposicionDeCelulaCambiadaEvent` salen del mismo commit y el outbox los entrega en
+paralelo. `ParticipantesCelulaService.sincronizar` no hace nada si la conversación todavía no existe (lo dice su código), y
+`CelulaCreadaChatListener` solo creaba la fila: si el aviso de la composición llegaba primero, nadie volvía a sincronizar.
+Con los grupos de Administración no se notaba porque el grupo se crea en un pedido y los integrantes se asignan en otros.
+
+**Solución.** `CelulaCreadaChatListener` sincroniza los participantes después de crear la conversación (la sincronización es
+idempotente; en un grupo sin integrantes no cambia nada). Prueba: `CelulaCreadaChatListenerTest.sincronizaLosIntegrantesDespuesDeCrearLaConversacion`.
+
+**Cómo evitarlo.** Un oyente que depende de que otro haya corrido antes (la conversación antes que sus participantes) no
+puede suponer el orden del outbox: o el primero hace también lo del segundo, o el segundo reintenta.
+
+## E-626 · `POST /api/v1/users/me` es una lectura: un solo lectura «por verbo» habría dejado a «ver como» sin arrancar (back, EVITADO, 14/10)
+
+**Síntoma.** Hallado leyendo la app antes de probar (`src/features/auth/api/authApi.ts`: `apiFetch('/api/v1/users/me',
+{ method: 'POST' })`): con la regla literal del contrato («todo POST, PUT, PATCH y DELETE de una sesión `soloLectura` → 403»),
+la primera pantalla de «ver como» habría recibido `403 MODO_SOLO_LECTURA` al leer el perfil y la app no habría arrancado.
+
+**Causa real.** El perfil propio se lee con `POST /users/me` (`UserController.me`, `@SinInterruptor` «Lectura del perfil
+propio, que la app usa al entrar»): es el único endpoint con sesión que usa POST para leer (los otros, `check-email` y
+`exists`, son del alta pública).
+
+**Solución.** `FiltroDeSoloLectura` deja pasar `POST /api/v1/users/me` junto a las dos salidas (`DELETE /soporte-ti/ver-como`
+y `POST /auth/logout`); editar el perfil (`PATCH /users/me`) sigue siendo 403. Prueba: `FiltroDeSoloLecturaTest.elPerfilPropioPasa`
+y `VerComoDePuntaAPuntaIT` (lee el perfil con POST desde la sesión «ver como»).
+
+**Cómo evitarlo.** Un endpoint nuevo que solo lee va con GET. Si alguno vuelve a leer con POST, hay que sumarlo a
+`FiltroDeSoloLectura.PERMITIDOS_AUNQUE_NO_SEAN_GET` o «ver como» lo rechaza.
 
 ## E-628 · La ficha del mentor mostraba el post diario sin nada que ver (backend, spec 005, RESUELTO, 19/10)
 

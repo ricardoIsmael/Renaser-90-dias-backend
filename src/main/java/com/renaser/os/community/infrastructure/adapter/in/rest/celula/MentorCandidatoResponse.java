@@ -21,15 +21,25 @@ import java.util.List;
  *
  * <p>{@code role} (D-265): {@code MENTOR} o {@code TRAINEE_GUIDE}, para que la pantalla diga «Guía de aprendiz»
  * donde corresponda. Va al final: una app que no lo conoce lo ignora.
+ *
+ * <p>{@code rolPersonalizado} (spec 002, fase 2; D-272): {@code { id, nombre }} si tiene un rol personalizado vigente,
+ * o {@code null}. Aditivo, al final; {@code role} sigue siendo el rol base.
  */
 public record MentorCandidatoResponse(String userId, String fullName, String avatarUrl, String cellId,
-                                       List<String> cellIds, String specialty, String role) {
+                                       List<String> cellIds, String specialty, String role,
+                                       RolPersonalizado rolPersonalizado) {
+
+    /** {@code { id, nombre }}. */
+    public record RolPersonalizado(String id, String nombre) {
+    }
 
     public static MentorCandidatoResponse from(MentorCandidato candidato) {
         return new MentorCandidatoResponse(candidato.userId().toString(), candidato.nombreCompleto(),
                 candidato.avatarUrl(), candidato.celulaActual() != null ? candidato.celulaActual().toString() : null,
                 candidato.celulasActuales().stream().map(CelulaId::toString).toList(),
                 candidato.especialidad() != null ? candidato.especialidad().name() : null,
-                candidato.rol() != null ? candidato.rol().name() : null);
+                candidato.rol() != null ? candidato.rol().name() : null,
+                candidato.rolPersonalizado() == null ? null : new RolPersonalizado(
+                        candidato.rolPersonalizado().id().toString(), candidato.rolPersonalizado().nombre()));
     }
 }

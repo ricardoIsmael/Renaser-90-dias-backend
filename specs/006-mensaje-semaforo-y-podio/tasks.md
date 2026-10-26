@@ -4,7 +4,7 @@
 
 **Prerequisites**: rama `006-mensaje-semaforo-y-podio` en los dos repos, creada desde `origin/master` (ya trae
 `IT_SUPPORT`, fase 1). Migración **V110** reservada; antes de integrar, confirmar que siga siendo mayor que la más alta
-de `origin/master` (la fase 2 está en pausa con V103–V108; la spec 005 tiene V109).
+de `origin/master` (la fase 2 está en pausa con V113–V118; la spec 005 tiene V109).
 
 **Tests**: obligatorios por la constitución (III): TDD, unitarias sin Spring, IT con Testcontainers, 403 negativos y
 reloj en la madrugada UTC.

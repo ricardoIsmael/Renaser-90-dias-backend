@@ -79,7 +79,10 @@ final class EntradasDelCatalogo {
                 normal("ia.voz", "SER (IA)", "Voz de SER", "La voz del orbe y la voz en vivo.", TODOS, NO_APLICA),
                 normal("ia.propuestas", "SER (IA)", "Propuestas de SER", "Las propuestas y acciones de SER.", TODOS, NO_APLICA),
                 normal("evidencias", "Evidencias", "Mis evidencias", "Ver las evidencias y su revisión.", TODOS, POSPONE),
-                normal("caja", "Caja Renaser", "Caja Renaser", "La Caja Renaser del aprendiz y su gestión.", EnumSet.of(TRAINEE, ADMIN, IT_SUPPORT), SALTA),
+                // MENTOR y TRAINEE_GUIDE: ven el chip de la caja en la ficha de su aprendiz (CajaDelMentorController, D-219).
+                // Faltaban (E-620): sin ellos la consola no mostraba su interruptor y un rol personalizado de esa base no
+                // la podía marcar.
+                normal("caja", "Caja Renaser", "Caja Renaser", "La Caja Renaser del aprendiz y su gestión.", EnumSet.of(TRAINEE, MENTOR, TRAINEE_GUIDE, ADMIN, IT_SUPPORT), SALTA),
                 normal("emergencia", "Cuenta", "Botón de emergencia", "Pedir ayuda por una emergencia y atenderla.", EnumSet.of(TRAINEE, ADMIN, ALCHEMIST, IT_SUPPORT), NO_APLICA),
                 raiz("cuenta.eliminar", "Cuenta", "Eliminar mi cuenta", "Eliminar la cuenta propia.", TODOS, NO_APLICA),
                 normal("perfil", "Cuenta", "Perfil", "Editar el perfil y la foto.", TODOS, NO_APLICA),

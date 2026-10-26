@@ -4,6 +4,11 @@ import com.renaser.os.rag.application.ports.in.espejosombra.GenerarInformeEspejo
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.ProgramasActivadosFinder;
+import com.renaser.os.users.api.UserRole;
+import com.renaser.os.users.api.UserStatus;
+import com.renaser.os.users.api.UserSummary;
+import com.renaser.os.users.api.UserSummaryFinder;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -12,12 +17,17 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * E-560. El reloj se fija en la madrugada UTC (regla 03): el lunes 05:00 UTC es la medianoche del domingo de Lima,
@@ -35,6 +45,20 @@ class BarridoDeInformesSemanalesServiceTest {
     private final Map<UserId, ZoneId> zonas = new HashMap<>();
     private final FakeParticipacionProgramaFinder padron = new FakeParticipacionProgramaFinder();
     private final List<Integer> tamanosDeLote = new ArrayList<>();
+    private final Set<UserId> cuentasDePrueba = new HashSet<>();
+    private final List<Integer> lecturasDeResumenes = new ArrayList<>();
+    private final UserSummaryFinder usuarios = mock(UserSummaryFinder.class);
+
+    {
+        when(usuarios.findByIds(anyCollection())).thenAnswer(invocacion -> {
+            Collection<UserId> ids = invocacion.getArgument(0);
+            lecturasDeResumenes.add(ids.size());
+            Map<UserId, UserSummary> resumenes = new HashMap<>();
+            ids.forEach(id -> resumenes.put(id, new UserSummary(id, "Persona", null, UserRole.TRAINEE,
+                    UserStatus.ACTIVE, null, cuentasDePrueba.contains(id))));
+            return resumenes;
+        });
+    }
 
     private record Generado(UserId participante, LocalDate semana) {
     }
@@ -46,7 +70,8 @@ class BarridoDeInformesSemanalesServiceTest {
             }
             generados.add(new Generado(participante, semana));
         };
-        return new BarridoDeInformesSemanalesService(generar, padron, new ProgramasEnMemoria(), FixedClock.at(ahora));
+        return new BarridoDeInformesSemanalesService(generar, padron, new ProgramasEnMemoria(), usuarios,
+                FixedClock.at(ahora));
     }
 
     private UserId inscrito(ZoneId zona) {
@@ -140,6 +165,18 @@ class BarridoDeInformesSemanalesServiceTest {
     }
 
     @Test
+    @DisplayName("D-273: la cuenta de prueba de «ver como» no tiene informe (una llamada a la IA que nadie lee)")
+    void laCuentaDePruebaNoTieneInforme() {
+        UserId real = inscrito(LIMA);
+        UserId deVerComo = inscrito(LIMA);
+        cuentasDePrueba.add(deVerComo);
+
+        servicioA(LUNES_0500_UTC).generarLosQueTocan();
+
+        assertThat(generados).containsExactly(new Generado(real, SEMANA_DEL_28_SEP));
+    }
+
+    @Test
     void elPadronSeRecorreEnLotesYLaZonaSePideUnaVezPorLote() {
         for (int i = 0; i < BarridoDeInformesSemanalesService.TAMANO_LOTE * 2 + 1; i++) {
             inscrito(LIMA);
@@ -150,6 +187,9 @@ class BarridoDeInformesSemanalesServiceTest {
         assertThat(generados).hasSize(BarridoDeInformesSemanalesService.TAMANO_LOTE * 2 + 1);
         assertThat(tamanosDeLote).containsExactly(BarridoDeInformesSemanalesService.TAMANO_LOTE,
                 BarridoDeInformesSemanalesService.TAMANO_LOTE, 1);
+        assertThat(lecturasDeResumenes).as("las cuentas de prueba se buscan una vez por lote, no por persona")
+                .containsExactly(BarridoDeInformesSemanalesService.TAMANO_LOTE,
+                        BarridoDeInformesSemanalesService.TAMANO_LOTE, 1);
     }
 
     private final class ProgramasEnMemoria implements ProgramasActivadosFinder {

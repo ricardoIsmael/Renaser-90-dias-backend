@@ -6,6 +6,7 @@ import com.renaser.os.shared.domain.ContrasenaIncorrectaException;
 import com.renaser.os.shared.domain.CredencialesInvalidasException;
 import com.renaser.os.shared.domain.EnvioEmailFallidoException;
 import com.renaser.os.shared.domain.FuncionalidadApagadaException;
+import com.renaser.os.shared.domain.FuncionalidadNoDisponibleException;
 import com.renaser.os.shared.domain.IdentidadProveedorInvalidaException;
 import com.renaser.os.shared.domain.IdentidadYaVinculadaException;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -181,6 +182,19 @@ public class GlobalExceptionHandler {
         log.info("503 -> funcionalidad apagada: {}", ex.clave());
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).contentType(MediaType.APPLICATION_JSON)
                 .body(ApiErrorConCodigo.of(ex.getMessage(), "FUNCIONALIDAD_APAGADA", ex.clave()));
+    }
+
+    /**
+     * Una funcionalidad que a esta persona todavía no le toca (despliegue progresivo) o que su rol personalizado no
+     * incluye (spec 002, fase 2): <b>404</b> con {@code codigo: "FUNCIONALIDAD_NO_DISPONIBLE"}. La app la esconde; no
+     * es mantenimiento ni algo que vuelva en un rato. Gana sobre {@link #handleFuncionalidadApagada}, que es de la
+     * excepción madre, porque Spring elige la más específica.
+     */
+    @ExceptionHandler(FuncionalidadNoDisponibleException.class)
+    public ResponseEntity<ApiErrorConCodigo> handleFuncionalidadNoDisponible(FuncionalidadNoDisponibleException ex) {
+        log.info("404 -> funcionalidad no disponible para la cuenta: {}", ex.clave());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).contentType(MediaType.APPLICATION_JSON)
+                .body(ApiErrorConCodigo.of(ex.getMessage(), "FUNCIONALIDAD_NO_DISPONIBLE", ex.clave()));
     }
 
     /**

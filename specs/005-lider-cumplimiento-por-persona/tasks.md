@@ -123,8 +123,8 @@ antes a las otras sesiones.
   > depende de la fase 2 **se hizo**: entrada `lider.cumplimiento` en `EntradasDelCatalogo`, `@Funcionalidad` en el
   > controller nuevo (`CumplimientoDelLiderController`; la publicación del Muro lleva `muro`), `puedeAbrirse` falso con la
   > funcionalidad apagada (`SemaforoPorGruposService`) y `saltaEsteTurno` en el resumen diario (T043); `FuncionalidadDeclaradaTest`
-  > en verde. **Sigue pendiente**, para cuando entre la fase 2 (V103–V108): `CuentasDePruebaFinder` real sobre
-  > `usuarios.es_cuenta_de_prueba` (V107) y renumerar V109 si esa fase ocupa números por encima de los de hoy.
+  > en verde. **Sigue pendiente**, para cuando entre la fase 2 (V113–V118): `CuentasDePruebaFinder` real sobre
+  > `usuarios.es_cuenta_de_prueba` (V117) y renumerar V109 si esa fase ocupa números por encima de los de hoy.
 
 ## Phase 8: Polish & Cross-Cutting
 

@@ -5,6 +5,7 @@ import com.renaser.os.chat.application.ports.in.conversacion.ExigirChatPrendidoU
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.shared.domain.FuncionalidadApagadaException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.web.security.SesionDeSoloLectura;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.springframework.lang.Nullable;
@@ -74,6 +75,12 @@ class SubscripcionAutorizadaInterceptor implements ChannelInterceptor {
         // conversacion de otros saltandose el caso de uso (y su persistencia y sus guardas). Un
         // cliente solo manda a /app/**; el unico que escribe en /topic es el servidor.
         if (accessor.getCommand() == StompCommand.SEND) {
+            // «Ver como rol» (D-273): una sesión de solo lectura lee, no manda. El texto lleva el código para que el
+            // cliente lo reconozca en el frame ERROR, como el 403 de la API.
+            if (SesionDeSoloLectura.loEs(accessor.getSessionAttributes())) {
+                throw new org.springframework.messaging.MessagingException(
+                        SesionDeSoloLectura.CODIGO + ": " + SesionDeSoloLectura.MENSAJE);
+            }
             String destinoEnvio = accessor.getDestination();
             if (destinoEnvio != null && destinoEnvio.startsWith("/topic/")) {
                 throw new org.springframework.messaging.MessagingException(

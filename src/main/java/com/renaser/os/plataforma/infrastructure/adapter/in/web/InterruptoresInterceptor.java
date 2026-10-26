@@ -1,12 +1,17 @@
 package com.renaser.os.plataforma.infrastructure.adapter.in.web;
 
+import com.renaser.os.plataforma.application.ports.in.MedirPedidoEnDespliegueUseCase;
 import com.renaser.os.shared.application.Interruptores;
+import com.renaser.os.shared.domain.FuncionalidadNoDisponibleException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.Funcionalidad;
+import com.renaser.os.shared.web.security.SesionDeSoloLectura;
 import com.renaser.os.shared.web.security.SinInterruptor;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -34,15 +39,28 @@ import org.springframework.web.servlet.HandlerInterceptor;
  * <p>Recibe {@link Interruptores} por {@link ObjectProvider} por el mismo motivo que el interceptor de permisos: este
  * interceptor entra en todos los {@code @WebMvcTest} del repo, y en esos contextos reducidos no hay quien lo
  * implemente; ahí deja pasar el pedido como antes de existir.
+ *
+ * <p><b>Métricas del despliegue progresivo</b> (fase 2, contrato §3.3): al terminar cada pedido con funcionalidad y con
+ * persona, {@link #afterCompletion} lo cuenta (5xx = error) para {@link MedirPedidoEnDespliegueUseCase}, que no hace
+ * nada si no hay despliegues en curso. Spring NO llama a {@code afterCompletion} de un interceptor cuyo
+ * {@code preHandle} lanzó, así que el 404 de quien está fuera del despliegue se cuenta al cortarlo. Un 503 por un
+ * interruptor apagado no se cuenta: es mantenimiento, no uso ni falla. Contar nunca rompe el pedido. Tampoco se
+ * cuentan los pedidos de una sesión «ver como» (D-273): los marca {@code FiltroDeSoloLectura}.
  */
 class InterruptoresInterceptor implements HandlerInterceptor {
 
+    private static final Logger log = LoggerFactory.getLogger(InterruptoresInterceptor.class);
     private static final String HEADER_ACTOR_ID = "X-Actor-Id";
+    /** El pedido a contar al terminar: se guarda en el despacho REQUEST y se lee también al cerrar un stream ASYNC. */
+    static final String PEDIDO_A_MEDIR = InterruptoresInterceptor.class.getName() + ".pedidoAMedir";
 
     private final ObjectProvider<Interruptores> interruptoresProvider;
+    private final ObjectProvider<MedirPedidoEnDespliegueUseCase> medidorProvider;
 
-    InterruptoresInterceptor(ObjectProvider<Interruptores> interruptoresProvider) {
+    InterruptoresInterceptor(ObjectProvider<Interruptores> interruptoresProvider,
+                             ObjectProvider<MedirPedidoEnDespliegueUseCase> medidorProvider) {
         this.interruptoresProvider = interruptoresProvider;
+        this.medidorProvider = medidorProvider;
     }
 
     @Override
@@ -54,30 +72,79 @@ class InterruptoresInterceptor implements HandlerInterceptor {
             // dejar que termine con su evento de siempre (spec 002, «pedido en vuelo»).
             return true;
         }
-        String clave = funcionalidadDe(handlerMethod);
-        Interruptores interruptores = interruptoresProvider.getIfAvailable();
-        if (clave == null || interruptores == null) {
+        Funcionalidad funcionalidad = funcionalidadDeclarada(handlerMethod);
+        if (funcionalidad == null) {
             return true;
         }
-        interruptores.exigirPrendidaPara(clave, actorDelPedido(request));
+        UserId actor = actorDelPedido(request);
+        // «Ver como» (D-273): los pedidos de una sesión de solo lectura (la cuenta de prueba que mira Soporte TI) no
+        // cuentan en las métricas del despliegue: no son uso real. Un pedido sin persona tampoco se cuenta.
+        PedidoAMedir pedido = new PedidoAMedir(funcionalidad.value(),
+                SesionDeSoloLectura.vieneDeUna(request) ? null : actor);
+        if (pedido.actor() != null) {
+            request.setAttribute(PEDIDO_A_MEDIR, pedido);
+        }
+        Interruptores interruptores = interruptoresProvider.getIfAvailable();
+        if (funcionalidad.laResuelveElCasoDeUso() || interruptores == null) {
+            return true;
+        }
+        try {
+            interruptores.exigirPrendidaPara(funcionalidad.value(), actor);
+        } catch (FuncionalidadNoDisponibleException fuera) {
+            request.removeAttribute(PEDIDO_A_MEDIR);
+            medir(pedido, false);
+            throw fuera;
+        }
         return true;
     }
 
-    /** La clave que declara el handler, o {@code null} si no tiene interruptor. */
+    @Override
+    public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler,
+                                Exception ex) {
+        if (request.getAttribute(PEDIDO_A_MEDIR) instanceof PedidoAMedir pedido) {
+            request.removeAttribute(PEDIDO_A_MEDIR);
+            medir(pedido, ex != null || response.getStatus() >= 500);
+        }
+    }
+
+    private void medir(PedidoAMedir pedido, boolean error) {
+        if (pedido.actor() == null) {
+            return;
+        }
+        MedirPedidoEnDespliegueUseCase medidor = medidorProvider.getIfAvailable();
+        if (medidor == null) {
+            return;
+        }
+        try {
+            medidor.registrar(pedido.clave(), pedido.actor(), error);
+        } catch (RuntimeException e) {
+            log.debug("[plataforma] no se pudo contar el pedido a {} para el despliegue", pedido.clave(), e);
+        }
+    }
+
+    /** La clave que declara el handler y corta el interceptor, o {@code null} si no tiene interruptor. */
     static String funcionalidadDe(HandlerMethod handlerMethod) {
+        Funcionalidad funcionalidad = funcionalidadDeclarada(handlerMethod);
+        return funcionalidad == null ? null : laCortaElInterceptor(funcionalidad);
+    }
+
+    /**
+     * La {@link Funcionalidad} que declara el handler (la del método gana sobre la de la clase), o {@code null} si es
+     * {@link SinInterruptor} o no declara ninguna. Incluye las que resuelve el caso de uso: se cuentan igual.
+     */
+    static Funcionalidad funcionalidadDeclarada(HandlerMethod handlerMethod) {
         if (handlerMethod.hasMethodAnnotation(SinInterruptor.class)) {
             return null;
         }
         Funcionalidad enElMetodo = handlerMethod.getMethodAnnotation(Funcionalidad.class);
         if (enElMetodo != null) {
-            return laCortaElInterceptor(enElMetodo);
+            return enElMetodo;
         }
         Class<?> clase = handlerMethod.getBeanType();
         if (clase.isAnnotationPresent(SinInterruptor.class)) {
             return null;
         }
-        Funcionalidad enLaClase = clase.getAnnotation(Funcionalidad.class);
-        return enLaClase == null ? null : laCortaElInterceptor(enLaClase);
+        return clase.getAnnotation(Funcionalidad.class);
     }
 
     /** Con {@code laResuelveElCasoDeUso}, el caso de uso responde lo suyo (la voz del orbe: 204, D-267). */
@@ -104,5 +171,9 @@ class InterruptoresInterceptor implements HandlerInterceptor {
         } catch (IllegalArgumentException e) {
             return null;
         }
+    }
+
+    /** @param actor {@code null} en un pedido sin persona (no se cuenta) */
+    private record PedidoAMedir(String clave, UserId actor) {
     }
 }

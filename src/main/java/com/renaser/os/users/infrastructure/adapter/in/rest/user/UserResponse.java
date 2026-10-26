@@ -6,16 +6,22 @@ import com.renaser.os.users.domain.model.user.User;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 
-/** Proyeccion a mano, no la entidad serializada (CLAUDE.MD §5.4.5/§8: evita fugas de campos). */
+/**
+ * Proyeccion a mano, no la entidad serializada (CLAUDE.MD §5.4.5/§8: evita fugas de campos).
+ *
+ * <p>{@code rolPersonalizado} (spec 002, fase 2; D-272): {@code { id, nombre }} si la cuenta tiene un rol personalizado
+ * vigente, o {@code null}. Va al final y es aditivo; {@code role} sigue siendo el rol base.
+ */
 public record UserResponse(String id, String email, UserRole role, UserStatus status, String fullName,
                             String avatarUrl, String bio, String department,
-                            TraineeProfileResponse traineeProfile) {
+                            TraineeProfileResponse traineeProfile, RolPersonalizadoResponse rolPersonalizado) {
 
     /** Usado por el flujo de login (AutenticacionController) — sin enriquecer con
      * `traineeProfile`, que es exclusivo de {@code POST /api/v1/users/me}. */
     public static UserResponse from(User user) {
         return new UserResponse(user.id().toString(), user.email().value(), user.role(), user.status(),
-                user.fullName(), user.avatarUrl(), user.bio(), user.department(), null);
+                user.fullName(), user.avatarUrl(), user.bio(), user.department(), null,
+                RolPersonalizadoResponse.de(user.rolPersonalizado().orElse(null)));
     }
 
     /** Hueco #1 (docs/PLAN_INTEGRACION_FRONTEND.md): version enriquecida para
@@ -25,7 +31,8 @@ public record UserResponse(String id, String email, UserRole role, UserStatus st
         User user = profile.user();
         return new UserResponse(user.id().toString(), user.email().value(), user.role(), user.status(),
                 user.fullName(), user.avatarUrl(), user.bio(), user.department(),
-                TraineeProfileResponse.from(profile.traineeProfile()));
+                TraineeProfileResponse.from(profile.traineeProfile()),
+                RolPersonalizadoResponse.de(user.rolPersonalizado().orElse(null)));
     }
 
     /** Nombre distinto de {@code participante.TraineeProfileResponse} (que representa

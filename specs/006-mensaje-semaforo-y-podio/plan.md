@@ -31,7 +31,7 @@ Native)
 **Primary Dependencies**: Flyway, JPA, Testcontainers · zod, `react-native-view-shot` 5.1.0 y `expo-sharing` ~57.0.22
 (ya instalados), `expo-image`
 
-**Storage**: PostgreSQL, schema `renaser`, migración **V110** reservada (las V98–V108 son de la fase 2 de Soporte TI y
+**Storage**: PostgreSQL, schema `renaser`, migración **V110** reservada (las V98–V118 son de la fase 2 de Soporte TI y
 la V109 de la spec 005). Dos tablas: el catálogo y lo elegido.
 
 **Testing**: JUnit sin Spring para el dominio; Testcontainers para el adaptador y el controller (incluye 403 negativos);
@@ -68,7 +68,7 @@ mucho una escritura al día por persona. La imagen del podio, en menos de 3 s.
 **Soporte TI**: el rol `IT_SUPPORT` está en `origin/master` (fase 1, V100–V102; el `master` local estaba atrasado).
 La fase 2 quedó en pausa (2026-10-19), así que la rama sale de `origin/master` ahora, con IT_SUPPORT incluido.
 
-**Riesgo de migraciones**: las V103–V108 de la fase 2 y la V109 de la spec 005 no están integradas, y Flyway no tiene
+**Riesgo de migraciones**: las V113–V118 de la fase 2 y la V109 de la spec 005 no están integradas, y Flyway no tiene
 `outOfOrder`. Regla acordada entre sesiones: antes de integrar, la migración tiene que ser mayor que la más alta de
 `origin/master`; quien integra después renumera la suya.
 

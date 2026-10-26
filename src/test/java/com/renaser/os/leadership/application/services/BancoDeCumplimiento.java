@@ -241,10 +241,23 @@ public class BancoDeCumplimiento {
         }
     };
 
-    final CuentasDePruebaFinder pruebas = ids -> {
-        Set<UserId> deLaPrueba = new HashSet<>(ids);
-        deLaPrueba.retainAll(cuentasDePrueba);
-        return deLaPrueba;
+    final CuentasDePruebaFinder pruebas = new CuentasDePruebaFinder() {
+        @Override
+        public boolean esCuentaDePrueba(UserId id) {
+            return cuentasDePrueba.contains(id);
+        }
+
+        @Override
+        public Set<UserId> entre(Collection<UserId> ids) {
+            Set<UserId> deLaPrueba = new HashSet<>(ids);
+            deLaPrueba.retainAll(cuentasDePrueba);
+            return deLaPrueba;
+        }
+
+        @Override
+        public Set<UserId> todas() {
+            return Set.copyOf(cuentasDePrueba);
+        }
     };
 
     /** Reemplazable: {@link #compartirElSemaforoCon} lo cambia por el del resumen para comparar las tres pantallas. */

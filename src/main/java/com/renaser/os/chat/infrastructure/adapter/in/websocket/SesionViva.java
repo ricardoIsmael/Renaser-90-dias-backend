@@ -1,6 +1,7 @@
 package com.renaser.os.chat.infrastructure.adapter.in.websocket;
 
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.web.security.SesionDeSoloLectura;
 import org.springframework.context.event.EventListener;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.session.Session;
@@ -116,10 +117,19 @@ class SesionViva {
         return viva;
     }
 
+    /**
+     * Una sesión de «ver como» (D-273) vence a los 30 minutos aunque se siga usando; Redis la conserva hasta que pase
+     * su inactividad o hasta el próximo pedido HTTP, que la cierra. Para el socket ya está muerta.
+     */
+    private boolean soloLecturaVencida(Session sesion) {
+        return sesion.getAttribute(SesionDeSoloLectura.ABIERTA_POR) instanceof String
+                && SesionDeSoloLectura.vencida(sesion.getAttribute(SesionDeSoloLectura.VENCE_EN), clock.now());
+    }
+
     private boolean existeEnRedis(String idSesionHttp) {
         try {
             Session sesion = sessionRepository.findById(idSesionHttp);
-            return sesion != null && !sesion.isExpired();
+            return sesion != null && !sesion.isExpired() && !soloLecturaVencida(sesion);
         } catch (RuntimeException redisCaido) {
             /* Falla ABIERTO, y es deliberado: si Redis no responde, nadie puede iniciar sesion de
                todos modos, y cortarle el chat a todo el mundo por una intermitencia es peor que

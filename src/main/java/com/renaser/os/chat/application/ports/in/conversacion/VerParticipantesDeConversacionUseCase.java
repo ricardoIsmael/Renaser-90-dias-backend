@@ -3,6 +3,7 @@ package com.renaser.os.chat.application.ports.in.conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.conversacion.RolEnElChat;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.RolPersonalizadoAsignado;
 
 import java.util.List;
 
@@ -35,8 +36,18 @@ public interface VerParticipantesDeConversacionUseCase {
      * @param llevaTarjeta si se muestra con su tarjeta con nombre (D-206), que solo existe en grupos y soportes
      * @param avatarUrl    la foto que subió, para las conversaciones donde no hay tarjetas
      */
+    /**
+     * @param rolPersonalizado el rol personalizado vigente de la persona (spec 002, fase 2; D-272), o {@code null}: la
+     *                         info del chat muestra su nombre donde hoy muestra el rol
+     */
     record ParticipanteDelChat(UserId userId, String nombre, RolEnElChat rol, boolean esUnoMismo,
-                               boolean llevaTarjeta, String avatarUrl) {
+                               boolean llevaTarjeta, String avatarUrl, RolPersonalizadoAsignado rolPersonalizado) {
+
+        /** Sin rol personalizado (firma anterior a D-272). */
+        public ParticipanteDelChat(UserId userId, String nombre, RolEnElChat rol, boolean esUnoMismo,
+                                   boolean llevaTarjeta, String avatarUrl) {
+            this(userId, nombre, rol, esUnoMismo, llevaTarjeta, avatarUrl, null);
+        }
     }
 
     /** @param total cuántos son (con la búsqueda aplicada), no cuántos trae esta página */

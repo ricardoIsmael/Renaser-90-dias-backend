@@ -59,6 +59,14 @@ class SmtpEnviarEmailAdapterTest {
     }
 
     @Test
+    @DisplayName("«ver como» (D-273): al dominio reservado de las cuentas de prueba no sale ningún correo")
+    void alDominioReservadoNoSaleNada() {
+        adapter.enviarCodigoResetContrasena("ver-como+mentor@renaser.invalid", "483920");
+
+        org.mockito.Mockito.verifyNoInteractions(mailSender);
+    }
+
+    @Test
     @DisplayName("el codigo de verificacion viaja en el cuerpo, con asunto y destinatario correctos")
     void enviaElCodigoDeVerificacion() throws Exception {
         prepararMimeMessage();

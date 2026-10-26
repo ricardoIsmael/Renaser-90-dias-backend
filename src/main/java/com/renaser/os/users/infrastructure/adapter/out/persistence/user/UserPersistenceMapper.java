@@ -27,7 +27,10 @@ class UserPersistenceMapper {
                 entity.getBio(),
                 entity.getDepartamento(),
                 entity.getUltimaActividadEn(),
-                entity.getBajaSolicitadaEn());
+                entity.getBajaSolicitadaEn(),
+                entity.getRolPersonalizadoId(),
+                entity.getNombreRolPersonalizado(),
+                entity.isEsCuentaDePrueba());
     }
 
     UserJpaEntity toEntity(User user) {
@@ -42,6 +45,9 @@ class UserPersistenceMapper {
                 toJpaStatus(user.status()),
                 user.lastActiveAt(),
                 user.bajaSolicitadaEn(),
+                user.rolPersonalizadoId(),
+                user.esCuentaDePrueba(), // solo al insertar: la columna no se actualiza
+                user.nombreDelRolPersonalizado(), // solo de lectura: Hibernate no lo escribe
                 false); // `nueva`: solo la marca registrarNueva (E-365); para save() sigue siendo un upsert
     }
 

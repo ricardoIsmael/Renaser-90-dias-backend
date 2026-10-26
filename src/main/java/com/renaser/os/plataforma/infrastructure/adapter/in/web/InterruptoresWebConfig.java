@@ -1,5 +1,6 @@
 package com.renaser.os.plataforma.infrastructure.adapter.in.web;
 
+import com.renaser.os.plataforma.application.ports.in.MedirPedidoEnDespliegueUseCase;
 import com.renaser.os.shared.application.Interruptores;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Configuration;
@@ -18,14 +19,17 @@ class InterruptoresWebConfig implements WebMvcConfigurer {
     static final int ORDEN = 100;
 
     private final ObjectProvider<Interruptores> interruptoresProvider;
+    private final ObjectProvider<MedirPedidoEnDespliegueUseCase> medidorProvider;
 
-    InterruptoresWebConfig(ObjectProvider<Interruptores> interruptoresProvider) {
+    InterruptoresWebConfig(ObjectProvider<Interruptores> interruptoresProvider,
+                           ObjectProvider<MedirPedidoEnDespliegueUseCase> medidorProvider) {
         this.interruptoresProvider = interruptoresProvider;
+        this.medidorProvider = medidorProvider;
     }
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(new InterruptoresInterceptor(interruptoresProvider))
+        registry.addInterceptor(new InterruptoresInterceptor(interruptoresProvider, medidorProvider))
                 .addPathPatterns("/api/v1/**")
                 .order(ORDEN);
     }

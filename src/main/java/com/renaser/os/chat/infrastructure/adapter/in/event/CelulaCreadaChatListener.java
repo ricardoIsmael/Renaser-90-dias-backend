@@ -1,6 +1,7 @@
 package com.renaser.os.chat.infrastructure.adapter.in.event;
 
 import com.renaser.os.chat.application.ports.in.conversacion.CrearConversacionCelulaUseCase;
+import com.renaser.os.chat.application.ports.in.conversacion.SincronizarParticipantesCelulaUseCase;
 import com.renaser.os.community.api.CelulaCreadaEvent;
 import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Component;
@@ -10,21 +11,28 @@ import org.springframework.stereotype.Component;
  * crea la conversacion CELULA correspondiente, de forma idempotente — protegida ademas
  * por {@code conversaciones.celula_id UNIQUE} (V1__baseline_renaser.sql:1281).
  *
- * <p>Solo crea la fila de la conversacion: agregar a los miembros de la celula como
- * participantes queda fuera de alcance de este encargo (`community` no publica hoy un
- * evento de "miembro agregado/quitado de celula" — ver docs/MODULO_CHAT.md §6).
+ * <p>Despues de crearla reconcilia los participantes, como el aviso de composicion
+ * ({@code ComposicionCelulaChatListener}). <b>Corregido 2026-10-14 (E-625).</b> Antes solo creaba la
+ * fila: si el grupo nacia con integrantes en el mismo commit (el grupo de prueba de «ver como»,
+ * D-273), los dos avisos salian juntos del outbox, el de la composicion podia llegar primero, no
+ * encontraba la conversacion y no hacia nada, y nadie volvia a sincronizar. La sincronizacion es
+ * idempotente: en un grupo recien creado sin integrantes no cambia nada.
  */
 @Component
 class CelulaCreadaChatListener {
 
     private final CrearConversacionCelulaUseCase crearConversacionCelulaUseCase;
+    private final SincronizarParticipantesCelulaUseCase sincronizarParticipantes;
 
-    CelulaCreadaChatListener(CrearConversacionCelulaUseCase crearConversacionCelulaUseCase) {
+    CelulaCreadaChatListener(CrearConversacionCelulaUseCase crearConversacionCelulaUseCase,
+                             SincronizarParticipantesCelulaUseCase sincronizarParticipantes) {
         this.crearConversacionCelulaUseCase = crearConversacionCelulaUseCase;
+        this.sincronizarParticipantes = sincronizarParticipantes;
     }
 
     @ApplicationModuleListener
     void on(CelulaCreadaEvent event) {
         crearConversacionCelulaUseCase.crearParaCelula(event.celulaId());
+        sincronizarParticipantes.sincronizar(event.celulaId());
     }
 }

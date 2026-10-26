@@ -12,7 +12,8 @@ interface SpringDataCelulaRepository extends JpaRepository<CelulaJpaEntity, UUID
 
     List<CelulaJpaEntity> findByCohorteIdOrderByNombreAsc(UUID cohorteId);
 
-    List<CelulaJpaEntity> findAllByOrderByNombreAsc();
+    /** Todas menos las de una cohorte: la de prueba de «ver como» (D-273), ver {@code CelulaPersistenceAdapter.todas}. */
+    List<CelulaJpaEntity> findByCohorteIdNotOrderByNombreAsc(UUID cohorteExcluida);
 
     /** Varias desde V58 (D-141): un mentor puede liderar varios grupos. Antes era un {@code Optional} (E-371). */
     List<CelulaJpaEntity> findByMentorIdOrderByNombreAsc(UUID mentorId);

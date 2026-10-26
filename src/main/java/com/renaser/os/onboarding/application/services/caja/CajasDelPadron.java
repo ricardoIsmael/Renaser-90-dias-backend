@@ -77,14 +77,16 @@ class CajasDelPadron {
                 .orElseThrow(() -> new NoSuchElementException("No hay un aprendiz con ese id"));
     }
 
-    /** Una página del padrón (programas activados, cualquier rol): solo los aprendices. */
+    /** Una página del padrón (programas activados, cualquier rol): solo los aprendices, sin las cuentas de prueba. */
     PaginaDelPadron pagina(int offset) {
         List<ProgramaActivado> pagina = programas.pagina(offset, TAMANO_LOTE);
         Map<UserId, ProgramaActivado> porPersona = pagina.stream()
                 .collect(Collectors.toMap(ProgramaActivado::participanteId, p -> p, (a, b) -> a));
         List<UserSummary> aprendices = porPersona.isEmpty() ? List.of()
                 : usuarios.findByIds(porPersona.keySet()).values().stream()
-                        .filter(persona -> persona.role() == UserRole.TRAINEE).toList();
+                        // Sin las cuentas de prueba de «ver como» (D-273): ni la lista de Administración ni el barrido
+                        // que avisa «está lista para su Caja» las ven.
+                        .filter(persona -> persona.role() == UserRole.TRAINEE && !persona.esCuentaDePrueba()).toList();
         List<CajaConFicha> cajas = aprendices.isEmpty() ? List.of() : armar(aprendices, porPersona, clock.now());
         return new PaginaDelPadron(cajas, pagina.size() < TAMANO_LOTE);
     }

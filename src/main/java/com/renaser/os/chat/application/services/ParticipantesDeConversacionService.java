@@ -96,7 +96,7 @@ public class ParticipantesDeConversacionService implements VerParticipantesDeCon
         Set<UserId> conTarjeta = fotos.conTarjetaEn(conversacion.tipo(), lote.stream().map(UserSummary::id).toList());
         return lote.stream()
                 .map(u -> new ParticipanteDelChat(u.id(), nombreDe(u), rolDe(u, mentor), u.id().equals(actorId),
-                        conTarjeta.contains(u.id()), u.avatarUrl()))
+                        conTarjeta.contains(u.id()), u.avatarUrl(), u.rolPersonalizado()))
                 .toList();
     }
 

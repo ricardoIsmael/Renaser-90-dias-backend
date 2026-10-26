@@ -63,6 +63,11 @@ Mapeo de excepción de dominio → HTTP (`shared/web/GlobalExceptionHandler.java
   respuestas y el cliente puede cachear la imagen. `null` = sin foto de perfil. Hasta el
   2026-08-31 era una URL prefirmada que caducaba a los 7 días — ver `docs/BITACORA_ERRORES.md`
   E-57.
+
+  **`rolPersonalizado`** (aditivo, D-272): `{ "id": "uuid", "nombre": "Mentor junior" } | null`, el rol
+  personalizado vigente de la cuenta (activo y que hereda de su rol). Va al final de `UserResponse`, así que
+  sale también en `GET /auth/me`, el login, el login social y `GET /admin/staff`. **`role` sigue siendo el rol
+  base**: una app 1.5.0 ignora el campo y muestra el rol base.
 - **Código de éxito:** 200 (sin `@ResponseStatus`, valor de retorno directo).
 - **Quién puede llamarlo:** cualquier usuario activo, sobre sí mismo. `GetMyProfileUseCase.getMyProfile` solo llama a `RequireActiveUserGuard.of(actorId)` — no hay chequeo de rol.
 - **Errores:** 404 si `X-Actor-Id` no existe (`"Usuario no encontrado: <id>"`); 403 si está `SUSPENDED` (`"Cuenta suspendida"`); 400 si falta el header o el UUID es inválido (`"UserId no es un UUID valido: ..."`).
@@ -131,6 +136,13 @@ Mapeo de excepción de dominio → HTTP (`shared/web/GlobalExceptionHandler.java
 - **Headers:** `X-Actor-Id` (obligatorio, debe ser ADMIN/ALCHEMIST).
 - **Path variable:** `id` = UUID del usuario objetivo.
 - **Request body** (`UpdateUserRoleRequest`, con `@Valid`): `{ "newRole": "ALCHEMIST|ADMIN|MENTOR_LEAD|MENTOR|TRAINEE" }`
+  > **Ampliado 2026-10-14 (D-272).** `{ "newRole"?, "rolPersonalizadoId"? }`. Con `rolPersonalizadoId` (un rol
+  > personalizado activo, de `GET /admin/roles-asignables`), la cuenta toma el rol base de ese rol y `newRole` se
+  > ignora (puede faltar). Sin él, `newRole` es obligatorio (lo que manda la app 1.5.0) y se **quita** el rol
+  > personalizado que tuviera. Errores nuevos: 400 si no viene ninguno de los dos, o si el rol personalizado no existe
+  > o está desactivado; 403 si quien asigna no administra roles (antes de decir si el rol existe) o si es un
+  > ALQUIMISTA asignando uno que hereda de ADMIN o ALQUIMISTA (solo un ADMIN, FR-031). Avisa además
+  > `RolPersonalizadoCambiadoEvent` (la plataforma recarga su copia en memoria al confirmar).
 - **Response body:** ninguno.
 - **Código de éxito:** 204 No Content.
 - **Quién puede llamarlo:** ADMIN/ALCHEMIST (`User.changeRole` → `requireRoleManager`).
@@ -187,7 +199,7 @@ Mapeo de excepción de dominio → HTTP (`shared/web/GlobalExceptionHandler.java
 
 - **Headers:** `X-Actor-Id` (obligatorio, debe ser ADMIN/ALCHEMIST).
 - **Path variable:** `id` = UUID de la solicitud (`AccountRequestId`).
-- **Request body:** opcional (D-265): `{ "role": "TRAINEE" | "TRAINEE_GUIDE" | "MENTOR" | "MENTOR_LEAD" | "ADMIN" | "ALCHEMIST" }`. Sin cuerpo o sin `role`, entra como `TRAINEE` (lo que mandan la app 1.5.0 y el panel de solicitudes). Un rol que no existe → 400. `IT_SUPPORT` también → 400 y la solicitud sigue pendiente: Soporte TI se asigna solo desde la base (D-267).
+- **Request body:** opcional (D-265): `{ "role": "TRAINEE" | "TRAINEE_GUIDE" | "MENTOR" | "MENTOR_LEAD" | "ADMIN" | "ALCHEMIST" }`. Sin cuerpo o sin `role`, entra como `TRAINEE` (lo que mandan la app 1.5.0 y el panel de solicitudes). Un rol que no existe → 400. `IT_SUPPORT` también → 400 y la solicitud sigue pendiente: Soporte TI se asigna solo desde la base (D-267). **D-272:** también `rolPersonalizadoId` (opcional): entra con ese rol personalizado, por el mismo cambio de rol que `PATCH /users/{id}/role` (mismas reglas y errores; si falla, la aprobación entera se deshace y la solicitud sigue pendiente).
 - **Response body:** ninguno.
 - **Código de éxito:** 204 No Content.
 - **Quién puede llamarlo:** ADMIN/ALCHEMIST (`AccountRequest.approve` → `requireManager` → `actor.canManageRoles()`).

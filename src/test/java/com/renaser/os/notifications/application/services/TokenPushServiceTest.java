@@ -94,6 +94,19 @@ class TokenPushServiceTest {
     }
 
     @Test
+    @DisplayName("«ver como» (D-273): una cuenta de prueba no registra un token (el upsert se lo quitaría al teléfono real)")
+    void cuentaDePruebaNoRegistraToken() {
+        UserId usuario = UserId.of(UUID.randomUUID());
+        when(userSummaryFinder.findById(usuario)).thenReturn(Optional.of(
+                new UserSummary(usuario, "Prueba · Aprendiz", null, UserRole.TRAINEE, UserStatus.ACTIVE, null, true)));
+
+        assertThatThrownBy(() -> service.registrar(
+                new RegistrarTokenPushCommand(usuario, "expo-tok-1", PlataformaPush.IOS)))
+                .isInstanceOf(NotAuthorizedException.class);
+        verify(upsertTokenPushPort, never()).upsertPorToken(any());
+    }
+
+    @Test
     @DisplayName("E-38: un X-Actor-Id inexistente no registra nada")
     void actorInexistenteNoPuedeRegistrarToken() {
         UserId usuario = UserId.of(UUID.randomUUID());

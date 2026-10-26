@@ -36,4 +36,19 @@ class CambioAuditadoTest {
         assertThatThrownBy(() -> CambioAuditado.acceso(UUID.randomUUID(), TipoDeCambio.MANUAL,
                 UserId.of(UUID.randomUUID()), "OK", null, AHORA)).isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    @DisplayName("un cambio de rol personalizado lleva actor y la clave rp:<id> (fase 2, D-272)")
+    void rolPersonalizado() {
+        UUID rol = UUID.randomUUID();
+        CambioAuditado cambio = CambioAuditado.deRolPersonalizado(UUID.randomUUID(), UserId.of(UUID.randomUUID()),
+                "rp:" + rol, null, Map.of("nombre", "Mentor junior"), "crearlo", null, AHORA);
+
+        assertThat(cambio.tipo()).isEqualTo(TipoDeCambio.ROL_PERSONALIZADO);
+        assertThat(cambio.clave()).isEqualTo("rp:" + rol);
+        assertThatThrownBy(() -> CambioAuditado.deRolPersonalizado(UUID.randomUUID(), UserId.of(UUID.randomUUID()),
+                "eventos", null, null, "m", null, AHORA)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> CambioAuditado.deRolPersonalizado(UUID.randomUUID(), null, "rp:" + rol, null, null,
+                "m", null, AHORA)).isInstanceOf(NullPointerException.class);
+    }
 }

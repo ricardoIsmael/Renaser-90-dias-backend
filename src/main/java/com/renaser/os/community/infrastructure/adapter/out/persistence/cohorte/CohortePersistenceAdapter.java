@@ -3,6 +3,7 @@ package com.renaser.os.community.infrastructure.adapter.out.persistence.cohorte;
 import com.renaser.os.community.application.ports.out.cohorte.EliminarCohortePort;
 import com.renaser.os.community.application.ports.out.cohorte.LoadCohortePort;
 import com.renaser.os.community.application.ports.out.cohorte.SaveCohortePort;
+import com.renaser.os.community.domain.model.celula.GrupoDePrueba;
 import com.renaser.os.community.domain.model.cohorte.Cohorte;
 import com.renaser.os.community.domain.model.cohorte.CohorteId;
 import com.renaser.os.community.domain.model.cohorte.EstadoCohorte;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Component
 class CohortePersistenceAdapter implements LoadCohortePort, SaveCohortePort, EliminarCohortePort {
@@ -31,11 +33,13 @@ class CohortePersistenceAdapter implements LoadCohortePort, SaveCohortePort, Eli
         return repository.findById(id.value()).map(mapper::toDomain);
     }
 
+    /** Sin la cohorte de prueba de «ver como» (D-273): Administración no la ve ni la puede editar desde la lista. */
     @Override
     public List<Cohorte> listar(EstadoCohorte filtroEstado) {
+        UUID dePrueba = GrupoDePrueba.COHORTE.value();
         List<CohorteJpaEntity> filas = filtroEstado == null
-                ? repository.findAllByOrderByCreadoEnDesc()
-                : repository.findByEstadoOrderByCreadoEnDesc(mapper.toJpaEstado(filtroEstado));
+                ? repository.findByIdNotOrderByCreadoEnDesc(dePrueba)
+                : repository.findByEstadoAndIdNotOrderByCreadoEnDesc(mapper.toJpaEstado(filtroEstado), dePrueba);
         return filas.stream().map(mapper::toDomain).toList();
     }
 

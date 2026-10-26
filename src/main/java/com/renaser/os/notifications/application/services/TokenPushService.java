@@ -10,6 +10,7 @@ import com.renaser.os.notifications.domain.model.tokenpush.TokenPush;
 import com.renaser.os.notifications.domain.model.tokenpush.TokenPushId;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
+import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,7 +48,11 @@ public class TokenPushService implements RegistrarTokenPushUseCase, RevocarToken
     @Override
     @Transactional
     public TokenPush registrar(RegistrarTokenPushCommand command) {
-        actorGuard.requireActivo(command.usuarioId());
+        if (actorGuard.requireActivo(command.usuarioId()).esCuentaDePrueba()) {
+            // «Ver como» (D-273): el filtro de solo lectura ya rechaza este POST. Si algún día pasara, el ON CONFLICT
+            // del upsert le quitaría el token al teléfono real de Soporte TI para dárselo a la cuenta de prueba.
+            throw new NotAuthorizedException("Una cuenta de prueba no recibe avisos");
+        }
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD 5.4.7).
         // Este id solo se usa en el camino de INSERT del upsert: si el token ya existe, el adaptador
         // conserva el id de la fila existente y este se descarta (TokenPushPersistenceAdapter).

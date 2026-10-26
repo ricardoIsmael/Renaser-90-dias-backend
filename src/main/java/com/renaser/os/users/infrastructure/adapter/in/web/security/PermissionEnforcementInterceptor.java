@@ -5,6 +5,7 @@ import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.ApiErrorResponse;
 import com.renaser.os.shared.web.security.PublicEndpoint;
 import com.renaser.os.shared.web.security.RequiresPermission;
+import com.renaser.os.shared.web.security.SesionDeSoloLectura;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
@@ -107,6 +108,12 @@ class PermissionEnforcementInterceptor implements HandlerInterceptor {
         Optional<UserSummary> actor = actorDelPedido(request);
         if (actor.isEmpty()) {
             return true;
+        }
+        if (actor.get().esCuentaDePrueba() && !SesionDeSoloLectura.vieneDeUna(request)) {
+            // «Ver como» (D-273): una cuenta de prueba solo se usa desde la sesión de solo lectura que abre Soporte TI.
+            // Sin esto, el respaldo de X-Actor-Id de las rutas abiertas permitiría escribir en su nombre.
+            denegar(response, "Una cuenta de prueba solo se usa con «ver como»");
+            return false;
         }
         Permission requerido = permisoRequerido(handlerMethod);
         if (suspendidaSinTolerancia(actor.get(), requerido)) {

@@ -12,7 +12,11 @@ public interface ConsultarMisFuncionalidadesUseCase {
 
     MisFuncionalidades mias(UserId actor);
 
-    record MisFuncionalidades(long version, List<FuncionalidadApagada> apagadas) {
+    /**
+     * @param noDisponibles las que existen pero a esta persona no le corresponden (fase 2: despliegue progresivo o rol
+     *                      personalizado). La app las esconde; también figuran todas las hijas de una madre fuera.
+     */
+    record MisFuncionalidades(long version, List<FuncionalidadApagada> apagadas, List<String> noDisponibles) {
     }
 
     /** @param aviso el que ve la persona; nunca vacío (sin aviso escrito, el genérico) */

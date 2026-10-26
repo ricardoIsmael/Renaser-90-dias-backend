@@ -41,6 +41,14 @@ Supabase quedó descartado (2026-08-31). El esquema del producto lo define **nue
   (`semaforo_pausas` con `motivo = 'CUENTA_SUSPENDIDA'`, V72, D-209, E-348).
 - Ninguna credencial que use la app móvil puede tener `INSERT` sobre `usuarios`: el alta pasa
   obligatoriamente por `ApproveAccountRequestUseCase` o `InviteAndCreateUserUseCase`.
+  > **Agregado 2026-10-14 (D-273).** La única otra alta es la de las cuentas de prueba de «ver como»
+  > (`users.api.CuentasDePruebaUseCase`, solo Soporte TI).
+- `usuarios.es_cuenta_de_prueba` (V117, D-273) marca las cuentas de prueba de «ver como rol». **Toda consulta
+  nueva que liste personas (padrón, ranking, conteo, destinatarios de un aviso, candidatas de una lista de
+  Administración) lleva `AND NOT es_cuenta_de_prueba`**, o filtra con `UserSummary.esCuentaDePrueba` si arma
+  la lista con `findByIds`. Lo que la cuenta de prueba necesita para verse como la de verdad (sus registros del
+  día, su semáforo, su programa) no se filtra: es su dato y nadie más lo ve. `VerComoDePuntaAPuntaIT` revisa las
+  listas de siempre; una lista nueva suma su caso ahí.
 
 ## Persistencia
 
