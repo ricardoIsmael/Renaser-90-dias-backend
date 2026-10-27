@@ -4,6 +4,7 @@ import com.renaser.os.rocks.application.ports.in.rocamaestra.ConsultarRocasMaest
 import com.renaser.os.rocks.application.ports.in.rocamaestra.DefinirRocaMaestraUseCase;
 import com.renaser.os.rocks.application.ports.in.rocamaestra.DefinirRocaMaestraUseCase.DefinirRocaMaestraCommand;
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
+import com.renaser.os.rocks.domain.model.rocamaestra.MapaPendienteException;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestraFijaException;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
@@ -50,12 +51,18 @@ public class RocaMaestraController {
     /**
      * Define el objetivo de 90 dias de ese eje, o registra su avance si ya estaba definido.
      *
-     * <p>Una vez definido, el objetivo, la meta, la unidad y la linea base quedan fijos (D-234):
-     * cambiarlos responde 409 {@code ROCA_MAESTRA_FIJA}. Mandar lo mismo, o lo mismo con otro
+     * <p>Con el Mapa de Renacimiento ACTIVO, el objetivo, la meta, la unidad y la linea base quedan fijos
+     * (D-234): cambiarlos responde 409 {@code ROCA_MAESTRA_FIJA}. Mandar lo mismo, o lo mismo con otro
      * avance, responde 200.
+     *
+     * <p>Con el Mapa SIN activar (D-284), lo que escribe la activacion del Mapa ({@code "origen": "MAPA"})
+     * reemplaza a la roca que hubiera. Y, con {@code renaser.rocks.exigir-mapa-activo} encendido, un pedido
+     * que no viene del Mapa y cambia algo responde 409 {@code MAPA_PENDIENTE}.
      *
      * > <b>Corregido 2026-09-30 (D-234).</b> Decia: "Define el objetivo de 90 dias de ese eje, o
      * > corrige el que ya estaba". Ya no se corrige.
+     * > <b>Corregido 2026-10-27 (D-284).</b> Decia que quedaba fijo una vez definido: ahora, una vez que el
+     * > Mapa esta activo.
      *
      * <p>{@code PUT} y no {@code POST} porque es idempotente por diseno: por eje hay una sola
      * Roca Maestra ({@code UNIQUE (participante_id, eje)}), asi que mandar dos veces lo mismo
@@ -67,7 +74,15 @@ public class RocaMaestraController {
     public RocaMaestraResponse definir(@ActorAutenticado UserId actor, @PathVariable EjeObjetivo eje,
                                         @Valid @RequestBody DefinirRocaMaestraRequest request) {
         return RocaMaestraResponse.from(definirUseCase.definir(new DefinirRocaMaestraCommand(
-                actor, eje, request.objetivo(), request.meta(), request.avance(), request.unidad(), request.lineaBase())));
+                actor, eje, request.objetivo(), request.meta(), request.avance(), request.unidad(), request.lineaBase(),
+                request.desdeElMapa())));
+    }
+
+    /** El 409 con su codigo, para que la app lo distinga sin adivinar por el texto (D-284). */
+    @ExceptionHandler(MapaPendienteException.class)
+    public ResponseEntity<RocaMaestraFijaResponse> mapaPendiente(MapaPendienteException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).contentType(MediaType.APPLICATION_JSON)
+                .body(new RocaMaestraFijaResponse(MapaPendienteException.CODIGO, e.getMessage(), Instant.now()));
     }
 
     /** El 409 con su codigo, para que la app lo distinga sin adivinar por el texto (D-234). */

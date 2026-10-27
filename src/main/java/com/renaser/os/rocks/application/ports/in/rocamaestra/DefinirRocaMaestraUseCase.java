@@ -20,6 +20,19 @@ import java.math.BigDecimal;
  * > <b>Corregido 2026-09-30 (D-234).</b> Decia: "Define el objetivo [...] o corrige el que ya
  * > tenia". Ya no se corrige: lo decidio el dueno.
  *
+ * <p><b>Fija desde que el Mapa esta activo, no desde que se definio (D-284, 2026-10-27).</b> El Mapa de
+ * Renacimiento es opcional y Plan deja definir el objetivo antes, pero esa roca provisional no puede dejar
+ * sin activar al Mapa (issue #20). Segun el estado del Mapa de la persona:
+ * <ul>
+ *   <li><b>Mapa activo:</b> rige D-234 de arriba, venga de donde venga el pedido.
+ *   <li><b>Mapa sin activar y {@code desdeElMapa}:</b> es la activacion escribiendo lo que la persona puso en
+ *       su Mapa; reemplaza a la roca que hubiera (objetivo, meta, unidad, punto de partida y avance).
+ *   <li><b>Mapa sin activar y no viene del Mapa:</b> con {@code renaser.rocks.exigir-mapa-activo} apagado
+ *       (el default, para que el APK que todavia no manda {@code desdeElMapa} pueda activar su Mapa)
+ *       se comporta como el caso anterior; encendido, solo acepta repetir la misma definicion y cualquier
+ *       otra cosa lanza {@code MapaPendienteException} (409 {@code MAPA_PENDIENTE}).
+ * </ul>
+ *
  * <p><b>Es una sola operacion y no un "crear" mas un "editar"</b> porque la tabla ya impone
  * {@code UNIQUE (participante_id, eje)}: por eje hay exactamente una Roca Maestra o ninguna.
  * Partirlo en dos obligaria a quien llama a saber de antemano cual de las dos usar, y a
@@ -40,11 +53,12 @@ public interface DefinirRocaMaestraUseCase {
                                       BigDecimal meta,
                                       BigDecimal avance,
                                       @Size(max = 20) String unidad,
-                                      BigDecimal lineaBase) {
+                                      BigDecimal lineaBase,
+                                      boolean desdeElMapa) {
 
         public DefinirRocaMaestraCommand {
             SelfValidating.validateConstructorArgs(DefinirRocaMaestraCommand.class, actorId, eje, objetivo,
-                    meta, avance, unidad, lineaBase);
+                    meta, avance, unidad, lineaBase, desdeElMapa);
             boolean algunNumero = meta != null || avance != null || unidad != null;
             boolean todosLosNumeros = meta != null && avance != null && unidad != null;
             if (algunNumero && !todosLosNumeros) {

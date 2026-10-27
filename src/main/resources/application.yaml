@@ -586,6 +586,15 @@ renaser:
   # /renaser/prod/CAJA_AVISAR_POR_REVISAR=true y reiniciar. Los avisos de 3 y 5 días no dependen de esto.
   caja:
     avisar-por-revisar: ${CAJA_AVISAR_POR_REVISAR:false}
+  # D-284 (2026-10-27, issue #20): el objetivo de 90 días (Roca Maestra) se bloquea hasta que el Mapa de
+  # Renacimiento esté activo. APAGADO por defecto, a propósito: con el Mapa sin activar, lo que escribe la
+  # activación del Mapa (PUT /rocks/master/{eje} con "origen": "MAPA") reemplaza a la roca que la persona
+  # hubiera definido en Plan, y eso ya rige apagado o prendido. Prendido, además, un PUT que NO trae ese
+  # origen y cambia algo responde 409 MAPA_PENDIENTE; el APK publicado todavía no manda el origen, así que
+  # prenderlo antes de que el APK nuevo esté en los teléfonos impide activar el Mapa a quien tiene el
+  # anterior. Prenderlo en producción: /renaser/prod/ROCKS_EXIGIR_MAPA_ACTIVO=true y reiniciar.
+  rocks:
+    exigir-mapa-activo: ${ROCKS_EXIGIR_MAPA_ACTIVO:false}
   chat:
     bienvenida:
       activa: ${BIENVENIDA_ACTIVA:false}

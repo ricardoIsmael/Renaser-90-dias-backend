@@ -3,6 +3,7 @@ package com.renaser.os.rocks.infrastructure.adapter.in.rest.rocamaestra;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestra;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 
@@ -36,5 +37,21 @@ public record DefinirRocaMaestraRequest(
          * <p>Se dejo opcional a proposito para no romper a un cliente que todavia no lo manda ni a
          * las filas anteriores a la migracion.
          */
-        @PositiveOrZero @Digits(integer = 12, fraction = 2) BigDecimal lineaBase) {
+        @PositiveOrZero @Digits(integer = 12, fraction = 2) BigDecimal lineaBase,
+        /**
+         * Quien escribe el objetivo (D-284). <b>Opcional</b>: ausente es "desde fuera del Mapa" (Plan, o un
+         * APK anterior). La activacion del Mapa manda {@code "MAPA"}; asi el servidor distingue ese
+         * {@code PUT}, que escribe las rocas ANTES de marcar el Mapa como activo, del de Plan. Cualquier otro
+         * valor es un 400: mejor que se note un error de la app a que se ignore en silencio.
+         */
+        @Pattern(regexp = DefinirRocaMaestraRequest.ORIGEN_MAPA, message = "origen solo admite \"MAPA\"")
+        String origen) {
+
+    /** Unico valor que admite {@link #origen}. */
+    public static final String ORIGEN_MAPA = "MAPA";
+
+    /** {@code true} cuando el pedido lo manda la activacion del Mapa de Renacimiento. */
+    public boolean desdeElMapa() {
+        return ORIGEN_MAPA.equals(origen);
+    }
 }

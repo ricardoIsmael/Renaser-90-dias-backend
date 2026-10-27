@@ -41,6 +41,14 @@ import java.util.Objects;
  * > durante el programa"</i> y el agregado tenia un {@code redefinir} libre que reemplazaba todo.
  * > Esa era la regla de D-119; el dueno la cambio. Se conserva lo de arriba porque sigue siendo
  * > cierto por que la escritura vive en {@code rocks} y no en {@code onboarding}.
+ *
+ * <p><b>Fija desde que el Mapa esta ACTIVO, no desde que se definio (D-284, 2026-10-27).</b> "Nace del
+ * Mapa" suponia que el Mapa siempre iba primero, y no es asi: el Mapa es opcional y Plan deja definir el
+ * objetivo antes. Esa roca provisional dejaba la activacion del Mapa con un 409 {@code ROCA_MAESTRA_FIJA}
+ * (issue #20). Mientras el Mapa no esta activo, lo que escribe el Mapa
+ * ({@link #reemplazarPorLaDelMapa}) manda y reemplaza a la roca; una vez activo, rige D-234 tal cual
+ * ({@link #recibirDefinicion}). Quien decide en cual de los dos casos esta es el servicio, que es el que
+ * sabe del Mapa; el agregado solo sabe hacer cada cosa.
  */
 public record RocaMaestra(RocaMaestraId id, UserId participanteId, EjeObjetivo eje, String objetivo,
                            MetaCuantitativa meta, Instant creadoEn, Instant actualizadoEn) {
@@ -88,13 +96,31 @@ public record RocaMaestra(RocaMaestraId id, UserId participanteId, EjeObjetivo e
      * devuelve {@code 30000.00} y el cliente manda {@code 30000}, y eso es la misma meta.
      */
     public RocaMaestra recibirDefinicion(String objetivoPedido, MetaCuantitativa metaPedida, Instant ahora) {
-        if (!mismaDefinicion(objetivoPedido, metaPedida)) {
+        if (!esLaMismaDefinicion(objetivoPedido, metaPedida)) {
             throw new RocaMaestraFijaException();
         }
         if (metaPedida == null || metaPedida.avance().compareTo(meta.avance()) == 0) {
             return this;
         }
         return registrarAvance(metaPedida.avance(), ahora);
+    }
+
+    /**
+     * La roca que escribe el Mapa de Renacimiento mientras el Mapa todavia no esta activo (D-284).
+     *
+     * <p>Lo que el Mapa dice manda: si la persona ya habia definido este eje desde Plan, el objetivo, la
+     * meta, la unidad, el punto de partida y el avance se reemplazan por los del Mapa. Se conservan la
+     * identidad y la fecha de creacion, para que lo que ya cuelgue de la roca (objetivos del mes,
+     * semanales, acciones) siga apuntando a ella.
+     *
+     * <p>Si lo que llega es lo mismo que ya hay —el reintento de una activacion que fallo a mitad—, se
+     * trata como siempre ({@link #recibirDefinicion}): se devuelve esta misma roca sin tocar.
+     */
+    public RocaMaestra reemplazarPorLaDelMapa(String objetivoPedido, MetaCuantitativa metaPedida, Instant ahora) {
+        if (esLaMismaDefinicion(objetivoPedido, metaPedida)) {
+            return recibirDefinicion(objetivoPedido, metaPedida, ahora);
+        }
+        return new RocaMaestra(id, participanteId, eje, objetivoPedido, metaPedida, creadoEn, ahora);
     }
 
     /**
@@ -108,7 +134,8 @@ public record RocaMaestra(RocaMaestraId id, UserId participanteId, EjeObjetivo e
         return new RocaMaestra(id, participanteId, eje, objetivo, meta.conAvance(nuevoAvance), creadoEn, ahora);
     }
 
-    private boolean mismaDefinicion(String objetivoPedido, MetaCuantitativa metaPedida) {
+    /** Mismo objetivo (tras {@code trim}), meta, unidad y punto de partida; el avance no cuenta. */
+    public boolean esLaMismaDefinicion(String objetivoPedido, MetaCuantitativa metaPedida) {
         return objetivoPedido != null && objetivo.equals(objetivoPedido.trim()) && mismaMedida(metaPedida);
     }
 

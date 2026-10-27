@@ -907,6 +907,12 @@ arrancado **después** de cargarlo (E-244).
 | `SEMAFORO_TARJETA_DIARIA_ACTIVA` | `true` | La tarjeta diaria del semáforo en el chat de soporte, a las 23:50 de cada aprendiz (D-223) | No hace falta cargarlo para tenerla prendida. Para apagarla: `false` y reiniciar. Con `STORAGE_PROVEEDOR=noop` sale solo el texto. El APK publicado antes de D-199 muestra la imagen de un mensaje del programa como «Mensaje del sistema»; el texto sí se lee. En el log, cada noche: `[chat.semaforo] enSuHora=… enviadas=… fallidas=…` (solo cuando hubo alguien en su hora) y, la primera vez de cada color, `[chat.semaforo] tarjeta … subida al almacenamiento` |
 | `RANKING_SEMANAL_ACTIVO` | `false` | El podio semanal del ranking general en el grupo «Formación Renaser Global», los lunes a las 09:00 de Lima (D-262) | Prenderlo no publica semanas atrasadas. Para probarlo antes: `GET /api/v1/admin/ranking-semanal/vista-previa` (no publica) y `POST …/publicar` (publica aunque esté apagado). Exige la migración V95 |
 
+**Para el objetivo de 90 días** (se lee al arrancar: se cambia el parámetro y `docker restart backend`):
+
+| Parámetro | Valor por defecto | Qué decide | Ojo |
+|---|---|---|---|
+| `ROCKS_EXIGIR_MAPA_ACTIVO` | `false` | Bloquea el objetivo de 90 días (Roca Maestra) hasta que el Mapa de Renacimiento esté activo (D-284, issue #20): con `true`, un `PUT /rocks/master/{eje}` que no trae `"origen": "MAPA"` y cambia algo responde 409 `MAPA_PENDIENTE`. Con `false` (el arreglo del issue #20 rige igual) el Mapa sin activar reemplaza al objetivo definido en Plan | **No prenderlo hasta que el APK que manda `origen` esté en los teléfonos**: con el APK anterior, activar el Mapa daría `MAPA_PENDIENTE`. Se lee al arrancar: cambiar el parámetro y `docker restart backend` |
+
 #### Checklist para encender el semáforo (S-7, 2026-09-26)
 
 Se enciende **de lunes a jueves**, nunca viernes, sábado ni domingo. El barrido de las :25 cierra la
