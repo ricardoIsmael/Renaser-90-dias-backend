@@ -8,6 +8,10 @@ package com.renaser.os.rocks.domain.model.rocamaestra;
  * <b>no se cambia</b>: lo que se ajusta son los objetivos semanales y las acciones diarias. El
  * mensaje es apto para mostrarse a la persona tal cual.
  *
+ * <p><b>Solo con el Mapa ACTIVO (D-284, 2026-10-27).</b> Antes salia en cuanto la roca existia, aunque la
+ * persona no hubiera llenado el Mapa (issue #20): el mensaje decia "en tu Mapa" y era mentira. Ahora el
+ * servicio solo la lanza cuando el Mapa esta activo, asi que el texto es cierto en todos los casos.
+ *
  * <p>Extiende {@link IllegalStateException} para que, si alguna vez sale por otro camino que no
  * sea {@code RocaMaestraController}, caiga igual en el 409 de {@code GlobalExceptionHandler}: el
  * pedido es valido, choca con el estado de la roca.

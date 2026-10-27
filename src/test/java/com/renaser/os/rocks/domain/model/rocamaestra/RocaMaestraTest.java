@@ -188,4 +188,63 @@ class RocaMaestraTest {
         assertThat(RocaMaestra.definir(ID, PARTICIPANTE, EjeObjetivo.CUERPO, "  Bajar a 68 kg  ", null, AYER)
                 .objetivo()).isEqualTo("Bajar a 68 kg");
     }
+
+    // ---------------------------------------------------------------------------------------
+    // D-284: mientras el Mapa no esta activo, lo que escribe el Mapa reemplaza a la roca
+    // ---------------------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("D-284: otro objetivo, meta y unidad del Mapa reemplazan a los de Plan, con la misma identidad")
+    void elMapaReemplazaLaRocaDefinidaDesdePlan() {
+        RocaMaestra dePlan = conMeta();
+
+        RocaMaestra delMapa = dePlan.reemplazarPorLaDelMapa("Pesar 75 kg",
+                MetaCuantitativa.desde(new BigDecimal("82"), new BigDecimal("75"), "kg"), HOY);
+
+        assertThat(delMapa.objetivo()).isEqualTo("Pesar 75 kg");
+        assertThat(delMapa.meta().objetivo()).isEqualByComparingTo("75");
+        assertThat(delMapa.meta().unidad()).isEqualTo("kg");
+        assertThat(delMapa.meta().lineaBase()).isEqualByComparingTo("82");
+        assertThat(delMapa.meta().avance()).as("el avance es el que manda el Mapa").isEqualByComparingTo("82");
+        assertThat(delMapa.id()).as("misma roca: lo que cuelga de ella sigue apuntando").isEqualTo(ID);
+        assertThat(delMapa.participanteId()).isEqualTo(PARTICIPANTE);
+        assertThat(delMapa.eje()).isEqualTo(EjeObjetivo.TRABAJO);
+        assertThat(delMapa.creadoEn()).isEqualTo(AYER);
+        assertThat(delMapa.actualizadoEn()).isEqualTo(HOY);
+    }
+
+    @Test
+    @DisplayName("D-284: el Mapa puede pasar un objetivo medible a cualitativo y al reves")
+    void elMapaPuedeAgregarOQuitarLaMeta() {
+        RocaMaestra sinMeta = conMeta().reemplazarPorLaDelMapa("Estar presente con mi familia", null, HOY);
+        assertThat(sinMeta.tieneMeta()).isFalse();
+
+        RocaMaestra conMeta = sinMeta.reemplazarPorLaDelMapa(OBJETIVO,
+                MetaCuantitativa.nueva(new BigDecimal("30000"), "USD"), HOY);
+        assertThat(conMeta.tieneMeta()).isTrue();
+        assertThat(conMeta.id()).isEqualTo(ID);
+    }
+
+    @Test
+    @DisplayName("D-284: lo mismo que ya hay (reintento de la activacion) devuelve la misma roca sin tocar")
+    void elMapaQueRepiteLoMismoNoCambiaNada() {
+        RocaMaestra roca = conBase();
+
+        RocaMaestra recibida = roca.reemplazarPorLaDelMapa("Pesar 75 kg",
+                MetaCuantitativa.desde(new BigDecimal("82.00"), new BigDecimal("75.00"), "kg"), HOY);
+
+        assertThat(recibida).isEqualTo(roca);
+    }
+
+    @Test
+    @DisplayName("D-284: esLaMismaDefinicion mira objetivo, meta, unidad y punto de partida, y no el avance")
+    void esLaMismaDefinicionIgnoraElAvance() {
+        RocaMaestra roca = conBase();
+
+        assertThat(roca.esLaMismaDefinicion(" Pesar 75 kg ", new MetaCuantitativa(new BigDecimal("75"),
+                new BigDecimal("79"), "kg", new BigDecimal("82")))).isTrue();
+        assertThat(roca.esLaMismaDefinicion("Pesar 70 kg", roca.meta())).isFalse();
+        assertThat(roca.esLaMismaDefinicion("Pesar 75 kg", null)).isFalse();
+        assertThat(roca.esLaMismaDefinicion(null, roca.meta())).isFalse();
+    }
 }
