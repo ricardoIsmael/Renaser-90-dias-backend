@@ -4,9 +4,12 @@
 Correr:  cd scripts/sparkie-indexacion && python3 -m unittest -v test_indexar
 Ninguna prueba toca la red ni produccion: el HTTP y Drive son falsos.
 """
+import importlib
+import inspect
 import io
 import json
 import os
+import sys
 import tempfile
 import unittest
 import unittest.mock
@@ -239,6 +242,266 @@ class FiltrosDeDrive(unittest.TestCase):
         plan = indexar.planificar(docs, set(), set())
         self.assertEqual(plan[0]['pendientes'], [1])
         self.assertIn('uc?export=download&id=f1', pedidos[1])
+
+
+# El unico video de la lista real (D-285) y dos descartados por ser promocion, no ensenanza.
+ID_RIQUEZA = '44uFzhTFp0Y'
+IDS_DESCARTADOS = ('ydI2_k3hbxk', '-MINWhAO-Gw')
+# Datos FICTICIOS para los escenarios de varios videos: no son ni deben ser de la lista real.
+ID_A, ID_B, ID_SIN_SUBS = 'aaaaaaaaaaa', 'bbbbbbbbbbb', 'ccccccccccc'
+ID_CON_GUION = '-abcdefghij'  # un id de YouTube puede empezar con guion
+LISTA_FICTICIA = [(ID_A, 'Clase ficticia A'), (ID_B, 'Clase ficticia B'),
+                  (ID_SIN_SUBS, 'Clase ficticia sin subtitulos')]
+
+VTT_DE_PRUEBA = (
+    'WEBVTT\nKind: captions\nLanguage: es\n\n'
+    '00:00:00.000 --> 00:00:02.000\nhola a todos\n\n'
+    '00:00:02.000 --> 00:00:04.000\nhola a todos\nvamos a crear riqueza\n\n'
+    '00:00:04.000 --> 00:00:06.000\n[Musica]\nvamos a crear riqueza\n')
+
+
+class BajarFalso:
+    """Doble de extraer_todo.bajar: escribe un VTT por id, salvo los ids en `sin_subs`."""
+
+    def __init__(self, sin_subs=(), error=None):
+        self.dir = tempfile.mkdtemp()
+        self.sin_subs = set(sin_subs)
+        self.error = error
+        self.pedidos = []
+
+    def __call__(self, vid):
+        self.pedidos.append(vid)
+        if self.error:
+            raise self.error
+        if vid in self.sin_subs:
+            return None
+        ruta = os.path.join(self.dir, vid + '.es-orig.vtt')
+        with io.open(ruta, 'w', encoding='utf-8') as f:
+            f.write(VTT_DE_PRUEBA)
+        return ruta
+
+
+def limpiar_falso(ruta):
+    """Doble de extraer_todo.limpiar: un texto largo que da 3 pedazos."""
+    return texto_de(1000)
+
+
+def cargar_youtube_falso(lista=None, bajar=None, limpiar=limpiar_falso):
+    """Arma los documentos con dobles. `lista=None` usa la lista REAL; con una lista, la reemplaza
+    solo durante la carga (los documentos ya armados no dependen de ella)."""
+    bajar = bajar or BajarFalso()
+    with redirect_stdout(io.StringIO()):
+        if lista is None:
+            return bajar, indexar.cargar_youtube(bajar=bajar, limpiar=limpiar)
+        with unittest.mock.patch.object(indexar, 'VIDEOS_YOUTUBE_ENSENANZA', lista):
+            return bajar, indexar.cargar_youtube(bajar=bajar, limpiar=limpiar)
+
+
+class YoutubeEnsenanza(unittest.TestCase):
+
+    def setUp(self):
+        self.registro = os.path.join(tempfile.mkdtemp(), 'indexados.jsonl')
+
+    # ---- la lista real ----
+
+    def test_la_lista_real_es_solo_la_ensenanza_aprobada(self):
+        self.assertEqual(indexar.VIDEOS_YOUTUBE_ENSENANZA, [(ID_RIQUEZA, 'Crea riqueza en el 2025')])
+        # promociones evaluadas y descartadas (criterio del dueno): no vuelven sin preguntarle
+        for descartado in IDS_DESCARTADOS:
+            self.assertNotIn(descartado, [v for v, _ in indexar.VIDEOS_YOUTUBE_ENSENANZA])
+        incluidos, excluidos = indexar.clasificar_videos(indexar.VIDEOS_YOUTUBE_ENSENANZA)
+        self.assertEqual(len(incluidos), 1)
+        self.assertEqual(excluidos, [])  # ningun titulo de la lista real cae en el filtro
+
+    def test_arma_el_documento_con_la_misma_etiqueta_que_el_canal(self):
+        _, docs = cargar_youtube_falso()
+        self.assertEqual(len(docs), 1)
+        d = docs[0]
+        self.assertEqual((d['tipoFuente'], d['clase']), ('TRANSCRIPCION_CANAL', 'CANAL DARREN'))
+        self.assertEqual((d['tipoFuente'], d['clase']),
+                         (indexar.TIPO_FUENTE_CANAL, indexar.CLASE_CANAL))
+        self.assertEqual(d['documentoId'], ID_RIQUEZA)
+        self.assertIsNone(d['leccionId'])
+        self.assertEqual(d['clave'], ID_RIQUEZA)
+        self.assertEqual(d['titulo'], 'Crea riqueza en el 2025')
+
+    def test_el_cuerpo_enviado_es_el_del_canal_visible_desde_el_dia_0(self):
+        _, docs = cargar_youtube_falso()
+        http = HttpFalso()
+        plan = indexar.planificar(docs, set(), set())
+        with redirect_stdout(io.StringIO()):
+            indexar.enviar_plan(plan, http, self.registro, 900)
+        self.assertEqual(len(http.cuerpos), 3)
+        c = http.cuerpos[0]
+        self.assertEqual(set(c), {'tipoFuente', 'clase', 'documentoId', 'leccionId', 'contenido',
+                                  'metadatos'})
+        self.assertEqual((c['tipoFuente'], c['clase'], c['documentoId'], c['leccionId']),
+                         ('TRANSCRIPCION_CANAL', 'CANAL DARREN', ID_RIQUEZA, None))
+        self.assertEqual(c['metadatos'], {'titulo': 'Crea riqueza en el 2025', 'parte': '1/3'})
+
+    def test_entra_en_todas_por_defecto(self):
+        self.assertIn('youtube-ensenanza', indexar.FUENTES)
+        self.assertEqual(indexar.argumentos([]).fuentes, indexar.FUENTES)
+        self.assertEqual(indexar.argumentos(['--fuentes', 'youtube-ensenanza']).fuentes,
+                         ['youtube-ensenanza'])
+
+    def test_sin_enviar_no_manda_nada(self):
+        # main() en ensayo con la fuente nueva: ni HTTP ni registro.
+        _, docs = cargar_youtube_falso()
+        with unittest.mock.patch.object(indexar, 'cargar_youtube', return_value=docs), \
+                unittest.mock.patch.object(indexar, 'publicar_http') as publicar, \
+                redirect_stdout(io.StringIO()) as salida:
+            self.assertEqual(indexar.main(['--fuentes', 'youtube-ensenanza', '--registro',
+                                           self.registro]), 0)
+        publicar.assert_not_called()
+        self.assertFalse(os.path.exists(self.registro))
+        self.assertIn('ENSAYO: no se envio nada', salida.getvalue())
+
+    def test_la_lista_no_acepta_ids_de_afuera(self):
+        # 1) la linea de comandos no tiene ninguna opcion para pasar videos
+        for opcion in ('--videos', '--video', '--video-id', '--ids', '--url-video'):
+            with self.subTest(opcion=opcion), unittest.mock.patch('sys.stderr', io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    indexar.argumentos(['--fuentes', 'youtube-ensenanza', opcion, ID_RIQUEZA])
+        # 2) la funcion que arma la fuente no recibe ids: solo los dobles de bajar y limpiar
+        self.assertEqual(set(inspect.signature(indexar.cargar_youtube).parameters),
+                         {'bajar', 'limpiar'})
+        # 3) lo que se baja es exactamente la lista escrita a mano, nada mas
+        bajar, docs = cargar_youtube_falso()
+        with redirect_stdout(io.StringIO()):
+            indexar.planificar(docs, set(), set())
+        self.assertEqual(bajar.pedidos, [v for v, _ in indexar.VIDEOS_YOUTUBE_ENSENANZA])
+
+    # ---- el mecanismo, con una lista ficticia de varios videos ----
+
+    def test_un_video_sin_subtitulos_se_saltea_con_aviso_y_no_rompe_la_corrida(self):
+        bajar, docs = cargar_youtube_falso(LISTA_FICTICIA, BajarFalso(sin_subs=[ID_SIN_SUBS]))
+        salida = io.StringIO()
+        with redirect_stdout(salida):
+            plan = indexar.planificar(docs, set(), set())
+            indexar.imprimir_plan(plan, 900)
+        self.assertEqual([it['pendientes'] for it in plan], [[1, 2, 3], [1, 2, 3], []])
+        self.assertTrue(plan[2]['sin_transcripcion'])
+        self.assertIn('SIN TRANSCRIPCION', plan[2]['nota'])
+        texto = salida.getvalue()
+        self.assertIn('AVISO', texto)
+        self.assertIn(ID_SIN_SUBS, texto)
+        self.assertIn('No se inventa una transcripcion', texto)
+        # y lo demas se envia igual, sin tocar al video sin subtitulos
+        http = HttpFalso()
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(indexar.enviar_plan(plan, http, self.registro, 900), 6)
+        self.assertEqual({c['documentoId'] for c in http.cuerpos}, {ID_A, ID_B})
+
+    def test_un_subtitulo_vacio_tambien_se_saltea(self):
+        _, docs = cargar_youtube_falso(LISTA_FICTICIA, limpiar=lambda ruta: '   ')
+        with redirect_stdout(io.StringIO()):
+            plan = indexar.planificar(docs, set(), set())
+        self.assertEqual([it['pendientes'] for it in plan], [[], [], []])
+        self.assertTrue(all(it['sin_transcripcion'] for it in plan))
+
+    def test_lo_que_ya_esta_en_produccion_no_toca_youtube(self):
+        bajar, docs = cargar_youtube_falso(LISTA_FICTICIA)
+        with redirect_stdout(io.StringIO()):
+            plan = indexar.planificar(docs, {ID_A, ID_B, ID_SIN_SUBS}, set())
+        self.assertEqual(bajar.pedidos, [])
+        self.assertEqual([it['nota'] for it in plan], ['ya en produccion'] * 3)
+
+    def test_solo_listar_no_baja_nada(self):
+        bajar, docs = cargar_youtube_falso(LISTA_FICTICIA)
+        with redirect_stdout(io.StringIO()):
+            indexar.planificar(docs, set(), set(), solo_listar=True)
+        self.assertEqual(bajar.pedidos, [])
+
+    def test_es_idempotente_con_el_registro_y_con_el_salteo_por_parte(self):
+        _, docs = cargar_youtube_falso(LISTA_FICTICIA)
+        with redirect_stdout(io.StringIO()):
+            indexar.enviar_plan(indexar.planificar(docs, set(), set()), HttpFalso(), self.registro, 900)
+        _, docs = cargar_youtube_falso(LISTA_FICTICIA)
+        http = HttpFalso()
+        with redirect_stdout(io.StringIO()):
+            plan = indexar.planificar(docs, set(), indexar.leer_registro(self.registro))
+            self.assertEqual(indexar.enviar_plan(plan, http, self.registro, 900), 0)
+        self.assertEqual(http.cuerpos, [])
+        # a medias: consulta-indexados.sh anota la parte 2/3 y solo faltan la 1 y la 3
+        _, docs = cargar_youtube_falso(LISTA_FICTICIA)
+        with redirect_stdout(io.StringIO()):
+            plan = indexar.planificar(docs[:1], set(), {(ID_A, '2/3')})
+        self.assertEqual(plan[0]['pendientes'], [1, 3])
+
+    def test_un_error_de_envio_corta_en_el_acto(self):
+        _, docs = cargar_youtube_falso(LISTA_FICTICIA)
+        http = HttpFalso({2: (429, 'RESOURCE_EXHAUSTED')})
+        with redirect_stdout(io.StringIO()):
+            plan = indexar.planificar(docs, set(), set())
+            with self.assertRaises(indexar.CorteDeEnvio) as corte:
+                indexar.enviar_plan(plan, http, self.registro, 900)
+        self.assertEqual(len(http.cuerpos), 2)  # no siguio con la parte 3 ni con el video B
+        self.assertIn('Clase ficticia A', str(corte.exception))
+
+    def test_un_id_mal_formado_o_repetido_en_la_lista_corta(self):
+        for malo in ('', 'corto', 'https://youtu.be/44uFzhTFp0Y', '--version -h', 'a' * 12,
+                     '44uFzhTFp0Y; rm', None):
+            with self.subTest(id=malo), self.assertRaises(ValueError):
+                indexar.clasificar_videos([(malo, 'Titulo')])
+        with self.assertRaises(ValueError):
+            indexar.clasificar_videos([(ID_A, 'A'), (ID_A, 'B')])
+        # un id valido puede empezar con guion
+        self.assertEqual(indexar.clasificar_videos([(ID_CON_GUION, 'Ok')]),
+                         ([(ID_CON_GUION, 'Ok')], []))
+
+    def test_el_filtro_de_privacidad_de_titulos_tambien_corre_aqui(self):
+        videos = [('aaaaaaaaaaa', 'Testimonio de Ana - Mi proceso'),
+                  ('bbbbbbbbbbb', 'Sesión individual con Pedro'),
+                  ('ccccccccccc', 'Mentoría grupal 3'),
+                  ('ddddddddddd', 'Atención a una aprendiz'),
+                  ('eeeeeeeeeee', 'Entrevista a un alumno'),
+                  ('fffffffffff', 'Ficha de ingreso'),
+                  ('ggggggggggg', 'Crea riqueza en el 2025')]
+        incluidos, excluidos = indexar.clasificar_videos(videos)
+        self.assertEqual(incluidos, [('ggggggggggg', 'Crea riqueza en el 2025')])
+        self.assertEqual([v for v, _, _ in excluidos], [v for v, _ in videos[:6]])
+        self.assertIn('testimonio', excluidos[0][2])
+        self.assertIn('privado', excluidos[1][2])
+
+    def test_un_titulo_prohibido_de_la_lista_se_excluye_y_no_se_baja(self):
+        lista = [(ID_RIQUEZA, 'Crea riqueza en el 2025'), (ID_A, 'TESTIMONIO de Luis')]
+        bajar = BajarFalso()
+        salida = io.StringIO()
+        with unittest.mock.patch.object(indexar, 'VIDEOS_YOUTUBE_ENSENANZA', lista), \
+                redirect_stdout(salida):
+            docs = indexar.cargar_youtube(bajar=bajar, limpiar=limpiar_falso)
+            indexar.planificar(docs, set(), set())
+        self.assertEqual([d['documentoId'] for d in docs], [ID_RIQUEZA])
+        self.assertEqual(bajar.pedidos, [ID_RIQUEZA])
+        self.assertIn('excluido', salida.getvalue())
+        # --incluir-testimonios es solo de Drive: no abre esta puerta
+        self.assertEqual(indexar.argumentos(['--incluir-testimonios']).fuentes, indexar.FUENTES)
+        self.assertEqual(indexar.clasificar_videos([(ID_A, 'TESTIMONIO de Luis')])[0], [])
+
+    def test_sin_yt_dlp_corta_con_un_mensaje_claro(self):
+        bajar, docs = cargar_youtube_falso(bajar=BajarFalso(error=FileNotFoundError('yt-dlp')))
+        with self.assertRaises(SystemExit) as corte, redirect_stdout(io.StringIO()):
+            indexar.planificar(docs, set(), set())
+        self.assertIn('yt-dlp', str(corte.exception))
+
+    def test_con_el_limpiar_real_el_vtt_sale_en_prosa_sin_repeticiones(self):
+        import extraer_todo
+        bajar, docs = cargar_youtube_falso(limpiar=extraer_todo.limpiar)
+        with redirect_stdout(io.StringIO()):
+            plan = indexar.planificar(docs, set(), set())
+        self.assertEqual(plan[0]['doc']['texto'], 'hola a todos vamos a crear riqueza')
+        self.assertEqual(plan[0]['pendientes'], [1])
+
+    def test_importar_extraer_todo_no_lanza_la_extraccion_de_las_lecciones(self):
+        # Antes el modulo corria las 124 lecciones al importarse (y yt-dlp, si faltaba un json).
+        sys.modules.pop('extraer_todo', None)
+        salida = io.StringIO()
+        with redirect_stdout(salida), unittest.mock.patch('subprocess.run') as correr:
+            modulo = importlib.import_module('extraer_todo')
+        self.assertEqual(salida.getvalue(), '')
+        correr.assert_not_called()
+        self.assertEqual(modulo.id_de_youtube('https://youtu.be/' + ID_CON_GUION), ID_CON_GUION)
 
 
 class ConsultaDeProduccion(unittest.TestCase):

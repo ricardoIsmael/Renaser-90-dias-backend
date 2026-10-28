@@ -15753,3 +15753,13 @@ para una semana pasada.
 **Cómo evitar que vuelva a pasar.** `ExpoPushTransporteVencimientoTest` fija el cuerpo exacto con y sin `venceEn` (y que son segundos, no milisegundos); `AvisoHabitoNotificationListenerTest` y `RecordatorioEventoNotificationListenerTest` fijan qué instante lleva cada aviso; `AvisoDeHabitoTest`/`AvisoDeEventoTest` fijan que `venceEn` y `yaNoSirve` coinciden. Con el transporte sin `expiration` o con un listener que pase `null`, esas pruebas fallan (verificado a mano mutando las dos líneas). Regla general: **un aviso que el servidor descarta por vencido tiene que llegar al proveedor ya con su caducidad**; un push nuevo «a una hora» pasa `venceEn` o dice por qué no.
 
 **Queda a la vista.** (a) Web Push sigue sin caducar: su TTL es relativo y `WebPushAdapter` no tiene el `Clock`; el navegador conserva el TTL de 28 días de la librería. (b) Expo documenta `expiration` como «timestamp since the Unix epoch» sin nombrar la unidad; se usan segundos, como el resto de la API (`ttl`). (c) A una app detenida a la fuerza Android no le entrega nada, con ninguna prioridad ni caducidad (E-394, E-405). (d) La parte de la app, para las alarmas locales atrasadas, es el issue #40 del frontend.
+
+## E-646 · `import extraer_todo` lanzaba la extracción de las 124 lecciones (scripts de indexación, 28/10)
+
+**Síntoma literal.** Al preparar `indexar.py` para importar `bajar` y `limpiar` de `extraer_todo.py` (D-285), la prueba de importación contra el código anterior imprimía `Lecciones a procesar: 124` y el resumen de la extracción (`Sin subtitulos/caidos: 0`, `URL no parseable  : 0`), sin que nadie la hubiera pedido.
+
+**Causa real.** El módulo ejecutaba todo su cuerpo al importarse: leía `lecciones.tsv` y recorría las 124 lecciones a nivel de módulo, sin `if __name__ == '__main__'`. Con todos los `.json` ya hechos solo imprimía; con uno faltante habría lanzado `yt-dlp` contra YouTube desde cualquier import (también desde las pruebas).
+
+**Solución.** El cuerpo pasó a `main()` bajo `if __name__ == '__main__'`; `bajar`, `limpiar` e `id_de_youtube` se pueden importar sin efectos (solo se crean las carpetas `transcripciones/salida` y `vtt`). Ejecutarlo como script hace lo mismo que antes.
+
+**Cómo evitar que vuelva a pasar.** `test_importar_extraer_todo_no_lanza_la_extraccion_de_las_lecciones` (`scripts/sparkie-indexacion/test_indexar.py`) importa el módulo con `subprocess.run` interceptado y exige cero salida; falla contra el código anterior. Regla para los scripts de esta carpeta: nada de trabajo a nivel de módulo. (`limpiar_vtt.py` también procesa `sys.argv` al importarse: no se importa, solo se ejecuta.)
