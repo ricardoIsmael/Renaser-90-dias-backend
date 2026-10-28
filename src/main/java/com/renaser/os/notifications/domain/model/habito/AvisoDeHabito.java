@@ -90,15 +90,21 @@ public record AvisoDeHabito(String tipoAviso, String tituloHabito, long minutosQ
      * criterio que {@code AvisoDeEvento.yaNoSirve} y que la franja de {@code CalculadoraAvisosHabito}).
      */
     public boolean yaNoSirve(Instant ahora) {
-        return !ahora.isBefore(momento());
+        return !ahora.isBefore(venceEn());
     }
 
     /**
-     * El momento del evento si viene; si no (evento viejo), el de la emision mas lo que faltaba, truncado
+     * El instante desde el cual este aviso ya no sirve: la hora del habito (inicio) o el plazo de entrega
+     * (por vencer). Es el mismo que usa {@link #yaNoSirve}, expuesto para que el push lo lleve como caducidad
+     * (E-645, issue #22): sin ella el proveedor (FCM) retiene el mensaje hasta 4 semanas y lo entrega tarde,
+     * cuando el servidor ya sabia que no habia que mandarlo. Una sola fuente: lo que el servidor descarta y lo
+     * que el proveedor descarta no pueden diferir.
+     *
+     * <p>El momento del evento si viene; si no (evento viejo), el de la emision mas lo que faltaba, truncado
      * al minuto: las horas de los habitos son {@code HH:mm} exactas, y los segundos de la emision no son
      * parte de la hora del habito.
      */
-    private Instant momento() {
+    public Instant venceEn() {
         if (momentoAvisado != null) {
             return momentoAvisado;
         }

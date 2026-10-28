@@ -364,13 +364,37 @@ Renaser y al arranque guiado); Web Push en `data.url` (ver «Web» abajo).
 ella Android lo entrega en lote y tarde con el teléfono en reposo (E-405). Llega con la app deslizada desde
 recientes en un Android estándar; a una app **detenida a la fuerza** no le llega nada, con ninguna prioridad.
 
+**Caduca a su hora (2026-10-28, E-645, issue #22).** El push de un aviso «a una hora» lleva `"expiration"`
+(timestamp Unix, en **segundos**) en el cuerpo de Expo: pasado ese instante FCM/APNs lo descartan si no lo
+entregaron. Antes no llevaba `expiration` ni `ttl` y el proveedor lo retenía hasta 4 semanas: con el teléfono sin
+red o en reposo, «GIMNASIO: te toca a las 07:00» llegó pasadas las 8 (28/10). Qué caduca y cuándo:
+
+| Aviso | `venceEn` | De dónde sale |
+|---|---|---|
+| Hábito, inicio | La hora del hábito | `AvisoDeHabito.venceEn()` (el `momento()` que ya decidía `yaNoSirve`) |
+| Hábito, por vencer | El plazo de entrega | Igual |
+| Recordatorio de evento | El inicio de la ocurrencia | `AvisoDeEvento.venceEn()` (el `inicio` que ya decidía `yaNoSirve`) |
+| Anuncio de evento nuevo | — (no caduca) | Se manda aunque el evento ya haya empezado |
+| Chat, logros, avisos manuales, todo lo demás | — (no caduca) | Su cuerpo JSON es el de siempre |
+
+Una sola fuente por dominio: lo que el servidor descarta antes de emitir y lo que el proveedor descarta después
+son el mismo instante. El instante viaja por `MensajePush.venceEn` (opcional, `null` = no caduca) y por una
+sobrecarga más de `EmitirNotificacionUseCase.emitir(comando, entregaPush, etiqueta, venceEn)`, no por
+`EmitirNotificacionCommand` (veintitantos llamadores), igual que la etiqueta de la spec 007. `ExpoPushTransporte`
+manda `expiration` y no `ttl` (si se mandaran los dos, `ttl` gana). **Web Push no caduca todavía**: su TTL es
+relativo (segundos desde ahora) y `WebPushAdapter` no tiene el `Clock`; el navegador sigue con el TTL de 28 días
+de la librería. Queda a la vista, no resuelto.
+
 **Web (D-218).** El service worker le manda `{tipo: 'renaser-abrir-aviso', ruta}` a la ventana abierta, o
 abre una nueva en la ruta; la app abre lo mismo que en el teléfono (E-407).
 
 Pruebas: `EntregaPushTest` (reloj a las 02:00 UTC), `TokenPushTest` (borde de 26 h, cambio de dueño),
 `NotificacionServiceTest` (el teléfono sin confirmar recibe, el confirmado no), `TokenPushServiceTest`,
 `TokenPushControllerTest` (200/400/404/403 y suspendida), `TokenPushPersistenceAdapterTest`,
-`AvisoHabitoNotificationListenerTest` (rutas), `ExpoPushTransporteCanalTest` (ruta con `?`).
+`AvisoHabitoNotificationListenerTest` (rutas y caducidad), `ExpoPushTransporteCanalTest` (ruta con `?`),
+`ExpoPushTransporteVencimientoTest` (`expiration` con y sin `venceEn`, en segundos, ejemplo exacto),
+`AvisoDeHabitoTest` / `AvisoDeEventoTest` (`venceEn`), `RecordatorioEventoNotificationListenerTest` (el
+recordatorio caduca al inicio, el anuncio no) y `NotificacionServiceTest` (el `MensajePush` lleva el `venceEn`).
 
 ### 10.3 Canal de Android del push de Expo (D-188, E-9)
 

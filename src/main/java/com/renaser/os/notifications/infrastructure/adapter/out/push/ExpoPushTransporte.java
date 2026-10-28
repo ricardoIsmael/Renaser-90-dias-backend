@@ -16,6 +16,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Locale;
 import java.util.Optional;
 
@@ -154,6 +155,17 @@ class ExpoPushTransporte implements TransportePush {
      * que no cambia: a una app DETENIDA A LA FUERZA Android no le entrega nada, con ninguna prioridad.
      * Va para todo tipo: todos los push de Renaser son avisos que la persona tiene que ver, no
      * sincronizaciones en segundo plano (el mal uso de {@code high} que Android penaliza).
+     *
+     * <p><b>{@code expiration} cuando el aviso es «a una hora» (E-645, issue #22).</b> Sin ese campo ni {@code ttl},
+     * el proveedor guarda el mensaje (FCM, hasta 4 semanas) y lo entrega cuando el teléfono recupera la red o sale
+     * del reposo: el 28/10 un «GIMNASIO: te toca a las 07:00» llegó pasadas las 8, aunque el servidor lo había
+     * mandado antes de las 07:00 y ya descarta lo que pasó ({@code AvisoDeHabito.yaNoSirve}). Con
+     * {@link MensajePush#venceEn()} el cuerpo suma {@code "expiration"}: el timestamp Unix, en segundos, en que el
+     * proveedor debe descartarlo si todavía no lo entregó. Se usa {@code expiration} y no {@code ttl} porque el
+     * momento del aviso es un instante absoluto y el cuerpo puede armarse en otro instante (reintentos del
+     * despachador); {@code ttl} tendría que recalcularse en cada intento y, si se mandara, mandaría sobre
+     * {@code expiration}. Sin {@code venceEn} (chat, logros, avisos manuales) el cuerpo es EXACTAMENTE el de
+     * antes: ninguno de esos avisos caduca.
      */
     String cuerpoJson(TokenPush token, MensajePush mensaje) {
         StringBuilder json = new StringBuilder(256);
@@ -162,6 +174,7 @@ class ExpoPushTransporte implements TransportePush {
                 .append(",\"body\":").append(comillas(mensaje.cuerpo()))
                 .append(",\"sound\":\"default\"")
                 .append(",\"priority\":\"high\"");
+        expiracionDe(mensaje).ifPresent(segundos -> json.append(",\"expiration\":").append(segundos));
         canalDe(token, mensaje).ifPresent(canal -> json.append(",\"channelId\":").append(comillas(canal)));
         // D-221: los avisos de un mismo chat se reemplazan (Android, `tag`) y se agrupan (iOS, `threadId`).
         mensaje.etiqueta().ifPresent(etiqueta -> json.append(",\"tag\":").append(comillas(etiqueta))
@@ -171,6 +184,11 @@ class ExpoPushTransporte implements TransportePush {
             json.append(",\"data\":{\"route\":").append(comillas(rutaApp)).append("}");
         }
         return json.append('}').toString();
+    }
+
+    /** El timestamp Unix, en segundos, que pide Expo; vacío si el aviso no caduca. */
+    private static Optional<Long> expiracionDe(MensajePush mensaje) {
+        return Optional.ofNullable(mensaje.venceEn()).map(Instant::getEpochSecond);
     }
 
     private Optional<String> canalDe(TokenPush token, MensajePush mensaje) {

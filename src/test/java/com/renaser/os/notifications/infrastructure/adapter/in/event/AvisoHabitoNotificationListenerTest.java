@@ -74,14 +74,66 @@ class AvisoHabitoNotificationListenerTest {
 
     private EmitirNotificacionCommand comandoEmitido() {
         ArgumentCaptor<EmitirNotificacionCommand> captor = ArgumentCaptor.forClass(EmitirNotificacionCommand.class);
-        verify(emitirNotificacionUseCase).emitir(captor.capture(), any(), any());
+        verify(emitirNotificacionUseCase).emitir(captor.capture(), any(), any(), any());
         return captor.getValue();
     }
 
     private String etiquetaEmitida() {
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-        verify(emitirNotificacionUseCase).emitir(any(), any(), captor.capture());
+        verify(emitirNotificacionUseCase).emitir(any(), any(), captor.capture(), any());
         return captor.getValue();
+    }
+
+    private Instant venceEnEmitido() {
+        ArgumentCaptor<Instant> captor = ArgumentCaptor.forClass(Instant.class);
+        verify(emitirNotificacionUseCase).emitir(any(), any(), any(), captor.capture());
+        return captor.getValue();
+    }
+
+    @Test
+    @DisplayName("E-645: el push de inicio caduca a la hora del habito (21:00 de Lima = 02:00 UTC del dia siguiente)")
+    void inicioCaducaALaHoraDelHabito() {
+        listener().on(aviso("INICIO", true, 10));
+
+        assertThat(venceEnEmitido()).isEqualTo(A_LAS_21_EN_LIMA);
+    }
+
+    @Test
+    @DisplayName("E-645: el de vencimiento caduca en el plazo de entrega que manda `habits`, no en la hora del habito")
+    void vencimientoCaducaEnElPlazo() {
+        Instant plazo = Instant.parse("2026-09-06T03:30:00Z");     // 22:30 en Lima
+        listener().on(new AvisoHabitoDebidoEvent(UUID.randomUUID(), UserId.of(UUID.randomUUID()), "Meditar",
+                "POR_VENCER", 10, 10, UUID.randomUUID(), true, 30, EMITIDO, HABITO, "BODY", plazo, "America/Lima",
+                null));
+
+        assertThat(venceEnEmitido()).isEqualTo(plazo);
+    }
+
+    @Test
+    @DisplayName("E-645: con el esquema por dia caduca igual: la hora del aviso de ese dia")
+    void inicioPorDiaCaducaALaHoraDelAviso() {
+        listener().on(avisoDelDia("INICIO", 6));
+
+        assertThat(venceEnEmitido()).isEqualTo(A_LAS_21_EN_LIMA);
+    }
+
+    @Test
+    @DisplayName("E-645: un evento anterior a la spec 007 (sin momento) caduca en lo que faltaba, truncado al minuto")
+    void eventoViejoCaducaEnLoQueFaltaba() {
+        listener().on(avisoViejo("INICIO"));
+
+        assertThat(venceEnEmitido()).isEqualTo(A_LAS_21_EN_LIMA);
+    }
+
+    @Test
+    @DisplayName("E-645: el instante de caducidad es el mismo con el que se decide si el aviso todavia sirve")
+    void elUltimoInstanteQueSirveEsElQueCaduca() {
+        // Un segundo antes de las 21:00 el aviso sale, y sale con caducidad a las 21:00: el proveedor no lo
+        // entrega ni un instante despues de la hora que el aviso dice.
+        new AvisoHabitoNotificationListener(emitirNotificacionUseCase,
+                FixedClock.at(A_LAS_21_EN_LIMA.minusSeconds(1))).on(aviso("INICIO", true, 10));
+
+        assertThat(venceEnEmitido()).isEqualTo(A_LAS_21_EN_LIMA);
     }
 
     @Test
@@ -114,7 +166,7 @@ class AvisoHabitoNotificationListenerTest {
         listener().on(aviso("INICIO", false, null));
 
         ArgumentCaptor<EmitirNotificacionCommand> captor = ArgumentCaptor.forClass(EmitirNotificacionCommand.class);
-        verify(emitirNotificacionUseCase).emitir(captor.capture(), eq(EntregaPush.NINGUNO), any());
+        verify(emitirNotificacionUseCase).emitir(captor.capture(), eq(EntregaPush.NINGUNO), any(), any());
         assertThat(captor.getValue().tipo()).isEqualTo(TipoNotificacion.RECORDATORIO_HABITO);
     }
 
@@ -123,7 +175,7 @@ class AvisoHabitoNotificationListenerTest {
     void inicioConAlarmaLocal() {
         listener().on(aviso("INICIO", true, 30));
 
-        verify(emitirNotificacionUseCase).emitir(any(), eq(EntregaPush.RESPALDO_DE_ALARMA_LOCAL), any());
+        verify(emitirNotificacionUseCase).emitir(any(), eq(EntregaPush.RESPALDO_DE_ALARMA_LOCAL), any(), any());
     }
 
     @Test
@@ -131,7 +183,7 @@ class AvisoHabitoNotificationListenerTest {
     void vencimientoATodos() {
         listener().on(aviso("POR_VENCER", true, 30));
 
-        verify(emitirNotificacionUseCase).emitir(any(), eq(EntregaPush.TODOS), any());
+        verify(emitirNotificacionUseCase).emitir(any(), eq(EntregaPush.TODOS), any(), any());
     }
 
     @Test
