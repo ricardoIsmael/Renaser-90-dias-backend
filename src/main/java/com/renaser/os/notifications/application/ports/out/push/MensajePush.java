@@ -3,6 +3,7 @@ package com.renaser.os.notifications.application.ports.out.push;
 import com.renaser.os.notifications.domain.model.notificacion.EtiquetaDelAviso;
 import com.renaser.os.notifications.domain.model.notificacion.TipoNotificacion;
 
+import java.time.Instant;
 import java.util.Optional;
 
 /**
@@ -22,13 +23,26 @@ import java.util.Optional;
  *                esa etiqueta no se puede deducir de la ruta ({@code /habitos/{id}?dimension=…} no dice si es
  *                el aviso de inicio o el de vencimiento). Viaja por aquí y no por {@code
  *                EmitirNotificacionCommand}, que tiene veintitantos llamadores y un único constructor.
+ * @param venceEn el instante después del cual el aviso ya no tiene sentido, o {@code null} si no caduca. Existe
+ *                desde E-645 (issue #22): el servidor ya no manda un aviso cuyo momento pasó
+ *                ({@code AvisoDeHabito.yaNoSirve}, {@code AvisoDeEvento.yaNoSirve}), pero el proveedor del push
+ *                (FCM, hasta 4 semanas) lo guarda y lo entrega cuando el teléfono recupera la red o sale del
+ *                reposo: «te toca a las 07:00» llegaba pasadas las 8. Con este instante el transporte le dice al
+ *                proveedor cuándo descartarlo. Solo lo ponen los avisos que son «a una hora» (hábitos y
+ *                recordatorios de evento); chat, logros y avisos manuales van con {@code null} y no cambian.
+ *                Viaja por aquí, igual que la etiqueta, y no por {@code EmitirNotificacionCommand}.
  */
 public record MensajePush(TipoNotificacion tipo, String titulo, String cuerpo, String rutaApp,
-                          String etiquetaPropia) {
+                          String etiquetaPropia, Instant venceEn) {
 
     /** Un aviso sin etiqueta propia: la de chat se sigue derivando de la ruta (D-221) y el resto no lleva. */
     public MensajePush(TipoNotificacion tipo, String titulo, String cuerpo, String rutaApp) {
-        this(tipo, titulo, cuerpo, rutaApp, null);
+        this(tipo, titulo, cuerpo, rutaApp, null, null);
+    }
+
+    /** Un aviso que no caduca (todos los de antes de E-645), con o sin etiqueta propia. */
+    public MensajePush(TipoNotificacion tipo, String titulo, String cuerpo, String rutaApp, String etiquetaPropia) {
+        this(tipo, titulo, cuerpo, rutaApp, etiquetaPropia, null);
     }
 
     /**

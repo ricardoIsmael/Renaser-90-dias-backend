@@ -543,4 +543,80 @@ class NotificacionServiceTest {
         assertThat(resultado).isEmpty();
         verify(pushPort, never()).enviar(anyList(), any());
     }
+
+    // ─── E-645, issue #22: el push caduca a su hora, y eso viaja aparte del comando ───────────
+
+    private static final Instant A_LAS_07_EN_LIMA = Instant.parse("2026-08-24T12:00:00Z");
+
+    @Test
+    @DisplayName("E-645: el instante de caducidad de un aviso de habito llega al MensajePush (no va en el comando)")
+    void elVencimientoDelAvisoLlegaAlPush() {
+        UserId usuario = usuario();
+        when(loadPreferenciasPort.habilitadaPara(usuario, TipoNotificacion.RECORDATORIO_HABITO))
+                .thenReturn(Optional.empty());
+        TokenPush android = token(usuario, PlataformaPush.ANDROID);
+        when(loadTokenPushPort.tokensDe(usuario)).thenReturn(List.of(android));
+        when(pushPort.enviar(anyList(), any())).thenReturn(List.of());
+
+        service.emitir(new EmitirNotificacionCommand(usuario, TipoNotificacion.RECORDATORIO_HABITO, "T", "C",
+                "/habitos/66507383-7219-43ab-aa42-2fbc76152b82?dimension=BODY", null), EntregaPush.TODOS,
+                ETIQUETA_DE_HABITO, A_LAS_07_EN_LIMA);
+
+        verify(pushPort).enviar(eq(List.of(android)), eq(new MensajePush(TipoNotificacion.RECORDATORIO_HABITO,
+                "T", "C", "/habitos/66507383-7219-43ab-aa42-2fbc76152b82?dimension=BODY", ETIQUETA_DE_HABITO,
+                A_LAS_07_EN_LIMA)));
+    }
+
+    @Test
+    @DisplayName("E-645: el vencimiento tambien viaja sin etiqueta propia (el recordatorio de un evento no tiene)")
+    void elVencimientoViajaSinEtiqueta() {
+        UserId usuario = usuario();
+        when(loadPreferenciasPort.habilitadaPara(usuario, TipoNotificacion.RECORDATORIO_EVENTO))
+                .thenReturn(Optional.empty());
+        TokenPush android = token(usuario, PlataformaPush.ANDROID);
+        when(loadTokenPushPort.tokensDe(usuario)).thenReturn(List.of(android));
+        when(pushPort.enviar(anyList(), any())).thenReturn(List.of());
+
+        service.emitir(new EmitirNotificacionCommand(usuario, TipoNotificacion.RECORDATORIO_EVENTO, "T", "C",
+                "/eventos/abc", null), EntregaPush.TODOS, null, A_LAS_07_EN_LIMA);
+
+        verify(pushPort).enviar(eq(List.of(android)), eq(new MensajePush(TipoNotificacion.RECORDATORIO_EVENTO,
+                "T", "C", "/eventos/abc", null, A_LAS_07_EN_LIMA)));
+    }
+
+    @Test
+    @DisplayName("E-645: las sobrecargas de siempre emiten un mensaje que no caduca (chat, logros y avisos manuales)")
+    void lasSobrecargasDeSiempreNoCaducan() {
+        UserId usuario = usuario();
+        when(loadPreferenciasPort.habilitadaPara(usuario, TipoNotificacion.MENSAJE_CHAT))
+                .thenReturn(Optional.empty());
+        TokenPush android = token(usuario, PlataformaPush.ANDROID);
+        when(loadTokenPushPort.tokensDe(usuario)).thenReturn(List.of(android));
+        when(pushPort.enviar(anyList(), any())).thenReturn(List.of());
+        var comando = new EmitirNotificacionCommand(usuario, TipoNotificacion.MENSAJE_CHAT, "T", "C", "/chat/abc",
+                null);
+
+        service.emitir(comando);
+        service.emitir(comando, EntregaPush.TODOS);
+        service.emitir(comando, EntregaPush.TODOS, ETIQUETA_DE_HABITO);
+
+        org.mockito.ArgumentCaptor<MensajePush> captor = org.mockito.ArgumentCaptor.forClass(MensajePush.class);
+        verify(pushPort, org.mockito.Mockito.times(3)).enviar(anyList(), captor.capture());
+        assertThat(captor.getAllValues()).allSatisfy(mensaje -> assertThat(mensaje.venceEn()).isNull());
+    }
+
+    @Test
+    @DisplayName("E-645: con EntregaPush.NINGUNO el vencimiento no revive el push, solo se guarda la bandeja")
+    void elVencimientoNoReviveElPushApagado() {
+        UserId usuario = usuario();
+        when(loadPreferenciasPort.habilitadaPara(usuario, TipoNotificacion.RECORDATORIO_HABITO))
+                .thenReturn(Optional.empty());
+
+        Optional<Notificacion> emitida = service.emitir(new EmitirNotificacionCommand(usuario,
+                TipoNotificacion.RECORDATORIO_HABITO, "T", "C", null, null), EntregaPush.NINGUNO,
+                ETIQUETA_DE_HABITO, A_LAS_07_EN_LIMA);
+
+        assertThat(emitida).isPresent();
+        verify(pushPort, never()).enviar(anyList(), any());
+    }
 }

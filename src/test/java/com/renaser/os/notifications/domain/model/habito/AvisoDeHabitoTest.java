@@ -168,4 +168,36 @@ class AvisoDeHabitoTest {
 
         assertThat(aviso.yaNoSirve(Instant.parse("2026-09-06T02:05:00Z"))).isFalse();
     }
+
+    // ─── Cuando caduca el push (E-645, issue #22) ──────────────────────────────────────────
+
+    @Test
+    @DisplayName("E-645: el aviso de inicio vence a la hora del habito (21:00 de Lima = 02:00 UTC del dia siguiente)")
+    void venceEnLaHoraDelInicio() {
+        assertThat(inicio(A_LAS_21_EN_LIMA, LIMA).venceEn()).isEqualTo(A_LAS_21_EN_LIMA);
+    }
+
+    @Test
+    @DisplayName("E-645: el de por vencer vence en el plazo de entrega, no en la hora del habito")
+    void venceEnElPlazoDeEntrega() {
+        assertThat(porVencer(A_LAS_22_30_EN_LIMA, LIMA).venceEn()).isEqualTo(A_LAS_22_30_EN_LIMA);
+    }
+
+    @Test
+    @DisplayName("E-645: un evento viejo (sin momento) vence en la emision mas lo que faltaba, truncado al minuto")
+    void venceEnSinMomento() {
+        AvisoDeHabito viejo = new AvisoDeHabito("INICIO", "Meditación nocturna", 10, 10, HABITO,
+                Instant.parse("2026-09-06T01:50:20Z"), null, null, null);
+
+        assertThat(viejo.venceEn()).isEqualTo(Instant.parse("2026-09-06T02:00:00Z"));
+    }
+
+    @Test
+    @DisplayName("E-645: una sola fuente, lo que el servidor descarta y lo que el proveedor descarta no difieren")
+    void yaNoSirveYVenceEnCoinciden() {
+        AvisoDeHabito aviso = inicio(A_LAS_21_EN_LIMA, LIMA);
+
+        assertThat(aviso.yaNoSirve(aviso.venceEn().minusSeconds(1))).isFalse();
+        assertThat(aviso.yaNoSirve(aviso.venceEn())).isTrue();
+    }
 }
