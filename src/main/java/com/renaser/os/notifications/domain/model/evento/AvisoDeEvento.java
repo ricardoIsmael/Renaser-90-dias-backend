@@ -73,6 +73,17 @@ public record AvisoDeEvento(long recordatorioId, UUID eventoId, String tituloEve
         return !esAnuncio && !ahora.isBefore(inicio);
     }
 
+    /**
+     * Desde cuando el push de este aviso ya no sirve: el inicio de la ocurrencia, el mismo instante que usa
+     * {@link #yaNoSirve}. Va al push como caducidad (E-645, issue #22) para que el proveedor no lo entregue
+     * tarde, cuando el teléfono recupere la red, diciendo «empieza en 10 min» de algo que ya empezó.
+     * {@code null} en el anuncio de un evento nuevo: ese no pierde sentido porque empiece el evento, se
+     * manda igual aunque ya haya empezado (ver {@link #yaNoSirve}) y no caduca.
+     */
+    public Instant venceEn() {
+        return esAnuncio ? null : inicio;
+    }
+
     public String titulo() {
         return esAnuncio ? "Nuevo evento: " + tituloEvento : tituloEvento;
     }

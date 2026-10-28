@@ -57,6 +57,11 @@ import java.nio.charset.StandardCharsets;
  *
  * <p><b>Spec 008 (R6).</b> Si el habito usa el esquema de alarmas por dia, el push de inicio lleva la etiqueta
  * {@code habito-{id}-d{iso}-0} de ese dia, la misma de la alarma local, y no {@code -inicio}.
+ *
+ * <p><b>El push caduca a su hora (E-645, issue #22).</b> Descartar aca lo que ya paso no alcanzaba: el aviso
+ * que SI sale (entre 15 min antes y la hora) el proveedor lo retenia hasta 4 semanas si el telefono estaba
+ * sin red o en reposo, y lo entregaba pasada la hora. Ahora el push lleva {@link AvisoDeHabito#venceEn()}, el
+ * mismo instante con el que se decide arriba si el aviso todavia sirve.
  */
 @Component
 class AvisoHabitoNotificationListener {
@@ -84,7 +89,7 @@ class AvisoHabitoNotificationListener {
                 event.claveEvento()),
                 EntregaDelAvisoDeHabito.para(event.tipoAviso(), event.recordatorioActivo(),
                         event.minutosRecordatorio()),
-                aviso.etiqueta());
+                aviso.etiqueta(), aviso.venceEn());
     }
 
     private static AvisoDeHabito avisoDe(AvisoHabitoDebidoEvent event) {

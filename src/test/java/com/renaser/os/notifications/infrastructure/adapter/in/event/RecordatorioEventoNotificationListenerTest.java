@@ -5,6 +5,7 @@ import com.renaser.os.notifications.application.ports.out.notificacion.LoadNotif
 import com.renaser.os.notifications.application.ports.out.notificacion.SaveNotificacionPort;
 import com.renaser.os.notifications.application.ports.out.preferencia.LoadPreferenciasPort;
 import com.renaser.os.notifications.application.ports.out.push.DesactivarTokenPushPort;
+import com.renaser.os.notifications.application.ports.out.push.MensajePush;
 import com.renaser.os.notifications.application.ports.out.push.PushPort;
 import com.renaser.os.notifications.application.ports.out.tokenpush.LoadTokenPushPort;
 import com.renaser.os.notifications.application.services.AlarmaLocalService;
@@ -25,6 +26,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -148,6 +150,40 @@ class RecordatorioEventoNotificationListenerTest {
         assertThat(fila.titulo()).isEqualTo("Mentoria");
         assertThat(fila.cuerpo()).isEqualTo("Empieza en 10 min, a las 19:30.");
         verify(pushPort, times(1)).enviar(anyList(), any());
+    }
+
+    private MensajePush mensajeEmpujado() {
+        ArgumentCaptor<MensajePush> captor = ArgumentCaptor.forClass(MensajePush.class);
+        verify(pushPort).enviar(anyList(), captor.capture());
+        return captor.getValue();
+    }
+
+    @Test
+    @DisplayName("E-645: el push de un recordatorio caduca al inicio de la ocurrencia, para que FCM no lo entregue tarde")
+    void elRecordatorioCaducaAlInicio() {
+        listener.on(recordatorio(10L, aprendiz));
+
+        assertThat(mensajeEmpujado().venceEn()).isEqualTo(INICIO);
+    }
+
+    @Test
+    @DisplayName("E-645: el anuncio de un evento nuevo no caduca: no pierde sentido porque empiece el evento")
+    void elAnuncioNoCaduca() {
+        listener.on(new RecordatorioEventoDebidoEvent(12L, EVENTO, aprendiz, INICIO, "Mentoria", true, false,
+                "America/Lima", AHORA));
+
+        assertThat(mensajeEmpujado().venceEn()).isNull();
+    }
+
+    @Test
+    @DisplayName("E-645: el recordatorio sigue sin etiqueta propia y a todos los dispositivos, como antes")
+    void elRecordatorioNoCambiaLoDemas() {
+        listener.on(recordatorio(10L, aprendiz));
+
+        MensajePush mensaje = mensajeEmpujado();
+        assertThat(mensaje.etiquetaPropia()).isNull();
+        assertThat(mensaje.tipo()).isEqualTo(TipoNotificacion.RECORDATORIO_EVENTO);
+        assertThat(mensaje.rutaApp()).isEqualTo("/eventos/" + EVENTO);
     }
 
     @Test

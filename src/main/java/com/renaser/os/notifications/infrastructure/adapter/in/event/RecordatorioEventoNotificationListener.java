@@ -5,6 +5,7 @@ import com.renaser.os.notifications.application.ports.in.alarmalocal.ConsultarAl
 import com.renaser.os.notifications.application.ports.in.notificacion.EmitirNotificacionUseCase;
 import com.renaser.os.notifications.application.ports.in.notificacion.EmitirNotificacionUseCase.EmitirNotificacionCommand;
 import com.renaser.os.notifications.domain.model.evento.AvisoDeEvento;
+import com.renaser.os.notifications.domain.model.notificacion.EntregaPush;
 import com.renaser.os.notifications.domain.model.notificacion.TipoNotificacion;
 import com.renaser.os.shared.domain.Clock;
 import org.slf4j.Logger;
@@ -46,6 +47,10 @@ import java.time.ZoneId;
  * programa nada: hasta el 2026-09-26 {@code calendar} apagaba los avisos al confirmar y quien
  * respondia desde el navegador se quedaba sin ninguno. Ahora el aviso se descarta aca, solo si la
  * persona dijo "Voy" Y tiene al menos un token de Android/iOS en este momento.
+ *
+ * <p><b>El push caduca al inicio (E-645, issue #22).</b> El recordatorio lleva {@link AvisoDeEvento#venceEn()}
+ * (el inicio de la ocurrencia) para que el proveedor no lo entregue tarde si el telefono estaba sin red o en
+ * reposo. El anuncio de un evento nuevo no caduca.
  */
 @Component
 class RecordatorioEventoNotificationListener {
@@ -81,6 +86,6 @@ class RecordatorioEventoNotificationListener {
         }
         emitirNotificacionUseCase.emitir(new EmitirNotificacionCommand(event.destinatarioId(),
                 TipoNotificacion.RECORDATORIO_EVENTO, aviso.titulo(), aviso.cuerpo(ahora), aviso.rutaApp(),
-                aviso.claveDeduplicacion()));
+                aviso.claveDeduplicacion()), EntregaPush.TODOS, null, aviso.venceEn());
     }
 }

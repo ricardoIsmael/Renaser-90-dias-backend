@@ -8,6 +8,7 @@ import com.renaser.os.shared.domain.UserId;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -55,6 +56,20 @@ public interface EmitirNotificacionUseCase {
      * (la de chat se deriva de la ruta, D-221).
      */
     Optional<Notificacion> emitir(EmitirNotificacionCommand command, EntregaPush entregaPush, String etiquetaDelPush);
+
+    /**
+     * Igual que {@link #emitir(EmitirNotificacionCommand, EntregaPush, String)}, ademas con el instante en que
+     * el aviso deja de tener sentido (E-645, issue #22): el push lleva esa caducidad para que el proveedor
+     * (FCM guarda un mensaje sin caducidad hasta 4 semanas) NO lo entregue tarde cuando el telefono recupere la
+     * red o salga del reposo. «Te toca a las 07:00» llegaba pasadas las 8.
+     *
+     * <p>La usan los avisos que son «a una hora»: un habito (su hora, o su plazo si es de vencimiento) y un
+     * recordatorio de evento (su inicio). Va como argumento y no como campo del comando por lo mismo que la
+     * etiqueta. Solo afecta al push: bandeja, preferencia y deduplicacion no cambian. {@code null} = no caduca
+     * (chat, logros y avisos manuales, como siempre).
+     */
+    Optional<Notificacion> emitir(EmitirNotificacionCommand command, EntregaPush entregaPush, String etiquetaDelPush,
+                                  Instant venceEn);
 
     record EmitirNotificacionCommand(@NotNull UserId usuarioId, @NotNull TipoNotificacion tipo,
                                       @NotBlank String titulo, @NotBlank String cuerpo, String rutaApp,

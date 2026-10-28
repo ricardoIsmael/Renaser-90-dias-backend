@@ -93,4 +93,24 @@ class AvisoDeEventoTest {
         assertThat(a.claveDeduplicacion()).isNotEqualTo(otraFila.claveDeduplicacion());
         assertThat(a.rutaApp()).isEqualTo("/eventos/" + EVENTO);
     }
+
+    @Test
+    @DisplayName("E-645: el push de un recordatorio vence al inicio de la ocurrencia, el mismo instante de yaNoSirve")
+    void elRecordatorioVenceAlInicio() {
+        Instant inicio = Instant.parse("2026-09-29T00:30:00Z");   // 19:30 del 28 en Lima
+        AvisoDeEvento aviso = recordatorio(inicio);
+
+        assertThat(aviso.venceEn()).isEqualTo(inicio);
+        assertThat(aviso.yaNoSirve(aviso.venceEn().minusSeconds(1))).isFalse();
+        assertThat(aviso.yaNoSirve(aviso.venceEn())).isTrue();
+    }
+
+    @Test
+    @DisplayName("E-645: el anuncio de un evento nuevo no caduca: se manda aunque el evento ya haya empezado")
+    void elAnuncioNoVence() {
+        Instant inicio = Instant.parse("2026-09-29T00:30:00Z");
+        AvisoDeEvento anuncio = new AvisoDeEvento(7L, EVENTO, "Clase abierta", inicio, LIMA, true);
+
+        assertThat(anuncio.venceEn()).isNull();
+    }
 }
