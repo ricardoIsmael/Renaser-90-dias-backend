@@ -7,7 +7,10 @@ Fuentes (--fuentes, separadas por coma):
   lecciones     las 124 transcripciones de clases de transcripciones/salida/*.json
   drive-audios  "36. SESIONES / Transcripcion de audios": DIA01 ... DIA43
   drive-canal   "37. TRANSCRIPCIONES YT": transcripciones del canal de YouTube
-Nada mas. Las carpetas de Drive permitidas estan fijas en drive.py (regla de privacidad).
+  youtube-ensenanza  lista FIJA de videos de ensenanza de YouTube (VIDEOS_YOUTUBE_ENSENANZA, abajo)
+Nada mas. Las carpetas de Drive permitidas estan fijas en drive.py y los videos de YouTube en este
+archivo (regla de privacidad): sumar uno es editar el codigo y queda en git. Nunca por la linea de
+comandos.
 
 POR QUE HAY QUE TROCEAR
   Cada texto que se indexa produce UN vector. Una clase entera de 6.000 palabras da un vector
@@ -44,6 +47,7 @@ import glob
 import io
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -60,6 +64,10 @@ TIPO_FUENTE_CANAL = 'TRANSCRIPCION_CANAL'   # a confirmar por el dueno
 CLASE_CANAL = 'CANAL DARREN'                 # a confirmar por el dueno
 TIPO_FUENTE_AUDIO = 'AUDIO_DIARIO'           # a confirmar por el dueno
 CLASE_AUDIO = 'AUDIOS DIARIOS'               # a confirmar por el dueno
+# Los videos de ensenanza de YouTube entran IGUAL que el canal (mismo tipo_fuente y misma clase
+# que los 75 que ya estan en produccion): visibles desde el dia 0, sin gate de leccion.
+TIPO_FUENTE_YOUTUBE = TIPO_FUENTE_CANAL
+CLASE_YOUTUBE = CLASE_CANAL
 
 # Mismos valores que el script viejo: si cambian, las partes k/N dejan de coincidir con las que
 # ya estan en produccion y el salteo por parte deja de servir.
@@ -69,8 +77,28 @@ SOLAPE = 60
 # Cuota gratuita de gemini-embedding-001: 1.000 por dia y por PROYECTO. 900 deja margen para
 # el uso normal de la app (cada pregunta al acompanante tambien gasta un embedding).
 LIMITE_POR_DEFECTO = 900
-FUENTES = ['lecciones', 'drive-audios', 'drive-canal']
+FUENTES = ['lecciones', 'drive-audios', 'drive-canal', 'youtube-ensenanza']
 VARIABLE_TOKEN = 'RENASER_ADMIN_TOKEN'
+
+# ---------------------------------------------------------------------------------------------
+# REGLA DE PRIVACIDAD (igual que CARPETAS_PERMITIDAS de drive.py): los UNICOS videos de YouTube que
+# se pueden indexar son los de esta lista, escrita a mano con su id y su titulo. No hay forma de
+# pasar ids por la linea de comandos. Sumar un video es una decision del dueno: se edita esta lista
+# y queda en el historial de git. Solo ensenanza: NADA de testimonios, promociones de eventos ni
+# shows. Decision del dueno (2026-10-28): «solo la ensenanza de YouTube, sin testimonios».
+# Cada entrada: (id de YouTube de 11 caracteres, titulo tal como se guarda en los metadatos).
+#
+# DESCARTADOS (2026-10-28, criterio del dueno: promocion no es ensenanza). No volver a sumarlos sin
+# preguntarle:
+#   ydI2_k3hbxk  «Crea un negocio millonario con tu pasion - Evento Renaser»: dura 1:18 y su
+#                subtitulo (66 palabras) es la letra de una cancion y una frase de promocion.
+#   -MINWhAO-Gw  «Inmersion Renaser - "Conexion & Consciencia" - Enero 2026»: dura 2:16, un trailer;
+#                YouTube no tiene subtitulos para el.
+# ---------------------------------------------------------------------------------------------
+VIDEOS_YOUTUBE_ENSENANZA = [
+    ('44uFzhTFp0Y', 'Crea riqueza en el 2025'),                                      # Dinero, 15:52
+]
+ID_DE_VIDEO = re.compile(r'[A-Za-z0-9_-]{11}')  # se usa con fullmatch
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 DIR_LECCIONES = os.path.join(AQUI, 'transcripciones', 'salida')
@@ -127,6 +155,74 @@ def cargar_drive(fuente, incluir_testimonios, pedir=None):
         docs.append(documento(tipo, clase, file_id, None, nombre,
                               descargar=lambda i=file_id: drive.descargar(i, pedir)))
     return docs
+
+
+class SinTranscripcion(Exception):
+    """El video no tiene un subtitulo utilizable. No es un error de la corrida: se saltea con aviso."""
+
+
+def clasificar_videos(videos):
+    """Separa lo que se indexa de lo que no. `videos` = [(id, titulo)]. Devuelve
+    (incluidos[(id, titulo)], excluidos[(id, titulo, motivo)]).
+    Un id mal formado o repetido es un error de la LISTA (de quien la edito), no de un video: corta."""
+    vistos, incluidos, excluidos = set(), [], []
+    for vid, titulo in videos:
+        if not ID_DE_VIDEO.fullmatch(vid or ''):
+            raise ValueError('Id de YouTube invalido en VIDEOS_YOUTUBE_ENSENANZA: %r (son 11 '
+                             'caracteres: letras, numeros, guion y guion bajo).' % (vid,))
+        if vid in vistos:
+            raise ValueError('Id repetido en VIDEOS_YOUTUBE_ENSENANZA: %s' % vid)
+        vistos.add(vid)
+        motivo = _motivo_de_exclusion_de_video(titulo)
+        if motivo:
+            excluidos.append((vid, titulo, motivo))
+        else:
+            incluidos.append((vid, titulo))
+    return incluidos, excluidos
+
+
+def _motivo_de_exclusion_de_video(titulo):
+    """El mismo filtro de titulos que Drive (palabras privadas y testimonios), con las mismas
+    constantes. --incluir-testimonios NO aplica aqui: el dueno decidio «sin testimonios»."""
+    t = drive.normalizar(titulo)
+    if any(p in t for p in drive.PALABRAS_PRIVADAS):
+        return 'titulo con palabra de contenido privado'
+    if drive.MARCA_TESTIMONIO in t:
+        return 'testimonio (no se indexan videos de testimonios)'
+    return None
+
+
+def _transcripcion_de_youtube(vid, bajar, limpiar):
+    try:
+        ruta = bajar(vid)
+    except FileNotFoundError:  # subprocess no encontro el ejecutable
+        raise SystemExit('Falta yt-dlp (se necesita para bajar los subtitulos de %s). Instalarlo y '
+                         'relanzar; no se siguio.' % vid)
+    if not ruta:
+        raise SinTranscripcion('YouTube no entrego subtitulos en espanol (es-orig ni es): el video '
+                               'no los tiene o no se pudieron bajar')
+    texto = limpiar(ruta)
+    if not texto.strip():
+        raise SinTranscripcion('el subtitulo bajado esta vacio')
+    return texto
+
+
+def cargar_youtube(bajar=None, limpiar=None):
+    """Los videos de VIDEOS_YOUTUBE_ENSENANZA, sin parametro de ids a proposito. `bajar(id) -> ruta
+    del .vtt o None` y `limpiar(ruta) -> texto` son los de extraer_todo.py (es-orig y si no es,
+    con player_client=android); se inyectan en las pruebas. La bajada se difiere hasta que haga
+    falta: lo que ya esta en produccion (saltear.txt) no toca YouTube."""
+    if bajar is None or limpiar is None:
+        import extraer_todo  # lazy: solo esta fuente lo necesita
+        bajar, limpiar = bajar or extraer_todo.bajar, limpiar or extraer_todo.limpiar
+    incluidos, excluidos = clasificar_videos(VIDEOS_YOUTUBE_ENSENANZA)
+    print('youtube-ensenanza: %d videos en la lista, %d excluidos.'
+          % (len(VIDEOS_YOUTUBE_ENSENANZA), len(excluidos)))
+    for _, titulo, motivo in excluidos:
+        print('   excluido: %-60s  (%s)' % (titulo[:60], motivo))
+    return [documento(TIPO_FUENTE_YOUTUBE, CLASE_YOUTUBE, vid, None, titulo,
+                      descargar=lambda v=vid: _transcripcion_de_youtube(v, bajar, limpiar))
+            for vid, titulo in incluidos]
 
 
 # ------------------------------- registro y salteos ------------------------------------------
@@ -188,7 +284,15 @@ def planificar(docs, enteros, partes_hechas, solo_listar=False):
             item['nota'] = 'sin descargar (--solo-listar)'
             continue
         if doc['texto'] is None:
-            doc['texto'] = doc['descargar']()
+            try:
+                doc['texto'] = doc['descargar']()
+            except SinTranscripcion as motivo:
+                item['pedazos'] = []
+                item['sin_transcripcion'] = True
+                item['nota'] = 'SIN TRANSCRIPCION: se saltea'
+                print('AVISO: "%s" (%s) se saltea: %s. No se inventa una transcripcion.'
+                      % (doc['titulo'], doc['documentoId'], motivo))
+                continue
         _completar_item(item, trocear(doc['texto']), partes_hechas)
     return plan
 
@@ -217,6 +321,9 @@ def imprimir_plan(plan, limite):
         total += len(it['pendientes'])
         print('%-4d %-16s %-50s %7s %9d  %s' % (n, d['tipoFuente'][:16], d['titulo'][:50], partes,
                                                 len(it['pendientes']), it['nota']))
+    sin = [it['doc']['titulo'] for it in plan if it.get('sin_transcripcion')]
+    if sin:
+        print('\nAVISO: %d documento(s) sin transcripcion, no se envian: %s' % (len(sin), '; '.join(sin)))
     dias = -(-total // limite)
     print('\nEmbeddings a generar (= chunks a enviar): %d. Con tope %d por corrida: %d dia(s).'
           % (total, limite, dias))
@@ -313,7 +420,8 @@ def argumentos(argv):
                    help='ids ya indexados (lo genera consulta-indexados.sh); se puede repetir')
     p.add_argument('--registro', default=REGISTRO_POR_DEFECTO,
                    help='registro local de partes enviadas (por defecto indexados.jsonl)')
-    p.add_argument('--incluir-testimonios', action='store_true')
+    p.add_argument('--incluir-testimonios', action='store_true',
+                   help='solo para las carpetas de Drive; youtube-ensenanza nunca incluye testimonios')
     p.add_argument('--solo-listar', action='store_true',
                    help='en ensayo, no descargar de Drive (no calcula partes de Drive)')
     p.add_argument('--si', action='store_true', help='no pedir confirmacion antes de enviar')
@@ -349,8 +457,12 @@ def main(argv=None):
             return 2
     docs = []
     for fuente in a.fuentes:
-        docs += (cargar_lecciones() if fuente == 'lecciones'
-                 else cargar_drive(fuente, a.incluir_testimonios))
+        if fuente == 'lecciones':
+            docs += cargar_lecciones()
+        elif fuente == 'youtube-ensenanza':
+            docs += cargar_youtube()
+        else:
+            docs += cargar_drive(fuente, a.incluir_testimonios)
     enteros, partes = leer_salteos(a.saltear_archivo)
     partes |= leer_registro(a.registro)
     plan = planificar(docs, enteros, partes, solo_listar=a.solo_listar)

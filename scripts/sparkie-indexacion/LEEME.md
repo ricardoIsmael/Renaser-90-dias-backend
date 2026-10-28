@@ -1,6 +1,6 @@
 # Indexación del RAG (Sparkie / Renasia) — guía para el dueño
 
-**Última actualización: 2026-09-26.**
+**Última actualización: 2026-10-28** (fuente `youtube-ensenanza`, D-285).
 
 Esta carpeta sirve para meter **contenido general del programa** en la base de conocimiento de
 producción (`renaser.base_conocimiento`), que es de donde el acompañante saca sus citas. La corre
@@ -13,26 +13,38 @@ el dueño desde su máquina; nadie más escribe en producción.
 | `lecciones` | Las 124 clases de los cursos (`transcripciones/salida/*.json`) | 124 (2.526 chunks) | el día en que se desbloquea cada lección |
 | `drive-audios` | Drive «36. SESIONES / Transcripción de audios»: `DIA01 - …` a `DIA43 - …` | 43 | **el día 0** (ver abajo) |
 | `drive-canal` | Drive «37. TRANSCRIPCIONES YT»: transcripciones del canal de YouTube | 81 − 1 − 5 = **75** | **el día 0** |
+| `youtube-ensenanza` | Lista **fija** de videos de enseñanza de YouTube, escrita a mano en `indexar.py` (`VIDEOS_YOUTUBE_ENSENANZA`); la transcripción sale de los subtítulos automáticos con `yt-dlp` | 1 en la lista: «Crea riqueza en el 2025» (**6 chunks**) | **el día 0** |
 
 Del canal se dejan afuera:
 - «El engaño de creer que sabes»: ya es una de las 124 lecciones; indexarlo otra vez lo duplica.
 - Los **5 testimonios** (títulos con «TESTIMONIO»): hablan personas concretas de su proceso.
   Quedan afuera **salvo que se pase `--incluir-testimonios`**. Decisión del dueño.
 
+De YouTube **solo** entra la lista de `VIDEOS_YOUTUBE_ENSENANZA` (id y título escritos a mano). Decisión del
+dueño, textual: «solo la enseñanza de YouTube, sin testimonios». Hoy es un solo video: «Crea riqueza en
+el 2025» (`44uFzhTFp0Y`, 15:52, 2.189 palabras). Se evaluaron y **se descartaron por ser promoción, no
+enseñanza** «Crea un negocio millonario con tu pasión - Evento Renaser» (`ydI2_k3hbxk`: 1:18, su subtítulo
+es la letra de una canción y una frase de promoción) e «Inmersión Renaser - "Conexión & Consciencia" -
+Enero 2026» (`-MINWhAO-Gw`: 2:16, un tráiler, sin subtítulos). No se vuelven a sumar sin preguntarle al
+dueño.
+
 **Nunca se indexa nada más de ese Drive**: sesiones individuales, mentorías grupales, atenciones,
 postulaciones, fichas. Es información de personas concretas, y un RAG no distingue quién puede ver
 qué: el acompañante podría citarle a un aprendiz lo que otro contó en su sesión. Por eso:
 
-- El script **no acepta ids de carpeta**. Solo conoce las dos carpetas de arriba, escritas a mano
-  en `drive.py` (`CARPETAS_PERMITIDAS`). Sumar otra es editar ese archivo y queda en git.
+- El script **no acepta ids de carpeta ni de videos**. Solo conoce las dos carpetas de arriba, escritas a
+  mano en `drive.py` (`CARPETAS_PERMITIDAS`), y los videos de `VIDEOS_YOUTUBE_ENSENANZA` en `indexar.py`.
+  Sumar una carpeta o un video es editar ese archivo y queda en git; no existe `--videos` ni nada parecido.
 - No entra a subcarpetas y solo toma `.txt`.
 - De la carpeta de audios solo toma archivos que empiezan con `DIAnn -`.
 - Si algún día aparece un título con «sesión individual», «mentoría grupal», «atención»,
-  «postulación», «ficha» o «entrevista», se excluye aunque esté en una carpeta permitida.
+  «postulación», «ficha» o «entrevista», se excluye aunque esté en una carpeta permitida. El mismo filtro
+  (y el de «testimonio») corre sobre los títulos de la lista de YouTube; ahí `--incluir-testimonios` **no
+  aplica**: es solo para Drive.
 
-**Por qué el contenido de Drive se ve desde el día 0:** las lecciones van atadas a su `leccionId`, y
+**Por qué el contenido de Drive y de YouTube se ve desde el día 0:** las lecciones van atadas a su `leccionId`, y
 la búsqueda solo le devuelve a cada aprendiz las lecciones que ya desbloqueó. El contenido de Drive
-no es una lección, va con `leccionId` vacío, y el backend **nunca filtra** los chunks sin lección
+y los videos de YouTube no son una lección, van con `leccionId` vacío, y el backend **nunca filtra** los chunks sin lección
 (`VectorStorePort`). Si se quiere que un audio `DIAnn` solo aparezca a partir del día *nn*, hace
 falta un cambio en el backend; este script no lo resuelve.
 
@@ -65,7 +77,21 @@ python3 indexar.py --saltear-archivo consulta/saltear.txt
 Sin `--enviar` el script **no manda nada**: lista cada documento, cuántas partes tiene, cuántas
 faltan, y cuántos embeddings va a gastar en total. Baja los `.txt` de Drive para poder contarlos
 (no guarda nada en disco). Para ver solo los títulos sin bajar nada: `--solo-listar`.
-Para una sola fuente: `--fuentes lecciones` (o `drive-audios`, `drive-canal`, separadas por coma).
+Para una sola fuente: `--fuentes lecciones` (o `drive-audios`, `drive-canal`, `youtube-ensenanza`,
+separadas por coma).
+
+**`youtube-ensenanza` necesita `yt-dlp` instalado y red a YouTube** (solo lectura). Baja los subtítulos
+automáticos en español (`es-orig` y, si no, `es`, con `--extractor-args youtube:player_client=android`)
+a `transcripciones/vtt/` (ignorado por git; si el `.vtt` ya está, no se vuelve a bajar) y los pasa a
+prosa. Un video **sin subtítulos se saltea con un AVISO y no corta la corrida**: no se inventa una
+transcripción (hoy ningún video de la lista está en ese caso; el mecanismo queda para cuando se sume
+otro). Un video que ya está en producción (`saltear.txt`) no toca YouTube.
+
+**`youtube-ensenanza` está dentro de «todas» (el valor por defecto de `--fuentes`)**, como las otras
+tres: «todas» significa todo lo que el script sabe indexar, y la idempotencia (registro y
+`saltear.txt`) hace que relanzarlo no duplique nada. Si quedara fuera, un día de «indexar todo» la
+dejaría sin enviar y nadie lo notaría. El precio: el comando por defecto ahora también pide YouTube.
+Para no tocarlo, `--fuentes lecciones,drive-audios,drive-canal`.
 
 ### 3. Sacar el token de admin
 
@@ -114,6 +140,20 @@ Lo pendiente al 2026-09-26 son ~1.504 chunks de lecciones (77 lecciones), más l
 lecciones a medias, más lo de Drive (el ensayo lo cuenta). A 900 por día son varios días: repetir
 los pasos 1, 2 y 4 cada día.
 
+### 4 bis. Enviar solo los videos de YouTube
+
+Después de los pasos 1 y 3 (consulta de producción y token):
+
+```bash
+python3 indexar.py --fuentes youtube-ensenanza --enviar --url https://djbooeq09skac.cloudfront.net \
+    --saltear-archivo consulta/saltear.txt
+```
+
+Mismo comportamiento que el paso 4: pide escribir `ENVIAR`, tope de 900 embeddings, cada chunk aceptado
+queda en `indexados.jsonl`, relanzar no duplica y **cualquier error corta en el acto**. Son 6
+chunks, un solo día. En `./consulta-indexados.sh`, las filas `TRANSCRIPCION_CANAL` pasan de 75 a 76
+documentos. Para ensayar primero, el mismo comando sin `--enviar`.
+
 ### 5. Verificar
 
 1. Volver a correr `./consulta-indexados.sh`: los documentos enviados tienen que aparecer como
@@ -147,6 +187,10 @@ Las lecciones se guardan como ya están en producción (`tipo_fuente = TRANSCRIP
 |---|---|---|---|---|
 | canal | `TRANSCRIPCION_CANAL` | `CANAL DARREN` | id del archivo de Drive | vacío |
 | audios | `AUDIO_DIARIO` | `AUDIOS DIARIOS` | id del archivo de Drive | vacío |
+| videos de YouTube | `TRANSCRIPCION_CANAL` | `CANAL DARREN` | id del video de YouTube | vacío |
+
+Los videos de YouTube usan **la misma etiqueta que el canal** (`TIPO_FUENTE_YOUTUBE = TIPO_FUENTE_CANAL`,
+`CLASE_YOUTUBE = CLASE_CANAL`): lo que ya está en producción para los 75 del canal. Una prueba lo fija.
 
 **Decidirlo antes de la primera tanda**: cambiarlo después deja filas con dos nombres distintos.
 
@@ -156,9 +200,12 @@ Las lecciones se guardan como ya están en producción (`tipo_fuente = TRANSCRIP
 python3 -m unittest -v test_indexar
 ```
 
-Sin red y sin producción: el HTTP y Drive son falsos. Cubren el troceo (y que da los mismos 2.526
-chunks que el script viejo), el registro y los salteos, que el 429 corte en el acto y se retome
-donde quedó, el tope diario, los filtros de Drive y el procesado de la consulta.
+Sin red y sin producción: el HTTP, Drive y `yt-dlp` son falsos (44 pruebas). Cubren el troceo (y que da
+los mismos 2.526 chunks que el script viejo), el registro y los salteos, que el 429 corte en el acto y se
+retome donde quedó, el tope diario, los filtros de Drive, el procesado de la consulta y la fuente de
+YouTube: la lista real, etiqueta y campos de cada documento, el video sin subtítulos que se saltea con
+aviso (con una lista ficticia de varios videos), la lista que no acepta ids de afuera, el filtro de títulos y que importar `extraer_todo.py` ya no lanza la
+extracción de las 124 lecciones. (No hace falta `pytest`: son `unittest`.)
 
 ## Estado anterior (histórico)
 
@@ -181,7 +228,7 @@ transcripciones de YouTube cuesta bastante, así que se versionó a propósito (
 derivados): el dueño trabaja desde dos máquinas y el repo es la única vía que llega a las dos. Los
 `.vtt` crudos (36 MB) no se guardaron; se regeneran con `extraer_todo.py`.
 
-`consulta/` e `indexados.jsonl` **no** se versionan (`.gitignore`): en otra máquina, el paso 1
+`consulta/`, `indexados.jsonl` y `transcripciones/vtt/` (los `.vtt` crudos) **no** se versionan (`.gitignore`): en otra máquina, el paso 1
 reconstruye desde producción lo que hace falta.
 
 ## Detalle que costó encontrar

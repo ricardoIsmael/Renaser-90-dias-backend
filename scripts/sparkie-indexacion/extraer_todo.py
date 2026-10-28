@@ -3,6 +3,9 @@
 
 Reanudable: si el .json de una leccion ya existe, no la vuelve a pedir. Un video
 caido o sin subtitulos NO corta la corrida -- se anota en el reporte y sigue.
+
+Se puede IMPORTAR (indexar.py usa `bajar`, `limpiar` e `id_de_youtube` para los videos de
+ensenanza de YouTube): la extraccion de las 124 lecciones solo corre al ejecutarlo como script.
 """
 import io, json, os, re, subprocess, sys, time
 
@@ -70,54 +73,59 @@ def bajar(vid):
     return None
 
 
-filas = [l.rstrip('\n').split('\t') for l in io.open(os.path.join(DIR, 'lecciones.tsv'), encoding='utf-8') if l.strip()]
-print('Lecciones a procesar: %d' % len(filas), flush=True)
+def main():
+    filas = [l.rstrip('\n').split('\t') for l in io.open(os.path.join(DIR, 'lecciones.tsv'), encoding='utf-8') if l.strip()]
+    print('Lecciones a procesar: %d' % len(filas), flush=True)
 
-ok, sin_subs, sin_id, saltadas = 0, [], [], 0
-for i, fila in enumerate(filas, 1):
-    if len(fila) < 5:
-        continue
-    lid, curso, titulo, len_html, url = fila[0], fila[1], fila[2], int(fila[3]), fila[4]
-    destino_json = os.path.join(OUT, lid + '.json')
-    if os.path.exists(destino_json):
-        saltadas += 1
+    ok, sin_subs, sin_id, saltadas = 0, [], [], 0
+    for i, fila in enumerate(filas, 1):
+        if len(fila) < 5:
+            continue
+        lid, curso, titulo, len_html, url = fila[0], fila[1], fila[2], int(fila[3]), fila[4]
+        destino_json = os.path.join(OUT, lid + '.json')
+        if os.path.exists(destino_json):
+            saltadas += 1
+            ok += 1
+            continue
+
+        vid = id_de_youtube(url)
+        if not vid:
+            sin_id.append((titulo, url))
+            print('[%3d/%d] SIN ID   %s | %s' % (i, len(filas), titulo[:45], url), flush=True)
+            continue
+
+        ruta = bajar(vid)
+        if not ruta:
+            sin_subs.append((curso, titulo, vid, url))
+            print('[%3d/%d] FALLA    %s (%s)' % (i, len(filas), titulo[:45], vid), flush=True)
+            continue
+
+        texto = limpiar(ruta)
+        registro = {
+            'leccion_id': lid, 'curso': curso, 'titulo': titulo,
+            'video_id': vid, 'video_url': url,
+            'largo_cuerpo_html': len_html,
+            'palabras': len(texto.split()), 'caracteres': len(texto),
+            'texto': texto,
+        }
+        datos = json.dumps(registro, ensure_ascii=False, indent=1).encode('utf-8')
+        tmp = destino_json + '.tmp'
+        with open(tmp, 'wb') as f:
+            f.write(datos)
+        os.replace(tmp, destino_json)
         ok += 1
-        continue
+        print('[%3d/%d] OK %6d palabras  %s' % (i, len(filas), registro['palabras'], titulo[:45]), flush=True)
+        time.sleep(1.0)
 
-    vid = id_de_youtube(url)
-    if not vid:
-        sin_id.append((titulo, url))
-        print('[%3d/%d] SIN ID   %s | %s' % (i, len(filas), titulo[:45], url), flush=True)
-        continue
+    print('\n===== RESUMEN =====', flush=True)
+    print('Con transcripcion : %d  (reusadas de una corrida previa: %d)' % (ok, saltadas), flush=True)
+    print('Sin subtitulos/caidos: %d' % len(sin_subs), flush=True)
+    print('URL no parseable  : %d' % len(sin_id), flush=True)
+    for c, t, v, u in sin_subs:
+        print('   FALLA: [%s] %s -> %s' % (c, t, u), flush=True)
+    for t, u in sin_id:
+        print('   SIN ID: %s -> %s' % (t, u), flush=True)
 
-    ruta = bajar(vid)
-    if not ruta:
-        sin_subs.append((curso, titulo, vid, url))
-        print('[%3d/%d] FALLA    %s (%s)' % (i, len(filas), titulo[:45], vid), flush=True)
-        continue
 
-    texto = limpiar(ruta)
-    registro = {
-        'leccion_id': lid, 'curso': curso, 'titulo': titulo,
-        'video_id': vid, 'video_url': url,
-        'largo_cuerpo_html': len_html,
-        'palabras': len(texto.split()), 'caracteres': len(texto),
-        'texto': texto,
-    }
-    datos = json.dumps(registro, ensure_ascii=False, indent=1).encode('utf-8')
-    tmp = destino_json + '.tmp'
-    with open(tmp, 'wb') as f:
-        f.write(datos)
-    os.replace(tmp, destino_json)
-    ok += 1
-    print('[%3d/%d] OK %6d palabras  %s' % (i, len(filas), registro['palabras'], titulo[:45]), flush=True)
-    time.sleep(1.0)
-
-print('\n===== RESUMEN =====', flush=True)
-print('Con transcripcion : %d  (reusadas de una corrida previa: %d)' % (ok, saltadas), flush=True)
-print('Sin subtitulos/caidos: %d' % len(sin_subs), flush=True)
-print('URL no parseable  : %d' % len(sin_id), flush=True)
-for c, t, v, u in sin_subs:
-    print('   FALLA: [%s] %s -> %s' % (c, t, u), flush=True)
-for t, u in sin_id:
-    print('   SIN ID: %s -> %s' % (t, u), flush=True)
+if __name__ == '__main__':
+    main()

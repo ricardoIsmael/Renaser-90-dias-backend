@@ -15741,3 +15741,13 @@ para una semana pasada.
 **Cómo evitar que vuelva a pasar.** `ObjetivoYMapaIT` reproduce el caso exacto con login real (Plan define → el Mapa activa con otro objetivo → 200, misma roca → `/completar` → cambiar vuelve a ser 409) y falla contra el código anterior; `ObjetivoYMapaExigidoIT` cubre el bloqueo; `RocaMaestraServiceTest` cubre la matriz Mapa activo / sin activar × origen × bloqueo. Regla general: **una regla que dice «fijo una vez definido» tiene que decir también quién puede definir primero y en qué orden llama la app**; antes de volver fija una escritura, mirar el orden real de llamadas del cliente y si existe otro camino que la haga antes.
 
 **Cuenta afectada.** Sin migración ni script: ver las consultas de solo lectura del informe de este arreglo (`rocas_maestras`, `etapas_onboarding_completadas`, `respuestas_onboarding`, `acciones_mapa`, `habitos`). Con el backend nuevo desplegado la persona vuelve a pulsar «Activar» desde la app.
+
+## E-646 · `import extraer_todo` lanzaba la extracción de las 124 lecciones (scripts de indexación, 28/10)
+
+**Síntoma literal.** Al preparar `indexar.py` para importar `bajar` y `limpiar` de `extraer_todo.py` (D-285), la prueba de importación contra el código anterior imprimía `Lecciones a procesar: 124` y el resumen de la extracción (`Sin subtitulos/caidos: 0`, `URL no parseable  : 0`), sin que nadie la hubiera pedido.
+
+**Causa real.** El módulo ejecutaba todo su cuerpo al importarse: leía `lecciones.tsv` y recorría las 124 lecciones a nivel de módulo, sin `if __name__ == '__main__'`. Con todos los `.json` ya hechos solo imprimía; con uno faltante habría lanzado `yt-dlp` contra YouTube desde cualquier import (también desde las pruebas).
+
+**Solución.** El cuerpo pasó a `main()` bajo `if __name__ == '__main__'`; `bajar`, `limpiar` e `id_de_youtube` se pueden importar sin efectos (solo se crean las carpetas `transcripciones/salida` y `vtt`). Ejecutarlo como script hace lo mismo que antes.
+
+**Cómo evitar que vuelva a pasar.** `test_importar_extraer_todo_no_lanza_la_extraccion_de_las_lecciones` (`scripts/sparkie-indexacion/test_indexar.py`) importa el módulo con `subprocess.run` interceptado y exige cero salida; falla contra el código anterior. Regla para los scripts de esta carpeta: nada de trabajo a nivel de módulo. (`limpiar_vtt.py` también procesa `sys.argv` al importarse: no se importa, solo se ejecuta.)
