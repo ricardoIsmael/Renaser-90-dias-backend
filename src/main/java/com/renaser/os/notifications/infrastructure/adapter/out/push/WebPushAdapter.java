@@ -6,9 +6,10 @@ import com.renaser.os.notifications.application.ports.out.push.ResultadoEnvioPus
 import com.renaser.os.notifications.application.ports.out.push.TransportePush;
 import com.renaser.os.notifications.domain.model.tokenpush.PlataformaPush;
 import com.renaser.os.notifications.domain.model.tokenpush.TokenPush;
+import com.renaser.os.shared.domain.Clock;
 import nl.martijndwars.webpush.Notification;
 import nl.martijndwars.webpush.PushService;
-import nl.martijndwars.webpush.Subscription;
+import nl.martijndwars.webpush.Urgency;
 import org.apache.http.HttpResponse;
 import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
@@ -17,8 +18,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.security.GeneralSecurityException;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalInt;
 
 /**
  * Entrega Web Push a las suscripciones del navegador.
@@ -29,6 +33,9 @@ import java.util.Map;
  *
  * <p>Sin VAPID configurado el backend conserva la notificación en la bandeja y deja un warning
  * claro. Eso permite arrancar localmente sin secretos, pero nunca simula una entrega exitosa.</p>
+ *
+ * <p>Cada aviso sale con prioridad alta y, si es «a una hora», con una caducidad que coincide con esa
+ * hora; ver {@link #notificacionDe}.</p>
  */
 @Component
 public class WebPushAdapter implements TransportePush {
@@ -43,14 +50,18 @@ public class WebPushAdapter implements TransportePush {
     private final String vapidPublicKey;
     private final String vapidPrivateKey;
     private final String vapidSubject;
+    /** El instante de «ahora» con el que se convierte {@code venceEn} en un TTL relativo (E-647). */
+    private final Clock clock;
     private volatile PushService pushService;
 
     public WebPushAdapter(@Value("${renaser.notifications.web-push.vapid-public-key:}") String vapidPublicKey,
                           @Value("${renaser.notifications.web-push.vapid-private-key:}") String vapidPrivateKey,
-                          @Value("${renaser.notifications.web-push.vapid-subject:mailto:soporte@renaser.com}") String vapidSubject) {
+                          @Value("${renaser.notifications.web-push.vapid-subject:mailto:soporte@renaser.com}") String vapidSubject,
+                          Clock clock) {
         this.vapidPublicKey = vapidPublicKey == null ? "" : vapidPublicKey.trim();
         this.vapidPrivateKey = vapidPrivateKey == null ? "" : vapidPrivateKey.trim();
         this.vapidSubject = vapidSubject == null ? "" : vapidSubject.trim();
+        this.clock = clock;
     }
 
     @Override
@@ -90,10 +101,9 @@ public class WebPushAdapter implements TransportePush {
                 // Invalido, no "fallo": el token no sirve y no tiene sentido reintentarlo.
                 return ResultadoEnvioPush.invalido(token.id(), "Endpoint de push no permitido");
             }
-            Subscription subscription = new Subscription(suscripcion.endpoint(),
-                    new Subscription.Keys(suscripcion.keys().p256dh(), suscripcion.keys().auth()));
             String payload = objectMapper.writeValueAsString(cuerpoDe(mensaje));
-            HttpResponse response = servicio().send(new Notification(subscription, payload));
+            HttpResponse response = servicio().send(notificacionDe(suscripcion.endpoint(),
+                    suscripcion.keys().p256dh(), suscripcion.keys().auth(), payload, mensaje));
             int status = response.getStatusLine().getStatusCode();
             EntityUtils.consumeQuietly(response.getEntity());
             return interpretar(token, status);
@@ -103,6 +113,58 @@ public class WebPushAdapter implements TransportePush {
             log.warn("[notifications.WebPushAdapter] fallo el envio web: {}", e.getMessage());
             return ResultadoEnvioPush.temporal(token.id(), e.getMessage());
         }
+    }
+
+    /**
+     * Arma la notificación con su urgencia y su caducidad. Paquete y no privado para poder probar el TTL y la
+     * urgencia sin salir a la red.
+     *
+     * <p><b>{@code Urgency: high} en todo Web Push (E-647, issue #26).</b> Sin la cabecera el servicio de push
+     * trata el aviso como de urgencia normal, y el de Apple, con el iPhone en reposo o ahorrando batería, puede
+     * retenerlo y entregarlo cuando le conviene: es el mismo defecto que Android tenía antes de D-217, que
+     * {@code ExpoPushTransporte} cierra con {@code priority: "high"}. Va para todo tipo de aviso por la misma razón que
+     * allá: todos los de Renaser son avisos que la persona tiene que ver, no sincronizaciones en segundo plano.
+     *
+     * <p><b>TTL relativo a {@link MensajePush#venceEn()}.</b> Sin él la librería manda {@code TTL} de 28 días y
+     * el servicio de push guarda el aviso hasta entregarlo: «Pastilla Renacer a las 7:00» aparecía a las 9. Web
+     * Push no tiene un instante absoluto como el {@code expiration} de Expo, solo segundos desde que el servicio
+     * recibe el pedido; por eso el TTL se calcula acá, en cada intento y contra {@link #clock}: un reintento del
+     * {@code DespachadorPush} (250 ms, 750 ms) vuelve a pasar por este método y manda los segundos que faltan
+     * entonces, no los de la primera vez. Se redondea hacia abajo, para que el aviso nunca viva más allá de su
+     * hora, y no baja de 0.
+     *
+     * <p><b>Un aviso que ya venció al enviarlo sale con TTL 0.</b> Con TTL 0 el servicio de push no lo retiene:
+     * lo entrega al instante si el navegador está disponible y, si no, expira y no se entrega nunca (RFC 8030,
+     * §5.2). Puede pasar solo si el aviso vence entre la comprobación del servidor ({@code yaNoSirve}) y este
+     * envío —milisegundos, o los reintentos del despachador—, y en ese caso a lo sumo llega con un segundo de
+     * retraso; nunca guardado. No se omite el envío porque ninguno de los estados de
+     * {@link ResultadoEnvioPush} dice «no se mandó porque ya no servía» sin mentir: {@code ENTREGADO} fingiría
+     * una entrega, {@code FALLO_TEMPORAL} se reintentaría para nada y {@code TOKEN_INVALIDO} desactivaría un
+     * token sano.
+     *
+     * <p>Sin {@code venceEn} (anuncios, chat, avisos manuales) no se toca el TTL: queda el de la librería, el
+     * de siempre.
+     */
+    Notification notificacionDe(String endpoint, String p256dh, String auth, String payload, MensajePush mensaje)
+            throws GeneralSecurityException {
+        Notification.NotificationBuilder notificacion = Notification.builder()
+                .endpoint(endpoint)
+                .userPublicKey(p256dh)
+                .userAuth(auth)
+                .payload(payload)
+                .urgency(Urgency.HIGH);
+        ttlDe(mensaje).ifPresent(notificacion::ttl);
+        return notificacion.build();
+    }
+
+    /** Los segundos que faltan para {@code venceEn}, sin bajar de 0 ni pasar del {@code int} del TTL; vacío si no caduca. */
+    private OptionalInt ttlDe(MensajePush mensaje) {
+        Instant venceEn = mensaje.venceEn();
+        if (venceEn == null) {
+            return OptionalInt.empty();
+        }
+        long segundos = Duration.between(clock.now(), venceEn).getSeconds();
+        return OptionalInt.of(Math.clamp(segundos, 0, Integer.MAX_VALUE));
     }
 
     /**
