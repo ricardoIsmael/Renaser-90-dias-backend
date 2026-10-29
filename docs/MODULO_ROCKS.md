@@ -482,3 +482,11 @@ Todos los imports cruzados van por `.api`: `community.api.PublicarEnMuroPort` (`
 ### Tamaños — el resto del módulo, dentro de límite
 
 Segundo archivo más grande: `DashboardRocasService.java` (234 líneas, dentro del techo de 300). Ningún otro archivo del módulo se acerca a 300 líneas. Clases de dominio más grandes (`RocaSemanal.java` 164, `RocaDiaria.java` 142) muy por debajo del techo.
+
+## 14. Las horas de las acciones, para los huecos de horario (spec 015, D-289, 2026-10-29)
+
+`rocks.api.HorasDeLasAccionesFinder.entre(persona, desde, hasta)` devuelve las acciones del día (rocas diarias) de una
+persona con `horaInicio`, `horaFin`, si se cumplió y cuándo (`completada_en`). Es otro contrato que `AccionesDelDiaFinder`:
+aquel suma la evidencia para la ficha del líder (y toca `evidence`); este solo lee horas, con la misma consulta que `GET
+/rocks/upcoming` (`deParticipanteEntreFechas`). Lo lee `mentoring` para calcular el tiempo ocupado: una acción sin hora de
+inicio no ocupa nada, y una con la hora de fin anterior a la de inicio (nada lo impide) dura lo que fija la spec (30 min).

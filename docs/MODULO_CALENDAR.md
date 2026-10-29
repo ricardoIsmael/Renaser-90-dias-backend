@@ -355,3 +355,11 @@ Alcance: solo lectura sobre `src/main/java/com/renaser/os/calendar/`, sin correr
 - **`EventoController` es "tonto" por endpoint**: los 9 métodos de ruta miden entre 3 y 4 líneas cada uno, ninguno inyecta un puerto `out` ni un repositorio, ninguno tiene `@Transactional` ni un `if` de regla de negocio. Sí concentra ~40 líneas de mapeo wire→comando en métodos privados (`aComandoCrear`/`aComandoActualizar`/`recurrenciaDe`/`rolesDestinoDe`/`reglasDe`) — es "Full Mapping" a mano tal como exige §5.4.1/§5.4.5 para la frontera web, no lógica de negocio, así que no viola la regla de controller tonto, pero es la parte más larga del archivo.
 - **Ningún otro método relevado supera 40 líneas** salvo el de hallazgo 2 (`EventoService.actualizar` con 36 líneas es el segundo más largo, dentro del techo).
 - **Ningún archivo del módulo supera 300 líneas** (`EventoService.java` con 340 líneas de archivo es el más grande, pero cuenta imports/comentarios; el cuerpo de clase real es ~293 líneas).
+
+## 8. Eventos entre dos días locales, para los huecos de horario (spec 015, D-289, 2026-10-29)
+
+`EventosDelParticipanteFinder.entre(persona, desde, hasta)` (nuevo) devuelve las ocurrencias visibles entre dos DÍAS LOCALES
+de la persona, pasados o por venir: `proximosDias` solo mira hacia adelante desde hoy y los huecos necesitan también los
+días ya vividos de la semana. Mismo caso de uso que `GET /calendar/events` (audiencia, recurrencias, excepciones y respuesta
+«Voy»/«No voy»), mismo tope de 90 días. Vienen las ocurrencias que EMPIEZAN dentro del rango (como `proximosDias`): quien
+necesite el pedazo de un evento que cruza la medianoche pide un día antes. `mentoring` descarta las de «No voy».

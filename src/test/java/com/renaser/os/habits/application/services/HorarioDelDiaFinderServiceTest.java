@@ -13,6 +13,7 @@ import com.renaser.os.habits.application.ports.out.participante.ConsultarProgres
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.RolParticipante;
 import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHorarioPort;
+import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort;
 import com.renaser.os.habits.domain.model.desbloqueo.DesbloqueoHabito;
 import com.renaser.os.habits.domain.model.habito.AmbitoHabito;
 import com.renaser.os.habits.domain.model.habito.ExigenciaEvidencia;
@@ -33,6 +34,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.UUID;
@@ -69,6 +71,8 @@ class HorarioDelDiaFinderServiceTest {
     private LoadPreferenciaHorarioPort loadPreferenciaPort;
     @Mock
     private LoadDesbloqueoHabitoPort loadDesbloqueoPort;
+    @Mock
+    private LoadRegistroHabitoPort loadRegistroPort;
 
     private HorarioDelDiaFinderService finder;
     private UserId aprendiz;
@@ -76,7 +80,7 @@ class HorarioDelDiaFinderServiceTest {
     @BeforeEach
     void setUp() {
         finder = new HorarioDelDiaFinderService(consultarUseCase, progresoPort, loadHabitoPort, loadPreferenciaPort,
-                loadDesbloqueoPort, CLOCK);
+                loadDesbloqueoPort, loadRegistroPort, CLOCK);
         aprendiz = UserId.of(UUID.randomUUID());
         lenient().when(progresoPort.deParticipante(aprendiz)).thenReturn(Optional.of(
                 new ProgresoParticipanteHabits(DIA_DE_HOY, "America/Lima", RolParticipante.TRAINEE, false, true)));
@@ -163,6 +167,52 @@ class HorarioDelDiaFinderServiceTest {
     }
 
     @Test
+    @DisplayName("spec 015: marca todaviaNoLeToca con el dia de programa de la FECHA, salvo que el habito ya haya corrido")
+    void marcaTodaviaNoLeToca() {
+        Habito pronto = habito("Pronto", true);
+        Habito yaCorrio = habito("Ya corrio", true);
+        Habito nunca = habito("Nunca llega", true);
+        LocalDate sabado = LocalDate.of(2026, 9, 12);
+        int diaDelSabado = DIA_DE_HOY + 3;
+        when(consultarUseCase.consultar(aprendiz, sabado)).thenReturn(resumen(
+                List.of(vista(pronto, null), vista(yaCorrio, null), vista(nunca, null)), cuotaLibre()));
+        when(loadPreferenciaPort.habitosApagadosEn(aprendiz, sabado)).thenReturn(List.of());
+        when(loadPreferenciaPort.habitosApagadosEnDiaSemana(aprendiz, DayOfWeek.SATURDAY)).thenReturn(List.of());
+        // «Pronto» se desbloquea el dia 15 (el del sabado): ya le toca. Los otros dos, despues.
+        when(loadDesbloqueoPort.deParticipante(aprendiz)).thenReturn(List.of(
+                desbloqueo(pronto, diaDelSabado), desbloqueo(yaCorrio, diaDelSabado + 5),
+                desbloqueo(nunca, diaDelSabado + 5)));
+        // «Ya corrio» genero un registro el dia 22 (retroceso de dia, D-196): sigue.
+        when(loadRegistroPort.diaProgramaMasAltoGeneradoPorHabito(any(), any()))
+                .thenReturn(Map.of(yaCorrio.id(), diaDelSabado + 6));
+        when(loadHabitoPort.porIds(any())).thenReturn(List.of(pronto, yaCorrio, nunca));
+
+        List<HorarioResuelto> habitos = finder.deFecha(aprendiz, sabado).habitos();
+
+        assertThat(habitos).extracting(HorarioResuelto::titulo, HorarioResuelto::todaviaNoLeToca)
+                .containsExactly(tuple("Pronto", false), tuple("Ya corrio", false), tuple("Nunca llega", true));
+    }
+
+    @Test
+    @DisplayName("spec 015: la clave de sistema viaja con el habito, para reconocer a Despertar y Dormir")
+    void traeLaClaveDeSistema() {
+        Habito despertar = habitoConClave("Despertar", "WAKE_UP");
+        Habito propio = habito("Propio", true);
+        when(consultarUseCase.consultar(aprendiz, HOY_EN_LIMA))
+                .thenReturn(resumen(List.of(vista(despertar, null), vista(propio, null)), cuotaLibre()));
+        when(loadPreferenciaPort.habitosApagadosEn(aprendiz, HOY_EN_LIMA)).thenReturn(List.of());
+        when(loadPreferenciaPort.habitosApagadosEnDiaSemana(aprendiz, DayOfWeek.WEDNESDAY)).thenReturn(List.of());
+        when(loadDesbloqueoPort.deParticipante(aprendiz)).thenReturn(List.of());
+        when(loadHabitoPort.porIds(any())).thenReturn(List.of(despertar, propio));
+
+        List<HorarioResuelto> habitos = finder.deFecha(aprendiz, null).habitos();
+
+        assertThat(habitos).extracting(HorarioResuelto::titulo, HorarioResuelto::claveSistema)
+                .containsExactly(tuple("Despertar", "WAKE_UP"), tuple("Propio", null));
+        verify(loadRegistroPort, never()).diaProgramaMasAltoGeneradoPorHabito(any(), any());
+    }
+
+    @Test
     @DisplayName("un participante sin programa no llega al caso de uso")
     void sinParticipacionFalla() {
         UserId desconocido = UserId.of(UUID.randomUUID());
@@ -183,6 +233,17 @@ class HorarioDelDiaFinderServiceTest {
     private static HorarioDeHabito vista(Habito habito, CambioProgramado cambio) {
         return new HorarioDeHabito(habito.id(), habito.titulo(), LocalTime.of(6, 0), LocalTime.of(8, 0), true,
                 false, null, cambio);
+    }
+
+    private DesbloqueoHabito desbloqueo(Habito habito, int diaDesbloqueo) {
+        return DesbloqueoHabito.rehydrate(aprendiz, habito.id(), diaDesbloqueo, CLOCK.now(), CLOCK.now(),
+                CLOCK.now());
+    }
+
+    private static Habito habitoConClave(String titulo, String clave) {
+        return Habito.rehydrate(HabitoId.of(UUID.randomUUID()), AmbitoHabito.SISTEMA, null, titulo, null,
+                TipoHabito.CHECKBOX, "CUERPO", null, clave, ExigenciaEvidencia.OPCIONAL, false, false, true,
+                false, null, null, null, null, true, CLOCK.now(), CLOCK.now());
     }
 
     private static Habito habito(String titulo, boolean desactivable) {

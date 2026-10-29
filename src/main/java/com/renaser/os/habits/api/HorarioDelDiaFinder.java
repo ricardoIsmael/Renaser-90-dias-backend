@@ -58,10 +58,24 @@ public interface HorarioDelDiaFinder {
      *                          apagar un dia
      * @param cambioProgramado  {@code null} salvo que haya un cambio general diferido esperando su
      *                          fecha
+     * @param todaviaNoLeToca   el habito se eligio para mas adelante y su dia de desbloqueo no llego a esa fecha
+     *                          (y nunca corrio): el generador diario no le crea registro. Spec 015: sin esta marca
+     *                          un habito del plan que todavia no empieza ocuparia tiempo en los huecos
+     * @param claveSistema      {@code habitos.clave_sistema} ({@code WAKE_UP}, {@code SLEEP}...), o {@code null}
+     *                          si no tiene. Para reconocer a Despertar y Dormir por lo que son y no por su titulo,
+     *                          que se renombra
      */
     record HorarioResuelto(UUID habitoId, String titulo, LocalTime horaDisparo, LocalTime horaLimite,
                            boolean personalizado, boolean apagado, boolean pausado, boolean obligatorio,
-                           CambioHorarioProgramado cambioProgramado) {
+                           CambioHorarioProgramado cambioProgramado, boolean todaviaNoLeToca, String claveSistema) {
+
+        /** La forma anterior a la spec 015, sin las dos marcas nuevas: no se sabe, asi que van en {@code false}/{@code null}. */
+        public HorarioResuelto(UUID habitoId, String titulo, LocalTime horaDisparo, LocalTime horaLimite,
+                               boolean personalizado, boolean apagado, boolean pausado, boolean obligatorio,
+                               CambioHorarioProgramado cambioProgramado) {
+            this(habitoId, titulo, horaDisparo, horaLimite, personalizado, apagado, pausado, obligatorio,
+                    cambioProgramado, false, null);
+        }
     }
 
     record CambioHorarioProgramado(LocalTime horaDisparo, LocalTime horaLimite, LocalDate desde) {

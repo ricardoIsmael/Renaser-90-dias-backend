@@ -170,6 +170,23 @@ Todas exigen sesión (`SecurityConfig`, E-254).
 `semanaHasta` es el viernes que cierra la semana (sábado→viernes); sin él, la ventana vigente (los 7 días
 cerrados que terminan ayer). Un `semanaHasta` que no es viernes responde 400.
 
+### Huecos de horario (spec 015, D-289, 2026-10-29)
+
+Contrato y reglas: [`specs/015-huecos-de-horario/contracts/api.md`](../specs/015-huecos-de-horario/contracts/api.md). Lo que le
+queda libre a una persona de lunes a domingo (ventana de Despertar a Dormir, huecos de 30 minutos o más, los que se repiten
+en 3 días o más) y lo cumplido frente a lo planificado. **Solo lectura para su acompañamiento**; la persona no tiene
+endpoint en esta versión. Ambas rutas devuelven la misma respuesta, con `Cache-Control: no-store`, y exigen sesión.
+
+| Verbo | Ruta | Quién · guard |
+|---|---|---|
+| GET | `/api/v1/mentor/groups/{groupId}/learners/{userId}/huecos?semana=YYYY-MM-DD` | mentor o guía · acompaña vigentemente el grupo, cuenta activa y el alumno es del grupo (mismo guardián que `…/radar`) |
+| GET | `/api/v1/leadership/groups/{groupId}/people/{personId}/huecos?semana=YYYY-MM-DD` | líder de mentores, admin, alquimista · `AccesoDeLiderazgo` (el de `…/week`); grupo con mentor y persona de ese grupo hoy |
+
+`semana` es el lunes; sin ella, la semana en curso de la persona (en SU zona). Una semana futura, anterior a la primera de su
+programa o que no es lunes responde 400; un rol sin permiso o una cuenta suspendida, 403. La semana en curso se calcula al
+pedirla; una ya terminada sale de la foto que guarda el barrido horario `mentoring-cerrar-huecos` (tabla `huecos_semana`, V120)
+con `cerrada: true`.
+
 ### `academy`
 
 | Verbo | Ruta |

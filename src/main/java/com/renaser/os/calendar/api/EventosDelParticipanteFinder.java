@@ -39,6 +39,18 @@ public interface EventosDelParticipanteFinder {
     AgendaDeEventos proximosDias(UserId participanteId, int dias);
 
     /**
+     * Las ocurrencias visibles entre dos DIAS LOCALES de la persona, pasados o por venir (spec 015: los huecos de
+     * horario miran la semana entera, incluidos los dias ya vividos). Desde la medianoche local de {@code desde} hasta
+     * el final de {@code hasta}, ordenadas por inicio. Vienen las ocurrencias que EMPIEZAN dentro del rango, como en
+     * {@link #proximosDias}: una que empezo el dia anterior y cruza la medianoche no viene, asi que quien necesite
+     * ese pedazo pide un dia antes.
+     *
+     * @param hasta inclusivo; el rango no pasa de {@link #MAXIMO_DIAS} dias
+     * @throws IllegalArgumentException si {@code hasta} es anterior a {@code desde} o el rango pasa del tope
+     */
+    AgendaDeEventos entre(UserId participanteId, LocalDate desde, LocalDate hasta);
+
+    /**
      * @param zona  la zona de la persona, con la que se calcularon las horas locales
      * @param desde primer dia del rango (hoy, en su zona)
      * @param hasta ultimo dia del rango, inclusive

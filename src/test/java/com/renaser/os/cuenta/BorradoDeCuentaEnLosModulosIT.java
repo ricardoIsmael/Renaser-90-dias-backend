@@ -64,13 +64,14 @@ class BorradoDeCuentaEnLosModulosIT {
     }
 
     @Test
-    @DisplayName("los catorce módulos se inyectan en el orden de D-243: los que cuelgan de otros, antes")
+    @DisplayName("los quince módulos se inyectan en el orden de D-243: los que cuelgan de otros, antes")
     void ordenDeLosModulos() {
         assertThat(borrados).extracting(b -> b.getClass().getSimpleName()).containsExactly(
                 "BorradoDeCuentaEnChatAdapter", "BorradoDeCuentaEnCommunityAdapter",
                 "BorradoDeCuentaEnCalendarAdapter", "BorradoDeCuentaEnNotificationsAdapter",
                 "BorradoDeCuentaEnSupportAdapter", "BorradoDeCuentaEnLeadershipAdapter",
-                "BorradoDeCuentaEnAcademyAdapter", "BorradoDeCuentaEnRagAdapter",
+                // Spec 015 (V120): las fotos semanales de huecos de horario.
+                "BorradoDeCuentaEnMentoringAdapter", "BorradoDeCuentaEnAcademyAdapter", "BorradoDeCuentaEnRagAdapter",
                 "BorradoDeCuentaEnOnboardingAdapter", "BorradoDeCuentaEnPhasecontractsAdapter",
                 "BorradoDeCuentaEnEvidenceAdapter", "BorradoDeCuentaEnRocksAdapter",
                 "BorradoDeCuentaEnPointsAdapter", "BorradoDeCuentaEnHabitsAdapter");
