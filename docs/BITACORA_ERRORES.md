@@ -10032,6 +10032,8 @@ en vivo se verifica con un mensaje de OTRA cuenta, no con uno propio. Pendiente 
 > `messageBrokerTaskScheduler`. Se verificó antes que no cortaran a nadie: la web no abre el socket, el APK publicado nunca
 > completa el CONNECT (este mismo error) y la app nueva late cada 10 s. `LatidosDelChatIT` fija la negociación y el cierre de
 > la conexión muda. El frontend dice todavía en sus comentarios que el backend contesta `heart-beat:0,0`: ya no es así.
+> **Actualizado 2026-10-29 (E-648).** El cierre de la conexión muda lo fija ahora `LatidosDelChatCortosIT` (latidos de 2 s);
+> `LatidosDelChatIT` conserva la negociación con el valor de producción.
 
 ---
 
@@ -15763,6 +15765,26 @@ para una semana pasada.
 **Solución.** El cuerpo pasó a `main()` bajo `if __name__ == '__main__'`; `bajar`, `limpiar` e `id_de_youtube` se pueden importar sin efectos (solo se crean las carpetas `transcripciones/salida` y `vtt`). Ejecutarlo como script hace lo mismo que antes.
 
 **Cómo evitar que vuelva a pasar.** `test_importar_extraer_todo_no_lanza_la_extraccion_de_las_lecciones` (`scripts/sparkie-indexacion/test_indexar.py`) importa el módulo con `subprocess.run` interceptado y exige cero salida; falla contra el código anterior. Regla para los scripts de esta carpeta: nada de trabajo a nivel de módulo. (`limpiar_vtt.py` también procesa `sys.argv` al importarse: no se importa, solo se ejecuta.)
+
+## E-648 · `LatidosDelChatIT.cierraSoloLaConexionMuda` frenó dos veces el pipeline: el `ERROR` del cierre a veces no sale (backend, issue #25, RESUELTO, 29/10)
+
+**Síntoma literal.** CD del 28/10 (run 40716792111, tras fusionar #23) y CI «push» del PR #27 (run 40796356612), las dos veces en la misma línea:
+
+```
+LatidosDelChatIT.cierraSoloLaConexionMuda:96
+Expecting any element of: ["CONNECTED ... heart-beat:10000,10000 ^@", "\n", "\n", "\n"]
+to satisfy ... startsWith("ERROR").contains("Session closed.")
+```
+
+El código de cierre (1002) sí había llegado; la trama `ERROR` no. Pasaba en local y en la mayoría de las corridas de CI.
+
+**Causa real.** No era una carrera del cliente (esperar más no la arregla) sino una del servidor, en Spring 7.0.9. En una misma pasada de `SimpleBrokerMessageHandler.HeartbeatTask` el broker declara muerta a la sesión (`handleDisconnect` encola `DISCONNECT_ACK`, que `StompSubProtocolHandler` vuelve `ERROR Session closed.` y, en su `finally`, cierra el socket con 1002) y, como al latir no actualiza `lastWriteTime`, también le encola un latido. Los dos salen por hilos distintos del canal de salida y por el mismo `ConcurrentWebSocketSessionDecorator`. Si el hilo del latido está escribiendo cuando el del `ERROR` deja su trama en la cola, el del `ERROR` no puede escribir, sigue a su `finally` y cierra (`closeInProgress`); el hilo del latido, al vaciar la cola, saca el `ERROR` y lo descarta porque `tryFlushMessageBuffer` hace `poll()` antes de mirar `shouldNotSend()`. Resultado: `CONNECTED`, tres latidos y un cierre 1002 sin `ERROR`, exactamente la lista del síntoma. Medido con latidos de 1 s y muchas mudas a la vez, leyendo 8 s después de cerrar: 49 de 300 (16 %) y 17 de 150 (11 %) sin `ERROR`. Además la prueba gastaba 30–40 s de reloj real (3 × 10 s sin leer, revisada cada 10 s) para una sola conexión.
+
+**Solución.** Sin tocar `src/main`. `LatidosDelChatIT` conserva solo la negociación con el valor de producción (`heart-beat:10000,10000`); el cierre de la muda pasa a `LatidosDelChatCortosIT`, con los mismos latidos pero de 2 s (un `BeanPostProcessor` de prueba cambia solo el intervalo del broker antes de arrancar; la prueba comprueba en el `CONNECTED` que quedó en 2 s): de 30–40 s a unos 8 s. En vez de una muda hay ocho: todas deben cerrarse con 1002, ninguna puede recibir otra trama que `CONNECTED`, latidos y `ERROR Session closed.`, y **al menos una** debe recibir el `ERROR`. Un servidor que nunca lo mande falla siempre; que se pierdan los ocho (0,16^8) es del orden de 1 en 2 millones, o menos. Cliente STOMP y esperas con tiempo límite en `ConexionesStompDePrueba` (ya no consume tramas al esperar). La prueba que cambió de clase es `LatidosDelChatCortosIT.cierraSoloLasConexionesMudas`.
+
+**Cómo evitar que vuelva a pasar.** Una prueba no exige, desde una sola conexión, una trama que el servidor manda a mejor esfuerzo junto a otra que sale por un hilo distinto: se exige lo determinista (el cierre 1002, que solo lo manda el servidor al procesar ese `ERROR`) y lo otro, sobre varias conexiones. Comprobado el 29/10 en local: 30 repeticiones seguidas en una JVM (30/30) y 10 corridas de `mvnw verify` con contexto nuevo, cada una con las dos clases (10/10).
+
+**Queda a la vista.** (a) El `ERROR` perdido es del framework y no cambia nada observable: la app, ante un `ERROR`, solo cierra el socket, y es `onclose` quien reconecta (`conexionStomp.ts`), así que recibe lo mismo con o sin él; la presencia se apaga con el `SessionDisconnectEvent`. (b) Si algún día se quisiera que siempre salga, bastaría con que `EntregaAutorizadaInterceptor.preSend` (que corre en el hilo del programador, en orden) marcara el socket al ver el `DISCONNECT_ACK` y descartara el latido que le sigue; no se hizo porque no cambia nada para la app.
 
 ## E-650 · Web Push no podía enviar: BouncyCastle no estaba registrado, «no such provider: BC» (backend, issue #28, RESUELTO, 29/10)
 

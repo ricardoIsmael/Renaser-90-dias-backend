@@ -778,7 +778,14 @@ latido no sale; el cliente, al no oír nada, cierra y reconecta, y el handshake 
 
 | Clase | Qué fija |
 |---|---|
-| `LatidosDelChatIT` (2) | Tomcat real, cliente STOMP en binario como la app: el `CONNECTED` negocia `10000,10000` (antes `0,0`); la conexión muda se cierra con `Session closed.` y 1002, la que late sigue abierta y recibe latidos, y la que ofreció `0,0` no se corta |
+| `LatidosDelChatIT` (1) | Tomcat real, cliente STOMP en binario como la app: el `CONNECTED` negocia `10000,10000` (antes `0,0`) |
+| `LatidosDelChatCortosIT` (1) | Lo mismo con latidos de 2 s (solo cambia el intervalo del broker, para no gastar 30–40 s): las conexiones mudas se cierran con 1002 y al menos una recibe `Session closed.`, la que late sigue abierta y recibe latidos, y la que ofreció `0,0` no se corta |
+
+> **Actualizado 2026-10-29 (E-648).** Antes eran dos pruebas en `LatidosDelChatIT`, una de ellas con 30–40 s de reloj
+> real y la exigencia de que una conexión sola recibiera el `ERROR Session closed.`. Ese `ERROR` es del mejor esfuerzo:
+> en la misma pasada del `HeartbeatTask` el broker también le encola un latido, y a veces el cierre 1002 lo descarta
+> (~16 % de las mudas, sin tramas fuera de `CONNECTED` y latidos). Lo determinista es el cierre 1002. La app no
+> depende del `ERROR`: ante un `ERROR` solo cierra, y es `onclose` quien reconecta.
 
 ## 12. La foto del chat de soporte: la tarjeta con el nombre de su aprendiz (2026-09-27, D-205)
 
