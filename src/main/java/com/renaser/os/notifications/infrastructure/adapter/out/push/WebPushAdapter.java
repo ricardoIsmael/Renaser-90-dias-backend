@@ -196,6 +196,45 @@ public class WebPushAdapter implements TransportePush {
         }
     }
 
+    /**
+     * Al cargar la clase: BouncyCastle queda registrado antes de que este adaptador toque web-push (E-650,
+     * issue #28).
+     *
+     * <p><b>Por qué hace falta.</b> {@code web-push} 5.1.2 pide sus primitivas criptográficas al proveedor llamado
+     * {@code "BC"}: las llaves VAPID en el constructor de {@code PushService}, la clave del navegador al armar la
+     * {@code Notification}, y el par de claves efímero y el AES-GCM al enviar. Solo su {@code Cli} lo registra;
+     * como biblioteca no lo hace, y tampoco lo hacían este backend, sus jars de runtime ni el Dockerfile. Con las
+     * llaves VAPID puestas, el primer envío habría caído en el {@code catch} de {@link #entregar} como
+     * {@code FALLO_TEMPORAL "no such provider: BC"} y ninguna notificación web habría llegado, tampoco al iPhone.
+     * No se vio antes porque en producción Web Push estaba apagado: sin VAPID, {@code entregar} sale antes.
+     *
+     * <p><b>Por qué en un {@code static} y no al crear el {@code PushService}.</b> Crear el servicio es solo la
+     * primera de las tres llamadas que necesitan BC, y {@code servicio()} corre antes que la {@code Notification}
+     * únicamente por el orden en que Java resuelve {@code servicio().send(...)}: bastaría repartir esa línea en
+     * dos para que el registro llegara tarde. Al cargar la clase no hay orden que cuidar: ningún método del
+     * adaptador corre sin que esto ya se haya ejecutado.
+     */
+    static {
+        registrarBouncyCastle();
+    }
+
+    /**
+     * Registra BouncyCastle si la JVM no lo tiene; idempotente y sin pisar uno que ya esté.
+     *
+     * <p>Se agrega <b>al final</b> de la lista de proveedores ({@code addProvider}, no {@code insertProviderAt}):
+     * el resto del backend (TLS, JWT, hashes) sigue resolviendo sus algoritmos con los del JDK y BC solo responde
+     * al nombre {@code "BC"} que {@code web-push} pide de forma explícita. Reordenar los proveedores de toda la
+     * JVM por una dependencia exclusiva de Web Push sería cambiar de alcance. El chequeo previo evita construir
+     * un proveedor que {@code addProvider} descartaría igual (devuelve -1 si el nombre ya existe).
+     *
+     * <p>Paquete y no privado para poder probarlo sin enviar nada.
+     */
+    static void registrarBouncyCastle() {
+        if (java.security.Security.getProvider(org.bouncycastle.jce.provider.BouncyCastleProvider.PROVIDER_NAME) == null) {
+            java.security.Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
+        }
+    }
+
     private record WebSubscription(String endpoint, WebSubscriptionKeys keys) {
     }
 

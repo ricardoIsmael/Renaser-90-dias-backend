@@ -411,6 +411,14 @@ iPhone.
 **Web (D-218).** El service worker le manda `{tipo: 'renaser-abrir-aviso', ruta}` a la ventana abierta, o
 abre una nueva en la ruta; la app abre lo mismo que en el teléfono (E-407).
 
+**Web Push necesita BouncyCastle registrado (2026-10-29, E-650, issue #28).** `web-push` 5.1.2 pide sus claves y su
+cifrado al proveedor `"BC"` y no lo registra (solo su `Cli`): con las llaves VAPID puestas, todo envío web habría
+caído en `FALLO_TEMPORAL "no such provider: BC"`. `WebPushAdapter` lo registra al cargar la clase
+(`registrarBouncyCastle()`: si falta, `Security.addProvider(new BouncyCastleProvider())`; idempotente, sin pisar uno
+que ya esté y al final de la lista, para no mover los proveedores del JDK). `bcprov-jdk15on` 1.70 ya estaba en el
+`pom.xml`. Prueba: `WebPushAdapterBouncyCastleTest` (parte de una JVM sin BC y arma un pedido con `preparePost`, sin
+red). Es un paso previo a encender Web Push en producción (llaves VAPID, que carga el dueño).
+
 Pruebas: `EntregaPushTest` (reloj a las 02:00 UTC), `TokenPushTest` (borde de 26 h, cambio de dueño),
 `NotificacionServiceTest` (el teléfono sin confirmar recibe, el confirmado no), `TokenPushServiceTest`,
 `TokenPushControllerTest` (200/400/404/403 y suspendida), `TokenPushPersistenceAdapterTest`,
