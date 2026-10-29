@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
@@ -174,5 +175,50 @@ class RegistroRadarPersistenceAdapterTest {
     @Test
     void primerRegistroRadarEnVacioSinHistorial() {
         assertThat(adapter.primerRegistroRadarEn(participanteId)).isEmpty();
+    }
+
+    // ── Spec 012 (V119): la hora prevista ─────────────────────────────────
+
+    @Test
+    void laHoraPrevistaSeGuardaYSeLee() {
+        adapter.save(RegistroRadar.registrar(RegistroRadarId.of(UUID.randomUUID()), participanteId, "h", "p", "s", 5,
+                "e", AHORA).conHoraPrevista(14));
+
+        assertThat(adapter.ultimoDeParticipante(participanteId)).get()
+                .extracting(RegistroRadar::horaPrevista).isEqualTo(14);
+    }
+
+    @Test
+    void unRegistroLibreQuedaSinHoraPrevista() {
+        adapter.save(RegistroRadar.registrar(RegistroRadarId.of(UUID.randomUUID()), participanteId, "h", "p", "s", 5,
+                "e", AHORA));
+
+        assertThat(adapter.ultimoDeParticipante(participanteId)).get()
+                .extracting(RegistroRadar::horaPrevista).isNull();
+    }
+
+    @Test
+    void elHistorialTraeLaHoraPrevistaDeCadaRegistro() {
+        adapter.save(RegistroRadar.registrar(RegistroRadarId.of(UUID.randomUUID()), participanteId, "h1", "p", "s", 1,
+                "e", AHORA.minus(2, ChronoUnit.HOURS)).conHoraPrevista(12));
+        adapter.save(RegistroRadar.registrar(RegistroRadarId.of(UUID.randomUUID()), participanteId, "h2", "p", "s", 2,
+                "e", AHORA));
+
+        assertThat(adapter.historialDeParticipante(participanteId, null, 10))
+                .extracting(RegistroRadar::horaPrevista).containsExactly(null, 12);
+    }
+
+    @Test
+    void laBaseRechazaUnaHoraPrevistaQueNoExiste() {
+        // V119: CHECK (hora_prevista BETWEEN 0 AND 23). Va al final del metodo: Postgres aborta la transaccion.
+        assertThatThrownBy(() -> entityManager.createNativeQuery("""
+                        INSERT INTO renaser.registros_radar (id, participante_id, que_hago, que_pienso, que_siento,
+                            nivel_energia, que_evito, creado_en, hora_prevista)
+                        VALUES (:id, :participante, 'h', 'p', 's', 5, 'e', now(), 24)
+                        """)
+                .setParameter("id", UUID.randomUUID())
+                .setParameter("participante", participanteId.value())
+                .executeUpdate())
+                .hasMessageContaining("registros_radar_hora_prevista_valida");
     }
 }

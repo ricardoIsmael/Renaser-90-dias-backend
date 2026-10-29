@@ -38,4 +38,9 @@ public class CumplimientoDePrueba {
     SemanaDePersonaService semanaDePersonaService(BancoDeCumplimiento banco) {
         return banco.semanaService();
     }
+
+    @Bean
+    RadarDePersonaService radarDePersonaService(BancoDeCumplimiento banco) {
+        return banco.radarService();
+    }
 }

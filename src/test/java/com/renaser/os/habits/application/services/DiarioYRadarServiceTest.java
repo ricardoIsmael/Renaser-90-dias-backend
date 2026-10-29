@@ -64,7 +64,7 @@ class DiarioYRadarServiceTest {
 
     private static RegistroRadar radar(UUID id, Instant creadoEn) {
         return RegistroRadar.rehydrate(RegistroRadarId.of(id), APRENDIZ, "hago", "pienso", "siento", 7, "evito",
-                creadoEn);
+                creadoEn, null);
     }
 
     private static EntradaDiario entrada(String texto, String audioRuta) {

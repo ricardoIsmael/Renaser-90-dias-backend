@@ -100,10 +100,12 @@ Mandá también `Authorization: Bearer <token>` en paralelo — hoy el backend l
 | POST | `/api/v1/radar` |
 | GET | `/api/v1/radar/latest` |
 | GET | `/api/v1/radar/history` |
+| GET · PUT | `/api/v1/radar/mi-radar` (D-286) |
 | GET | `/api/v1/habit-preferences` |
 | PATCH | `/api/v1/habit-preferences/{habitId}` |
 | GET | `/api/v1/mentor/groups/{groupId}/learners/{userId}/habits` |
 | GET | `/api/v1/mentor/groups/{groupId}/learners/{userId}/radar` |
+| GET | `/api/v1/leadership/groups/{groupId}/people/{personId}/radar` (D-286) |
 
 > Las dos rutas `mentor/...` (2026-09-15, D-126) las sirve `habits` y no `mentoring`, porque el dato es
 > de este módulo: devuelven **exactamente la misma respuesta** que `/admin/trainees/{id}/habits` y que

@@ -34,4 +34,7 @@ public class RegistroRadarJpaEntity {
     private String queEvito;
 
     private Instant creadoEn;
+
+    /** V119 (spec 012): la hora local (0-23) a la que respondia; {@code null} = registro libre o anterior a V119. */
+    private Short horaPrevista;
 }

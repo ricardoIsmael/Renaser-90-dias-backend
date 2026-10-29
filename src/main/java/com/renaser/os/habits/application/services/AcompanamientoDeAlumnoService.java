@@ -7,14 +7,11 @@ import com.renaser.os.habits.application.ports.in.acompanamiento.ConsultarHabito
 import com.renaser.os.habits.application.ports.in.habitosaprendiz.ConsultarHabitosDeAprendizUseCase.VistaHabitosDeAprendiz;
 import com.renaser.os.habits.application.ports.in.radar.ConsultarHistorialRadarUseCase.HistorialRadarPage;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
-import com.renaser.os.habits.application.ports.out.radar.LoadRegistroRadarPort;
-import com.renaser.os.habits.domain.model.radar.RegistroRadar;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
-import java.util.List;
 
 /**
  * Lo que un acompañante (mentor o guia) puede leer de UN alumno suyo: su configuracion de habitos
@@ -34,15 +31,15 @@ public class AcompanamientoDeAlumnoService
 
     private final AcompanamientoFinder acompanamientoFinder;
     private final HabitosDeAprendizAdminService habitosDeAprendiz;
-    private final LoadRegistroRadarPort loadRadarPort;
+    private final LecturaDelRadar lecturaDelRadar;
     private final Clock clock;
 
     AcompanamientoDeAlumnoService(AcompanamientoFinder acompanamientoFinder,
                                    HabitosDeAprendizAdminService habitosDeAprendiz,
-                                   LoadRegistroRadarPort loadRadarPort, Clock clock) {
+                                   LecturaDelRadar lecturaDelRadar, Clock clock) {
         this.acompanamientoFinder = acompanamientoFinder;
         this.habitosDeAprendiz = habitosDeAprendiz;
-        this.loadRadarPort = loadRadarPort;
+        this.lecturaDelRadar = lecturaDelRadar;
         this.clock = clock;
     }
 
@@ -57,8 +54,7 @@ public class AcompanamientoDeAlumnoService
     public HistorialRadarPage codigoRenaserDeAlumno(ConsultaDeAcompanante consulta, Instant cursor,
                                                      int tamanoPagina) {
         requireAcompananteVigente(consulta);
-        List<RegistroRadar> pagina = loadRadarPort.historialDeParticipante(consulta.alumnoId(), cursor, tamanoPagina);
-        return new HistorialRadarPage(pagina, RadarService.siguienteCursor(pagina, tamanoPagina));
+        return lecturaDelRadar.pagina(consulta.alumnoId(), cursor, tamanoPagina);
     }
 
     /**

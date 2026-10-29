@@ -2,6 +2,9 @@ package com.renaser.os.leadership.application.services;
 
 import com.renaser.os.community.api.AcompanamientoFinder;
 import com.renaser.os.community.api.AcompanamientoFinder.GrupoAcompanado;
+import com.renaser.os.habits.api.CodigoRenaserDePersonaFinder;
+import com.renaser.os.habits.api.CodigoRenaserDePersonaFinder.CodigoRenaserDePersona;
+import com.renaser.os.habits.api.CodigoRenaserDePersonaFinder.MiRadarDeLaPersona;
 import com.renaser.os.leadership.application.ports.out.GuardarConsultaDeFichaPort;
 import com.renaser.os.leadership.domain.model.consulta.ConsultaDeFicha;
 import com.renaser.os.leadership.domain.model.cumplimiento.VentanaDeLaFicha;
@@ -97,6 +100,15 @@ public class BancoDeCumplimiento {
 
     public final List<ConsultaDeFicha> consultas = new ArrayList<>();
     private int siguienteId = 1;
+
+    /** Lo que {@code habits} diria del Codigo Renaser de cada persona (spec 012). */
+    final Map<UserId, CodigoRenaserDePersona> radares = new LinkedHashMap<>();
+    /** Cada lectura del Radar que llego a {@code habits}: quien, desde que cursor y de a cuantos. */
+    public final List<LecturaDelRadarPedida> lecturasDelRadar = new ArrayList<>();
+
+    /** @param cursor el que pidio quien llamo; null = la pagina mas reciente */
+    public record LecturaDelRadarPedida(UserId persona, Instant cursor, int tamanoPagina) {
+    }
 
     public final Clock reloj = new Clock() {
         @Override
@@ -318,6 +330,11 @@ public class BancoDeCumplimiento {
             .getOrDefault(aprendiz, List.of()).stream()
             .filter(a -> !a.fecha().isBefore(desde) && !a.fecha().isAfter(hasta)).toList();
 
+    final CodigoRenaserDePersonaFinder radarFinder = (persona, cursor, tamanoPagina) -> {
+        lecturasDelRadar.add(new LecturaDelRadarPedida(persona, cursor, tamanoPagina));
+        return radares.getOrDefault(persona, new CodigoRenaserDePersona(new MiRadarDeLaPersona(false, List.of(), List.of()), List.of(), null));
+    };
+
     final GuardarConsultaDeFichaPort guardarConsulta = consulta -> {
         consultas.add(consulta);
         return consulta;
@@ -340,6 +357,8 @@ public class BancoDeCumplimiento {
         accionesPorPersona.clear();
         ventanasPedidasALaSemana.clear();
         consultas.clear();
+        radares.clear();
+        lecturasDelRadar.clear();
     }
 
     /** Un grupo con mentor vigente (que es una cuenta de mentor activa, sin programa propio hasta que se le dé). */
@@ -389,6 +408,11 @@ public class BancoDeCumplimiento {
 
     public void accion(UserId id, AccionDelDia accion) {
         accionesPorPersona.computeIfAbsent(id, p -> new ArrayList<>()).add(accion);
+    }
+
+    /** Lo que {@code habits} devuelve del Codigo Renaser y Mi Radar de la persona. */
+    public void radar(UserId id, CodigoRenaserDePersona radar) {
+        radares.put(id, radar);
     }
 
     /** La misma ventana con un día cambiado a otro estado, sin porcentaje (pausa, suspensión…). */
@@ -455,5 +479,9 @@ public class BancoDeCumplimiento {
     public SemanaDePersonaService semanaService() {
         return new SemanaDePersonaService(acceso(), personas(), new LecturaDeLaFicha(seguimiento, semaforoDeLaPersona(),
                 accionesFinder, usuariosFinder), guardarConsulta, ids, reloj);
+    }
+
+    public RadarDePersonaService radarService() {
+        return new RadarDePersonaService(acceso(), personas(), radarFinder, reloj);
     }
 }

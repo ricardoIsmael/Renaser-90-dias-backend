@@ -131,7 +131,7 @@ Actor resuelto por header `X-Actor-Id` (temporal, D-29 de `users`, sin autentica
 | POST | `/api/v1/habit-tracks/phone-free/break` | Rompe la racha activa (sin penalización) |
 | POST | `/api/v1/radar` | Registra un check-in de Código Renaser (§8) |
 | GET | `/api/v1/radar/latest` | Timestamp del último check-in del actor (gating de horario, ver §8) |
-| GET | `/api/v1/radar/history?cursor=` | Historial paginado por cursor, 20 por página (§8) |
+| GET | `/api/v1/radar/history?cursor=` | Historial paginado por cursor, 84 por página desde D-286 (eran 20; §8) |
 
 **Contrato viejo no verificado 1:1** contra `docs/API_CONTRACT.md`/`docs/MOBILE_HABITS_API.md` del repo viejo — no se abrieron esos archivos en esta pasada por límite de tiempo frente al tamaño del módulo. Las rutas se diseñaron por analogía con `blocking.ts`/`phoneFree.ts` (`POST .../phone-free/start|complete|break`, coincide con los comentarios de esos archivos) pero **esto es una desviación potencial sin verificar**, documentada explícitamente en vez de asumida como correcta.
 
@@ -255,6 +255,72 @@ Ver también la pregunta #5 agregada en §5. Resumen:
 1. **¿Vista de mentor/admin sobre el Código Renaser de un aprendiz?** Existía en el backend viejo (`/admin/trainees/[id]/radar`), fuera de alcance de este encargo (D-H12).
 2. **¿Hace falta el equivalente a `/today` (RC-02)?** El cliente actual no lo usa; si un futuro flujo admin/mentor lo necesita, falta construirlo (D-H13).
 3. **¿Por qué el cliente móvil dejó de pasar por la API vieja y empezó a escribir directo a Supabase?** No se encontró el motivo en el repo (sin commit ni comentario) — se documenta el hecho, no se especula la causa.
+
+### 8.4 Mi Radar — el Código Renaser desde el día 8 (D-286, spec 012, 2026-10-29)
+
+> **Corregido 2026-10-29 (cuarta ronda de la spec 012, pedido del dueño).** Esta sección decía que Mi Radar eran «de 1 a 12 horas… (las
+> mismas todos los días)», con la columna `horas_mi_radar`, `{ "encendido", "horas" }` y `HorarioDelRadar` por hora. Ahora es **por día
+> de la semana**, igual que los hábitos en Planificar: `horas` valen para todos los días y `dias` trae los días con horas propias o
+> «Sin Radar ese día». V119 se modificó (no se creó V120) porque todavía no se publicó. Ver la forma, la base y las reglas abajo.
+>
+> **Corregido 2026-10-29.** §8.2 decía que `GET /api/v1/radar/history` pagina de a 20 y que el Radar es «TRAINEE únicamente»; la
+> página es hoy de **84** (desde el día 8 un día puede tener 21 registros) y la puerta es la de siempre desde E-169 (el aprendiz, o
+> quien tiene su programa activado). §8.3 (1) tampoco es cierta ya: el mentor lee el Radar de su aprendiz desde D-126, y desde
+> esta spec también el líder de mentores, Administración y el alquimista.
+
+**Qué es.** Los días 1 a 7 el Código Renaser son doce franjas fijas (08:00 a 19:00) que la app abre sola. Desde el día 8 queda
+**apagado** y la persona lo enciende por su cuenta en Yo → Mi Radar, eligiendo de 1 a 12 horas en punto entre las 03:00 y las
+23:00 para todos los días y, por día de la semana, horas propias o «Sin Radar ese día». Es opcional: no encenderlo nunca cuenta como falta, ni toca puntos, racha, semáforo ni coherencia.
+
+**Datos (V119, sin tablas nuevas).**
+
+| Tabla | Columna | Significado |
+|---|---|---|
+| `participantes_programa` | `horas_mi_radar smallint[]` | Las horas de TODOS los días. `NULL` = apagado. Si no, 1 a 12 horas entre 3 y 23 (CHECK). Apagar guarda `NULL` |
+| `participantes_programa` | `dias_mi_radar jsonb` | Los días con horas propias: `[{"dia": 6, "horas": [11]}, {"dia": 7, "horas": []}]`, lunes = 1; `horas: []` = «Sin Radar ese día»; `NULL` = ningún día propio. CHECK: es un arreglo y hay `horas_mi_radar`. El resto de la forma lo valida el dominio |
+| `registros_radar` | `hora_prevista smallint` | La hora local (0–23) a la que respondía; `NULL` = registro libre o anterior a V119 (no se rellenó) |
+
+**Por qué jsonb y no una tabla de días.** El dueño pidió no crear tablas, y son a lo sumo siete elementos que siempre se leen y se
+escriben juntos (no se consulta «quién tiene Radar los sábados»). El costo: la base no ve dentro del arreglo, y lo impone `MiRadar`.
+Si algún día hay que consultar por día de la semana, ese día se normaliza a una tabla.
+
+Las columnas son de una tabla de `users`: `habits` llega a ellas por `users.api.HorasDeMiRadarPort` (la implementa
+`HorasDeMiRadarJdbcAdapter`, en `users`; devuelve y recibe `HorasDeMiRadar(horas, dias)`), detrás de `LoadMiRadarPort` /
+`SaveMiRadarPort` (`MiRadarPersistenceAdapter`).
+
+**Dominio.** `MiRadar(horas, dias)` (valor: `horas` ordenadas, 1–12, de 3 a 23, sin repetir; sin horas es apagado y sin días;
+`dias` son `DiaPropio(dia 1–7 sin repetir, horas con las mismas reglas)`, y encendido exige horas para todos los días) con
+`horasDelDia(DayOfWeek)` —las propias del día o las de todos los días— y `HorarioDelRadar` (funciones puras con el día del programa
+y el momento LOCAL de la persona, `ZonedDateTime`: de ahí salen la hora y el día de la semana, que con el reloj en la madrugada UTC
+puede ser el anterior):
+
+| Día del programa | `puedeRegistrar` | `horaPrevista` |
+|---|---|---|
+| 0–7 | siempre, como hoy | la hora local, si está entre 8 y 19 |
+| ≥ 8, apagado | no | — |
+| ≥ 8, encendido, día de la semana sin horas (`horas: []`, «Sin Radar ese día») | no | — |
+| ≥ 8, encendido | si la hora local está entre 3 y 23 | la hora local, si es una de las `horasDelDia` de ese día de la semana |
+
+`RadarService.registrar` calcula el momento local con el `Clock` en la zona de la persona (regla 02) y, si no puede registrar, responde
+**409** (`IllegalStateException`: «Mi Radar está apagado», «Hoy no tienes Mi Radar» o «Mi Radar funciona de 03:00 a 23:59») y no 403. La regla de un registro por hora (comprobación + índice V52) sigue igual. `AccesoAlRadar`
+es la puerta de la propia persona (antes eran dos métodos privados de `RadarService`) y `LecturaDelRadar` arma la página del
+historial para la persona, su mentor y liderazgo; en esa página `miRadar` es `null` mientras el `dia_programa` es menor que 8.
+
+**Endpoints.**
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/v1/radar/mi-radar` | `{ "encendido": bool, "horas": [9, 14, 20], "dias": [{ "dia": 6, "horas": [11] }, { "dia": 7, "horas": [] }] }` (apagado: `horas` y `dias` vacíos) |
+| PUT | `/api/v1/radar/mi-radar` | Mismo cuerpo (sin `dias` equivale a `dias: []`). Con `encendido: false` se ignoran las horas y los días. 400 con el mensaje del dominio si no cumplen las reglas (horas de todos los días o de un día, día fuera de 1–7 o repetido, `horas` ausente en un día) |
+| GET | `/api/v1/leadership/groups/{g}/people/{p}/radar?cursor=` | Líder de mentores, administrador y alquimista (`AccesoDeLiderazgo`, grupo con mentor, persona de ese grupo hoy); `no-store`; de a 84; misma forma que `/radar/history` |
+
+`POST /radar` suma `horaPrevista` a su respuesta; `/radar/history` y la lectura del mentor suman `miRadar` (`{ encendido, horas, dias }`;
+`null` en la semana 1) y `horaPrevista` por registro. `leadership` lee por `habits.api.CodigoRenaserDePersonaFinder` y no deja registro de consulta propio.
+
+**Pruebas.** `MiRadarTest`, `HorarioDelRadarTest`, `RegistroRadarTest`, `RadarServiceTest` (con el reloj en la madrugada UTC),
+`MiRadarServiceTest`, `AcompanamientoDeAlumnoServiceTest`, `RadarDePersonaServiceTest`, `RadarControllerMiRadarTest` y
+`CumplimientoDelLiderControllerTest`; de integración (Testcontainers) `HorasDeMiRadarJdbcAdapterTest`, `MiRadarPersistenceAdapterTest`,
+`RegistroRadarPersistenceAdapterTest`, `RadarMiRadarIT` y `CumplimientoDelLiderIT`.
 
 ---
 

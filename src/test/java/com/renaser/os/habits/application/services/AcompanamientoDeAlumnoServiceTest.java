@@ -7,7 +7,9 @@ import com.renaser.os.habits.application.ports.out.participante.ConsultarProgres
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.RolParticipante;
 import com.renaser.os.habits.application.ports.out.habitosaprendiz.LeerHabitosPersonalizadosPort;
 import com.renaser.os.habits.application.ports.out.preferencia.HistorialCambioHorarioPort;
+import com.renaser.os.habits.application.ports.out.radar.LoadMiRadarPort;
 import com.renaser.os.habits.application.ports.out.radar.LoadRegistroRadarPort;
+import com.renaser.os.habits.domain.model.radar.MiRadar;
 import com.renaser.os.habits.domain.model.radar.RegistroRadar;
 import com.renaser.os.habits.domain.model.radar.RegistroRadarId;
 import com.renaser.os.shared.domain.FixedClock;
@@ -61,6 +63,8 @@ class AcompanamientoDeAlumnoServiceTest {
     private HistorialCambioHorarioPort historialPort;
     @Mock
     private LoadRegistroRadarPort loadRadarPort;
+    @Mock
+    private LoadMiRadarPort miRadarPort;
 
     private AcompanamientoDeAlumnoService service;
     private UserId mentor;
@@ -72,7 +76,8 @@ class AcompanamientoDeAlumnoServiceTest {
         alumno = UserId.of(UUID.randomUUID());
         var habitosDeAprendiz = new HabitosDeAprendizAdminService(guardDeAdmin, progresoPort, leerHabitosPort,
                 historialPort, CLOCK, CatalogoAplicableDePrueba.sinAudiencias());
-        service = new AcompanamientoDeAlumnoService(acompanamientoFinder, habitosDeAprendiz, loadRadarPort, CLOCK);
+        service = new AcompanamientoDeAlumnoService(acompanamientoFinder, habitosDeAprendiz,
+                new LecturaDelRadar(loadRadarPort, miRadarPort, progresoPort), CLOCK);
     }
 
     // ─── habitos del alumno ────────────────────────────────────────────────
@@ -127,6 +132,8 @@ class AcompanamientoDeAlumnoServiceTest {
     void codigoRenaserDeAlumnoDevuelveLaPaginaSinCursorCuandoNoEstaLlena() {
         acompanaDeVerdad();
         when(loadRadarPort.historialDeParticipante(alumno, null, 84)).thenReturn(List.of(registro()));
+        enElDia(10);
+        when(miRadarPort.deParticipante(alumno)).thenReturn(MiRadar.apagado());
 
         var pagina = service.codigoRenaserDeAlumno(new ConsultaDeAcompanante(mentor, GRUPO, alumno), null, 84);
 
@@ -134,10 +141,40 @@ class AcompanamientoDeAlumnoServiceTest {
         assertThat(pagina.siguienteCursor()).isNull();
     }
 
+    /** Spec 012, FR-013: quien acompaña ve tambien si Mi Radar esta encendido y a que horas (desde el dia 8). */
+    @Test
+    void codigoRenaserDeAlumnoTraeMiRadarDelAlumno() {
+        acompanaDeVerdad();
+        when(loadRadarPort.historialDeParticipante(alumno, null, 84)).thenReturn(List.of(registro()));
+        enElDia(8);
+        when(miRadarPort.deParticipante(alumno)).thenReturn(MiRadar.encendido(List.of(20, 9, 14)));
+
+        var pagina = service.codigoRenaserDeAlumno(new ConsultaDeAcompanante(mentor, GRUPO, alumno), null, 84);
+
+        assertThat(pagina.miRadar().estaEncendido()).isTrue();
+        assertThat(pagina.miRadar().horas()).containsExactly(9, 14, 20);
+    }
+
+    /** Spec 012: en la semana 1 (dia menor que 8) Mi Radar no aplica: va en null y ni se lee la columna. */
+    @Test
+    void codigoRenaserDeAlumnoSinMiRadarEnLaSemana1() {
+        acompanaDeVerdad();
+        when(loadRadarPort.historialDeParticipante(alumno, null, 84)).thenReturn(List.of(registro()));
+        enElDia(7);
+
+        var pagina = service.codigoRenaserDeAlumno(new ConsultaDeAcompanante(mentor, GRUPO, alumno), null, 84);
+
+        assertThat(pagina.entradas()).hasSize(1);
+        assertThat(pagina.miRadar()).isNull();
+        verifyNoInteractions(miRadarPort);
+    }
+
     @Test
     void codigoRenaserDeAlumnoDevuelveCursorCuandoLaPaginaVineLlena() {
         acompanaDeVerdad();
         when(loadRadarPort.historialDeParticipante(alumno, null, 1)).thenReturn(List.of(registro()));
+        enElDia(10);
+        when(miRadarPort.deParticipante(alumno)).thenReturn(MiRadar.apagado());
 
         var pagina = service.codigoRenaserDeAlumno(new ConsultaDeAcompanante(mentor, GRUPO, alumno), null, 1);
 
@@ -151,7 +188,7 @@ class AcompanamientoDeAlumnoServiceTest {
         assertThatThrownBy(() -> service.codigoRenaserDeAlumno(new ConsultaDeAcompanante(mentor, GRUPO, alumno),
                 null, 84)).isInstanceOf(NotAuthorizedException.class);
 
-        verifyNoInteractions(loadRadarPort);
+        verifyNoInteractions(loadRadarPort, miRadarPort, progresoPort);
     }
 
     @Test
@@ -163,7 +200,7 @@ class AcompanamientoDeAlumnoServiceTest {
         assertThatThrownBy(() -> service.codigoRenaserDeAlumno(new ConsultaDeAcompanante(mentor, GRUPO, alumno),
                 null, 84)).isInstanceOf(NotAuthorizedException.class);
 
-        verifyNoInteractions(loadRadarPort);
+        verifyNoInteractions(loadRadarPort, miRadarPort, progresoPort);
     }
 
     /** Nadie puede leer el Codigo Renaser por esta puerta sin pasar por el guard del grupo. */
@@ -177,6 +214,11 @@ class AcompanamientoDeAlumnoServiceTest {
         verify(loadRadarPort, never()).historialDeParticipante(any(), any(), anyInt());
     }
 
+    private void enElDia(int dia) {
+        when(progresoPort.deParticipante(alumno)).thenReturn(Optional.of(
+                new ProgresoParticipanteHabits(dia, "America/Lima", RolParticipante.TRAINEE, false, true)));
+    }
+
     private void acompanaDeVerdad() {
         when(acompanamientoFinder.acompanaVigente(mentor, GRUPO, CLOCK.now())).thenReturn(true);
         when(acompanamientoFinder.aprendicesVigentes(GRUPO, CLOCK.now())).thenReturn(List.of(alumno));
@@ -185,6 +227,6 @@ class AcompanamientoDeAlumnoServiceTest {
     private RegistroRadar registro() {
         return RegistroRadar.rehydrate(RegistroRadarId.of(UUID.fromString("00000000-0000-0000-0000-00000000000a")),
                 alumno, "Escribiendo", "Que llego tarde", "Ansiedad", 6, "La llamada de ventas",
-                Instant.parse("2026-09-14T13:00:00Z"));
+                Instant.parse("2026-09-14T13:00:00Z"), null);
     }
 }

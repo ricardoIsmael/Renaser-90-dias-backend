@@ -4,12 +4,18 @@ import com.renaser.os.habits.domain.model.radar.RegistroRadar;
 
 import java.time.Instant;
 
-/** Proyeccion explicita de salida (CLAUDE.MD §5.4.1) — nunca la entidad de dominio serializada. */
+/**
+ * Proyeccion explicita de salida (CLAUDE.MD §5.4.1) — nunca la entidad de dominio serializada.
+ *
+ * <p>{@code horaPrevista} (spec 012): la hora local (0-23) a la que respondia, o {@code null} si fue un registro libre
+ * o anterior a V119. Es campo nuevo y aditivo: el APK publicado lo ignora.
+ */
 public record RegistroRadarResponse(String id, String whatAmIDoing, String whatAmIThinking, String whatAmIFeeling,
-                                     int energyLevel, String whatAmIAvoiding, Instant createdAt) {
+                                     int energyLevel, String whatAmIAvoiding, Instant createdAt,
+                                     Integer horaPrevista) {
 
     public static RegistroRadarResponse from(RegistroRadar r) {
         return new RegistroRadarResponse(r.id().toString(), r.queHago(), r.quePienso(), r.queSiento(),
-                r.nivelEnergia(), r.queEvito(), r.creadoEn());
+                r.nivelEnergia(), r.queEvito(), r.creadoEn(), r.horaPrevista());
     }
 }
