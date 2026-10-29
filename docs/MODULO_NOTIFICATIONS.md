@@ -120,7 +120,7 @@ Sin `api/` propio: `notifications` es un sumidero terminal — hoy ningún otro 
 - **REST**: ver tabla de endpoints §2.
 - **Eventos** (`in/event/`): 4 listeners, uno por evento, cada uno `@Component` package-private con un único método `@ApplicationModuleListener void on(XxxEvent event)`. Se optó por **uno por evento** (no un solo listener que dispatchee por tipo) para que cada uno declare su propio mapeo a `TipoNotificacion`/copy de forma explícita y testeable en aislamiento — encargo lo dejaba a criterio de diseño.
 - **Persistencia**: JPA + mappers a mano (D-28, traducción explícita caso a caso, nunca `valueOf` "mágico" por nombre — mismo criterio que `support`/`points` aunque los valores coincidan textualmente). `PreferenciaNotificacionJpaEntity` usa `@IdClass` (mismo patrón que `HistorialCoherenciaJpaEntity` de `points`) para su PK compuesta `(usuario_id, tipo)`.
-- **Push** (`out/push/WebPushAdapter`): entrega suscripciones de navegador con VAPID y serializa un payload mínimo (`title`, `body`, `data.url`). Filtra `WEB` y deja intactos los tokens `IOS`/`ANDROID` para el adaptador nativo. Sin claves VAPID configuradas hace *no-op* seguro y deja un warning; una respuesta 4xx/5xx o un endpoint vencido tampoco revierte la notificación de la bandeja.
+- **Push** (`out/push/WebPushAdapter`): entrega suscripciones de navegador con VAPID y serializa un payload mínimo (`title`, `body`, `data.url`) y lo manda con `Urgency: high` y, si el aviso es «a una hora», con un TTL que termina a esa hora (§10.4). Filtra `WEB` y deja intactos los tokens `IOS`/`ANDROID` para el adaptador nativo. Sin claves VAPID configuradas hace *no-op* seguro y deja un warning; una respuesta 4xx/5xx o un endpoint vencido tampoco revierte la notificación de la bandeja.
 - **Scheduler** (`PurgaNotificacionesScheduler`): cron diario 04:30 UTC, purga filas de más de 90 días. Reutiliza `@EnableScheduling` global ya declarado por `points.PointsSchedulingConfig` — no lo repite (mismo criterio documentado en `rocks.VerdugoIgnoradoScheduler`).
 
 ---
@@ -229,6 +229,7 @@ A diferencia de `habits`→`points` y `rocks`→`points` (síncrono, misma trans
 | Integración Testcontainers | `PreferenciaNotificacionPersistenceAdapterTest` | sin fila → vacío, upsert inserta y luego actualiza la MISMA fila (no duplica), traducción de los 13 tipos |
 | Integración Testcontainers | `TokenPushPersistenceAdapterTest` | upsert inserta nuevo, upsert con token ya existente reasigna sin duplicar fila, `tokensDe` trae todos los dispositivos de un usuario |
 | Unit adaptador | `WebPushAdapterTest` | sin VAPID configurado no rompe la emisión y no intenta tocar el canal nativo |
+| Unit adaptador | `WebPushAdapterVencimientoTest` | E-647: el TTL de Web Push termina a la hora del aviso (y no baja de 0), sin `venceEn` queda el de la librería, `Urgency: high` en todo aviso |
 | Integración E2E (outbox) | `NotificationsEventOutboxIT` (+ `TransactionalEventPublisherTestHelper`) | §4 — publica `SantuarioRotoEvent`/`RocaCompletadaEvent` reales y confirma que llegan a la bandeja |
 
 `./mvnw clean test` ejecutado el 2026-09-08: **2614 pruebas, 0 fallos, 0 errores, BUILD SUCCESS**. La suite levantó PostgreSQL/Redis con Testcontainers, aplicó V42 y pasó `ArchitectureTest`.
@@ -381,9 +382,31 @@ Una sola fuente por dominio: lo que el servidor descarta antes de emitir y lo qu
 son el mismo instante. El instante viaja por `MensajePush.venceEn` (opcional, `null` = no caduca) y por una
 sobrecarga más de `EmitirNotificacionUseCase.emitir(comando, entregaPush, etiqueta, venceEn)`, no por
 `EmitirNotificacionCommand` (veintitantos llamadores), igual que la etiqueta de la spec 007. `ExpoPushTransporte`
-manda `expiration` y no `ttl` (si se mandaran los dos, `ttl` gana). **Web Push no caduca todavía**: su TTL es
-relativo (segundos desde ahora) y `WebPushAdapter` no tiene el `Clock`; el navegador sigue con el TTL de 28 días
-de la librería. Queda a la vista, no resuelto.
+manda `expiration` y no `ttl` (si se mandaran los dos, `ttl` gana).
+
+> **Corregido 2026-10-28 (E-647, issue #26).** Esta sección terminaba así: «**Web Push no caduca todavía**: su TTL
+> es relativo (segundos desde ahora) y `WebPushAdapter` no tiene el `Clock`; el navegador sigue con el TTL de 28
+> días de la librería. Queda a la vista, no resuelto.» Ya caduca y sale con prioridad alta; ver el párrafo siguiente.
+
+**Web Push caduca a su hora y sale con prioridad alta (2026-10-28, E-647, issue #26).** Un usuario con iPhone (la
+web en Safari) recibía «Pastilla Renacer a las 7:00» hacia las 9: `new Notification(subscription, payload)` deja el
+TTL de la librería (28 días) y ninguna cabecera `Urgency`, y el servicio de push guarda el aviso hasta entregarlo.
+`WebPushAdapter` recibe el `Clock` y arma la notificación en `notificacionDe`:
+
+- **`Urgency: high` en todo Web Push**, como `priority: "high"` en Expo (D-217).
+- **`TTL` = los segundos que faltan para `MensajePush.venceEn()`**, redondeados hacia abajo y sin bajar de 0, para
+  los mismos avisos de la tabla de arriba. Web Push no tiene un instante absoluto como el `expiration` de Expo, así
+  que se calcula en cada intento: un reintento del `DespachadorPush` (250 ms, 750 ms) manda los segundos que
+  faltan entonces. Sin `venceEn` (anuncios, chat, avisos manuales), el TTL de la librería, como siempre.
+- **Un aviso que ya venció al enviarlo sale con TTL 0**: según RFC 8030 §5.2 el servicio de push no lo retiene;
+  lo entrega al instante si el navegador está disponible y, si no, expira. No se omite el envío ni se agregó un
+  estado a `ResultadoEnvioPush`: ninguno de los cuatro dice «no se mandó porque ya no servía» sin mentir.
+
+`PushService` de la librería (5.1.2) manda las dos cabeceras: `prepareRequest` pone `TTL` siempre y `Urgency`
+cuando la notificación la trae. No cambian el cuerpo del JSON, la validación del endpoint, la interpretación de la
+respuesta ni VAPID. No hace falta APK ni tocar la web. Queda a la vista: con TTL 0 un aviso que vence entre la
+comprobación del servidor y el envío puede llegar con un segundo de retraso, nunca guardado; y no se probó con un
+iPhone.
 
 **Web (D-218).** El service worker le manda `{tipo: 'renaser-abrir-aviso', ruta}` a la ventana abierta, o
 abre una nueva en la ruta; la app abre lo mismo que en el teléfono (E-407).
@@ -393,6 +416,8 @@ Pruebas: `EntregaPushTest` (reloj a las 02:00 UTC), `TokenPushTest` (borde de 26
 `TokenPushControllerTest` (200/400/404/403 y suspendida), `TokenPushPersistenceAdapterTest`,
 `AvisoHabitoNotificationListenerTest` (rutas y caducidad), `ExpoPushTransporteCanalTest` (ruta con `?`),
 `ExpoPushTransporteVencimientoTest` (`expiration` con y sin `venceEn`, en segundos, ejemplo exacto),
+`WebPushAdapterVencimientoTest` (TTL exacto con `venceEn`, TTL 0 si ya venció, el de la librería sin `venceEn`,
+`Urgency: high` siempre y las cabeceras que arma `PushService`),
 `AvisoDeHabitoTest` / `AvisoDeEventoTest` (`venceEn`), `RecordatorioEventoNotificationListenerTest` (el
 recordatorio caduca al inicio, el anuncio no) y `NotificacionServiceTest` (el `MensajePush` lleva el `venceEn`).
 

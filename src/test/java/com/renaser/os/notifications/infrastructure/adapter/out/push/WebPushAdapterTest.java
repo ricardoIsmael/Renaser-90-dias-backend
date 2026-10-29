@@ -30,7 +30,7 @@ class WebPushAdapterTest {
     @Test
     @DisplayName("sin VAPID no rompe la emision y lo DICE, en vez de fingir una entrega")
     void sinVapidConfiguradoNoRompeLaEmision() {
-        WebPushAdapter adapter = new WebPushAdapter("", "", "");
+        WebPushAdapter adapter = new WebPushAdapter("", "", "", CLOCK);
         TokenPush token = web();
 
         assertThatCode(() -> adapter.entregar(token, new MensajePush(null, "Aviso", "Cuerpo", null))).doesNotThrowAnyException();
@@ -44,7 +44,7 @@ class WebPushAdapterTest {
     @Test
     @DisplayName("solo atiende WEB: los nativos no son asunto suyo")
     void noTocaElCanalNativo() {
-        WebPushAdapter adapter = new WebPushAdapter("", "", "");
+        WebPushAdapter adapter = new WebPushAdapter("", "", "", CLOCK);
 
         assertThat(adapter.atiende(PlataformaPush.WEB)).isTrue();
         assertThat(adapter.atiende(PlataformaPush.IOS)).isFalse();
@@ -58,7 +58,7 @@ class WebPushAdapterTest {
     @Test
     @DisplayName("spec 007: el aviso de habito lleva `tag` para que el navegador reemplace y no apile")
     void elAvisoDeHabitoLlevaTag() {
-        WebPushAdapter adapter = new WebPushAdapter("", "", "");
+        WebPushAdapter adapter = new WebPushAdapter("", "", "", CLOCK);
 
         assertThat(adapter.cuerpoDe(new MensajePush(TipoNotificacion.RECORDATORIO_HABITO, "Tu hábito está por empezar",
                 "Meditar: te toca a las 21:00. En juego: 10 puntos.", "/habitos/abc?dimension=BODY",
@@ -71,7 +71,7 @@ class WebPushAdapterTest {
     @Test
     @DisplayName("spec 007: sin etiqueta el cuerpo web no trae `tag`, como hasta ahora")
     void sinEtiquetaNoHayTag() {
-        WebPushAdapter adapter = new WebPushAdapter("", "", "");
+        WebPushAdapter adapter = new WebPushAdapter("", "", "", CLOCK);
 
         assertThat(adapter.cuerpoDe(new MensajePush(TipoNotificacion.RECORDATORIO_HABITO, "T", "C", "/habitos/abc")))
                 .doesNotContainKey("tag");

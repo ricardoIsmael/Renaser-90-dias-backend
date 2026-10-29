@@ -5,6 +5,7 @@ import com.renaser.os.notifications.domain.model.notificacion.TipoNotificacion;
 import com.renaser.os.notifications.domain.model.tokenpush.PlataformaPush;
 import com.renaser.os.notifications.domain.model.tokenpush.TokenPush;
 import com.renaser.os.notifications.domain.model.tokenpush.TokenPushId;
+import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -70,7 +71,7 @@ class AvisoDeChatEnElPushTest {
     @Test
     @DisplayName("web: el navegador recibe la etiqueta para mostrar uno por chat; los demás, el cuerpo de siempre")
     void web() {
-        WebPushAdapter web = new WebPushAdapter("", "", "");
+        WebPushAdapter web = new WebPushAdapter("", "", "", FixedClock.at(Instant.parse("2026-10-28T12:00:00Z")));
         assertThat(web.cuerpoDe(DE_CHAT)).containsEntry("tag", "chat-" + CONVERSACION)
                 .containsEntry("title", "Luisa y sus aprendices (3 mensajes nuevos)");
         assertThat(web.cuerpoDe(new MensajePush(TipoNotificacion.HITO_PROGRAMA, "t", "c", "/caja")))
