@@ -1,6 +1,7 @@
 package com.renaser.os.rag;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.plataforma.PedidosDePrueba;
 import com.renaser.os.plataforma.application.services.CopiaDeEstados;
@@ -10,7 +11,6 @@ import com.renaser.os.rag.application.ports.out.ia.SintetizarVozPort;
 import com.renaser.os.rag.application.services.circuito.CopiaDelCircuito;
 import com.renaser.os.rag.application.services.circuito.EstadoAutomaticoDeLaIa;
 import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
-import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.ProveedorIaNoDisponibleException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,8 +37,6 @@ import java.net.http.WebSocket;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -68,7 +66,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CircuitoDeLaIaIT {
 
     private static final String AVISO = EstadoAutomaticoDeLaIa.AVISO;
-    private static final RelojMovible RELOJ = new RelojMovible();
     private static final Proveedor CHAT = new Proveedor();
     private static final Proveedor VOZ = new Proveedor();
     private static final Proveedor EN_VIVO = new Proveedor();
@@ -95,11 +92,14 @@ class CircuitoDeLaIaIT {
     private Instant base;
     private final Instant inicioReal = Instant.now();
 
+    @Autowired
+    private RelojDePrueba reloj;
+
     @BeforeEach
     void armar() {
         // Cada prueba en su propia hora del reloj: las ventanas (fallas, tope de avisos) no se mezclan.
         base = Instant.now().truncatedTo(ChronoUnit.HOURS).plus(Duration.ofDays(1L + PRUEBAS.incrementAndGet()));
-        RELOJ.fijar(base);
+        reloj.fijar(base);
         CHAT.reiniciar();
         VOZ.reiniciar();
         EN_VIVO.reiniciar();
@@ -162,7 +162,7 @@ class CircuitoDeLaIaIT {
         assertThat(circuito.get("fallasEnVentana").asInt()).isEqualTo(5);
         assertThat(Instant.parse(circuito.get("proximaPrueba").asText())).isEqualTo(base.plus(Duration.ofMinutes(2)));
 
-        RELOJ.avanzar(Duration.ofMinutes(2));
+        reloj.avanzar(Duration.ofMinutes(2));
         assertThat(apagadas(aprendiz)).as("vencida la espera, la app vuelve a ver SER").doesNotContainKey("ia.chat");
         CHAT.falla = false;
         HttpResponse<String> prueba = chat(aprendiz);
@@ -195,7 +195,7 @@ class CircuitoDeLaIaIT {
         assertThat(EN_VIVO.llamadas.get()).as("Gemini Live ni se intenta").isZero();
         assertThat(chat(aprendiz).statusCode()).as("el chat sigue: otro circuito").isEqualTo(200);
 
-        RELOJ.avanzar(Duration.ofMinutes(2));
+        reloj.avanzar(Duration.ofMinutes(2));
         VOZ.falla = false;
         assertThat(voz(aprendiz).statusCode()).isEqualTo(201);
         assertThat(esperarHasta(() -> !apagadasSinFallar(aprendiz).containsKey("ia.voz"))).isTrue();
@@ -219,7 +219,7 @@ class CircuitoDeLaIaIT {
         assertThat(apagadas(aprendiz)).as("con lo manual apagado, su aviso").containsEntry("ia.chat",
                 "SER vuelve mañana.");
 
-        RELOJ.avanzar(Duration.ofMinutes(2));
+        reloj.avanzar(Duration.ofMinutes(2));
         CHAT.falla = false;
         assertThat(chat(mentor).statusCode()).as("la prueba del mentor").isEqualTo(200);
         assertThat(circuitoEnLaConsola("ia.chat").get("estado").asText()).isEqualTo("CERRADO");
@@ -248,18 +248,18 @@ class CircuitoDeLaIaIT {
             chat(mentor);
         }
         for (Duration espera : List.of(Duration.ofMinutes(2), Duration.ofMinutes(5))) {
-            RELOJ.avanzar(espera);
+            reloj.avanzar(espera);
             chat(mentor);
         }
-        RELOJ.avanzar(Duration.ofMinutes(15));
+        reloj.avanzar(Duration.ofMinutes(15));
         CHAT.falla = false;
         chat(mentor);
-        RELOJ.avanzar(Duration.ofMinutes(1));
+        reloj.avanzar(Duration.ofMinutes(1));
         CHAT.falla = true;
         for (int i = 0; i < 5; i++) {
             chat(mentor);
         }
-        RELOJ.avanzar(Duration.ofMinutes(2));
+        reloj.avanzar(Duration.ofMinutes(2));
         CHAT.falla = false;
         chat(mentor);
 
@@ -365,12 +365,6 @@ class CircuitoDeLaIaIT {
 
         @Bean
         @Primary
-        Clock relojDelCircuito() {
-            return RELOJ;
-        }
-
-        @Bean
-        @Primary
         ChatIAPort chatDePrueba() {
             return consulta -> Flux.defer(() -> {
                 CHAT.llamadas.incrementAndGet();
@@ -425,28 +419,6 @@ class CircuitoDeLaIaIT {
         void reiniciar() {
             falla = false;
             llamadas.set(0);
-        }
-    }
-
-    static final class RelojMovible implements Clock {
-        private volatile Instant ahora = Instant.now();
-
-        void fijar(Instant instante) {
-            ahora = instante;
-        }
-
-        void avanzar(Duration cuanto) {
-            ahora = ahora.plus(cuanto);
-        }
-
-        @Override
-        public Instant now() {
-            return ahora;
-        }
-
-        @Override
-        public LocalDate today() {
-            return ahora.atZone(ZoneOffset.UTC).toLocalDate();
         }
     }
 

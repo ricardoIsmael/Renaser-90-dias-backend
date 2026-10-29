@@ -1,17 +1,15 @@
 package com.renaser.os.habits.infrastructure.adapter.in.rest.registro;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
-import com.renaser.os.shared.domain.Clock;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -26,33 +24,28 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /** HTTP, permisos, Clock y zona real de participantes_programa contra PostgreSQL/Redis descartables. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import({TestcontainersConfiguration.class, DiaDeHabitosIT.RelojConfig.class})
+@Import(TestcontainersConfiguration.class)
 class DiaDeHabitosIT {
     private static final Instant ANTES = Instant.parse("2026-10-17T04:59:59Z");
     private static final UUID DESPERTAR = UUID.fromString("899a2151-e98c-4b61-a46c-b55134240d17");
-    @TestConfiguration static class RelojConfig {
-        @Bean @Primary RelojMovible relojDia() { return new RelojMovible(); }
-    }
-    static final class RelojMovible implements Clock {
-        volatile Instant ahora = ANTES;
-        public Instant now() { return ahora; }
-        public LocalDate today() { return ahora.atZone(ZoneOffset.UTC).toLocalDate(); }
-    }
     @Autowired JdbcTemplate jdbc;
-    @Autowired RelojMovible reloj;
+    @Autowired RelojDePrueba reloj;
     @Autowired SessionRepository<? extends Session> sesiones;
     @LocalServerPort int puerto;
     private final List<UUID> usuarios = new ArrayList<>();
     private final HttpClient http = HttpClient.newHttpClient();
     private final ObjectMapper json = new ObjectMapper();
 
+    @BeforeEach void fijarElReloj() {
+        reloj.fijar(ANTES);
+    }
+
     @AfterEach void limpiar() {
         usuarios.forEach(id -> jdbc.update("DELETE FROM renaser.usuarios WHERE id = ?", id));
-        reloj.ahora = ANTES;
     }
 
     @Test void cambiaElSnapshotEnSuMedianocheYRechazaElIntentoAnterior() throws Exception {
-        reloj.ahora = ANTES;
+        reloj.fijar(ANTES);
         UUID lima = participante("America/Lima");
         UUID madrid = participante("Europe/Madrid");
         UUID deAyer = registro(lima, LocalDate.of(2026, 10, 16), 10);
@@ -67,7 +60,7 @@ class DiaDeHabitosIT {
         assertThat(enMadrid.get("fechaLocal").asText()).isEqualTo("2026-10-17");
         assertThat(enMadrid.get("cierraEn").asText()).isEqualTo("2026-10-17T22:00:00Z");
 
-        reloj.ahora = Instant.parse("2026-10-17T05:00:00Z");
+        reloj.fijar(Instant.parse("2026-10-17T05:00:00Z"));
         var despues = json.readTree(get("/today/snapshot", sesion).body());
         assertThat(despues.get("fechaLocal").asText()).isEqualTo("2026-10-17");
         assertThat(despues.get("tracks").get(0).get("id").asText()).isEqualTo(deHoy.toString());

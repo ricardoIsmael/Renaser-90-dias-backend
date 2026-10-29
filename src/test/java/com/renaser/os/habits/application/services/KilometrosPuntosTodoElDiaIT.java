@@ -1,10 +1,10 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase.CompletarRegistroCommand;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
-import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,10 +12,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.math.BigDecimal;
@@ -26,7 +23,6 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -44,7 +40,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * no probaría que la fecha del registro es la del aprendiz y no la del servidor.
  */
 @SpringBootTest
-@Import({TestcontainersConfiguration.class, KilometrosPuntosTodoElDiaIT.RelojMovilConfig.class})
+@Import(TestcontainersConfiguration.class)
 class KilometrosPuntosTodoElDiaIT {
 
     private static final UUID HABITO_KM = UUID.fromString("ea87fdec-d4c1-4c4f-9e61-1557bc7255d1");
@@ -61,18 +57,19 @@ class KilometrosPuntosTodoElDiaIT {
     /** 23:59:30 del 29/09 en Lima: el último minuto del día. */
     private static final Instant A_LAS_23_59_EN_LIMA = Instant.parse("2026-09-30T04:59:30Z");
 
-    /** El reloj del contexto; cada prueba lo pone donde necesita antes de actuar. */
-    private static final AtomicReference<Instant> AHORA = new AtomicReference<>(A_LAS_22_30_EN_LIMA);
-
     @Autowired
     private CompletarRegistroUseCase completar;
     @Autowired
     private JdbcTemplate jdbc;
+    /** El reloj del contexto; cada prueba lo pone donde necesita antes de actuar. */
+    @Autowired
+    private RelojDePrueba reloj;
 
     private UUID aprendiz;
 
     @BeforeEach
     void seed() {
+        reloj.fijar(A_LAS_22_30_EN_LIMA);
         aprendiz = UUID.randomUUID();
         jdbc.update("""
                 INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado)
@@ -130,7 +127,7 @@ class KilometrosPuntosTodoElDiaIT {
     }
 
     private Map<String, Object> completarKmA(Instant instante) {
-        AHORA.set(instante);
+        reloj.fijar(instante);
         assertThat(instante.atOffset(ZoneOffset.UTC).toLocalDate())
                 .as("el instante tiene que caer en el día siguiente en UTC").isAfter(DIA_EN_LIMA);
         UUID registro = registroPendienteDeKm();
@@ -164,22 +161,4 @@ class KilometrosPuntosTodoElDiaIT {
                 aprendiz);
     }
 
-    @TestConfiguration
-    static class RelojMovilConfig {
-        @Bean
-        @Primary
-        Clock relojMovil() {
-            return new Clock() {
-                @Override
-                public Instant now() {
-                    return AHORA.get();
-                }
-
-                @Override
-                public LocalDate today() {
-                    return AHORA.get().atOffset(ZoneOffset.UTC).toLocalDate();
-                }
-            };
-        }
-    }
 }

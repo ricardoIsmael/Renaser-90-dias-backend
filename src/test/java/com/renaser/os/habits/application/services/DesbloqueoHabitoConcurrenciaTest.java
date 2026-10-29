@@ -1,23 +1,19 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.habits.application.ports.in.desbloqueo.ElegirHabitoUseCase;
 import com.renaser.os.habits.application.ports.in.desbloqueo.ElegirHabitoUseCase.ElegirHabitoCommand;
 import com.renaser.os.habits.domain.model.desbloqueo.DesbloqueoHabito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
-import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import com.renaser.os.shared.domain.Clock;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.Instant;
@@ -49,7 +45,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code EntityManager} compartido dentro de un {@code @Transactional} de clase.
  */
 @SpringBootTest
-@Import({TestcontainersConfiguration.class, DesbloqueoHabitoConcurrenciaTest.FixedClockConfig.class})
+@Import(TestcontainersConfiguration.class)
 class DesbloqueoHabitoConcurrenciaTest {
 
     private static final Instant AHORA = Instant.parse("2026-08-26T10:00:00Z");
@@ -63,8 +59,12 @@ class DesbloqueoHabitoConcurrenciaTest {
     private UserId participanteId;
     private HabitoId habitoId;
 
+    @Autowired
+    private RelojDePrueba reloj;
+
     @BeforeEach
     void seedParticipanteYHabito() {
+        reloj.fijar(AHORA);
         participanteId = UserId.of(UUID.randomUUID());
         habitoId = HabitoId.of(UUID.randomUUID());
 
@@ -140,12 +140,4 @@ class DesbloqueoHabitoConcurrenciaTest {
         return total == null ? 0 : total;
     }
 
-    @TestConfiguration
-    static class FixedClockConfig {
-        @Bean
-        @Primary
-        Clock relojFijo() {
-            return FixedClock.at(AHORA);
-        }
-    }
 }

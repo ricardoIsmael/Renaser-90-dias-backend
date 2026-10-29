@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.habits.api.CompletarClaseDiariaHabitoUseCase;
 import com.renaser.os.habits.api.CompletarClaseDiariaHabitoUseCase.CompletarClaseDiariaHabitoCommand;
@@ -9,8 +10,6 @@ import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
-import com.renaser.os.shared.domain.Clock;
-import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,10 +17,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
@@ -99,7 +95,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code COMPLETADO} — solo que despues de haberse cobrado varias veces.
  */
 @SpringBootTest
-@Import({TestcontainersConfiguration.class, ClaseDiariaYPastillaCerrojoIT.RelojFijoConfig.class})
+@Import(TestcontainersConfiguration.class)
 class ClaseDiariaYPastillaCerrojoIT {
 
     /**
@@ -146,8 +142,12 @@ class ClaseDiariaYPastillaCerrojoIT {
 
     private UserId participanteId;
 
+    @Autowired
+    private RelojDePrueba reloj;
+
     @BeforeEach
     void seedFixtures() {
+        reloj.fijar(AHORA);
         transaccionPropia = new TransactionTemplate(transactionManager);
         transaccionPropia.setPropagationBehavior(Propagation.REQUIRES_NEW.value());
 
@@ -363,14 +363,4 @@ class ClaseDiariaYPastillaCerrojoIT {
         }
     }
 
-    @TestConfiguration
-    static class RelojFijoConfig {
-
-        /** Ver javadoc de la clase: fija el puntaje de los dos habitos en 10 a cualquier hora. */
-        @Bean
-        @Primary
-        Clock relojFijo() {
-            return FixedClock.at(AHORA);
-        }
-    }
 }

@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase.CompletarRegistroCommand;
@@ -8,7 +9,6 @@ import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
-import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import jakarta.persistence.EntityManager;
@@ -18,9 +18,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -28,8 +25,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.time.ZoneOffset;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -51,7 +46,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * fila queda COMPLETADA de verdad con cero puntos, y que un rechazo no deja escrito nada.
  */
 @SpringBootTest
-@Import({TestcontainersConfiguration.class, CompletarRegistroExpiracionTransaccionIT.RelojConfig.class})
+@Import(TestcontainersConfiguration.class)
 class CompletarRegistroExpiracionTransaccionIT {
 
     /** 04:30 UTC del 7 = 23:30 del 6 de octubre en Lima. */
@@ -59,7 +54,6 @@ class CompletarRegistroExpiracionTransaccionIT {
     /** 05:00:01 UTC del 7 = 00:00:01 del 7 en Lima: el 6 ya termino. */
     private static final Instant RECIEN_EMPEZADO_EL_7_EN_LIMA = Instant.parse("2026-10-07T05:00:01Z");
     private static final LocalDate EL_6 = LocalDate.of(2026, 10, 6);
-    private static final AtomicReference<Instant> AHORA = new AtomicReference<>(ULTIMA_MEDIA_HORA_DEL_6_EN_LIMA);
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"));
 
@@ -73,12 +67,15 @@ class CompletarRegistroExpiracionTransaccionIT {
     private JdbcTemplate jdbcTemplate;
     @Autowired
     private TransactionTemplate transactionTemplate;
+    @Autowired
+    private RelojDePrueba reloj;
 
     private UserId participanteId;
     private HabitoId habitoId;
 
     @BeforeEach
     void seedFixtures() {
+        reloj.fijar(ULTIMA_MEDIA_HORA_DEL_6_EN_LIMA);
         participanteId = UserId.of(UUID.randomUUID());
         habitoId = HabitoId.of(UUID.randomUUID());
 
@@ -148,7 +145,7 @@ class CompletarRegistroExpiracionTransaccionIT {
     @Test
     @DisplayName("D-259: pasada la hora y dentro de su dia (23:30 de Lima) SE COMPLETA, y paga cero")
     void pasadaLaHoraDentroDelDiaSeCompletaConCeroPuntos() {
-        AHORA.set(ULTIMA_MEDIA_HORA_DEL_6_EN_LIMA);
+        reloj.fijar(ULTIMA_MEDIA_HORA_DEL_6_EN_LIMA);
         RegistroHabitoId id = seedRegistroDelSeis();
 
         completarUseCase.completar(new CompletarRegistroCommand(participanteId, id, null, null));
@@ -161,7 +158,7 @@ class CompletarRegistroExpiracionTransaccionIT {
     @Test
     @DisplayName("D-259: terminado su dia en Lima, un registro PENDIENTE (el barrido no paso) ya no se completa")
     void terminadoSuDiaUnPendienteYaNoSeCompleta() {
-        AHORA.set(RECIEN_EMPEZADO_EL_7_EN_LIMA);
+        reloj.fijar(RECIEN_EMPEZADO_EL_7_EN_LIMA);
         RegistroHabitoId id = seedRegistroDelSeis();
 
         assertThatThrownBy(() -> completarUseCase.completar(
@@ -180,7 +177,7 @@ class CompletarRegistroExpiracionTransaccionIT {
     @Test
     @DisplayName("D-259: un registro EXPIRADO (de un dia que ya termino) no se completa")
     void unRegistroExpiradoNoSeCompleta() {
-        AHORA.set(RECIEN_EMPEZADO_EL_7_EN_LIMA);
+        reloj.fijar(RECIEN_EMPEZADO_EL_7_EN_LIMA);
         RegistroHabitoId id = seedRegistroDelSeis();
         jdbcTemplate.update("""
                 UPDATE renaser.registros_habito SET estado = CAST('EXPIRADO' AS renaser.estado_registro)
@@ -198,7 +195,7 @@ class CompletarRegistroExpiracionTransaccionIT {
     @Test
     @DisplayName("Un registro FALLIDO no se puede completar")
     void unRegistroFallidoSigueCerrado() {
-        AHORA.set(ULTIMA_MEDIA_HORA_DEL_6_EN_LIMA);
+        reloj.fijar(ULTIMA_MEDIA_HORA_DEL_6_EN_LIMA);
         RegistroHabitoId id = seedRegistroDelSeis();
         jdbcTemplate.update("""
                 UPDATE renaser.registros_habito SET estado = CAST('FALLIDO' AS renaser.estado_registro)
@@ -212,22 +209,4 @@ class CompletarRegistroExpiracionTransaccionIT {
         assertThat(estadoEnBaseDe(id)).isEqualTo("FALLIDO");
     }
 
-    @TestConfiguration
-    static class RelojConfig {
-        @Bean
-        @Primary
-        Clock relojDeEstaPrueba() {
-            return new Clock() {
-                @Override
-                public Instant now() {
-                    return AHORA.get();
-                }
-
-                @Override
-                public LocalDate today() {
-                    return AHORA.get().atOffset(ZoneOffset.UTC).toLocalDate();
-                }
-            };
-        }
-    }
 }

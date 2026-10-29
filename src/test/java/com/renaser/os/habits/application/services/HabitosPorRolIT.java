@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.habits.api.CompletarClaseDiariaHabitoUseCase;
 import com.renaser.os.habits.api.CompletarClaseDiariaHabitoUseCase.CompletarClaseDiariaHabitoCommand;
@@ -16,7 +17,6 @@ import com.renaser.os.habits.domain.model.habito.DetallesHabito;
 import com.renaser.os.habits.domain.model.habito.ExigenciaEvidencia;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
-import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,10 +24,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -35,13 +32,11 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -54,7 +49,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 15:00 UTC del 12/10 (10:00 en Lima); el "cambio de noche" a las 04:30 UTC del 13/10 es todavía el 12 en Lima.
  */
 @SpringBootTest
-@Import({TestcontainersConfiguration.class, HabitosPorRolIT.RelojDeLaPrueba.class})
+@Import(TestcontainersConfiguration.class)
 class HabitosPorRolIT {
 
     private static final Instant AHORA = Instant.parse("2026-10-12T15:00:00Z");
@@ -65,37 +60,10 @@ class HabitosPorRolIT {
     private static final DetallesHabito DETALLES = new DetallesHabito("desc", "CUERPO", ExigenciaEvidencia.OPCIONAL,
             false, false);
 
-    @TestConfiguration
-    static class RelojDeLaPrueba {
-        @Bean
-        @Primary
-        RelojFijable relojFijable() {
-            return new RelojFijable();
-        }
-    }
-
-    static final class RelojFijable implements Clock {
-        private final AtomicReference<Instant> ahora = new AtomicReference<>(AHORA);
-
-        void fijar(Instant instante) {
-            ahora.set(instante);
-        }
-
-        @Override
-        public Instant now() {
-            return ahora.get();
-        }
-
-        @Override
-        public LocalDate today() {
-            return ahora.get().atZone(ZoneOffset.UTC).toLocalDate();
-        }
-    }
-
     @Autowired
     private JdbcTemplate jdbc;
     @Autowired
-    private RelojFijable reloj;
+    private RelojDePrueba reloj;
     @Autowired
     private GenerarTracksDelDiaUseCase generar;
     @Autowired
