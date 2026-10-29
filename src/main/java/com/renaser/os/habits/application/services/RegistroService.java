@@ -30,6 +30,7 @@ import com.renaser.os.habits.domain.model.politica.GestoCompletar;
 import com.renaser.os.habits.domain.model.politica.PoliticaHabito;
 import com.renaser.os.habits.domain.model.politica.RegistroPoliticasHabito;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
+import com.renaser.os.habits.domain.model.registro.DiasCerradosDeLaSemana;
 import com.renaser.os.habits.domain.model.registro.FaseOtorgamiento;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
@@ -156,6 +157,17 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         LocalDate hoyEnSuZona = clock.now().atZone(zona).toLocalDate();
         return new RegistrosDelDia(loadRegistroPort.porParticipanteYFecha(participanteId, hoyEnSuZona), hoyEnSuZona,
                 zona, progreso.fechaInicio());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public RegistrosDelDia consultarDiaCerrado(UserId actorId, UserId participanteId, LocalDate fecha) {
+        ProgresoParticipanteHabits progreso = requireSelf(actorId, participanteId);
+        ZoneId zona = ZoneId.of(progreso.timezone());
+        LocalDate hoyEnSuZona = clock.now().atZone(zona).toLocalDate();
+        DiasCerradosDeLaSemana.de(hoyEnSuZona, progreso.fechaInicio()).exigirQueIncluya(fecha);
+        return new RegistrosDelDia(loadRegistroPort.porParticipanteYFecha(participanteId, fecha), fecha, zona,
+                progreso.fechaInicio());
     }
 
     @Override

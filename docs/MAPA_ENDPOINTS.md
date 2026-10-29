@@ -91,6 +91,7 @@ Mandá también `Authorization: Bearer <token>` en paralelo — hoy el backend l
 | Verbo | Ruta |
 |---|---|
 | GET | `/api/v1/habit-tracks/today` |
+| GET | `/api/v1/habit-tracks/day?date=YYYY-MM-DD` — mismos registros que `/today`, de un día YA CERRADO de tu semana en curso (D-288) |
 | POST | `/api/v1/habit-tracks/{id}/complete` |
 | POST | `/api/v1/habit-tracks/{id}/evidence` |
 | POST | `/api/v1/habit-tracks/{id}/phone-free/start` |
