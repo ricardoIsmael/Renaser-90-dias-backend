@@ -319,6 +319,14 @@ renaser:
       mentoring-resumir-semana-semaforo:
         lock-at-most-for: PT20M
         lock-at-least-for: PT30S
+      # Spec 015 (D-289): foto semanal de los huecos de horario, cada hora en el minuto 50; a cada persona
+      # con la semana recien terminada en SU zona le calcula y guarda la foto. Sin lock, dos instancias
+      # recorren el padron y calculan lo mismo dos veces; la foto no se duplica (PK + ON CONFLICT DO NOTHING).
+      # Una pagina de 500 personas son ~100 consultas de solo lectura por persona sin foto: minutos, no horas;
+      # 20 min deja margen y por debajo de la hora la corrida siguiente no se pierde si el proceso muere con el lock.
+      mentoring-cerrar-huecos:
+        lock-at-most-for: PT20M
+        lock-at-least-for: PT30S
       # D-224: completa los chats de los aprendices (soporte y chat de dos) a los 3 min de
       # arrancar y despues cada hora. Sin lock no duplicaria nada (UNIQUE de clave_directa), pero
       # recorreria el padron dos veces.

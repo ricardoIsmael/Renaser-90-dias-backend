@@ -1422,3 +1422,23 @@ spec, clarificaciones del dueño, plan, research, modelo de datos, contrato, tar
 - **Límite conocido:** un rol nuevo exige una constante más en el espejo `RolParticipante` (y su `nombreVisible()` en
   `UserRole`); nada más del módulo.
 
+## 12. Lo que `habits` entrega a los huecos de horario (spec 015, D-289, 2026-10-29)
+
+Los huecos de horario de una persona los calcula `mentoring` (ver D-289 en `docs/MODULOS_A_AVANZAR.md` §8); `habits` solo le
+da dos cosas, las dos aditivas y de solo lectura:
+
+- **`HorarioDelDiaFinder.HorarioResuelto` suma `todaviaNoLeToca` y `claveSistema`** (el constructor anterior sigue, con
+  `false` y `null`). `todaviaNoLeToca` es `DesbloqueoHabito.todaviaNoLeToca` con el **día de programa de la fecha
+  consultada** (no el de hoy): para un día por venir dice cuándo llegará. La consulta de «ya corrió» (D-196,
+  `diaProgramaMasAltoGeneradoPorHabito`) se hace solo si algún desbloqueo está por encima de ese día, y es una para todos.
+  `claveSistema` (`WAKE_UP`, `SLEEP`) reconoce a Despertar y Dormir por lo que son y no por su título, que se renombra.
+- **`RegistrosDeHabitoFinder.deParticipanteEntre(persona, desde, hasta)`**: los registros de UNA persona con estado,
+  si eran opcionales y el instante en que se cumplieron (`registros_habito.completado_en`). Una consulta sobre
+  `registros_dia_idx` (`RegistrosDelRangoJdbcAdapter`). Es otro contrato que `ObligacionesHistoricasFinder`: aquel
+  arma las obligaciones de un grupo para el mentor, sin hábito ni instante.
+
+**Lo que se verificó en el código y la spec afirmaba otra cosa:** el generador diario (`RegistroService.generarInterno`)
+NO usa `dias_semanales_habito` (el día elegido de un hábito semanal), solo pausa, apagados y `todaviaNoLeToca`; y ningún
+hábito del catálogo semilla tiene `eleccion_dia_semanal = true`. Los huecos siguen al generador: no filtran por el día
+elegido. Si algún día un hábito semanal empieza a generarse solo ese día, `RegistroService` debe decidirlo primero y
+los huecos lo heredan por los registros.

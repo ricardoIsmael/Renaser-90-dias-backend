@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.NoSuchElementException;
 
@@ -47,13 +48,26 @@ class EventosDelParticipanteService implements EventosDelParticipanteFinder {
         }
         ZoneId zona = zonaDe(participanteId);
         LocalDate hoy = clock.now().atZone(zona).toLocalDate();
-        LocalDate ultimo = hoy.plusDays(dias - 1L);
-        Instant desde = hoy.atStartOfDay(zona).toInstant();
+        return agendaEntre(participanteId, zona, hoy, hoy.plusDays(dias - 1L));
+    }
+
+    @Override
+    public AgendaDeEventos entre(UserId participanteId, LocalDate desde, LocalDate hasta) {
+        if (hasta.isBefore(desde) || ChronoUnit.DAYS.between(desde, hasta) + 1 > MAXIMO_DIAS) {
+            throw new IllegalArgumentException("El rango debe ir de 1 a " + MAXIMO_DIAS + " dias: " + desde + " → "
+                    + hasta);
+        }
+        return agendaEntre(participanteId, zonaDe(participanteId), desde, hasta);
+    }
+
+    /** Del inicio de {@code primero} al final de {@code ultimo}, en dias locales de la persona. */
+    private AgendaDeEventos agendaEntre(UserId participanteId, ZoneId zona, LocalDate primero, LocalDate ultimo) {
+        Instant desde = primero.atStartOfDay(zona).toInstant();
         Instant hasta = ultimo.plusDays(1).atStartOfDay(zona).toInstant();
         List<EventoDeLaAgenda> eventos = listarEventosUseCase.listar(participanteId, desde, hasta).stream()
                 .map(ocurrencia -> aEventoDeLaAgenda(ocurrencia, zona))
                 .toList();
-        return new AgendaDeEventos(zona, hoy, ultimo, eventos);
+        return new AgendaDeEventos(zona, primero, ultimo, eventos);
     }
 
     /** El suspendido lo rechaza despues el caso de uso; aca solo hace falta la zona. */

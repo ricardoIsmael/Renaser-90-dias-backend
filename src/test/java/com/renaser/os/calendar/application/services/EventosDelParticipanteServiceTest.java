@@ -115,6 +115,33 @@ class EventosDelParticipanteServiceTest {
     }
 
     @Test
+    @DisplayName("spec 015: entre() lee dias locales explicitos, pasados incluidos, desde la medianoche de Lima")
+    void entreDiasLocalesExplicitos() {
+        when(listar.listar(any(), any(), any())).thenReturn(List.of());
+
+        AgendaDeEventos agenda = servicio(NOCHE_EN_LIMA)
+                .entre(aprendiz, LocalDate.of(2026, 9, 21), LocalDate.of(2026, 9, 27));
+
+        assertThat(agenda.desde()).isEqualTo(LocalDate.of(2026, 9, 21));
+        assertThat(agenda.hasta()).isEqualTo(LocalDate.of(2026, 9, 27));
+        assertThat(agenda.zona()).isEqualTo(LIMA);
+        verify(listar).listar(aprendiz, Instant.parse("2026-09-21T05:00:00Z"), Instant.parse("2026-09-28T05:00:00Z"));
+    }
+
+    @Test
+    @DisplayName("spec 015: entre() rechaza un rango al reves o de mas de 90 dias antes de consultar nada")
+    void entreRangoInvalido() {
+        var servicio = new EventosDelParticipanteService(listar, progresoPort, NOCHE_EN_LIMA);
+        LocalDate dia = LocalDate.of(2026, 9, 21);
+
+        assertThatThrownBy(() -> servicio.entre(aprendiz, dia, dia.minusDays(1)))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> servicio.entre(aprendiz, dia, dia.plusDays(EventosDelParticipanteFinder.MAXIMO_DIAS)))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(listar, progresoPort);
+    }
+
+    @Test
     @DisplayName("el tope es el mismo que el del endpoint")
     void mismoTopeQueElEndpoint() {
         assertThat(EventosDelParticipanteFinder.MAXIMO_DIAS).isEqualTo(ListarEventosParaVisorUseCase.RANGO_MAXIMO_DIAS);
