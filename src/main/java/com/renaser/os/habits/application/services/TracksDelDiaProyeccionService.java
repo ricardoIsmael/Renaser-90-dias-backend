@@ -125,6 +125,17 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
     }
 
     /**
+     * D-288. Un dia YA CERRADO de la semana en curso: una sola transaccion de solo lectura y NINGUNA red de seguridad
+     * (no genera los registros del dia: ver {@link #consultarConRedDeSeguridad}). La fecha la valida
+     * {@code consultarDiaCerrado}, con el progreso que autoriza, en la zona de la persona.
+     */
+    @Override
+    public List<TrackDelDiaConCatalogo> consultarDiaCerradoDe(UserId participanteId, LocalDate fecha) {
+        return enSoloLectura(() -> proyectar(participanteId,
+                consultarTracksUseCase.consultarDiaCerrado(participanteId, participanteId, fecha), true)).tracks();
+    }
+
+    /**
      * V-5 (D-180). El camino normal —el dia ya tiene registros— es UNA transaccion de solo lectura
      * con el progreso leido una sola vez: sin escrituras, sin flush ni copias de Hibernate para el
      * dirty checking, y con una sola conexion del pool para las ocho consultas en vez de pedir y
@@ -141,20 +152,20 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
      */
     private ProyeccionDelDia consultarConRedDeSeguridad(UserId actorId, UserId participanteId,
                                                                     Supplier<RegistrosDelDia> lectura) {
-        ProyeccionDelDia primera = enSoloLectura(() -> proyectar(participanteId, lectura.get()));
+        ProyeccionDelDia primera = enSoloLectura(() -> proyectar(participanteId, lectura.get(), false));
         if (!primera.tracks().isEmpty() || !actorId.equals(participanteId)) {
             return primera;
         }
         generarTracksUseCase.generarDisponiblesAhora(participanteId);
         return enSoloLectura(() -> proyectar(participanteId,
-                consultarTracksUseCase.consultarEnSuZona(actorId, participanteId, primera.fecha())));
+                consultarTracksUseCase.consultarEnSuZona(actorId, participanteId, primera.fecha()), false));
     }
 
     private ProyeccionDelDia enSoloLectura(Supplier<ProyeccionDelDia> lectura) {
         return soloLectura.execute(estado -> lectura.get());
     }
 
-    private ProyeccionDelDia proyectar(UserId participanteId, RegistrosDelDia dia) {
+    private ProyeccionDelDia proyectar(UserId participanteId, RegistrosDelDia dia, boolean diaCerrado) {
         List<RegistroHabito> registros = dia.registros();
         if (registros.isEmpty()) {
             return new ProyeccionDelDia(dia.fecha(), dia.zona(), List.of());
@@ -188,7 +199,8 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
         // D-226: solo consulta si el dia tiene un habito medible (hoy, los km).
         var mediciones = medicionesDelDia.de(participanteId, registros, habitosPorId, fecha);
         // D-254: la racha de todos los habitos del dia, de lote y por paginas — nunca una consulta por habito.
-        Map<HabitoId, Integer> rachas = rachasDeHabitos.de(participanteId, dia);
+        // D-288: un dia cerrado no la lleva (su pantalla muestra lo hecho, no la racha) y se ahorra el lote.
+        Map<HabitoId, Integer> rachas = diaCerrado ? Map.of() : rachasDeHabitos.de(participanteId, dia);
         return new ProyeccionDelDia(fecha, dia.zona(), registros.stream()
                 .map(registro -> construirVista(registro, new CatalogoDeHabito(
                         habitosPorId.get(registro.habitoId()),
@@ -198,6 +210,7 @@ public class TracksDelDiaProyeccionService implements ConsultarTracksDelDiaConCa
                         renombresPorHabito.get(registro.habitoId())), momento,
                         conEvidencia.contains(registro.id().value())).conMedicion(mediciones.get(registro))
                         .conRacha(rachas.get(registro.habitoId())))
+                .map(vista -> diaCerrado ? vista.sinPuntosEnJuego() : vista)
                 .toList());
     }
 

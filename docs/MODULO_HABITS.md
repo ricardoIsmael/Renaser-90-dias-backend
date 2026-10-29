@@ -122,6 +122,7 @@ Actor resuelto por header `X-Actor-Id` (temporal, D-29 de `users`, sin autentica
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/v1/habit-tracks/today` | Tracks del día del actor |
+| GET | `/api/v1/habit-tracks/day?date=` | Tracks de un día YA CERRADO de la semana en curso del actor, misma forma que `/today`; solo lectura (D-288, §11.1) |
 | POST | `/api/v1/habit-tracks/{id}/complete` | Completa un registro (no-BLOQUEO) |
 | POST | `/api/v1/habit-tracks/{id}/santuario/start` | Inicia sesión de Santuario |
 | POST | `/api/v1/habit-tracks/{id}/santuario/complete` | Completa la sesión (idempotente si ya COMPLETADA) |
@@ -436,6 +437,32 @@ Tests: `RegistroEspirituTest` (dominio, sin Spring) y `EspirituServiceTest` (Moc
 Tests: `TracksDelDiaProyeccionServiceTest` — sin registros no consulta ningún puerto de catálogo, resuelve título/tipo/guía/horario con una sola consulta por tabla (verificado con `verify(..., times(1))`), la guía más específica (mayor `diaInicio` que aplica) gana sobre una más genérica, la preferencia del participante gana al horario del catálogo cuando está seteada.
 
 **Qué quedó fuera:** el `GuiaResumen` expuesto es un subconjunto (mantra + qué hacer/cómo hacerlo) — no incluye ciencia/renaser/alquimia/resultados ni los adjuntos de `adjuntos_guia` (sin persistencia propia todavía). Ampliar es agregar campos al record, no un cambio de arquitectura.
+
+### 11.1 `GET /habit-tracks/day?date=` — los registros de un día ya cerrado (D-288, spec 014 «Training por hora») — 2026-10-29
+
+Training pasa a mostrar la semana: los días anteriores enseñan lo que la persona hizo (✓) y lo que no (candado), sin
+botones. Hasta hoy el servidor solo entregaba «hoy» hábito por hábito (`/today`).
+
+- **Qué devuelve:** el mismo arreglo de `RegistroHabitoConCatalogoResponse` que `/today` (título, tipo, guía, horario…),
+  armado por la MISMA proyección (`TracksDelDiaProyeccionService.proyectar`, `consultarDiaCerradoDe`): una consulta de lote
+  por tabla del catálogo, nunca una por hábito. Dos campos van siempre en `null` porque un día cerrado no los tiene:
+  `puntosEnJuego` (nada que ganar ni perder; D-259 rechaza registrar ese día) y `rachaDias` (no se calcula: una consulta de
+  lote menos y la pantalla no la muestra).
+- **Qué fechas (`DiasCerradosDeLaSemana`, dominio puro):** de AYER hacia atrás hasta el LUNES de la semana en curso, en la
+  zona de la PERSONA (`Clock` + `timezone` del participante, nunca `now()` estático ni la fecha del servidor: a las 22:00 en
+  Lima ya es el día siguiente en UTC), y nunca antes de su Día 1 (`fecha_inicio`). Hoy, el futuro, otra semana, una fecha
+  anterior al Día 1 y una persona sin Día 1 son `400` (`IllegalArgumentException`, con el motivo en el mensaje). Sin `date` o
+  mal formada, también `400`. La semana es de lunes a domingo, la que muestra Training; el lunes no hay ningún día válido.
+- **Solo lectura:** `RegistroService.consultarDiaCerrado` lee el progreso (autoriza con `requireSelf`: otra persona o cuenta
+  suspendida → `403`; sin participación → `404`, como `/today`), valida la fecha y lee los registros. No pasa por la red de
+  seguridad de `/today`: un día sin registros devuelve `[]` y no crea ninguno.
+- **Autorización:** `@RequiresPermission(USE_APP)` y `@Funcionalidad("habitos")` heredada de la clase (interruptor `habitos`).
+- **Caché:** `Cache-Control: private, max-age=300` (un día cerrado no cambia y el teléfono no repite el pedido) y
+  `Vary: X-Auth-Token, Authorization`, para que otra cuenta en el mismo navegador no reciba el día de la anterior. Un rechazo
+  no lleva esa cabecera.
+- **Sin** migración, tabla, permiso ni scheduler. Pruebas: `DiasCerradosDeLaSemanaTest`, `DiaCerradoConsultaTest` (reloj en la
+  madrugada UTC), `DiaCerradoControllerTest`; `DiaCerradoIT` (base real: no crea tracks y no crece con los hábitos) quedó
+  escrita sin correr.
 
 ---
 

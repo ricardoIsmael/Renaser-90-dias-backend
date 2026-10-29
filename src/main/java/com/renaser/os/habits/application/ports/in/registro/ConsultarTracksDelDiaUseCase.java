@@ -27,6 +27,15 @@ public interface ConsultarTracksDelDiaUseCase {
     RegistrosDelDia consultarHoy(UserId actorId, UserId participanteId);
 
     /**
+     * D-288 (spec 014): los registros de un dia YA CERRADO de la semana en curso de la persona, de ayer hacia atras
+     * hasta el lunes y nunca antes de su Dia 1, medido en SU zona. <b>Solo lectura</b>: no genera ni completa nada.
+     * Misma autorizacion que {@link #consultar}.
+     *
+     * @throws IllegalArgumentException (400) si la fecha es hoy, futura, de otra semana o anterior al Dia 1
+     */
+    RegistrosDelDia consultarDiaCerrado(UserId actorId, UserId participanteId, LocalDate fecha);
+
+    /**
      * Los registros de un dia, la fecha que se consulto y la zona en que vive el participante.
      *
      * <p>{@code inicioDelPrograma} (D-254): la fecha de inicio del programa, leida en la MISMA

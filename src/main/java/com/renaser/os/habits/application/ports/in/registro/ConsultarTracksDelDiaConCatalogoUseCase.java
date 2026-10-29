@@ -39,6 +39,18 @@ public interface ConsultarTracksDelDiaConCatalogoUseCase {
     /** Lectura coherente con el cierre del dia del participante, incluso sin registros. */
     DiaDeHabitos consultarHoyConContextoDe(UserId participanteId);
 
+    /**
+     * D-288 (spec 014 «Training por hora»): lo mismo que {@link #consultarHoyDe}, con la misma forma y el catalogo
+     * resuelto en lote, para un dia YA CERRADO de la semana en curso del propio aprendiz (de ayer hacia atras hasta
+     * el lunes, nunca antes de su Dia 1; hoy, el futuro y otra semana son 400).
+     *
+     * <p><b>Solo lectura:</b> a diferencia de {@code consultarHoyDe}, no tiene la red de seguridad que genera los
+     * registros de hoy si faltan; un dia que no tiene registros devuelve la lista vacia. Un dia cerrado no tiene
+     * nada en juego, asi que {@code puntosEnJuego} va en {@code null}, y no calcula la racha (una consulta de lote
+     * menos): el resto de los campos es el de siempre.
+     */
+    List<TrackDelDiaConCatalogo> consultarDiaCerradoDe(UserId participanteId, LocalDate fecha);
+
     record DiaDeHabitos(LocalDate fechaLocal, java.time.ZoneId zonaHoraria,
                          java.time.Instant cierraEn, java.time.Instant ahoraServidor,
                          List<TrackDelDiaConCatalogo> tracks) {
@@ -128,6 +140,12 @@ public interface ConsultarTracksDelDiaConCatalogoUseCase {
             return new TrackDelDiaConCatalogo(registro, tituloHabito, tipoHabito, guia, horaDisparo, horaLimite,
                     puntosEnJuego, tieneEvidencia, exigeEvidencia, claveSistema, tituloDelPrograma, medicionDelTrack,
                     rachaDias);
+        }
+
+        /** La misma vista sin puntos en juego: un dia cerrado no tiene nada que ganar ni perder (D-288). */
+        public TrackDelDiaConCatalogo sinPuntosEnJuego() {
+            return new TrackDelDiaConCatalogo(registro, tituloHabito, tipoHabito, guia, horaDisparo, horaLimite,
+                    null, tieneEvidencia, exigeEvidencia, claveSistema, tituloDelPrograma, medicion, rachaDias);
         }
 
         /** La misma vista con la racha del habito (D-254). */
