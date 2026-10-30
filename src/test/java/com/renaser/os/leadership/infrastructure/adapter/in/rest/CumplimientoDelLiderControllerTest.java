@@ -20,9 +20,11 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
 import java.time.Instant;
+import java.time.LocalTime;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.DESDE_SEMANA_CERRADA;
 import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.DESDE_VIGENTE;
@@ -244,8 +246,10 @@ class CumplimientoDelLiderControllerTest {
     }
 
     private void conRadarDeAna() {
-        banco.radar(ANA, new CodigoRenaserDePersona(new MiRadarDeLaPersona(true, List.of(9, 14, 20),
-                List.of(new DiaDeLaPersona(6, List.of(11)), new DiaDeLaPersona(7, List.of()))), List.of(
+        banco.radar(ANA, new CodigoRenaserDePersona(new MiRadarDeLaPersona(true, LocalDate.of(2026, 10, 14),
+                List.of(new DiaDeLaPersona(3, LocalDate.of(2026, 10, 14), "AUTOMATICO", 17, 17, false, false,
+                        LocalTime.of(5, 30), LocalTime.of(22, 30), IntStream.rangeClosed(6, 22).boxed().toList(),
+                        null))), List.of(
                 new RegistroDelRadar(UUID.fromString("00000000-0000-0000-0000-0000000000f1"), "Trabajando",
                         "En la reunión", "Tranquila", 7, "El correo", Instant.parse("2026-10-14T19:06:00Z"), 14),
                 new RegistroDelRadar(UUID.fromString("00000000-0000-0000-0000-0000000000f2"), "Caminando",
@@ -262,14 +266,13 @@ class CumplimientoDelLiderControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control", containsString("no-store")))
                 .andExpect(jsonPath("$.miRadar.encendido").value(true))
-                .andExpect(jsonPath("$.miRadar.horas", hasSize(3)))
-                .andExpect(jsonPath("$.miRadar.horas[0]").value(9))
-                .andExpect(jsonPath("$.miRadar.horas[2]").value(20))
-                .andExpect(jsonPath("$.miRadar.dias", hasSize(2)))
-                .andExpect(jsonPath("$.miRadar.dias[0].dia").value(6))
-                .andExpect(jsonPath("$.miRadar.dias[0].horas[0]").value(11))
-                .andExpect(jsonPath("$.miRadar.dias[1].dia").value(7))
-                .andExpect(jsonPath("$.miRadar.dias[1].horas", hasSize(0)))
+                .andExpect(jsonPath("$.miRadar.hoy").value("2026-10-14"))
+                .andExpect(jsonPath("$.miRadar.dias", hasSize(1)))
+                .andExpect(jsonPath("$.miRadar.dias[0].dia").value(3))
+                .andExpect(jsonPath("$.miRadar.dias[0].despertar").value("05:30"))
+                .andExpect(jsonPath("$.miRadar.dias[0].dormir").value("22:30"))
+                .andExpect(jsonPath("$.miRadar.dias[0].veces").value(17))
+                .andExpect(jsonPath("$.miRadar.dias[0].horas", hasSize(17)))
                 .andExpect(jsonPath("$.entries", hasSize(2)))
                 .andExpect(jsonPath("$.entries[0].id").value("00000000-0000-0000-0000-0000000000f1"))
                 .andExpect(jsonPath("$.entries[0].whatAmIDoing").value("Trabajando"))
@@ -318,7 +321,6 @@ class CumplimientoDelLiderControllerTest {
             pedir(radar(BETO), actor)
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.miRadar.encendido").value(false))
-                    .andExpect(jsonPath("$.miRadar.horas", hasSize(0)))
                     .andExpect(jsonPath("$.miRadar.dias", hasSize(0)))
                     .andExpect(jsonPath("$.entries", hasSize(0)))
                     .andExpect(jsonPath("$.nextCursor").doesNotExist());

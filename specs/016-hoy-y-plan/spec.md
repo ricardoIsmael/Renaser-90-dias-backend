@@ -32,6 +32,9 @@ la spec» (Plan, opción B).
   - las rocas diarias tienen hora opcional, estado y la regla de Pareto (la verde va primero).
 - **Training** (spec 014) ya muestra y registra las acciones del día en su lista por hora.
 - **Mi Radar** (spec 012): configuración por día, horas elegidas, hora prevista y la regla de un registro por hora.
+  > **Corregido 2026-10-30 (spec 019).** Ya no hay «horas elegidas»: Mi Radar es Automático (cada hora entre el Despertar y el Dormir, sin
+  > tope de 12) o Personalizado (cuántas veces por día, repartidas parejo). La mitad del Radar de Hoy sigue la misma regla y dice, por
+  > ejemplo, «Encendido · 05:30 a 22:30 · 17 veces» o «Hoy no tienes Mi Radar».
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -83,7 +86,7 @@ la spec» (Plan, opción B).
 
 - **FR-001**: Hoy MUST mostrar «Hábitos de hoy» partida en dos mitades iguales, con el contenido centrado, y apilarlas
   con la letra grande.
-- **FR-002**: La mitad del Radar MUST seguir las reglas de la spec 012 y las de la US1: días 1 a 7, apagado, encendido
+- **FR-002** *(corregido 2026-10-30: las horas de Mi Radar salen del Despertar y el Dormir, spec 019)*: La mitad del Radar MUST seguir las reglas de la spec 012 y las de la US1: días 1 a 7, apagado, encendido
   con hora pendiente, encendido sin hora y día sin Radar. Desde Hoy MUST NOT registrarse nada que la spec 012 rechace.
 - **FR-003**: En los días 1 a 7, la tarjeta aparte del Código Renaser MUST NOT duplicarse con la mitad. El formulario
   sigue abriéndose solo y obligatorio, como hoy.

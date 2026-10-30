@@ -1,8 +1,9 @@
 package com.renaser.os.habits.infrastructure.adapter.out.persistence.radar;
 
 import com.renaser.os.TestcontainersConfiguration;
+import com.renaser.os.habits.domain.model.radar.DiaDeMiRadar;
+import com.renaser.os.habits.domain.model.radar.DiaDeMiRadar.Modo;
 import com.renaser.os.habits.domain.model.radar.MiRadar;
-import com.renaser.os.habits.domain.model.radar.MiRadar.DiaPropio;
 import com.renaser.os.shared.domain.UserId;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,9 +21,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Mi Radar (spec 012, V119) contra Postgres real, por el camino completo: el adaptador de {@code habits} →
- * {@code users.api.HorasDeMiRadarPort} → {@code participantes_programa.horas_mi_radar} (las horas de todos los dias) y
- * {@code dias_mi_radar} (los dias con horas propias, jsonb). NULL es apagado y ningun dia propio.
+ * Mi Radar (spec 019, V122) contra Postgres real, por el camino completo: el adaptador de {@code habits} →
+ * {@code users.api.MiRadarGuardadoPort} → {@code participantes_programa.mi_radar_encendido} y {@code dias_mi_radar}.
  */
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
@@ -54,115 +54,37 @@ class MiRadarPersistenceAdapterTest {
                 .executeUpdate();
     }
 
-    /** Pregunta por el NULL en la base y no lee el arreglo: asi la prueba no depende de como Hibernate mapee un smallint[]. */
-    private boolean horasSonNull() {
-        return (Boolean) columna("horas_mi_radar IS NULL");
-    }
-
-    private Object columna(String nombre) {
-        return entityManager.createNativeQuery(
-                        "SELECT " + nombre + " FROM renaser.participantes_programa WHERE usuario_id = :id")
-                .setParameter("id", participanteId.value()).getSingleResult();
-    }
-
     @Test
-    void sinHorasGuardadasEstaApagado() {
+    void sinNadaGuardadoEstaApagadoYConTodosLosDiasDeFabrica() {
         assertThat(adapter.deParticipante(participanteId)).isEqualTo(MiRadar.apagado());
-        assertThat(horasSonNull()).isTrue();
     }
 
     @Test
-    void guardaYLeeLasHorasDeMenorAMayor() {
-        adapter.guardar(participanteId, MiRadar.encendido(List.of(20, 9, 14)));
-
-        MiRadar leido = adapter.deParticipante(participanteId);
-
-        assertThat(leido.estaEncendido()).isTrue();
-        assertThat(leido.horas()).containsExactly(9, 14, 20);
-    }
-
-    @Test
-    void unaSolaHoraYLosExtremosFuncionan() {
-        adapter.guardar(participanteId, MiRadar.encendido(List.of(3)));
-        assertThat(adapter.deParticipante(participanteId).horas()).containsExactly(3);
-
-        adapter.guardar(participanteId, MiRadar.encendido(List.of(3, 23)));
-        assertThat(adapter.deParticipante(participanteId).horas()).containsExactly(3, 23);
-    }
-
-    @Test
-    void doceHorasCaben() {
-        List<Integer> doce = List.of(8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19);
-
-        adapter.guardar(participanteId, MiRadar.encendido(doce));
-
-        assertThat(adapter.deParticipante(participanteId).horas()).containsExactlyElementsOf(doce);
-    }
-
-    @Test
-    void cambiarLasHorasReemplazaLasAnteriores() {
-        adapter.guardar(participanteId, MiRadar.encendido(List.of(9, 14, 20)));
-        adapter.guardar(participanteId, MiRadar.encendido(List.of(7)));
-
-        assertThat(adapter.deParticipante(participanteId).horas()).containsExactly(7);
-    }
-
-    @Test
-    void apagarGuardaNullYNoDejaHorasViejas() {
-        adapter.guardar(participanteId, MiRadar.encendido(List.of(9, 14, 20)));
-
-        adapter.guardar(participanteId, MiRadar.apagado());
-
-        assertThat(adapter.deParticipante(participanteId).estaEncendido()).isFalse();
-        assertThat(horasSonNull()).isTrue();
-    }
-
-    @Test
-    void guardarMiRadarNoTocaElRestoDeLaFilaDelPrograma() {
-        adapter.guardar(participanteId, MiRadar.encendido(List.of(9)));
-
-        assertThat(((Number) columna("dia_programa")).intValue()).isEqualTo(10);
-        assertThat(columna("timezone")).isEqualTo("America/Argentina/Buenos_Aires");
-    }
-
-    @Test
-    void guardaYLeeLosDiasConHorasPropiasYElDiaSinRadar() {
-        MiRadar miRadar = MiRadar.encendido(List.of(9, 14, 20),
-                List.of(new DiaPropio(7, List.of()), new DiaPropio(6, List.of(11, 10))));
+    void guardaYLeeElEncendidoYLosDiasQueNoSonDeFabrica() {
+        MiRadar miRadar = new MiRadar(true, List.of(new DiaDeMiRadar(6, Modo.PERSONALIZADO, 3, false),
+                new DiaDeMiRadar(7, Modo.AUTOMATICO, null, true)));
 
         adapter.guardar(participanteId, miRadar);
+
         MiRadar leido = adapter.deParticipante(participanteId);
-
         assertThat(leido).isEqualTo(miRadar);
-        assertThat(leido.dias()).extracting(DiaPropio::dia).containsExactly(6, 7);
-        assertThat(leido.dias().get(0).horas()).containsExactly(10, 11);
-        assertThat(leido.dias().get(1).horas()).isEmpty();
-        assertThat((Boolean) columna("dias_mi_radar IS NULL")).isFalse();
+        assertThat(leido.dia(6).veces()).isEqualTo(3);
+        assertThat(leido.dia(3)).isEqualTo(DiaDeMiRadar.normal(3));
     }
 
     @Test
-    void cambiarLasHorasSinDiasQuitaLosDiasPropiosAnteriores() {
-        adapter.guardar(participanteId, MiRadar.encendido(List.of(9), List.of(new DiaPropio(6, List.of(11)))));
+    void apagarConservaLosDiasYEncenderLosEncuentra() {
+        adapter.guardar(participanteId, new MiRadar(true, List.of(new DiaDeMiRadar(6, Modo.PERSONALIZADO, 4, false))));
 
-        adapter.guardar(participanteId, MiRadar.encendido(List.of(9)));
+        adapter.guardar(participanteId, adapter.deParticipante(participanteId).conEncendido(false));
 
-        assertThat(adapter.deParticipante(participanteId).dias()).isEmpty();
-        assertThat((Boolean) columna("dias_mi_radar IS NULL")).isTrue();
+        MiRadar apagado = adapter.deParticipante(participanteId);
+        assertThat(apagado.encendido()).isFalse();
+        assertThat(apagado.dia(6).veces()).isEqualTo(4);
     }
 
     @Test
-    void apagarTambienDejaLosDiasEnNull() {
-        adapter.guardar(participanteId, MiRadar.encendido(List.of(9), List.of(new DiaPropio(6, List.of(11)))));
-
-        adapter.guardar(participanteId, MiRadar.apagado());
-
-        assertThat(adapter.deParticipante(participanteId)).isEqualTo(MiRadar.apagado());
-        assertThat((Boolean) columna("dias_mi_radar IS NULL")).isTrue();
-        assertThat(horasSonNull()).isTrue();
-    }
-
-    @Test
-    void quienNoTieneProgramaEsNoEncontrado() {
+    void sinFilaDeProgramaNoGuardaNiLee() {
         UserId sinPrograma = UserId.of(UUID.randomUUID());
 
         assertThatThrownBy(() -> adapter.deParticipante(sinPrograma)).isInstanceOf(NoSuchElementException.class);

@@ -7,6 +7,7 @@ import com.renaser.os.habits.application.ports.out.participante.ConsultarProgres
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.RolParticipante;
 import com.renaser.os.habits.application.ports.out.habitosaprendiz.LeerHabitosPersonalizadosPort;
 import com.renaser.os.habits.application.ports.out.preferencia.HistorialCambioHorarioPort;
+import com.renaser.os.habits.api.HorarioDelDiaFinder;
 import com.renaser.os.habits.application.ports.out.radar.LoadMiRadarPort;
 import com.renaser.os.habits.application.ports.out.radar.LoadRegistroRadarPort;
 import com.renaser.os.habits.domain.model.radar.MiRadar;
@@ -22,6 +23,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.time.LocalTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -65,6 +67,8 @@ class AcompanamientoDeAlumnoServiceTest {
     private LoadRegistroRadarPort loadRadarPort;
     @Mock
     private LoadMiRadarPort miRadarPort;
+    @Mock
+    private HorarioDelDiaFinder horarios;
 
     private AcompanamientoDeAlumnoService service;
     private UserId mentor;
@@ -77,7 +81,7 @@ class AcompanamientoDeAlumnoServiceTest {
         var habitosDeAprendiz = new HabitosDeAprendizAdminService(guardDeAdmin, progresoPort, leerHabitosPort,
                 historialPort, CLOCK, CatalogoAplicableDePrueba.sinAudiencias());
         service = new AcompanamientoDeAlumnoService(acompanamientoFinder, habitosDeAprendiz,
-                new LecturaDelRadar(loadRadarPort, miRadarPort, progresoPort), CLOCK);
+                new LecturaDelRadar(loadRadarPort, miRadarPort, progresoPort, new AgendaDelRadar(horarios, CLOCK)), CLOCK);
     }
 
     // ─── habitos del alumno ────────────────────────────────────────────────
@@ -134,6 +138,7 @@ class AcompanamientoDeAlumnoServiceTest {
         when(loadRadarPort.historialDeParticipante(alumno, null, 84)).thenReturn(List.of(registro()));
         enElDia(10);
         when(miRadarPort.deParticipante(alumno)).thenReturn(MiRadar.apagado());
+        HorarioDeRadarDePrueba.siempre(horarios, LocalTime.of(6, 0), LocalTime.of(22, 0));
 
         var pagina = service.codigoRenaserDeAlumno(new ConsultaDeAcompanante(mentor, GRUPO, alumno), null, 84);
 
@@ -147,12 +152,15 @@ class AcompanamientoDeAlumnoServiceTest {
         acompanaDeVerdad();
         when(loadRadarPort.historialDeParticipante(alumno, null, 84)).thenReturn(List.of(registro()));
         enElDia(8);
-        when(miRadarPort.deParticipante(alumno)).thenReturn(MiRadar.encendido(List.of(20, 9, 14)));
+        when(miRadarPort.deParticipante(alumno)).thenReturn(new MiRadar(true, List.of()));
+        HorarioDeRadarDePrueba.siempre(horarios, LocalTime.of(5, 30), LocalTime.of(22, 30));
 
         var pagina = service.codigoRenaserDeAlumno(new ConsultaDeAcompanante(mentor, GRUPO, alumno), null, 84);
 
-        assertThat(pagina.miRadar().estaEncendido()).isTrue();
-        assertThat(pagina.miRadar().horas()).containsExactly(9, 14, 20);
+        assertThat(pagina.miRadar().encendido()).isTrue();
+        assertThat(pagina.miRadar().dias()).hasSize(1);
+        assertThat(pagina.miRadar().dias().getFirst().despertar()).isEqualTo(LocalTime.of(5, 30));
+        assertThat(pagina.miRadar().dias().getFirst().veces()).isEqualTo(17);
     }
 
     /** Spec 012: en la semana 1 (dia menor que 8) Mi Radar no aplica: va en null y ni se lee la columna. */
@@ -166,7 +174,7 @@ class AcompanamientoDeAlumnoServiceTest {
 
         assertThat(pagina.entradas()).hasSize(1);
         assertThat(pagina.miRadar()).isNull();
-        verifyNoInteractions(miRadarPort);
+        verifyNoInteractions(miRadarPort, horarios);
     }
 
     @Test
@@ -175,6 +183,7 @@ class AcompanamientoDeAlumnoServiceTest {
         when(loadRadarPort.historialDeParticipante(alumno, null, 1)).thenReturn(List.of(registro()));
         enElDia(10);
         when(miRadarPort.deParticipante(alumno)).thenReturn(MiRadar.apagado());
+        HorarioDeRadarDePrueba.siempre(horarios, LocalTime.of(6, 0), LocalTime.of(22, 0));
 
         var pagina = service.codigoRenaserDeAlumno(new ConsultaDeAcompanante(mentor, GRUPO, alumno), null, 1);
 

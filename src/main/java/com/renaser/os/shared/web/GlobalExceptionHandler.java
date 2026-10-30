@@ -48,9 +48,17 @@ public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    /**
+     * 403. Con un motivo ({@link NotAuthorizedException#codigo()}) el cuerpo suma {@code codigo} (aditivo: un cliente que
+     * no lo conoce sigue leyendo {@code message}); sin motivo es el de siempre.
+     */
     @ExceptionHandler(NotAuthorizedException.class)
-    public ResponseEntity<ApiErrorResponse> handleNotAuthorized(NotAuthorizedException ex) {
-        return respond(HttpStatus.FORBIDDEN, ex.getMessage());
+    public ResponseEntity<?> handleNotAuthorized(NotAuthorizedException ex) {
+        if (ex.codigo() == null) {
+            return respond(HttpStatus.FORBIDDEN, ex.getMessage());
+        }
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).contentType(MediaType.APPLICATION_JSON)
+                .body(ApiErrorConCodigo.of(ex.getMessage(), ex.codigo(), null));
     }
 
     /** Login fallido: 401, no 403 — todavia no hay identidad establecida que autorizar o no. */

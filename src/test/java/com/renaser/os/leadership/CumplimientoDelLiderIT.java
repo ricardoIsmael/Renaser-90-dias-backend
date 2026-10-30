@@ -230,10 +230,10 @@ class CumplimientoDelLiderIT {
     }
 
     @Test
-    @DisplayName("spec 012: el Radar trae Mi Radar (encendido, sus horas) y todos los registros, con la hora prevista, de la base de verdad")
+    @DisplayName("spec 019: el Radar trae Mi Radar encendido con lo de HOY y todos los registros, con la hora prevista, de la base de verdad")
     void elRadarDeLaPersona() {
-        jdbc.update("UPDATE renaser.participantes_programa SET horas_mi_radar = ARRAY[20, 9, 14]::smallint[], "
-                + "dias_mi_radar = CAST('[{\"dia\":7,\"horas\":[]},{\"dia\":6,\"horas\":[11]}]' AS jsonb) "
+        jdbc.update("UPDATE renaser.participantes_programa SET mi_radar_encendido = true, "
+                + "dias_mi_radar = CAST('[{\"dia\":7,\"modo\":\"AUTOMATICO\",\"sinRadar\":true}]' AS jsonb) "
                 + "WHERE usuario_id = ?", ANA);
         registroDelRadar(ANA, Instant.parse("2026-10-09T15:00:00Z"), 10);
         registroDelRadar(ANA, Instant.parse("2026-10-14T19:06:00Z"), 14);
@@ -241,16 +241,10 @@ class CumplimientoDelLiderIT {
 
         CodigoRenaserDePersona resultado = radarDeAna(LIDER, null);
 
-        // Guardadas como 20, 9, 14: Mi Radar las devuelve de menor a mayor.
         assertThat(resultado.miRadar().encendido()).isTrue();
-        assertThat(resultado.miRadar().horas()).containsExactly(9, 14, 20);
-        // Los dias con horas propias salen tal cual los guardo la persona: el sabado la 11 y el domingo «Sin Radar».
-        assertThat(resultado.miRadar().dias()).extracting(CodigoRenaserDePersonaFinder.DiaDeLaPersona::dia)
-                .containsExactlyInAnyOrder(6, 7);
-        assertThat(resultado.miRadar().dias()).filteredOn(dia -> dia.dia() == 6).singleElement()
-                .satisfies(dia -> assertThat(dia.horas()).containsExactly(11));
-        assertThat(resultado.miRadar().dias()).filteredOn(dia -> dia.dia() == 7).singleElement()
-                .satisfies(dia -> assertThat(dia.horas()).isEmpty());
+        // Las fichas traen solo el dia de hoy: la misma forma que la lectura propia, con una sola entrada.
+        assertThat(resultado.miRadar().dias()).hasSize(1);
+        assertThat(resultado.miRadar().dias().getFirst().fecha()).isEqualTo(resultado.miRadar().hoy());
         // Del mas nuevo al mas viejo: el libre, el de Mi Radar y el de la primera semana.
         assertThat(resultado.registros()).extracting(RegistroDelRadar::horaPrevista).containsExactly(null, 14, 10);
         assertThat(resultado.registros().getFirst().queSiento()).isEqualTo("Tranquila");
@@ -258,24 +252,22 @@ class CumplimientoDelLiderIT {
     }
 
     @Test
-    @DisplayName("spec 012: sin Mi Radar encendido sale apagado y sin horas, y los registros de la primera semana igual estan")
+    @DisplayName("spec 019: sin Mi Radar encendido sale apagado, y los registros de la primera semana igual estan")
     void elRadarSinMiRadar() {
         registroDelRadar(ANA, Instant.parse("2026-10-09T15:00:00Z"), 10);
 
         CodigoRenaserDePersona resultado = radarDeAna(LIDER, null);
 
         assertThat(resultado.miRadar().encendido()).isFalse();
-        assertThat(resultado.miRadar().horas()).isEmpty();
-        assertThat(resultado.miRadar().dias()).isEmpty();
         assertThat(resultado.registros()).hasSize(1);
     }
 
     @Test
-    @DisplayName("spec 012: en la semana 1 (dia 4) Mi Radar no aplica: miRadar va en null aunque haya horas guardadas, y los registros igual estan")
+    @DisplayName("spec 012: en la semana 1 (dia 4) Mi Radar no aplica: miRadar va en null aunque este encendido, y los registros igual estan")
     void elRadarEnLaSemana1() {
         // Lunes 19 de octubre en Lima: con el Dia 1 el viernes 16, hoy es el dia 4.
         jdbc.update("UPDATE renaser.participantes_programa SET fecha_inicio = DATE '2026-10-16', "
-                + "horas_mi_radar = ARRAY[9]::smallint[] WHERE usuario_id = ?", ANA);
+                + "mi_radar_encendido = true WHERE usuario_id = ?", ANA);
         registroDelRadar(ANA, Instant.parse("2026-10-17T15:00:00Z"), 10);
 
         CodigoRenaserDePersona resultado = radarDeAna(LIDER, null);

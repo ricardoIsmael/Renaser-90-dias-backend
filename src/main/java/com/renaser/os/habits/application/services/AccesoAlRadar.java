@@ -7,8 +7,6 @@ import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
 
-import java.util.NoSuchElementException;
-
 /**
  * La puerta del Codigo Renaser propio, una sola para el registro, el historial y Mi Radar (spec 012): la propia
  * persona y con el programa andando. Devuelve su progreso porque quien entra lo necesita (el dia del programa y la
@@ -19,6 +17,8 @@ import java.util.NoSuchElementException;
  */
 @Component
 class AccesoAlRadar {
+
+    static final String MENSAJE_SIN_PROGRAMA = "Mi Radar empieza en tu día 8. Primero elige tu Día 1.";
 
     private final ConsultarProgresoParticipanteHabitsPort progresoPort;
 
@@ -38,10 +38,13 @@ class AccesoAlRadar {
     }
 
     private ProgresoParticipanteHabits requireParticipanteHabilitado(UserId participanteId) {
+        /* Sin fila de programa: el personal que nunca empezo el suyo (`POST /mentor/activate-tracking` o elegir su Dia 1). El actor sale
+           de la sesion, asi que «no existe» solo puede ser eso: es el mismo motivo que un programa sin activar y la app lo lleva a
+           elegir su Dia 1 (spec 019). Antes era un 404 que la app leia como «no hay Mi Radar». */
         ProgresoParticipanteHabits progreso = progresoPort.deParticipante(participanteId)
-                .orElseThrow(() -> new NoSuchElementException("Participante no encontrado: " + participanteId));
+                .orElseThrow(() -> new NotAuthorizedException(MENSAJE_SIN_PROGRAMA, NotAuthorizedException.PROGRAMA_NO_ACTIVADO));
         if (progreso.suspendido()) {
-            throw new NotAuthorizedException("Cuenta suspendida");
+            throw new NotAuthorizedException("Cuenta suspendida", NotAuthorizedException.CUENTA_SUSPENDIDA);
         }
         /* E-169: la puerta no es el ROL, es tener el programa andando. `TRACK_PROGRAM_AS_STAFF`
            y `POST /api/v1/mentor/activate-tracking` existen para que el staff curse los 90 dias;
@@ -52,7 +55,9 @@ class AccesoAlRadar {
            Terminos, y el cambio corto lo habria dejado fuera de su propio programa. Asi el cambio
            es ESTRICTAMENTE aditivo: nadie que hoy pase, deja de pasar. */
         if (progreso.rol() != RolParticipante.TRAINEE && !progreso.programaActivado()) {
-            throw new NotAuthorizedException("El Codigo Renaser es exclusivo de aprendices");
+            /* Spec 019: el 403 dice POR QUE (`PROGRAMA_NO_ACTIVADO`) para que la app lleve al personal a elegir su Dia 1 en vez de
+               callar. El texto lo lee quien no conoce el codigo (un APK anterior). */
+            throw new NotAuthorizedException(MENSAJE_SIN_PROGRAMA, NotAuthorizedException.PROGRAMA_NO_ACTIVADO);
         }
         return progreso;
     }

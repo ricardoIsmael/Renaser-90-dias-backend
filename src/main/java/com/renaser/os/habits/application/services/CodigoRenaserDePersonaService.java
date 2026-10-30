@@ -2,7 +2,8 @@ package com.renaser.os.habits.application.services;
 
 import com.renaser.os.habits.api.CodigoRenaserDePersonaFinder;
 import com.renaser.os.habits.application.ports.in.radar.ConsultarHistorialRadarUseCase.HistorialRadarPage;
-import com.renaser.os.habits.domain.model.radar.MiRadar;
+import com.renaser.os.habits.domain.model.radar.DiaDelRadar;
+import com.renaser.os.habits.domain.model.radar.PlanDeMiRadar;
 import com.renaser.os.habits.domain.model.radar.RegistroRadar;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
@@ -31,9 +32,15 @@ class CodigoRenaserDePersonaService implements CodigoRenaserDePersonaFinder {
                 pagina.siguienteCursor());
     }
 
-    private static MiRadarDeLaPersona miRadarDe(MiRadar miRadar) {
-        return miRadar == null ? null : new MiRadarDeLaPersona(miRadar.estaEncendido(), miRadar.horas(),
-                miRadar.dias().stream().map(dia -> new DiaDeLaPersona(dia.dia(), dia.horas())).toList());
+    private static MiRadarDeLaPersona miRadarDe(PlanDeMiRadar plan) {
+        return plan == null ? null : new MiRadarDeLaPersona(plan.encendido(), plan.hoy(),
+                plan.dias().stream().map(CodigoRenaserDePersonaService::diaDe).toList());
+    }
+
+    private static DiaDeLaPersona diaDe(DiaDelRadar dia) {
+        return new DiaDeLaPersona(dia.dia(), dia.fecha(), dia.modo().name(), dia.maximo(), dia.veces(),
+                dia.sinRadar(), dia.editable(), dia.despertar(), dia.dormir(), dia.horas(),
+                dia.motivo() == null ? null : dia.motivo().name());
     }
 
     private static RegistroDelRadar registroDe(RegistroRadar r) {

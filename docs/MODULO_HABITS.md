@@ -259,6 +259,17 @@ Ver también la pregunta #5 agregada en §5. Resumen:
 
 ### 8.4 Mi Radar — el Código Renaser desde el día 8 (D-286, spec 012, 2026-10-29)
 
+> **Corregido 2026-10-30 (D-292, spec 019, decisión del dueño).** Lo que sigue de las horas elegidas a mano (`horas_mi_radar`,
+> `dias_mi_radar` con horas, «de 1 a 12 horas», `MiRadar(horas, dias)`, `horasDelDia`, `HorasDeMiRadarPort`) **ya no es cierto y
+> nunca llegó a producción**. Mi Radar es **automático o personalizado**: la persona solo guarda si está encendido y, por día de la
+> semana, el modo (`AUTOMATICO`: cada hora en punto entre el Despertar y el Dormir de ese día, de 03:00 a 23:00 y sin tope de 12;
+> `PERSONALIZADO`: cuántas veces, repartidas parejo), las veces y «Sin Radar». Las horas las calcula `HorarioDelRadar` con
+> `HorarioDelDiaFinder` (`claveSistema` `WAKE_UP` / `SLEEP`, `horaDisparo`, sin apagados ni pausados); un día sin Despertar o sin Dormir
+> no tiene Radar y no se inventa un horario. **V122**: `mi_radar_encendido boolean` (nueva), `dias_mi_radar jsonb` con
+> `[{dia, modo, veces, sinRadar}]` solo para los días que no son de fábrica, y `horas_mi_radar` se elimina. Hoy y los días pasados no se
+> editan: el servidor responde 409. `MiRadar(encendido, dias)`, `DiaDeMiRadar`, `PlanDeMiRadar`/`DiaDelRadar`, `AgendaDelRadar` y
+> `users.api.MiRadarGuardadoPort`. Contrato en `docs/api/CONTRATO_DIA_A_DIA.md` y `specs/019-radar-automatico/`.
+
 > **Corregido 2026-10-29 (cuarta ronda de la spec 012, pedido del dueño).** Esta sección decía que Mi Radar eran «de 1 a 12 horas… (las
 > mismas todos los días)», con la columna `horas_mi_radar`, `{ "encendido", "horas" }` y `HorarioDelRadar` por hora. Ahora es **por día
 > de la semana**, igual que los hábitos en Planificar: `horas` valen para todos los días y `dias` trae los días con horas propias o
@@ -304,7 +315,7 @@ puede ser el anterior):
 
 `RadarService.registrar` calcula el momento local con el `Clock` en la zona de la persona (regla 02) y, si no puede registrar, responde
 **409** (`IllegalStateException`: «Mi Radar está apagado», «Hoy no tienes Mi Radar» o «Mi Radar funciona de 03:00 a 23:59») y no 403. La regla de un registro por hora (comprobación + índice V52) sigue igual. `AccesoAlRadar`
-es la puerta de la propia persona (antes eran dos métodos privados de `RadarService`) y `LecturaDelRadar` arma la página del
+es la puerta de la propia persona (y la que responde el **403 con `codigo`**: `PROGRAMA_NO_ACTIVADO` para el personal sin Día 1, con o sin fila de programa —antes un 404 «Participante no encontrado» si no tenía fila—, y `CUENTA_SUSPENDIDA`; el filtro de permisos suma `SIN_PERMISO` y `CUENTA_SUSPENDIDA`; ver D-292 y `docs/api/CONTRATO_DIA_A_DIA.md`) (antes eran dos métodos privados de `RadarService`) y `LecturaDelRadar` arma la página del
 historial para la persona, su mentor y liderazgo; en esa página `miRadar` es `null` mientras el `dia_programa` es menor que 8.
 
 **Endpoints.**

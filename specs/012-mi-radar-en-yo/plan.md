@@ -5,6 +5,9 @@
 
 ## Summary
 
+> **Corregido 2026-10-30 (spec 019).** Las horas ya no se eligen a mano ni se guardan (`horas_mi_radar` se elimina en la V122): salen del
+> Despertar y el Dormir. Ver `specs/019-radar-automatico/plan.md`.
+
 Desde el día 8, la persona enciende el Código Renaser en Yo → Mi Radar y elige de 1 a 12 horas en punto, entre 03:00
 y 23:00. El teléfono le avisa a esas horas y el formulario es el de siempre. Lo que responde lo ven ella y su
 acompañamiento (mentor, líder, administración y alquimista). Los días 1 a 7 no cambian.

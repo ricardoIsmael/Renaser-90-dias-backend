@@ -340,7 +340,7 @@ public class BancoDeCumplimiento {
 
     final CodigoRenaserDePersonaFinder radarFinder = (persona, cursor, tamanoPagina) -> {
         lecturasDelRadar.add(new LecturaDelRadarPedida(persona, cursor, tamanoPagina));
-        return radares.getOrDefault(persona, new CodigoRenaserDePersona(new MiRadarDeLaPersona(false, List.of(), List.of()), List.of(), null));
+        return radares.getOrDefault(persona, new CodigoRenaserDePersona(new MiRadarDeLaPersona(false, java.time.LocalDate.of(2026, 10, 14), List.of()), List.of(), null));
     };
 
     /** Spec 018: el horario resuelto de un día, tal cual lo deja {@link #habitosDeHoy}. */

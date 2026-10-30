@@ -78,6 +78,8 @@ class PermissionEnforcementInterceptorTest {
         assertThat(ultimaRespuesta.getContentAsString())
                 .as("el mensaje no debe revelar el permiso ni el rol del actor")
                 .doesNotContain("MODERATE_WALL", "TRAINEE", "role");
+        // Spec 019: el 403 dice POR QUE con un codigo aditivo (el formato ApiErrorConCodigo), sin nombrar el permiso.
+        assertThat(ultimaRespuesta.getContentAsString()).contains("\"codigo\":\"SIN_PERMISO\"");
     }
 
     @Test
@@ -198,6 +200,7 @@ class PermissionEnforcementInterceptorTest {
         assertThat(continua).isFalse();
         assertThat(ultimaRespuesta.getStatus()).isEqualTo(403);
         assertThat(ultimaRespuesta.getContentAsString()).contains("Cuenta suspendida");
+        assertThat(ultimaRespuesta.getContentAsString()).contains("\"codigo\":\"CUENTA_SUSPENDIDA\"");
     }
 
     @Test

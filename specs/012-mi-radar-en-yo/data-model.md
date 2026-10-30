@@ -2,6 +2,9 @@
 
 ## Cambios en la base (V119, sin tablas nuevas)
 
+> **Corregido 2026-10-30 (spec 019, V122).** `horas_mi_radar` se eliminó y `dias_mi_radar` guarda `{dia, modo, veces, sinRadar}`; se suma
+> `mi_radar_encendido`. Las horas se calculan con el Despertar y el Dormir. Ver `specs/019-radar-automatico/plan.md`.
+
 > **Corregido 2026-10-29 (cuarta ronda).** Decía una sola columna de horas, las mismas todos los días. Mi Radar es ahora por día de la
 > semana: se suma `dias_mi_radar` y V119 se modificó (no se creó V120) porque no se publicó.
 

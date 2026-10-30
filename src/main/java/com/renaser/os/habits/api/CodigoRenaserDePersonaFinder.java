@@ -3,11 +3,13 @@ package com.renaser.os.habits.api;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.UUID;
 
 /**
- * El Codigo Renaser de una persona visto desde otro modulo (spec 012, D-286): sus registros y su Mi Radar, para que el
+ * El Codigo Renaser de una persona visto desde otro modulo (spec 012, D-286): sus registros y su Mi Radar (spec 019: lo de hoy), para que el
  * lider de mentores, Administracion y el alquimista los lean en la ficha de la persona
  * ({@code leadership}, {@code GET /api/v1/leadership/groups/{g}/people/{p}/radar}).
  *
@@ -39,19 +41,28 @@ public interface CodigoRenaserDePersonaFinder {
     }
 
     /**
-     * @param horas las horas en punto (03 a 23) de TODOS los dias, de menor a mayor; vacia si esta apagado
-     * @param dias  los dias de la semana con horas propias, por numero; un dia que no esta sigue {@code horas}
+     * Mi Radar de la persona con lo de HOY (spec 019): su Despertar, su Dormir y cuantas veces pregunta.
+     *
+     * @param hoy  la fecha de hoy en la zona de la persona
+     * @param dias solo el dia de hoy (una lista, con la misma forma que la lectura propia)
      */
-    record MiRadarDeLaPersona(boolean encendido, List<Integer> horas, List<DiaDeLaPersona> dias) {
+    record MiRadarDeLaPersona(boolean encendido, LocalDate hoy, List<DiaDeLaPersona> dias) {
 
         public MiRadarDeLaPersona {
-            horas = List.copyOf(horas);
             dias = List.copyOf(dias);
         }
     }
 
-    /** @param dia lunes = 1 ... domingo = 7 @param horas las propias de ese dia; vacia = «Sin Radar ese dia» */
-    record DiaDeLaPersona(int dia, List<Integer> horas) {
+    /**
+     * @param dia      lunes = 1 ... domingo = 7
+     * @param modo     {@code AUTOMATICO} o {@code PERSONALIZADO}
+     * @param maximo   las horas en punto que caben entre su Despertar y su Dormir
+     * @param veces    las que pregunta de verdad; 0 si ese dia no tiene Radar
+     * @param motivo   {@code SIN_DESPERTAR}, {@code SIN_DORMIR} o {@code HORARIO_INVALIDO} si no hay horario; si no, nulo
+     */
+    record DiaDeLaPersona(int dia, LocalDate fecha, String modo, int maximo, int veces, boolean sinRadar,
+                          boolean editable, LocalTime despertar, LocalTime dormir, List<Integer> horas,
+                          String motivo) {
 
         public DiaDeLaPersona {
             horas = List.copyOf(horas);

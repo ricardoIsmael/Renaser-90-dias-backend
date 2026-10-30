@@ -15,6 +15,8 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.UUID;
@@ -55,8 +57,9 @@ class RadarDePersonaServiceTest {
         banco.usuario(SOPORTE_TI, "Soporte", UserRole.IT_SUPPORT, UserStatus.ACTIVE);
         banco.grupoConMentor(FENIX, "Grupo Fénix", MENTORA, "Luisa Rojas");
         banco.aprendiz(FENIX, ANA, "Ana Pérez");
-        banco.radar(ANA, new CodigoRenaserDePersona(new MiRadarDeLaPersona(true, List.of(9, 14, 20),
-                List.of(new DiaDeLaPersona(6, List.of(11)), new DiaDeLaPersona(7, List.of()))), List.of(
+        banco.radar(ANA, new CodigoRenaserDePersona(new MiRadarDeLaPersona(true, LocalDate.of(2026, 10, 14),
+                List.of(new DiaDeLaPersona(3, LocalDate.of(2026, 10, 14), "AUTOMATICO", 17, 17, false, false,
+                        LocalTime.of(5, 30), LocalTime.of(22, 30), List.of(6, 7, 8), null))), List.of(
                 new RegistroDelRadar(UUID.randomUUID(), "Trabajando", "En la reunión", "Tranquila", 7, "El correo",
                         Instant.parse("2026-10-14T19:06:00Z"), 14)), ANTES));
     }
@@ -74,10 +77,9 @@ class RadarDePersonaServiceTest {
             CodigoRenaserDePersona radar = de(actor, FENIX, ANA, null);
 
             assertThat(radar.miRadar().encendido()).isTrue();
-            assertThat(radar.miRadar().horas()).containsExactly(9, 14, 20);
-            assertThat(radar.miRadar().dias()).extracting(DiaDeLaPersona::dia).containsExactly(6, 7);
-            assertThat(radar.miRadar().dias().get(0).horas()).containsExactly(11);
-            assertThat(radar.miRadar().dias().get(1).horas()).isEmpty();
+            assertThat(radar.miRadar().dias()).extracting(DiaDeLaPersona::dia).containsExactly(3);
+            assertThat(radar.miRadar().dias().get(0).despertar()).isEqualTo(LocalTime.of(5, 30));
+            assertThat(radar.miRadar().dias().get(0).veces()).isEqualTo(17);
             assertThat(radar.registros()).singleElement().satisfies(r -> {
                 assertThat(r.queSiento()).isEqualTo("Tranquila");
                 assertThat(r.horaPrevista()).isEqualTo(14);
