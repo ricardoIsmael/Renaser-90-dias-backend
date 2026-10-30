@@ -9,13 +9,14 @@ import java.time.LocalTime;
  *
  * @param claveSistema {@code WAKE_UP} o {@code SLEEP} reconocen a Despertar y Dormir; cualquier otra, o {@code null},
  *                     es un hábito más
+ * @param titulo       el nombre con que la persona lo ve; es lo que lleva su bloque en la agenda del día
  */
-public record HabitoConHora(String claveSistema, LocalTime horaDisparo) {
+public record HabitoConHora(String claveSistema, LocalTime horaDisparo, String titulo) {
 
     public static final String DESPERTAR = "WAKE_UP";
     public static final String DORMIR = "SLEEP";
 
     public ItemPlanificado enElDia(LocalDate dia) {
-        return ItemPlanificado.deHabito(dia, horaDisparo);
+        return ItemPlanificado.deHabito(dia, horaDisparo, titulo);
     }
 }

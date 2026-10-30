@@ -13,27 +13,67 @@ import java.util.List;
  * <p><b>Vive en {@code api}</b> para que {@code leadership} la lea por {@link HuecosDeHorarioFinder} sin armar una
  * segunda semana: que el cálculo sea UNO solo es el requisito (FR-025).
  *
+ * <p><b>Corregido 2026-10-29</b> (el dueño pidió ver el tiempo libre «por día», como una agenda): cada día suma, de
+ * forma aditiva, sus bloques ocupados con su nombre ({@code ocupados}), los hábitos y acciones que cumplió a tiempo,
+ * tarde o no, y por qué cuenta entero cuando no tiene ventana; la semana suma {@code hoy}. Los campos de antes no
+ * cambian. Un día que sale de la foto de una semana cerrada <b>no trae</b> los tres primeros (la foto guarda tramos de
+ * tiempo, no nombres): quien los lee tiene que tolerar su ausencia.
+ *
  * @param semana        el lunes de la semana
  * @param primeraSemana el lunes de la semana de su Día 1; {@code null} si todavía no eligió su Día 1
+ * @param hoy           el día de hoy en la zona de la persona; con él la app sabe cuál es hoy y cuáles días vienen
  * @param cerrada       {@code true} solo si sale de la foto guardada al cerrar la semana (el horario que regía
  *                      entonces); {@code false} si se calculó al pedirla, con el horario de hoy
  */
-public record HuecosDeLaSemana(LocalDate semana, LocalDate primeraSemana, boolean cerrada, List<Dia> dias,
-                               Resumen resumen) {
+public record HuecosDeLaSemana(LocalDate semana, LocalDate primeraSemana, LocalDate hoy, boolean cerrada,
+                               List<Dia> dias, Resumen resumen) {
 
     public HuecosDeLaSemana {
         dias = List.copyOf(dias);
     }
 
     /**
-     * @param ventana {@code null} si ese día no hay Despertar y Dormir coherentes: el día cuenta de 00:00 a 24:00
-     * @param huecos  solo los de 30 minutos o más, dentro de la ventana y en orden
+     * @param ventana          {@code null} si ese día no hay Despertar y Dormir coherentes: el día cuenta de 00:00 a
+     *                         24:00
+     * @param sinVentanaPor    por qué no hay ventana; {@code null} si la hay y también en un día de una semana cerrada
+     * @param huecos           solo los de 30 minutos o más, dentro de la ventana y en orden
+     * @param ocupados         lo planificado de ese día, bloque por bloque y en orden de hora; los que se cruzan vienen
+     *                         separados. {@code null} (no vacío) en un día de una semana cerrada: ahí no se sabe
+     * @param cumplidosATiempo hábitos y acciones de ese día cumplidos hasta su hora límite; {@code null} en un día de
+     *                         una semana cerrada. Cero en un día que todavía no llega
      */
-    public record Dia(LocalDate fecha, Ventana ventana, int minutosOcupados, int minutosLibres, List<Hueco> huecos) {
+    public record Dia(LocalDate fecha, Ventana ventana, SinVentanaPor sinVentanaPor, int minutosOcupados,
+                      int minutosLibres, List<Hueco> huecos, List<Ocupado> ocupados, Integer cumplidosATiempo,
+                      Integer cumplidosTarde, Integer noCumplidos) {
 
         public Dia {
             huecos = List.copyOf(huecos);
+            ocupados = ocupados == null ? null : List.copyOf(ocupados);
         }
+    }
+
+    /** Por qué un día cuenta entero: la app dice cuál de las dos horas hay que pedirle a la persona. */
+    public enum SinVentanaPor {
+        SIN_DESPERTAR,
+        SIN_DORMIR,
+        SIN_DESPERTAR_NI_DORMIR,
+        DORMIR_ANTES_DE_DESPERTAR
+    }
+
+    /**
+     * Un bloque ocupado de la agenda de un día, dentro de su ventana. Las horas son {@code "HH:mm"}.
+     *
+     * @param titulo el nombre del hábito, de la acción o del evento; {@code null} en {@link Tipo#AGENDA}, que son las
+     *               horas que la persona dijo estar ocupada y no llevan etiqueta
+     */
+    public record Ocupado(String desde, String hasta, Tipo tipo, String titulo) {
+    }
+
+    public enum Tipo {
+        HABITO,
+        ACCION,
+        EVENTO,
+        AGENDA
     }
 
     public record Ventana(String desde, String hasta) {

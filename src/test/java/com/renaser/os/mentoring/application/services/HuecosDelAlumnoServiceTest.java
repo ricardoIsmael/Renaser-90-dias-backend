@@ -45,7 +45,8 @@ class HuecosDelAlumnoServiceTest {
     private final UserSummaryFinder usuarios = mock(UserSummaryFinder.class);
     private final HuecosDeHorarioFinder huecos = mock(HuecosDeHorarioFinder.class);
     private final HuecosDeLaSemana respuesta = ArmadoDeLosHuecos.armar(
-            SemanasDeHuecosDePrueba.delContrato(LocalDate.of(2026, 10, 26)), null, false);
+            SemanasDeHuecosDePrueba.delContrato(LocalDate.of(2026, 10, 26)),
+            new ArmadoDeLosHuecos.Lectura(null, false, LocalDate.of(2026, 10, 29)));
 
     private HuecosDelAlumnoService servicio;
 

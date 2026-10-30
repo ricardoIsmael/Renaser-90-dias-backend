@@ -31,6 +31,25 @@ public record VentanaDelDia(int desde, int hasta) {
         return diaEntero();
     }
 
+    /**
+     * Por qué el día cuenta entero; vacío si hay ventana (Despertar y Dormir coherentes). Es la misma regla de
+     * {@link #de}: una sola fuente.
+     */
+    public static Optional<MotivoSinVentana> motivoDeDiaEntero(List<HabitoConHora> habitos) {
+        Optional<Integer> despertar = horaDe(habitos, HabitoConHora.DESPERTAR);
+        Optional<Integer> dormir = horaDe(habitos, HabitoConHora.DORMIR);
+        if (despertar.isEmpty() && dormir.isEmpty()) {
+            return Optional.of(MotivoSinVentana.SIN_DESPERTAR_NI_DORMIR);
+        }
+        if (despertar.isEmpty()) {
+            return Optional.of(MotivoSinVentana.SIN_DESPERTAR);
+        }
+        if (dormir.isEmpty()) {
+            return Optional.of(MotivoSinVentana.SIN_DORMIR);
+        }
+        return despertar.get() < dormir.get() ? Optional.empty() : Optional.of(MotivoSinVentana.DORMIR_ANTES_DE_DESPERTAR);
+    }
+
     /** {@code false} cuando la ventana es el día entero: la app lo dice como «de 00:00 a 24:00». */
     public boolean vieneDeLaPersona() {
         return !equals(diaEntero());

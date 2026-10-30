@@ -154,6 +154,12 @@ hábito y para Despertar), cada uno diciendo entre qué ítems quedó.
    escenario, con el tiempo libre de cada día y el total de la semana.
 9. **Given** una fecha por venir, **When** la pido, **Then** se calcula con el plan que tengo y se lee como plan, no como
    algo que ya pasó.
+10. *(Corregido 2026-10-29: el dueño pidió ver el tiempo libre «por día», como una agenda, y no como una lista de horarios
+    repetidos y siete filas que abrir una por una.)* **Given** una semana, **When** la ficha la muestra, **Then** cada
+    día se ve como una columna con lo libre de su ventana, y al elegir un día se ve su agenda: lo ocupado bloque por
+    bloque, con el nombre del hábito, la acción o el evento (la agenda personal, solo como «Ocupado»), y cada hueco de 30
+    minutos o más con su duración y su rango. Si la persona no tiene hora de Despertar o de Dormir, la ficha dice cuál
+    falta y no cuenta el sueño como tiempo libre.
 
 ---
 
@@ -250,6 +256,9 @@ confirma o elige otro y solo entonces se agenda.
 - **FR-001**: Para una persona y una fecha, el sistema MUST entregar la ventana del día, los ítems que ocupan tiempo (con
   su hora y de dónde vienen), los huecos (desde, hasta, minutos y entre qué ítems quedaron) y el tiempo ocupado y libre
   del día.
+  *(Corregido 2026-10-29: «los ítems que ocupan tiempo» se entregan uno por uno, no solo como minutos: cada bloque con su
+  hora, su tipo —hábito, acción, evento o agenda personal— y su nombre, salvo la agenda personal, que no lleva. Ver
+  FR-028.)*
 - **FR-002**: Los ítems que ocupan tiempo MUST ser los hábitos con hora, las acciones del día con hora y los eventos con
   hora a los que la persona no dijo «No voy», más las horas ocupadas que la persona guardó con SER.
 - **FR-003**: Cada ítem MUST usar el horario vigente de **esa** fecha, el mismo que ve la persona al planificar: hora
@@ -270,6 +279,9 @@ confirma o elige otro y solo entonces se agenda.
   medianoche MUST partirse y contarse en cada día.
 - **FR-010**: Para una semana, el sistema MUST entregar los siete días de lunes a domingo, cada uno como en FR-001, con
   el tiempo libre por día y el total, marcando cuáles ya se vivieron y cuáles vienen. MUST aceptar fechas por venir.
+  *(Corregido 2026-10-29: «marcando cuáles ya se vivieron y cuáles vienen» no estaba en el contrato y la ficha lo
+  necesita para señalar hoy y decir «Todavía no llega»: la semana entrega `hoy`, el día de hoy en la zona de la persona.
+  El total de tiempo libre de la ficha suma solo los días que tienen ventana; un día sin ventana no se cuenta.)*
 - **FR-011**: Antes del Día 1, después del día 90 y sin Día 1 elegido, el sistema MUST NOT inventar hábitos del programa;
   MUST calcular lo demás y MUST decir que la fecha está fuera de sus 90 días o que aún no eligió su Día 1.
 - **FR-012**: Calcular los huecos MUST ser de solo lectura: no crea ni cambia horarios, no gasta el cupo de cambios, no
@@ -292,6 +304,8 @@ confirma o elige otro y solo entonces se agenda.
   Al cerrar cada semana MUST guardarse una foto por persona: los minutos ocupados y libres útiles, los huecos que se
   repiten y el horario que regía esa semana. La recapitulación de una semana pasada MUST salir de esa foto y no del
   horario de hoy. La foto es historia: MUST NOT reescribirse después (constitución IV). Decisión del dueño, pregunta 2.
+  *(Corregido 2026-10-29: la foto guarda tramos de tiempo y no etiquetas —V120—. Un día que sale de ella no tiene los
+  nombres de lo ocupado ni lo cumplido de ese día; ver FR-028.)*
 
 **Las sugerencias (historia 3, a futuro)**
 
@@ -338,11 +352,32 @@ confirma o elige otro y solo entonces se agenda.
     no avisa) y junta a las personas **sin repetir a nadie**, con un solo aviso por mentor y día. Abrir la semana y los
     huecos de la misma persona el mismo día cuenta una vez.
 
+- **FR-028** *(Corregido 2026-10-29: antes la spec no decía nada de esto; es la agenda del día que pidió el dueño.)* Cada
+  día de la respuesta MUST traer, **de forma aditiva** (lo de antes no cambia):
+  - `ocupados`: los bloques de lo planificado, uno por hábito, acción, evento o tramo de agenda personal, con desde,
+    hasta, tipo (`HABITO`, `ACCION`, `EVENTO`, `AGENDA`) y título (`null` en `AGENDA`). Recortados a la ventana del día,
+    en orden de hora y sin unir los que se cruzan; lo que cae fuera de la ventana MUST NOT salir. La unión que ya
+    calculaba el servidor (minutos ocupados y huecos) MUST seguir siendo la misma.
+  - `cumplidosATiempo`, `cumplidosTarde` y `noCumplidos` de ese día, con la misma cuenta que el resumen de la semana: su
+    suma por día MUST ser el total. Un día que todavía no llega MUST traer ceros.
+  - `sinVentanaPor` (`SIN_DESPERTAR`, `SIN_DORMIR`, `SIN_DESPERTAR_NI_DORMIR`, `DORMIR_ANTES_DE_DESPERTAR`) cuando `ventana`
+    es `null`, para que la ficha diga cuál hora pedirle a la persona. Sin ventana la ficha MUST NOT dibujar el sueño
+    como tiempo libre ni contar un total inventado: el total dice «—».
+  Y la semana MUST traer `hoy`, el día de hoy en la zona de la persona.
+  **Una semana cerrada no los trae.** La foto (V120) guarda tramos de tiempo y MUST NOT guardar títulos de la vida de la
+  persona; un día que sale de ella sale con `ocupados`, los tres conteos y `sinVentanaPor` en `null` (no en cero ni en
+  lista vacía), y quien los lee MUST tolerar su ausencia y mostrar lo que sí hay (la ventana, los huecos y el tiempo
+  libre). Guardarlos pediría una migración nueva y decidir antes qué se guarda; no se hizo.
+  La agenda personal MUST NOT llevar título y la ficha la dice solo «Ocupado». Quién los ve no cambia (FR-024).
+
 ### Key Entities
 
 - **Ítem planificado**: algo de la persona con hora en un día —un hábito, una acción del día, un evento o un tramo
   ocupado que guardó con SER—. Tiene título, hora de inicio, duración (propia o por defecto) y de dónde viene la hora.
 - **Ventana del día**: el tramo del día que cuenta para los huecos, de Despertar a Dormir o el día entero.
+- **Bloque ocupado** *(Corregido 2026-10-29, FR-028)*: un pedazo de la agenda de un día tal como lo planificó la persona
+  —un hábito, una acción, un evento o un tramo de su agenda personal—, con su tipo y su nombre. Se deriva al calcular
+  el día; no se guarda.
 - **Hueco**: un tramo libre de al menos el mínimo útil, con su desde, su hasta, sus minutos y los ítems entre los que
   quedó. Se deriva; no se guarda.
 - **Recapitulación de la semana**: por día y por hábito, lo planificado frente a lo real, más los huecos que se repiten y

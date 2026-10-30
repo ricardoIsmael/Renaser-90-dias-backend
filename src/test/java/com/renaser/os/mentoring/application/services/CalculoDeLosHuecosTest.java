@@ -10,9 +10,12 @@ import com.renaser.os.habits.api.HorarioDelDiaFinder.HorarioResuelto;
 import com.renaser.os.habits.api.HorarioDelDiaFinder.HorariosDelDia;
 import com.renaser.os.habits.api.RegistrosDeHabitoFinder;
 import com.renaser.os.habits.api.RegistrosDeHabitoFinder.RegistroDeHabito;
+import com.renaser.os.mentoring.domain.model.huecos.BloqueOcupado;
 import com.renaser.os.mentoring.domain.model.huecos.DiaDeHuecos;
 import com.renaser.os.mentoring.domain.model.huecos.LoReal;
+import com.renaser.os.mentoring.domain.model.huecos.MotivoSinVentana;
 import com.renaser.os.mentoring.domain.model.huecos.SemanaDeHuecos;
+import com.renaser.os.mentoring.domain.model.huecos.TipoDeOcupado;
 import com.renaser.os.rag.api.AgendaOcupadaFinder;
 import com.renaser.os.rocks.api.HorasDeLasAccionesFinder;
 import com.renaser.os.rocks.api.HorasDeLasAccionesFinder.HoraDeUnaAccion;
@@ -166,9 +169,9 @@ class CalculoDeLosHuecosTest {
     @DisplayName("las acciones con hora ocupan (30 min por defecto); las sin hora no")
     void acciones() {
         when(acciones.entre(persona, LUNES, DOMINGO)).thenReturn(List.of(
-                new HoraDeUnaAccion(LUNES, LocalTime.of(11, 0), LocalTime.of(12, 30), false, null),
-                new HoraDeUnaAccion(LUNES, LocalTime.of(14, 0), null, false, null),
-                new HoraDeUnaAccion(LUNES, null, null, false, null)));
+                new HoraDeUnaAccion(LUNES, "Accion 1", LocalTime.of(11, 0), LocalTime.of(12, 30), false, null),
+                new HoraDeUnaAccion(LUNES, "Accion 2", LocalTime.of(14, 0), null, false, null),
+                new HoraDeUnaAccion(LUNES, "Accion 3", null, null, false, null)));
         when(horarios.deFecha(persona, LUNES)).thenReturn(new HorariosDelDia(LUNES, 10, List.of(), cuota()));
 
         SemanaDeHuecos semana = calculo.calcular(participacion(true), LUNES, LocalDate.of(2026, 10, 18));
@@ -234,18 +237,85 @@ class CalculoDeLosHuecosTest {
     @DisplayName("una acción cumplida cuenta como cumplida a tiempo si no tiene hora; sin cumplir en un dia vivido, no cumplida")
     void accionesEnLoReal() {
         when(acciones.entre(persona, LUNES, DOMINGO)).thenReturn(List.of(
-                new HoraDeUnaAccion(LUNES, LocalTime.of(11, 0), LocalTime.of(12, 0), true, lima(LUNES, 11, 50)),
-                new HoraDeUnaAccion(LUNES, LocalTime.of(14, 0), LocalTime.of(15, 0), true, lima(LUNES, 16, 0)),
-                new HoraDeUnaAccion(LUNES.plusDays(1), null, null, true, lima(LUNES.plusDays(1), 9, 0)),
-                new HoraDeUnaAccion(LUNES.plusDays(1), LocalTime.of(9, 0), null, false, null)));
+                new HoraDeUnaAccion(LUNES, "Accion 4", LocalTime.of(11, 0), LocalTime.of(12, 0), true, lima(LUNES, 11, 50)),
+                new HoraDeUnaAccion(LUNES, "Accion 5", LocalTime.of(14, 0), LocalTime.of(15, 0), true, lima(LUNES, 16, 0)),
+                new HoraDeUnaAccion(LUNES.plusDays(1), "Accion 6", null, null, true, lima(LUNES.plusDays(1), 9, 0)),
+                new HoraDeUnaAccion(LUNES.plusDays(1), "Accion 7", LocalTime.of(9, 0), null, false, null)));
 
         SemanaDeHuecos semana = calculo.calcular(participacion(true), LUNES, HOY);
 
         assertThat(semana.real()).isEqualTo(new LoReal(2, 1, 1));
     }
 
+    @Test
+    @DisplayName("la agenda del dia trae cada bloque con su tipo y su nombre; la agenda personal sin nombre, y en orden de hora")
+    void bloquesConNombre() {
+        when(acciones.entre(persona, LUNES, DOMINGO)).thenReturn(List.of(
+                new HoraDeUnaAccion(LUNES, "Enviar la propuesta", LocalTime.of(10, 0), LocalTime.of(10, 30), false, null)));
+        when(eventos.entre(persona, LUNES.minusDays(1), DOMINGO)).thenReturn(new AgendaDeEventos(LIMA,
+                LUNES.minusDays(1), DOMINGO, List.of(
+                        eventoLlamado("Reunion de equipo", LUNES.atTime(9, 0), LUNES.atTime(10, 30)))));
+        when(agenda.semanaDe(persona)).thenReturn(Map.of(DayOfWeek.MONDAY, List.of(new TramoDelDia(840, 960))));
+
+        SemanaDeHuecos semana = calculo.calcular(participacion(true), LUNES, LocalDate.of(2026, 10, 18));
+
+        // Dormir (22:00) empieza donde termina la ventana: no entra a la agenda. Los que se cruzan (reunion y propuesta) van aparte.
+        assertThat(semana.dias().get(0).detalle().bloques()).containsExactly(
+                new BloqueOcupado(new TramoDelDia(360, 390), TipoDeOcupado.HABITO, "Despertar"),
+                new BloqueOcupado(new TramoDelDia(420, 450), TipoDeOcupado.HABITO, "Agua"),
+                new BloqueOcupado(new TramoDelDia(540, 630), TipoDeOcupado.EVENTO, "Reunion de equipo"),
+                new BloqueOcupado(new TramoDelDia(600, 630), TipoDeOcupado.ACCION, "Enviar la propuesta"),
+                new BloqueOcupado(new TramoDelDia(840, 960), TipoDeOcupado.AGENDA, null));
+    }
+
+    @Test
+    @DisplayName("lo real de cada dia sale de sus propios registros y la suma de los dias es el de la semana")
+    void loRealPorDia() {
+        when(registros.deParticipanteEntre(persona, LUNES, DOMINGO)).thenReturn(List.of(
+                new RegistroDeHabito(agua, LUNES, EstadoObligacion.COMPLETADO, false, lima(LUNES, 8, 30)),
+                new RegistroDeHabito(despertar, LUNES, EstadoObligacion.COMPLETADO, false, lima(LUNES, 5, 55)),
+                new RegistroDeHabito(agua, LUNES.plusDays(1), EstadoObligacion.COMPLETADO, false,
+                        lima(LUNES.plusDays(1), 10, 0)),
+                new RegistroDeHabito(despertar, LUNES.plusDays(1), EstadoObligacion.EXPIRADO, false, null)));
+
+        SemanaDeHuecos semana = calculo.calcular(participacion(true), LUNES, HOY);
+
+        assertThat(semana.dias().get(0).detalle().real()).isEqualTo(new LoReal(2, 0, 0));
+        assertThat(semana.dias().get(1).detalle().real()).isEqualTo(new LoReal(0, 1, 1));
+        // Un dia sin registros, y uno que todavia no llega, no cuentan nada.
+        assertThat(semana.dias().get(2).detalle().real()).isEqualTo(LoReal.NADA);
+        assertThat(semana.dias().get(4).detalle().real()).isEqualTo(LoReal.NADA);
+        int aTiempo = semana.dias().stream().mapToInt(dia -> dia.detalle().real().aTiempo()).sum();
+        int tarde = semana.dias().stream().mapToInt(dia -> dia.detalle().real().tarde()).sum();
+        int sinCumplir = semana.dias().stream().mapToInt(dia -> dia.detalle().real().noCumplidos()).sum();
+        assertThat(new LoReal(aTiempo, tarde, sinCumplir)).isEqualTo(semana.real());
+    }
+
+    @Test
+    @DisplayName("un dia sin la hora de Despertar dice por que cuenta entero")
+    void diaSinVentana() {
+        when(horarios.deFecha(persona, LUNES)).thenReturn(new HorariosDelDia(LUNES, 10, List.of(
+                new HorarioResuelto(dormir, "Dormir", LocalTime.of(22, 0), null, false, false, false, true, null, false,
+                        "SLEEP")), cuota()));
+
+        SemanaDeHuecos semana = calculo.calcular(participacion(true), LUNES, LocalDate.of(2026, 10, 18));
+
+        assertThat(semana.dias().get(0).ventana().vieneDeLaPersona()).isFalse();
+        assertThat(semana.dias().get(0).detalle().sinVentana()).isEqualTo(MotivoSinVentana.SIN_DESPERTAR);
+        assertThat(semana.dias().get(1).detalle().sinVentana()).isNull();
+    }
+
     private static EventoDeLaAgenda evento(LocalDateTime inicia, LocalDateTime termina, String asistencia) {
-        return new EventoDeLaAgenda(UUID.randomUUID(), "Evento", inicia, termina, asistencia);
+        return eventoLlamado("Evento", inicia, termina, asistencia);
+    }
+
+    private static EventoDeLaAgenda eventoLlamado(String titulo, LocalDateTime inicia, LocalDateTime termina) {
+        return eventoLlamado(titulo, inicia, termina, null);
+    }
+
+    private static EventoDeLaAgenda eventoLlamado(String titulo, LocalDateTime inicia, LocalDateTime termina,
+                                                  String asistencia) {
+        return new EventoDeLaAgenda(UUID.randomUUID(), titulo, inicia, termina, asistencia);
     }
 
     private static Instant lima(LocalDate dia, int hora, int minuto) {

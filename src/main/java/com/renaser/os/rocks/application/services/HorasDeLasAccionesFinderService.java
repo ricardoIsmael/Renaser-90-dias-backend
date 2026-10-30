@@ -27,8 +27,8 @@ class HorasDeLasAccionesFinderService implements HorasDeLasAccionesFinder {
     @Transactional(readOnly = true)
     public List<HoraDeUnaAccion> entre(UserId aprendizId, LocalDate desde, LocalDate hasta) {
         return loadRocaDiariaPort.deParticipanteEntreFechas(aprendizId, desde, hasta).stream()
-                .map(roca -> new HoraDeUnaAccion(roca.fecha(), roca.horaInicio(), roca.horaFin(), roca.completada(),
-                        roca.completadaEn()))
+                .map(roca -> new HoraDeUnaAccion(roca.fecha(), roca.titulo(), roca.horaInicio(), roca.horaFin(),
+                        roca.completada(), roca.completadaEn()))
                 .toList();
     }
 }

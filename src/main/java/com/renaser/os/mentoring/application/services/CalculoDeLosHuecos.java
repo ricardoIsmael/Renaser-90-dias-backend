@@ -66,9 +66,12 @@ class CalculoDeLosHuecos {
         for (int i = 0; i < DIAS_DE_LA_SEMANA; i++) {
             LocalDate fecha = lunes.plusDays(i);
             HabitosDeUnDia habitos = habitosDe(persona, fecha, hoy, fuentes);
-            dias.add(DiaDeHuecos.calcular(fecha, habitos.ocupan(), fuentes.otrosDe(fecha), fuentes.agendaDe(fecha)));
-            cumplibles.addAll(habitos.cumplibles());
-            cumplibles.addAll(fuentes.cumplibles(fecha));
+            List<Cumplible> delDia = new ArrayList<>(habitos.cumplibles());
+            delDia.addAll(fuentes.cumplibles(fecha));
+            // Lo real de cada día y el de la semana salen de los mismos cumplibles: la suma de los días es el total.
+            dias.add(DiaDeHuecos.calcular(fecha, habitos.ocupan(), fuentes.otrosDe(fecha), fuentes.agendaDe(fecha))
+                    .conLoReal(LoReal.de(persona.zona(), hoy, delDia)));
+            cumplibles.addAll(delDia);
         }
         return SemanaDeHuecos.de(lunes, dias, LoReal.de(persona.zona(), hoy, cumplibles));
     }
@@ -83,7 +86,7 @@ class CalculoDeLosHuecos {
         // Un dia antes: un evento de la noche anterior que cruza la medianoche deja su pedazo en el lunes.
         List<ItemPlanificado> delCalendario = eventos.entre(id, lunes.minusDays(1), domingo).eventos().stream()
                 .filter(evento -> !NO_VA.equals(evento.asistencia()))
-                .map(evento -> ItemPlanificado.deEvento(evento.iniciaLocal(), evento.terminaLocal()))
+                .map(evento -> ItemPlanificado.deEvento(evento.iniciaLocal(), evento.terminaLocal(), evento.titulo()))
                 .toList();
         return new Fuentes(registrosPorDia, acciones.entre(id, lunes, domingo), delCalendario, agenda.semanaDe(id));
     }
@@ -107,7 +110,7 @@ class CalculoDeLosHuecos {
         List<ItemPlanificado> otrosDe(LocalDate fecha) {
             List<ItemPlanificado> otros = new ArrayList<>(eventos);
             accionesDe(fecha).stream().filter(accion -> accion.horaInicio() != null)
-                    .forEach(accion -> otros.add(ItemPlanificado.deAccion(fecha, accion.horaInicio(), accion.horaFin())));
+                    .forEach(accion -> otros.add(ItemPlanificado.deAccion(fecha, accion.horaInicio(), accion.horaFin(), accion.titulo())));
             return otros;
         }
 
