@@ -183,7 +183,8 @@ endpoint en esta versión. Ambas rutas devuelven la misma respuesta, con `Cache-
 | GET | `/api/v1/leadership/groups/{groupId}/people/{personId}/huecos?semana=YYYY-MM-DD` | líder de mentores, admin, alquimista · `AccesoDeLiderazgo` (el de `…/week`); grupo con mentor y persona de ese grupo hoy |
 
 `semana` es el lunes; sin ella, la semana en curso de la persona (en SU zona). Una semana futura, anterior a la primera de su
-programa o que no es lunes responde 400; un rol sin permiso o una cuenta suspendida, 403. La semana en curso se calcula al
+programa o que no es lunes responde 400; un rol sin permiso o una cuenta suspendida, 403. La ruta del liderazgo (líder, admin, alquimista) **deja constancia
+de la consulta** en `consultas_de_ficha`, como `…/week` (spec 005 FR-016), solo cuando responde 200; la del mentor o la guía no. La semana en curso se calcula al
 pedirla; una ya terminada sale de la foto que guarda el barrido horario `mentoring-cerrar-huecos` (tabla `huecos_semana`, V120)
 con `cerrada: true`.
 

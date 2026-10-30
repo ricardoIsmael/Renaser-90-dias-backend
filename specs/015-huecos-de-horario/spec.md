@@ -80,6 +80,10 @@ reconstruir con el horario que rige hoy**. Lo real (a qué hora cumplió) sí qu
   horas de los hábitos se sobrescriben y no queda historia del horario de cada semana, así que sin la foto semanal una
   semana pasada se compararía con el horario de hoy (opción B, con una tabla nueva).
 - **Pregunta 3:** en la primera versión solo se calculan y se muestran (opción A).
+- **Constancia de la consulta (2026-10-29, después de construir la primera versión):** cuando el líder de mentores, el
+  administrador o el alquimista leen los huecos de una persona, queda constancia de la consulta, igual que al abrir su
+  ficha semanal (spec 005, FR-016). Se reutiliza la tabla de consultas que ya existe (`consultas_de_ficha`, V109): sin
+  tabla nueva. Ver FR-027.
 
 > **Corregido 2026-10-29.** Las preguntas de abajo quedaron respondidas; se conservan como contexto.
 
@@ -311,10 +315,28 @@ confirma o elige otro y solo entonces se agenda.
   Además MUST poder leerlos, solo en lectura, su acompañamiento, con la misma cadena del Radar (spec 012): el mentor o
   la guía vigente, el líder de mentores, el administrador y el alquimista. Para el personal que hace su programa rige la
   spec 013. MUST sumarse a la Política de Privacidad antes de publicarlo. Decisión del dueño, pregunta 1.
+  *(Corregido 2026-10-29: cuando lo lee el líder de mentores, el administrador o el alquimista queda constancia de la
+  consulta; ver FR-027. La lectura del mentor o la guía no deja constancia, como tampoco la deja hoy su Radar del
+  alumno ni la spec 005 la pide para sus rutas.)*
 - **FR-025**: Lo que muestre la app, lo que use SER y lo que lea cualquier otro consumidor MUST salir del mismo cálculo
   del servidor: una sola regla.
 - **FR-026**: Todo MUST ser aditivo: el APK publicado sigue igual con el backend nuevo, y una app nueva contra un backend
   anterior no muestra nada nuevo.
+- **FR-027** *(Corregido 2026-10-29: antes la spec no decía nada de esto y la primera versión no lo registraba.)* El
+  sistema MUST dejar constancia de cada vez que el líder de mentores, el administrador o el alquimista leen los huecos
+  de una persona, con la misma constancia que deja la ficha de la semana (spec 005, FR-016): quién, con qué rol, a
+  quién, de qué grupo, a qué mentor, el lunes de la semana que miró y cuándo. Reglas:
+  - Reutiliza la tabla y el puerto de la ficha de la semana (`consultas_de_ficha`, append-only): MUST NOT crear una
+    tabla nueva. La fila no distingue si lo que se miró fue la semana del semáforo o los huecos.
+  - La constancia se deja DESPUÉS de leer y en la misma transacción. Una lectura que falla (semana que no se puede
+    pedir, persona que no se encuentra, cuenta suspendida) y un rechazo (403 por rol o cuenta suspendida, 404 por grupo
+    o persona ajena) MUST NOT dejarla; si no se puede dejar la constancia, MUST NOT entregarse la lectura.
+  - Se anota el lunes que de verdad se miró (el resuelto, también cuando el pedido no trae semana), no el pedido.
+  - Cada llamada es una fila: cambiar de semana o repetirla es otra.
+  - Entra al resumen que el mentor recibe a las 20:00 («Tu líder revisó a tu grupo», spec 005, FR-017) con la regla de
+    siempre: cuenta solo la consulta del **líder de mentores** (lo de administración y alquimista queda registrado pero
+    no avisa) y junta a las personas **sin repetir a nadie**, con un solo aviso por mentor y día. Abrir la semana y los
+    huecos de la misma persona el mismo día cuenta una vez.
 
 ### Key Entities
 
@@ -327,8 +349,11 @@ confirma o elige otro y solo entonces se agenda.
   los totales. Se deriva; solo se guardaría si el dueño elige la opción B de la pregunta 2.
 - **Sugerencia** *(a futuro)*: una actividad, el hueco propuesto y su explicación. No se guarda hasta que la persona la
   confirma.
+- **Constancia de la consulta** *(FR-027)*: la fila de `consultas_de_ficha` que deja quien del liderazgo leyó los huecos
+  de una persona. Ya existe (spec 005); no es una entidad nueva.
 
-Ninguna entidad es una tabla nueva, salvo que el dueño elija guardar la foto semanal (pregunta 2, opción B).
+Ninguna entidad es una tabla nueva, salvo que el dueño elija guardar la foto semanal (pregunta 2, opción B). La
+constancia de la consulta (FR-027) reutiliza `consultas_de_ficha`: sin tabla ni migración nuevas.
 
 ## Success Criteria *(mandatory)*
 
@@ -353,6 +378,9 @@ Ninguna entidad es una tabla nueva, salvo que el dueño elija guardar la foto se
   TI, cuenta suspendida) se rechazan el 100 % de las veces.
 - **SC-010** *(historia 3)*: ninguna sugerencia cae sobre un ítem ni fuera de la ventana, y ninguna se aplica sin que la
   persona la confirme (100 %).
+- **SC-011** *(FR-027)*: el 100 % de las lecturas de huecos del líder, del administrador y del alquimista que se
+  entregan dejan una constancia; ninguna lectura que falla ni ningún rechazo la deja; y una persona que el líder abrió
+  por la semana y por los huecos el mismo día aparece una sola vez en el resumen del mentor.
 
 ## Assumptions
 
@@ -373,8 +401,8 @@ Ninguna entidad es una tabla nueva, salvo que el dueño elija guardar la foto se
 - **Eventos**: ocupa todo evento al que la persona no dijo «No voy», como «Mi agenda».
 - **Zona**: la vigente de la persona; no se guarda historia de zonas.
 - **Se reutiliza, sin tablas nuevas**: el horario de los hábitos que ya resuelve el servidor, las acciones del día, los
-  eventos, las horas ocupadas que guarda SER, los registros de hábitos y el Radar. La única tabla posible es la foto
-  semanal de la pregunta 2, opción B.
+  eventos, las horas ocupadas que guarda SER, los registros de hábitos y el Radar, y la constancia de la consulta
+  (`consultas_de_ficha`, FR-027). La única tabla posible es la foto semanal de la pregunta 2, opción B.
 - **El cálculo lo hace el servidor**, para que la app, SER y cualquier otro consumidor vean lo mismo (constitución I: el
   servidor decide, la app no recalcula).
 - **Dependencias**: la spec 008 (hora por día de la semana) y la 010 (acciones por día) ya están; la 012 (hora prevista
