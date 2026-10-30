@@ -2,11 +2,14 @@ package com.renaser.os.leadership.infrastructure.adapter.in.rest;
 
 import com.renaser.os.community.api.AcompanamientoFinder;
 import com.renaser.os.community.api.AcompanamientoFinder.GrupoAcompanado;
+import com.renaser.os.leadership.application.ports.out.GuardarConsultaDeFichaPort;
 import com.renaser.os.leadership.application.services.HuecosDePersonaDePrueba;
+import com.renaser.os.leadership.domain.model.consulta.ConsultaDeFicha;
 import com.renaser.os.mentoring.api.HuecosDeHorarioFinder;
 import com.renaser.os.mentoring.application.services.SemanasDeHuecosDePrueba;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.CuentasDePruebaFinder;
 import com.renaser.os.users.api.FasePrograma;
@@ -20,6 +23,7 @@ import com.renaser.os.users.api.UserSummaryFinder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -38,6 +42,7 @@ import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.any;
@@ -91,6 +96,8 @@ class HuecosDeLaPersonaControllerTest {
     private CuentasDePruebaFinder pruebas;
     @MockitoBean
     private HuecosDeHorarioFinder huecos;
+    @MockitoBean
+    private GuardarConsultaDeFichaPort consultas;
 
     @TestConfiguration(proxyBeanMethods = false)
     static class RelojDePrueba {
@@ -99,11 +106,16 @@ class HuecosDeLaPersonaControllerTest {
         Clock reloj() {
             return FixedClock.at(AHORA);
         }
+
+        @Bean
+        IdGenerator ids() {
+            return UUID::randomUUID;
+        }
     }
 
     @BeforeEach
     void preparar() {
-        reset(usuarios, fichas, acompanamiento, participaciones, pruebas, huecos);
+        reset(usuarios, fichas, acompanamiento, participaciones, pruebas, huecos, consultas);
         usuario(lider, UserRole.MENTOR_LEAD, UserStatus.ACTIVE);
         usuario(admin, UserRole.ADMIN, UserStatus.ACTIVE);
         usuario(alquimista, UserRole.ALCHEMIST, UserStatus.ACTIVE);
@@ -147,6 +159,21 @@ class HuecosDeLaPersonaControllerTest {
                 .andExpect(jsonPath("$.resumen.huecosQueSeRepiten[0].dias[2]").value(4))
                 .andExpect(jsonPath("$.resumen.noCumplidos").value(4));
         verify(huecos).semanaDe(ana, null);
+        // FR-027: la lectura del lider deja la misma constancia que la ficha de la semana, con el lunes resuelto.
+        ConsultaDeFicha constancia = constanciaDejada();
+        assertThat(constancia.consultorId()).isEqualTo(lider);
+        assertThat(constancia.rolConsultor()).isEqualTo(UserRole.MENTOR_LEAD);
+        assertThat(constancia.personaId()).isEqualTo(ana);
+        assertThat(constancia.grupoId()).isEqualTo(fenix);
+        assertThat(constancia.mentorId()).isEqualTo(mentora);
+        assertThat(constancia.semanaDesde()).isEqualTo(LUNES);
+        assertThat(constancia.consultadaEn()).isEqualTo(AHORA);
+    }
+
+    private ConsultaDeFicha constanciaDejada() {
+        ArgumentCaptor<ConsultaDeFicha> captura = ArgumentCaptor.forClass(ConsultaDeFicha.class);
+        verify(consultas).insertar(captura.capture());
+        return captura.getValue();
     }
 
     @Test
@@ -156,6 +183,11 @@ class HuecosDeLaPersonaControllerTest {
             pedir("?semana=2026-10-19", actor, fenix, ana).andExpect(status().isOk());
         }
         verify(huecos, times(2)).semanaDe(ana, LocalDate.of(2026, 10, 19));
+        // Dejan su constancia con su rol (el resumen al mentor solo cuenta despues la del lider).
+        ArgumentCaptor<ConsultaDeFicha> captura = ArgumentCaptor.forClass(ConsultaDeFicha.class);
+        verify(consultas, times(2)).insertar(captura.capture());
+        assertThat(captura.getAllValues()).extracting(ConsultaDeFicha::rolConsultor)
+                .containsExactly(UserRole.ADMIN, UserRole.ALCHEMIST);
     }
 
     @Test
@@ -166,6 +198,9 @@ class HuecosDeLaPersonaControllerTest {
 
         doThrow(new NoSuchElementException("Persona no encontrada")).when(huecos).semanaDe(any(), any());
         pedir("", lider, fenix, ana).andExpect(status().isNotFound());
+
+        // Un error de lectura no deja constancia: no se miro nada.
+        verifyNoInteractions(consultas);
     }
 
     @Test
@@ -174,7 +209,7 @@ class HuecosDeLaPersonaControllerTest {
         pedir("", mentora, fenix, ana)
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message").value("Solo MENTOR_LEAD/ADMIN/ALCHEMIST gestionan el cuerpo de mentores"));
-        verifyNoInteractions(huecos);
+        verifyNoInteractions(huecos, consultas);
     }
 
     @Test
@@ -182,7 +217,7 @@ class HuecosDeLaPersonaControllerTest {
     void otrosRoles() throws Exception {
         pedir("", ana, fenix, ana).andExpect(status().isForbidden());
         pedir("", soporte, fenix, ana).andExpect(status().isForbidden());
-        verifyNoInteractions(huecos);
+        verifyNoInteractions(huecos, consultas);
     }
 
     @Test
@@ -193,7 +228,7 @@ class HuecosDeLaPersonaControllerTest {
         pedir("", lider, fenix, ana)
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message").value("Cuenta suspendida"));
-        verifyNoInteractions(huecos);
+        verifyNoInteractions(huecos, consultas);
     }
 
     @Test
@@ -204,7 +239,7 @@ class HuecosDeLaPersonaControllerTest {
 
         pedir("", admin, fenix, ana).andExpect(status().isForbidden());
         pedir("", alquimista, fenix, ana).andExpect(status().isForbidden());
-        verifyNoInteractions(huecos);
+        verifyNoInteractions(huecos, consultas);
     }
 
     @Test
@@ -212,6 +247,6 @@ class HuecosDeLaPersonaControllerTest {
     void personaOGrupoAjeno() throws Exception {
         pedir("", lider, fenix, beto).andExpect(status().isNotFound());
         pedir("", lider, sinMentor, ana).andExpect(status().isNotFound());
-        verifyNoInteractions(huecos);
+        verifyNoInteractions(huecos, consultas);
     }
 }

@@ -9,6 +9,10 @@ Solo lectura para el acompañamiento. La persona no tiene endpoint en esta versi
   (mismo guardián `AccesoDeLiderazgo` que `.../week` y `.../radar`).
 - `semana` es el lunes; sin ella, la semana en curso de la persona. Una semana futura o anterior a su primera semana da 400.
 - 403 a cualquier otro rol o a una cuenta suspendida. `Cache-Control: no-store`.
+- **Constancia de la consulta (FR-027).** La ruta del líder, administración y alquimista deja una fila en
+  `consultas_de_ficha` (la misma de `.../week`, spec 005 FR-016) con el lunes de la semana que se miró, solo si la
+  respuesta es 200. Un 400, 403 o 404 no deja nada. La ruta del mentor o la guía no deja constancia. Sin cambio en el
+  JSON ni en las rutas.
 
 ## Respuesta 200
 ```json
