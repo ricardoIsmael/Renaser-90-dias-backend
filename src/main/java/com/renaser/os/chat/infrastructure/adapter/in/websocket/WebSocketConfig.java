@@ -34,8 +34,18 @@ class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
      * muerta (el teléfono que pasa de wifi a datos, o que se queda sin señal) no se notaba nunca: el
      * socket seguía «abierto» del lado del servidor, con sus suscripciones y su «en línea»
      * ({@code PresenciaDeSockets} lo refresca cada 45 s mientras el socket exista). Con latidos, si
-     * el cliente no escribe nada en 3 × 10 s el broker cierra la sesión STOMP ({@code ERROR
-     * Session closed.} + cierre del socket), y el {@code SessionDisconnectEvent} apaga la presencia.
+     * el cliente no escribe nada en 3 × 10 s el broker cierra la sesión STOMP (cierre del socket con
+     * 1002, que es lo que el cliente usa para reconectar), y el {@code SessionDisconnectEvent} apaga la
+     * presencia.
+     *
+     * <p><b>La trama {@code ERROR Session closed.} que suele ir delante del cierre NO está garantizada</b>
+     * (E-657, issue #25). {@code HeartbeatTask} de Spring manda, en la misma pasada, el
+     * {@code DISCONNECT_ACK} (que se vuelve ese {@code ERROR} + {@code close(1002)}) y el último latido
+     * de esa sesión, y el canal de salida los atiende en hilos distintos: si el hilo del latido tiene
+     * tomado el envío del socket, {@code ConcurrentWebSocketSessionDecorator} deja el {@code ERROR} en su
+     * búfer, el otro hilo cierra, y el cierre descarta lo que quedaba en el búfer. El cliente no lo
+     * necesita ({@code conexionStomp.ts} reconecta con el {@code onclose}, haya o no {@code ERROR}), así
+     * que no se fuerza ningún orden: lo seguro y lo que se prueba es el cierre 1002 pasados los 30 s.
      *
      * <p><b>Por qué 10 s y en los dos sentidos.</b> Es lo que ofrecen los dos clientes que existen
      * (`conexionStomp.ts`: {@code heart-beat:10000,10000}), así que la negociación queda en 10 s
