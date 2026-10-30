@@ -140,6 +140,10 @@ Es la misma forma que `TablaDelSemaforoResponse` (contrato del semáforo §4.3),
 - **Efecto**: registra una `ConsultaDeFicha` por llamada, con el rol de quien consulta. El cambio de semana es otra
   llamada y otro registro.
 
+> **Ampliado 2026-10-29 (spec 018, D-291).** La respuesta suma un campo opcional `programacion {habitosConHora, habitosTotal,
+> accionesConHora, accionesTotal, programo}` con si la persona programó su día de HOY (no depende de `semanaHasta`). Aditivo:
+> un cliente anterior lo ignora. Contrato completo en `specs/018-lider-limpio/contracts/leadership-programacion.md`.
+
 ## 3. Evidencias (existentes, regla ampliada)
 
 - `GET /evidence/{id}` y `GET /evidence/{id}/url` aceptan a MENTOR_LEAD activo como **lector**, además del dueño, el

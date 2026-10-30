@@ -11,11 +11,12 @@ class RegistroRadarPersistenceMapper {
     RegistroRadar toDomain(RegistroRadarJpaEntity e) {
         return RegistroRadar.rehydrate(RegistroRadarId.of(e.getId()), UserId.of(e.getParticipanteId()),
                 e.getQueHago(), e.getQuePienso(), e.getQueSiento(), e.getNivelEnergia(), e.getQueEvito(),
-                e.getCreadoEn());
+                e.getCreadoEn(), e.getHoraPrevista() == null ? null : e.getHoraPrevista().intValue());
     }
 
     RegistroRadarJpaEntity toEntity(RegistroRadar r) {
         return new RegistroRadarJpaEntity(r.id().value(), r.participanteId().value(), r.queHago(), r.quePienso(),
-                r.queSiento(), (short) r.nivelEnergia(), r.queEvito(), r.creadoEn());
+                r.queSiento(), (short) r.nivelEnergia(), r.queEvito(), r.creadoEn(),
+                r.horaPrevista() == null ? null : r.horaPrevista().shortValue());
     }
 }

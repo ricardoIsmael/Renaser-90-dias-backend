@@ -32,10 +32,13 @@ public final class RegistroRadar {
     private final int nivelEnergia;
     private final String queEvito;
     private final Instant creadoEn;
+    /** Spec 012 (V119): la hora local (0-23) a la que respondia, o {@code null} si el registro fue libre. */
+    private final Integer horaPrevista;
 
     /**
      * El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
-     * {@code IdGenerator} que inyecta el caso de uso ({@code RadarService.registrar}).
+     * {@code IdGenerator} que inyecta el caso de uso ({@code RadarService.registrar}). Nace sin hora prevista: la
+     * pone {@link #conHoraPrevista} quien la calcula (spec 012).
      */
     public static RegistroRadar registrar(RegistroRadarId id, UserId participanteId, String queHago,
                                            String quePienso, String queSiento, int nivelEnergia, String queEvito,
@@ -48,14 +51,24 @@ public final class RegistroRadar {
         }
         return new RegistroRadar(id, participanteId, requireNotBlank(queHago, "queHago"),
                 requireNotBlank(quePienso, "quePienso"), requireNotBlank(queSiento, "queSiento"), nivelEnergia,
-                requireNotBlank(queEvito, "queEvito"), ahora);
+                requireNotBlank(queEvito, "queEvito"), ahora, null);
+    }
+
+    /** El mismo registro, respondiendo a la hora local {@code hora} (0-23) que le tocaba: Mi Radar o las franjas de la semana 1. */
+    public RegistroRadar conHoraPrevista(int hora) {
+        if (hora < 0 || hora > 23) {
+            throw new IllegalArgumentException("horaPrevista fuera de rango 0..23: " + hora);
+        }
+        return new RegistroRadar(id, participanteId, queHago, quePienso, queSiento, nivelEnergia, queEvito, creadoEn,
+                hora);
     }
 
     /** Solo para el adaptador de persistencia. */
     public static RegistroRadar rehydrate(RegistroRadarId id, UserId participanteId, String queHago,
                                            String quePienso, String queSiento, int nivelEnergia, String queEvito,
-                                           Instant creadoEn) {
-        return new RegistroRadar(id, participanteId, queHago, quePienso, queSiento, nivelEnergia, queEvito, creadoEn);
+                                           Instant creadoEn, Integer horaPrevista) {
+        return new RegistroRadar(id, participanteId, queHago, quePienso, queSiento, nivelEnergia, queEvito, creadoEn,
+                horaPrevista);
     }
 
     private static String requireNotBlank(String value, String campo) {

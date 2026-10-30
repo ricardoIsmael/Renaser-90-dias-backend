@@ -14,6 +14,10 @@ import java.util.UUID;
  * El hecho de que alguien del liderazgo abrió la ficha de cumplimiento de una persona (spec 005, FR-016): quién, con
  * qué rol, a quién, de qué grupo, la semana que miraba y cuándo. Alimenta el resumen que recibe el mentor a las 20:00.
  *
+ * <p>También deja esta misma constancia la lectura de los <b>huecos de horario</b> de la persona (spec 015, FR-027,
+ * decisión del dueño del 2026-10-29), con el lunes de la semana en {@code semanaDesde}. La fila no dice cuál de las dos
+ * lecturas fue, y no hace falta: ambas son «miró a esta persona» y el resumen junta a cada una una sola vez.
+ *
  * <p><b>Append-only</b>, como {@code ObservacionDeMentor}: no tiene un solo método que la cambie y la base lo hace
  * cumplir con un trigger (V109). No lleva ningún nombre ni texto, solo ids: sobrevive al borrado de las cuentas.
  *

@@ -2,6 +2,12 @@ package com.renaser.os.leadership.application.services;
 
 import com.renaser.os.community.api.AcompanamientoFinder;
 import com.renaser.os.community.api.AcompanamientoFinder.GrupoAcompanado;
+import com.renaser.os.habits.api.CodigoRenaserDePersonaFinder;
+import com.renaser.os.habits.api.CodigoRenaserDePersonaFinder.CodigoRenaserDePersona;
+import com.renaser.os.habits.api.CodigoRenaserDePersonaFinder.MiRadarDeLaPersona;
+import com.renaser.os.habits.api.HorarioDelDiaFinder;
+import com.renaser.os.habits.api.HorarioDelDiaFinder.HorarioResuelto;
+import com.renaser.os.habits.api.HorarioDelDiaFinder.HorariosDelDia;
 import com.renaser.os.leadership.application.ports.out.GuardarConsultaDeFichaPort;
 import com.renaser.os.leadership.domain.model.consulta.ConsultaDeFicha;
 import com.renaser.os.leadership.domain.model.cumplimiento.VentanaDeLaFicha;
@@ -34,6 +40,7 @@ import com.renaser.os.users.api.UserSummaryFinder;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -92,11 +99,24 @@ public class BancoDeCumplimiento {
 
     final Map<UserId, Map<LocalDate, List<ObligacionDelDia>>> obligacionesPorDia = new LinkedHashMap<>();
     final Map<UserId, List<AccionDelDia>> accionesPorPersona = new LinkedHashMap<>();
+    /** Spec 018: los hábitos que le tocan a cada persona hoy, con la hora que cada una eligió o no. */
+    final Map<UserId, List<HorarioResuelto>> horariosDeHoy = new LinkedHashMap<>();
+    /** Spec 018: cada pregunta al horario del día, como «persona fecha»: prueba que «hoy» es el de ella. */
+    public final List<String> horariosPedidos = new ArrayList<>();
     /** Cada ventana que se le pidió a la semana de seguimiento: {desde, hasta}. */
     public final List<LocalDate[]> ventanasPedidasALaSemana = new ArrayList<>();
 
     public final List<ConsultaDeFicha> consultas = new ArrayList<>();
     private int siguienteId = 1;
+
+    /** Lo que {@code habits} diria del Codigo Renaser de cada persona (spec 012). */
+    final Map<UserId, CodigoRenaserDePersona> radares = new LinkedHashMap<>();
+    /** Cada lectura del Radar que llego a {@code habits}: quien, desde que cursor y de a cuantos. */
+    public final List<LecturaDelRadarPedida> lecturasDelRadar = new ArrayList<>();
+
+    /** @param cursor el que pidio quien llamo; null = la pagina mas reciente */
+    public record LecturaDelRadarPedida(UserId persona, Instant cursor, int tamanoPagina) {
+    }
 
     public final Clock reloj = new Clock() {
         @Override
@@ -318,6 +338,18 @@ public class BancoDeCumplimiento {
             .getOrDefault(aprendiz, List.of()).stream()
             .filter(a -> !a.fecha().isBefore(desde) && !a.fecha().isAfter(hasta)).toList();
 
+    final CodigoRenaserDePersonaFinder radarFinder = (persona, cursor, tamanoPagina) -> {
+        lecturasDelRadar.add(new LecturaDelRadarPedida(persona, cursor, tamanoPagina));
+        return radares.getOrDefault(persona, new CodigoRenaserDePersona(new MiRadarDeLaPersona(false, List.of(), List.of()), List.of(), null));
+    };
+
+    /** Spec 018: el horario resuelto de un día, tal cual lo deja {@link #habitosDeHoy}. */
+    final HorarioDelDiaFinder horarioFinder = (participante, fecha) -> {
+        horariosPedidos.add(participante.value() + " " + fecha);
+        return new HorariosDelDia(fecha, 0, horariosDeHoy.getOrDefault(participante, List.of()),
+                new HorarioDelDiaFinder.CuotaCambiosHorario(0, 3, 3, false));
+    };
+
     final GuardarConsultaDeFichaPort guardarConsulta = consulta -> {
         consultas.add(consulta);
         return consulta;
@@ -338,8 +370,12 @@ public class BancoDeCumplimiento {
         lecturasDelSemaforo.clear();
         obligacionesPorDia.clear();
         accionesPorPersona.clear();
+        horariosDeHoy.clear();
+        horariosPedidos.clear();
         ventanasPedidasALaSemana.clear();
         consultas.clear();
+        radares.clear();
+        lecturasDelRadar.clear();
     }
 
     /** Un grupo con mentor vigente (que es una cuenta de mentor activa, sin programa propio hasta que se le dé). */
@@ -389,6 +425,21 @@ public class BancoDeCumplimiento {
 
     public void accion(UserId id, AccionDelDia accion) {
         accionesPorPersona.computeIfAbsent(id, p -> new ArrayList<>()).add(accion);
+    }
+
+    /** Lo que {@code habits} devuelve del Codigo Renaser y Mi Radar de la persona. */
+    public void radar(UserId id, CodigoRenaserDePersona radar) {
+        radares.put(id, radar);
+    }
+
+    /** Spec 018: un hábito que le toca a la persona hoy; {@code propia} = la hora la eligió ella, no el catálogo. */
+    public void habitoDeHoy(UserId id, String titulo, boolean propia) {
+        habitoDeHoy(id, titulo, propia, false, false);
+    }
+
+    public void habitoDeHoy(UserId id, String titulo, boolean propia, boolean apagado, boolean pausado) {
+        horariosDeHoy.computeIfAbsent(id, p -> new ArrayList<>()).add(new HorarioResuelto(UUID.randomUUID(), titulo,
+                LocalTime.of(7, 0), LocalTime.of(8, 0), propia, apagado, pausado, false, null));
     }
 
     /** La misma ventana con un día cambiado a otro estado, sin porcentaje (pausa, suspensión…). */
@@ -452,8 +503,16 @@ public class BancoDeCumplimiento {
         return new GrupoDelLiderService(acceso(), personas(), semaforoDeLaPersona(), tabla, usuariosFinder, reloj);
     }
 
+    ProgramacionDeLaPersona programacionDeLaPersona() {
+        return new ProgramacionDeLaPersona(horarioFinder, accionesFinder, reloj);
+    }
+
     public SemanaDePersonaService semanaService() {
         return new SemanaDePersonaService(acceso(), personas(), new LecturaDeLaFicha(seguimiento, semaforoDeLaPersona(),
-                accionesFinder, usuariosFinder), guardarConsulta, ids, reloj);
+                accionesFinder, usuariosFinder, programacionDeLaPersona()), guardarConsulta, ids, reloj);
+    }
+
+    public RadarDePersonaService radarService() {
+        return new RadarDePersonaService(acceso(), personas(), radarFinder, reloj);
     }
 }

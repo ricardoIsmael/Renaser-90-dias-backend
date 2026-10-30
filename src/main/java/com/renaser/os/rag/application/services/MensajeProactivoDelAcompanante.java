@@ -75,10 +75,16 @@ final class MensajeProactivoDelAcompanante {
      * mensaje. Es el mismo buscar-o-crear de {@code ConversacionRenasiaService}, repetido y no
      * extraido a proposito: son dos lineas sobre dos puertos que ya existen, y extraerlas obligaba a
      * tocar ese servicio sin ganar nada.
+     *
+     * <p><b>La creacion es idempotente (E-655).</b> La lectura previa solo evita una escritura cuando la
+     * conversacion ya esta (lo comun); NO protege de la carrera: dos avisos de la misma persona en paralelo
+     * pueden ver "sin conversacion" a la vez. Por eso se crea con {@code crearSiFalta}, que no falla si el
+     * otro hilo ya la creo, y el mensaje se escribe siempre. Atrapar la excepcion de unicidad aca no serviria:
+     * dentro de una transaccion de Spring la deja marcada solo para rollback.
      */
     void escribir(MensajeRenasiaId id, UserId participanteId, String texto) {
         if (loadConversacionPort.porUsuarioId(participanteId).isEmpty()) {
-            saveConversacionPort.save(ConversacionRenasia.iniciar(participanteId, clock.now()));
+            saveConversacionPort.crearSiFalta(ConversacionRenasia.iniciar(participanteId, clock.now()));
         }
         saveMensajePort.save(MensajeRenasia.escribirDeAsistente(id, participanteId, ACOMPANANTE, texto, List.of(),
                 clock.now()));

@@ -393,6 +393,12 @@ y los textos son configuración y **provisorios hasta que el dueño apruebe la r
 - **No se escribe si el momento ya pasó, ni si lo último del chat es un pedido sin respuesta:** un
   mensaje del asistente ahí haría pasar ese pedido por respondido en `soloTurnosRespondidos` y
   reabriría D-132. El push sale igual.
+- **La conversación se crea al vuelo sin carrera (E-655, 2026-10-30):** quien nunca abrió el chat igual recibe
+  el aviso, y varios avisos de la misma persona llegan juntos (el barrido publicó 132 para 81 personas en un
+  minuto). La conversación se crea con `SaveConversacionRenasiaPort.crearSiFalta`
+  (`INSERT ... ON CONFLICT (usuario_id) DO NOTHING`), no con «¿existe? → save»: dos avisos en paralelo veían
+  «no hay», los dos la creaban y el segundo perdía su mensaje con `conversaciones_renasia_pkey`. Lo mismo vale
+  para el chat de la persona y la voz en vivo (`ConversacionRenasiaService`, `TurnosDeVozEnVivo`).
 - **Entrega:** la app lo ve al abrir el panel (recarga el historial); no hay tiempo real.
 - Sin verificar contra Gemini: una memoria que empieza con un turno del asistente, o con dos
   seguidos.
@@ -1954,3 +1960,14 @@ Archivo más grande del módulo: `application/services/EspejoSombraService.java`
 5. `domain/model/conocimiento/ChunkConocimiento.java` — 99 líneas
 
 **Resumen:** `rag` es, de los módulos auditados hasta ahora, uno de los más limpios contra CLAUDE.md — cero violaciones de autenticación (hallazgo 1), cuota sin bypass (hallazgo 2), dominio puro con subcarpetas correctas por agregado (hallazgo 4), controllers tontos (hallazgo 5) y autorización resuelta enteramente en `application/` (hallazgo 6). Los únicos hallazgos son menores: una inconsistencia de logging de `UserId`/`sub` de Supabase contra el propio criterio que el módulo se fijó (hallazgo 3, el más accionable de la lista) y el uso de mapeo manual en vez de MapStruct en persistencia (hallazgo 7, estilo).
+
+## 7. La agenda ocupada y su algoritmo, compartidos con los huecos de horario (spec 015, D-289, 2026-10-29)
+
+- **`rag.api.AgendaOcupadaFinder.semanaDe(persona)`** (nuevo) entrega las horas en que la persona dijo estar ocupada cada día
+  de la semana (`agenda_ocupada`, V64, D-161), sin etiqueta, como `TramoDelDia`. Solo lectura: `mentoring` las suma al tiempo
+  ocupado de los huecos. La tabla sigue siendo de `rag` y solo la escribe SER al confirmar un botón.
+- **El algoritmo de `AgendaOcupada` (ordenar, juntar lo que se pisa o se toca, sacar lo libre en un recorrido) pasó a
+  `shared.domain`** (`TramoDelDia`, `TramosUnidos`), porque Modulith no deja a otro módulo importar `rag.domain`. `AgendaOcupada`
+  lo usa por dentro y no cambió en nada hacia afuera: sigue con su `Tramo`, su tope de 12 tramos y su texto (`AgendaOcupadaTest`,
+  sin tocar, en verde). El tope de 12 es una regla de la conversación con el acompañante y no de la aritmética, así que se
+  quedó en `rag`.

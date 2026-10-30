@@ -3,25 +3,27 @@ package com.renaser.os.habits.application.services;
 import com.renaser.os.habits.application.ports.in.radar.ConsultarHistorialRadarUseCase;
 import com.renaser.os.habits.application.ports.in.radar.ConsultarUltimoRadarUseCase;
 import com.renaser.os.habits.application.ports.in.radar.RegistrarCheckInRadarUseCase;
-import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
-import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.RolParticipante;
+import com.renaser.os.habits.application.ports.out.radar.LoadMiRadarPort;
 import com.renaser.os.habits.application.ports.out.radar.LoadRegistroRadarPort;
 import com.renaser.os.habits.application.ports.out.radar.SaveRegistroRadarPort;
+import com.renaser.os.habits.domain.model.radar.HorarioDelRadar;
+import com.renaser.os.habits.domain.model.radar.MiRadar;
 import com.renaser.os.habits.domain.model.radar.RegistroRadar;
 import com.renaser.os.habits.domain.model.radar.RegistroRadarId;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
-import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.OptionalInt;
 
 /**
  * Codigo Renaser (`RegistroRadar`) — traduccion del check-in que hoy escribe
@@ -34,23 +36,31 @@ import java.util.Optional;
  * <p>Restriccion de rol a TRAINEE tomada literal de ese contrato viejo
  * (`requireRole(auth.data, ['TRAINEE'])` en ambas rutas) — el Codigo Renaser
  * nunca fue self-service para otros roles.
+ *
+ * <p>Spec 012 (2026-10-29): desde el dia 8 del programa el Codigo Renaser es Mi Radar —opcional, con las horas que la
+ * persona elige para todos los dias o para cada dia de la semana— y {@link #registrar} aplica {@code HorarioDelRadar}
+ * con el momento LOCAL de la persona (su hora y su dia de la semana): los dias 0 a 7 no cambian. La autorizacion (la
+ * propia persona, con el programa andando) vive en {@code AccesoAlRadar}.
  */
 @Service
 public class RadarService implements RegistrarCheckInRadarUseCase, ConsultarUltimoRadarUseCase,
         ConsultarHistorialRadarUseCase {
 
+    private final AccesoAlRadar acceso;
     private final LoadRegistroRadarPort loadPort;
     private final SaveRegistroRadarPort savePort;
-    private final ConsultarProgresoParticipanteHabitsPort progresoPort;
+    private final LoadMiRadarPort miRadarPort;
+    private final LecturaDelRadar lectura;
     private final Clock clock;
     private final IdGenerator idGenerator;
 
-    public RadarService(LoadRegistroRadarPort loadPort, SaveRegistroRadarPort savePort,
-                         ConsultarProgresoParticipanteHabitsPort progresoPort, Clock clock,
-                         IdGenerator idGenerator) {
+    RadarService(AccesoAlRadar acceso, LoadRegistroRadarPort loadPort, SaveRegistroRadarPort savePort,
+                 LoadMiRadarPort miRadarPort, LecturaDelRadar lectura, Clock clock, IdGenerator idGenerator) {
+        this.acceso = acceso;
         this.loadPort = loadPort;
         this.savePort = savePort;
-        this.progresoPort = progresoPort;
+        this.miRadarPort = miRadarPort;
+        this.lectura = lectura;
         this.clock = clock;
         this.idGenerator = idGenerator;
     }
@@ -58,9 +68,15 @@ public class RadarService implements RegistrarCheckInRadarUseCase, ConsultarUlti
     @Override
     @Transactional
     public RegistroRadar registrar(RegistrarCheckInRadarCommand command) {
-        requireSelf(command.actorId(), command.participanteId());
-        requireParticipanteHabilitado(command.participanteId());
+        ProgresoParticipanteHabits progreso = acceso.propio(command.actorId(), command.participanteId());
         Instant ahora = clock.now();
+        /* Spec 012: la hora y el dia de la semana son los de la persona (su zona, regla 02), no los del servidor:
+           con el reloj en la madrugada UTC el dia local es el anterior. Los dias 0 a 7 siempre se puede registrar,
+           como hoy; desde el dia 8 solo con Mi Radar encendido, en un dia que tenga Radar y de 03:00 a 23:59. Es una
+           regla de ESTADO y no de permisos: 409 y no 403, porque en la app un 403 apaga el Radar entero. */
+        MiRadar miRadar = miRadarPort.deParticipante(command.participanteId());
+        ZonedDateTime local = ahora.atZone(ZoneId.of(progreso.timezone()));
+        requirePuedeRegistrar(progreso.diaPrograma(), miRadar, local);
         /* Un Codigo Renaser por hora: si ya hay uno en la franja en curso, se devuelve ESE en vez
            de crear otro.
 
@@ -77,11 +93,31 @@ public class RadarService implements RegistrarCheckInRadarUseCase, ConsultarUlti
         if (deEstaHora.isPresent()) {
             return deEstaHora.get();
         }
+        OptionalInt prevista = HorarioDelRadar.horaPrevista(progreso.diaPrograma(), miRadar, local);
+        return savePort.save(nuevoRegistro(command, ahora, prevista));
+    }
+
+    private static void requirePuedeRegistrar(int diaPrograma, MiRadar miRadar, ZonedDateTime local) {
+        if (HorarioDelRadar.puedeRegistrar(diaPrograma, miRadar, local)) {
+            return;
+        }
+        throw new IllegalStateException(motivoDelRechazo(miRadar, local.getDayOfWeek()));
+    }
+
+    private static String motivoDelRechazo(MiRadar miRadar, DayOfWeek diaDeLaSemana) {
+        if (!miRadar.estaEncendido()) {
+            return "Mi Radar está apagado";
+        }
+        return miRadar.horasDelDia(diaDeLaSemana).isEmpty()
+                ? "Hoy no tienes Mi Radar" : "Mi Radar funciona de 03:00 a 23:59";
+    }
+
+    private RegistroRadar nuevoRegistro(RegistrarCheckInRadarCommand command, Instant ahora, OptionalInt prevista) {
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD 5.4.7).
         RegistroRadar registro = RegistroRadar.registrar(RegistroRadarId.of(idGenerator.newId()),
                 command.participanteId(), command.queHago(), command.quePienso(), command.queSiento(),
                 command.nivelEnergia(), command.queEvito(), ahora);
-        return savePort.save(registro);
+        return prevista.isPresent() ? registro.conHoraPrevista(prevista.getAsInt()) : registro;
     }
 
     /**
@@ -98,56 +134,13 @@ public class RadarService implements RegistrarCheckInRadarUseCase, ConsultarUlti
 
     @Override
     public Optional<RegistroRadar> ultimo(UserId actorId, UserId participanteId) {
-        requireSelf(actorId, participanteId);
-        requireParticipanteHabilitado(participanteId);
+        acceso.propio(actorId, participanteId);
         return loadPort.ultimoDeParticipante(participanteId);
     }
 
     @Override
     public HistorialRadarPage historial(UserId actorId, UserId participanteId, Instant cursor, int tamanoPagina) {
-        requireSelf(actorId, participanteId);
-        requireParticipanteHabilitado(participanteId);
-        List<RegistroRadar> pagina = loadPort.historialDeParticipante(participanteId, cursor, tamanoPagina);
-        Instant siguienteCursor = siguienteCursor(pagina, tamanoPagina);
-        return new HistorialRadarPage(pagina, siguienteCursor);
-    }
-
-    /**
-     * Pagina llena => puede haber mas, misma heuristica que radar.ts:384-387 (sin conteo extra).
-     *
-     * <p>Package-private desde 2026-09-15: la lectura del acompañante
-     * ({@code AcompanamientoDeAlumnoService}) pagina el mismo historial y tiene que cortar igual.
-     * Copiar estas cuatro lineas alla habria dejado dos heuristicas capaces de desincronizarse.
-     */
-    static Instant siguienteCursor(List<RegistroRadar> pagina, int tamanoPagina) {
-        if (pagina.size() < tamanoPagina) {
-            return null;
-        }
-        return pagina.get(pagina.size() - 1).creadoEn();
-    }
-
-    private void requireSelf(UserId actorId, UserId participanteId) {
-        if (!actorId.equals(participanteId)) {
-            throw new NotAuthorizedException("Solo el propio participante puede operar su Codigo Renaser");
-        }
-    }
-
-    private void requireParticipanteHabilitado(UserId participanteId) {
-        ProgresoParticipanteHabits progreso = progresoPort.deParticipante(participanteId)
-                .orElseThrow(() -> new NoSuchElementException("Participante no encontrado: " + participanteId));
-        if (progreso.suspendido()) {
-            throw new NotAuthorizedException("Cuenta suspendida");
-        }
-        /* E-169: la puerta no es el ROL, es tener el programa andando. `TRACK_PROGRAM_AS_STAFF`
-           y `POST /api/v1/mentor/activate-tracking` existen para que el staff curse los 90 dias;
-           preguntar solo por el rol dejaba la inscripcion construida y el uso prohibido.
-
-           Se conserva la rama del rol en vez de reducirlo a `!programaActivado`: un TRAINEE recien
-           aprobado tiene `programa_activado_en` en null hasta que termina primer login + Ficha +
-           Terminos, y el cambio corto lo habria dejado fuera de su propio programa. Asi el cambio
-           es ESTRICTAMENTE aditivo: nadie que hoy pase, deja de pasar. */
-        if (progreso.rol() != RolParticipante.TRAINEE && !progreso.programaActivado()) {
-            throw new NotAuthorizedException("El Codigo Renaser es exclusivo de aprendices");
-        }
+        acceso.propio(actorId, participanteId);
+        return lectura.pagina(participanteId, cursor, tamanoPagina);
     }
 }

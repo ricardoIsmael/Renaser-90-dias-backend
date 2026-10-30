@@ -2,7 +2,9 @@ package com.renaser.os.habits.application.services;
 
 import com.renaser.os.community.api.PublicacionMuroFinder;
 import com.renaser.os.evidence.api.RegistrosConEvidenciaFinder;
+import com.renaser.os.evidence.api.RegistrosConTextoFinder;
 import com.renaser.os.habits.api.HabitoCompletadoEvent;
+import com.renaser.os.habits.application.politica.PoliticaAudioterapia;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaUseCase;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaUseCase.RegistrosDelDia;
@@ -30,6 +32,7 @@ import com.renaser.os.habits.domain.model.politica.GestoCompletar;
 import com.renaser.os.habits.domain.model.politica.PoliticaHabito;
 import com.renaser.os.habits.domain.model.politica.RegistroPoliticasHabito;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
+import com.renaser.os.habits.domain.model.registro.DiasCerradosDeLaSemana;
 import com.renaser.os.habits.domain.model.registro.FaseOtorgamiento;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
@@ -101,6 +104,8 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
     /** Spec 001 (D-264): qué hábitos globales le tocan a la persona ese día, según su rol. */
     private final CatalogoAplicable catalogoAplicable;
     private final RegistrosConEvidenciaFinder registrosConEvidencia;
+    /** E-652: si el registro ya tiene el texto con las respuestas del audio (la Audioterapia semanal). */
+    private final RegistrosConTextoFinder registrosConTexto;
     /** Spec 002: el interruptor propio de kilómetros y de gimnasio al completar. */
     private final Interruptores interruptores;
 
@@ -112,7 +117,8 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
                             LoadDesbloqueoHabitoPort loadDesbloqueoPort,
                             ApplicationEventPublisher events, Clock clock, IdGenerator idGenerator,
                             List<PoliticaHabito> politicas, CatalogoAplicable catalogoAplicable,
-                            RegistrosConEvidenciaFinder registrosConEvidencia, Interruptores interruptores) {
+                            RegistrosConEvidenciaFinder registrosConEvidencia,
+                            RegistrosConTextoFinder registrosConTexto, Interruptores interruptores) {
         this.interruptores = interruptores;
         this.loadRegistroPort = loadRegistroPort;
         this.saveRegistroPort = saveRegistroPort;
@@ -131,6 +137,7 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         this.politicas = new RegistroPoliticasHabito(politicas);
         this.catalogoAplicable = catalogoAplicable;
         this.registrosConEvidencia = registrosConEvidencia;
+        this.registrosConTexto = registrosConTexto;
     }
 
     @Override
@@ -156,6 +163,17 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         LocalDate hoyEnSuZona = clock.now().atZone(zona).toLocalDate();
         return new RegistrosDelDia(loadRegistroPort.porParticipanteYFecha(participanteId, hoyEnSuZona), hoyEnSuZona,
                 zona, progreso.fechaInicio());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public RegistrosDelDia consultarDiaCerrado(UserId actorId, UserId participanteId, LocalDate fecha) {
+        ProgresoParticipanteHabits progreso = requireSelf(actorId, participanteId);
+        ZoneId zona = ZoneId.of(progreso.timezone());
+        LocalDate hoyEnSuZona = clock.now().atZone(zona).toLocalDate();
+        DiasCerradosDeLaSemana.de(hoyEnSuZona, progreso.fechaInicio()).exigirQueIncluya(fecha);
+        return new RegistrosDelDia(loadRegistroPort.porParticipanteYFecha(participanteId, fecha), fecha, zona,
+                progreso.fechaInicio());
     }
 
     @Override
@@ -545,7 +563,18 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
      * consulta al Muro que casi nadie usa.
      */
     private ContextoCompletar contextoDe(RegistroHabito registro, MedicionDiaria medicion) {
-        return ContextoCompletar.de(() -> publicoEnElMuroEseDia(registro), medicion);
+        return ContextoCompletar.de(() -> publicoEnElMuroEseDia(registro), () -> tieneLasRespuestasDelAudio(registro),
+                medicion);
+    }
+
+    /**
+     * E-652: la Audioterapia se cierra con el texto de sus dos respuestas, que la app (y SER) suben como evidencia de
+     * TEXTO antes de completar. Cualquier estado de validacion cuenta: la pregunta es "ya las escribio".
+     */
+    private boolean tieneLasRespuestasDelAudio(RegistroHabito registro) {
+        UUID id = registro.id().value();
+        return registrosConTexto.conTextoDeAlMenos(Set.of(id), PoliticaAudioterapia.LARGO_MINIMO_DEL_TEXTO)
+                .contains(id);
     }
 
     /**

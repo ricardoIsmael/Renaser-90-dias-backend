@@ -1,6 +1,7 @@
 package com.renaser.os.leadership.application.ports.in;
 
 import com.renaser.os.leadership.domain.model.cumplimiento.ColorDeLaFila;
+import com.renaser.os.leadership.domain.model.cumplimiento.ProgramacionDelDia;
 import com.renaser.os.mentoring.api.ObligacionDelDia;
 import com.renaser.os.mentoring.api.ResumenSemana;
 import com.renaser.os.rocks.api.AccionesDelDiaFinder.AccionDelDia;
@@ -46,11 +47,14 @@ public interface ConsultarSemanaDePersonaUseCase {
      * @param mentor        el mentor vigente del grupo; null si no tiene (la app esconde «Avisar a su mentor»)
      * @param color         el del semáforo de esa ventana; {@code NO_SE_MIDE} para quien lleva su propio programa
      * @param porcentaje    1 decimal; null si ningún día se midió
+     * @param programacion  spec 018: si programó su día de HOY (hábitos con su hora y acciones agendadas); null si no hay
+     *                      nada que programar (programa sin activar, ningún hábito que le toque hoy). No depende de la
+     *                      ventana de {@code dias}
      */
     record SemanaDeLaPersona(UUID grupoId, UUID personaId, String nombre, String avatarUrl, UserRole rol,
                              LocalDate desde, LocalDate hasta, String zona, boolean cerrada, LocalDate primeraSemana,
                              MentorDelGrupo mentor, ColorDeLaFila color, BigDecimal porcentaje,
-                             ResumenSemana resumen, List<DiaDeLaFicha> dias) {
+                             ResumenSemana resumen, List<DiaDeLaFicha> dias, ProgramacionDelDia programacion) {
 
         public SemanaDeLaPersona {
             dias = dias == null ? List.of() : List.copyOf(dias);

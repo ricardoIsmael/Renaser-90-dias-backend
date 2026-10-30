@@ -120,10 +120,37 @@ class RegistroRadarTest {
     void rehydrateNoRevalidaRangosNiRecorta() {
         RegistroRadarId id = RegistroRadarId.of(UUID.randomUUID());
 
-        RegistroRadar registro = RegistroRadar.rehydrate(id, PARTICIPANTE, "  h  ", "p", "s", 5, "e", AHORA);
+        RegistroRadar registro = RegistroRadar.rehydrate(id, PARTICIPANTE, "  h  ", "p", "s", 5, "e", AHORA, 14);
 
         assertThat(registro.id()).isEqualTo(id);
         assertThat(registro.queHago()).isEqualTo("  h  ");
+        assertThat(registro.horaPrevista()).isEqualTo(14);
+    }
+
+    @Test
+    void unRegistroNuevoNaceSinHoraPrevista() {
+        assertThat(registrar("h", "p", "s", 5, "e").horaPrevista()).isNull();
+    }
+
+    @Test
+    void conHoraPrevistaDevuelveElMismoRegistroConLaHora() {
+        RegistroRadar libre = registrar("h", "p", "s", 5, "e");
+
+        RegistroRadar prevista = libre.conHoraPrevista(14);
+
+        assertThat(prevista.horaPrevista()).isEqualTo(14);
+        assertThat(prevista).isEqualTo(libre);
+        assertThat(prevista.queHago()).isEqualTo(libre.queHago());
+        assertThat(prevista.creadoEn()).isEqualTo(libre.creadoEn());
+        assertThat(libre.horaPrevista()).isNull();
+    }
+
+    @Test
+    void conHoraPrevistaRechazaUnaHoraQueNoExiste() {
+        RegistroRadar libre = registrar("h", "p", "s", 5, "e");
+
+        assertThatThrownBy(() -> libre.conHoraPrevista(-1)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> libre.conHoraPrevista(24)).isInstanceOf(IllegalArgumentException.class);
     }
 
     private static RegistroRadar registrar(String queHago, String quePienso, String queSiento, int nivelEnergia,

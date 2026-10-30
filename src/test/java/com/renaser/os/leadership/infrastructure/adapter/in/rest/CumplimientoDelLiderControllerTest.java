@@ -1,5 +1,9 @@
 package com.renaser.os.leadership.infrastructure.adapter.in.rest;
 
+import com.renaser.os.habits.api.CodigoRenaserDePersonaFinder.CodigoRenaserDePersona;
+import com.renaser.os.habits.api.CodigoRenaserDePersonaFinder.DiaDeLaPersona;
+import com.renaser.os.habits.api.CodigoRenaserDePersonaFinder.MiRadarDeLaPersona;
+import com.renaser.os.habits.api.CodigoRenaserDePersonaFinder.RegistroDelRadar;
 import com.renaser.os.leadership.application.services.BancoDeCumplimiento;
 import com.renaser.os.leadership.application.services.CumplimientoDePrueba;
 import com.renaser.os.shared.domain.UserId;
@@ -15,6 +19,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -51,6 +56,7 @@ class CumplimientoDelLiderControllerTest {
     private static final UserId OTRO_MENTOR = id("a2");
     private static final UserId ANA = id("b1");
     private static final UserId BETO = id("b2");
+    private static final UserId SOPORTE_TI = id("e1");
 
     @Autowired
     private MockMvc mockMvc;
@@ -185,6 +191,26 @@ class CumplimientoDelLiderControllerTest {
     }
 
     @Test
+    @DisplayName("ficha (spec 018): trae «programacion» con las cuentas y el Si/No de HOY; sin habitos que le toquen, el campo no viene")
+    void fichaConProgramacion() throws Exception {
+        banco.habitoDeHoy(ANA, "Ritual de la mañana", true);
+        banco.habitoDeHoy(ANA, "Caminar", false);
+        banco.accion(ANA, new com.renaser.os.rocks.api.AccionesDelDiaFinder.AccionDelDia(UUID.randomUUID(),
+                LocalDate.of(2026, 10, 19), "Llamar", false, null, java.time.LocalTime.of(9, 0)));
+
+        pedir(semana(ANA), LIDER)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.programacion.habitosConHora").value(1))
+                .andExpect(jsonPath("$.programacion.habitosTotal").value(2))
+                .andExpect(jsonPath("$.programacion.accionesConHora").value(1))
+                .andExpect(jsonPath("$.programacion.accionesTotal").value(1))
+                .andExpect(jsonPath("$.programacion.programo").value(true));
+        pedir(semana(BETO), LIDER)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.programacion").doesNotExist());
+    }
+
+    @Test
     @DisplayName("ficha: una semana cerrada del pasado")
     void fichaDeUnaSemanaCerrada() throws Exception {
         banco.semana(SEMANA_CERRADA, ANA, ventanaPareja(LocalDate.of(2026, 10, 10), true, 55));
@@ -208,6 +234,134 @@ class CumplimientoDelLiderControllerTest {
                 .andExpect(status().isNotFound());
 
         assertThat(banco.consultas).isEmpty();
+        assertThat(banco.horariosPedidos).isEmpty();
+    }
+
+    // ── el Radar de la persona (spec 012) ───────────────────────────────────
+
+    private static String radar(UserId persona) {
+        return "/api/v1/leadership/groups/" + FENIX + "/people/" + persona + "/radar";
+    }
+
+    private void conRadarDeAna() {
+        banco.radar(ANA, new CodigoRenaserDePersona(new MiRadarDeLaPersona(true, List.of(9, 14, 20),
+                List.of(new DiaDeLaPersona(6, List.of(11)), new DiaDeLaPersona(7, List.of()))), List.of(
+                new RegistroDelRadar(UUID.fromString("00000000-0000-0000-0000-0000000000f1"), "Trabajando",
+                        "En la reunión", "Tranquila", 7, "El correo", Instant.parse("2026-10-14T19:06:00Z"), 14),
+                new RegistroDelRadar(UUID.fromString("00000000-0000-0000-0000-0000000000f2"), "Caminando",
+                        "En mi día", "Cansada", 4, "Nada", Instant.parse("2026-10-14T15:30:00Z"), null)),
+                Instant.parse("2026-10-14T15:30:00Z")));
+    }
+
+    @Test
+    @DisplayName("radar: el contrato de /radar/history con miRadar, la hora prevista de cada registro, sin cache y de a 84")
+    void radarContrato() throws Exception {
+        conRadarDeAna();
+
+        pedir(radar(ANA), LIDER)
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", containsString("no-store")))
+                .andExpect(jsonPath("$.miRadar.encendido").value(true))
+                .andExpect(jsonPath("$.miRadar.horas", hasSize(3)))
+                .andExpect(jsonPath("$.miRadar.horas[0]").value(9))
+                .andExpect(jsonPath("$.miRadar.horas[2]").value(20))
+                .andExpect(jsonPath("$.miRadar.dias", hasSize(2)))
+                .andExpect(jsonPath("$.miRadar.dias[0].dia").value(6))
+                .andExpect(jsonPath("$.miRadar.dias[0].horas[0]").value(11))
+                .andExpect(jsonPath("$.miRadar.dias[1].dia").value(7))
+                .andExpect(jsonPath("$.miRadar.dias[1].horas", hasSize(0)))
+                .andExpect(jsonPath("$.entries", hasSize(2)))
+                .andExpect(jsonPath("$.entries[0].id").value("00000000-0000-0000-0000-0000000000f1"))
+                .andExpect(jsonPath("$.entries[0].whatAmIDoing").value("Trabajando"))
+                .andExpect(jsonPath("$.entries[0].whatAmIThinking").value("En la reunión"))
+                .andExpect(jsonPath("$.entries[0].whatAmIFeeling").value("Tranquila"))
+                .andExpect(jsonPath("$.entries[0].energyLevel").value(7))
+                .andExpect(jsonPath("$.entries[0].whatAmIAvoiding").value("El correo"))
+                .andExpect(jsonPath("$.entries[0].createdAt").value("2026-10-14T19:06:00Z"))
+                .andExpect(jsonPath("$.entries[0].horaPrevista").value(14))
+                .andExpect(jsonPath("$.entries[1].horaPrevista").doesNotExist())
+                .andExpect(jsonPath("$.nextCursor").value("2026-10-14T15:30:00Z"));
+        assertThat(banco.lecturasDelRadar).singleElement()
+                .isEqualTo(new BancoDeCumplimiento.LecturaDelRadarPedida(ANA, null, 84));
+    }
+
+    @Test
+    @DisplayName("radar: en la semana 1 (dia menor que 8) Mi Radar no aplica y miRadar va en null, con los registros igual")
+    void radarEnLaSemana1() throws Exception {
+        banco.radar(ANA, new CodigoRenaserDePersona(null, List.of(
+                new RegistroDelRadar(UUID.fromString("00000000-0000-0000-0000-0000000000f1"), "Trabajando",
+                        "En la reunión", "Tranquila", 7, "El correo", Instant.parse("2026-10-14T19:06:00Z"), 14)),
+                null));
+
+        pedir(radar(ANA), LIDER)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.miRadar").doesNotExist())
+                .andExpect(jsonPath("$.entries", hasSize(1)))
+                .andExpect(jsonPath("$.entries[0].horaPrevista").value(14));
+    }
+
+    @Test
+    @DisplayName("radar: el cursor de la pagina anterior se pasa tal cual")
+    void radarConCursor() throws Exception {
+        conRadarDeAna();
+
+        pedir(radar(ANA) + "?cursor=2026-10-14T15:30:00Z", LIDER).andExpect(status().isOk());
+
+        assertThat(banco.lecturasDelRadar).singleElement().isEqualTo(
+                new BancoDeCumplimiento.LecturaDelRadarPedida(ANA, Instant.parse("2026-10-14T15:30:00Z"), 84));
+    }
+
+    @Test
+    @DisplayName("radar: sin Mi Radar la persona sale apagada y sin horas; el lider, el admin y el alquimista lo abren (200)")
+    void radarParaLosTresRoles() throws Exception {
+        for (UserId actor : List.of(LIDER, ADMIN, ALQUIMISTA)) {
+            pedir(radar(BETO), actor)
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.miRadar.encendido").value(false))
+                    .andExpect(jsonPath("$.miRadar.horas", hasSize(0)))
+                    .andExpect(jsonPath("$.miRadar.dias", hasSize(0)))
+                    .andExpect(jsonPath("$.entries", hasSize(0)))
+                    .andExpect(jsonPath("$.nextCursor").doesNotExist());
+        }
+    }
+
+    @Test
+    @DisplayName("radar: una persona de otro grupo, un grupo sin mentor o que no existe es 404 y no se lee nada; leerlo no deja consulta")
+    void radarQueNoSeAbre() throws Exception {
+        pedir(radar(id("b9")), LIDER).andExpect(status().isNotFound());
+        pedir("/api/v1/leadership/groups/" + SIN_MENTOR + "/people/" + ANA + "/radar", LIDER)
+                .andExpect(status().isNotFound());
+        pedir("/api/v1/leadership/groups/" + UUID.randomUUID() + "/people/" + ANA + "/radar", LIDER)
+                .andExpect(status().isNotFound());
+
+        assertThat(banco.lecturasDelRadar).isEmpty();
+        assertThat(banco.consultas).isEmpty();
+    }
+
+    @Test
+    @DisplayName("radar, autorizacion negativa: MENTOR (tambien el del grupo), TRAINEE y Soporte TI reciben 403 y no se lee nada")
+    void radarSinPermiso() throws Exception {
+        banco.usuario(SOPORTE_TI, "Soporte", UserRole.IT_SUPPORT, UserStatus.ACTIVE);
+
+        for (UserId actor : List.of(OTRO_MENTOR, MENTORA, ANA, SOPORTE_TI)) {
+            pedir(radar(ANA), actor).andExpect(status().isForbidden());
+        }
+
+        assertThat(banco.lecturasDelRadar).isEmpty();
+    }
+
+    @Test
+    @DisplayName("radar, autorizacion negativa: lider, admin y alquimista SUSPENDIDOS reciben 403 aunque su token sea valido")
+    void radarConLaCuentaSuspendida() throws Exception {
+        banco.usuario(LIDER, "Lider Uno", UserRole.MENTOR_LEAD, UserStatus.SUSPENDED);
+        banco.usuario(ADMIN, "Admin", UserRole.ADMIN, UserStatus.SUSPENDED);
+        banco.usuario(ALQUIMISTA, "Alquimista", UserRole.ALCHEMIST, UserStatus.SUSPENDED);
+
+        for (UserId actor : List.of(LIDER, ADMIN, ALQUIMISTA)) {
+            pedir(radar(ANA), actor).andExpect(status().isForbidden());
+        }
+
+        assertThat(banco.lecturasDelRadar).isEmpty();
     }
 
     // ── autorización negativa ───────────────────────────────────────────────
@@ -223,6 +377,7 @@ class CumplimientoDelLiderControllerTest {
         assertThat(banco.consultas).isEmpty();
         assertThat(banco.lecturasDelSemaforo).isEmpty();
         assertThat(banco.ventanasPedidasALaSemana).isEmpty();
+        assertThat(banco.horariosPedidos).isEmpty();
     }
 
     @Test
@@ -242,5 +397,6 @@ class CumplimientoDelLiderControllerTest {
 
         pedir(grupo(), ADMIN).andExpect(status().isForbidden());
         pedir(semana(ANA), ADMIN).andExpect(status().isForbidden());
+        assertThat(banco.horariosPedidos).isEmpty();
     }
 }

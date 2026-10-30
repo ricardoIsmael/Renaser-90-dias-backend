@@ -52,6 +52,23 @@ interface SpringDataRocaDiariaRepository extends JpaRepository<RocaDiariaJpaEnti
     @Query("SELECT r FROM RocaDiariaJpaEntity r WHERE r.id = :id")
     Optional<RocaDiariaJpaEntity> findByIdParaEscritura(@Param("id") UUID id);
 
+    /**
+     * La respuesta de cierre de una accion PENDIENTE (spec 017). Es un UPDATE dirigido a proposito: guardar la entidad entera
+     * reescribiria {@code completada} y los puntos con lo que se leyo antes, y si la persona cumplio la accion en el medio
+     * se perderia su cumplimiento. {@code completada = false} en el WHERE cubre la carrera al reves. Con {@code flushAutomatically}
+     * y {@code clearAutomatically} (regla 04) para no dejar al contexto de persistencia con filas viejas.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update RocaDiariaJpaEntity r set r.cierreMotivo = :motivo, r.cierreManana = :manana, r.cierreNota = :nota, "
+            + "r.cierreEn = :en where r.id = :id and r.completada = false")
+    int guardarElCierre(@Param("id") UUID id, @Param("motivo") String motivo, @Param("manana") String manana,
+                        @Param("nota") String nota, @Param("en") Instant en);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update RocaDiariaJpaEntity r set r.cierreMotivo = null, r.cierreManana = null, r.cierreNota = null, "
+            + "r.cierreEn = null where r.id = :id")
+    int quitarElCierre(@Param("id") UUID id);
+
     List<RocaDiariaJpaEntity> findByParticipanteIdAndFecha(UUID participanteId, LocalDate fecha);
 
     List<RocaDiariaJpaEntity> findByParticipanteIdAndFechaBetweenOrderByFechaAscPosicionAsc(UUID participanteId,

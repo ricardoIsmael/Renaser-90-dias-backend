@@ -1,5 +1,7 @@
 package com.renaser.os.rocks.domain.model.rocadiaria;
 
+import com.renaser.os.rocks.domain.model.cierre.CierreDeAccion;
+import com.renaser.os.rocks.domain.model.cierre.RespuestaDeCierre;
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
 import com.renaser.os.rocks.domain.model.rocasemanal.RocaSemanalId;
 import com.renaser.os.shared.domain.Clock;
@@ -54,6 +56,12 @@ public final class RocaDiaria {
     private int puntosOtorgados;
     private final Instant creadoEn;
     private Instant actualizadoEn;
+    /**
+     * Lo que la persona dijo de esta accion al cerrar su dia (spec 017), o {@code null}. Solo tiene sentido mientras la accion
+     * sigue pendiente; el agregado lo conserva aunque se cumpla despues (el UPDATE que la cumple no lo conoce) y quien lo lee
+     * debe mirar {@link #completada()} antes de mostrarlo.
+     */
+    private CierreDeAccion cierre;
 
     /**
      * Planifica una Roca Diaria nueva (R-04). El color se deriva de la posición, nunca se recibe suelto.
@@ -78,7 +86,7 @@ public final class RocaDiaria {
         Instant ahora = clock.now();
         return new RocaDiaria(id, participanteId, fecha, posicion, requireTitulo(titulo),
                 requireDescripcion(descripcion), color, puntajeImpacto, esDelegable, eje, rocaSemanalId, horaInicio,
-                horaFin, copiaOrdenada(acciones), false, null, 0, ahora, ahora);
+                horaFin, copiaOrdenada(acciones), false, null, 0, ahora, ahora, null);
     }
 
     /** Copia defensiva y ordenada por `orden`: el agregado no comparte su lista con quien la paso. */
@@ -89,16 +97,28 @@ public final class RocaDiaria {
         return acciones.stream().sorted(java.util.Comparator.comparingInt(AccionDiaria::orden)).toList();
     }
 
-    /** Solo para el adaptador de persistencia: reconstruye una roca diaria ya existente. */
+    /** Solo para el adaptador de persistencia: reconstruye una roca diaria ya existente, sin respuesta de cierre. */
     public static RocaDiaria rehydrate(RocaDiariaId id, UserId participanteId, LocalDate fecha, int posicion,
                                         String titulo, String descripcion, ColorPareto color, int puntajeImpacto,
                                         boolean esDelegable, EjeObjetivo eje, RocaSemanalId rocaSemanalId,
                                         LocalTime horaInicio, LocalTime horaFin, List<AccionDiaria> acciones,
                                         boolean completada, Instant completadaEn, int puntosOtorgados,
                                         Instant creadoEn, Instant actualizadoEn) {
+        return rehydrate(id, participanteId, fecha, posicion, titulo, descripcion, color, puntajeImpacto, esDelegable, eje,
+                rocaSemanalId, horaInicio, horaFin, acciones, completada, completadaEn, puntosOtorgados, creadoEn,
+                actualizadoEn, null);
+    }
+
+    /** Lo mismo, con la respuesta de cierre que ya tenia guardada (spec 017). */
+    public static RocaDiaria rehydrate(RocaDiariaId id, UserId participanteId, LocalDate fecha, int posicion,
+                                        String titulo, String descripcion, ColorPareto color, int puntajeImpacto,
+                                        boolean esDelegable, EjeObjetivo eje, RocaSemanalId rocaSemanalId,
+                                        LocalTime horaInicio, LocalTime horaFin, List<AccionDiaria> acciones,
+                                        boolean completada, Instant completadaEn, int puntosOtorgados,
+                                        Instant creadoEn, Instant actualizadoEn, CierreDeAccion cierre) {
         return new RocaDiaria(id, participanteId, fecha, posicion, titulo, descripcion, color, puntajeImpacto,
                 esDelegable, eje, rocaSemanalId, horaInicio, horaFin, copiaOrdenada(acciones), completada,
-                completadaEn, puntosOtorgados, creadoEn, actualizadoEn);
+                completadaEn, puntosOtorgados, creadoEn, actualizadoEn, cierre);
     }
 
     /** Marca la roca completada. Solo se puede completar una vez (ALREADY_COMPLETED en el repo viejo). */
@@ -109,6 +129,22 @@ public final class RocaDiaria {
         this.completada = true;
         this.completadaEn = Objects.requireNonNull(completadaEn, "completadaEn es obligatorio");
         this.actualizadoEn = clock.now();
+    }
+
+    /**
+     * Guarda lo que la persona contesto de esta accion al cerrar su dia (spec 017). Solo una accion PENDIENTE lleva respuesta:
+     * una cumplida no tiene nada que explicar. <b>No completa la roca ni toca sus puntos</b> (el cierre es opcional y no paga).
+     */
+    public void cerrarConRespuesta(RespuestaDeCierre respuesta, Instant ahora) {
+        if (completada) {
+            throw new IllegalStateException("Esta accion ya esta cumplida: no lleva respuesta de cierre");
+        }
+        this.cierre = new CierreDeAccion(respuesta, ahora);
+    }
+
+    /** Olvida la respuesta de cierre (la accion se cumplio despues de cerrar el dia, o se vuelve a cerrar sin ella). */
+    public void quitarCierre() {
+        this.cierre = null;
     }
 
     /** Idempotencia del pago de puntos: un track solo premia una vez (mismo criterio que `habits`). */

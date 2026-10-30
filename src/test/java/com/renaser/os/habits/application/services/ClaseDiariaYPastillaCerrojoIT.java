@@ -303,12 +303,15 @@ class ClaseDiariaYPastillaCerrojoIT {
     }
 
     /**
-     * Aca los caminos concurrentes son DOS de verdad y no uno repetido: este habito no tiene una
-     * politica que le cierre la ruta generica (no existe una {@code PoliticaPastillaRenacer}, a
-     * diferencia de {@code PoliticaClaseDiaria}), asi que la entrega del resumen de Espiritu y el
-     * {@code POST /habit-tracks/{id}/complete} de siempre pueden cerrar el mismo registro a la
+     * Aca los caminos concurrentes eran DOS de verdad y no uno repetido: este habito no tenia una
+     * politica que le cerrara la ruta generica, asi que la entrega del resumen de Espiritu y el
+     * {@code POST /habit-tracks/{id}/complete} de siempre podian cerrar el mismo registro a la
      * vez. Se modela con seis espejos simultaneos, que es la misma carrera y no depende del
      * modulo de rutas.
+     *
+     * <p>Corregido 2026-10-29 (E-652): la ruta generica ya esta cerrada por {@code PoliticaPastillaRenacer} y el
+     * espejo completa con {@code GestoCompletar.PROPIO_DEL_HABITO}. La carrera que queda es la de la entrega de
+     * Espiritu contra si misma (doble toque, dos telefonos), y es la que este test sigue cubriendo.
      *
      * <p>Y va anidado en una transaccion externa a proposito: es la forma real, y deja
      * demostrado que el REQUIRES_NEW de {@code EspirituService} no era el que salvaba esto.

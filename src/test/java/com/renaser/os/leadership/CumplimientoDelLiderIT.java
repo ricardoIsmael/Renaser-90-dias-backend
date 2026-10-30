@@ -2,8 +2,13 @@ package com.renaser.os.leadership;
 
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.community.api.AcompanamientoFinder;
+import com.renaser.os.habits.api.CodigoRenaserDePersonaFinder;
+import com.renaser.os.habits.api.CodigoRenaserDePersonaFinder.CodigoRenaserDePersona;
+import com.renaser.os.habits.api.CodigoRenaserDePersonaFinder.RegistroDelRadar;
 import com.renaser.os.leadership.application.ports.in.ConsultarGrupoDelLiderUseCase;
 import com.renaser.os.leadership.application.ports.in.ConsultarGrupoDelLiderUseCase.ConsultaGrupoDelLider;
+import com.renaser.os.leadership.application.ports.in.ConsultarRadarDePersonaUseCase;
+import com.renaser.os.leadership.application.ports.in.ConsultarRadarDePersonaUseCase.ConsultaRadarDePersona;
 import com.renaser.os.leadership.application.ports.in.ConsultarSemanaDePersonaUseCase;
 import com.renaser.os.leadership.application.ports.in.ConsultarSemanaDePersonaUseCase.ConsultaSemanaDePersona;
 import com.renaser.os.leadership.application.ports.in.ConsultarSemanaDePersonaUseCase.DiaDeLaFicha;
@@ -17,6 +22,7 @@ import com.renaser.os.points.api.SemaforoFinder;
 import com.renaser.os.points.api.VentanaDelSemaforo;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,6 +43,7 @@ import java.time.ZoneId;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -69,6 +76,8 @@ class CumplimientoDelLiderIT {
     private ConsultarGrupoDelLiderUseCase grupo;
     @Autowired
     private ConsultarSemanaDePersonaUseCase semana;
+    @Autowired
+    private ConsultarRadarDePersonaUseCase radar;
     @Autowired
     private JdbcTemplate jdbc;
 
@@ -205,6 +214,122 @@ class CumplimientoDelLiderIT {
         assertThat(lista).extracting(PersonaDeLaLista::nombre).containsExactly("Ana Pérez", "Luisa Rojas");
         assertThat(lista.getFirst().color()).isEqualTo(ColorDeLaFila.AMARILLO);
         assertThat(lista.getLast().color()).isEqualTo(ColorDeLaFila.NO_SE_MIDE);
+    }
+
+    // ── el Radar de la persona (spec 012) ───────────────────────────────────
+
+    private CodigoRenaserDePersona radarDeAna(UUID actor, Instant cursor) {
+        return radar.radarDe(new ConsultaRadarDePersona(UserId.of(actor), FENIX, ANA, cursor));
+    }
+
+    private void registroDelRadar(UUID persona, Instant creadoEn, Integer horaPrevista) {
+        jdbc.update("INSERT INTO renaser.registros_radar (id, participante_id, que_hago, que_pienso, que_siento, "
+                + "nivel_energia, que_evito, creado_en, hora_prevista) VALUES (?, ?, 'Trabajando', 'En la reunión', "
+                + "'Tranquila', 7, 'El correo', CAST(? AS timestamptz), ?)", UUID.randomUUID(), persona,
+                creadoEn.toString(), horaPrevista);
+    }
+
+    @Test
+    @DisplayName("spec 012: el Radar trae Mi Radar (encendido, sus horas) y todos los registros, con la hora prevista, de la base de verdad")
+    void elRadarDeLaPersona() {
+        jdbc.update("UPDATE renaser.participantes_programa SET horas_mi_radar = ARRAY[20, 9, 14]::smallint[], "
+                + "dias_mi_radar = CAST('[{\"dia\":7,\"horas\":[]},{\"dia\":6,\"horas\":[11]}]' AS jsonb) "
+                + "WHERE usuario_id = ?", ANA);
+        registroDelRadar(ANA, Instant.parse("2026-10-09T15:00:00Z"), 10);
+        registroDelRadar(ANA, Instant.parse("2026-10-14T19:06:00Z"), 14);
+        registroDelRadar(ANA, Instant.parse("2026-10-15T20:20:00Z"), null);
+
+        CodigoRenaserDePersona resultado = radarDeAna(LIDER, null);
+
+        // Guardadas como 20, 9, 14: Mi Radar las devuelve de menor a mayor.
+        assertThat(resultado.miRadar().encendido()).isTrue();
+        assertThat(resultado.miRadar().horas()).containsExactly(9, 14, 20);
+        // Los dias con horas propias salen tal cual los guardo la persona: el sabado la 11 y el domingo «Sin Radar».
+        assertThat(resultado.miRadar().dias()).extracting(CodigoRenaserDePersonaFinder.DiaDeLaPersona::dia)
+                .containsExactlyInAnyOrder(6, 7);
+        assertThat(resultado.miRadar().dias()).filteredOn(dia -> dia.dia() == 6).singleElement()
+                .satisfies(dia -> assertThat(dia.horas()).containsExactly(11));
+        assertThat(resultado.miRadar().dias()).filteredOn(dia -> dia.dia() == 7).singleElement()
+                .satisfies(dia -> assertThat(dia.horas()).isEmpty());
+        // Del mas nuevo al mas viejo: el libre, el de Mi Radar y el de la primera semana.
+        assertThat(resultado.registros()).extracting(RegistroDelRadar::horaPrevista).containsExactly(null, 14, 10);
+        assertThat(resultado.registros().getFirst().queSiento()).isEqualTo("Tranquila");
+        assertThat(resultado.siguienteCursor()).isNull();
+    }
+
+    @Test
+    @DisplayName("spec 012: sin Mi Radar encendido sale apagado y sin horas, y los registros de la primera semana igual estan")
+    void elRadarSinMiRadar() {
+        registroDelRadar(ANA, Instant.parse("2026-10-09T15:00:00Z"), 10);
+
+        CodigoRenaserDePersona resultado = radarDeAna(LIDER, null);
+
+        assertThat(resultado.miRadar().encendido()).isFalse();
+        assertThat(resultado.miRadar().horas()).isEmpty();
+        assertThat(resultado.miRadar().dias()).isEmpty();
+        assertThat(resultado.registros()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("spec 012: en la semana 1 (dia 4) Mi Radar no aplica: miRadar va en null aunque haya horas guardadas, y los registros igual estan")
+    void elRadarEnLaSemana1() {
+        // Lunes 19 de octubre en Lima: con el Dia 1 el viernes 16, hoy es el dia 4.
+        jdbc.update("UPDATE renaser.participantes_programa SET fecha_inicio = DATE '2026-10-16', "
+                + "horas_mi_radar = ARRAY[9]::smallint[] WHERE usuario_id = ?", ANA);
+        registroDelRadar(ANA, Instant.parse("2026-10-17T15:00:00Z"), 10);
+
+        CodigoRenaserDePersona resultado = radarDeAna(LIDER, null);
+
+        assertThat(resultado.miRadar()).isNull();
+        assertThat(resultado.registros()).extracting(RegistroDelRadar::horaPrevista).containsExactly(10);
+    }
+
+    @Test
+    @DisplayName("spec 012: pagina de a 84 con el cursor del ultimo registro, y la segunda pagina sigue donde quedo la primera")
+    void elRadarPagina() {
+        Instant primero = Instant.parse("2026-09-01T00:00:00Z");
+        for (int hora = 0; hora < 85; hora++) {
+            registroDelRadar(ANA, primero.plusSeconds(3600L * hora), null);
+        }
+
+        CodigoRenaserDePersona pagina1 = radarDeAna(LIDER, null);
+        CodigoRenaserDePersona pagina2 = radarDeAna(LIDER, pagina1.siguienteCursor());
+
+        assertThat(pagina1.registros()).hasSize(84);
+        assertThat(pagina1.siguienteCursor()).isEqualTo(primero.plusSeconds(3600L));
+        assertThat(pagina2.registros()).hasSize(1);
+        assertThat(pagina2.registros().getFirst().creadoEn()).isEqualTo(primero);
+        assertThat(pagina2.siguienteCursor()).isNull();
+    }
+
+    @Test
+    @DisplayName("spec 012, SC-006: una persona de otro grupo es 404 y el mentor, la aprendiz y una cuenta suspendida reciben 403")
+    void elRadarNoSeAbreATodos() {
+        UUID ajena = UUID.randomUUID();
+        usuario(ajena, "APRENDIZ", "Ana de otro grupo");
+        programa(ajena);
+        try {
+            assertThatThrownBy(() -> radar.radarDe(new ConsultaRadarDePersona(UserId.of(LIDER), FENIX, ajena, null)))
+                    .isInstanceOf(NoSuchElementException.class);
+            assertThatThrownBy(() -> radarDeAna(MENTORA, null)).isInstanceOf(NotAuthorizedException.class);
+            assertThatThrownBy(() -> radarDeAna(ANA, null)).isInstanceOf(NotAuthorizedException.class);
+            jdbc.update("UPDATE renaser.usuarios SET estado = 'SUSPENDIDO' WHERE id = ?", LIDER);
+            assertThatThrownBy(() -> radarDeAna(LIDER, null)).isInstanceOf(NotAuthorizedException.class);
+        } finally {
+            jdbc.update("DELETE FROM renaser.usuarios WHERE id = ?", ajena);
+        }
+    }
+
+    @Test
+    @DisplayName("spec 012, FR-015: leer el Radar no deja ninguna fila en consultas_de_ficha")
+    void elRadarNoRegistraConsulta() {
+        long antes = jdbc.queryForObject("SELECT count(*) FROM renaser.consultas_de_ficha WHERE persona_id = ?",
+                Long.class, ANA);
+
+        radarDeAna(LIDER, null);
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM renaser.consultas_de_ficha WHERE persona_id = ?",
+                Long.class, ANA)).isEqualTo(antes);
     }
 
     // ── el registro es append-only (V109) ───────────────────────────────────

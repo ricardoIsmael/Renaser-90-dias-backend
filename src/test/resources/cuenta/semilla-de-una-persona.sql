@@ -161,3 +161,7 @@ VALUES ('{{P}}', CURRENT_DATE, 1, 1, 1, 1, now());
 INSERT INTO renaser.semaforo_pausas (id, usuario_id, desde, creada_en, motivo) VALUES (md5('{{P}}-sp')::uuid, '{{P}}', CURRENT_DATE, now(), 'CUENTA_SUSPENDIDA');
 INSERT INTO renaser.semaforo_semanas (participante_id, semana_hasta, semana_desde, porcentaje, dias_con_datos, dias_medidos, version_formula, cerrada_en)
 VALUES ('{{P}}', date_trunc('week', CURRENT_DATE)::date + 4, date_trunc('week', CURRENT_DATE)::date - 2, 50, 7, 7, 'v1', now());
+
+-- mentoring (spec 015, V120)
+INSERT INTO renaser.huecos_semana (participante_id, semana_inicio, zona, minutos_ocupados, minutos_libres, cumplidos_a_tiempo, cumplidos_tarde, no_cumplidos, horario_que_regia, cerrada_en)
+VALUES ('{{P}}', date_trunc('week', CURRENT_DATE)::date - 7, 'America/Lima', 100, 900, 3, 1, 0, '[]'::jsonb, now());

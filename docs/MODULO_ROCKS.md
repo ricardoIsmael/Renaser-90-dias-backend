@@ -452,6 +452,23 @@ Pruebas: `CupoDelDiaTest`, `FechasPlanificablesTest`, `AgregarRocaDiariaServiceT
 `EdicionDeObjetivoSemanalServiceTest` (incluye domingo 12:30 UTC = 07:30 en Lima, ventana todavía
 cerrada), `RocasDelAprendizServiceTest` (progreso, noventa, cierre anterior en la zona de la persona).
 
+## 14. «Cierra tu día» (spec 017, D-290, 2026-10-29)
+
+Al final del día la persona cuenta, de cada acción (`rocas_diarias`) que quedó pendiente, **qué pasó** y **qué hará mañana**, y puede
+dejar una nota. Opcional y sin puntos. Spec y contrato: `specs/017-cierre-del-dia/`; decisión: D-290.
+
+- **Dónde se guarda** (V121, sin tabla nueva): `cierre_motivo`, `cierre_manana`, `cierre_nota` y `cierre_en` en `rocas_diarias`
+  (`RocaDiaria.cierre()`: `CierreDeAccion(RespuestaDeCierre, cerradoEn)`). La marca de «día cerrado» y la nota del día son una fila
+  `EVALUACION_DIA` de `entradas_diario` (módulo `habits`, por `habits.api.EvaluacionDelDiaPort`).
+- **Cerrar NO cumple ni paga**: `SaveRocaDiariaPort.guardarSoloElCierre` hace un `UPDATE` de esas cuatro columnas (`WHERE completada = false`);
+  no se usa `save`, que reescribiría `completada` y los puntos. Si la persona cumple la acción después de cerrar, la respuesta queda en
+  la fila pero la lectura la oculta (`ArmadoDelCierre`).
+- **Reglas** (`rocks.domain.model.cierre.*`, `rocadiaria.CierreDelDia`): una respuesta por pendiente; solo hoy en la zona de la persona
+  (pasado 409, futuro 400); reabrir reemplaza todo.
+- **Servicios**: `CierreDelDiaService` (la persona: `GET/PUT /rocks/day-closure`), `CierresDeLaSemanaService`
+  (`rocks.api.CierresDelDiaFinder`, la lectura por semana de las fichas), `CierresDelAlumnoService` (guardián del mentor).
+- **Dependencia nueva**: `rocks → habits.api` (`EvaluacionDelDiaPort`); `leadership → rocks.api.CierresDelDiaFinder`.
+
 ## Auditoría de arquitectura (2026-08-28) — agente automático
 
 Auditoría de solo lectura de `src/main/java/com/renaser/os/rocks/`, 105 archivos `.java`, contra las reglas de CLAUDE.md §5.1/§5.4. No se modificó código fuente.
@@ -482,3 +499,11 @@ Todos los imports cruzados van por `.api`: `community.api.PublicarEnMuroPort` (`
 ### Tamaños — el resto del módulo, dentro de límite
 
 Segundo archivo más grande: `DashboardRocasService.java` (234 líneas, dentro del techo de 300). Ningún otro archivo del módulo se acerca a 300 líneas. Clases de dominio más grandes (`RocaSemanal.java` 164, `RocaDiaria.java` 142) muy por debajo del techo.
+
+## 14. Las horas de las acciones, para los huecos de horario (spec 015, D-289, 2026-10-29)
+
+`rocks.api.HorasDeLasAccionesFinder.entre(persona, desde, hasta)` devuelve las acciones del día (rocas diarias) de una
+persona con `horaInicio`, `horaFin`, si se cumplió y cuándo (`completada_en`). Es otro contrato que `AccionesDelDiaFinder`:
+aquel suma la evidencia para la ficha del líder (y toca `evidence`); este solo lee horas, con la misma consulta que `GET
+/rocks/upcoming` (`deParticipanteEntreFechas`). Lo lee `mentoring` para calcular el tiempo ocupado: una acción sin hora de
+inicio no ocupa nada, y una con la hora de fin anterior a la de inicio (nada lo impide) dura lo que fija la spec (30 min).

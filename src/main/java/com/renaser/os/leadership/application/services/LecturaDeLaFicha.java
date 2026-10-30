@@ -3,6 +3,7 @@ package com.renaser.os.leadership.application.services;
 import com.renaser.os.community.api.AcompanamientoFinder.GrupoAcompanado;
 import com.renaser.os.leadership.application.ports.in.ConsultarSemanaDePersonaUseCase.MentorDelGrupo;
 import com.renaser.os.leadership.application.services.PersonasDelGrupo.Miembro;
+import com.renaser.os.leadership.domain.model.cumplimiento.ProgramacionDelDia;
 import com.renaser.os.leadership.domain.model.cumplimiento.VentanaDeLaFicha;
 import com.renaser.os.mentoring.api.SemanaDelAlumno;
 import com.renaser.os.mentoring.api.SemanaDeSeguimientoFinder;
@@ -19,7 +20,8 @@ import java.util.Optional;
 
 /**
  * Las lecturas que arman la ficha de una persona (spec 005): su semana de seguimiento, lo que dice el semáforo de esa
- * ventana, sus acciones del día y el mentor del grupo. Todo por APIs públicas, todo en la misma ventana.
+ * ventana, sus acciones del día y el mentor del grupo. Todo por APIs públicas, todo en la misma ventana. La spec 018 suma
+ * si la persona programó su día de HOY, que no depende de la ventana.
  */
 @Component
 class LecturaDeLaFicha {
@@ -28,20 +30,23 @@ class LecturaDeLaFicha {
     private final SemaforoDeLaPersona semaforo;
     private final AccionesDelDiaFinder acciones;
     private final UserSummaryFinder usuarios;
+    private final ProgramacionDeLaPersona programacion;
 
     LecturaDeLaFicha(SemanaDeSeguimientoFinder seguimiento, SemaforoDeLaPersona semaforo, AccionesDelDiaFinder acciones,
-                     UserSummaryFinder usuarios) {
+                     UserSummaryFinder usuarios, ProgramacionDeLaPersona programacion) {
         this.seguimiento = seguimiento;
         this.semaforo = semaforo;
         this.acciones = acciones;
         this.usuarios = usuarios;
+        this.programacion = programacion;
     }
 
     Lectura leer(Miembro miembro, GrupoAcompanado grupo, VentanaDeLaFicha ventana) {
         UserId persona = miembro.perfil().id();
         SemanaDelAlumno semana = seguimiento.semanaDe(persona, grupo.grupoId(), ventana.desde(), ventana.hasta());
         return new Lectura(semana, semaforo.ventanaDe(persona, ventana),
-                acciones.accionesEntre(persona, ventana.desde(), ventana.hasta()), mentorDe(grupo, persona));
+                acciones.accionesEntre(persona, ventana.desde(), ventana.hasta()), mentorDe(grupo, persona),
+                programacion.deHoy(miembro));
     }
 
     /**
@@ -56,8 +61,11 @@ class LecturaDeLaFicha {
         return new MentorDelGrupo(grupo.mentorId().value(), nombre);
     }
 
-    /** @param semaforo vacío si el semáforo no la mide */
+    /**
+     * @param semaforo     vacío si el semáforo no la mide
+     * @param programacion vacío si no hay nada que programar hoy (programa sin activar, ningún hábito que le toque)
+     */
     record Lectura(SemanaDelAlumno semana, Optional<VentanaDelSemaforo> semaforo, List<AccionDelDia> acciones,
-                   MentorDelGrupo mentor) {
+                   MentorDelGrupo mentor, Optional<ProgramacionDelDia> programacion) {
     }
 }

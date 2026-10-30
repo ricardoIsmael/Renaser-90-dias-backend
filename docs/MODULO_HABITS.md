@@ -122,6 +122,7 @@ Actor resuelto por header `X-Actor-Id` (temporal, D-29 de `users`, sin autentica
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/v1/habit-tracks/today` | Tracks del día del actor |
+| GET | `/api/v1/habit-tracks/day?date=` | Tracks de un día YA CERRADO de la semana en curso del actor, misma forma que `/today`; solo lectura (D-288, §11.1) |
 | POST | `/api/v1/habit-tracks/{id}/complete` | Completa un registro (no-BLOQUEO) |
 | POST | `/api/v1/habit-tracks/{id}/santuario/start` | Inicia sesión de Santuario |
 | POST | `/api/v1/habit-tracks/{id}/santuario/complete` | Completa la sesión (idempotente si ya COMPLETADA) |
@@ -131,7 +132,7 @@ Actor resuelto por header `X-Actor-Id` (temporal, D-29 de `users`, sin autentica
 | POST | `/api/v1/habit-tracks/phone-free/break` | Rompe la racha activa (sin penalización) |
 | POST | `/api/v1/radar` | Registra un check-in de Código Renaser (§8) |
 | GET | `/api/v1/radar/latest` | Timestamp del último check-in del actor (gating de horario, ver §8) |
-| GET | `/api/v1/radar/history?cursor=` | Historial paginado por cursor, 20 por página (§8) |
+| GET | `/api/v1/radar/history?cursor=` | Historial paginado por cursor, 84 por página desde D-286 (eran 20; §8) |
 
 **Contrato viejo no verificado 1:1** contra `docs/API_CONTRACT.md`/`docs/MOBILE_HABITS_API.md` del repo viejo — no se abrieron esos archivos en esta pasada por límite de tiempo frente al tamaño del módulo. Las rutas se diseñaron por analogía con `blocking.ts`/`phoneFree.ts` (`POST .../phone-free/start|complete|break`, coincide con los comentarios de esos archivos) pero **esto es una desviación potencial sin verificar**, documentada explícitamente en vez de asumida como correcta.
 
@@ -256,6 +257,72 @@ Ver también la pregunta #5 agregada en §5. Resumen:
 2. **¿Hace falta el equivalente a `/today` (RC-02)?** El cliente actual no lo usa; si un futuro flujo admin/mentor lo necesita, falta construirlo (D-H13).
 3. **¿Por qué el cliente móvil dejó de pasar por la API vieja y empezó a escribir directo a Supabase?** No se encontró el motivo en el repo (sin commit ni comentario) — se documenta el hecho, no se especula la causa.
 
+### 8.4 Mi Radar — el Código Renaser desde el día 8 (D-286, spec 012, 2026-10-29)
+
+> **Corregido 2026-10-29 (cuarta ronda de la spec 012, pedido del dueño).** Esta sección decía que Mi Radar eran «de 1 a 12 horas… (las
+> mismas todos los días)», con la columna `horas_mi_radar`, `{ "encendido", "horas" }` y `HorarioDelRadar` por hora. Ahora es **por día
+> de la semana**, igual que los hábitos en Planificar: `horas` valen para todos los días y `dias` trae los días con horas propias o
+> «Sin Radar ese día». V119 se modificó (no se creó V120) porque todavía no se publicó. Ver la forma, la base y las reglas abajo.
+>
+> **Corregido 2026-10-29.** §8.2 decía que `GET /api/v1/radar/history` pagina de a 20 y que el Radar es «TRAINEE únicamente»; la
+> página es hoy de **84** (desde el día 8 un día puede tener 21 registros) y la puerta es la de siempre desde E-169 (el aprendiz, o
+> quien tiene su programa activado). §8.3 (1) tampoco es cierta ya: el mentor lee el Radar de su aprendiz desde D-126, y desde
+> esta spec también el líder de mentores, Administración y el alquimista.
+
+**Qué es.** Los días 1 a 7 el Código Renaser son doce franjas fijas (08:00 a 19:00) que la app abre sola. Desde el día 8 queda
+**apagado** y la persona lo enciende por su cuenta en Yo → Mi Radar, eligiendo de 1 a 12 horas en punto entre las 03:00 y las
+23:00 para todos los días y, por día de la semana, horas propias o «Sin Radar ese día». Es opcional: no encenderlo nunca cuenta como falta, ni toca puntos, racha, semáforo ni coherencia.
+
+**Datos (V119, sin tablas nuevas).**
+
+| Tabla | Columna | Significado |
+|---|---|---|
+| `participantes_programa` | `horas_mi_radar smallint[]` | Las horas de TODOS los días. `NULL` = apagado. Si no, 1 a 12 horas entre 3 y 23 (CHECK). Apagar guarda `NULL` |
+| `participantes_programa` | `dias_mi_radar jsonb` | Los días con horas propias: `[{"dia": 6, "horas": [11]}, {"dia": 7, "horas": []}]`, lunes = 1; `horas: []` = «Sin Radar ese día»; `NULL` = ningún día propio. CHECK: es un arreglo y hay `horas_mi_radar`. El resto de la forma lo valida el dominio |
+| `registros_radar` | `hora_prevista smallint` | La hora local (0–23) a la que respondía; `NULL` = registro libre o anterior a V119 (no se rellenó) |
+
+**Por qué jsonb y no una tabla de días.** El dueño pidió no crear tablas, y son a lo sumo siete elementos que siempre se leen y se
+escriben juntos (no se consulta «quién tiene Radar los sábados»). El costo: la base no ve dentro del arreglo, y lo impone `MiRadar`.
+Si algún día hay que consultar por día de la semana, ese día se normaliza a una tabla.
+
+Las columnas son de una tabla de `users`: `habits` llega a ellas por `users.api.HorasDeMiRadarPort` (la implementa
+`HorasDeMiRadarJdbcAdapter`, en `users`; devuelve y recibe `HorasDeMiRadar(horas, dias)`), detrás de `LoadMiRadarPort` /
+`SaveMiRadarPort` (`MiRadarPersistenceAdapter`).
+
+**Dominio.** `MiRadar(horas, dias)` (valor: `horas` ordenadas, 1–12, de 3 a 23, sin repetir; sin horas es apagado y sin días;
+`dias` son `DiaPropio(dia 1–7 sin repetir, horas con las mismas reglas)`, y encendido exige horas para todos los días) con
+`horasDelDia(DayOfWeek)` —las propias del día o las de todos los días— y `HorarioDelRadar` (funciones puras con el día del programa
+y el momento LOCAL de la persona, `ZonedDateTime`: de ahí salen la hora y el día de la semana, que con el reloj en la madrugada UTC
+puede ser el anterior):
+
+| Día del programa | `puedeRegistrar` | `horaPrevista` |
+|---|---|---|
+| 0–7 | siempre, como hoy | la hora local, si está entre 8 y 19 |
+| ≥ 8, apagado | no | — |
+| ≥ 8, encendido, día de la semana sin horas (`horas: []`, «Sin Radar ese día») | no | — |
+| ≥ 8, encendido | si la hora local está entre 3 y 23 | la hora local, si es una de las `horasDelDia` de ese día de la semana |
+
+`RadarService.registrar` calcula el momento local con el `Clock` en la zona de la persona (regla 02) y, si no puede registrar, responde
+**409** (`IllegalStateException`: «Mi Radar está apagado», «Hoy no tienes Mi Radar» o «Mi Radar funciona de 03:00 a 23:59») y no 403. La regla de un registro por hora (comprobación + índice V52) sigue igual. `AccesoAlRadar`
+es la puerta de la propia persona (antes eran dos métodos privados de `RadarService`) y `LecturaDelRadar` arma la página del
+historial para la persona, su mentor y liderazgo; en esa página `miRadar` es `null` mientras el `dia_programa` es menor que 8.
+
+**Endpoints.**
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/v1/radar/mi-radar` | `{ "encendido": bool, "horas": [9, 14, 20], "dias": [{ "dia": 6, "horas": [11] }, { "dia": 7, "horas": [] }] }` (apagado: `horas` y `dias` vacíos) |
+| PUT | `/api/v1/radar/mi-radar` | Mismo cuerpo (sin `dias` equivale a `dias: []`). Con `encendido: false` se ignoran las horas y los días. 400 con el mensaje del dominio si no cumplen las reglas (horas de todos los días o de un día, día fuera de 1–7 o repetido, `horas` ausente en un día) |
+| GET | `/api/v1/leadership/groups/{g}/people/{p}/radar?cursor=` | Líder de mentores, administrador y alquimista (`AccesoDeLiderazgo`, grupo con mentor, persona de ese grupo hoy); `no-store`; de a 84; misma forma que `/radar/history` |
+
+`POST /radar` suma `horaPrevista` a su respuesta; `/radar/history` y la lectura del mentor suman `miRadar` (`{ encendido, horas, dias }`;
+`null` en la semana 1) y `horaPrevista` por registro. `leadership` lee por `habits.api.CodigoRenaserDePersonaFinder` y no deja registro de consulta propio.
+
+**Pruebas.** `MiRadarTest`, `HorarioDelRadarTest`, `RegistroRadarTest`, `RadarServiceTest` (con el reloj en la madrugada UTC),
+`MiRadarServiceTest`, `AcompanamientoDeAlumnoServiceTest`, `RadarDePersonaServiceTest`, `RadarControllerMiRadarTest` y
+`CumplimientoDelLiderControllerTest`; de integración (Testcontainers) `HorasDeMiRadarJdbcAdapterTest`, `MiRadarPersistenceAdapterTest`,
+`RegistroRadarPersistenceAdapterTest`, `RadarMiRadarIT` y `CumplimientoDelLiderIT`.
+
 ---
 
 ## 9. `PorcentajeHabitosFinder` — % de hábitos EN LOTE para el ranking general (D-43, 2026-08-24)
@@ -370,6 +437,32 @@ Tests: `RegistroEspirituTest` (dominio, sin Spring) y `EspirituServiceTest` (Moc
 Tests: `TracksDelDiaProyeccionServiceTest` — sin registros no consulta ningún puerto de catálogo, resuelve título/tipo/guía/horario con una sola consulta por tabla (verificado con `verify(..., times(1))`), la guía más específica (mayor `diaInicio` que aplica) gana sobre una más genérica, la preferencia del participante gana al horario del catálogo cuando está seteada.
 
 **Qué quedó fuera:** el `GuiaResumen` expuesto es un subconjunto (mantra + qué hacer/cómo hacerlo) — no incluye ciencia/renaser/alquimia/resultados ni los adjuntos de `adjuntos_guia` (sin persistencia propia todavía). Ampliar es agregar campos al record, no un cambio de arquitectura.
+
+### 11.1 `GET /habit-tracks/day?date=` — los registros de un día ya cerrado (D-288, spec 014 «Training por hora») — 2026-10-29
+
+Training pasa a mostrar la semana: los días anteriores enseñan lo que la persona hizo (✓) y lo que no (candado), sin
+botones. Hasta hoy el servidor solo entregaba «hoy» hábito por hábito (`/today`).
+
+- **Qué devuelve:** el mismo arreglo de `RegistroHabitoConCatalogoResponse` que `/today` (título, tipo, guía, horario…),
+  armado por la MISMA proyección (`TracksDelDiaProyeccionService.proyectar`, `consultarDiaCerradoDe`): una consulta de lote
+  por tabla del catálogo, nunca una por hábito. Dos campos van siempre en `null` porque un día cerrado no los tiene:
+  `puntosEnJuego` (nada que ganar ni perder; D-259 rechaza registrar ese día) y `rachaDias` (no se calcula: una consulta de
+  lote menos y la pantalla no la muestra).
+- **Qué fechas (`DiasCerradosDeLaSemana`, dominio puro):** de AYER hacia atrás hasta el LUNES de la semana en curso, en la
+  zona de la PERSONA (`Clock` + `timezone` del participante, nunca `now()` estático ni la fecha del servidor: a las 22:00 en
+  Lima ya es el día siguiente en UTC), y nunca antes de su Día 1 (`fecha_inicio`). Hoy, el futuro, otra semana, una fecha
+  anterior al Día 1 y una persona sin Día 1 son `400` (`IllegalArgumentException`, con el motivo en el mensaje). Sin `date` o
+  mal formada, también `400`. La semana es de lunes a domingo, la que muestra Training; el lunes no hay ningún día válido.
+- **Solo lectura:** `RegistroService.consultarDiaCerrado` lee el progreso (autoriza con `requireSelf`: otra persona o cuenta
+  suspendida → `403`; sin participación → `404`, como `/today`), valida la fecha y lee los registros. No pasa por la red de
+  seguridad de `/today`: un día sin registros devuelve `[]` y no crea ninguno.
+- **Autorización:** `@RequiresPermission(USE_APP)` y `@Funcionalidad("habitos")` heredada de la clase (interruptor `habitos`).
+- **Caché:** `Cache-Control: private, max-age=300` (un día cerrado no cambia y el teléfono no repite el pedido) y
+  `Vary: X-Auth-Token, Authorization`, para que otra cuenta en el mismo navegador no reciba el día de la anterior. Un rechazo
+  no lleva esa cabecera.
+- **Sin** migración, tabla, permiso ni scheduler. Pruebas: `DiasCerradosDeLaSemanaTest`, `DiaCerradoConsultaTest` (reloj en la
+  madrugada UTC), `DiaCerradoControllerTest`; `DiaCerradoIT` (base real: no crea tracks y no crece con los hábitos) quedó
+  escrita sin correr.
 
 ---
 
@@ -1055,6 +1148,11 @@ la Audioterapia; nunca por título, que la persona puede renombrar (D-133). **No
 Pruebas: `AudioterapiaDelAprendizServiceTest` (evidencia antes que completar, otro día, ya completada,
 sin audio) y `TracksDelDiaProyeccionServiceTest.laProyeccionLlevaLaClaveDelCatalogo`.
 
+> **Agregado 2026-10-29 (E-652).** «Todas sus guardas» incluye ahora `PoliticaAudioterapia`: el registro tiene que
+> tener ya el texto de las dos respuestas. `entregarRespuestas` lo sube justo antes, así que sigue completando con el
+> gesto genérico; lo que cambió es que ninguna otra persona (ni el ✓ del APK viejo) puede cerrar la Audioterapia sin
+> ese texto. Ver §28.
+
 ---
 
 ## 24. `GET /habit-tracks/today` más barato (V-5, D-180) — 2026-09-26
@@ -1328,4 +1426,67 @@ spec, clarificaciones del dueño, plan, research, modelo de datos, contrato, tar
 - **Admin:** `HabitoAdminService` + `AudienciasDelCatalogo`; contrato en `specs/001-habitos-por-rol/contracts/admin-habits.md`.
 - **Límite conocido:** un rol nuevo exige una constante más en el espejo `RolParticipante` (y su `nombreVisible()` en
   `UserRole`); nada más del módulo.
+
+## 12. Lo que `habits` entrega a los huecos de horario (spec 015, D-289, 2026-10-29)
+
+Los huecos de horario de una persona los calcula `mentoring` (ver D-289 en `docs/MODULOS_A_AVANZAR.md` §8); `habits` solo le
+da dos cosas, las dos aditivas y de solo lectura:
+
+- **`HorarioDelDiaFinder.HorarioResuelto` suma `todaviaNoLeToca` y `claveSistema`** (el constructor anterior sigue, con
+  `false` y `null`). `todaviaNoLeToca` es `DesbloqueoHabito.todaviaNoLeToca` con el **día de programa de la fecha
+  consultada** (no el de hoy): para un día por venir dice cuándo llegará. La consulta de «ya corrió» (D-196,
+  `diaProgramaMasAltoGeneradoPorHabito`) se hace solo si algún desbloqueo está por encima de ese día, y es una para todos.
+  `claveSistema` (`WAKE_UP`, `SLEEP`) reconoce a Despertar y Dormir por lo que son y no por su título, que se renombra.
+- **`RegistrosDeHabitoFinder.deParticipanteEntre(persona, desde, hasta)`**: los registros de UNA persona con estado,
+  si eran opcionales y el instante en que se cumplieron (`registros_habito.completado_en`). Una consulta sobre
+  `registros_dia_idx` (`RegistrosDelRangoJdbcAdapter`). Es otro contrato que `ObligacionesHistoricasFinder`: aquel
+  arma las obligaciones de un grupo para el mentor, sin hábito ni instante.
+
+**Lo que se verificó en el código y la spec afirmaba otra cosa:** el generador diario (`RegistroService.generarInterno`)
+NO usa `dias_semanales_habito` (el día elegido de un hábito semanal), solo pausa, apagados y `todaviaNoLeToca`; y ningún
+hábito del catálogo semilla tiene `eleccion_dia_semanal = true`. Los huecos siguen al generador: no filtran por el día
+elegido. Si algún día un hábito semanal empieza a generarse solo ese día, `RegistroService` debe decidirlo primero y
+los huecos lo heredan por los registros.
+
+---
+
+## 28. La Pastilla Renacer y la Audioterapia solo se cierran con sus respuestas (E-652, issue #33) — 2026-10-29
+
+Regla del dueño: «sí o sí deben mandar los mensajes de los audios y audioterapias». Hasta hoy el servidor cerraba y
+pagaba los dos hábitos por `POST /habit-tracks/{id}/complete` sin audio ni respuestas (eran `JOURNALING` opcionales y
+sin política); solo la pantalla pedía las respuestas. Ahora lo exige el servidor, aunque lo pida un APK viejo.
+
+| Hábito (`clave_sistema`) | Por el gesto genérico (`/complete`, SER `marcar_habito_completado`) | Su camino válido |
+|---|---|---|
+| `PASTILLA_RENACER` | **Rechazado siempre** (`PoliticaPastillaRenacer`) | `POST /spirit-audio/submit` → `EspirituService.entregar` → `PastillaRenacerHabitoService.completarDeHoy`, que completa con `GestoCompletar.PROPIO_DEL_HABITO` (la política no se le consulta) |
+| `AUDIO_THERAPY_WEEKLY` | **Solo si el registro ya tiene el texto de las respuestas** (`PoliticaAudioterapia`) | Subir la evidencia de TEXTO (`POST /habit-tracks/{id}/evidence`, las dos preguntas con sus respuestas) y después `POST /habit-tracks/{id}/complete`; SER hace lo mismo en `AudioterapiaDelAprendizService` |
+
+- **Qué cuenta como «tiene el texto».** Una evidencia de tipo `TEXTO` del registro con al menos
+  `PoliticaAudioterapia.LARGO_MINIMO_DEL_TEXTO` = 30 caracteres sin los espacios de los bordes (2 respuestas × los 15 que
+  exige la app, `RESPUESTA_MIN_LENGTH`), en cualquier estado de validación. Lo pregunta `RegistroService` con
+  `evidence.api.RegistrosConTextoFinder.conTextoDeAlMenos(ids, largo)` (una consulta que mide el largo en la base, sobre
+  `evidencias_registro_idx`) y llega a la política por `ContextoCompletar.tieneLasRespuestasDelAudio()`, perezoso y
+  memoizado como el hecho del Muro: los demás hábitos no pagan la consulta.
+- **El servidor no separa las respuestas.** El texto lleva las preguntas en medio y la app puede cambiarlas, así que
+  acoplar el servidor a su redacción rompería la Audioterapia el día que cambien. Se comprueba el total.
+- **El rechazo** es el de cualquier política: `DecisionPolitica.noProcede` → `IllegalArgumentException` → 400 con
+  «Para la Pastilla Renacer, escucha el audio y responde las dos preguntas.» o «Para la Audioterapia semanal, escucha
+  el audio y responde las dos preguntas.». La app ya muestra el mensaje del servidor.
+- **No cambia** ningún otro hábito, el cálculo de puntos, el cerrojo de la Pastilla ni `/spirit-audio/submit` (que sigue
+  validando solo que el texto no esté vacío).
+- **App.** El Training nuevo (spec 014) ya no ofrece el ✓ en estos dos hábitos; el APK publicado sí, y desde este cambio
+  recibe el rechazo en vez de cerrar el hábito. No hace falta APK nuevo.
+- Pruebas: `RegistroServiceTest` (los cinco caminos), `PoliticaPastillaRenacerTest`, `PoliticaAudioterapiaTest`,
+  `PastillaRenacerHabitoServiceTest`, y con base real `EvidenciaPersistenceAdapterTest` y
+  `PastillaYAudioterapiaConRespuestasIT`.
+## «Cierra tu día»: la marca del día en `entradas_diario` (spec 017, D-290, 2026-10-29)
+
+`EVALUACION_DIA` (en el enum de `entradas_diario` desde `V1`, sin caso de uso hasta ahora) es la marca de que la persona cerró su día:
+una fila por persona y fecha (`UNIQUE`), con la nota del día en `contenido_texto` y la hora del primer cierre en `creado_en`.
+
+- **Puerto público**: `habits.api.EvaluacionDelDiaPort` (`dejarCerrado`, `marcasEntre`), implementado por `EvaluacionDelDiaService`. No
+  valida el día: lo resuelve `rocks.CierreDelDiaService` (que es quien orquesta el cierre) en la zona de la persona.
+- **No entra al Espejo Sombra**: `EntradaDiarioFinder.entradasEntre` excluye el tipo `EVALUACION_DIA` (lo que alguien le cuenta a su
+  acompañamiento no es material para el análisis de una IA); el dato se lee por el puerto de arriba.
+- `LoadEntradaDiarioPort.entreFechasDeTipo` es la lectura por tipo y rango.
 

@@ -1,9 +1,11 @@
 package com.renaser.os.rag.domain.model.agenda;
 
+import com.renaser.os.shared.domain.TramoDelDia;
+import com.renaser.os.shared.domain.TramosUnidos;
+
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 
@@ -103,21 +105,7 @@ public record AgendaOcupada(List<Tramo> ocupados) {
 
     /** Lo libre dentro de {@code [desde, hasta)}, en orden. */
     public List<Tramo> libresEntre(int desde, int hasta) {
-        List<Tramo> libres = new ArrayList<>();
-        int cursor = desde;
-        for (Tramo ocupado : ocupados) {
-            if (ocupado.hasta() <= cursor || ocupado.desde() >= hasta) {
-                continue;
-            }
-            if (ocupado.desde() > cursor) {
-                libres.add(new Tramo(cursor, ocupado.desde()));
-            }
-            cursor = Math.max(cursor, ocupado.hasta());
-        }
-        if (cursor < hasta) {
-            libres.add(new Tramo(cursor, hasta));
-        }
-        return libres;
+        return aTramos(new TramosUnidos(aTramosDelDia(ocupados)).libresEntre(desde, hasta));
     }
 
     public static int minutos(LocalTime hora) {
@@ -163,17 +151,15 @@ public record AgendaOcupada(List<Tramo> ocupados) {
 
     /** Ordena y junta los que se pisan o se tocan: 09:00-12:00 y 11:00-13:00 son 09:00-13:00. */
     private static List<Tramo> unir(List<Tramo> tramos) {
-        List<Tramo> ordenados = new ArrayList<>(tramos);
-        ordenados.sort(Comparator.comparingInt(Tramo::desde));
-        List<Tramo> unidos = new ArrayList<>();
-        for (Tramo tramo : ordenados) {
-            Tramo ultimo = unidos.isEmpty() ? null : unidos.get(unidos.size() - 1);
-            if (ultimo != null && tramo.desde() <= ultimo.hasta()) {
-                unidos.set(unidos.size() - 1, new Tramo(ultimo.desde(), Math.max(ultimo.hasta(), tramo.hasta())));
-            } else {
-                unidos.add(tramo);
-            }
-        }
-        return List.copyOf(unidos);
+        return List.copyOf(aTramos(new TramosUnidos(aTramosDelDia(tramos)).tramos()));
+    }
+
+    /** El algoritmo vive en {@code shared} (spec 015); el {@link Tramo} de acá sigue siendo el de esta agenda. */
+    private static List<TramoDelDia> aTramosDelDia(List<Tramo> tramos) {
+        return tramos.stream().map(tramo -> new TramoDelDia(tramo.desde(), tramo.hasta())).toList();
+    }
+
+    private static List<Tramo> aTramos(List<TramoDelDia> tramos) {
+        return tramos.stream().map(tramo -> new Tramo(tramo.desde(), tramo.hasta())).toList();
     }
 }

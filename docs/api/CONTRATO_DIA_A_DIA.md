@@ -396,8 +396,13 @@ mismo.
 
 ```json
 { "id": "uuid", "whatAmIDoing": "...", "whatAmIThinking": "...", "whatAmIFeeling": "...",
-  "energyLevel": 7, "whatAmIAvoiding": "...", "createdAt": "..." }
+  "energyLevel": 7, "whatAmIAvoiding": "...", "createdAt": "...", "horaPrevista": 14 }
 ```
+
+> **Agregado 2026-10-29 (D-286, spec 012).** `horaPrevista` es la hora local (0–23) a la que respondía, o `null` si el registro fue libre
+> o anterior a V119. **Desde el día 8** del programa, con Mi Radar apagado, en un día de la semana «Sin Radar» o fuera de 03:00–23:59
+> (hora y día de la semana de la persona, no los de UTC) el servidor responde **409** («Mi Radar está apagado» / «Hoy no tienes Mi
+> Radar» / «Mi Radar funciona de 03:00 a 23:59»); los días 0 a 7 no cambia nada.
 
 #### `GET /api/v1/radar/latest`
 
@@ -406,10 +411,31 @@ mismo.
 
 #### `GET /api/v1/radar/history?cursor=<instant>`
 
-- **Query param** `cursor` opcional (ISO-8601 Instant) — paginación por cursor, tamaño de página fijo **20**.
-- **Response 200** — `{ "entries": [RegistroRadarResponse...], "nextCursor": null | "instant" }`.
-  `nextCursor` viene `null` cuando la página no llegó a 20 elementos (heurística sin conteo extra, calcada
+- **Query param** `cursor` opcional (ISO-8601 Instant) — paginación por cursor, tamaño de página fijo **84**.
+- **Response 200** — `{ "entries": [RegistroRadarResponse...], "nextCursor": null | "instant", "miRadar": null | { "encendido": bool, "horas": [int], "dias": [{ "dia": int, "horas": [int] }] } }`.
+  `nextCursor` viene `null` cuando la página no llegó a 84 elementos (heurística sin conteo extra, calcada
   del cliente viejo — puede haber falsos negativos raros en el borde, es la misma heurística que ya usaban).
+
+> **Corregido 2026-10-29 (D-286, spec 012).** Decía «tamaño de página fijo **20**» y «no llegó a 20 elementos»: desde el día 8 un día
+> puede tener hasta 21 registros (03–23) y Mi Radar arma «Hoy» con la primera página. `miRadar` es nuevo y va `null` mientras el
+> `dia_programa` de la persona es menor que 8 (en la semana 1 Mi Radar no aplica); lleva `horas` (las de todos los días) y `dias` (los
+> días de la semana con horas propias, ver más abajo; corregido el mismo día, cuarta ronda). Misma forma en
+> `GET /api/v1/mentor/groups/{g}/learners/{u}/radar` y en `GET /api/v1/leadership/groups/{g}/people/{p}/radar` (líder, administrador y
+> alquimista; sin registro de consulta).
+
+#### `GET` / `PUT /api/v1/radar/mi-radar`
+
+- **Body del PUT y respuesta de ambos** — `{ "encendido": true, "horas": [9, 14, 20], "dias": [ { "dia": 6, "horas": [11] }, { "dia": 7, "horas": [] } ] }`.
+  Mi Radar es **por día de la semana**, igual que los hábitos: `horas` vale para todos los días; cada elemento de `dias` es un día
+  (ISO: lunes = 1 … domingo = 7, una vez cada uno) con horas propias, y `horas: []` es «Sin Radar ese día». Un día que no está en `dias`
+  sigue las de todos los días. Apagado: `{ "encendido": false, "horas": [], "dias": [] }`.
+  Con `encendido: false` se ignoran las horas y los días. Encendido exige al menos una hora en `horas`; el PUT sin `dias` equivale a
+  `dias: []`. De 1 a 12 horas, en punto, entre 3 y 23, sin repetir (también las de cada día); un día fuera de 1–7 o repetido, un día sin
+  `dia` o sin `horas`, o `dias` con horas pero sin `horas` para todos los días: **400** con el mensaje del dominio. Solo la propia
+  persona con el programa andando (403 si no).
+
+> **Corregido 2026-10-29 (D-286, cuarta ronda de la spec 012).** Decía `{ "encendido": true, "horas": [9, 14, 20] }`, las mismas horas todos
+> los días, y el 409 de `POST /api/v1/radar` solo cubría Mi Radar apagado o fuera de 03:00–23:59.
 
 ```bash
 curl -s -X POST http://localhost:8080/api/v1/radar \

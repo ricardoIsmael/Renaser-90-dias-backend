@@ -163,7 +163,7 @@ class LogroEnChatServiceTest {
 
         servicio(prendidos()).celebrarEnElChat(logro(TipoLogro.ROCA_COMPLETADA, UUID.randomUUID()));
 
-        verify(saveConversacionPort).save(any());
+        verify(saveConversacionPort).crearSiFalta(any());
         assertThat(guardados).singleElement().satisfies(mensaje -> assertThat(mensaje.contenido()).isEqualTo(ROCA));
     }
 

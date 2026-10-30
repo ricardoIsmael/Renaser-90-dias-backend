@@ -15,13 +15,18 @@ import com.renaser.os.shared.web.security.ActorAutenticado;
 import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -66,6 +71,22 @@ public class HabitTrackController {
     public List<RegistroHabitoConCatalogoResponse> hoy(@ActorAutenticado UserId actor) {
         return consultarTracksDelDiaUseCase.consultarHoyDe(actor)
                 .stream().map(RegistroHabitoConCatalogoResponse::from).toList();
+    }
+
+    /**
+     * D-288 (spec 014 «Training por hora»): los registros de un dia YA CERRADO de la semana en curso, con la misma
+     * forma que {@code /today}. Solo lectura: no crea registros. El dia pasado no cambia, asi que el telefono lo
+     * guarda 5 minutos y no repite el pedido; {@code Vary} por el token de sesion, para que una cuenta distinta en el
+     * mismo navegador nunca reciba el dia de otra. Hoy, el futuro, otra semana o una fecha anterior al Dia 1 son 400.
+     */
+    @RequiresPermission(value = Permission.USE_APP, scope = "habitos de un dia cerrado del propio actor")
+    @GetMapping("/day")
+    public ResponseEntity<List<RegistroHabitoConCatalogoResponse>> deUnDiaCerrado(@ActorAutenticado UserId actor,
+            @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        List<RegistroHabitoConCatalogoResponse> registros = consultarTracksDelDiaUseCase
+                .consultarDiaCerradoDe(actor, date).stream().map(RegistroHabitoConCatalogoResponse::from).toList();
+        return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL, "private, max-age=300")
+                .varyBy("X-Auth-Token", HttpHeaders.AUTHORIZATION).body(registros);
     }
 
     /** Contrato aditivo: /today conserva su array para los APK anteriores. */

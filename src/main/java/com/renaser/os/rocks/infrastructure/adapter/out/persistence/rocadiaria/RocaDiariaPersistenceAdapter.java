@@ -6,6 +6,7 @@ import com.renaser.os.rocks.domain.model.rocadiaria.RocaDiaria;
 import com.renaser.os.rocks.domain.model.rocadiaria.RocaDiariaId;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -77,6 +78,20 @@ class RocaDiariaPersistenceAdapter implements LoadRocaDiariaPort, SaveRocaDiaria
     public RocaDiaria save(RocaDiaria rocaDiaria) {
         var saved = repository.saveAndFlush(mapper.toEntity(rocaDiaria));
         return mapper.toDomain(saved);
+    }
+
+    @Override
+    @Transactional
+    public void guardarSoloElCierre(List<RocaDiaria> rocas) {
+        for (RocaDiaria roca : rocas) {
+            if (roca.cierre() == null) {
+                repository.quitarElCierre(roca.id().value());
+                continue;
+            }
+            var respuesta = roca.cierre().respuesta();
+            repository.guardarElCierre(roca.id().value(), respuesta.motivo().name(), respuesta.manana().name(),
+                    respuesta.nota(), roca.cierre().cerradoEn());
+        }
     }
 
     @Override

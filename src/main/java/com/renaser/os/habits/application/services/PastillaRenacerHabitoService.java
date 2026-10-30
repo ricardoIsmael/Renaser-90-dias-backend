@@ -8,6 +8,7 @@ import com.renaser.os.habits.application.ports.out.participante.ConsultarProgres
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
 import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort;
 import com.renaser.os.habits.domain.model.habito.Habito;
+import com.renaser.os.habits.domain.model.politica.GestoCompletar;
 import com.renaser.os.habits.domain.model.registro.EstadoRegistro;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.shared.domain.Clock;
@@ -57,13 +58,16 @@ import java.util.Optional;
  * caen dentro de esa misma transaccion nueva y comparten su contexto de persistencia. El
  * REQUIRES_NEW mueve de lugar la transaccion que las dos lecturas comparten; no las separa.
  *
- * <p>Lo que costaba: este habito NO tiene una politica que le cierre la ruta generica (no existe
- * una {@code PoliticaPastillaRenacer}, a diferencia de {@code PoliticaClaseDiaria}), asi que hay
- * dos caminos vivos que lo cierran — la entrega del resumen de Espiritu y el
+ * <p>Lo que costaba: este habito no tenia una politica que le cerrara la ruta generica, asi que habia
+ * dos caminos vivos que lo cerraban — la entrega del resumen de Espiritu y el
  * {@code POST /habit-tracks/{id}/complete} de siempre. Simultaneos, los dos leian
  * {@code PENDIENTE} y los dos pagaban; y como el camino de Espiritu manda su propio resumen,
  * el segundo en escribir pisaba el texto del primero. Con la lectura bloqueada aqui arriba el
  * segundo entra serializado, lee {@code COMPLETADO} y devuelve el resultado ya otorgado.
+ *
+ * <p><b>Desde E-652 (issue #33) la ruta generica ya esta cerrada</b>: {@code PoliticaPastillaRenacer} la rechaza, y
+ * esta clase completa con {@code GestoCompletar.PROPIO_DEL_HABITO} para no toparse con su propia regla. El cerrojo
+ * de arriba sigue haciendo falta: la entrega concurrente de Espiritu consigo misma sigue siendo posible.
  *
  * <p><b>Tomar el cerrojo unas lineas antes no reabre el auto-interbloqueo</b> que advierte el
  * javadoc de {@code RegistroService.transaccionPropia} y que
@@ -115,8 +119,9 @@ public class PastillaRenacerHabitoService implements CompletarPastillaRenacerUse
             return Optional.of(new RegistroCompletado(track.id().value(), track.puntosOtorgados()));
         }
 
+        // Gesto PROPIO: este es el camino legitimo de la Pastilla y PoliticaPastillaRenacer le cierra el generico (E-652).
         RegistroHabito completado = completarRegistroUseCase.completar(
-                new CompletarRegistroCommand(participanteId, track.id(), resumen, null));
+                new CompletarRegistroCommand(participanteId, track.id(), resumen, null, GestoCompletar.PROPIO_DEL_HABITO));
         return Optional.of(new RegistroCompletado(completado.id().value(), completado.puntosOtorgados()));
     }
 
