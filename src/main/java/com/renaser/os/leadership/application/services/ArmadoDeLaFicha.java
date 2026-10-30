@@ -36,7 +36,8 @@ final class ArmadoDeLaFicha {
         return new SemanaDeLaPersona(lectura.semana().grupoId(), perfil.id().value(), perfil.fullName(),
                 perfil.avatarUrl(), perfil.role(), ventana.desde(), ventana.hasta(), miembro.participacion().zona().getId(),
                 ventana.cerrada(), primeraSemana(miembro), lectura.mentor(), color(miembro, suya),
-                suya == null ? null : suya.porcentaje(), lectura.semana().resumen(), dias(lectura, ventana, suya));
+                suya == null ? null : suya.porcentaje(), lectura.semana().resumen(), dias(lectura, ventana, suya),
+                lectura.programacion().orElse(null));
     }
 
     /** El sábado que abre la semana del Día 1; no hay semanas antes. Null mientras no eligió su Día 1. */

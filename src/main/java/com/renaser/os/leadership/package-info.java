@@ -8,6 +8,10 @@
  * comparte archivos con la lógica de acompañamiento, que sigue siendo de {@code community} y
  * {@code mentoring} (propuesta PL-09 del SDD 002).
  *
+ * <p>Desde la spec 005 también lee la ficha de cada persona del grupo, y desde la spec 018 (D-291) dice si «programó» su día de
+ * hoy: para eso lee {@code habits.api} (el horario resuelto) y {@code rocks.api} (las acciones de hoy). Ninguno de los dos
+ * depende de este módulo, así que no hay ciclo.
+ *
  * <p>Lo único que escribe es lo suyo: las observaciones del líder sobre un mentor
  * ({@code observaciones_mentor}, V89, append-only).
  *

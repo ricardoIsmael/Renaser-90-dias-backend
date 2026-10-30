@@ -38,7 +38,7 @@ class AccionesDelDiaFinderService implements AccionesDelDiaFinder {
                 .filter(RocaDiaria::completada).map(roca -> roca.id().value()).toList());
         return rocas.stream()
                 .map(roca -> new AccionDelDia(roca.id().value(), roca.fecha(), roca.titulo(), roca.completada(),
-                        deLasCompletadas.get(roca.id().value())))
+                        deLasCompletadas.get(roca.id().value()), roca.horaInicio()))
                 .toList();
     }
 }
