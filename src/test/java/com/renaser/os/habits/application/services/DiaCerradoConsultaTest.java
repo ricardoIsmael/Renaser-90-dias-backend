@@ -112,6 +112,7 @@ class DiaCerradoConsultaTest {
                 loadDesbloqueoPort, mock(ApplicationEventPublisher.class), reloj, idGenerator,
                 List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()),
                 CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort), ids -> Set.copyOf(ids),
+                (ids, largoMinimo) -> Set.of(),
                 new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido());
         proyeccion = new TracksDelDiaProyeccionService(registros, registros, loadHabitoPort, loadHorarioPort,
                 loadPreferenciaPort, loadGuiaPort, registrosConEvidenciaFinder, loadRenombrePort,
