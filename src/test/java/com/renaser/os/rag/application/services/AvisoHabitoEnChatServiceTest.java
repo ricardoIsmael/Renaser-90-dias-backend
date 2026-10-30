@@ -180,7 +180,7 @@ class AvisoHabitoEnChatServiceTest {
 
         servicio(prendidos(), CLOCK).dejarEnElChat(aviso("INICIO", CALCULADO_EN, 30));
 
-        verify(saveConversacionPort).save(any());
+        verify(saveConversacionPort).crearSiFalta(any());
         assertThat(guardados).singleElement().satisfies(mensaje -> assertThat(mensaje.contenido())
                 .isEqualTo("Tu habito Meditar empieza a las 21:29. Hay 10 puntos en juego."));
     }

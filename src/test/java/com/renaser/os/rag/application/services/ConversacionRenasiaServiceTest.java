@@ -532,7 +532,7 @@ class ConversacionRenasiaServiceTest {
 
         service.preguntar(pregunta(activo)).collectList().block();
 
-        verify(saveConversacionRenasiaPort).save(any(ConversacionRenasia.class));
+        verify(saveConversacionRenasiaPort).crearSiFalta(any(ConversacionRenasia.class));
     }
 
     @Test
@@ -544,7 +544,7 @@ class ConversacionRenasiaServiceTest {
 
         service.preguntar(pregunta(activo)).collectList().block();
 
-        verify(saveConversacionRenasiaPort, never()).save(any());
+        verify(saveConversacionRenasiaPort, never()).crearSiFalta(any());
     }
 
     @Test

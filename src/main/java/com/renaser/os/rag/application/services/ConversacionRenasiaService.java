@@ -256,7 +256,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         List<FragmentoRelevante> fragmentos;
         List<MensajeRenasia> historial;
         try {
-            buscarOCrearConversacion(command.actorId());
+            asegurarConversacion(command.actorId());
             // D-100: la memoria se lee ANTES de guardar la pregunta nueva, para que el historial
             // no la incluya dos veces (una como turno previo y otra como pregunta). `pagina`
             // devuelve del mas nuevo al mas viejo; el modelo los quiere cronologicos.
@@ -568,9 +568,11 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
         return List.copyOf(completos);
     }
 
-    private ConversacionRenasia buscarOCrearConversacion(UserId actorId) {
-        return loadConversacionRenasiaPort.porUsuarioId(actorId)
-                .orElseGet(() -> saveConversacionRenasiaPort.save(ConversacionRenasia.iniciar(actorId, clock.now())));
+    /** E-655: crear con {@code crearSiFalta}; dos turnos a la vez de la misma persona no pueden chocar en la PK. */
+    private void asegurarConversacion(UserId actorId) {
+        if (loadConversacionRenasiaPort.porUsuarioId(actorId).isEmpty()) {
+            saveConversacionRenasiaPort.crearSiFalta(ConversacionRenasia.iniciar(actorId, clock.now()));
+        }
     }
 
     private void requireCuotaDisponible(PreguntarRenasiaCommand command) {

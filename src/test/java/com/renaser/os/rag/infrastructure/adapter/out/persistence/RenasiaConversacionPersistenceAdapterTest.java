@@ -90,6 +90,19 @@ class RenasiaConversacionPersistenceAdapterTest {
         assertThat(recuperada.get().usuarioId()).isEqualTo(guardada.usuarioId());
     }
 
+    /** E-655: crear dos veces la misma conversacion no falla ni pisa la primera (INSERT ... ON CONFLICT DO NOTHING). */
+    @Test
+    void crearSiFaltaEsIdempotenteYNoPisaLaConversacionExistente() {
+        Instant primera = Instant.parse("2026-09-23T02:00:00Z");
+
+        saveConversacionRenasiaPort.crearSiFalta(ConversacionRenasia.iniciar(usuarioId, primera));
+        saveConversacionRenasiaPort.crearSiFalta(ConversacionRenasia.iniciar(usuarioId, primera.plusSeconds(60)));
+
+        ConversacionRenasia recuperada = loadConversacionRenasiaPort.porUsuarioId(usuarioId).orElseThrow();
+        assertThat(recuperada.creadoEn()).isEqualTo(primera);
+        assertThat(recuperada.actualizadoEn()).isEqualTo(primera);
+    }
+
     @Test
     void guardaYRecuperaUnMensajeDeUsuarioSinFuentes() {
         saveConversacionRenasiaPort.save(ConversacionRenasia.iniciar(usuarioId, Instant.now()));
