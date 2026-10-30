@@ -12,6 +12,7 @@ import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
+import com.renaser.os.habits.domain.model.politica.GestoCompletar;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
 import com.renaser.os.shared.domain.FixedClock;
@@ -77,7 +78,8 @@ class PastillaRenacerHabitoServiceTest {
     }
 
     @Test
-    @DisplayName("Localiza el habito PASTILLA_RENACER de hoy y delega el completado en CompletarRegistroUseCase")
+    @DisplayName("Localiza el habito PASTILLA_RENACER de hoy y delega el completado en CompletarRegistroUseCase "
+            + "con su gesto PROPIO: la ruta generica esta cerrada por PoliticaPastillaRenacer (E-652)")
     void completarDeHoyDelegaEnRegistroService() {
         UserId participanteId = participante();
         Habito habito = habitoPastilla();
@@ -97,7 +99,8 @@ class PastillaRenacerHabitoServiceTest {
         assertThat(resultado.get().registroId()).isEqualTo(completado.id().value());
         assertThat(resultado.get().puntosOtorgados()).isEqualTo(10);
         verify(completarRegistroUseCase)
-                .completar(new CompletarRegistroCommand(participanteId, pendiente.id(), RESUMEN, null));
+                .completar(new CompletarRegistroCommand(participanteId, pendiente.id(), RESUMEN, null,
+                        GestoCompletar.PROPIO_DEL_HABITO));
     }
 
     @Test

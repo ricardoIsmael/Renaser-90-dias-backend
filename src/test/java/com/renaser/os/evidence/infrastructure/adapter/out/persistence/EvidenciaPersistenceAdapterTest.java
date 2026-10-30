@@ -330,6 +330,74 @@ class EvidenciaPersistenceAdapterTest {
         assertThat(adapter.registrosHabitoConEvidencia(List.of(registroId))).isEmpty();
     }
 
+    // ---- registrosHabitoConTextoDeAlMenos (E-652): lo que exige la Audioterapia antes de cerrarse ----
+
+    private Evidencia fotoDeRegistro(UUID registroHabitoId) {
+        return Evidencia.registrar(nuevoId(), participanteId,
+                new DestinoEvidencia.RegistroHabito(registroHabitoId), TipoEvidencia.FOTO, "bucket", "ruta/foto.jpg",
+                null, null, null, null, false, CLOCK.now(), CLOCK);
+    }
+
+    private Evidencia textoDeRegistro(UUID registroHabitoId, String texto) {
+        return Evidencia.registrar(nuevoId(), participanteId,
+                new DestinoEvidencia.RegistroHabito(registroHabitoId), TipoEvidencia.TEXTO, null, null, texto,
+                null, null, null, false, CLOCK.now(), CLOCK);
+    }
+
+    private static final int LARGO_MINIMO = 30;
+
+    @Test
+    @DisplayName("con texto: devuelve solo los registros con una evidencia de TEXTO de al menos el largo pedido")
+    void conTextoDeAlMenosDevuelveSoloLosQueCumplen() {
+        UUID largo = seedRegistroHabito();
+        UUID justo = seedRegistroHabito();
+        UUID corto = seedRegistroHabito();
+        UUID sinNada = seedRegistroHabito();
+        adapter.save(textoDeRegistro(largo, "x".repeat(200)));
+        adapter.save(textoDeRegistro(justo, "x".repeat(LARGO_MINIMO)));
+        adapter.save(textoDeRegistro(corto, "x".repeat(LARGO_MINIMO - 1)));
+
+        Set<UUID> resultado = adapter.registrosHabitoConTextoDeAlMenos(List.of(largo, justo, corto, sinNada),
+                LARGO_MINIMO);
+
+        assertThat(resultado).containsExactlyInAnyOrder(largo, justo);
+    }
+
+    @Test
+    @DisplayName("con texto: los espacios de los bordes no cuentan para el largo")
+    void conTextoDeAlMenosNoCuentaLosEspaciosDeLosBordes() {
+        UUID relleno = seedRegistroHabito();
+        adapter.save(textoDeRegistro(relleno, " ".repeat(40) + "hola" + " ".repeat(40)));
+
+        assertThat(adapter.registrosHabitoConTextoDeAlMenos(List.of(relleno), LARGO_MINIMO)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("con texto: una foto, aunque exista, no cuenta; basta con que UNA de las evidencias sea el texto")
+    void conTextoDeAlMenosIgnoraLosOtrosTipos() {
+        UUID soloFoto = seedRegistroHabito();
+        UUID fotoYTexto = seedRegistroHabito();
+        adapter.save(fotoDeRegistro(soloFoto));
+        adapter.save(fotoDeRegistro(fotoYTexto));
+        adapter.save(textoDeRegistro(fotoYTexto, "x".repeat(LARGO_MINIMO)));
+
+        Set<UUID> resultado = adapter.registrosHabitoConTextoDeAlMenos(List.of(soloFoto, fotoYTexto), LARGO_MINIMO);
+
+        assertThat(resultado).containsExactly(fotoYTexto);
+    }
+
+    @Test
+    @DisplayName("con texto: un registro con varios textos largos aparece UNA vez y la coleccion vacia no consulta")
+    void conTextoDeAlMenosNoRepiteYCortaConLaColeccionVacia() {
+        UUID registroId = seedRegistroHabito();
+        adapter.save(textoDeRegistro(registroId, "x".repeat(LARGO_MINIMO)));
+        adapter.save(textoDeRegistro(registroId, "y".repeat(LARGO_MINIMO)));
+
+        assertThat(adapter.registrosHabitoConTextoDeAlMenos(List.of(registroId), LARGO_MINIMO))
+                .containsExactly(registroId);
+        assertThat(adapter.registrosHabitoConTextoDeAlMenos(List.of(), LARGO_MINIMO)).isEmpty();
+    }
+
     @Test
     @DisplayName("coleccion vacia: conjunto vacio, sin ir a la base con un IN () invalido")
     void registrosHabitoConEvidenciaConListaVaciaDevuelveVacio() {

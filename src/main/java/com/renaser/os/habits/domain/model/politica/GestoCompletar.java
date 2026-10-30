@@ -46,11 +46,12 @@ public enum GestoCompletar {
      * entrada. No se le consulta a la politica porque la politica existe justamente para empujar
      * al aprendiz hacia aca.
      *
-     * <p><b>Hoy lo usa un solo llamador: {@code ClaseDiariaHabitoService}.</b>
-     * {@code PastillaRenacerHabitoService} tambien tiene gesto propio y sigue mandando
-     * {@link #GENERICO}: hoy da igual porque {@code PASTILLA_RENACER} no tiene politica, pero el
-     * dia que la tenga hay que marcarlo aca. Se dejo sin tocar a proposito — quedaba fuera del
-     * alcance del arreglo de la Clase Diaria (E-120).
+     * <p><b>Hoy lo usan dos llamadores: {@code ClaseDiariaHabitoService} y
+     * {@code PastillaRenacerHabitoService}.</b> Esta ultima mandaba {@link #GENERICO} mientras
+     * {@code PASTILLA_RENACER} no tenia politica (se dejo asi a proposito, fuera del alcance de E-120);
+     * al nacer {@code PoliticaPastillaRenacer} (E-652) paso a este gesto, que es exactamente lo que esta nota
+     * anunciaba. Los demas que cierran por el check generico, como {@code PostDiarioComunidadHabitoService}, lo
+     * siguen mandando a proposito para que su politica vuelva a comprobar.
      *
      * <p><b>No es un bypass alcanzable desde afuera:</b> {@code CompletarRegistroUseCase} vive en
      * {@code application/ports/in} y no en {@code api/}, asi que ningun otro modulo puede
