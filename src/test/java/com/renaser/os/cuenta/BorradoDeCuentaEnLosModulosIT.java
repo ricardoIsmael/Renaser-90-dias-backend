@@ -1,6 +1,8 @@
 package com.renaser.os.cuenta;
 
 import com.renaser.os.TestcontainersConfiguration;
+import com.renaser.os.calendar.application.ports.in.recordatorio.DespacharRecordatoriosUseCase;
+import com.renaser.os.calendar.application.ports.in.recordatorio.GenerarRecordatoriosUseCase;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.BorradoDeDatosDeCuenta;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,6 +15,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -55,6 +58,10 @@ class BorradoDeCuentaEnLosModulosIT {
     private JdbcTemplate jdbc;
     @Autowired
     private PlatformTransactionManager transactionManager;
+    @Autowired
+    private GenerarRecordatoriosUseCase generarRecordatorios;
+    @Autowired
+    private DespacharRecordatoriosUseCase despacharRecordatorios;
 
     private SemillaDeCuenta semilla;
 
@@ -96,6 +103,33 @@ class BorradoDeCuentaEnLosModulosIT {
                 .filter(t -> !antes.get(t).equals(despues.get(t)))
                 .collect(Collectors.toSet());
         assertThat(conFilasDeMas).as("tablas que no volvieron a su conteo previo").isEqualTo(SOBREVIVEN);
+    }
+
+    /**
+     * #47 / E-658. {@code borraTodoLoDeLaPersonaYNadaDeLaOtra} fallaba al azar en el CD ({@code notificaciones.usuario_id}
+     * de la otra persona: esperaba 1 y tenía 2) porque la semilla dejaba un recordatorio de evento ya vencido y sin
+     * enviar: el {@code @Scheduled} que despacha recordatorios corre cada minuto en punto y, si la prueba lo cruzaba,
+     * {@code notifications} le creaba un aviso a la persona sembrada.
+     *
+     * <p>Acá se llama a mano, y sin esperar al reloj, lo que harían los dos planificadores de calendario (el generador,
+     * cada 5 minutos, y el despachador, cada minuto): lo sembrado no debe cambiar. El despachador marca
+     * {@code enviado_en} ANTES de publicar el aviso, así que el cambio se ve acá mismo, sin esperar al oyente asíncrono
+     * que crea la notificación.
+     */
+    @Test
+    @DisplayName("#47: lo sembrado no lo toca ningún planificador de calendario, así que la prueba no depende del reloj")
+    void lasTareasProgramadasNoTocanLoSembrado() {
+        UUID persona = semilla.nuevaPersona();
+        Map<String, Long> filasAntes = filasDe(persona);
+        List<Map<String, Object>> recordatoriosAntes = recordatoriosDe(persona);
+        assertThat(recordatoriosAntes).as("la semilla siembra un recordatorio de evento").isNotEmpty();
+
+        generarRecordatorios.generar(Instant.now());
+        despacharRecordatorios.despachar(Instant.now());
+
+        assertThat(recordatoriosDe(persona)).as("recordatorios de la persona sembrada (enviado_en incluido)")
+                .isEqualTo(recordatoriosAntes);
+        assertThat(filasDe(persona)).as("filas de la persona sembrada").isEqualTo(filasAntes);
     }
 
     @Test
@@ -171,6 +205,11 @@ class BorradoDeCuentaEnLosModulosIT {
     private void borrarEnUnaTransaccion(UUID persona) {
         new TransactionTemplate(transactionManager).executeWithoutResult(status ->
                 borrados.forEach(b -> b.borrarDatosDe(UserId.of(persona))));
+    }
+
+    private List<Map<String, Object>> recordatoriosDe(UUID persona) {
+        return jdbc.queryForList("SELECT evento_id, inicio_ocurrencia, enviar_en, enviado_en, motivo_cancelacion "
+                + "FROM renaser.recordatorios_evento WHERE usuario_id = ? ORDER BY id", persona);
     }
 
     /** Filas por columna de persona, fuera de las tablas de {@code users}. */

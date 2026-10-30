@@ -32,18 +32,24 @@ INSERT INTO renaser.mensajes_bienvenida (usuario_destinatario_id, mensaje_id) VA
 INSERT INTO renaser.cambios_bienvenida (pieza, texto, cambiado_por) VALUES ('GRUPO', 'Bienvenida', '{{P}}');
 
 -- calendar
+-- El evento ya pasó (ayer) y su recordatorio ya se envió. NO debe quedar nada que una tarea programada pueda
+-- tocar mientras corre la prueba (#47, E-658): con `enviar_en = now()` y `enviado_en` vacío, el despachador de
+-- recordatorios (`DespacharRecordatoriosScheduler`, cada minuto en punto) lo tomaba, y `notifications` le creaba
+-- un RECORDATORIO_EVENTO a la persona sembrada: «la otra persona» tenía 2 notificaciones en vez de 1. Un evento
+-- futuro tampoco sirve: el generador (cada 5 minutos) lo toma como candidato. Un evento pasado, sin recurrencia y
+-- sin `notificar_al_crear`, no es candidato de nadie. Además es coherente: tiene asistencia marcada y lista cerrada.
 INSERT INTO renaser.eventos (id, titulo, inicia_en, timezone, tipo_ubicacion, tipo_audiencia, tipo_evento, creado_por)
-VALUES (md5('{{P}}-ev')::uuid, 'Evento', now() + interval '1 day', 'America/Lima', 'ZOOM', 'TODOS', 'ESPONTANEO', '{{P}}');
+VALUES (md5('{{P}}-ev')::uuid, 'Evento', now() - interval '1 day', 'America/Lima', 'ZOOM', 'TODOS', 'ESPONTANEO', '{{P}}');
 INSERT INTO renaser.confirmaciones_evento (evento_id, inicio_ocurrencia, usuario_id, estado)
-VALUES (md5('{{P}}-ev')::uuid, now() + interval '1 day', '{{P}}', 'ASISTE');
-INSERT INTO renaser.recordatorios_evento (evento_id, inicio_ocurrencia, usuario_id, enviar_en)
-VALUES (md5('{{P}}-ev')::uuid, now() + interval '1 day', '{{P}}', now());
+VALUES (md5('{{P}}-ev')::uuid, now() - interval '1 day', '{{P}}', 'ASISTE');
+INSERT INTO renaser.recordatorios_evento (evento_id, inicio_ocurrencia, usuario_id, enviar_en, enviado_en)
+VALUES (md5('{{P}}-ev')::uuid, now() - interval '1 day', '{{P}}', now() - interval '1 day 10 minutes', now() - interval '1 day 10 minutes');
 INSERT INTO renaser.historial_confirmaciones_evento (evento_id, inicio_ocurrencia, usuario_id, estado, registrado_en)
-VALUES (md5('{{P}}-ev')::uuid, now() + interval '1 day', '{{P}}', 'ASISTE', now());
+VALUES (md5('{{P}}-ev')::uuid, now() - interval '1 day', '{{P}}', 'ASISTE', now() - interval '2 days');
 INSERT INTO renaser.asistencias_evento (evento_id, inicio_ocurrencia, usuario_id, estado, marcado_por, marcado_en)
-VALUES (md5('{{P}}-ev')::uuid, now() + interval '1 day', '{{P}}', 'A_TIEMPO', '{{P}}', now());
+VALUES (md5('{{P}}-ev')::uuid, now() - interval '1 day', '{{P}}', 'A_TIEMPO', '{{P}}', now() - interval '1 day');
 INSERT INTO renaser.listas_asistencia_evento (evento_id, inicio_ocurrencia, cerrada_en, cerrada_por)
-VALUES (md5('{{P}}-ev')::uuid, now() + interval '1 day', now(), '{{P}}');
+VALUES (md5('{{P}}-ev')::uuid, now() - interval '1 day', now() - interval '1 day', '{{P}}');
 
 -- notifications
 INSERT INTO renaser.notificaciones (usuario_id, tipo, titulo, cuerpo) VALUES ('{{P}}', 'ANUNCIO_SISTEMA', 'T', 'C');
