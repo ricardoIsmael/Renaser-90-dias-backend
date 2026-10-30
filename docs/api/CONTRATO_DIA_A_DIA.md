@@ -441,7 +441,13 @@ mismo.
   sin `dias`, ninguno cambia. `veces` va de 1 a 21 y solo cuenta en `PERSONALIZADO` (sin él se propone 6, recortado a lo que cabe).
   **400**: modo desconocido, día fuera de 1–7 o repetido, veces fuera de 1–21 o más de las que caben ese día (`Ese día caben N veces`).
   **409**: el pedido **cambia** hoy o un día pasado (`Hoy y los días que pasaron no se pueden cambiar`; repetir un día tal como está se
-  acepta). **403**: solo la propia persona con el programa andando.
+  acepta). **403**: solo la propia persona con el programa andando, y **el cuerpo dice por qué** con el formato de siempre
+  (`{ "message", "timestamp", "codigo" }`, el de `ApiErrorConCodigo`; `codigo` es aditivo y un cliente que no lo conoce lee `message`):
+  `PROGRAMA_NO_ACTIVADO` («Mi Radar empieza en tu día 8. Primero elige tu Día 1.»: el personal que todavía no eligió su Día 1, con o sin
+  fila de programa; vale para `GET` y `PUT /radar/mi-radar` y para `POST /radar`), `CUENTA_SUSPENDIDA` («Cuenta suspendida») y
+  `SIN_PERMISO` («No autorizado», cuando el rol no tiene el permiso del endpoint). El 403 de «cuenta de prueba» no trae código. La
+  suspensión y la falta de permiso las escribe el filtro de permisos (`PermissionEnforcementInterceptor`), así que el `codigo` aparece en
+  **todos** los 403 de esos dos motivos, no solo en Mi Radar.
 - **`GET /radar/history`, la lectura del mentor y la del líder** traen `miRadar` con la misma forma pero con **solo el día de hoy** en
   `dias` (y `hoy`), `null` antes del día 8 o con la cuenta suspendida.
 - **`POST /api/v1/radar`** desde el día 8: 409 si Mi Radar está apagado («Mi Radar está apagado»), si hoy no tiene Radar («Hoy no tienes

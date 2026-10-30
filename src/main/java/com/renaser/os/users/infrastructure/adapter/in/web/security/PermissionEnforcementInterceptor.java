@@ -1,5 +1,6 @@
 package com.renaser.os.users.infrastructure.adapter.in.web.security;
 
+import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.ApiErrorResponse;
@@ -112,12 +113,12 @@ class PermissionEnforcementInterceptor implements HandlerInterceptor {
         if (actor.get().esCuentaDePrueba() && !SesionDeSoloLectura.vieneDeUna(request)) {
             // «Ver como» (D-273): una cuenta de prueba solo se usa desde la sesión de solo lectura que abre Soporte TI.
             // Sin esto, el respaldo de X-Actor-Id de las rutas abiertas permitiría escribir en su nombre.
-            denegar(response, "Una cuenta de prueba solo se usa con «ver como»");
+            denegar(response, "Una cuenta de prueba solo se usa con «ver como»", null);
             return false;
         }
         Permission requerido = permisoRequerido(handlerMethod);
         if (suspendidaSinTolerancia(actor.get(), requerido)) {
-            denegar(response, "Cuenta suspendida");
+            denegar(response, "Cuenta suspendida", NotAuthorizedException.CUENTA_SUSPENDIDA);
             return false;
         }
         if (requerido == null) {
@@ -162,7 +163,7 @@ class PermissionEnforcementInterceptor implements HandlerInterceptor {
             if (actor.role() == UserRole.IT_SUPPORT) {
                 return true;
             }
-            denegar(response, "No autorizado");
+            denegar(response, "No autorizado", NotAuthorizedException.SIN_PERMISO);
             return false;
         }
         if (actor.role() == UserRole.MENTOR_LEAD) {
@@ -171,7 +172,7 @@ class PermissionEnforcementInterceptor implements HandlerInterceptor {
         if (actor.role() != UserRole.TRAINEE || actor.role().can(requerido)) {
             return true; // MENTOR/ADMIN/ALCHEMIST/IT_SUPPORT: la matriz sigue falla-abierto (A-1, javadoc de la clase)
         }
-        denegar(response, "No autorizado");
+        denegar(response, "No autorizado", NotAuthorizedException.SIN_PERMISO);
         return false;
     }
 
@@ -196,7 +197,7 @@ class PermissionEnforcementInterceptor implements HandlerInterceptor {
                     request.getMethod(), request.getRequestURI(), requerido);
             return true;
         }
-        denegar(response, "No autorizado");
+        denegar(response, "No autorizado", NotAuthorizedException.SIN_PERMISO);
         return false;
     }
 
@@ -259,15 +260,17 @@ class PermissionEnforcementInterceptor implements HandlerInterceptor {
      * {@code JavaTimeModule} que {@code Instant} necesita para serializar — pedirlo hubiera
      * significado el mismo riesgo de romper tests ajenos que ya se evito con
      * {@link ObjectProvider} para {@link UserSummaryFinder}. El cuerpo es fijo y de dos campos:
-     * no hace falta Jackson para escribirlo.
+     * no hace falta Jackson para escribirlo. {@code codigo} solo va cuando hay un motivo que la app reconozca.
      */
-    private void denegar(HttpServletResponse response, String mensaje) throws IOException {
+    private void denegar(HttpServletResponse response, String mensaje, String codigo) throws IOException {
         response.setStatus(HttpStatus.FORBIDDEN.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
         ApiErrorResponse cuerpo = ApiErrorResponse.of(mensaje);
         String mensajeEscapado = cuerpo.message().replace("\\", "\\\\").replace("\"", "\\\"");
+        // `codigo` es aditivo (el mismo del formato `ApiErrorConCodigo`): la app lo usa para decir POR QUE sin leer el texto.
+        String conCodigo = codigo == null ? "" : ",\"codigo\":\"" + codigo + "\"";
         response.getWriter().write(
-                "{\"message\":\"" + mensajeEscapado + "\",\"timestamp\":\"" + cuerpo.timestamp() + "\"}");
+                "{\"message\":\"" + mensajeEscapado + "\",\"timestamp\":\"" + cuerpo.timestamp() + "\"" + conCodigo + "}");
     }
 }

@@ -29,7 +29,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.Instant;
 import java.time.LocalTime;
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -102,12 +101,14 @@ class RadarServiceTest {
     }
 
     @Test
-    void registrarRechazaParticipanteInexistente() {
+    void registrarRechazaAQuienNoTieneFilaDePrograma() {
         UserId dueno = UserId.of(UUID.randomUUID());
         when(progresoPort.deParticipante(dueno)).thenReturn(Optional.empty());
 
+        // Spec 019: sin fila de programa es el mismo 403 que un programa sin activar, con su motivo (antes un 404 mudo).
         assertThatThrownBy(() -> service.registrar(comando(dueno, dueno)))
-                .isInstanceOf(NoSuchElementException.class);
+                .isInstanceOf(NotAuthorizedException.class)
+                .hasFieldOrPropertyWithValue("codigo", NotAuthorizedException.PROGRAMA_NO_ACTIVADO);
     }
 
     @Test

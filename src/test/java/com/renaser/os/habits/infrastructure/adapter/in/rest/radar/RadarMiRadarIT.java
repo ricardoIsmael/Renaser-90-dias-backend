@@ -417,15 +417,48 @@ class RadarMiRadarIT {
     }
 
     @Test
-    @DisplayName("FR-019: el personal sin su programa activado no lo usa: 403 (la puerta es tener el programa andando, no el rol)")
+    @DisplayName("FR-019: el personal sin su programa activado no lo usa: 403 con el motivo PROGRAMA_NO_ACTIVADO en GET, PUT y POST (la puerta es tener el programa andando, no el rol)")
     void elPersonalSinPrograma() throws Exception {
         UUID sinPrograma = participante(0, "MENTOR", false);
         String sesion = sesionDe(sesiones, sinPrograma);
 
-        assertThat(get("/mi-radar", sesion).statusCode()).isEqualTo(403);
-        assertThat(put("/mi-radar", sesion, "{\"encendido\":true}").statusCode()).isEqualTo(403);
-        assertThat(post("", sesion, REGISTRO).statusCode()).isEqualTo(403);
+        for (HttpResponse<String> respuesta : List.of(get("/mi-radar", sesion), put("/mi-radar", sesion, "{\"encendido\":true}"),
+                post("", sesion, REGISTRO))) {
+            assertThat(respuesta.statusCode()).isEqualTo(403);
+            JsonNode cuerpo = json.readTree(respuesta.body());
+            assertThat(cuerpo.get("codigo").asText()).isEqualTo("PROGRAMA_NO_ACTIVADO");
+            assertThat(cuerpo.get("message").asText()).isEqualTo("Mi Radar empieza en tu día 8. Primero elige tu Día 1.");
+            assertThat(cuerpo.has("timestamp")).isTrue();
+        }
         assertThat(encendidoGuardado(sinPrograma)).isFalse();
+    }
+
+    @Test
+    @DisplayName("el personal que nunca empezo su programa (sin fila) recibe el mismo 403 PROGRAMA_NO_ACTIVADO, no un 404 mudo")
+    void sinFilaDePrograma() throws Exception {
+        UUID persona = UUID.randomUUID();
+        jdbc.update("INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado) "
+                + "VALUES (?, ?, 'Sin programa', CAST('LIDER_MENTORES' AS renaser.rol_usuario), 'ACTIVO')", persona, persona + "@renaser.test");
+        usuarios.add(persona);
+        String sesion = sesionDe(sesiones, persona);
+
+        for (HttpResponse<String> respuesta : List.of(get("/mi-radar", sesion), put("/mi-radar", sesion, "{\"encendido\":true}"))) {
+            assertThat(respuesta.statusCode()).isEqualTo(403);
+            assertThat(json.readTree(respuesta.body()).get("codigo").asText()).isEqualTo("PROGRAMA_NO_ACTIVADO");
+        }
+    }
+
+    @Test
+    @DisplayName("una cuenta suspendida recibe 403 con el motivo CUENTA_SUSPENDIDA (y no el del programa), aunque sea personal sin programa")
+    void suspendidaDiceSuMotivo() throws Exception {
+        UUID suspendida = participante(0, "MENTOR", false);
+        String sesion = sesionDe(sesiones, suspendida);
+        jdbc.update("UPDATE renaser.usuarios SET estado = 'SUSPENDIDO' WHERE id = ?", suspendida);
+
+        for (HttpResponse<String> respuesta : List.of(get("/mi-radar", sesion), put("/mi-radar", sesion, "{\"encendido\":true}"))) {
+            assertThat(respuesta.statusCode()).isEqualTo(403);
+            assertThat(json.readTree(respuesta.body()).get("codigo").asText()).isEqualTo("CUENTA_SUSPENDIDA");
+        }
     }
 
     @Test

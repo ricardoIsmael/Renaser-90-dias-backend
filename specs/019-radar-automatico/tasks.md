@@ -37,7 +37,9 @@ fichas. No se toca Training, Plan, los días 1 a 7, los hábitos ni otras pantal
 - [x] T024 Hoy (mitad del Radar y hoja «Tu Radar de hoy») y las fichas (`CodigoRenaserDelAlumno`) con el horario y las veces de hoy
 - [x] T025 `AGENTS.md`: la entrada del 2026-10-30 después de la 018 y «Corregido 2026-10-30» en las de la 012 y la 016
 - [x] T026 `tsc --noEmit` y Jest
+- [x] T029 El 403 con motivo: `NotAuthorizedException.codigo`, `GlobalExceptionHandler` y `PermissionEnforcementInterceptor` (`ApiErrorConCodigo`); `AccesoAlRadar` (sin programa, sin fila, suspendida); `RadarMiRadarIT`; en la app `lecturaDeUnError`, `vistaDeMiRadar`, `SinMiRadar`, «Elegir mi Día 1» y la fila de Yo para el personal sin programa (`miRadarEnYo`), con Jest
 - [x] T028 Yo → Mi Radar sin las respuestas de la persona (registros de hoy, «Historial» y «Patrones» se quitan) y con una sola línea «Hoy: N de M»; Mi Radar y la mitad de Hoy sin filtro por rol (prueba que lo fija)
+- [ ] T030 Correr `.maestro/mi-radar/16-personal-sin-programa.yaml` en el emulador (escrito, sin correr: el emulador lo usa otra tarea)
 - [x] T027 Maestro: `.maestro/mi-radar/` ajustado a los dos modos y corrido en el emulador, con capturas (ver el informe)
 
 ## Anotado, no hecho (fuera de alcance)

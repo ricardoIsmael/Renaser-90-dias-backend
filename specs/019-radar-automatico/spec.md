@@ -2,7 +2,7 @@
 
 **Feature Branch**: `019-radar-automatico` (backend y app)
 **Created**: 2026-10-30
-**Status**: Implementada, probada en el emulador (ver `tasks.md`)
+**Status**: Implementada, probada en el emulador (ver `tasks.md`; el flujo 16 del 403 está escrito y falta correrlo)
 **Input**: Diseño final aprobado por el dueño (2026-10-30) sobre la vista previa
 https://claude.ai/artifact/8GyvvTWsdqY4uTKx37QtV7 (copia: `vista-previa.html`). Modelo visual: el editor de un hábito en
 Planificar. «Aplicar ese rediseño, nada más.»
@@ -43,6 +43,13 @@ otras pantallas.
   las que le tocaban), en 16 px con cifras tabulares y sin colores de estado; el lector de pantalla dice «Hoy respondiste 4
   de 6 veces». Solo con Mi Radar encendido y un día con Radar (no apagado, no «Sin Radar» hoy, no los días 1 a 7, no con 0
   que tocan). Sale de lo que la app ya lee: las horas de hoy de `GET /radar/mi-radar` y las respuestas de hoy.
+- **El 403 de Mi Radar dice por qué.** El cuerpo trae `codigo` (formato `ApiErrorConCodigo`): `PROGRAMA_NO_ACTIVADO` (el personal sin
+  Día 1, con o sin fila de programa), `CUENTA_SUSPENDIDA` o `SIN_PERMISO`. En la app, Yo → Mi Radar: sin programa, una línea «Mi Radar
+  empieza en tu día 8. Primero elige tu Día 1.» y el botón «Elegir mi Día 1» (el de siempre del programa; al elegir vuelve a leer y dice
+  cuándo empieza); suspendida o sin permiso, una línea con el motivo y nada más; sin red o 5xx, «No pudimos cargar Mi Radar.» con
+  «Reintentar». El personal sin programa **ve la fila «Mi Radar»** en Yo («Primero elige tu Día 1»). Nunca se ve el motivo anterior ni una
+  pantalla vacía mientras se vuelve a leer. Con un backend anterior, un 403 **sin** `codigo` (o con uno que la app no conoce) se lee como siempre: «no hay
+  Mi Radar», sin fila y sin cambios. La fila del personal sin programa aparece **solo cuando el servidor confirmó** `PROGRAMA_NO_ACTIVADO`.
 - **Mi Radar y la mitad del Radar de Hoy son para todos los roles que hacen los 90 días** (aprendiz, guía, mentor, líder,
   administrador y alquimista con su programa propio): ninguna pieza filtra por rol; la puerta es tener el programa activado.
 - **Un día sin Despertar (o sin Dormir)**: en lugar de «Hora», una tarjeta de una línea («Falta tu hora de Despertar») y,
@@ -130,6 +137,9 @@ y el teléfono avisa de 06:00 a 22:00.
   cambiar modo, veces, Despertar o Dormir.
 - **FR-009**: Hoy y las fichas MUST mostrar el horario y las veces de hoy.
 - **FR-010**: Una app nueva con un backend anterior MUST NOT mostrar la fila «Mi Radar» ni romper los días 1 a 7.
+- **FR-011**: El 403 de `GET`/`PUT /radar/mi-radar` (y de `POST /radar`) MUST decir por qué con `codigo` en el cuerpo: `PROGRAMA_NO_ACTIVADO` (el
+  personal sin Día 1, con o sin fila de programa), `CUENTA_SUSPENDIDA` o `SIN_PERMISO`. El `message` no cambia. La app MUST leer un 403 sin
+  motivo como «no hay Mi Radar».
 
 ## Success Criteria
 
@@ -137,3 +147,5 @@ y el teléfono avisa de 06:00 a 22:00.
 - **SC-002**: 6 de 17 da 06, 09, 12, 16, 19, 22.
 - **SC-003**: Hoy y lo pasado se rechazan el 100 % de las veces en el servidor y no se pueden marcar en la app.
 - **SC-004**: Los flujos de `.maestro/mi-radar/` y `codigo-renaser/40` pasan en el emulador.
+- **SC-005**: Cada motivo del 403 tiene su prueba en `RadarMiRadarIT` (sin Día 1 con y sin fila, suspendida) y en la app (`useConfigDeMiRadar`,
+  `miRadarScreen`, `miRadarEnYo`); el flujo `.maestro/mi-radar/16-personal-sin-programa.yaml` pasa en el emulador.

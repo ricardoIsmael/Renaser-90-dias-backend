@@ -254,15 +254,29 @@ class RadarControllerMiRadarTest {
     }
 
     @Test
-    @DisplayName("lo que el caso de uso niega (programa sin activar, cuenta suspendida) es 403")
+    @DisplayName("lo que el caso de uso niega es 403 y dice POR QUE: PROGRAMA_NO_ACTIVADO (personal sin Dia 1) o CUENTA_SUSPENDIDA, con el formato de error de siempre mas `codigo`")
     void elCasoDeUsoNiega() throws Exception {
         actor(UserStatus.ACTIVE);
-        doThrow(new NotAuthorizedException("El Codigo Renaser es exclusivo de aprendices")).when(configurarMiRadar)
-                .configurar(any());
-        doThrow(new NotAuthorizedException("Cuenta suspendida")).when(consultarMiRadar).consultar(any(), any());
+        doThrow(new NotAuthorizedException("Mi Radar empieza en tu día 8. Primero elige tu Día 1.",
+                NotAuthorizedException.PROGRAMA_NO_ACTIVADO)).when(configurarMiRadar).configurar(any());
+        doThrow(new NotAuthorizedException("Cuenta suspendida", NotAuthorizedException.CUENTA_SUSPENDIDA))
+                .when(consultarMiRadar).consultar(any(), any());
 
-        guardar("{\"encendido\":true}").andExpect(status().isForbidden());
-        leer().andExpect(status().isForbidden());
+        guardar("{\"encendido\":true}").andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.codigo").value("PROGRAMA_NO_ACTIVADO"))
+                .andExpect(jsonPath("$.message").value("Mi Radar empieza en tu día 8. Primero elige tu Día 1."))
+                .andExpect(jsonPath("$.timestamp").exists());
+        leer().andExpect(status().isForbidden()).andExpect(jsonPath("$.codigo").value("CUENTA_SUSPENDIDA"));
+    }
+
+    @Test
+    @DisplayName("un 403 sin motivo conserva el cuerpo de siempre: sin `codigo`")
+    void sinMotivoSinCodigo() throws Exception {
+        actor(UserStatus.ACTIVE);
+        doThrow(new NotAuthorizedException("Solo el propio participante")).when(consultarMiRadar).consultar(any(), any());
+
+        leer().andExpect(status().isForbidden()).andExpect(jsonPath("$.message").value("Solo el propio participante"))
+                .andExpect(jsonPath("$.codigo").doesNotExist());
     }
 
     // ── el registro ─────────────────────────────────────────────────────────

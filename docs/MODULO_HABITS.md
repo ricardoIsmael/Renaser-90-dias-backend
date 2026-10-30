@@ -315,7 +315,7 @@ puede ser el anterior):
 
 `RadarService.registrar` calcula el momento local con el `Clock` en la zona de la persona (regla 02) y, si no puede registrar, responde
 **409** (`IllegalStateException`: «Mi Radar está apagado», «Hoy no tienes Mi Radar» o «Mi Radar funciona de 03:00 a 23:59») y no 403. La regla de un registro por hora (comprobación + índice V52) sigue igual. `AccesoAlRadar`
-es la puerta de la propia persona (antes eran dos métodos privados de `RadarService`) y `LecturaDelRadar` arma la página del
+es la puerta de la propia persona (y la que responde el **403 con `codigo`**: `PROGRAMA_NO_ACTIVADO` para el personal sin Día 1, con o sin fila de programa —antes un 404 «Participante no encontrado» si no tenía fila—, y `CUENTA_SUSPENDIDA`; el filtro de permisos suma `SIN_PERMISO` y `CUENTA_SUSPENDIDA`; ver D-292 y `docs/api/CONTRATO_DIA_A_DIA.md`) (antes eran dos métodos privados de `RadarService`) y `LecturaDelRadar` arma la página del
 historial para la persona, su mentor y liderazgo; en esa página `miRadar` es `null` mientras el `dia_programa` es menor que 8.
 
 **Endpoints.**
