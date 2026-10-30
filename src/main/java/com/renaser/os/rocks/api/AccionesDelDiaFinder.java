@@ -3,6 +3,7 @@ package com.renaser.os.rocks.api;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -30,7 +31,20 @@ public interface AccionesDelDiaFinder {
     /**
      * @param id          el de {@code rocas_diarias}
      * @param evidenciaId la PRIMERA evidencia de la acción; null si no tiene
+     * @param horaInicio  spec 018: la hora local en que la persona agendó la acción; null si no la agendó. Es lo que
+     *                    cuenta el «¿Programó?» de la ficha del líder
      */
-    record AccionDelDia(UUID id, LocalDate fecha, String titulo, boolean completada, UUID evidenciaId) {
+    record AccionDelDia(UUID id, LocalDate fecha, String titulo, boolean completada, UUID evidenciaId,
+                        LocalTime horaInicio) {
+
+        /** Sin la hora: la forma de antes de la spec 018. */
+        public AccionDelDia(UUID id, LocalDate fecha, String titulo, boolean completada, UUID evidenciaId) {
+            this(id, fecha, titulo, completada, evidenciaId, null);
+        }
+
+        /** Si la persona le puso hora a la acción (la «agendó»). */
+        public boolean agendada() {
+            return horaInicio != null;
+        }
     }
 }

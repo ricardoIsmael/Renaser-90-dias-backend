@@ -191,6 +191,26 @@ class CumplimientoDelLiderControllerTest {
     }
 
     @Test
+    @DisplayName("ficha (spec 018): trae «programacion» con las cuentas y el Si/No de HOY; sin habitos que le toquen, el campo no viene")
+    void fichaConProgramacion() throws Exception {
+        banco.habitoDeHoy(ANA, "Ritual de la mañana", true);
+        banco.habitoDeHoy(ANA, "Caminar", false);
+        banco.accion(ANA, new com.renaser.os.rocks.api.AccionesDelDiaFinder.AccionDelDia(UUID.randomUUID(),
+                LocalDate.of(2026, 10, 19), "Llamar", false, null, java.time.LocalTime.of(9, 0)));
+
+        pedir(semana(ANA), LIDER)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.programacion.habitosConHora").value(1))
+                .andExpect(jsonPath("$.programacion.habitosTotal").value(2))
+                .andExpect(jsonPath("$.programacion.accionesConHora").value(1))
+                .andExpect(jsonPath("$.programacion.accionesTotal").value(1))
+                .andExpect(jsonPath("$.programacion.programo").value(true));
+        pedir(semana(BETO), LIDER)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.programacion").doesNotExist());
+    }
+
+    @Test
     @DisplayName("ficha: una semana cerrada del pasado")
     void fichaDeUnaSemanaCerrada() throws Exception {
         banco.semana(SEMANA_CERRADA, ANA, ventanaPareja(LocalDate.of(2026, 10, 10), true, 55));
@@ -214,6 +234,7 @@ class CumplimientoDelLiderControllerTest {
                 .andExpect(status().isNotFound());
 
         assertThat(banco.consultas).isEmpty();
+        assertThat(banco.horariosPedidos).isEmpty();
     }
 
     // ── el Radar de la persona (spec 012) ───────────────────────────────────
@@ -356,6 +377,7 @@ class CumplimientoDelLiderControllerTest {
         assertThat(banco.consultas).isEmpty();
         assertThat(banco.lecturasDelSemaforo).isEmpty();
         assertThat(banco.ventanasPedidasALaSemana).isEmpty();
+        assertThat(banco.horariosPedidos).isEmpty();
     }
 
     @Test
@@ -375,5 +397,6 @@ class CumplimientoDelLiderControllerTest {
 
         pedir(grupo(), ADMIN).andExpect(status().isForbidden());
         pedir(semana(ANA), ADMIN).andExpect(status().isForbidden());
+        assertThat(banco.horariosPedidos).isEmpty();
     }
 }

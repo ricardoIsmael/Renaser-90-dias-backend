@@ -5,6 +5,7 @@ import com.renaser.os.leadership.application.ports.in.ConsultarSemanaDePersonaUs
 import com.renaser.os.leadership.application.ports.in.ConsultarSemanaDePersonaUseCase.SemanaDeLaPersona;
 import com.renaser.os.leadership.domain.model.consulta.ConsultaDeFicha;
 import com.renaser.os.leadership.domain.model.cumplimiento.ColorDeLaFila;
+import com.renaser.os.leadership.domain.model.cumplimiento.ProgramacionDelDia;
 import com.renaser.os.mentoring.api.EvidenciaDeObligacion;
 import com.renaser.os.mentoring.api.ObligacionDelDia;
 import com.renaser.os.points.api.EstadoDiaSemaforo;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.UUID;
@@ -286,6 +288,129 @@ class SemanaDePersonaServiceTest {
         });
         assertThat(dias.stream().filter(d -> !d.fecha().equals(LocalDate.of(2026, 10, 14)))
                 .flatMap(d -> d.acciones().stream())).isEmpty();
+    }
+
+    // ── «¿Programó?» (spec 018) ─────────────────────────────────────────────
+
+    private static AccionDelDia accionDe(LocalDate fecha, String titulo, LocalTime hora) {
+        return new AccionDelDia(UUID.randomUUID(), fecha, titulo, false, null, hora);
+    }
+
+    private static final LocalDate HOY = LocalDate.of(2026, 10, 19);
+
+    @Test
+    @DisplayName("spec 018: cuenta los habitos de hoy con la hora que ella eligio y las acciones de hoy con hora de inicio")
+    void programoConHorasYAcciones() {
+        banco.habitoDeHoy(ANA, "Ritual de la mañana", true);
+        banco.habitoDeHoy(ANA, "Caminar", true);
+        banco.habitoDeHoy(ANA, "Agua", false);
+        banco.habitoDeHoy(ANA, "Dormir", false);
+        banco.accion(ANA, accionDe(HOY, "Llamar a 3 clientes", LocalTime.of(9, 30)));
+        banco.accion(ANA, accionDe(HOY, "Enviar la propuesta", LocalTime.of(11, 0)));
+
+        ProgramacionDelDia programacion = delLider(ANA, null).programacion();
+
+        assertThat(programacion).isEqualTo(new ProgramacionDelDia(2, 4, 2, 2));
+        assertThat(programacion.programo()).isTrue();
+    }
+
+    @Test
+    @DisplayName("spec 018: una accion de hoy sin hora la deja en «No»; las de otros dias no cuentan")
+    void unaAccionSinHoraEsNo() {
+        banco.habitoDeHoy(ANA, "Caminar", true);
+        banco.accion(ANA, accionDe(HOY, "Con hora", LocalTime.of(9, 30)));
+        banco.accion(ANA, accionDe(HOY, "Sin hora", null));
+        banco.accion(ANA, accionDe(HOY.minusDays(1), "De ayer, sin hora", null));
+        banco.accion(ANA, accionDe(HOY.plusDays(1), "De mañana, sin hora", null));
+
+        ProgramacionDelDia programacion = delLider(ANA, null).programacion();
+
+        assertThat(programacion).isEqualTo(new ProgramacionDelDia(1, 1, 1, 2));
+        assertThat(programacion.programo()).isFalse();
+    }
+
+    @Test
+    @DisplayName("spec 018: un habito apagado o en pausa no le toca hoy: no suma al total ni cuenta como sin hora")
+    void apagadosYPausadosNoCuentan() {
+        banco.habitoDeHoy(ANA, "Caminar", true);
+        banco.habitoDeHoy(ANA, "Agua", false);
+        banco.habitoDeHoy(ANA, "Apagado", false, true, false);
+        banco.habitoDeHoy(ANA, "En pausa", false, false, true);
+        banco.habitoDeHoy(ANA, "Apagado con hora", true, true, false);
+
+        assertThat(delLider(ANA, null).programacion()).isEqualTo(new ProgramacionDelDia(1, 2, 0, 0));
+    }
+
+    @Test
+    @DisplayName("spec 018: sin ningun habito que le toque hoy no hay pregunta: programacion nula, nunca un «No»")
+    void sinHabitosNoHayProgramacion() {
+        banco.accion(ANA, accionDe(HOY, "Sin hora", null));
+
+        assertThat(delLider(ANA, null).programacion()).isNull();
+    }
+
+    @Test
+    @DisplayName("spec 018: quien todavia no activo su programa no tiene un dia que programar y no se le pregunta a habits")
+    void sinProgramaActivoNoSePregunta() {
+        banco.aprendiz(FENIX, LUIS, "Luis Vega");
+        banco.programa(LUIS, UserRole.TRAINEE, LocalDate.of(2026, 10, 20), false);
+        banco.habitoDeHoy(LUIS, "Caminar", true);
+
+        assertThat(delLider(LUIS, null).programacion()).isNull();
+        assertThat(banco.horariosPedidos).isEmpty();
+    }
+
+    @Test
+    @DisplayName("regla 02: «hoy» es el de la persona; con el reloj en la madrugada UTC cuenta las acciones del dia de Lima")
+    void hoyEsElDeLaPersona() {
+        // 03:00 UTC del martes 20 = 22:00 del lunes 19 en Lima.
+        banco.ahora = Instant.parse("2026-10-20T03:00:00Z");
+        banco.habitoDeHoy(ANA, "Caminar", true);
+        banco.accion(ANA, accionDe(HOY, "De hoy en Lima", LocalTime.of(9, 0)));
+        banco.accion(ANA, accionDe(HOY.plusDays(1), "Del martes, que en Lima aun no llega", null));
+
+        ProgramacionDelDia programacion = delLider(ANA, null).programacion();
+
+        assertThat(programacion).isEqualTo(new ProgramacionDelDia(1, 1, 1, 1));
+        assertThat(banco.horariosPedidos).containsExactly(ANA.value() + " " + HOY);
+    }
+
+    @Test
+    @DisplayName("spec 018: la programacion es la de HOY aunque se mire una semana cerrada del pasado")
+    void noDependeDeLaVentana() {
+        banco.habitoDeHoy(ANA, "Caminar", true);
+
+        assertThat(delLider(ANA, SEMANA_CERRADA).programacion()).isEqualTo(new ProgramacionDelDia(1, 1, 0, 0));
+        assertThat(banco.horariosPedidos).containsExactly(ANA.value() + " " + HOY);
+    }
+
+    @Test
+    @DisplayName("spec 018: el mentor con programa propio tambien tiene su programacion, aunque no se mida en el semaforo")
+    void elMentorTambienProgramo() {
+        banco.programa(MENTORA, UserRole.MENTOR, LocalDate.of(2026, 9, 1), true);
+        banco.vigente(MENTORA, ventanaPareja(DESDE_VIGENTE, false, 85));
+        banco.habitoDeHoy(MENTORA, "Caminar", false);
+
+        SemanaDeLaPersona semana = delLider(MENTORA, null);
+
+        assertThat(semana.color()).isEqualTo(ColorDeLaFila.NO_SE_MIDE);
+        assertThat(semana.programacion().programo()).isFalse();
+    }
+
+    @Test
+    @DisplayName("spec 018: quien no puede abrir la ficha (sin permiso, otro grupo, suspendido) no dispara ninguna lectura de habitos")
+    void sinPermisoNoSeLeeLaProgramacion() {
+        banco.habitoDeHoy(ANA, "Caminar", true);
+        banco.usuario(AJENA, "Ana de otro grupo", UserRole.TRAINEE, UserStatus.ACTIVE);
+        banco.programa(AJENA, UserRole.TRAINEE, LocalDate.of(2026, 8, 17), true);
+
+        assertThatThrownBy(() -> servicio.semanaDe(new ConsultaSemanaDePersona(ANA, FENIX, ANA.value(), null)))
+                .isInstanceOf(NotAuthorizedException.class);
+        assertThatThrownBy(() -> delLider(AJENA, null)).isInstanceOf(NoSuchElementException.class);
+        banco.usuario(ANA, "Ana Pérez", UserRole.TRAINEE, UserStatus.SUSPENDED);
+        assertThatThrownBy(() -> delLider(ANA, null)).isInstanceOf(NoSuchElementException.class);
+
+        assertThat(banco.horariosPedidos).isEmpty();
     }
 
     // ── alcance ─────────────────────────────────────────────────────────────

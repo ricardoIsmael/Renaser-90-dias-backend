@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -48,9 +49,13 @@ class AccionesDelDiaFinderServiceTest {
     private final AccionesDelDiaFinderService servicio = new AccionesDelDiaFinderService(rocas, evidencias);
 
     private static RocaDiaria roca(LocalDate fecha, int posicion, boolean completada) {
+        return roca(fecha, posicion, completada, null);
+    }
+
+    private static RocaDiaria roca(LocalDate fecha, int posicion, boolean completada, LocalTime horaInicio) {
         return RocaDiaria.rehydrate(new RocaDiariaId(UUID.randomUUID()), ANA, fecha, posicion, "Accion " + posicion,
-                null, ColorPareto.paraPosicion(posicion), 5, false, EjeObjetivo.CUERPO, null, null, null, List.of(),
-                completada, completada ? AHORA : null, 0, AHORA, AHORA);
+                null, ColorPareto.paraPosicion(posicion), 5, false, EjeObjetivo.CUERPO, null, horaInicio, null,
+                List.of(), completada, completada ? AHORA : null, 0, AHORA, AHORA);
     }
 
     @Test
@@ -68,6 +73,19 @@ class AccionesDelDiaFinderServiceTest {
                 new AccionDelDia(cumplida.id().value(), LocalDate.of(2026, 10, 14), "Accion 1", true, foto),
                 new AccionDelDia(pendiente.id().value(), LocalDate.of(2026, 10, 14), "Accion 2", false, null));
         verify(rocas).deParticipanteEntreFechas(ANA, DESDE, HASTA);
+    }
+
+    @Test
+    @DisplayName("spec 018: cada accion trae la hora en que la persona la agendo, o nada si no la agendo")
+    void accionesConSuHora() {
+        RocaDiaria agendada = roca(LocalDate.of(2026, 10, 14), 1, false, LocalTime.of(9, 30));
+        RocaDiaria suelta = roca(LocalDate.of(2026, 10, 14), 2, false);
+        when(rocas.deParticipanteEntreFechas(ANA, DESDE, HASTA)).thenReturn(List.of(agendada, suelta));
+
+        List<AccionDelDia> acciones = servicio.accionesEntre(ANA, DESDE, HASTA);
+
+        assertThat(acciones).extracting(AccionDelDia::horaInicio).containsExactly(LocalTime.of(9, 30), null);
+        assertThat(acciones).extracting(AccionDelDia::agendada).containsExactly(true, false);
     }
 
     @Test
