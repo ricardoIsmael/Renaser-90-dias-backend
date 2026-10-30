@@ -20,6 +20,7 @@ import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -49,6 +50,8 @@ class LatidosDelChatIT {
 
     private static final String FIN_DE_TRAMA = "\u0000";
     private static final String LATIDO = "\n";
+    /** El broker corta tras 3 × 10 s sin leer nada; 1 s menos por si el reloj de pared y el monotónico difieren. */
+    private static final Duration SILENCIO_MINIMO = Duration.ofSeconds(29);
 
     @LocalServerPort
     private int puerto;
@@ -76,13 +79,14 @@ class LatidosDelChatIT {
     }
 
     @Test
-    @DisplayName("la conexión muda se cierra; la que late sigue abierta y recibe los latidos del servidor; "
-            + "la que no ofreció latidos no se corta")
+    @DisplayName("la conexión muda se cierra con 1002 tras 3 × 10 s de silencio; la que late sigue abierta y "
+            + "recibe los latidos del servidor; la que no ofreció latidos no se corta")
     void cierraSoloLaConexionMuda() throws Exception {
         Cliente queLate = new Cliente();
         Cliente muda = new Cliente();
         Cliente sinLatidos = new Cliente();
         WebSocket socketQueLate = conectarStomp(queLate, "10000,10000");
+        long inicioDeLaMuda = System.nanoTime();
         conectarStomp(muda, "10000,10000");
         conectarStomp(sinLatidos, "0,0");
         queLate.esperarTrama("CONNECTED", 10);
@@ -92,12 +96,35 @@ class LatidosDelChatIT {
         latidosDelCliente.scheduleAtFixedRate(() -> enviar(socketQueLate, LATIDO), 5, 5, TimeUnit.SECONDS);
 
         // El broker da por muerta a la muda tras 3 × 10 s sin leer nada de ella, y la revisa cada 10 s.
-        assertThat(muda.cierre.get(50, TimeUnit.SECONDS)).as("código de cierre de la muda").isEqualTo(1002);
-        assertThat(muda.tramas).anySatisfy(t -> assertThat(t).startsWith("ERROR").contains("Session closed."));
+        // Los 60 s son el tope para fallar con un mensaje claro, no una espera: sigue en cuanto se cierra.
+        assertThat(muda.cierre.get(60, TimeUnit.SECONDS)).as("código de cierre de la muda").isEqualTo(1002);
+        verificarQueSeCerroPorSilencio(muda, inicioDeLaMuda);
 
         assertThat(queLate.cierre).as("la que late sigue abierta").isNotDone();
         assertThat(queLate.latidosRecibidos()).as("latidos del servidor").isPositive();
         assertThat(sinLatidos.cierre).as("sin latidos acordados no se corta").isNotDone();
+    }
+
+    /**
+     * Lo que se puede afirmar de la muda SIN depender de una carrera de Spring (E-657, issue #25).
+     *
+     * <p>Antes la prueba exigía además una trama {@code ERROR ... Session closed.} entre lo recibido, y
+     * fallaba de vez en cuando (issue #25; con 40 a 80 mudas a la vez se perdía en 27 de 320 cierres): el
+     * broker manda en la misma pasada el {@code ERROR}+{@code close} y el último latido de esa sesión desde
+     * hilos distintos, y si el latido tiene tomado el envío del socket, el {@code ERROR} queda en el búfer
+     * de {@code ConcurrentWebSocketSessionDecorator} y el cierre lo descarta (ver {@code WebSocketConfig}).
+     * El cliente solo necesita el cierre. El 1002 ({@code PROTOCOL_ERROR}) es el cierre que Spring hace al
+     * terminar con ese {@code ERROR}, y la muda solo mandó un CONNECTED válido, así que no hay otro camino
+     * que lo produzca; aquí se le suma que no fue antes de tiempo y que no llegó nada fuera de lo esperado.
+     */
+    private static void verificarQueSeCerroPorSilencio(Cliente muda, long inicioNanos) {
+        Duration enSilencio = Duration.ofNanos(System.nanoTime() - inicioNanos);
+        assertThat(enSilencio).as("no se corta antes de 3 × 10 s de silencio").isGreaterThanOrEqualTo(SILENCIO_MINIMO);
+        assertThat(muda.tramas).as("lo único que recibió la muda: su CONNECTED, latidos y, a veces, el ERROR del cierre")
+                .allSatisfy(trama -> assertThat(trama).satisfiesAnyOf(
+                        t -> assertThat(t).isEqualTo(LATIDO),
+                        t -> assertThat(t).startsWith("CONNECTED\n"),
+                        t -> assertThat(t).startsWith("ERROR\n").contains("Session closed.")));
     }
 
     // ── Cliente STOMP mínimo ───────────────────────────────────────────────

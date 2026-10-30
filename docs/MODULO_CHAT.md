@@ -756,6 +756,16 @@ no escribe nada en 3 × 10 s (la revisa cada 10 s, así que en 30 a 40 s): `ERRO
 cierre 1002. El `SessionDisconnectEvent` apaga la presencia (§9). Un cliente que ofrece `heart-beat:0,0` no
 promete latir y no se corta.
 
+> **Corregido 2026-10-30 (E-657, issue #25).** Arriba decía que el broker cierra con `ERROR` «`Session closed.`» y
+> cierre 1002, y `LatidosDelChatIT` exigía las dos cosas. **Lo seguro es el cierre 1002; la trama `ERROR` suele ir
+> delante pero Spring puede perderla.** En la misma pasada de `HeartbeatTask` salen dos mensajes de esa sesión, el
+> `DISCONNECT_ACK` (que se vuelve `ERROR` + `close(1002)`) y su último latido, y el canal de salida los atiende en
+> hilos distintos: si el del latido tiene tomado el envío del socket, `ConcurrentWebSocketSessionDecorator` deja el
+> `ERROR` en su búfer, el otro hilo cierra, y el cierre descarta lo que quedaba. Medido con 40 a 80 mudas a la vez, se
+> perdía en 27 de 320 cierres; con un solo hilo de salida (solo como experimento), en 0 de 200. El cliente (`conexionStomp.ts`) reconecta con
+> el `onclose`, haya o no `ERROR`, así que no se fuerza ningún orden en producción. La prueba pasó a exigir el 1002,
+> que no cierre antes de 29 s de silencio y que lo recibido sea solo `CONNECTED`, latidos y, si llegó, ese `ERROR`.
+
 **Por qué 10 s.** Es lo que ofrecen los dos clientes que existen (`conexionStomp.ts`,
 `heart-beat:10000,10000`). La app nueva manda su latido cada 10 s y, cuando el servidor late, da la conexión
 por muerta tras 32 s de silencio (`latidosNegociados`): holgado contra los 10 s del servidor.
@@ -778,7 +788,7 @@ latido no sale; el cliente, al no oír nada, cierra y reconecta, y el handshake 
 
 | Clase | Qué fija |
 |---|---|
-| `LatidosDelChatIT` (2) | Tomcat real, cliente STOMP en binario como la app: el `CONNECTED` negocia `10000,10000` (antes `0,0`); la conexión muda se cierra con `Session closed.` y 1002, la que late sigue abierta y recibe latidos, y la que ofreció `0,0` no se corta |
+| `LatidosDelChatIT` (2) | Tomcat real, cliente STOMP en binario como la app: el `CONNECTED` negocia `10000,10000` (antes `0,0`); la conexión muda se cierra con 1002 tras 30 s de silencio (la trama `ERROR Session closed.` puede faltar, E-657), la que late sigue abierta y recibe latidos, y la que ofreció `0,0` no se corta |
 
 ## 12. La foto del chat de soporte: la tarjeta con el nombre de su aprendiz (2026-09-27, D-205)
 
