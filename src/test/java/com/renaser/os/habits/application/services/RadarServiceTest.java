@@ -9,6 +9,9 @@ import com.renaser.os.habits.application.ports.out.participante.ConsultarProgres
 import com.renaser.os.habits.application.ports.out.radar.LoadMiRadarPort;
 import com.renaser.os.habits.application.ports.out.radar.LoadRegistroRadarPort;
 import com.renaser.os.habits.application.ports.out.radar.SaveRegistroRadarPort;
+import com.renaser.os.habits.api.HorarioDelDiaFinder;
+import com.renaser.os.habits.domain.model.radar.DiaDeMiRadar;
+import com.renaser.os.habits.domain.model.radar.DiaDeMiRadar.Modo;
 import com.renaser.os.habits.domain.model.radar.MiRadar;
 import com.renaser.os.habits.domain.model.radar.RegistroRadar;
 import com.renaser.os.habits.domain.model.radar.RegistroRadarId;
@@ -24,6 +27,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
@@ -32,6 +36,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -55,6 +60,8 @@ class RadarServiceTest {
     private ConsultarProgresoParticipanteHabitsPort progresoPort;
     @Mock
     private IdGenerator idGenerator;
+    @Mock
+    private HorarioDelDiaFinder horarios;
 
     private RadarService service;
 
@@ -68,8 +75,9 @@ class RadarServiceTest {
     }
 
     private RadarService servicioConElReloj(FixedClock reloj) {
+        AgendaDelRadar agenda = new AgendaDelRadar(horarios, reloj);
         return new RadarService(new AccesoAlRadar(progresoPort), loadPort, savePort, miRadarPort,
-                new LecturaDelRadar(loadPort, miRadarPort, progresoPort), reloj, idGenerator);
+                new LecturaDelRadar(loadPort, miRadarPort, progresoPort, agenda), agenda, reloj, idGenerator);
     }
 
     private static ProgresoParticipanteHabits trainee() {
@@ -272,8 +280,12 @@ class RadarServiceTest {
         when(miRadarPort.deParticipante(persona)).thenReturn(miRadar);
     }
 
+    private static MiRadar encendido(DiaDeMiRadar... dias) {
+        return new MiRadar(true, List.of(dias));
+    }
+
     @Test
-    @DisplayName("FR-001: dias 0 a 7 se registra a cualquier hora y sin Mi Radar, como hoy, con hora prevista solo de 08 a 19")
+    @DisplayName("FR-001: dias 0 a 7 se registra a cualquier hora y sin Mi Radar, como hoy, con hora prevista solo de 08 a 19, y sin leer ni el horario")
     void primeraSemanaComoHoy() {
         for (int dia : new int[]{0, 1, 7}) {
             UserId persona = personaEnLima(dia);
@@ -286,11 +298,13 @@ class RadarServiceTest {
             assertThat(fueraDeFranja.horaPrevista()).as("dia %d, 22:00", dia).isNull();
             assertThat(madrugada.horaPrevista()).as("dia %d, 01:30", dia).isNull();
         }
+        verify(horarios, never()).deFecha(any(), any());
     }
 
     @Test
     @DisplayName("FR-008a: desde el dia 8 con Mi Radar apagado el servidor rechaza con 409 y no guarda nada")
     void apagadoDesdeElDia8Rechaza() {
+        HorarioDeRadarDePrueba.siempre(horarios, LocalTime.of(6, 0), LocalTime.of(22, 0));
         for (int dia : new int[]{8, 9, 90}) {
             UserId persona = personaEnLima(dia);
 
@@ -304,35 +318,37 @@ class RadarServiceTest {
     }
 
     @Test
-    @DisplayName("desde el dia 8 encendido, a una hora elegida: se guarda con esa hora prevista")
-    void horaElegida() {
+    @DisplayName("desde el dia 8 encendido, a una hora de su horario (Despertar 06:00, Dormir 22:00): se guarda con esa hora prevista")
+    void horaDelHorario() {
         UserId persona = personaEnLima(10);
-        conMiRadar(persona, MiRadar.encendido(List.of(9, 10, 20)));
+        conMiRadar(persona, encendido());
+        HorarioDeRadarDePrueba.siempre(horarios, LocalTime.of(6, 0), LocalTime.of(22, 0));
 
         RegistroRadar guardado = servicioConElReloj(LIMA_10_00).registrar(comando(persona, persona));
 
         assertThat(guardado.horaPrevista()).isEqualTo(10);
-        assertThat(guardado.creadoEn()).isEqualTo(LIMA_10_00.now());
         verify(savePort).save(guardado);
     }
 
     @Test
-    @DisplayName("desde el dia 8 encendido, a una hora que no elegi (Registrar ahora): se guarda sin hora prevista")
-    void horaLibre() {
+    @DisplayName("Personalizado: la hora prevista es una de las repartidas; a otra hora se guarda libre")
+    void horaDelReparto() {
         UserId persona = personaEnLima(10);
-        conMiRadar(persona, MiRadar.encendido(List.of(9, 14, 20)));
+        // Martes: 6 de 17 dan 06, 09, 12, 16, 19, 22 y a las 10:00 no pregunta.
+        conMiRadar(persona, encendido(new DiaDeMiRadar(2, Modo.PERSONALIZADO, 6, false)));
+        HorarioDeRadarDePrueba.siempre(horarios, LocalTime.of(5, 30), LocalTime.of(22, 30));
 
-        RegistroRadar guardado = servicioConElReloj(LIMA_10_00).registrar(comando(persona, persona));
+        RegistroRadar libre = servicioConElReloj(LIMA_10_00).registrar(comando(persona, persona));
 
-        assertThat(guardado.horaPrevista()).isNull();
-        verify(savePort).save(guardado);
+        assertThat(libre.horaPrevista()).isNull();
     }
 
     @Test
-    @DisplayName("regla 02: la hora es la de Lima y no la UTC; a las 22:00 de Lima (03:00 UTC) la hora 22 elegida es la prevista")
+    @DisplayName("regla 02: la hora es la de Lima y no la UTC; a las 22:00 de Lima (03:00 UTC) la 22 es la ultima hora prevista de un dia 06 a 22")
     void laHoraPrevistaEsLaLocalConElRelojEnLaMadrugadaUtc() {
         UserId persona = personaEnLima(10);
-        conMiRadar(persona, MiRadar.encendido(List.of(22)));
+        conMiRadar(persona, encendido());
+        HorarioDeRadarDePrueba.siempre(horarios, LocalTime.of(5, 30), LocalTime.of(22, 30));
 
         RegistroRadar guardado = servicioConElReloj(LIMA_22_00_ES_03_UTC).registrar(comando(persona, persona));
 
@@ -341,188 +357,123 @@ class RadarServiceTest {
 
     @Test
     @DisplayName("regla 02: a la 01:30 de Lima (06:30 UTC) no se registra aunque Mi Radar este encendido: 409 de 03:00 a 23:59")
-    void antesDeLas03ConLaUtcYaEnHorario() {
+    void antesDeLas03() {
         UserId persona = personaEnLima(10);
-        conMiRadar(persona, MiRadar.encendido(List.of(9, 14, 20)));
+        conMiRadar(persona, encendido());
+        HorarioDeRadarDePrueba.siempre(horarios, LocalTime.of(6, 0), LocalTime.of(22, 0));
 
         assertThatThrownBy(() -> servicioConElReloj(LIMA_01_30_ES_06_UTC).registrar(comando(persona, persona)))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("Mi Radar funciona de 03:00 a 23:59");
+                .isInstanceOf(IllegalStateException.class).hasMessage("Mi Radar funciona de 03:00 a 23:59");
         verify(savePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("un dia sin Despertar o sin Dormir no tiene Mi Radar: 409 «Hoy no tienes Mi Radar» y no guarda nada")
+    void diaSinHorario() {
+        UserId persona = personaEnLima(10);
+        conMiRadar(persona, encendido());
+        HorarioDeRadarDePrueba.siempre(horarios, null, LocalTime.of(22, 0));
+
+        assertThatThrownBy(() -> servicioConElReloj(LIMA_10_00).registrar(comando(persona, persona)))
+                .isInstanceOf(IllegalStateException.class).isNotInstanceOf(NotAuthorizedException.class)
+                .hasMessage("Hoy no tienes Mi Radar");
+        verify(savePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("un Despertar apagado o en pausa cuenta como sin Despertar")
+    void despertarApagadoOEnPausa() {
+        UserId persona = personaEnLima(10);
+        conMiRadar(persona, encendido());
+        for (boolean[] marcas : new boolean[][]{{true, false}, {false, true}}) {
+            HorarioDeRadarDePrueba.porFecha(horarios, (fecha, dia) -> new HorarioDelDiaFinder.HorariosDelDia(fecha, 10,
+                    List.of(HorarioDeRadarDePrueba.habito("WAKE_UP", LocalTime.of(6, 0), marcas[0], marcas[1]),
+                            HorarioDeRadarDePrueba.habito("SLEEP", LocalTime.of(22, 0), false, false)),
+                    new HorarioDelDiaFinder.CuotaCambiosHorario(0, 3, 3, false)));
+
+            assertThatThrownBy(() -> servicioConElReloj(LIMA_10_00).registrar(comando(persona, persona)))
+                    .isInstanceOf(IllegalStateException.class).hasMessage("Hoy no tienes Mi Radar");
+        }
+    }
+
+    @Test
+    @DisplayName("«Sin Radar» de la persona ese dia tambien rechaza con «Hoy no tienes Mi Radar»; martes 10:00 de Lima")
+    void sinRadarDeLaPersona() {
+        UserId persona = personaEnLima(10);
+        conMiRadar(persona, encendido(new DiaDeMiRadar(2, Modo.AUTOMATICO, null, true)));
+        HorarioDeRadarDePrueba.siempre(horarios, LocalTime.of(6, 0), LocalTime.of(22, 0));
+
+        assertThatThrownBy(() -> servicioConElReloj(LIMA_10_00).registrar(comando(persona, persona)))
+                .isInstanceOf(IllegalStateException.class).hasMessage("Hoy no tienes Mi Radar");
+    }
+
+    @Test
+    @DisplayName("regla 02: lunes 03:00Z es domingo en Lima; manda el domingo (sin Radar) y no el lunes")
+    void elDiaEsElLocal() {
+        UserId persona = personaEnLima(10);
+        conMiRadar(persona, encendido(new DiaDeMiRadar(7, Modo.AUTOMATICO, null, true)));
+        HorarioDeRadarDePrueba.siempre(horarios, LocalTime.of(6, 0), LocalTime.of(22, 0));
+
+        assertThatThrownBy(() -> servicioConElReloj(DOMINGO_LIMA_22_00_ES_LUNES_03_UTC).registrar(comando(persona, persona)))
+                .isInstanceOf(IllegalStateException.class).hasMessage("Hoy no tienes Mi Radar");
     }
 
     @Test
     @DisplayName("sigue la regla de un registro por hora: si ya hay uno en esta hora se devuelve ese y no se guarda otro")
-    void unoPorHoraDesdeElDia8() {
+    void unoPorHora() {
         UserId persona = personaEnLima(10);
-        conMiRadar(persona, MiRadar.encendido(List.of(10)));
-        FixedClock a10y30 = FixedClock.at(Instant.parse("2026-10-20T15:30:00Z"));
-        RegistroRadar deEstaHora = RegistroRadar.registrar(RegistroRadarId.of(UUID.randomUUID()), persona, "h", "p",
-                "s", 5, "e", Instant.parse("2026-10-20T15:06:00Z")).conHoraPrevista(10);
-        when(loadPort.ultimoDeParticipante(persona)).thenReturn(Optional.of(deEstaHora));
+        conMiRadar(persona, encendido());
+        HorarioDeRadarDePrueba.siempre(horarios, LocalTime.of(6, 0), LocalTime.of(22, 0));
+        RegistroRadar previo = servicioConElReloj(LIMA_10_00).registrar(comando(persona, persona));
+        when(loadPort.ultimoDeParticipante(persona)).thenReturn(Optional.of(previo));
 
-        RegistroRadar devuelto = servicioConElReloj(a10y30).registrar(comando(persona, persona));
+        RegistroRadar otra = servicioConElReloj(LIMA_10_00).registrar(comando(persona, persona));
 
-        assertThat(devuelto).isSameAs(deEstaHora);
-        verify(savePort, never()).save(any());
+        assertThat(otra).isSameAs(previo);
     }
 
     @Test
-    @DisplayName("la cuenta suspendida y el actor ajeno se rechazan con 403 antes de mirar Mi Radar")
-    void elGuardDeSiempreCorreAntes() {
-        UserId dueno = UserId.of(UUID.randomUUID());
-        UserId otro = UserId.of(UUID.randomUUID());
-        when(progresoPort.deParticipante(dueno)).thenReturn(Optional.of(
+    @DisplayName("la cuenta suspendida y el actor ajeno se rechazan con 403 antes de mirar Mi Radar ni el horario")
+    void rechazadosAntesDeMirar() {
+        UserId suspendido = UserId.of(UUID.randomUUID());
+        when(progresoPort.deParticipante(suspendido)).thenReturn(Optional.of(
                 new ProgresoParticipanteHabits(10, "America/Lima", RolParticipante.TRAINEE, true, true)));
+        UserId ajeno = UserId.of(UUID.randomUUID());
 
-        assertThatThrownBy(() -> service.registrar(comando(otro, dueno))).isInstanceOf(NotAuthorizedException.class);
-        assertThatThrownBy(() -> service.registrar(comando(dueno, dueno))).isInstanceOf(NotAuthorizedException.class);
-
+        assertThatThrownBy(() -> service.registrar(comando(suspendido, suspendido))).isInstanceOf(NotAuthorizedException.class);
+        assertThatThrownBy(() -> service.registrar(comando(ajeno, suspendido))).isInstanceOf(NotAuthorizedException.class);
         verify(miRadarPort, never()).deParticipante(any());
-        verify(savePort, never()).save(any());
+        verify(horarios, never()).deFecha(any(), any());
     }
 
     @Test
-    @DisplayName("el historial trae Mi Radar de la persona junto a la pagina")
-    void historialTraeMiRadar() {
+    @DisplayName("el historial trae Mi Radar con lo de HOY: Despertar, Dormir y las veces")
+    void historialTraeMiRadarDeHoy() {
         UserId persona = personaEnLima(10);
-        conMiRadar(persona, MiRadar.encendido(List.of(14, 9)));
-        when(loadPort.historialDeParticipante(persona, null, 20)).thenReturn(List.of());
+        conMiRadar(persona, encendido());
+        HorarioDeRadarDePrueba.siempre(horarios, LocalTime.of(5, 30), LocalTime.of(22, 30));
+        when(loadPort.historialDeParticipante(eq(persona), any(), anyInt())).thenReturn(List.of());
 
-        HistorialRadarPage pagina = service.historial(persona, persona, null, 20);
+        HistorialRadarPage pagina = servicioConElReloj(LIMA_10_00).historial(persona, persona, null, 84);
 
-        assertThat(pagina.miRadar().estaEncendido()).isTrue();
-        assertThat(pagina.miRadar().horas()).containsExactly(9, 14);
+        assertThat(pagina.miRadar().encendido()).isTrue();
+        assertThat(pagina.miRadar().dias()).hasSize(1);
+        assertThat(pagina.miRadar().dias().getFirst().veces()).isEqualTo(17);
+        assertThat(pagina.miRadar().dias().getFirst().despertar()).isEqualTo(LocalTime.of(5, 30));
     }
 
     @Test
-    @DisplayName("el historial de la semana 1 (dia menor que 8) no trae Mi Radar: va en null y ni se lee la columna")
+    @DisplayName("el historial de la semana 1 (dia menor que 8) no trae Mi Radar: va en null y ni se lee la columna ni el horario")
     void historialSinMiRadarEnLaSemana1() {
-        for (int dia : new int[]{0, 1, 7}) {
+        for (int dia : new int[]{0, 1, 4, 7}) {
             UserId persona = personaEnLima(dia);
-            when(loadPort.historialDeParticipante(persona, null, 84)).thenReturn(List.of());
+            when(loadPort.historialDeParticipante(eq(persona), any(), anyInt())).thenReturn(List.of());
 
             HistorialRadarPage pagina = service.historial(persona, persona, null, 84);
 
             assertThat(pagina.miRadar()).as("dia %d", dia).isNull();
             verify(miRadarPort, never()).deParticipante(persona);
         }
-    }
-
-    // ─── Spec 012, cuarta ronda: por dia de la semana ──────────────────────
-
-    private static MiRadar.DiaPropio dia(int numero, Integer... horas) {
-        return new MiRadar.DiaPropio(numero, List.of(horas));
-    }
-
-    @Test
-    @DisplayName("un dia con horas propias: a una de ellas se guarda con esa hora prevista (el lunes 15:00 de Lima)")
-    void diaConHorasPropias() {
-        UserId persona = personaEnLima(10);
-        conMiRadar(persona, MiRadar.encendido(List.of(9, 14, 20), List.of(dia(1, 15))));
-
-        RegistroRadar guardado = servicioConElReloj(LUNES_LIMA_15_00).registrar(comando(persona, persona));
-
-        assertThat(guardado.horaPrevista()).isEqualTo(15);
-        verify(savePort).save(guardado);
-    }
-
-    @Test
-    @DisplayName("un dia con horas propias: las de todos los dias NO son previstas ese dia, y lo que se registra a esa hora sale libre")
-    void lasDeTodosLosDiasNoValenEnUnDiaPropio() {
-        UserId persona = personaEnLima(10);
-        // El lunes solo tiene la 15; a las 15:00 de Lima del lunes la 15 de todos los dias no existe.
-        conMiRadar(persona, MiRadar.encendido(List.of(15, 20), List.of(dia(1, 9))));
-
-        RegistroRadar guardado = servicioConElReloj(LUNES_LIMA_15_00).registrar(comando(persona, persona));
-
-        assertThat(guardado.horaPrevista()).isNull();
-        verify(savePort).save(guardado);
-    }
-
-    @Test
-    @DisplayName("un dia que no esta en dias sigue las horas de todos los dias (el martes 10:00 de Lima)")
-    void diaSinHorasPropiasSigueLasDeTodos() {
-        UserId persona = personaEnLima(10);
-        conMiRadar(persona, MiRadar.encendido(List.of(9, 10, 20), List.of(dia(1, 15))));
-
-        RegistroRadar guardado = servicioConElReloj(LIMA_10_00).registrar(comando(persona, persona));
-
-        assertThat(guardado.horaPrevista()).isEqualTo(10);
-    }
-
-    @Test
-    @DisplayName("«Sin Radar ese dia»: el servidor rechaza con 409 «Hoy no tienes Mi Radar», no es 403 y no guarda nada")
-    void diaSinRadarRechaza() {
-        UserId persona = personaEnLima(10);
-        // LIMA_10_00 es martes (dia 2): ese dia no tiene Radar, aunque Mi Radar este encendido el resto de la semana.
-        conMiRadar(persona, MiRadar.encendido(List.of(9, 10, 20), List.of(dia(2))));
-
-        assertThatThrownBy(() -> servicioConElReloj(LIMA_10_00).registrar(comando(persona, persona)))
-                .isInstanceOf(IllegalStateException.class)
-                .isNotInstanceOf(NotAuthorizedException.class)
-                .hasMessage("Hoy no tienes Mi Radar");
-        verify(savePort, never()).save(any());
-    }
-
-    @Test
-    @DisplayName("en un dia sin Radar el motivo es ese y no el horario, tambien a la 01:30")
-    void diaSinRadarGanaAlHorario() {
-        UserId persona = personaEnLima(10);
-        conMiRadar(persona, MiRadar.encendido(List.of(9), List.of(dia(2))));
-
-        assertThatThrownBy(() -> servicioConElReloj(LIMA_01_30_ES_06_UTC).registrar(comando(persona, persona)))
-                .isInstanceOf(IllegalStateException.class).hasMessage("Hoy no tienes Mi Radar");
-    }
-
-    @Test
-    @DisplayName("«Sin Radar ese dia» no cierra la semana 1: los dias 0 a 7 se registra igual, como hoy")
-    void diaSinRadarNoAplicaEnLaSemana1() {
-        UserId persona = personaEnLima(7);
-        conMiRadar(persona, MiRadar.encendido(List.of(9), List.of(dia(2))));
-
-        RegistroRadar guardado = servicioConElReloj(LIMA_10_00).registrar(comando(persona, persona));
-
-        assertThat(guardado.horaPrevista()).isEqualTo(10);
-    }
-
-    @Test
-    @DisplayName("regla 02: con el reloj en la madrugada UTC (lunes 03:00Z) el dia local es el domingo; las horas del domingo mandan, no las del lunes")
-    void elDiaDeLaSemanaEsElLocalEnLaMadrugadaUtc() {
-        UserId persona = personaEnLima(10);
-        // Lunes: solo la 15. Domingo: solo la 22. A las 22:00 de Lima del domingo (03:00Z del lunes) la prevista es la 22.
-        conMiRadar(persona, MiRadar.encendido(List.of(9), List.of(dia(1, 15), dia(7, 22))));
-
-        RegistroRadar guardado = servicioConElReloj(DOMINGO_LIMA_22_00_ES_LUNES_03_UTC)
-                .registrar(comando(persona, persona));
-
-        assertThat(guardado.horaPrevista()).isEqualTo(22);
-    }
-
-    @Test
-    @DisplayName("regla 02: lunes 03:00Z es domingo en Lima, y si el domingo es «Sin Radar» se rechaza aunque el lunes tenga Radar")
-    void domingoSinRadarConElRelojEnLaMadrugadaUtc() {
-        UserId persona = personaEnLima(10);
-        conMiRadar(persona, MiRadar.encendido(List.of(9, 22), List.of(dia(7))));
-
-        assertThatThrownBy(() -> servicioConElReloj(DOMINGO_LIMA_22_00_ES_LUNES_03_UTC)
-                .registrar(comando(persona, persona)))
-                .isInstanceOf(IllegalStateException.class).hasMessage("Hoy no tienes Mi Radar");
-        verify(savePort, never()).save(any());
-    }
-
-    @Test
-    @DisplayName("el historial trae los dias propios de Mi Radar junto a las horas de todos los dias")
-    void historialTraeLosDias() {
-        UserId persona = personaEnLima(10);
-        conMiRadar(persona, MiRadar.encendido(List.of(14, 9), List.of(dia(7), dia(6, 11))));
-        when(loadPort.historialDeParticipante(persona, null, 84)).thenReturn(List.of());
-
-        HistorialRadarPage pagina = service.historial(persona, persona, null, 84);
-
-        assertThat(pagina.miRadar().horas()).containsExactly(9, 14);
-        assertThat(pagina.miRadar().dias()).extracting(MiRadar.DiaPropio::dia).containsExactly(6, 7);
-        assertThat(pagina.miRadar().horasDelDia(java.time.DayOfWeek.SATURDAY)).containsExactly(11);
-        assertThat(pagina.miRadar().horasDelDia(java.time.DayOfWeek.SUNDAY)).isEmpty();
+        verify(horarios, never()).deFecha(any(), any());
     }
 }

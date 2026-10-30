@@ -1,0 +1,230 @@
+<title>Mi Radar automático</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Jost:wght@400;500;700&display=swap">
+<style>
+/* Sala de revisión: arriba qué cambia; abajo «Antes» y los teléfonos nuevos lado a lado (tokens de src/theme/tokens.ts). */
+:root{
+  --pg:#EEEAE3;--pgCard:#FFFFFF;--pgInk:#16140F;--pgSoft:#5A544A;--pgLine:#DDD6CA;--pgGold:#856C35;
+  --serif:"Fraunces",Georgia,serif;--sans:"Jost",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --bg:#FCFBF9;--s1:#FFFFFF;--s2:#F4F1EB;--line:#E8E2D8;--ink:#11100D;--soft:#4A453D;--mute:#7A7266;--gold:#B2924F;--goldInk:#856C35;
+  --wash:rgba(178,146,79,.10);--wash2:rgba(178,146,79,.20);--onGold:#1E1B18;--ok:#2E7D52;--okWash:rgba(46,125,82,.12);
+  --track:#ECE6DC;--shadow:0 1px 2px rgba(30,27,24,.05),0 8px 24px rgba(30,27,24,.07);--frame:#1B1916;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --pg:#050504;--pgCard:#141311;--pgInk:#F6F4EE;--pgSoft:#BDB5A8;--pgLine:#2A2722;--pgGold:#D9BD7E;
+  --bg:#0C0B09;--s1:#161513;--s2:#201F1C;--line:rgba(198,164,92,.16);--ink:#FFFFFF;--soft:#C5BEB3;--mute:#8E877C;--gold:#C6A45C;--goldInk:#D9BD7E;
+  --wash:rgba(198,164,92,.12);--wash2:rgba(198,164,92,.24);--onGold:#14120E;--ok:#70D2A0;--okWash:rgba(112,210,160,.14);
+  --track:#2A2824;--shadow:0 0 0 1px rgba(198,164,92,.10);--frame:#2E2B27;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --pg:#050504;--pgCard:#141311;--pgInk:#F6F4EE;--pgSoft:#BDB5A8;--pgLine:#2A2722;--pgGold:#D9BD7E;
+  --bg:#0C0B09;--s1:#161513;--s2:#201F1C;--line:rgba(198,164,92,.16);--ink:#FFFFFF;--soft:#C5BEB3;--mute:#8E877C;--gold:#C6A45C;--goldInk:#D9BD7E;
+  --wash:rgba(198,164,92,.12);--wash2:rgba(198,164,92,.24);--onGold:#14120E;--ok:#70D2A0;--okWash:rgba(112,210,160,.14);
+  --track:#2A2824;--shadow:0 0 0 1px rgba(198,164,92,.10);--frame:#2E2B27;color-scheme:dark}
+*{box-sizing:border-box}
+::selection{background:var(--wash2);color:var(--pgInk)}
+body{background:var(--pg);color:var(--pgInk);font-family:var(--sans);font-size:15.5px;line-height:1.45;margin:0;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 72px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+h1{font-family:var(--serif);font-weight:700;font-size:clamp(30px,4.6vw,44px);line-height:1.04;letter-spacing:-.02em;margin:0;text-wrap:balance}
+.lead{color:var(--pgSoft);margin:0;max-width:68ch}
+.cambios{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+.cambio{background:var(--pgCard);border:1px solid var(--pgLine);border-radius:16px;padding:14px 16px}
+.cambio b{display:block;font-size:15px;margin-bottom:4px}
+.cambio span{color:var(--pgSoft);font-size:14.5px}
+.phones{display:flex;gap:22px;overflow-x:auto;padding:4px 4px 18px;scroll-snap-type:x mandatory}
+.cap{display:flex;flex-direction:column;gap:10px;align-items:center;scroll-snap-align:start;flex:none}
+.cap>p{margin:0;font-size:13.5px;color:var(--pgSoft);text-align:center;max-width:300px}
+.cap>p b{color:var(--pgInk)}
+.antes{width:330px;border-radius:44px;padding:9px;background:var(--frame);flex:none}
+.antes img{display:block;width:100%;height:680px;object-fit:cover;object-position:top;border-radius:36px}
+.ph{width:330px;border-radius:44px;padding:9px;background:var(--frame);box-shadow:0 24px 50px rgba(0,0,0,.2);flex:none}
+.sc{position:relative;height:680px;border-radius:36px;overflow:hidden;background:var(--bg);color:var(--ink);display:flex;flex-direction:column}
+.st{display:flex;justify-content:space-between;padding:12px 24px 2px;font-size:12.5px;font-weight:500}
+.bd{flex:1;overflow-y:auto;padding:4px 16px 84px;scrollbar-width:none}.bd::-webkit-scrollbar{display:none}
+:where(.sc button){font-family:var(--sans);color:inherit}
+.sc :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+svg.i{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
+svg.s16{width:16px;height:16px}
+.back{display:flex;align-items:center;gap:6px;margin:6px 0 0 -6px;font-weight:500;font-size:16px}
+.fila{display:flex;align-items:center;gap:12px;margin-top:16px}
+.fila .x{flex:1;min-width:0}
+.fila .n{font-size:17px;font-weight:700}
+.fila .s{font-size:14.5px;color:var(--soft);margin-top:2px}
+.sw{width:72px;height:40px;border-radius:20px;background:var(--track);border:0;position:relative;flex:none;cursor:pointer;font:700 12px var(--sans);color:var(--soft);padding:0}
+.sw::after{content:"";position:absolute;left:3px;top:3px;width:34px;height:34px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .18s cubic-bezier(.2,.8,.2,1)}
+.sw span{position:absolute;right:11px;top:12px}
+.sw[aria-checked="true"]{background:var(--gold);color:var(--onGold)}.sw[aria-checked="true"]::after{transform:translateX(32px)}.sw[aria-checked="true"] span{right:auto;left:12px}
+.hoy{background:var(--s1);box-shadow:var(--shadow);border-radius:20px;padding:16px;margin-top:18px;display:flex;flex-direction:column;gap:12px}
+.hoy .k{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.hoy .k b{font-size:16px}
+.hoy .k span{font-size:13.5px;color:var(--soft);font-variant-numeric:tabular-nums}
+.horas{display:grid;grid-template-columns:repeat(9,1fr);gap:5px}
+.h{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10.5px;color:var(--mute);font-variant-numeric:tabular-nums}
+.h i{width:100%;aspect-ratio:1;max-width:26px;border-radius:8px;border:1.5px solid var(--line);display:grid;place-items:center}
+.h.ok i{background:var(--ok);border-color:var(--ok);color:var(--bg)}
+.h.ok i::after{content:"";width:8px;height:4px;border-left:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(-45deg) translate(1px,-1px)}
+.h.ahora i{border-color:var(--gold);background:var(--wash2)}
+.h.ahora{color:var(--goldInk);font-weight:700}
+.h.pasada i{background:var(--s2)}
+.cta{display:flex;align-items:center;justify-content:center;gap:8px;min-height:50px;border-radius:25px;background:var(--gold);color:var(--onGold);font:700 15.5px var(--sans);border:0;cursor:pointer;width:100%}
+.cta:active{transform:scale(.98)}
+.prox{font-size:14px;color:var(--soft)}
+.dias{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:8px}
+.d{display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 0;border-radius:12px;border:1px solid var(--line);background:var(--s1);font-size:11.5px;color:var(--soft)}
+.d b{font-size:15px;color:var(--ink)}
+.d .v{font-size:11px;font-variant-numeric:tabular-nums;color:var(--ink);font-weight:500}
+.d.hoyd{border-color:var(--gold);background:var(--wash)}
+.d.off .v{color:var(--mute);font-weight:400}
+.ml{font-size:13px;font-weight:700;color:var(--goldInk);margin:20px 2px 4px}
+.lnk{display:inline-flex;align-items:center;gap:4px;color:var(--goldInk);font-weight:500;font-size:15px;border:0;background:transparent;padding:10px 0;cursor:pointer;min-height:44px}
+.reg{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}
+.reg:last-child{border-bottom:0}
+.reg .t{font-weight:700;font-size:14px;width:44px;font-variant-numeric:tabular-nums}
+.reg .x{flex:1;min-width:0;font-size:14px;color:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.falta{background:var(--wash);border:1px solid var(--wash2);border-radius:20px;padding:16px;margin-top:18px;display:flex;flex-direction:column;gap:10px}
+.falta b{font-size:16px}
+.falta span{font-size:14.5px;color:var(--soft)}
+.fab{position:absolute;right:14px;bottom:76px;width:52px;height:52px;border-radius:50%;background:var(--s1);border:2px solid var(--gold);box-shadow:var(--shadow);display:grid;place-items:center;color:var(--goldInk);font:700 12px var(--sans)}
+.tb{position:absolute;left:0;right:0;bottom:0;height:62px;border-top:1px solid var(--line);background:var(--bg);display:flex;justify-content:space-around;align-items:flex-end;padding-bottom:10px}
+.tb span{font:500 9px var(--sans);letter-spacing:.05em;color:var(--mute)}
+.tb span.on{color:var(--goldInk)}
+.notas{background:var(--pgCard);border:1px solid var(--pgLine);border-radius:18px;padding:16px 18px}
+.notas h2{font-family:var(--serif);font-weight:600;font-size:22px;margin:0 0 8px}
+.notas ul{margin:0;padding-left:20px;color:var(--pgSoft);display:flex;flex-direction:column;gap:6px}
+.notas b{color:var(--pgInk);font-weight:500}
+.edh{display:flex;align-items:center;gap:10px;margin-top:4px}.edh .x{flex:1;min-width:0}.edh b{display:block;font-size:17px;font-weight:700;letter-spacing:.01em}.edh span{font-size:13px;color:var(--soft)}
+.xb{width:40px;height:40px;border-radius:20px;border:1px solid var(--line);background:var(--s1);display:grid;place-items:center;font-size:16px}
+.rueda{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;margin-top:6px}
+.rueda .col{display:flex;flex-direction:column;align-items:center;gap:6px}
+.rueda .f{font-size:17px;color:var(--mute);font-variant-numeric:tabular-nums}
+.rueda .c{width:100%;text-align:center;font:700 30px var(--sans);color:var(--goldInk);font-variant-numeric:tabular-nums;border-top:1.5px solid var(--gold);border-bottom:1.5px solid var(--gold);padding:6px 0}
+.rueda .sep{font:700 22px var(--sans);color:var(--ink);padding:0 8px;margin-top:-2px}
+.rueda .et{font-size:11.5px;color:var(--mute)}
+.chips7{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.ch{display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 0;border-radius:12px;border:1px solid var(--line);background:var(--s1);font-size:12px;color:var(--soft);cursor:pointer;min-height:64px}
+.ch b{font-size:13.5px;color:var(--ink)}.ch .v{font-size:13px;font-weight:700;color:var(--goldInk);font-variant-numeric:tabular-nums}
+.ch.lk{opacity:.5;cursor:default}.ch.sel{border-color:var(--gold);background:var(--wash2)}.ch.off .v{color:var(--mute)}
+.lb{font-size:13px;font-weight:700;color:var(--goldInk);margin:18px 2px 8px}
+.rowc{display:flex;align-items:center;gap:12px;min-height:58px;padding:6px 0;border-top:1px solid var(--line)}.rowc:first-of-type{border-top:0}.rowc .x{flex:1;min-width:0}.rowc .n{font-size:16.5px}.rowc .t{font-size:14px;color:var(--soft)}
+.fijo{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 16px;background:var(--bg);border-top:1px solid var(--line)}
+.segm{display:flex;background:var(--s2);border-radius:14px;padding:4px;margin-top:12px}
+.segm button{flex:1;min-height:42px;border-radius:11px;border:0;background:transparent;font:500 14.5px var(--sans);color:var(--soft);cursor:pointer}
+.segm button[aria-pressed="true"]{background:var(--s1);color:var(--ink);font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.step{display:flex;align-items:center;justify-content:center;gap:18px;margin-top:4px}
+.step button{width:48px;height:48px;border-radius:24px;border:0;background:var(--wash);color:var(--goldInk);font:700 22px var(--sans);cursor:pointer}
+.step button:disabled{opacity:.35;cursor:default}
+.step b{font:700 30px var(--sans);min-width:52px;text-align:center;font-variant-numeric:tabular-nums}
+.hrs{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:10px}
+.hrs span{font-size:13px;font-weight:500;padding:4px 10px;border-radius:999px;background:var(--wash);color:var(--goldInk);font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion: reduce){.sw::after{transition:none}.cta:active{transform:none}}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+<symbol id="right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+<symbol id="lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+<symbol id="sunrise" viewBox="0 0 24 24"><path d="M12 2v8M4.93 10.93l1.41 1.41M2 18h2M20 18h2M19.07 10.93l-1.41 1.41M22 22H2M8 6l4-4 4 4M16 18a4 4 0 0 0-8 0"/></symbol>
+</defs></svg>
+
+<div class="wrap">
+  <header style="display:flex;flex-direction:column;gap:10px">
+    <h1>Mi Radar automático</h1>
+    <p class="lead">Desde el día 8, Mi Radar pregunta cada hora entre el Despertar y el Dormir que la persona ya programó en sus hábitos, siempre dentro de 03:00 a 23:00. Los días 1 a 7 y el interruptor de encendido no cambian. Son datos de ejemplo; no toca la app ni producción.</p>
+  </header>
+
+  <div class="cambios">
+    <div class="cambio"><b>Fuera los textos de explicación</b><span>Se van «Lo ves tú, tu mentor…», «Aquí verás tus registros de hoy» y «De 03:00 a 23:00, hasta 12 horas por día».</span></div>
+    <div class="cambio"><b>Igual que Planificar un hábito</b><span>Arriba el modo: «Automático» pregunta cada hora de tu Despertar a tu Dormir; «Personalizado» te deja elegir cuántas veces por día. Debajo, los días con sus veces. Hoy y lo pasado van con candado.</span></div>
+    <div class="cambio"><b>Todas las horas que quepan</b><span>Sin el tope de 12: con Despertar 05:30 y Dormir 22:30, pregunta de 06:00 a 22:00 (17 veces).</span></div>
+    <div class="cambio"><b>Sin Despertar o Dormir, ese día se apaga</b><span>Si están desactivados o sin hora, ese día no hay Radar y la pantalla dice cómo programarlos.</span></div>
+  </div>
+
+  <div class="phones">
+    <div class="cap">
+      <div class="antes"><img src="img/ahora.jpg" alt="Yo → Mi Radar como está hoy"></div>
+      <p><b>Antes</b>: textos de explicación, horas a mano y una fila cortada debajo del fénix.</p>
+    </div>
+    <div class="cap">
+      <div class="antes"><img src="img/editor-habito.jpg" alt="Editor de un hábito en Planificar"></div>
+      <p><b>El modelo</b>: el editor de un hábito en Planificar, que Mi Radar copia tal cual.</p>
+    </div>
+    <div class="cap">
+      <div class="ph"><div class="sc">
+        <div class="st"><span>10:50</span><span>81 %</span></div>
+        <div class="bd" id="bd1" style="padding-bottom:96px"></div>
+        <div class="fijo"><button class="cta" type="button" id="guardar">Guardar · todos los días</button></div>
+      </div></div>
+      <p><b>Mi Radar, igual que un hábito</b>: <b>Automático</b> pregunta cada hora de tu Despertar a tu Dormir. <b>Personalizado</b>: eliges cuántas veces por día y se reparten parejo en ese horario. Hoy (viernes 30) y lo pasado van con candado: − / + cambia solo los días que vienen. Toca el modo, el sábado o el domingo, y − / +.</p>
+    </div>
+    <div class="cap">
+      <div class="ph"><div class="sc">
+        <div class="st"><span>10:50</span><span>81 %</span></div>
+        <div class="bd" id="bd2" style="padding-bottom:96px"></div>
+        <div class="fijo"><button class="cta" type="button">Programar mi Despertar</button></div>
+      </div></div>
+      <p><b>Sin Despertar ese día</b>: en lugar de la hora, una línea y el botón para programarlo. Ese día no hay Radar.</p>
+    </div>
+  </div>
+
+  <div class="notas">
+    <h2>Anotado para ajustar después</h2>
+    <ul>
+      <li><b>Qué pasa si la persona desactiva Despertar y Dormir:</b> por ahora ese día se apaga solo. Después vemos cómo manejarlo mejor.</li>
+      <li><b>Despertar o Dormir fuera de 03:00 a 23:00:</b> el Radar se recorta a ese rango. Por ejemplo, Dormir a las 23:30 deja la última pregunta a las 23:00.</li>
+      <li><b>Lo elegido a mano en la versión anterior (spec 012)</b> no llegó a producción, así que se borra sin migrar a nadie.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+(function(){
+  var on=true, sel={}, off={}, modo='auto', propias={};
+  // Hoy es viernes 30: lo pasado y hoy van con candado (el mismo día no se cambia, como en Planificar).
+  var D=[['L',26,'05:30','22:30',1],['M',27,'05:30','22:30',1],['M',28,'05:30','22:30',1],['J',29,'05:30','22:30',1],['V',30,'05:30','22:30',1],['S',31,'08:00','23:00',0],['D',1,'08:00','23:00',0]];
+  var HOY=4;
+  function hh(t){return t.slice(0,2)}
+  function slots(a,z){var m0=+a.slice(0,2)*60+ +a.slice(3), m1=+z.slice(0,2)*60+ +z.slice(3), r=[]; for(var h=3;h<=23;h++){if(h*60>=m0&&h*60<m1) r.push(h)} return r}
+  function repartir(lista,n){if(n>=lista.length) return lista; if(n<=1) return [lista[0]]; var r=[]; for(var i=0;i<n;i++) r.push(lista[Math.round(i*(lista.length-1)/(n-1))]); return r}
+  function horasDe(k){var l=slots(D[k][2],D[k][3]); return modo==='auto'?l:repartir(l, propias[k]!=null?propias[k]:Math.min(6,l.length))}
+  function veces(a,z){var m0=+a.slice(0,2)*60+ +a.slice(3), m1=+z.slice(0,2)*60+ +z.slice(3), n=0; for(var h=3;h<=23;h++){var m=h*60; if(m>=m0&&m<m1) n++} return n}
+  function cab(sub){return '<div class="edh"><span class="xb" aria-hidden="true">‹</span><div class="x"><b>MI RADAR</b><span>'+sub+'</span></div></div>'}
+  function rueda(a,z){return '<div class="lb">Hora</div><div class="rueda"><div class="col"><span class="f">'+(+hh(a)-1+'').padStart(2,'0')+':'+a.slice(3)+'</span><span class="c">'+a+'</span><span class="et">Despertar</span></div><span class="sep">a</span><div class="col"><span class="f">'+(+hh(z)-1+'').padStart(2,'0')+':'+z.slice(3)+'</span><span class="c">'+z+'</span><span class="et">Dormir</span></div></div>'}
+  function dias(){return D.map(function(d,k){var c='ch'+(d[4]?' lk':'')+(sel[k]?' sel':'')+(off[k]?' off':'');return '<button type="button" class="'+c+'" data-k="'+k+'"'+(d[4]?' disabled':'')+'><span>'+d[0]+'</span><b>'+String(d[1]).padStart(2,'0')+'</b><span class="v">'+(d[4]?'<svg class="i" style="width:12px;height:12px" aria-label="Con candado"><use href="#lock"/></svg>':off[k]?'—':horasDe(k).length)+'</span></button>'}).join('')}
+  function sw(id,v,lbl){return '<button class="sw" type="button" role="switch" data-sw="'+id+'" aria-checked="'+v+'" aria-label="'+lbl+'"><span>'+(v?'Sí':'No')+'</span></button>'}
+  function pinta(){
+    var ks=Object.keys(sel).map(Number), ref=ks.length?D[ks[0]]:D[HOY];
+    var o=cab('Ahora: '+ref[2]+' a '+ref[3]);
+    o+='<div class="rowc" style="margin-top:8px"><div class="x"><div class="n">Encendido</div></div>'+sw('on',on,'Mi Radar encendido')+'</div>';
+    if(on){
+      o+='<div class="segm" role="group" aria-label="Modo"><button type="button" data-modo="auto" aria-pressed="'+(modo==='auto')+'">Automático</button><button type="button" data-modo="propio" aria-pressed="'+(modo==='propio')+'">Personalizado</button></div>';
+      o+=rueda(ref[2],ref[3]);
+      if(modo==='propio'){
+        var objetivo=ks.length?ks:[0,1,2,3,4,5,6].filter(function(k){return !D[k][4]});
+        var k0=objetivo[0], max=slots(D[k0][2],D[k0][3]).length, n=horasDe(k0).length;
+        var distintas=objetivo.some(function(k){return horasDe(k).length!==n});
+        o+='<div class="lb">Veces al día</div><div class="step"><button type="button" data-veces="-1" aria-label="Una vez menos"'+(n<=1?' disabled':'')+'>−</button><b>'+(distintas?'—':n)+'</b><button type="button" data-veces="1" aria-label="Una vez más"'+(n>=max?' disabled':'')+'>+</button></div>';
+      }
+      o+='<div class="lb">'+(ks.length?'Solo '+ks.map(function(k){return D[k][0].toLowerCase()}).join(', '):'Todos los días')+'</div><div class="chips7">'+dias()+'</div>';
+      if(ks.length) o+='<div class="rowc" style="margin-top:10px"><div class="x"><div class="n">Sin Radar estos días</div></div>'+sw('off',ks.every(function(k){return off[k]}),'Sin Radar estos días')+'</div>';
+
+    }
+    document.getElementById('bd1').innerHTML=o;
+    document.getElementById('guardar').textContent='Guardar · '+(ks.length?ks.map(function(k){return D[k][0].toLowerCase()}).join(', '):'todos los días');
+  }
+  document.getElementById('bd2').innerHTML=cab('Hoy sin Radar')+'<div class="rowc" style="margin-top:8px"><div class="x"><div class="n">Encendido</div></div>'+sw('x',true,'Mi Radar encendido')+'</div>'+
+    '<div class="lb">Hora</div><div class="falta"><b>Falta tu hora de Despertar</b></div>'+
+    '<div class="lb">Todos los días</div><div class="chips7">'+D.map(function(d,k){return '<span class="ch'+(d[4]?' lk':'')+(k===HOY?' sel':'')+(k===HOY||k===6?' off':'')+'"><span>'+d[0]+'</span><b>'+String(d[1]).padStart(2,'0')+'</b><span class="v">'+(d[4]&&k!==HOY?'<svg class="i" style="width:12px;height:12px" aria-label="Con candado"><use href="#lock"/></svg>':(k===HOY||k===6)?'—':veces(d[2],d[3]))+'</span></span>'}).join('')+'</div>';
+  document.addEventListener('click',function(e){
+    var t=e.target.closest('button'); if(!t||!t.closest('#bd1')) return;
+    if(t.dataset.k!=null){var k=+t.dataset.k; if(sel[k]) delete sel[k]; else sel[k]=1; pinta(); return}
+    if(t.dataset.modo){modo=t.dataset.modo;pinta();return}
+    if(t.dataset.veces){var ks=Object.keys(sel).map(Number); var obj=ks.length?ks:[0,1,2,3,4,5,6].filter(function(k){return !D[k][4]}); obj.forEach(function(k){var max=slots(D[k][2],D[k][3]).length; var n=horasDe(k).length+ +t.dataset.veces; propias[k]=Math.max(1,Math.min(max,n))}); pinta(); return}
+    var w=t.dataset.sw;
+    if(w==='on'){on=!on;pinta();return}
+    if(w==='off'){var ks=Object.keys(sel),todos=ks.every(function(k){return off[k]});ks.forEach(function(k){if(todos) delete off[k]; else off[k]=1});pinta();return}
+    if(w){suena[w]=!suena[w];pinta();}
+  });
+  pinta();
+})();
+</script>

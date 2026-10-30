@@ -37,8 +37,9 @@ import java.time.Instant;
  * (radar.ts:136-158 y :357-390) — no existe un endpoint equivalente en el
  * contrato viejo (ese exponia `/today`, que el cliente actual no usa).
  *
- * <p>Spec 012 (D-286): `GET`/`PUT /api/v1/radar/mi-radar`, Mi Radar de la propia persona desde el dia 8 (horas para
- * todos los dias y, por dia de la semana, horas propias). Mismo permiso y mismo autoservicio estricto que el resto.
+ * <p>Spec 012 (D-286) y 019 (D-292): `GET`/`PUT /api/v1/radar/mi-radar`, Mi Radar de la propia persona desde el dia 8
+ * (encendido y, por dia de la semana, modo, veces y «Sin Radar»; las horas salen del Despertar y el Dormir). Mismo
+ * permiso y mismo autoservicio estricto que el resto.
  */
 @RestController
 @RequestMapping("/api/v1/radar")
@@ -102,7 +103,6 @@ public class RadarController {
     public MiRadarResponse configurarMiRadar(@ActorAutenticado UserId actor,
                                               @RequestBody @Valid GuardarMiRadarRequest request) {
         return MiRadarResponse.from(configurarMiRadarUseCase.configurar(
-                new ConfigurarMiRadarCommand(actor, actor, request.encendido(), request.horas(),
-                        request.diasPropios())));
+                new ConfigurarMiRadarCommand(actor, actor, request.encendido(), request.cambios())));
     }
 }

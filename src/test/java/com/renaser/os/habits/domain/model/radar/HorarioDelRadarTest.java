@@ -1,200 +1,237 @@
 package com.renaser.os.habits.domain.model.radar;
 
+import com.renaser.os.habits.domain.model.radar.DiaDelRadar.MotivoSinHorario;
+import com.renaser.os.habits.domain.model.radar.DiaDeMiRadar.Modo;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.DayOfWeek;
-import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.List;
-import java.util.OptionalInt;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * Spec 012: cuando se puede registrar el Codigo Renaser y a que hora estaba prevista. Los dias 0 a 7 se comportan
- * EXACTAMENTE como antes (FR-001); desde el 8, solo con Mi Radar encendido, en un dia de la semana que tenga Radar y de
- * 03:00 a 23:59 (FR-008a). Funciones puras: el momento local entra como parametro, asi que el reloj en la madrugada UTC
- * se prueba tambien en {@code RadarServiceTest}.
- */
+/** Spec 019: las horas de cada dia, el reparto parejo, hoy y lo pasado, y cuando se puede registrar. */
 class HorarioDelRadarTest {
 
     private static final ZoneId LIMA = ZoneId.of("America/Lima");
-    /** Un lunes: el dia de la semana se suma desde aca. */
-    private static final LocalDate UN_LUNES = LocalDate.of(2026, 10, 19);
 
-    private static final MiRadar APAGADO = MiRadar.apagado();
-    private static final MiRadar ENCENDIDO = MiRadar.encendido(List.of(9, 14, 20));
-    /** 9, 14 y 20 todos los dias, salvo el lunes (solo la 15) y el domingo (sin Radar). */
-    private static final MiRadar POR_DIA = MiRadar.encendido(List.of(9, 14, 20), List.of(
-            new MiRadar.DiaPropio(1, List.of(15)), new MiRadar.DiaPropio(7, List.of())));
-
-    private static ZonedDateTime local(DayOfWeek dia, int hora) {
-        return UN_LUNES.plusDays(dia.getValue() - 1L).atTime(hora, 30).atZone(LIMA);
+    private static List<Integer> de(int desde, int hasta) {
+        return IntStream.rangeClosed(desde, hasta).boxed().toList();
     }
 
-    // ── dias 0 a 7: como hoy ────────────────────────────────────────────────
+    private static ZonedDateTime lima(String instanteLocal) {
+        return ZonedDateTime.of(java.time.LocalDateTime.parse(instanteLocal), LIMA);
+    }
+
+    // ─── las horas que caben ──────────────────────────────────────────────
 
     @Test
-    @DisplayName("dias 0 a 7: siempre se puede registrar, a cualquier hora y cualquier dia, con o sin Mi Radar")
-    void primeraSemanaSiempreSePuedeRegistrar() {
-        for (int dia : new int[]{0, 1, 4, 7}) {
-            for (DayOfWeek semana : DayOfWeek.values()) {
-                for (int hora = 0; hora <= 23; hora++) {
-                    ZonedDateTime momento = local(semana, hora);
-                    assertThat(HorarioDelRadar.puedeRegistrar(dia, APAGADO, momento)).as("dia %d %s %d", dia, semana,
-                            hora).isTrue();
-                    assertThat(HorarioDelRadar.puedeRegistrar(dia, ENCENDIDO, momento)).as("dia %d %s %d", dia, semana,
-                            hora).isTrue();
-                    assertThat(HorarioDelRadar.puedeRegistrar(dia, POR_DIA, momento)).as("dia %d %s %d", dia, semana,
-                            hora).isTrue();
-                }
+    @DisplayName("Despertar 05:30 y Dormir 22:30: de 06 a 22, 17 veces y sin el tope de 12")
+    void diecisieteHoras() {
+        assertThat(HorarioDelRadar.horasQueCaben(LocalTime.of(5, 30), LocalTime.of(22, 30))).containsExactlyElementsOf(de(6, 22));
+    }
+
+    @Test
+    @DisplayName("Despertar 08:00 y Dormir 23:00: de 08 a 22, 15 veces (la de las 23:00 ya es la hora de dormir)")
+    void quinceHoras() {
+        assertThat(HorarioDelRadar.horasQueCaben(LocalTime.of(8, 0), LocalTime.of(23, 0))).containsExactlyElementsOf(de(8, 22));
+    }
+
+    @Test
+    @DisplayName("Despertar 06:00 y Dormir 22:00: de 06 a 21 (la hora del Despertar cuenta y la del Dormir no)")
+    void bordesExactos() {
+        assertThat(HorarioDelRadar.horasQueCaben(LocalTime.of(6, 0), LocalTime.of(22, 0))).containsExactlyElementsOf(de(6, 21));
+    }
+
+    @Test
+    @DisplayName("se recorta a 03:00-23:00: Despertar 02:00 y Dormir 23:30 dan de 03 a 23 (21 veces)")
+    void recortaA03Y23() {
+        assertThat(HorarioDelRadar.horasQueCaben(LocalTime.of(2, 0), LocalTime.of(23, 30))).containsExactlyElementsOf(de(3, 23));
+    }
+
+    @Test
+    @DisplayName("sin Despertar, sin Dormir, o con Dormir igual o antes del Despertar: ninguna, no se inventa un horario")
+    void sinHorarioNoHayHoras() {
+        assertThat(HorarioDelRadar.horasQueCaben(null, LocalTime.of(22, 0))).isEmpty();
+        assertThat(HorarioDelRadar.horasQueCaben(LocalTime.of(6, 0), null)).isEmpty();
+        assertThat(HorarioDelRadar.horasQueCaben(LocalTime.of(22, 0), LocalTime.of(6, 0))).isEmpty();
+        assertThat(HorarioDelRadar.horasQueCaben(LocalTime.of(6, 0), LocalTime.of(6, 0))).isEmpty();
+        assertThat(HorarioDelRadar.horasQueCaben(LocalTime.of(5, 10), LocalTime.of(5, 50))).as("ninguna hora en punto").isEmpty();
+    }
+
+    // ─── el reparto parejo ────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("6 de 17 (06 a 22) se reparten en 06, 09, 12, 16, 19 y 22")
+    void seisDeDiecisiete() {
+        assertThat(HorarioDelRadar.repartir(de(6, 22), 6)).containsExactly(6, 9, 12, 16, 19, 22);
+    }
+
+    @Test
+    @DisplayName("los extremos: 1 deja la primera, 2 la primera y la ultima, y n igual o mayor que las que caben las deja todas")
+    void extremosDelReparto() {
+        assertThat(HorarioDelRadar.repartir(de(6, 22), 1)).containsExactly(6);
+        assertThat(HorarioDelRadar.repartir(de(6, 22), 0)).containsExactly(6);
+        assertThat(HorarioDelRadar.repartir(de(6, 22), 2)).containsExactly(6, 22);
+        assertThat(HorarioDelRadar.repartir(de(6, 22), 17)).containsExactlyElementsOf(de(6, 22));
+        assertThat(HorarioDelRadar.repartir(de(6, 22), 40)).containsExactlyElementsOf(de(6, 22));
+        assertThat(HorarioDelRadar.repartir(List.of(), 3)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("para cualquier cantidad que cabe, salen exactamente n horas distintas, en orden, dentro del horario y con la primera y la ultima")
+    void nHorasDistintasYParejas() {
+        for (int total = 1; total <= 21; total++) {
+            List<Integer> horas = de(3, 2 + total);
+            for (int n = 2; n <= total; n++) {
+                List<Integer> elegidas = HorarioDelRadar.repartir(horas, n);
+                assertThat(elegidas).as("%d de %d", n, total).hasSize(n).doesNotHaveDuplicates().isSorted()
+                        .startsWith(horas.getFirst()).endsWith(horas.getLast()).isSubsetOf(horas);
             }
         }
     }
 
+    // ─── el dia resuelto ──────────────────────────────────────────────────
+
+    private static DiaDelRadar plan(DiaDeMiRadar dia, LocalTime despertar, LocalTime dormir) {
+        return HorarioDelRadar.planDelDia(dia, LocalDate.of(2026, 10, 31), despertar, dormir, true);
+    }
+
     @Test
-    @DisplayName("dias 0 a 7: la hora prevista es la hora local si cae entre las 08 y las 19, y nada fuera de ahi")
-    void primeraSemanaHoraPrevista() {
-        for (int dia : new int[]{0, 3, 7}) {
-            for (DayOfWeek semana : DayOfWeek.values()) {
-                for (int hora = 0; hora <= 23; hora++) {
-                    OptionalInt esperada = hora >= 8 && hora <= 19 ? OptionalInt.of(hora) : OptionalInt.empty();
-                    assertThat(HorarioDelRadar.horaPrevista(dia, APAGADO, local(semana, hora)))
-                            .as("dia %d %s %d", dia, semana, hora).isEqualTo(esperada);
-                }
-            }
+    @DisplayName("Automatico pregunta todas las horas que caben")
+    void automatico() {
+        DiaDelRadar dia = plan(DiaDeMiRadar.normal(6), LocalTime.of(5, 30), LocalTime.of(22, 30));
+
+        assertThat(dia.horas()).containsExactlyElementsOf(de(6, 22));
+        assertThat(dia.veces()).isEqualTo(17);
+        assertThat(dia.maximo()).isEqualTo(17);
+        assertThat(dia.motivo()).isNull();
+    }
+
+    @Test
+    @DisplayName("Personalizado reparte las veces elegidas y las recorta a lo que cabe si el horario se achico")
+    void personalizado() {
+        DiaDeMiRadar seis = new DiaDeMiRadar(6, Modo.PERSONALIZADO, 6, false);
+
+        assertThat(plan(seis, LocalTime.of(5, 30), LocalTime.of(22, 30)).horas()).containsExactly(6, 9, 12, 16, 19, 22);
+        DiaDelRadar corto = plan(seis, LocalTime.of(9, 0), LocalTime.of(12, 30));
+        assertThat(corto.horas()).containsExactly(9, 10, 11, 12);
+        assertThat(corto.veces()).isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("Personalizado sin veces guardadas propone 6, o menos si no caben")
+    void porDefectoSeis() {
+        DiaDeMiRadar dia = new DiaDeMiRadar(6, Modo.PERSONALIZADO, null, false);
+
+        assertThat(dia.veces()).isEqualTo(6);
+        assertThat(plan(dia, LocalTime.of(8, 0), LocalTime.of(10, 30)).veces()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("un dia sin Despertar, sin Dormir o con Dormir antes del Despertar no tiene Radar, en los dos modos, y dice por que")
+    void sinHorarioNoTieneRadar() {
+        for (Modo modo : Modo.values()) {
+            DiaDeMiRadar dia = new DiaDeMiRadar(6, modo, 6, false);
+
+            assertThat(plan(dia, null, LocalTime.of(22, 0)).horas()).as("sin Despertar %s", modo).isEmpty();
+            assertThat(plan(dia, null, LocalTime.of(22, 0)).motivo()).isEqualTo(MotivoSinHorario.SIN_DESPERTAR);
+            assertThat(plan(dia, LocalTime.of(6, 0), null).motivo()).isEqualTo(MotivoSinHorario.SIN_DORMIR);
+            assertThat(plan(dia, LocalTime.of(22, 0), LocalTime.of(6, 0)).motivo()).isEqualTo(MotivoSinHorario.HORARIO_INVALIDO);
+            assertThat(plan(dia, LocalTime.of(22, 0), LocalTime.of(6, 0)).veces()).isZero();
         }
     }
 
     @Test
-    @DisplayName("dias 0 a 7: las horas de Mi Radar, las de todos los dias y las de un dia, no cuentan aunque esten guardadas")
-    void primeraSemanaIgnoraMiRadar() {
-        // Mi Radar encendido con las 9, 14 y 20: la 20 NO es prevista el dia 7 (la semana 1 llega hasta las 19)...
-        assertThat(HorarioDelRadar.horaPrevista(7, ENCENDIDO, local(DayOfWeek.WEDNESDAY, 20))).isEmpty();
-        // ...y la 11 SI lo es, aunque no este en sus horas.
-        assertThat(HorarioDelRadar.horaPrevista(7, ENCENDIDO, local(DayOfWeek.WEDNESDAY, 11))).hasValue(11);
-        // El domingo «Sin Radar» tampoco cuenta en la semana 1: se registra y las franjas son las de siempre.
-        assertThat(HorarioDelRadar.puedeRegistrar(7, POR_DIA, local(DayOfWeek.SUNDAY, 12))).isTrue();
-        assertThat(HorarioDelRadar.horaPrevista(7, POR_DIA, local(DayOfWeek.SUNDAY, 12))).hasValue(12);
-        // El lunes tiene solo la 15, pero la semana 1 sigue en 08-19.
-        assertThat(HorarioDelRadar.horaPrevista(5, POR_DIA, local(DayOfWeek.MONDAY, 9))).hasValue(9);
+    @DisplayName("«Sin Radar» apaga el dia pero deja a la vista cuantas caben")
+    void sinRadarDeLaPersona() {
+        DiaDelRadar dia = plan(new DiaDeMiRadar(6, Modo.AUTOMATICO, null, true), LocalTime.of(6, 0), LocalTime.of(22, 0));
+
+        assertThat(dia.horas()).isEmpty();
+        assertThat(dia.veces()).isZero();
+        assertThat(dia.maximo()).isEqualTo(16);
+        assertThat(dia.motivo()).isNull();
     }
 
-    // ── desde el dia 8: apagado y encendido igual todos los dias ────────────
+    // ─── hoy y lo pasado no se editan ─────────────────────────────────────
 
     @Test
-    @DisplayName("desde el dia 8 con Mi Radar apagado no se puede registrar a ninguna hora ni en ningun dia, ni el dia 90")
-    void apagadoNoRegistra() {
-        for (int dia : new int[]{8, 9, 30, 90}) {
-            for (DayOfWeek semana : DayOfWeek.values()) {
-                for (int hora = 0; hora <= 23; hora++) {
-                    assertThat(HorarioDelRadar.puedeRegistrar(dia, APAGADO, local(semana, hora)))
-                            .as("dia %d %s %d", dia, semana, hora).isFalse();
-                }
-            }
+    @DisplayName("un viernes lunes a viernes tienen candado y sabado y domingo se editan")
+    void viernes() {
+        LocalDate viernes = LocalDate.of(2026, 10, 30);
+
+        for (DayOfWeek dia : DayOfWeek.values()) {
+            assertThat(HorarioDelRadar.esEditable(dia, viernes)).as(dia.name()).isEqualTo(dia.getValue() > 5);
         }
     }
 
     @Test
-    @DisplayName("desde el dia 8 encendido (sin dias propios) se registra de 03:00 a 23:59 en cualquier dia, y no de 00:00 a 02:59")
-    void encendidoRegistraDe03a2359() {
-        for (int dia : new int[]{8, 10, 90}) {
-            for (DayOfWeek semana : DayOfWeek.values()) {
-                for (int hora = 0; hora <= 23; hora++) {
-                    assertThat(HorarioDelRadar.puedeRegistrar(dia, ENCENDIDO, local(semana, hora)))
-                            .as("dia %d %s %d", dia, semana, hora).isEqualTo(hora >= 3);
-                }
-            }
+    @DisplayName("un lunes solo el lunes tiene candado")
+    void lunes() {
+        LocalDate lunes = LocalDate.of(2026, 10, 26);
+
+        assertThat(HorarioDelRadar.esEditable(DayOfWeek.MONDAY, lunes)).isFalse();
+        assertThat(HorarioDelRadar.esEditable(DayOfWeek.TUESDAY, lunes)).isTrue();
+        assertThat(HorarioDelRadar.esEditable(DayOfWeek.SUNDAY, lunes)).isTrue();
+    }
+
+    @Test
+    @DisplayName("un domingo se muestra la semana siguiente: de lunes a sabado se edita, pero el domingo mismo no (cambiaria hoy)")
+    void domingo() {
+        LocalDate domingo = LocalDate.of(2026, 11, 1);
+
+        for (DayOfWeek dia : DayOfWeek.values()) {
+            assertThat(HorarioDelRadar.esEditable(dia, domingo)).as(dia.name()).isEqualTo(dia != DayOfWeek.SUNDAY);
+        }
+        assertThat(HorarioDelRadar.lunesDeLaSemanaMostrada(domingo)).isEqualTo(LocalDate.of(2026, 11, 2));
+    }
+
+    @Test
+    @DisplayName("la semana que se muestra empieza el lunes de hoy, y cada dia se resuelve con la proxima fecha en que cae")
+    void fechas() {
+        LocalDate viernes = LocalDate.of(2026, 10, 30);
+
+        assertThat(HorarioDelRadar.lunesDeLaSemanaMostrada(viernes)).isEqualTo(LocalDate.of(2026, 10, 26));
+        assertThat(HorarioDelRadar.proximaFecha(5, viernes)).as("hoy mismo").isEqualTo(viernes);
+        assertThat(HorarioDelRadar.proximaFecha(6, viernes)).isEqualTo(LocalDate.of(2026, 10, 31));
+        assertThat(HorarioDelRadar.proximaFecha(1, viernes)).as("el lunes pasado cae el proximo").isEqualTo(LocalDate.of(2026, 11, 2));
+    }
+
+    // ─── registrar ────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("los dias 0 a 7 no cambian: se registra a cualquier hora y la hora prevista es la local de 08 a 19")
+    void primeraSemana() {
+        for (int dia : new int[]{0, 1, 7}) {
+            assertThat(HorarioDelRadar.puedeRegistrar(dia, false, List.of(), lima("2026-10-26T01:30:00"))).isTrue();
+            assertThat(HorarioDelRadar.horaPrevista(dia, List.of(), lima("2026-10-26T10:15:00"))).hasValue(10);
+            assertThat(HorarioDelRadar.horaPrevista(dia, List.of(), lima("2026-10-26T22:00:00"))).isEmpty();
         }
     }
 
     @Test
-    @DisplayName("desde el dia 8 la hora prevista es la hora local solo si es una de las elegidas")
-    void encendidoHoraPrevista() {
-        assertThat(HorarioDelRadar.horaPrevista(10, ENCENDIDO, local(DayOfWeek.TUESDAY, 9))).hasValue(9);
-        assertThat(HorarioDelRadar.horaPrevista(10, ENCENDIDO, local(DayOfWeek.TUESDAY, 14))).hasValue(14);
-        assertThat(HorarioDelRadar.horaPrevista(10, ENCENDIDO, local(DayOfWeek.TUESDAY, 20))).hasValue(20);
-        // Una hora libre (entre 03:00 y 23:59) se registra, pero sin hora prevista.
-        assertThat(HorarioDelRadar.horaPrevista(10, ENCENDIDO, local(DayOfWeek.TUESDAY, 15))).isEmpty();
-        assertThat(HorarioDelRadar.horaPrevista(10, ENCENDIDO, local(DayOfWeek.TUESDAY, 4))).isEmpty();
+    @DisplayName("desde el dia 8 solo con Mi Radar encendido, un dia con Radar y de 03:00 a 23:59")
+    void desdeElDia8() {
+        List<Integer> horas = de(6, 22);
+
+        assertThat(HorarioDelRadar.puedeRegistrar(8, true, horas, lima("2026-10-26T10:15:00"))).isTrue();
+        assertThat(HorarioDelRadar.puedeRegistrar(8, true, horas, lima("2026-10-26T03:00:00"))).isTrue();
+        assertThat(HorarioDelRadar.puedeRegistrar(8, true, horas, lima("2026-10-26T23:59:00"))).isTrue();
+        assertThat(HorarioDelRadar.puedeRegistrar(8, true, horas, lima("2026-10-26T02:59:00"))).isFalse();
+        assertThat(HorarioDelRadar.puedeRegistrar(8, false, horas, lima("2026-10-26T10:15:00"))).as("apagado").isFalse();
+        assertThat(HorarioDelRadar.puedeRegistrar(8, true, List.of(), lima("2026-10-26T10:15:00"))).as("dia sin Radar").isFalse();
     }
 
     @Test
-    @DisplayName("el dia 8 es el primero de Mi Radar y el 7 el ultimo de la primera semana")
-    void elLimiteEsElDia8() {
-        assertThat(HorarioDelRadar.PRIMER_DIA_DE_MI_RADAR).isEqualTo(8);
-        assertThat(HorarioDelRadar.puedeRegistrar(7, APAGADO, local(DayOfWeek.WEDNESDAY, 1))).isTrue();
-        assertThat(HorarioDelRadar.puedeRegistrar(8, APAGADO, local(DayOfWeek.WEDNESDAY, 12))).isFalse();
-    }
-
-    @Test
-    @DisplayName("apagado desde el dia 8 no tiene ninguna hora prevista")
-    void apagadoSinHoraPrevista() {
-        for (DayOfWeek semana : DayOfWeek.values()) {
-            for (int hora = 0; hora <= 23; hora++) {
-                assertThat(HorarioDelRadar.horaPrevista(12, APAGADO, local(semana, hora))).isEmpty();
-            }
-        }
-    }
-
-    // ── desde el dia 8: por dia de la semana ────────────────────────────────
-
-    @Test
-    @DisplayName("un dia con horas propias: la prevista es una de las suyas y NO las de todos los dias; lo demas se registra libre")
-    void diaConHorasPropias() {
-        // El lunes (dia 1) tiene solo la 15.
-        assertThat(HorarioDelRadar.horaPrevista(10, POR_DIA, local(DayOfWeek.MONDAY, 15))).hasValue(15);
-        assertThat(HorarioDelRadar.horaPrevista(10, POR_DIA, local(DayOfWeek.MONDAY, 9))).isEmpty();
-        assertThat(HorarioDelRadar.horaPrevista(10, POR_DIA, local(DayOfWeek.MONDAY, 14))).isEmpty();
-        // Un registro libre del lunes (a las 9) se puede hacer: es un dia con Radar y es de 03:00 a 23:59.
-        assertThat(HorarioDelRadar.puedeRegistrar(10, POR_DIA, local(DayOfWeek.MONDAY, 9))).isTrue();
-        assertThat(HorarioDelRadar.puedeRegistrar(10, POR_DIA, local(DayOfWeek.MONDAY, 2))).isFalse();
-    }
-
-    @Test
-    @DisplayName("los dias que no estan en dias siguen las horas de todos los dias")
-    void diaSinHorasPropiasSigueLasDeTodos() {
-        for (DayOfWeek semana : new DayOfWeek[]{DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY,
-                DayOfWeek.FRIDAY, DayOfWeek.SATURDAY}) {
-            assertThat(HorarioDelRadar.horaPrevista(10, POR_DIA, local(semana, 9))).as("%s 9", semana).hasValue(9);
-            assertThat(HorarioDelRadar.horaPrevista(10, POR_DIA, local(semana, 14))).as("%s 14", semana).hasValue(14);
-            assertThat(HorarioDelRadar.horaPrevista(10, POR_DIA, local(semana, 15))).as("%s 15", semana).isEmpty();
-            assertThat(HorarioDelRadar.puedeRegistrar(10, POR_DIA, local(semana, 15))).as("%s 15", semana).isTrue();
-        }
-    }
-
-    @Test
-    @DisplayName("«Sin Radar ese dia» se comporta como apagado ese dia: ni se registra ni tiene hora prevista, a ninguna hora")
-    void diaSinRadar() {
-        for (int dia : new int[]{8, 10, 90}) {
-            for (int hora = 0; hora <= 23; hora++) {
-                ZonedDateTime domingo = local(DayOfWeek.SUNDAY, hora);
-                assertThat(HorarioDelRadar.puedeRegistrar(dia, POR_DIA, domingo)).as("dia %d domingo %d", dia, hora)
-                        .isFalse();
-                assertThat(HorarioDelRadar.horaPrevista(dia, POR_DIA, domingo)).as("dia %d domingo %d", dia, hora)
-                        .isEmpty();
-            }
-        }
-        // Pero Mi Radar sigue encendido el resto de la semana.
-        assertThat(HorarioDelRadar.puedeRegistrar(10, POR_DIA, local(DayOfWeek.SATURDAY, 10))).isTrue();
-    }
-
-    @Test
-    @DisplayName("el dia de la semana es el del momento local que se pasa: el mismo instante cae en domingo o en lunes segun la zona")
-    void elDiaDeLaSemanaEsElDelMomentoLocal() {
-        // 2026-10-26T03:00Z es lunes en UTC y domingo 22:00 en Lima (UTC-5).
-        Instant instante = Instant.parse("2026-10-26T03:00:00Z");
-        ZonedDateTime enLima = instante.atZone(LIMA);
-        ZonedDateTime enUtc = instante.atZone(ZoneId.of("UTC"));
-
-        assertThat(enLima.getDayOfWeek()).isEqualTo(DayOfWeek.SUNDAY);
-        assertThat(enUtc.getDayOfWeek()).isEqualTo(DayOfWeek.MONDAY);
-        // POR_DIA: el domingo no tiene Radar y el lunes tiene solo la 15. A las 22:00 de Lima NO se puede registrar...
-        assertThat(HorarioDelRadar.puedeRegistrar(10, POR_DIA, enLima)).isFalse();
-        // ...y mirado con el reloj de UTC (03:00 del lunes) si se podria: por eso el servidor SIEMPRE pasa la zona de la persona.
-        assertThat(HorarioDelRadar.puedeRegistrar(10, POR_DIA, enUtc)).isTrue();
+    @DisplayName("desde el dia 8 la hora prevista es la local solo si es una de las de hoy; si no, el registro es libre")
+    void horaPrevistaDesdeElDia8() {
+        assertThat(HorarioDelRadar.horaPrevista(10, de(6, 22), lima("2026-10-26T10:15:00"))).hasValue(10);
+        assertThat(HorarioDelRadar.horaPrevista(10, List.of(6, 9, 12), lima("2026-10-26T10:15:00"))).isEmpty();
+        assertThat(HorarioDelRadar.horaPrevista(10, de(6, 22), lima("2026-10-26T23:10:00"))).isEmpty();
     }
 }

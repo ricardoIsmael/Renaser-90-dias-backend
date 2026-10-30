@@ -8,6 +8,13 @@ previa https://claude.ai/artifact/VCFE5EYjVa6BCWv3iz7ef7: «el radar son los pri
 persona puede activarlo individualmente y que le aparezca». Es la primera pieza del encargo de gerencia que pasa a
 spec. El resto (Hoy breve, Preparar mañana, bloques, cierre del día…) va en specs aparte.
 
+> **Corregido 2026-10-30 (spec 019, decisión del dueño).** Todo lo de **elegir las horas a mano** de esta spec (las horas en punto de 03:00 a
+> 23:00, «hasta 12 por día», `ChipDeOpcion`, horas propias por día, «Puedes elegir hasta 12», «Elige al menos una hora») y el tope de 12
+> **dejó de ser cierto y nunca llegó a producción**. Mi Radar desde el día 8 es **Automático** (cada hora entre el Despertar y el Dormir que
+> la persona programó, sin tope) o **Personalizado** (elige cuántas veces por día; las horas se reparten parejo), por día de la semana, y
+> un día sin Despertar o sin Dormir no tiene Radar. Hoy y lo pasado no se editan. Lo demás (interruptor opcional, la invitación del día 8,
+> los días 1 a 7, quién lo ve, un registro por hora) sigue igual. Ver `specs/019-radar-automatico/`.
+
 ## Clarifications
 
 ### Session 2026-10-29 (respuestas del dueño)
@@ -18,6 +25,7 @@ spec. El resto (Hoy breve, Preparar mañana, bloques, cierre del día…) va en 
 - **Elige sus horarios**: horas en punto «desde las 3:00 hasta las 23:00 del mismo día, nada después de la
   medianoche». Hasta 12 por día, las mismas todos los días. «No nos compliquemos» con la hora de despertar o de
   dormir: no se piden.
+  > **Corregido 2026-10-30.** Ya no se eligen horas ni hay tope de 12: salen del Despertar y el Dormir (spec 019).
 - **Cuando llega una hora elegida**: aviso del teléfono y entrada en Yo, «debajo de soporte, ayuda o emergencia».
   «No sobrecargar el inicio»: desde el día 8, Hoy no muestra nada del Radar.
 - **Las preguntas son las de hoy**: ¿Qué hago?, ¿Qué pienso?, ¿Qué siento?, ¿Qué evito? y la energía de 1 a 10.

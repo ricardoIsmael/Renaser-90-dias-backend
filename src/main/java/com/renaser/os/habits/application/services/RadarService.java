@@ -8,6 +8,7 @@ import com.renaser.os.habits.application.ports.out.radar.LoadMiRadarPort;
 import com.renaser.os.habits.application.ports.out.radar.LoadRegistroRadarPort;
 import com.renaser.os.habits.application.ports.out.radar.SaveRegistroRadarPort;
 import com.renaser.os.habits.domain.model.radar.HorarioDelRadar;
+import com.renaser.os.habits.domain.model.radar.DiaDelRadar;
 import com.renaser.os.habits.domain.model.radar.MiRadar;
 import com.renaser.os.habits.domain.model.radar.RegistroRadar;
 import com.renaser.os.habits.domain.model.radar.RegistroRadarId;
@@ -17,11 +18,11 @@ import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
 
@@ -51,16 +52,19 @@ public class RadarService implements RegistrarCheckInRadarUseCase, ConsultarUlti
     private final SaveRegistroRadarPort savePort;
     private final LoadMiRadarPort miRadarPort;
     private final LecturaDelRadar lectura;
+    private final AgendaDelRadar agenda;
     private final Clock clock;
     private final IdGenerator idGenerator;
 
     RadarService(AccesoAlRadar acceso, LoadRegistroRadarPort loadPort, SaveRegistroRadarPort savePort,
-                 LoadMiRadarPort miRadarPort, LecturaDelRadar lectura, Clock clock, IdGenerator idGenerator) {
+                 LoadMiRadarPort miRadarPort, LecturaDelRadar lectura, AgendaDelRadar agenda, Clock clock,
+                 IdGenerator idGenerator) {
         this.acceso = acceso;
         this.loadPort = loadPort;
         this.savePort = savePort;
         this.miRadarPort = miRadarPort;
         this.lectura = lectura;
+        this.agenda = agenda;
         this.clock = clock;
         this.idGenerator = idGenerator;
     }
@@ -70,13 +74,19 @@ public class RadarService implements RegistrarCheckInRadarUseCase, ConsultarUlti
     public RegistroRadar registrar(RegistrarCheckInRadarCommand command) {
         ProgresoParticipanteHabits progreso = acceso.propio(command.actorId(), command.participanteId());
         Instant ahora = clock.now();
-        /* Spec 012: la hora y el dia de la semana son los de la persona (su zona, regla 02), no los del servidor:
-           con el reloj en la madrugada UTC el dia local es el anterior. Los dias 0 a 7 siempre se puede registrar,
-           como hoy; desde el dia 8 solo con Mi Radar encendido, en un dia que tenga Radar y de 03:00 a 23:59. Es una
-           regla de ESTADO y no de permisos: 409 y no 403, porque en la app un 403 apaga el Radar entero. */
-        MiRadar miRadar = miRadarPort.deParticipante(command.participanteId());
-        ZonedDateTime local = ahora.atZone(ZoneId.of(progreso.timezone()));
-        requirePuedeRegistrar(progreso.diaPrograma(), miRadar, local);
+        /* Spec 012 y 019: la hora y el dia de la semana son los de la persona (su zona, regla 02), no los del servidor:
+           con el reloj en la madrugada UTC el dia local es el anterior. Los dias 0 a 7 siempre se puede registrar, como
+           hoy (y no se lee ni el horario); desde el dia 8 solo con Mi Radar encendido, en un dia que tenga Radar (las horas
+           salen del Despertar y el Dormir de hoy) y de 03:00 a 23:59. Es una regla de ESTADO y no de permisos: 409 y no
+           403, porque en la app un 403 apaga el Radar entero. */
+        ZoneId zona = ZoneId.of(progreso.timezone());
+        ZonedDateTime local = ahora.atZone(zona);
+        MiRadar miRadar = HorarioDelRadar.aplicaMiRadar(progreso.diaPrograma())
+                ? miRadarPort.deParticipante(command.participanteId()) : MiRadar.apagado();
+        DiaDelRadar hoy = HorarioDelRadar.aplicaMiRadar(progreso.diaPrograma())
+                ? agenda.deHoy(command.participanteId(), zona, miRadar) : null;
+        List<Integer> horasDeHoy = hoy == null || !miRadar.encendido() ? List.of() : hoy.horas();
+        requirePuedeRegistrar(progreso.diaPrograma(), miRadar, hoy, horasDeHoy, local);
         /* Un Codigo Renaser por hora: si ya hay uno en la franja en curso, se devuelve ESE en vez
            de crear otro.
 
@@ -93,23 +103,23 @@ public class RadarService implements RegistrarCheckInRadarUseCase, ConsultarUlti
         if (deEstaHora.isPresent()) {
             return deEstaHora.get();
         }
-        OptionalInt prevista = HorarioDelRadar.horaPrevista(progreso.diaPrograma(), miRadar, local);
+        OptionalInt prevista = HorarioDelRadar.horaPrevista(progreso.diaPrograma(), horasDeHoy, local);
         return savePort.save(nuevoRegistro(command, ahora, prevista));
     }
 
-    private static void requirePuedeRegistrar(int diaPrograma, MiRadar miRadar, ZonedDateTime local) {
-        if (HorarioDelRadar.puedeRegistrar(diaPrograma, miRadar, local)) {
+    private static void requirePuedeRegistrar(int diaPrograma, MiRadar miRadar, DiaDelRadar hoy,
+                                               List<Integer> horasDeHoy, ZonedDateTime local) {
+        if (HorarioDelRadar.puedeRegistrar(diaPrograma, miRadar.encendido(), horasDeHoy, local)) {
             return;
         }
-        throw new IllegalStateException(motivoDelRechazo(miRadar, local.getDayOfWeek()));
+        throw new IllegalStateException(motivoDelRechazo(miRadar, hoy));
     }
 
-    private static String motivoDelRechazo(MiRadar miRadar, DayOfWeek diaDeLaSemana) {
-        if (!miRadar.estaEncendido()) {
+    private static String motivoDelRechazo(MiRadar miRadar, DiaDelRadar hoy) {
+        if (!miRadar.encendido()) {
             return "Mi Radar está apagado";
         }
-        return miRadar.horasDelDia(diaDeLaSemana).isEmpty()
-                ? "Hoy no tienes Mi Radar" : "Mi Radar funciona de 03:00 a 23:59";
+        return hoy == null || hoy.horas().isEmpty() ? "Hoy no tienes Mi Radar" : "Mi Radar funciona de 03:00 a 23:59";
     }
 
     private RegistroRadar nuevoRegistro(RegistrarCheckInRadarCommand command, Instant ahora, OptionalInt prevista) {

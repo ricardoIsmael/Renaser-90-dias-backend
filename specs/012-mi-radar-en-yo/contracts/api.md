@@ -1,5 +1,10 @@
 # Contratos HTTP: Mi Radar en Yo
 
+> **Corregido 2026-10-30 (spec 019).** Todo lo de `horas` y `dias[].horas` de este contrato **ya no es cierto** (y nunca llegó a producción): las horas las
+> calcula el servidor con el Despertar y el Dormir y la forma vigente de `GET/PUT /radar/mi-radar` está en `docs/api/CONTRATO_DIA_A_DIA.md` y en
+> `specs/019-radar-automatico/plan.md`.
+
+
 Todo es aditivo: ningún campo existente cambia de nombre ni de tipo.
 
 ## GET /api/v1/radar/mi-radar (nuevo)

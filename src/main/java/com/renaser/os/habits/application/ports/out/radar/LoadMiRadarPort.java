@@ -5,6 +5,6 @@ import com.renaser.os.shared.domain.UserId;
 
 public interface LoadMiRadarPort {
 
-    /** Siempre devuelve algo: sin horas guardadas es {@link MiRadar#apagado()}. */
+    /** Siempre devuelve algo: sin nada guardado es {@link MiRadar#apagado()}. */
     MiRadar deParticipante(UserId participanteId);
 }

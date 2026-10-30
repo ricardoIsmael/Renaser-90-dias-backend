@@ -425,6 +425,31 @@ mismo.
 
 #### `GET` / `PUT /api/v1/radar/mi-radar`
 
+> **Corregido 2026-10-30 (D-292, spec 019).** Las horas ya no se eligen a mano ni viajan en el contrato: las calcula el servidor con el
+> Despertar y el Dormir de cada día. Lo que sigue es la forma vigente; la de la spec 012 (`horas`, `dias[].horas`) quedó abajo, tachada
+> en la corrección anterior, y nunca llegó a producción.
+
+- **Respuesta de ambos** — `{ "encendido": true, "hoy": "2026-10-30", "dias": [ { "dia": 1, "fecha": "2026-10-26", "modo": "AUTOMATICO",
+  "veces": 17, "maximo": 17, "sinRadar": false, "editable": false, "despertar": "05:30", "dormir": "22:30", "horas": [6, "…", 22],
+  "motivo": null }, … ] }` con los **siete** días de la semana que se muestra (lunes = 1 … domingo = 7; el domingo, la semana siguiente).
+  `modo` es `AUTOMATICO` (cada hora en punto con Despertar ≤ h:00 < Dormir, de 03 a 23, sin tope de cantidad) o `PERSONALIZADO` (`veces`
+  horas repartidas parejo). `maximo` son las horas que caben; `veces`, las que pregunta de verdad (0 si no hay Radar ese día).
+  `motivo` es `SIN_DESPERTAR`, `SIN_DORMIR` o `HORARIO_INVALIDO` cuando el día no tiene horario: ese día no hay Radar y no se inventa
+  uno. `editable` es `false` para hoy y los días pasados. `despertar` / `dormir` son `"HH:mm"` o `null`. Apagado trae los días igual.
+- **Body del PUT** — `{ "encendido": true, "dias": [ { "dia": 6, "modo": "PERSONALIZADO", "veces": 3, "sinRadar": false } ] }`.
+  `encendido` es obligatorio y rige en el acto. `dias` son **solo los días que se tocan** y lo que cada uno no dice queda como estaba;
+  sin `dias`, ninguno cambia. `veces` va de 1 a 21 y solo cuenta en `PERSONALIZADO` (sin él se propone 6, recortado a lo que cabe).
+  **400**: modo desconocido, día fuera de 1–7 o repetido, veces fuera de 1–21 o más de las que caben ese día (`Ese día caben N veces`).
+  **409**: el pedido **cambia** hoy o un día pasado (`Hoy y los días que pasaron no se pueden cambiar`; repetir un día tal como está se
+  acepta). **403**: solo la propia persona con el programa andando.
+- **`GET /radar/history`, la lectura del mentor y la del líder** traen `miRadar` con la misma forma pero con **solo el día de hoy** en
+  `dias` (y `hoy`), `null` antes del día 8 o con la cuenta suspendida.
+- **`POST /api/v1/radar`** desde el día 8: 409 si Mi Radar está apagado («Mi Radar está apagado»), si hoy no tiene Radar («Hoy no tienes
+  Mi Radar»: sin Despertar, sin Dormir, Dormir ≤ Despertar o «Sin Radar») o fuera de 03:00–23:59. La hora prevista es la local si es una
+  de las de hoy. Los días 1 a 7 no cambian.
+
+<details><summary>Spec 012 (reemplazada)</summary>
+
 - **Body del PUT y respuesta de ambos** — `{ "encendido": true, "horas": [9, 14, 20], "dias": [ { "dia": 6, "horas": [11] }, { "dia": 7, "horas": [] } ] }`.
   Mi Radar es **por día de la semana**, igual que los hábitos: `horas` vale para todos los días; cada elemento de `dias` es un día
   (ISO: lunes = 1 … domingo = 7, una vez cada uno) con horas propias, y `horas: []` es «Sin Radar ese día». Un día que no está en `dias`
@@ -436,6 +461,8 @@ mismo.
 
 > **Corregido 2026-10-29 (D-286, cuarta ronda de la spec 012).** Decía `{ "encendido": true, "horas": [9, 14, 20] }`, las mismas horas todos
 > los días, y el 409 de `POST /api/v1/radar` solo cubría Mi Radar apagado o fuera de 03:00–23:59.
+
+</details>
 
 ```bash
 curl -s -X POST http://localhost:8080/api/v1/radar \
