@@ -37,7 +37,14 @@ otras pantallas.
 - **Sin «Cómo suena»**: el Radar siempre suena, una vez por hora, como hoy. Sin repeticiones nuevas.
 - **Se quitan** los textos de explicación («Lo ves tú, tu mentor…», «Aquí verás tus registros de hoy», «De 03:00 a 23:00,
   hasta 12 horas por día», «Toca un día para…»), la elección de horas a mano y la fila cortada bajo el botón flotante de
-  SER (queda solo su relleno). El historial, si existe, queda debajo, sin texto de ayuda.
+  SER (queda solo su relleno).
+- **Yo → Mi Radar ya no muestra las respuestas de la persona** (ni los registros de hoy, ni «Historial», ni «Patrones»):
+  eso lo ven su mentor y su líder en la ficha. En su lugar, **una sola línea «Hoy: 4 de 6»** (las veces que respondió hoy de
+  las que le tocaban), en 16 px con cifras tabulares y sin colores de estado; el lector de pantalla dice «Hoy respondiste 4
+  de 6 veces». Solo con Mi Radar encendido y un día con Radar (no apagado, no «Sin Radar» hoy, no los días 1 a 7, no con 0
+  que tocan). Sale de lo que la app ya lee: las horas de hoy de `GET /radar/mi-radar` y las respuestas de hoy.
+- **Mi Radar y la mitad del Radar de Hoy son para todos los roles que hacen los 90 días** (aprendiz, guía, mentor, líder,
+  administrador y alquimista con su programa propio): ninguna pieza filtra por rol; la puerta es tener el programa activado.
 - **Un día sin Despertar (o sin Dormir)**: en lugar de «Hora», una tarjeta de una línea («Falta tu hora de Despertar») y,
   fijo abajo, «Programar mi Despertar», que lleva a Training → Planificar.
 - **Hoy (mitad del Radar) y las fichas** muestran lo que toca: «encendido · 05:30 a 22:30 · 17 veces» o «Hoy no tienes

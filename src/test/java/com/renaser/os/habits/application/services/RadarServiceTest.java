@@ -368,6 +368,22 @@ class RadarServiceTest {
     }
 
     @Test
+    @DisplayName("FR-019: registrar desde el dia 8 vale para todo rol con su programa activado, sin filtro por rol")
+    void registrarParaTodosLosRoles() {
+        HorarioDeRadarDePrueba.siempre(horarios, LocalTime.of(5, 30), LocalTime.of(22, 30));
+        for (RolParticipante rol : RolParticipante.values()) {
+            UserId persona = UserId.of(UUID.randomUUID());
+            when(progresoPort.deParticipante(persona)).thenReturn(Optional.of(
+                    new ProgresoParticipanteHabits(10, "America/Lima", rol, false, true)));
+            conMiRadar(persona, encendido());
+
+            RegistroRadar guardado = servicioConElReloj(LIMA_10_00).registrar(comando(persona, persona));
+
+            assertThat(guardado.horaPrevista()).as("rol %s", rol).isEqualTo(10);
+        }
+    }
+
+    @Test
     @DisplayName("un dia sin Despertar o sin Dormir no tiene Mi Radar: 409 «Hoy no tienes Mi Radar» y no guarda nada")
     void diaSinHorario() {
         UserId persona = personaEnLima(10);

@@ -143,14 +143,17 @@ class MiRadarServiceTest {
     }
 
     @Test
-    @DisplayName("FR-019: lo puede usar el personal con su programa activado, no solo el aprendiz")
+    @DisplayName("FR-019: lo puede usar todo rol con su programa activado (aprendiz, guia, mentor, lider, admin y alquimista), sin filtro por rol")
     void personalConProgramaActivado() {
         conHorario(LocalTime.of(6, 0), LocalTime.of(22, 0));
-        for (RolParticipante rol : new RolParticipante[]{RolParticipante.MENTOR, RolParticipante.MENTOR_LEAD,
-                RolParticipante.ADMIN, RolParticipante.ALCHEMIST, RolParticipante.TRAINEE_GUIDE}) {
+        for (RolParticipante rol : new RolParticipante[]{RolParticipante.TRAINEE, RolParticipante.MENTOR,
+                RolParticipante.MENTOR_LEAD, RolParticipante.ADMIN, RolParticipante.ALCHEMIST,
+                RolParticipante.TRAINEE_GUIDE}) {
             conProgramaActivado(rol);
 
             assertThat(service.consultar(persona, persona).dias()).as("rol %s", rol).hasSize(7);
+            assertThat(service.configurar(pedido(true, cambio(6, Modo.PERSONALIZADO, 3, null))).dias().get(5).veces())
+                    .as("rol %s configura", rol).isEqualTo(3);
         }
     }
 

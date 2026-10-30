@@ -396,16 +396,47 @@ class RadarMiRadarIT {
     }
 
     @Test
-    @DisplayName("FR-019: el personal con su programa activado lo enciende; sin activarlo, es 403")
-    void elPersonal() throws Exception {
-        UUID conPrograma = participante(10, "MENTOR", true);
-        UUID sinPrograma = participante(0, "MENTOR", false);
+    @DisplayName("FR-019: Mi Radar es para todos los roles que hacen los 90 dias: con su programa activado cada rol lee, configura y registra (ningun filtro por rol)")
+    void todosLosRolesConPrograma() throws Exception {
+        for (String rol : List.of("APRENDIZ", "GUIA_APRENDIZ", "MENTOR", "LIDER_MENTORES", "ADMIN", "ALQUIMISTA")) {
+            reloj.ahora = A_LAS_14_06_EN_LIMA;
+            UUID persona = participanteConHorario(10, rol, "05:30", "22:30");
+            String sesion = sesionDe(sesiones, persona);
 
-        assertThat(put("/mi-radar", sesionDe(sesiones, conPrograma), "{\"encendido\":true}").statusCode())
-                .isEqualTo(200);
-        assertThat(put("/mi-radar", sesionDe(sesiones, sinPrograma), "{\"encendido\":true}").statusCode())
-                .isEqualTo(403);
+            JsonNode semana = json.readTree(get("/mi-radar", sesion).body());
+            assertThat(semana.get("dias")).as("%s: GET", rol).hasSize(7);
+            assertThat(semana.get("dias").get(0).get("veces").asInt()).as("%s: 17 veces", rol).isEqualTo(17);
+            assertThat(put("/mi-radar", sesion, FIN_DE_SEMANA_PERSONALIZADO).statusCode()).as("%s: PUT", rol).isEqualTo(200);
+            assertThat(put("/mi-radar", sesion, "{\"encendido\":true,\"dias\":[{\"dia\":2,\"sinRadar\":true}]}").statusCode())
+                    .as("%s: hoy no se edita para nadie", rol).isEqualTo(409);
+            HttpResponse<String> registro = post("", sesion, REGISTRO);
+            assertThat(registro.statusCode()).as("%s: POST", rol).isEqualTo(200);
+            assertThat(json.readTree(registro.body()).get("horaPrevista").asInt()).as("%s: prevista", rol).isEqualTo(14);
+            assertThat(json.readTree(get("/history", sesion).body()).get("miRadar").get("dias")).as("%s: historial", rol).hasSize(1);
+        }
+    }
+
+    @Test
+    @DisplayName("FR-019: el personal sin su programa activado no lo usa: 403 (la puerta es tener el programa andando, no el rol)")
+    void elPersonalSinPrograma() throws Exception {
+        UUID sinPrograma = participante(0, "MENTOR", false);
+        String sesion = sesionDe(sesiones, sinPrograma);
+
+        assertThat(get("/mi-radar", sesion).statusCode()).isEqualTo(403);
+        assertThat(put("/mi-radar", sesion, "{\"encendido\":true}").statusCode()).isEqualTo(403);
+        assertThat(post("", sesion, REGISTRO).statusCode()).isEqualTo(403);
         assertThat(encendidoGuardado(sinPrograma)).isFalse();
+    }
+
+    @Test
+    @DisplayName("el personal que ya eligio su Dia 1 lee Mi Radar aunque este en la semana 1 (ningun 403)")
+    void conProgramaAunqueSeaLaSemana1() throws Exception {
+        UUID persona = participante(3, "MENTOR", true);
+
+        HttpResponse<String> respuesta = get("/mi-radar", sesionDe(sesiones, persona));
+
+        assertThat(respuesta.statusCode()).isEqualTo(200);
+        assertThat(json.readTree(respuesta.body()).get("dias")).hasSize(7);
     }
 
     // ── ayudas ──────────────────────────────────────────────────────────────
