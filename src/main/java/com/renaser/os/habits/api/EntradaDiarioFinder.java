@@ -15,7 +15,9 @@ import java.util.List;
 public interface EntradaDiarioFinder {
 
     /**
-     * Entradas del participante en el rango, ordenadas por fecha ascendente.
+     * Entradas del participante en el rango, ordenadas por fecha ascendente. <b>No incluye</b> las de «Cierra tu día»
+     * ({@code EVALUACION_DIA}, spec 017): lo que alguien le cuenta a su acompañamiento al cerrar el día no es material para el
+     * Espejo Sombra. Se lee por {@link EvaluacionDelDiaPort}.
      *
      * @param inicio primer dia incluido
      * @param fin    ultimo dia incluido

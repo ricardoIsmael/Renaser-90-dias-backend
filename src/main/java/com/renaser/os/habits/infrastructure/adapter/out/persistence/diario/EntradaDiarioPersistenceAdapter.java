@@ -53,8 +53,20 @@ class EntradaDiarioPersistenceAdapter implements LoadEntradaDiarioPort, SaveEntr
     @Transactional(readOnly = true)
     public List<EntradaDiarioSummary> entradasEntre(UserId participanteId, LocalDate inicio, LocalDate fin) {
         return repository
-                .findByParticipanteIdAndFechaBetweenOrderByFechaAsc(participanteId.value(), inicio, fin).stream()
+                .findByParticipanteIdAndFechaBetweenAndTipoNotOrderByFechaAsc(participanteId.value(), inicio, fin,
+                        TipoEntradaDiarioJpa.EVALUACION_DIA).stream()
                 .map(EntradaDiarioPersistenceMapper::aResumen)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<EntradaDiario> entreFechasDeTipo(UserId participanteId, TipoEntradaDiario tipo, LocalDate desde,
+                                                 LocalDate hasta) {
+        return repository
+                .findByParticipanteIdAndTipoAndFechaBetweenOrderByFechaAsc(participanteId.value(),
+                        TipoEntradaDiarioJpa.valueOf(tipo.name()), desde, hasta).stream()
+                .map(EntradaDiarioPersistenceMapper::aDominio)
                 .toList();
     }
 }

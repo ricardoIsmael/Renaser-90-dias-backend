@@ -452,6 +452,23 @@ Pruebas: `CupoDelDiaTest`, `FechasPlanificablesTest`, `AgregarRocaDiariaServiceT
 `EdicionDeObjetivoSemanalServiceTest` (incluye domingo 12:30 UTC = 07:30 en Lima, ventana todavía
 cerrada), `RocasDelAprendizServiceTest` (progreso, noventa, cierre anterior en la zona de la persona).
 
+## 14. «Cierra tu día» (spec 017, D-290, 2026-10-29)
+
+Al final del día la persona cuenta, de cada acción (`rocas_diarias`) que quedó pendiente, **qué pasó** y **qué hará mañana**, y puede
+dejar una nota. Opcional y sin puntos. Spec y contrato: `specs/017-cierre-del-dia/`; decisión: D-290.
+
+- **Dónde se guarda** (V121, sin tabla nueva): `cierre_motivo`, `cierre_manana`, `cierre_nota` y `cierre_en` en `rocas_diarias`
+  (`RocaDiaria.cierre()`: `CierreDeAccion(RespuestaDeCierre, cerradoEn)`). La marca de «día cerrado» y la nota del día son una fila
+  `EVALUACION_DIA` de `entradas_diario` (módulo `habits`, por `habits.api.EvaluacionDelDiaPort`).
+- **Cerrar NO cumple ni paga**: `SaveRocaDiariaPort.guardarSoloElCierre` hace un `UPDATE` de esas cuatro columnas (`WHERE completada = false`);
+  no se usa `save`, que reescribiría `completada` y los puntos. Si la persona cumple la acción después de cerrar, la respuesta queda en
+  la fila pero la lectura la oculta (`ArmadoDelCierre`).
+- **Reglas** (`rocks.domain.model.cierre.*`, `rocadiaria.CierreDelDia`): una respuesta por pendiente; solo hoy en la zona de la persona
+  (pasado 409, futuro 400); reabrir reemplaza todo.
+- **Servicios**: `CierreDelDiaService` (la persona: `GET/PUT /rocks/day-closure`), `CierresDeLaSemanaService`
+  (`rocks.api.CierresDelDiaFinder`, la lectura por semana de las fichas), `CierresDelAlumnoService` (guardián del mentor).
+- **Dependencia nueva**: `rocks → habits.api` (`EvaluacionDelDiaPort`); `leadership → rocks.api.CierresDelDiaFinder`.
+
 ## Auditoría de arquitectura (2026-08-28) — agente automático
 
 Auditoría de solo lectura de `src/main/java/com/renaser/os/rocks/`, 105 archivos `.java`, contra las reglas de CLAUDE.md §5.1/§5.4. No se modificó código fuente.

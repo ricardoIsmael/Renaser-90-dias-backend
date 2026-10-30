@@ -1479,3 +1479,14 @@ sin política); solo la pantalla pedía las respuestas. Ahora lo exige el servid
 - Pruebas: `RegistroServiceTest` (los cinco caminos), `PoliticaPastillaRenacerTest`, `PoliticaAudioterapiaTest`,
   `PastillaRenacerHabitoServiceTest`, y con base real `EvidenciaPersistenceAdapterTest` y
   `PastillaYAudioterapiaConRespuestasIT`.
+## «Cierra tu día»: la marca del día en `entradas_diario` (spec 017, D-290, 2026-10-29)
+
+`EVALUACION_DIA` (en el enum de `entradas_diario` desde `V1`, sin caso de uso hasta ahora) es la marca de que la persona cerró su día:
+una fila por persona y fecha (`UNIQUE`), con la nota del día en `contenido_texto` y la hora del primer cierre en `creado_en`.
+
+- **Puerto público**: `habits.api.EvaluacionDelDiaPort` (`dejarCerrado`, `marcasEntre`), implementado por `EvaluacionDelDiaService`. No
+  valida el día: lo resuelve `rocks.CierreDelDiaService` (que es quien orquesta el cierre) en la zona de la persona.
+- **No entra al Espejo Sombra**: `EntradaDiarioFinder.entradasEntre` excluye el tipo `EVALUACION_DIA` (lo que alguien le cuenta a su
+  acompañamiento no es material para el análisis de una IA); el dato se lee por el puerto de arriba.
+- `LoadEntradaDiarioPort.entreFechasDeTipo` es la lectura por tipo y rango.
+
