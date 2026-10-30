@@ -142,6 +142,42 @@ class HuecosDelAlumnoControllerTest {
     }
 
     @Test
+    @DisplayName("la semana calculada trae por dia sus bloques ocupados con nombre, lo cumplido y por que no hay ventana; y hoy")
+    void agendaDelDia() throws Exception {
+        when(huecos.semanaDe(any(), any())).thenReturn(
+                SemanasDeHuecosDePrueba.respuestaConAgenda(LUNES, PRIMERA, LocalDate.of(2026, 10, 29)));
+
+        pedir("", mentora, fenix, ana)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hoy").value("2026-10-29"))
+                .andExpect(jsonPath("$.dias[0].ocupados[0].desde").value("05:30"))
+                .andExpect(jsonPath("$.dias[0].ocupados[0].hasta").value("06:00"))
+                .andExpect(jsonPath("$.dias[0].ocupados[0].tipo").value("HABITO"))
+                .andExpect(jsonPath("$.dias[0].ocupados[0].titulo").value("Despertar"))
+                .andExpect(jsonPath("$.dias[0].ocupados[1].tipo").value("EVENTO"))
+                .andExpect(jsonPath("$.dias[0].ocupados[1].titulo").value("Reunion de equipo"))
+                .andExpect(jsonPath("$.dias[0].ocupados[2].tipo").value("AGENDA"))
+                .andExpect(jsonPath("$.dias[0].ocupados[2].titulo").value(nullValue()))
+                .andExpect(jsonPath("$.dias[0].cumplidosATiempo").value(5))
+                .andExpect(jsonPath("$.dias[0].cumplidosTarde").value(2))
+                .andExpect(jsonPath("$.dias[0].noCumplidos").value(1))
+                .andExpect(jsonPath("$.dias[0].sinVentanaPor").value(nullValue()))
+                .andExpect(jsonPath("$.dias[1].ventana").value(nullValue()))
+                .andExpect(jsonPath("$.dias[1].sinVentanaPor").value("SIN_DESPERTAR"));
+    }
+
+    @Test
+    @DisplayName("un dia de una semana cerrada no trae bloques ni lo cumplido: van en null y lo de antes no cambia")
+    void diaDeLaSemanaCerrada() throws Exception {
+        pedir("", mentora, fenix, ana)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.dias[0].ocupados").value(nullValue()))
+                .andExpect(jsonPath("$.dias[0].cumplidosATiempo").value(nullValue()))
+                .andExpect(jsonPath("$.dias[0].sinVentanaPor").value(nullValue()))
+                .andExpect(jsonPath("$.dias[0].minutosOcupados").value(410));
+    }
+
+    @Test
     @DisplayName("la semana pedida llega al calculo; sin ella, nula (la en curso la decide el servicio en la zona del alumno)")
     void semanaPedida() throws Exception {
         pedir("?semana=2026-10-19", mentora, fenix, ana).andExpect(status().isOk());

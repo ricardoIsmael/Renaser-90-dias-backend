@@ -19,6 +19,7 @@ Solo lectura para el acompañamiento. La persona no tiene endpoint en esta versi
 {
   "semana": "2026-10-26",
   "primeraSemana": "2026-10-12",
+  "hoy": "2026-10-29",
   "cerrada": false,
   "dias": [
     {
@@ -26,7 +27,16 @@ Solo lectura para el acompañamiento. La persona no tiene endpoint en esta versi
       "ventana": { "desde": "05:30", "hasta": "22:30" },
       "minutosOcupados": 410,
       "minutosLibres": 390,
-      "huecos": [ { "desde": "15:00", "hasta": "17:00", "minutos": 120 } ]
+      "huecos": [ { "desde": "15:00", "hasta": "17:00", "minutos": 120 } ],
+      "sinVentanaPor": null,
+      "ocupados": [
+        { "desde": "05:30", "hasta": "06:00", "tipo": "HABITO", "titulo": "Despertar" },
+        { "desde": "09:00", "hasta": "10:30", "tipo": "EVENTO", "titulo": "Reunión de equipo" },
+        { "desde": "14:00", "hasta": "15:00", "tipo": "AGENDA", "titulo": null }
+      ],
+      "cumplidosATiempo": 5,
+      "cumplidosTarde": 1,
+      "noCumplidos": 0
     }
   ],
   "resumen": {
@@ -43,3 +53,17 @@ Solo lectura para el acompañamiento. La persona no tiene endpoint en esta versi
 - `huecos`: solo los de 30 minutos o más, dentro de la ventana, en orden.
 - `cerrada: true` sale de la foto guardada al cerrar la semana; `false` es la semana en curso, calculada al pedirla.
 - `dias` lleva los 7 días de la semana (lunes a domingo). Un día que viene muestra lo planificado; uno pasado, también lo real en `resumen`.
+
+## Corregido 2026-10-29: la agenda del día (aditivo; lo de arriba no cambia)
+El dueño pidió ver el tiempo libre «por día». Cada día suma, y la semana suma `hoy`:
+- `hoy`: el día de hoy en la zona de la persona (`yyyy-MM-dd`). Con él la app marca hoy y dice «Todavía no llega» en los días que vienen.
+- `ocupados`: los bloques de lo planificado ese día, uno por hábito, acción, evento o tramo de agenda personal. `tipo` es `HABITO`,
+  `ACCION`, `EVENTO` o `AGENDA`; `titulo` es el nombre y es `null` en `AGENDA` (la persona los dijo sin etiqueta). Las horas son
+  `HH:mm`. Van **recortados a la ventana** del día, **en orden de hora** (inicio, fin, tipo, nombre) y **sin unir**: dos que se cruzan vienen
+  los dos. Lo que cae fuera de la ventana (Dormir, que empieza donde termina) no sale. Sin ventana, el día entero.
+- `cumplidosATiempo`, `cumplidosTarde`, `noCumplidos`: lo de ese día, con la cuenta del `resumen`. Ceros en un día que todavía no llega.
+- `sinVentanaPor`: solo cuando `ventana` es `null`. `SIN_DESPERTAR`, `SIN_DORMIR`, `SIN_DESPERTAR_NI_DORMIR` o `DORMIR_ANTES_DE_DESPERTAR`.
+
+**Un día de una semana `cerrada: true` no trae `ocupados`, los tres conteos ni `sinVentanaPor`** (vienen en `null`): la foto de la semana
+(`huecos_semana`, V120) guarda tramos de tiempo y no títulos. Un cliente tiene que tolerar su ausencia; los campos de antes (`ventana`,
+`minutosOcupados`, `minutosLibres`, `huecos`) y el `resumen` siguen siempre.

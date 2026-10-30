@@ -57,7 +57,7 @@ class HabitosDeUnDiaTest {
 
         HabitosDeUnDia habitos = HabitosDeUnDia.de(HOY, horarios, List.of());
 
-        assertThat(habitos.ocupan()).containsExactly(new HabitoConHora(HabitoConHora.DESPERTAR, LocalTime.of(6, 0)));
+        assertThat(habitos.ocupan()).containsExactly(new HabitoConHora(HabitoConHora.DESPERTAR, LocalTime.of(6, 0), "Habito"));
         assertThat(habitos.cumplibles()).isEmpty();
     }
 
@@ -88,7 +88,7 @@ class HabitosDeUnDiaTest {
         HabitosDeUnDia habitos = HabitosDeUnDia.de(HOY, horarios,
                 List.of(registro(conRegistro, AYER, EstadoObligacion.COMPLETADO, a, false)));
 
-        assertThat(habitos.ocupan()).containsExactly(new HabitoConHora(null, LocalTime.of(7, 0)));
+        assertThat(habitos.ocupan()).containsExactly(new HabitoConHora(null, LocalTime.of(7, 0), "Habito"));
         assertThat(habitos.cumplibles()).containsExactly(
                 new Cumplible(AYER, LocalTime.of(7, 0), null, a, false));
     }

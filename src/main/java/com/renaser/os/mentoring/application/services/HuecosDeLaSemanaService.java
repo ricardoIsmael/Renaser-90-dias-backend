@@ -58,10 +58,10 @@ public class HuecosDeLaSemanaService implements HuecosDeHorarioFinder {
         Optional<FotoDeHuecos> foto = lunes.isBefore(SemanaPedida.lunesDe(hoy))
                 ? fotos.deLaSemana(personaId, lunes) : Optional.empty();
         if (foto.isPresent()) {
-            return ArmadoDeLosHuecos.armar(foto.get().semana(), primeraSemana, true);
+            return ArmadoDeLosHuecos.armar(foto.get().semana(), new ArmadoDeLosHuecos.Lectura(primeraSemana, true, hoy));
         }
         SemanaDeHuecos semana = calculo.calcular(persona, lunes, hoy);
-        return ArmadoDeLosHuecos.armar(semana, primeraSemana, false);
+        return ArmadoDeLosHuecos.armar(semana, new ArmadoDeLosHuecos.Lectura(primeraSemana, false, hoy));
     }
 
     /** El lunes de la semana de su Día 1; {@code null} mientras no lo eligió (su fecha de inicio es provisional). */

@@ -11,18 +11,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 class VentanaDelDiaTest {
 
     private static HabitoConHora despertar(int hora, int minuto) {
-        return new HabitoConHora(HabitoConHora.DESPERTAR, LocalTime.of(hora, minuto));
+        return new HabitoConHora(HabitoConHora.DESPERTAR, LocalTime.of(hora, minuto), "Habito");
     }
 
     private static HabitoConHora dormir(int hora, int minuto) {
-        return new HabitoConHora(HabitoConHora.DORMIR, LocalTime.of(hora, minuto));
+        return new HabitoConHora(HabitoConHora.DORMIR, LocalTime.of(hora, minuto), "Habito");
     }
 
     @Test
     @DisplayName("va de la hora de Despertar a la de Dormir")
     void deDespertarADormir() {
         VentanaDelDia ventana = VentanaDelDia.de(List.of(dormir(22, 30), despertar(5, 30),
-                new HabitoConHora(null, LocalTime.of(9, 0))));
+                new HabitoConHora(null, LocalTime.of(9, 0), "Habito")));
 
         assertThat(ventana).isEqualTo(new VentanaDelDia(330, 1350));
         assertThat(ventana.vieneDeLaPersona()).isTrue();

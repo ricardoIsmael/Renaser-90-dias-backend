@@ -18,7 +18,7 @@ class ItemPlanificadoTest {
     @Test
     @DisplayName("un habito dura 30 minutos por defecto")
     void habito() {
-        ItemPlanificado item = ItemPlanificado.deHabito(LUNES, LocalTime.of(7, 0));
+        ItemPlanificado item = ItemPlanificado.deHabito(LUNES, LocalTime.of(7, 0), "Agua");
 
         assertThat(item.tramoEn(LUNES)).contains(new TramoDelDia(420, 450));
         assertThat(item.tramoEn(MARTES)).isEmpty();
@@ -27,13 +27,13 @@ class ItemPlanificadoTest {
     @Test
     @DisplayName("una accion usa su inicio y su fin; sin fin, o con el fin antes del inicio, dura 30 minutos")
     void accion() {
-        assertThat(ItemPlanificado.deAccion(LUNES, LocalTime.of(9, 0), LocalTime.of(10, 30)).tramoEn(LUNES))
+        assertThat(ItemPlanificado.deAccion(LUNES, LocalTime.of(9, 0), LocalTime.of(10, 30), "Llamar").tramoEn(LUNES))
                 .contains(new TramoDelDia(540, 630));
-        assertThat(ItemPlanificado.deAccion(LUNES, LocalTime.of(9, 0), null).tramoEn(LUNES))
+        assertThat(ItemPlanificado.deAccion(LUNES, LocalTime.of(9, 0), null, "Llamar").tramoEn(LUNES))
                 .contains(new TramoDelDia(540, 570));
-        assertThat(ItemPlanificado.deAccion(LUNES, LocalTime.of(9, 0), LocalTime.of(8, 0)).tramoEn(LUNES))
+        assertThat(ItemPlanificado.deAccion(LUNES, LocalTime.of(9, 0), LocalTime.of(8, 0), "Llamar").tramoEn(LUNES))
                 .contains(new TramoDelDia(540, 570));
-        assertThat(ItemPlanificado.deAccion(LUNES, LocalTime.of(9, 0), LocalTime.of(9, 0)).tramoEn(LUNES))
+        assertThat(ItemPlanificado.deAccion(LUNES, LocalTime.of(9, 0), LocalTime.of(9, 0), "Llamar").tramoEn(LUNES))
                 .contains(new TramoDelDia(540, 570));
     }
 
@@ -42,17 +42,17 @@ class ItemPlanificadoTest {
     void evento() {
         LocalDateTime inicia = LUNES.atTime(10, 0);
 
-        assertThat(ItemPlanificado.deEvento(inicia, null).tramoEn(LUNES)).contains(new TramoDelDia(600, 660));
-        assertThat(ItemPlanificado.deEvento(inicia, LUNES.atTime(11, 30)).tramoEn(LUNES))
+        assertThat(ItemPlanificado.deEvento(inicia, null, "Clase").tramoEn(LUNES)).contains(new TramoDelDia(600, 660));
+        assertThat(ItemPlanificado.deEvento(inicia, LUNES.atTime(11, 30), "Clase").tramoEn(LUNES))
                 .contains(new TramoDelDia(600, 690));
-        assertThat(ItemPlanificado.deEvento(inicia, LUNES.atTime(9, 0)).tramoEn(LUNES))
+        assertThat(ItemPlanificado.deEvento(inicia, LUNES.atTime(9, 0), "Clase").tramoEn(LUNES))
                 .contains(new TramoDelDia(600, 660));
     }
 
     @Test
     @DisplayName("un evento que cruza la medianoche se parte: cada dia cuenta su pedazo")
     void cruzaLaMedianoche() {
-        ItemPlanificado item = ItemPlanificado.deEvento(LUNES.atTime(23, 0), MARTES.atTime(1, 30));
+        ItemPlanificado item = ItemPlanificado.deEvento(LUNES.atTime(23, 0), MARTES.atTime(1, 30), "Fiesta");
 
         assertThat(item.tramoEn(LUNES)).contains(new TramoDelDia(1380, TramoDelDia.FIN_DEL_DIA));
         assertThat(item.tramoEn(MARTES)).contains(new TramoDelDia(0, 90));
@@ -63,7 +63,7 @@ class ItemPlanificadoTest {
     @Test
     @DisplayName("una accion de 30 minutos por defecto que empieza a las 23:50 deja su resto en la madrugada")
     void accionPorDefectoQueCruza() {
-        ItemPlanificado item = ItemPlanificado.deAccion(LUNES, LocalTime.of(23, 50), null);
+        ItemPlanificado item = ItemPlanificado.deAccion(LUNES, LocalTime.of(23, 50), null, "Llamar");
 
         assertThat(item.tramoEn(LUNES)).contains(new TramoDelDia(1430, TramoDelDia.FIN_DEL_DIA));
         assertThat(item.tramoEn(MARTES)).contains(new TramoDelDia(0, 20));

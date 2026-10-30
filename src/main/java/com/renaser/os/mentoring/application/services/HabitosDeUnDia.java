@@ -74,6 +74,6 @@ record HabitosDeUnDia(List<HabitoConHora> ocupan, List<Cumplible> cumplibles) {
 
     private static Optional<HabitoConHora> conHora(HorarioResuelto habito) {
         return habito.horaDisparo() == null ? Optional.empty()
-                : Optional.of(new HabitoConHora(habito.claveSistema(), habito.horaDisparo()));
+                : Optional.of(new HabitoConHora(habito.claveSistema(), habito.horaDisparo(), habito.titulo()));
     }
 }
