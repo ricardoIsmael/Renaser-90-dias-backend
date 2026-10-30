@@ -78,4 +78,13 @@ public class RocaDiariaJpaEntity {
     private Instant creadoEn;
 
     private Instant actualizadoEn;
+
+    /** «Cierra tu dia» (V121, spec 017): las cuatro van juntas o ninguna. Se escriben SOLO con el UPDATE dirigido del repositorio. */
+    private String cierreMotivo;
+
+    private String cierreManana;
+
+    private String cierreNota;
+
+    private Instant cierreEn;
 }

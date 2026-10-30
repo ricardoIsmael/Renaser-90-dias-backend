@@ -131,6 +131,7 @@ Mandá también `Authorization: Bearer <token>` en paralelo — hoy el backend l
 | POST | `/api/v1/rocks/plan` |
 | POST | `/api/v1/rocks/{id}/evidence/upload-url` |
 | POST | `/api/v1/rocks/{id}/evidence` |
+| GET · PUT | `/api/v1/rocks/day-closure` (spec 017, «Cierra tu día»: ver más abajo) |
 | GET · POST | `/api/v1/enforcer-events` |
 
 ### `evidence`
@@ -169,6 +170,22 @@ Todas exigen sesión (`SecurityConfig`, E-254).
 
 `semanaHasta` es el viernes que cierra la semana (sábado→viernes); sin él, la ventana vigente (los 7 días
 cerrados que terminan ayer). Un `semanaHasta` que no es viernes responde 400.
+
+### Cierra tu día (spec 017, D-290, 2026-10-29)
+
+Contrato y reglas: [`specs/017-cierre-del-dia/contracts/api.md`](../specs/017-cierre-del-dia/contracts/api.md). Al final del día la
+persona cuenta, de cada acción que le quedó pendiente, qué pasó y qué hará mañana. **Opcional, sin puntos: cerrar nunca completa una
+acción, paga puntos ni toca el semáforo.** Todo exige sesión y responde con `Cache-Control: no-store`.
+
+| Verbo | Ruta | Quién · guard |
+|---|---|---|
+| GET | `/api/v1/rocks/day-closure?date=YYYY-MM-DD` | la propia persona (`FOLLOW_OWN_PROGRAM`); aprendiz o personal con su programa activado; sin `date`, hoy en su zona; una fecha futura es 400 |
+| PUT | `/api/v1/rocks/day-closure` | ídem; cierra el de HOY (idempotente); un día que ya pasó es 409 «Ese día ya cerró…»; falta la respuesta de una pendiente, 400 |
+| GET | `/api/v1/mentor/groups/{groupId}/learners/{userId}/cierres?semana=YYYY-MM-DD` | mentor o guía · acompaña vigentemente el grupo, cuenta activa y el alumno es del grupo (mismo guardián que `…/radar` y `…/huecos`) |
+| GET | `/api/v1/leadership/groups/{groupId}/people/{personId}/cierres?semana=YYYY-MM-DD` | líder de mentores, admin, alquimista · `AccesoDeLiderazgo`; **deja constancia** en `consultas_de_ficha` solo si responde 200 |
+
+Interruptores de Soporte TI: `plan` (la persona), `mentor.mi_grupo` y `lider.cumplimiento` (las fichas). `semana` es el lunes; sin ella, la
+semana en curso de la persona; una semana futura, anterior a la primera de su programa o que no es lunes responde 400.
 
 ### `academy`
 

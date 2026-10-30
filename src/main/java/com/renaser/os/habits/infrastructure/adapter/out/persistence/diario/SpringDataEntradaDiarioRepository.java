@@ -12,7 +12,19 @@ interface SpringDataEntradaDiarioRepository extends JpaRepository<EntradaDiarioJ
     Optional<EntradaDiarioJpaEntity> findByParticipanteIdAndFechaAndTipo(UUID participanteId, LocalDate fecha,
                                                                           TipoEntradaDiarioJpa tipo);
 
-    /** Rango cerrado en ambos extremos — usa `entradas_diario_perfil_fecha_idx`. */
-    List<EntradaDiarioJpaEntity> findByParticipanteIdAndFechaBetweenOrderByFechaAsc(UUID participanteId,
-                                                                                     LocalDate inicio, LocalDate fin);
+    /**
+     * Rango cerrado en ambos extremos — usa `entradas_diario_perfil_fecha_idx` — SIN las de un tipo. Es lo que lee el Espejo Sombra
+     * de {@code rag}: el cierre del dia (EVALUACION_DIA, spec 017) es lo que la persona le cuenta a su acompanamiento, no material
+     * para que una IA lo analice.
+     */
+    List<EntradaDiarioJpaEntity> findByParticipanteIdAndFechaBetweenAndTipoNotOrderByFechaAsc(UUID participanteId,
+                                                                                               LocalDate inicio,
+                                                                                               LocalDate fin,
+                                                                                               TipoEntradaDiarioJpa excluido);
+
+    /** Las de UN tipo en un rango cerrado, por fecha (spec 017: las marcas de «dia cerrado»). */
+    List<EntradaDiarioJpaEntity> findByParticipanteIdAndTipoAndFechaBetweenOrderByFechaAsc(UUID participanteId,
+                                                                                            TipoEntradaDiarioJpa tipo,
+                                                                                            LocalDate inicio,
+                                                                                            LocalDate fin);
 }

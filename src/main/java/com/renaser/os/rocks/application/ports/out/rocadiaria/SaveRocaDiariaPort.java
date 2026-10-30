@@ -21,4 +21,12 @@ public interface SaveRocaDiariaPort {
      * una persona — {@code RocaDiariaService} solo lo invoca para fechas posteriores a hoy.
      */
     void borrarDeParticipanteYFecha(UserId participanteId, LocalDate fecha);
+
+    /**
+     * Guarda SOLO la respuesta de cierre de cada roca (spec 017): las cuatro columnas {@code cierre_*}, y nada mas. A diferencia de
+     * {@link #save}, que reescribe la fila entera, esto no puede tocar {@code completada}, {@code completada_en} ni
+     * {@code puntos_otorgados}: si la persona cumple una accion mientras cierra su dia, ese cumplimiento sobrevive. Una roca con
+     * respuesta solo se actualiza si sigue pendiente; una sin respuesta ({@code cierre() == null}) se limpia.
+     */
+    void guardarSoloElCierre(List<RocaDiaria> rocas);
 }

@@ -1,0 +1,499 @@
+<title>Cierre, tiempo libre y líder</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Jost:wght@400;500;700&display=swap">
+<style>
+/* Sala de revisión: arriba qué se decide; luego cada pieza con sus teléfonos lado a lado (los tokens del teléfono son los de src/theme/tokens.ts). */
+:root{
+  --pg:#EEEAE3;--pgCard:#FFFFFF;--pgInk:#16140F;--pgSoft:#5A544A;--pgLine:#DDD6CA;--pgGold:#856C35;--pgWash:rgba(178,146,79,.14);--pgOk:#2E7D52;
+  --serif:"Fraunces",Georgia,serif;--sans:"Jost",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --bg:#FCFBF9;--s1:#FFFFFF;--s2:#F4F1EB;--line:#E8E2D8;--ink:#11100D;--soft:#4A453D;--mute:#7A7266;--gold:#B2924F;--goldInk:#856C35;
+  --wash:rgba(178,146,79,.10);--wash2:rgba(178,146,79,.20);--onGold:#1E1B18;--ok:#2E7D52;--okWash:rgba(46,125,82,.12);--warn:#A86A12;--bad:#B23A35;
+  --track:#ECE6DC;--busy:#E9E3D8;--busyInk:#3D382F;--shadow:0 1px 2px rgba(30,27,24,.05),0 8px 24px rgba(30,27,24,.07);--frame:#1B1916;--scrim:rgba(17,16,13,.38);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --pg:#050504;--pgCard:#141311;--pgInk:#F6F4EE;--pgSoft:#BDB5A8;--pgLine:#2A2722;--pgGold:#D9BD7E;--pgWash:rgba(198,164,92,.14);--pgOk:#70D2A0;
+  --bg:#0C0B09;--s1:#161513;--s2:#201F1C;--line:rgba(198,164,92,.16);--ink:#FFFFFF;--soft:#C5BEB3;--mute:#8E877C;--gold:#C6A45C;--goldInk:#D9BD7E;
+  --wash:rgba(198,164,92,.12);--wash2:rgba(198,164,92,.24);--onGold:#14120E;--ok:#70D2A0;--okWash:rgba(112,210,160,.14);--warn:#E2B65C;--bad:#EF8A84;
+  --track:#2A2824;--busy:#24221E;--busyInk:#D9D2C6;--shadow:0 0 0 1px rgba(198,164,92,.10);--frame:#2E2B27;--scrim:rgba(0,0,0,.6);color-scheme:dark}}
+:root[data-theme="dark"]{
+  --pg:#050504;--pgCard:#141311;--pgInk:#F6F4EE;--pgSoft:#BDB5A8;--pgLine:#2A2722;--pgGold:#D9BD7E;--pgWash:rgba(198,164,92,.14);--pgOk:#70D2A0;
+  --bg:#0C0B09;--s1:#161513;--s2:#201F1C;--line:rgba(198,164,92,.16);--ink:#FFFFFF;--soft:#C5BEB3;--mute:#8E877C;--gold:#C6A45C;--goldInk:#D9BD7E;
+  --wash:rgba(198,164,92,.12);--wash2:rgba(198,164,92,.24);--onGold:#14120E;--ok:#70D2A0;--okWash:rgba(112,210,160,.14);--warn:#E2B65C;--bad:#EF8A84;
+  --track:#2A2824;--busy:#24221E;--busyInk:#D9D2C6;--shadow:0 0 0 1px rgba(198,164,92,.10);--frame:#2E2B27;--scrim:rgba(0,0,0,.6);color-scheme:dark}
+*{box-sizing:border-box}
+::selection{background:var(--pgWash);color:var(--pgInk)}
+html{accent-color:var(--gold);scrollbar-color:var(--pgLine) transparent}
+body{background:var(--pg);color:var(--pgInk);font-family:var(--sans);font-size:15.5px;line-height:1.45;margin:0;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 72px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1{font-family:var(--serif);font-weight:700;font-size:clamp(30px,4.6vw,44px);line-height:1.04;letter-spacing:-.02em;margin:0;text-wrap:balance}
+.lead{color:var(--pgSoft);margin:0;max-width:66ch}
+.tabs{display:flex;gap:6px;background:var(--pgCard);border:1px solid var(--pgLine);border-radius:16px;padding:5px;max-width:720px;flex-wrap:wrap}
+.tabs button{flex:1 1 180px;border:0;background:transparent;color:var(--pgInk);font:500 15px var(--sans);min-height:46px;border-radius:12px;cursor:pointer;padding:0 12px}
+.tabs button[aria-selected="true"]{background:var(--pgInk);color:var(--pg)}
+.tabs button:focus-visible,.pgbtn:focus-visible{outline:2px solid var(--pgGold);outline-offset:2px}
+.panel{display:grid;grid-template-columns:minmax(260px,330px) 1fr;gap:28px;align-items:start}
+@media (max-width:980px){.panel{grid-template-columns:1fr}}
+.why{display:flex;flex-direction:column;gap:14px;min-width:0}
+.why h2{font-family:var(--serif);font-weight:600;font-size:26px;margin:0;line-height:1.12;text-wrap:balance}
+.why p{margin:0;color:var(--pgSoft)}
+.why ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:7px;color:var(--pgSoft)}
+.why li b{color:var(--pgInk);font-weight:500}
+.note{background:var(--pgCard);border:1px solid var(--pgLine);border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.note h3{margin:0;font-size:14px;font-weight:700}
+.note p{font-size:14.5px}
+.phones{display:flex;gap:22px;overflow-x:auto;padding:4px 4px 18px;scroll-snap-type:x mandatory;min-width:0}
+.cap{display:flex;flex-direction:column;gap:10px;align-items:center;scroll-snap-align:start;flex:none}
+.cap>p{margin:0;font-size:13.5px;color:var(--pgSoft);text-align:center;max-width:300px}
+.cap>p b{color:var(--pgInk);font-weight:700}
+/* teléfono */
+.ph{width:330px;border-radius:44px;padding:9px;background:var(--frame);box-shadow:0 24px 50px rgba(0,0,0,.2);flex:none}
+.sc{position:relative;height:680px;border-radius:36px;overflow:hidden;background:var(--bg);color:var(--ink);display:flex;flex-direction:column}
+.st{display:flex;justify-content:space-between;padding:12px 24px 2px;font-size:12.5px;font-weight:500;color:var(--ink)}
+.bd{flex:1;overflow-y:auto;padding:6px 16px 28px;scrollbar-width:none}.bd::-webkit-scrollbar{display:none}
+:where(.sc button){font-family:var(--sans);color:inherit}
+.sc :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+svg.i{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
+svg.s14{width:14px;height:14px}svg.s16{width:16px;height:16px}svg.s24{width:24px;height:24px}
+.tt{font-family:var(--serif);font-weight:700;font-size:25px;letter-spacing:-.01em;margin-top:6px}
+.sub{font-size:13px;color:var(--soft)}
+.num{font-variant-numeric:tabular-nums}
+.ml{font-size:13px;font-weight:700;color:var(--goldInk);margin:16px 2px 6px}
+.row{display:grid;grid-template-columns:46px 1fr auto;gap:10px;align-items:center;min-height:52px;padding:6px 2px;border-bottom:1px solid var(--line)}
+.row .h{font-weight:700;font-size:14px;font-variant-numeric:tabular-nums}
+.row .n{font-weight:500;font-size:15px;line-height:1.25}
+.pill{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 13px;border-radius:18px;font:500 13.5px var(--sans);background:var(--wash);color:var(--goldInk);border:0}
+.ring{width:32px;height:32px;border-radius:50%;border:1.75px solid var(--soft)}
+.done{color:var(--mute);text-decoration:line-through;text-decoration-color:var(--mute)}
+.closeRow{margin-top:14px;display:grid;grid-template-columns:46px 1fr auto;gap:10px;align-items:center;padding:14px 12px;border-radius:18px;background:var(--wash);border:1px solid var(--wash2);cursor:pointer;width:100%;text-align:left}
+.closeRow .n{font-weight:700;font-size:15.5px}
+.closeRow .h{font-weight:700;font-size:14px;color:var(--goldInk);font-variant-numeric:tabular-nums}
+.closeRow .m{width:32px;height:32px;border-radius:50%;background:var(--gold);color:var(--onGold);display:grid;place-items:center}
+.closed{background:var(--okWash);border-color:transparent}
+.closed .m{background:var(--ok);color:var(--bg)}
+/* hoja */
+.sheetHead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px}
+.sheetHead h4{font-family:var(--serif);font-weight:600;font-size:23px;margin:0;line-height:1.1}
+.xbtn{width:40px;height:40px;border-radius:20px;border:1px solid var(--line);background:var(--s1);display:grid;place-items:center;flex:none}
+.grab{width:40px;height:5px;border-radius:3px;background:var(--line);margin:4px auto 6px}
+.ok-line{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.ok-line .c{width:26px;height:26px;border-radius:50%;background:var(--ok);color:var(--bg);display:grid;place-items:center;flex:none}
+.ok-line .n{font-size:15px;font-weight:500;flex:1;min-width:0}
+.ok-line .t{font-size:13px;color:var(--ok);font-weight:500;white-space:nowrap}
+.act{background:var(--s1);box-shadow:var(--shadow);border-radius:18px;padding:14px;margin-top:10px;display:flex;flex-direction:column;gap:8px}
+.act .n{font-size:16px;font-weight:500}
+.act .when{font-size:13px;color:var(--soft)}
+.q{font-size:14px;font-weight:700;margin-top:6px}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chips button{min-height:42px;padding:0 13px;border-radius:21px;border:1px solid var(--line);background:var(--s1);font-size:14px;cursor:pointer;transition:background-color .15s ease-out,border-color .15s ease-out}
+.chips button[aria-pressed="true"]{background:var(--gold);border-color:var(--gold);color:var(--onGold);font-weight:700}
+.chips button:active{transform:scale(.97)}
+.ta{width:100%;min-height:48px;border-radius:14px;border:1px solid var(--line);background:var(--s1);color:var(--ink);font:400 15px var(--sans);padding:12px 14px;resize:none}
+.ta::placeholder{color:var(--mute)}
+.fold{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:52px;border:0;border-top:1px solid var(--line);background:transparent;font:700 15px var(--sans);cursor:pointer;padding:0 2px;margin-top:16px;color:var(--ink)}
+.cta{display:flex;align-items:center;justify-content:center;gap:8px;min-height:52px;border-radius:26px;background:var(--gold);color:var(--onGold);font:700 15.5px var(--sans);border:0;cursor:pointer;width:100%;margin-top:18px}
+.cta:active{transform:scale(.98)}
+.cta:disabled{opacity:.4;cursor:default;transform:none}
+.hint{font-size:13px;color:var(--soft);text-align:center;margin-top:8px}
+.savedBox{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;margin-top:34px}
+.savedBox .big{width:64px;height:64px;border-radius:50%;background:var(--okWash);color:var(--ok);display:grid;place-items:center}
+.savedBox b{font-size:19px}
+.lnk{display:inline-flex;align-items:center;gap:4px;color:var(--goldInk);font-weight:500;font-size:15px;border:0;background:transparent;padding:8px 0;cursor:pointer;min-height:44px}
+/* tiempo libre */
+.back{display:flex;align-items:center;gap:4px;margin:2px 0 0 -6px;color:var(--goldInk);font-weight:500;font-size:15px}
+.weeknav{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px}
+.weeknav .wn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--s1);display:grid;place-items:center}
+.weeknav .wn[disabled]{opacity:.35}
+.weeknav div{text-align:center}
+.weeknav b{display:block;font-size:15px}
+.free{display:flex;align-items:baseline;gap:8px;margin-top:14px;flex-wrap:wrap}
+.free b{font:700 26px var(--sans);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.free span{font-size:13.5px;color:var(--soft)}
+.days{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-top:12px}
+.dcol{display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 0 7px;border-radius:12px;border:1px solid transparent;background:transparent;cursor:pointer}
+.dcol .l{font-size:12px;color:var(--soft);font-weight:500}
+.dcol .bar{width:20px;height:58px;border-radius:7px;background:var(--busy);position:relative;overflow:hidden}
+.dcol .bar i{position:absolute;left:0;right:0;bottom:0;background:var(--gold);border-radius:7px 7px 7px 7px}
+.dcol .v{font-size:11.5px;font-weight:700;font-variant-numeric:tabular-nums}
+.dcol[aria-pressed="true"]{background:var(--wash2);border-color:var(--gold)}
+.dcol .today{width:5px;height:5px;border-radius:50%;background:var(--goldInk)}
+.dayhead{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-top:16px}
+.dayhead b{font-size:17px}
+.dayhead span{font-size:13px;color:var(--soft);font-variant-numeric:tabular-nums}
+.real{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.tag{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:700;padding:3px 9px;border-radius:8px;background:var(--s2);color:var(--soft)}
+.tag.ok{background:var(--okWash);color:var(--ok)}
+.tag.w{background:rgba(168,106,18,.12);color:var(--warn)}
+.tag.b{background:rgba(178,58,53,.1);color:var(--bad)}
+.tl{position:relative;margin-top:12px;margin-left:40px}
+.tl .hr{position:absolute;left:-40px;font-size:11px;color:var(--mute);font-variant-numeric:tabular-nums;transform:translateY(-50%)}
+.tl .tick{position:absolute;left:0;right:0;height:1px;background:var(--line)}
+.blk{position:absolute;left:0;right:0;border-radius:8px;padding:2px 8px;display:flex;align-items:center;gap:6px;overflow:hidden;font-size:12px;line-height:1.15}
+.blk.busy{background:var(--busy);color:var(--busyInk)}
+.blk.ev{background:var(--s2);color:var(--busyInk);box-shadow:inset 0 0 0 1px var(--line)}
+.blk.gap{background:var(--wash);color:var(--goldInk);box-shadow:inset 0 0 0 1.5px var(--gold);font-weight:700;justify-content:space-between}
+.blk.gap em{font-style:normal;font-weight:500;font-size:11.5px;color:var(--goldInk)}
+.repeat{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.repeat div{display:flex;justify-content:space-between;gap:8px;font-size:14px;padding:8px 10px;border-radius:12px;background:var(--s1);box-shadow:var(--shadow)}
+.repeat div span{color:var(--soft)}
+/* líder */
+.seg{display:flex;background:var(--s2);border-radius:14px;padding:4px;margin-top:10px}
+.seg button{flex:1;text-align:center;min-height:40px;border-radius:11px;font-size:13.5px;color:var(--soft);border:0;background:transparent;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--s1);color:var(--ink);font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.list{background:var(--s1);box-shadow:var(--shadow);border-radius:18px;overflow:hidden;margin-top:10px}
+.li{display:flex;align-items:center;gap:12px;padding:11px 14px;min-height:60px;width:100%;border:0;background:transparent;text-align:left;cursor:pointer}
+.li+.li{border-top:1px solid var(--line)}
+.li .x{flex:1;min-width:0}
+.li .n{font-size:15px;font-weight:500}
+.li .m{font-size:13px;color:var(--soft)}
+.li .p{font:700 15px var(--sans);font-variant-numeric:tabular-nums}
+.dot{width:10px;height:10px;border-radius:50%;flex:none}
+.dot.g{background:var(--ok)}.dot.y{background:var(--warn)}.dot.r{background:var(--bad)}.dot.n{background:transparent;border:2px solid var(--mute)}
+.av{width:36px;height:36px;border-radius:50%;background:var(--wash2);color:var(--goldInk);display:grid;place-items:center;font-weight:700;font-size:13px;flex:none}
+.answers{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.ans{background:var(--s1);box-shadow:var(--shadow);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:4px}
+.ans .k{font-size:12.5px;color:var(--soft);font-weight:500}
+.ans .v{font:700 20px var(--sans);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.ans .s{font-size:12.5px;color:var(--soft)}
+.ans.no .v{color:var(--bad)}.ans.si .v{color:var(--ok)}
+.drow{display:flex;align-items:center;gap:10px;padding:10px 2px;border-bottom:1px solid var(--line)}
+.drow .x{flex:1;min-width:0}
+.drow .n{font-size:14.5px;font-weight:500}
+.drow .m{font-size:12.5px;color:var(--soft)}
+.ev{width:30px;height:30px;border-radius:9px;background:var(--wash);color:var(--goldInk);display:grid;place-items:center;flex:none}
+.ev.none{background:var(--s2);color:var(--mute)}
+.tb{display:flex;justify-content:space-around;align-items:flex-end;height:62px;border-top:1px solid var(--line);background:var(--bg);padding-bottom:10px;flex:none}
+.tb span{display:flex;flex-direction:column;align-items:center;gap:3px;font:500 9px var(--sans);letter-spacing:.05em;color:var(--mute)}
+.tb span.on{color:var(--goldInk)}
+.tb .mid{width:46px;height:46px;border-radius:50%;background:var(--gold);color:var(--onGold);display:grid;place-items:center;margin-top:-18px;border:4px solid var(--bg)}
+/* decisiones */
+.decs{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.dec{background:var(--pgCard);border:1px solid var(--pgLine);border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.dec h3{margin:0;font-size:16px;font-weight:700;line-height:1.3}
+.opt{display:flex;flex-direction:column;gap:2px;font-size:14.5px;color:var(--pgSoft);border-top:1px solid var(--pgLine);padding-top:8px}
+.opt b{color:var(--pgInk);font-weight:500}
+.opt.rec b::after{content:" · recomendada";color:var(--pgGold);font-weight:700;font-size:12.5px}
+h2.sec{font-family:var(--serif);font-weight:600;font-size:28px;margin:18px 0 0}
+@media (prefers-reduced-motion: reduce){.chips button,.cta{transition:none}.chips button:active,.cta:active{transform:none}}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+<symbol id="moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+<symbol id="camera" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3"/></symbol>
+<symbol id="x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+<symbol id="left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+<symbol id="right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+<symbol id="chevd" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+<symbol id="image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></symbol>
+<symbol id="cal" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+<symbol id="msg" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+<symbol id="house" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .71-1.53l7-6a2 2 0 0 1 2.58 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+<symbol id="clip" viewBox="0 0 24 24"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M12 11h4M12 16h4M8 11h.01M8 16h.01"/></symbol>
+<symbol id="bicep" viewBox="0 0 24 24"><path d="M12.4 12.5a6 6 0 0 1 8.6 5.4V19a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-6.7a10 10 0 0 1 3.3-7.4L8 3.5a1.5 1.5 0 0 1 2.3 1.9L9 8"/><path d="M13 9.5a3.5 3.5 0 0 0-5 3.2"/></symbol>
+<symbol id="users" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3"/><circle cx="5" cy="10" r="2.2"/><circle cx="19" cy="10" r="2.2"/><path d="M7 20a5 5 0 0 1 10 0M1.5 19a3.6 3.6 0 0 1 4.5-3.4M22.5 19a3.6 3.6 0 0 0-4.5-3.4"/></symbol>
+<symbol id="user" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.66V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.66"/></symbol>
+</defs></svg>
+
+<div class="wrap">
+  <header style="display:flex;flex-direction:column;gap:10px">
+    <h1>Cierre, tiempo libre y líder</h1>
+    <p class="lead">Tres piezas para terminar hoy, sobre la app real: «Cierra tu día» en Training para quien hace su programa, «Tiempo libre» por día en la ficha y la vista del líder de mentores más limpia. Son datos de ejemplo; no toca la app ni producción. Abajo están las decisiones que te toca tomar.</p>
+  </header>
+
+  <div class="tabs" role="tablist" aria-label="Pieza">
+    <button type="button" role="tab" id="t-cierre" aria-controls="p-cierre" aria-selected="true">1 · Cierra tu día</button>
+    <button type="button" role="tab" id="t-libre" aria-controls="p-libre" aria-selected="false">2 · Tiempo libre por día</button>
+    <button type="button" role="tab" id="t-lider" aria-controls="p-lider" aria-selected="false">3 · Líder de mentores</button>
+  </div>
+
+  <!-- 1 · CIERRA TU DÍA -->
+  <section class="panel" id="p-cierre" role="tabpanel" aria-labelledby="t-cierre">
+    <div class="why">
+      <h2>Cierra tu día, al final de Training</h2>
+      <p>Es la última fila de hoy, media hora antes de tu hora de Dormir. Si Dormir no tiene hora, sale a las 21:30. No da puntos y no es obligatorio.</p>
+      <ul>
+        <li><b>Lo que ya hiciste no se pregunta.</b> Las acciones que registraste en Training llegan marcadas como cumplidas.</li>
+        <li><b>Solo se pregunta por lo que quedó pendiente:</b> qué pasó y qué harás mañana. Se responde con un toque; escribir es opcional.</li>
+        <li><b>Tu semana, en una línea.</b> Cuántas acciones de la semana llevas cumplidas, sin preguntarte nada. La revisión del domingo sigue en Plan, como ahora.</li>
+      </ul>
+      <div class="note">
+        <h3>¿Por qué estas preguntas van aquí?</h3>
+        <p>Las acciones de hoy son los pasos hacia tu objetivo de 90 días. Si una no se hizo, hoy simplemente desaparece. Con «¿Qué pasó?» le pones nombre al obstáculo, y con «¿Qué harás mañana?» lo conviertes en un cambio concreto. Se pregunta al final del día porque es el único momento en que ya sabes cómo te fue. El mentor ve en la ficha los motivos que se repiten, por ejemplo «no me alcanzó el tiempo» cuatro noches seguidas, y con el tiempo libre de la pieza 2 puede ayudarte a mover esa acción a un hueco real.</p>
+      </div>
+    </div>
+    <div class="phones">
+      <div class="cap">
+        <div class="ph"><div class="sc">
+          <div class="st"><span>21:58</span><span>78 %</span></div>
+          <div class="bd">
+            <div class="tt">TRAINING</div>
+            <div class="sub">El Ciclo Alquímico · Día 20 de 90</div>
+            <div class="ml">Jueves 29 · 14 de 18 hechos</div>
+            <div class="row"><span class="h">21:00</span><span class="n done">Ritual de la noche</span><span class="tag ok">Hecho</span></div>
+            <div class="row"><span class="h">21:30</span><span class="n">Escritura libre nocturna</span><button class="pill" type="button"><svg class="i s16"><use href="#camera"/></svg>Subir</button></div>
+            <button class="closeRow" type="button" data-open="cierre" aria-label="Cierra tu día, 22:00">
+              <span class="h">22:00</span>
+              <span><span class="n" style="display:block">Cierra tu día</span><span class="sub">2 minutos</span></span>
+              <span class="m"><svg class="i s16"><use href="#moon"/></svg></span>
+            </button>
+            <div class="row" style="border-bottom:0"><span class="h">22:30</span><span class="n">Dormir</span><span class="ring" aria-hidden="true"></span></div>
+          </div>
+          <nav class="tb" aria-hidden="true"><span><svg class="i"><use href="#house"/></svg>HOY</span><span><svg class="i"><use href="#clip"/></svg>PLAN</span><span class="on"><i class="mid"><svg class="i"><use href="#bicep"/></svg></i>TRAINING</span><span><svg class="i"><use href="#users"/></svg>COMUNIDAD</span><span><svg class="i"><use href="#user"/></svg>YO</span></nav>
+        </div></div>
+        <p><b>En Training</b>: una fila distinta, en dorado suave, entre lo último del día y Dormir.</p>
+      </div>
+
+      <div class="cap">
+        <div class="ph"><div class="sc">
+          <div class="st"><span>22:01</span><span>78 %</span></div>
+          <div class="bd" id="cierreBd"></div>
+        </div></div>
+        <p><b>Al tocarla</b>: lo cumplido ya viene marcado. Toca las opciones; los botones responden.</p>
+      </div>
+
+      <div class="cap">
+        <div class="ph"><div class="sc">
+          <div class="st"><span>22:03</span><span>78 %</span></div>
+          <div class="bd">
+            <div class="tt">TRAINING</div>
+            <div class="sub">El Ciclo Alquímico · Día 20 de 90</div>
+            <div class="ml">Jueves 29 · 15 de 18 hechos</div>
+            <div class="row"><span class="h">21:30</span><span class="n done">Escritura libre nocturna</span><span class="tag ok">Hecho</span></div>
+            <div class="closeRow closed" role="img" aria-label="Día cerrado">
+              <span class="h" style="color:var(--ok)">22:02</span>
+              <span><span class="n" style="display:block">Día cerrado</span><span class="sub">Mañana: «Revisar las facturas» a otra hora</span></span>
+              <span class="m"><svg class="i s16"><use href="#check"/></svg></span>
+            </div>
+            <div class="row" style="border-bottom:0"><span class="h">22:30</span><span class="n">Dormir</span><span class="ring" aria-hidden="true"></span></div>
+            <div class="ml" style="margin-top:22px">Un día anterior</div>
+            <div class="row"><span class="h">22:00</span><span class="n">Día cerrado</span><span class="tag ok">Cerrado</span></div>
+            <div class="row" style="border-bottom:0"><span class="h">22:00</span><span class="n" style="color:var(--soft)">Sin cerrar</span><span class="tag">Sin cerrar</span></div>
+          </div>
+        </div></div>
+        <p><b>Ya cerrado</b>: la fila queda en verde con lo que dijiste para mañana. En un día anterior solo se ve si lo cerraste; no se puede cerrar tarde.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 · TIEMPO LIBRE -->
+  <section class="panel" id="p-libre" role="tabpanel" aria-labelledby="t-libre" hidden>
+    <div class="why">
+      <h2>El tiempo libre, día por día</h2>
+      <p>Hoy la ficha muestra una lista de horarios repetidos y siete filas que hay que abrir una por una. Ahora se ve como la agenda de un día:</p>
+      <ul>
+        <li><b>Arriba, la semana en siete barras.</b> El dorado es el tiempo libre de cada día, de Despertar a Dormir. Se ve de un vistazo qué día está apretado y cuál tiene espacio.</li>
+        <li><b>Tocar un día muestra su agenda.</b> Lo ocupado va en gris, con su nombre, y cada hueco de 30 minutos o más va en dorado con cuánto dura.</li>
+        <li><b>Lo que se repite queda al final,</b> en tres líneas como máximo.</li>
+      </ul>
+      <div class="note">
+        <h3>Lo ven el mentor, el líder, el admin y el alquimista</h3>
+        <p>Como decidiste: la persona todavía no lo ve. Toca los días del teléfono para cambiar de agenda.</p>
+      </div>
+    </div>
+    <div class="phones">
+      <div class="cap">
+        <div class="ph"><div class="sc">
+          <div class="st"><span>20:15</span><span>81 %</span></div>
+          <div class="bd" id="libreBd"></div>
+        </div></div>
+        <p><b>En la ficha de la persona</b>: la semana arriba y la agenda del día que eliges.</p>
+      </div>
+      <div class="cap">
+        <div class="ph"><div class="sc">
+          <div class="st"><span>20:15</span><span>81 %</span></div>
+          <div class="bd">
+            <div class="back"><svg class="i"><use href="#left"/></svg>Mi grupo</div>
+            <div class="tt" style="font-size:22px">Tiempo libre</div>
+            <div class="weeknav"><span class="wn"><svg class="i s16"><use href="#left"/></svg></span><div><b>Semana en curso</b><span class="sub">26 oct – 1 nov</span></div><span class="wn" aria-disabled="true" style="opacity:.35"><svg class="i s16"><use href="#right"/></svg></span></div>
+            <div class="act" style="margin-top:16px">
+              <div class="n">Falta su hora de Despertar</div>
+              <div class="when">Sin ella no se sabe cuándo empieza su día y se cuenta desde las 00:00. Pídele que la elija en Training → Planificar.</div>
+            </div>
+            <div class="free"><b>—</b><span>libre esta semana</span></div>
+          </div>
+        </div></div>
+        <p><b>Sin Despertar o sin Dormir</b>: lo dice una vez, arriba, y no muestra el sueño como tiempo libre.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 · LÍDER -->
+  <section class="panel" id="p-lider" role="tabpanel" aria-labelledby="t-lider" hidden>
+    <div class="why">
+      <h2>El líder ve sus tres papeles por separado</h2>
+      <p>Una líder que también es mentora y hace su programa hoy ve en Hoy un montón de tarjetas una debajo de otra: tickets, semáforo por grupos, mis mentores, mi grupo, el mapa… Como pidieron, se ordena por lo que es:</p>
+      <ul>
+        <li><b>Arriba de Hoy, tres pestañas:</b> «Mi programa», «Mi grupo» y «Mis mentores». Solo aparecen las que corresponden a su rol.</li>
+        <li><b>«Mis mentores»</b> muestra el resultado por grupo en una fila: nombre, mentor, color y porcentaje. Sin textos de ayuda.</li>
+        <li><b>Al tocar a una persona,</b> lo primero que se ve son las dos respuestas que piden: si programó y si subió evidencias. El detalle de los días va debajo.</li>
+      </ul>
+    </div>
+    <div class="phones">
+      <div class="cap">
+        <div class="ph"><div class="sc">
+          <div class="st"><span>19:05</span><span>64 %</span></div>
+          <div class="bd" id="liderBd"></div>
+          <nav class="tb" aria-hidden="true"><span class="on"><svg class="i"><use href="#house"/></svg>HOY</span><span><svg class="i"><use href="#clip"/></svg>PLAN</span><span><i class="mid"><svg class="i"><use href="#bicep"/></svg></i>TRAINING</span><span><svg class="i"><use href="#users"/></svg>COMUNIDAD</span><span><svg class="i"><use href="#user"/></svg>YO</span></nav>
+        </div></div>
+        <p><b>Hoy de una líder</b>: cambia de papel sin bajar por diez tarjetas. Toca las pestañas.</p>
+      </div>
+      <div class="cap">
+        <div class="ph"><div class="sc">
+          <div class="st"><span>19:06</span><span>64 %</span></div>
+          <div class="bd">
+            <div class="back"><svg class="i"><use href="#left"/></svg>Grupo Octubre</div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:10px"><span class="av" style="width:48px;height:48px;font-size:16px">AT</span><div><div class="tt" style="font-size:21px;margin:0">Ana Torres</div><div class="sub" style="display:flex;align-items:center;gap:6px"><span class="dot r"></span>Con problemas · 38 %</div></div></div>
+            <div class="answers">
+              <div class="ans no"><span class="k">¿Programó?</span><span class="v num">No</span><span class="s">5 de 17 hábitos con su hora · 0 acciones agendadas</span></div>
+              <div class="ans"><span class="k">¿Subió evidencias?</span><span class="v num">4 de 12</span><span class="s">esta semana</span></div>
+            </div>
+            <div class="ml">Últimos 7 días</div>
+            <div class="drow"><span class="ev"><svg class="i s16"><use href="#image"/></svg></span><div class="x"><div class="n">Jueves 29</div><div class="m">3 de 17 hábitos · 1 evidencia</div></div><svg class="i s16" style="color:var(--mute)"><use href="#chevd"/></svg></div>
+            <div class="drow"><span class="ev none"><svg class="i s16"><use href="#image"/></svg></span><div class="x"><div class="n">Miércoles 28</div><div class="m">0 de 17 hábitos · sin evidencias</div></div><svg class="i s16" style="color:var(--mute)"><use href="#chevd"/></svg></div>
+            <div class="drow"><span class="ev"><svg class="i s16"><use href="#image"/></svg></span><div class="x"><div class="n">Martes 27</div><div class="m">6 de 17 hábitos · 3 evidencias</div></div><svg class="i s16" style="color:var(--mute)"><use href="#chevd"/></svg></div>
+            <div style="display:flex;gap:8px;margin-top:16px"><button class="cta" type="button" style="margin:0;flex:1"><svg class="i s16"><use href="#msg"/></svg>Escribirle</button></div>
+          </div>
+        </div></div>
+        <p><b>La persona</b>: dos respuestas arriba y los días debajo, cerrados. Al abrir un día se ven sus hábitos y evidencias, como ahora.</p>
+      </div>
+    </div>
+  </section>
+
+  <h2 class="sec">Lo que decides tú</h2>
+  <div class="decs">
+    <div class="dec"><h3>1. ¿Quién ve lo que escribe la persona en su cierre?</h3>
+      <div class="opt rec"><b>Ella y su acompañamiento</b>El mentor, el líder, el admin y el alquimista lo ven en su ficha, como el tiempo libre. Así el mentor ve los motivos que se repiten.</div>
+      <div class="opt"><b>Solo ella</b>Más privado, pero el mentor no se entera de por qué se queda lo pendiente.</div></div>
+    <div class="dec"><h3>2. ¿Cerrar el día es obligatorio?</h3>
+      <div class="opt rec"><b>Opcional, sin puntos</b>Nunca resta ni cuenta en el semáforo. Si no lo cierra, ese día solo dice «Sin cerrar».</div>
+      <div class="opt"><b>Que cuente en el semáforo</b>Más cumplimiento, pero vuelve a ser un formulario más cuando la persona está cansada.</div></div>
+    <div class="dec"><h3>3. Lo que dijeron: «por el momento no debería haber grupos»</h3>
+      <div class="opt rec"><b>Que el líder vea primero a sus mentores, no los grupos</b>En «Mis mentores», cada fila es un mentor con el resultado de su grupo, sin la sección «Por grupo» aparte.</div>
+      <div class="opt"><b>Que todavía no se armen grupos</b>Todos siguen en el grupo inicial y el líder ve a las personas directamente.</div>
+      <div class="opt"><b>Otra cosa</b>Dime qué quisieron decir.</div></div>
+    <div class="dec"><h3>4. ¿Qué cuenta como «programó»?</h3>
+      <div class="opt rec"><b>Puso la hora de sus hábitos y agendó sus acciones de hoy</b>Las dos cosas se ven en la tarjeta de la persona.</div>
+      <div class="opt"><b>Armó su semana</b>Solo mira si hizo el objetivo semanal del domingo.</div></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var $=function(s,r){return (r||document).querySelector(s)};
+  var ic=function(id,c){return '<svg class="i '+(c||'')+'"><use href="#'+id+'"/></svg>'};
+  /* pestañas */
+  var tabs=[].slice.call(document.querySelectorAll('[role="tab"]'));
+  tabs.forEach(function(t){t.addEventListener('click',function(){
+    tabs.forEach(function(o){var on=o===t;o.setAttribute('aria-selected',on);document.getElementById(o.getAttribute('aria-controls')).hidden=!on});
+  })});
+
+  /* ===== 1 · Cierra tu día ===== */
+  var C={motivo:null,manana:null,nota:'',semana:false,guardado:false};
+  var MOTIVOS=['No me alcanzó el tiempo','Surgió otra cosa','Me faltó energía','Lo dejé para después'];
+  var MANANA=['Hacerla a otra hora','Hacerla más corta','Pedir ayuda','Dejarla'];
+  function chips(list,sel,key){return '<div class="chips">'+list.map(function(t){return '<button type="button" data-k="'+key+'" data-v="'+t+'" aria-pressed="'+(sel===t)+'">'+t+'</button>'}).join('')+'</div>'}
+  function cierre(){
+    var b=$('#cierreBd');
+    if(C.guardado){
+      b.innerHTML='<div class="grab"></div><div class="sheetHead"><h4>Cierra tu día</h4><span class="xbtn">'+ic('x','s16')+'</span></div>'+
+      '<div class="savedBox"><span class="big">'+ic('check','s24')+'</span><b>Día cerrado</b><span class="sub" style="max-width:240px">Mañana: «Revisar las facturas», '+(C.manana||'').toLowerCase()+'.</span>'+
+      '<button class="lnk" type="button">Ver mañana en Training '+ic('right','s16')+'</button></div>'+
+      '<button class="lnk" type="button" data-act="otra" style="margin:18px auto 0;display:flex">Ver de nuevo el formulario</button>';
+      return;
+    }
+    var listo=!!(C.motivo&&C.manana);
+    b.innerHTML='<div class="grab"></div><div class="sheetHead"><h4>Cierra tu día</h4><span class="xbtn" aria-label="Cerrar">'+ic('x','s16')+'</span></div>'+
+      '<div class="sub">Jueves 29 · Día 20</div>'+
+      '<div class="ml">Tus acciones de hoy</div>'+
+      '<div class="ok-line"><span class="c">'+ic('check','s14')+'</span><span class="n">Enviar la propuesta al cliente</span><span class="t num">10:20</span></div>'+
+      '<div class="ok-line"><span class="c">'+ic('check','s14')+'</span><span class="n">Llamar a mi mentor</span><span class="t num">17:40</span></div>'+
+      '<div class="act"><div class="n">Revisar las facturas</div><div class="when num">Era a las 20:30 · quedó pendiente</div>'+
+        '<div class="q">¿Qué pasó?</div>'+chips(MOTIVOS,C.motivo,'motivo')+
+        '<div class="q">¿Qué harás mañana?</div>'+chips(MANANA,C.manana,'manana')+
+        '<textarea class="ta" id="cNota" rows="2" placeholder="Si quieres, cuéntalo con tus palabras">'+C.nota+'</textarea>'+
+      '</div>'+
+      '<div class="ml">Tus hábitos</div><div class="sub">14 de 18 hechos hoy. No hace falta responder nada.</div>'+
+      '<div class="ml">Tu semana</div><div class="sub">7 de 12 acciones cumplidas hasta hoy.</div>'+
+      '<button class="cta" type="button" data-act="guardar"'+(listo?'':' disabled')+'>Guardar mi cierre</button>'+
+      (listo?'':'<div class="hint">Elige qué pasó y qué harás mañana con «Revisar las facturas».</div>');
+  }
+  document.addEventListener('click',function(e){
+    var t=e.target.closest('button');if(!t)return;
+    if(t.dataset.k==='motivo'){C.motivo=t.dataset.v;cierre();return}
+    if(t.dataset.k==='manana'){C.manana=t.dataset.v;cierre();return}
+    if(t.dataset.act==='semana'){C.semana=!C.semana;cierre();return}
+    if(t.dataset.act==='guardar'){var n=$('#cNota');if(n)C.nota=n.value;C.guardado=true;cierre();return}
+    if(t.dataset.act==='otra'){C.guardado=false;cierre();return}
+    if(t.dataset.dia){L.sel=+t.dataset.dia;libre();return}
+    if(t.dataset.rol){R.rol=t.dataset.rol;lider();return}
+  });
+  document.addEventListener('input',function(e){if(e.target.id==='cNota')C.nota=e.target.value});
+
+  /* ===== 2 · Tiempo libre ===== */
+  var h=function(s){var p=s.split(':');return +p[0]*60+ +p[1]};
+  var f=function(m){return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0')};
+  var dur=function(m){var H=Math.floor(m/60),M=m%60;return H?(H+' h'+(M?' '+M:'')):M+' min'};
+  var base=[['05:30','06:00','Despertar'],['06:45','07:15','Ritual de la mañana'],['07:30','08:00','Pastilla Renacer'],['11:00','11:30','Primera comida'],['13:00','13:30','Ritual del mediodía'],['17:30','18:00','Clase diaria'],['18:00','18:30','Última comida'],['21:00','21:30','Ritual de la noche'],['21:30','22:00','Escritura libre']];
+  var extra={
+    0:[['09:00','13:00','Trabajo · reunión','ev'],['14:30','15:30','Gimnasio'],['16:00','16:30','Kilómetros'],['19:00','20:00','Revisar pendientes']],
+    1:[['08:30','12:30','Trabajo','ev'],['14:00','18:00','Trabajo','ev'],['20:00','20:30','Estirar']],
+    2:[['09:00','13:00','Trabajo · reunión','ev'],['14:30','15:30','Gimnasio'],['16:00','16:30','Kilómetros']],
+    3:[['09:00','10:30','Reunión de equipo','ev'],['10:00','10:30','Enviar la propuesta'],['14:30','15:30','Gimnasio'],['16:00','16:30','Kilómetros'],['16:30','17:30','Clase en vivo','ev'],['20:00','20:30','Estirar'],['20:30','21:00','Revisar las facturas']],
+    4:[['08:30','13:00','Trabajo','ev'],['14:00','17:30','Trabajo','ev']],
+    5:[['10:00','12:00','Familia','ev'],['16:00','17:00','Kilómetros']],
+    6:[['11:00','13:30','Almuerzo familiar','ev']]
+  };
+  var NOMBRES=['Lunes 26','Martes 27','Miércoles 28','Jueves 29','Viernes 30','Sábado 31','Domingo 1'];
+  var LETRA=['L','M','M','J','V','S','D'];
+  var REAL={0:[6,3,2],1:[4,2,5],2:[7,2,1],3:[5,1,2]};
+  var V0=h('05:30'),V1=h('22:30');
+  function dia(i){
+    var b=base.concat(extra[i]).map(function(x){return {a:h(x[0]),z:h(x[1]),n:x[2],t:x[3]||'busy'}}).sort(function(p,q){return p.a-q.a});
+    var u=[];b.forEach(function(x){var l=u[u.length-1];if(l&&x.a<=l.z){l.z=Math.max(l.z,x.z)}else u.push({a:x.a,z:x.z})});
+    var g=[],c=V0;u.forEach(function(x){if(x.a-c>=30)g.push({a:c,z:x.a});c=Math.max(c,x.z)});if(V1-c>=30)g.push({a:c,z:V1});
+    var libreTotal=g.reduce(function(s,x){return s+(x.z-x.a)},0);
+    return {b:b,g:g,libre:libreTotal};
+  }
+  var L={sel:3};
+  function libre(){
+    var ds=[0,1,2,3,4,5,6].map(dia),tot=ds.reduce(function(s,d){return s+d.libre},0),max=V1-V0;
+    var d=ds[L.sel],PX=0.46;
+    var o='<div class="back">'+ic('left')+'Mi grupo</div><div class="tt" style="font-size:22px">Tiempo libre</div>'+
+      '<div class="weeknav"><span class="wn">'+ic('left','s16')+'</span><div><b>Semana en curso</b><span class="sub">26 oct – 1 nov</span></div><span class="wn" style="opacity:.35">'+ic('right','s16')+'</span></div>'+
+      '<div class="free"><b>'+dur(tot)+'</b><span>libres esta semana, de Despertar a Dormir</span></div>'+
+      '<div class="days" role="group" aria-label="Días">'+ds.map(function(x,i){return '<button type="button" class="dcol" data-dia="'+i+'" aria-pressed="'+(i===L.sel)+'" aria-label="'+NOMBRES[i]+', '+dur(x.libre)+' libres"><span class="l">'+LETRA[i]+'</span><span class="bar"><i style="height:'+Math.round(x.libre/max*100)+'%"></i></span><span class="v">'+(Math.round(x.libre/6)/10)+' h</span>'+(i===3?'<span class="today"></span>':'<span style="height:5px"></span>')+'</button>'}).join('')+'</div>'+
+      '<div class="dayhead"><b>'+NOMBRES[L.sel]+(L.sel===3?' · hoy':'')+'</b><span>05:30 a 22:30</span></div>';
+    var r=REAL[L.sel];
+    o+='<div class="real">'+(r?'<span class="tag ok">'+r[0]+' a tiempo</span><span class="tag w">'+r[1]+' tarde</span><span class="tag b">'+r[2]+' sin cumplir</span>':'<span class="tag">Todavía no llega</span>')+'<span class="tag" style="background:var(--wash);color:var(--goldInk)">'+dur(d.libre)+' libres</span></div>';
+    o+='<div class="tl" style="height:'+Math.round((V1-V0)*PX)+'px">';
+    for(var m=6*60;m<=22*60;m+=120){var y=Math.round((m-V0)*PX);o+='<span class="tick" style="top:'+y+'px"></span><span class="hr" style="top:'+y+'px">'+f(m)+'</span>'}
+    d.b.forEach(function(x){var y=Math.round((x.a-V0)*PX),hh=Math.max(13,Math.round((x.z-x.a)*PX)-2);o+='<div class="blk '+(x.t==='ev'?'ev':'busy')+'" style="top:'+y+'px;height:'+hh+'px" title="'+f(x.a)+'–'+f(x.z)+' '+x.n+'">'+(hh>=13?x.n:'')+'</div>'});
+    d.g.forEach(function(x){var y=Math.round((x.a-V0)*PX)+1,hh=Math.round((x.z-x.a)*PX)-3;o+='<div class="blk gap" style="top:'+y+'px;height:'+hh+'px"><span>'+dur(x.z-x.a)+'</span><em class="num">'+f(x.a)+'–'+f(x.z)+'</em></div>'});
+    o+='</div>';
+    o+='<div class="ml" style="margin-top:20px">Se repite</div><div class="repeat"><div>Casi todos los días<span class="num">13:30–14:30</span></div><div>Lunes a viernes<span class="num">08:00–09:00</span></div><div>Fin de semana<span class="num">14:00–16:00</span></div></div>';
+    $('#libreBd').innerHTML=o;
+  }
+
+  /* ===== 3 · Líder ===== */
+  var R={rol:'mentores'};
+  function lider(){
+    var o='<div class="tt">HOY</div><div class="sub">Día 20 de 90 · Líder de mentores</div>'+
+      '<div class="seg" role="group" aria-label="Papel">'+[['programa','Mi programa'],['grupo','Mi grupo'],['mentores','Mis mentores']].map(function(x){return '<button type="button" data-rol="'+x[0]+'" aria-pressed="'+(R.rol===x[0])+'">'+x[1]+'</button>'}).join('')+'</div>';
+    if(R.rol==='mentores'){
+      o+='<div class="ml">Resultado por grupo · últimos 7 días</div><div class="list">'+
+      [['Grupo Octubre','Mentora: Carla Ríos',41,'y'],['Grupo Noviembre','Mentor: Diego Paredes',78,'g'],['Grupo Diciembre','Mentora: Elena Soto',22,'r'],['Grupo Enero','Mentor: Fabio León',null,'n']].map(function(g){return '<button class="li" type="button"><span class="dot '+g[3]+'"></span><div class="x"><div class="n">'+g[0]+'</div><div class="m">'+g[1]+'</div></div><span class="p">'+(g[2]==null?'—':g[2]+' %')+'</span>'+ic('right','s16')+'</button>'}).join('')+'</div>'+
+      '<div class="list"><button class="li" type="button"><div class="x"><div class="n">Consultas de mentores</div><div class="m">2 sin responder</div></div>'+ic('right','s16')+'</button></div>';
+    } else if(R.rol==='grupo'){
+      o+='<div class="ml">Grupo Octubre · 6 aprendices</div><div class="list">'+
+      [['AT','Ana Torres',38,'r'],['BM','Bruno Meza',72,'y'],['CQ','Celia Quispe',91,'g'],['DV','Darío Vega',null,'n']].map(function(p){return '<button class="li" type="button"><span class="av">'+p[0]+'</span><div class="x"><div class="n">'+p[1]+'</div></div><span class="dot '+p[3]+'"></span><span class="p">'+(p[2]==null?'—':p[2]+' %')+'</span></button>'}).join('')+'</div>';
+    } else {
+      o+='<div class="act" style="margin-top:14px"><div class="when">Tu programa de 90 días, como cualquier aprendiz</div><div class="n">Hábitos de hoy · 11 de 17</div><div class="when">Te toca ahora: Clase diaria · 19:00</div></div>'+
+      '<div class="act"><div class="n">Código Renaser</div><div class="when">Apagado · planifica tu Radar</div></div>';
+    }
+    $('#liderBd').innerHTML=o;
+  }
+  cierre();libre();lider();
+})();
+</script>

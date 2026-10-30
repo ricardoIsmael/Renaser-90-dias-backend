@@ -1,5 +1,9 @@
 package com.renaser.os.rocks.infrastructure.adapter.out.persistence.rocadiaria;
 
+import com.renaser.os.rocks.domain.model.cierre.CierreDeAccion;
+import com.renaser.os.rocks.domain.model.cierre.MotivoDeAccionPendiente;
+import com.renaser.os.rocks.domain.model.cierre.PlanDeManana;
+import com.renaser.os.rocks.domain.model.cierre.RespuestaDeCierre;
 import com.renaser.os.rocks.domain.model.rocadiaria.AccionDiaria;
 import com.renaser.os.rocks.domain.model.rocadiaria.ColorPareto;
 import com.renaser.os.rocks.domain.model.rocadiaria.RocaDiaria;
@@ -23,7 +27,7 @@ class RocaDiariaPersistenceMapper {
                 e.getPosicion(), e.getTitulo(), e.getDescripcion(), toDomainColor(e.getColor()),
                 e.getPuntajeImpacto(), e.isEsDelegable(), toDomainEje(e.getEje()), rocaSemanalId, e.getHoraInicio(),
                 e.getHoraFin(), aDominio(e.getAcciones()), e.isCompletada(), e.getCompletadaEn(),
-                e.getPuntosOtorgados(), e.getCreadoEn(), e.getActualizadoEn());
+                e.getPuntosOtorgados(), e.getCreadoEn(), e.getActualizadoEn(), aCierre(e));
     }
 
     RocaDiariaJpaEntity toEntity(RocaDiaria r) {
@@ -31,7 +35,33 @@ class RocaDiariaPersistenceMapper {
         return new RocaDiariaJpaEntity(r.id().value(), r.participanteId().value(), r.fecha(), (short) r.posicion(),
                 r.titulo(), r.descripcion(), toJpaColor(r.color()), (short) r.puntajeImpacto(), r.esDelegable(),
                 toJpaEje(r.eje()), rocaSemanalId, r.horaInicio(), r.horaFin(), aJpa(r.acciones()), r.completada(),
-                r.completadaEn(), (short) r.puntosOtorgados(), r.creadoEn(), r.actualizadoEn());
+                r.completadaEn(), (short) r.puntosOtorgados(), r.creadoEn(), r.actualizadoEn(),
+                motivoDe(r.cierre()), planDe(r.cierre()), notaDe(r.cierre()), r.cierre() == null ? null : r.cierre().cerradoEn());
+    }
+
+    /** La respuesta de cierre (V121), o {@code null}. Un motivo o plan roto no tumba la lectura de la accion. */
+    private static CierreDeAccion aCierre(RocaDiariaJpaEntity e) {
+        if (e.getCierreMotivo() == null || e.getCierreManana() == null || e.getCierreEn() == null) {
+            return null;
+        }
+        try {
+            return new CierreDeAccion(new RespuestaDeCierre(MotivoDeAccionPendiente.desde(e.getCierreMotivo()),
+                    PlanDeManana.desde(e.getCierreManana()), e.getCierreNota()), e.getCierreEn());
+        } catch (IllegalArgumentException valorRoto) {
+            return null;
+        }
+    }
+
+    private static String motivoDe(CierreDeAccion cierre) {
+        return cierre == null ? null : cierre.respuesta().motivo().name();
+    }
+
+    private static String planDe(CierreDeAccion cierre) {
+        return cierre == null ? null : cierre.respuesta().manana().name();
+    }
+
+    private static String notaDe(CierreDeAccion cierre) {
+        return cierre == null ? null : cierre.respuesta().nota();
     }
 
     /** Las acciones del objetivo del dia (V61). Lista vacia y null son lo mismo: sin desglose. */
