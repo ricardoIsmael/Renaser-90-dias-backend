@@ -168,7 +168,7 @@ class SemaforoEnChatServiceTest {
 
         servicio(prendido()).dejarEnElChat(verde());
 
-        verify(saveConversacionPort).save(any());
+        verify(saveConversacionPort).crearSiFalta(any());
         assertThat(guardados).hasSize(1);
     }
 

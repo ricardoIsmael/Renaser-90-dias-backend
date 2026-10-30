@@ -60,10 +60,13 @@ public class TurnosDeVozEnVivo {
         this.idGenerator = idGenerator;
     }
 
-    /** Los mensajes cuelgan de la conversacion 1:1 (clave foranea): tiene que existir antes. */
+    /**
+     * Los mensajes cuelgan de la conversacion 1:1 (clave foranea): tiene que existir antes. Se crea con
+     * {@code crearSiFalta} (E-655): la carrera con otro turno o aviso de la misma persona no puede chocar en la PK.
+     */
     public void asegurarConversacion(UserId actorId) {
         if (loadConversacionPort.porUsuarioId(actorId).isEmpty()) {
-            saveConversacionPort.save(ConversacionRenasia.iniciar(actorId, clock.now()));
+            saveConversacionPort.crearSiFalta(ConversacionRenasia.iniciar(actorId, clock.now()));
         }
     }
 

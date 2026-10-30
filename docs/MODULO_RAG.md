@@ -393,6 +393,12 @@ y los textos son configuración y **provisorios hasta que el dueño apruebe la r
 - **No se escribe si el momento ya pasó, ni si lo último del chat es un pedido sin respuesta:** un
   mensaje del asistente ahí haría pasar ese pedido por respondido en `soloTurnosRespondidos` y
   reabriría D-132. El push sale igual.
+- **La conversación se crea al vuelo sin carrera (E-655, 2026-10-30):** quien nunca abrió el chat igual recibe
+  el aviso, y varios avisos de la misma persona llegan juntos (el barrido publicó 132 para 81 personas en un
+  minuto). La conversación se crea con `SaveConversacionRenasiaPort.crearSiFalta`
+  (`INSERT ... ON CONFLICT (usuario_id) DO NOTHING`), no con «¿existe? → save»: dos avisos en paralelo veían
+  «no hay», los dos la creaban y el segundo perdía su mensaje con `conversaciones_renasia_pkey`. Lo mismo vale
+  para el chat de la persona y la voz en vivo (`ConversacionRenasiaService`, `TurnosDeVozEnVivo`).
 - **Entrega:** la app lo ve al abrir el panel (recarga el historial); no hay tiempo real.
 - Sin verificar contra Gemini: una memoria que empieza con un turno del asistente, o con dos
   seguidos.

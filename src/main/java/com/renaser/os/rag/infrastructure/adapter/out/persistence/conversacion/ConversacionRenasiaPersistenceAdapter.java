@@ -5,6 +5,7 @@ import com.renaser.os.rag.application.ports.out.conversacion.SaveConversacionRen
 import com.renaser.os.rag.domain.model.conversacion.ConversacionRenasia;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 
@@ -29,5 +30,13 @@ class ConversacionRenasiaPersistenceAdapter implements LoadConversacionRenasiaPo
     public ConversacionRenasia save(ConversacionRenasia conversacion) {
         var guardada = repository.saveAndFlush(mapper.toEntity(conversacion));
         return mapper.toDomain(guardada);
+    }
+
+    /** {@code @Transactional}: un {@code @Modifying} necesita transaccion, y quien llama (un oyente) no abre ninguna. */
+    @Override
+    @Transactional
+    public void crearSiFalta(ConversacionRenasia conversacion) {
+        repository.insertarSiFalta(conversacion.usuarioId().value(), conversacion.creadoEn(),
+                conversacion.actualizadoEn());
     }
 }

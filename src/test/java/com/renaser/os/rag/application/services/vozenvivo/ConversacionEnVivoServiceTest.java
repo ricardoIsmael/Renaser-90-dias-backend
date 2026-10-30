@@ -134,7 +134,7 @@ class ConversacionEnVivoServiceTest {
         assertThat(proveedor.apertura.situacion()).isEqualTo(new SituacionDelAprendiz(12, 1));
         assertThat(proveedor.apertura.herramientas()).extracting(DefinicionHerramienta::nombre)
                 .containsExactly("consultar_habitos_del_dia");
-        verify(saveConversacion).save(any());
+        verify(saveConversacion).crearSiFalta(any());
         assertThat(metricas.registradas).containsExactly("voz ABIERTA");
     }
 
