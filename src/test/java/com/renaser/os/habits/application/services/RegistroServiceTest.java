@@ -1,8 +1,13 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.evidence.api.RegistrosConTextoFinder;
+import com.renaser.os.habits.api.AudioterapiaDelAprendizPort;
+import com.renaser.os.habits.application.politica.PoliticaAudioterapia;
 import com.renaser.os.habits.application.politica.PoliticaClaseDiaria;
+import com.renaser.os.habits.application.politica.PoliticaPastillaRenacer;
 import com.renaser.os.habits.application.politica.PoliticaPostDiarioComunidad;
 import com.renaser.os.habits.application.politica.PoliticaSantuario;
+import com.renaser.os.habits.application.ports.in.espiritu.CompletarPastillaRenacerUseCase;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase.CompletarRegistroCommand;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
@@ -57,6 +62,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -88,6 +94,9 @@ class RegistroServiceTest {
     private org.springframework.context.ApplicationEventPublisher events;
     @Mock
     private IdGenerator idGenerator;
+    /** E-652: por defecto ningun registro tiene el texto con las respuestas del audio. */
+    @Mock
+    private RegistrosConTextoFinder registrosConTexto;
 
     private RegistroService service;
 
@@ -99,8 +108,10 @@ class RegistroServiceTest {
         service = new RegistroService(loadRegistroPort, saveRegistroPort, loadHabitoPort, loadHorarioPort,
                 loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder, loadDesbloqueoPort, events,
                 CLOCK, idGenerator,
-                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()), CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort),
-                ids -> Set.copyOf(ids), new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido());
+                List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria(),
+                        new PoliticaPastillaRenacer(), new PoliticaAudioterapia()),
+                CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort),
+                ids -> Set.copyOf(ids), registrosConTexto, new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido());
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(saveRegistroPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveRegistroPort.insertarSiNoExiste(any())).thenReturn(true);
@@ -204,7 +215,7 @@ class RegistroServiceTest {
                 loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder, loadDesbloqueoPort, events,
                 CLOCK, idGenerator,
                 List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()),
-                CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort), ids -> Set.of(), new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido());
+                CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort), ids -> Set.of(), registrosConTexto, new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido());
     }
 
     private RegistroHabito pendienteListoParaCompletar(UserId dueno, Habito habito) {
@@ -257,6 +268,121 @@ class RegistroServiceTest {
                 new CompletarRegistroCommand(dueno, registro.id(), null, null));
 
         assertThat(resultado.estado()).isEqualTo(EstadoRegistro.COMPLETADO);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────────────────
+    // PASTILLA RENACER y AUDIOTERAPIA SEMANAL (E-652, issue #33): "si o si deben mandar los
+    // mensajes de los audios y audioterapias". Los tests que rechazan FALLAN contra el codigo
+    // anterior: los dos eran JOURNALING opcionales sin politica y el check de la tarjeta del APK
+    // publicado los cerraba y pagaba por POST /habit-tracks/{id}/complete sin audio ni respuestas.
+    // ────────────────────────────────────────────────────────────────────────────────────
+
+    private static final String MENSAJE_PASTILLA =
+            "Para la Pastilla Renacer, escucha el audio y responde las dos preguntas.";
+    private static final String MENSAJE_AUDIOTERAPIA =
+            "Para la Audioterapia semanal, escucha el audio y responde las dos preguntas.";
+
+    private static Habito habitoDeAudio(String titulo, String claveSistema) {
+        return Habito.rehydrate(HabitoId.of(UUID.randomUUID()), AmbitoHabito.SISTEMA, null, titulo, null,
+                TipoHabito.JOURNALING, "ESPIRITU", "PODCAST", claveSistema, ExigenciaEvidencia.OPCIONAL,
+                false, false, false, false, null, null, null, null, true, CLOCK.now(), CLOCK.now());
+    }
+
+    private static Habito habitoPastillaRenacer() {
+        return habitoDeAudio("Pastilla Renacer", CompletarPastillaRenacerUseCase.CLAVE_SISTEMA_PASTILLA_RENACER);
+    }
+
+    private static Habito habitoAudioterapia() {
+        return habitoDeAudio("AUDIOTERAPIA SEMANAL", AudioterapiaDelAprendizPort.CLAVE_SISTEMA_AUDIOTERAPIA);
+    }
+
+    @Test
+    @DisplayName("PASTILLA RENACER (E-652): el cierre generico se rechaza, aunque traiga texto, y no paga")
+    void pastillaRenacerNoSeCierraConElGestoGenerico() {
+        UserId dueno = participante();
+        RegistroHabito registro = pendienteListoParaCompletar(dueno, habitoPastillaRenacer());
+
+        assertThatThrownBy(() -> service.completar(new CompletarRegistroCommand(dueno, registro.id(),
+                "Un texto cualquiera de mas de quince caracteres", null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage(MENSAJE_PASTILLA);
+
+        assertThat(registro.estado()).isEqualTo(EstadoRegistro.PENDIENTE);
+        verify(saveRegistroPort, never()).save(any());
+        verify(ajustarPuntosPort, never()).ajustar(any(), any(), anyInt(), any());
+    }
+
+    @Test
+    @DisplayName("PASTILLA RENACER (E-652): por su flujo propio (la entrega de Espiritu) se cierra, guarda el resumen y paga")
+    void pastillaRenacerSeCierraPorSuFlujoPropio() {
+        UserId dueno = participante();
+        RegistroHabito registro = pendienteListoParaCompletar(dueno, habitoPastillaRenacer());
+
+        RegistroHabito resultado = service.completar(new CompletarRegistroCommand(dueno, registro.id(),
+                "Lo que sentí al escuchar el audio de hoy", null, GestoCompletar.PROPIO_DEL_HABITO));
+
+        assertThat(resultado.estado()).isEqualTo(EstadoRegistro.COMPLETADO);
+        assertThat(resultado.respuestaTexto()).isEqualTo("Lo que sentí al escuchar el audio de hoy");
+        verify(ajustarPuntosPort).ajustar(eq(dueno), eq(MotivoPuntos.HABIT_COMPLETED), eq(10), any());
+    }
+
+    @Test
+    @DisplayName("AUDIOTERAPIA (E-652): sin el texto de las respuestas el cierre generico se rechaza y no paga")
+    void audioterapiaSinTextoNoSeCierra() {
+        UserId dueno = participante();
+        RegistroHabito registro = pendienteListoParaCompletar(dueno, habitoAudioterapia());
+
+        assertThatThrownBy(() -> service.completar(new CompletarRegistroCommand(dueno, registro.id(), null, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage(MENSAJE_AUDIOTERAPIA);
+
+        assertThat(registro.estado()).isEqualTo(EstadoRegistro.PENDIENTE);
+        verify(saveRegistroPort, never()).save(any());
+        verify(ajustarPuntosPort, never()).ajustar(any(), any(), anyInt(), any());
+        // Le pide a evidence lo mismo que exige la app: dos respuestas de al menos 15 caracteres.
+        verify(registrosConTexto).conTextoDeAlMenos(Set.of(registro.id().value()), 2 * 15);
+    }
+
+    @Test
+    @DisplayName("AUDIOTERAPIA (E-652): con el texto de las respuestas ya subido se cierra y paga como siempre")
+    void audioterapiaConTextoSeCierra() {
+        UserId dueno = participante();
+        RegistroHabito registro = pendienteListoParaCompletar(dueno, habitoAudioterapia());
+        UUID id = registro.id().value();
+        when(registrosConTexto.conTextoDeAlMenos(Set.of(id), 2 * 15)).thenReturn(Set.of(id));
+
+        RegistroHabito resultado = service.completar(new CompletarRegistroCommand(dueno, registro.id(), null, null));
+
+        assertThat(resultado.estado()).isEqualTo(EstadoRegistro.COMPLETADO);
+        verify(ajustarPuntosPort).ajustar(eq(dueno), eq(MotivoPuntos.HABIT_COMPLETED), eq(10), any());
+    }
+
+    @Test
+    @DisplayName("AUDIOTERAPIA (E-652): el texto de OTRO registro no sirve")
+    void audioterapiaConElTextoDeOtroRegistroNoSeCierra() {
+        UserId dueno = participante();
+        RegistroHabito registro = pendienteListoParaCompletar(dueno, habitoAudioterapia());
+        UUID otro = UUID.randomUUID();
+        lenient().when(registrosConTexto.conTextoDeAlMenos(any(), anyInt())).thenReturn(Set.of(otro));
+
+        assertThatThrownBy(() -> service.completar(new CompletarRegistroCommand(dueno, registro.id(), null, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage(MENSAJE_AUDIOTERAPIA);
+
+        assertThat(registro.estado()).isEqualTo(EstadoRegistro.PENDIENTE);
+    }
+
+    @Test
+    @DisplayName("E-652: un hábito cualquiera se cierra igual que antes y ni siquiera pregunta por el texto")
+    void otroHabitoNoCambiaNiPreguntaPorElTexto() {
+        UserId dueno = participante();
+        RegistroHabito registro = pendienteListoParaCompletar(dueno, habitoCheckbox());
+
+        RegistroHabito resultado = service.completar(new CompletarRegistroCommand(dueno, registro.id(), null, null));
+
+        assertThat(resultado.estado()).isEqualTo(EstadoRegistro.COMPLETADO);
+        verify(ajustarPuntosPort).ajustar(eq(dueno), eq(MotivoPuntos.HABIT_COMPLETED), eq(10), any());
+        verifyNoInteractions(registrosConTexto);
     }
 
     @Test
@@ -647,7 +773,7 @@ class RegistroServiceTest {
                 loadHorarioPort, loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder,
                 loadDesbloqueoPort, events, FixedClock.at(Instant.parse("2026-09-28T03:00:00Z")), idGenerator,
                 List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()), CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort),
-                ids -> Set.copyOf(ids), new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido());
+                ids -> Set.copyOf(ids), registrosConTexto, new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido());
         UserId participante = participante();
         Habito personal = habitoPersonalDe(participante);
         conUnHabitoPersonal(participante, personal, 25, horarioDesdeElDia(personal.id(), 30, TipoDia.TODOS));
@@ -687,7 +813,7 @@ class RegistroServiceTest {
                 loadHorarioPort, loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder,
                 loadDesbloqueoPort, events, FixedClock.at(Instant.parse("2026-08-31T04:30:00Z")), idGenerator,
                 List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()), CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort),
-                ids -> Set.copyOf(ids), new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido());
+                ids -> Set.copyOf(ids), registrosConTexto, new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido());
         UserId participante = participante();
         Habito descanso = habitoCheckbox();
         when(progresoPort.deParticipante(participante)).thenReturn(Optional.of(
@@ -756,7 +882,7 @@ class RegistroServiceTest {
                 loadPreferenciaPort, progresoPort, ajustarPuntosPort, publicacionMuroFinder, loadDesbloqueoPort, events,
                 FixedClock.at(Instant.parse(instante)), idGenerator,
                 List.of(new PoliticaSantuario(), new PoliticaPostDiarioComunidad(), new PoliticaClaseDiaria()), CatalogoAplicableDePrueba.sinAudiencias(loadHabitoPort),
-                ids -> Set.copyOf(ids), new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido());
+                ids -> Set.copyOf(ids), registrosConTexto, new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido());
     }
 
     private static HorarioHabito horarioDeSeisAOcho(HabitoId habitoId) {

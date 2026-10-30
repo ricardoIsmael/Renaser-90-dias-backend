@@ -1148,6 +1148,11 @@ la Audioterapia; nunca por título, que la persona puede renombrar (D-133). **No
 Pruebas: `AudioterapiaDelAprendizServiceTest` (evidencia antes que completar, otro día, ya completada,
 sin audio) y `TracksDelDiaProyeccionServiceTest.laProyeccionLlevaLaClaveDelCatalogo`.
 
+> **Agregado 2026-10-29 (E-652).** «Todas sus guardas» incluye ahora `PoliticaAudioterapia`: el registro tiene que
+> tener ya el texto de las dos respuestas. `entregarRespuestas` lo sube justo antes, así que sigue completando con el
+> gesto genérico; lo que cambió es que ninguna otra persona (ni el ✓ del APK viejo) puede cerrar la Audioterapia sin
+> ese texto. Ver §28.
+
 ---
 
 ## 24. `GET /habit-tracks/today` más barato (V-5, D-180) — 2026-09-26
@@ -1442,3 +1447,35 @@ NO usa `dias_semanales_habito` (el día elegido de un hábito semanal), solo pau
 hábito del catálogo semilla tiene `eleccion_dia_semanal = true`. Los huecos siguen al generador: no filtran por el día
 elegido. Si algún día un hábito semanal empieza a generarse solo ese día, `RegistroService` debe decidirlo primero y
 los huecos lo heredan por los registros.
+
+---
+
+## 28. La Pastilla Renacer y la Audioterapia solo se cierran con sus respuestas (E-652, issue #33) — 2026-10-29
+
+Regla del dueño: «sí o sí deben mandar los mensajes de los audios y audioterapias». Hasta hoy el servidor cerraba y
+pagaba los dos hábitos por `POST /habit-tracks/{id}/complete` sin audio ni respuestas (eran `JOURNALING` opcionales y
+sin política); solo la pantalla pedía las respuestas. Ahora lo exige el servidor, aunque lo pida un APK viejo.
+
+| Hábito (`clave_sistema`) | Por el gesto genérico (`/complete`, SER `marcar_habito_completado`) | Su camino válido |
+|---|---|---|
+| `PASTILLA_RENACER` | **Rechazado siempre** (`PoliticaPastillaRenacer`) | `POST /spirit-audio/submit` → `EspirituService.entregar` → `PastillaRenacerHabitoService.completarDeHoy`, que completa con `GestoCompletar.PROPIO_DEL_HABITO` (la política no se le consulta) |
+| `AUDIO_THERAPY_WEEKLY` | **Solo si el registro ya tiene el texto de las respuestas** (`PoliticaAudioterapia`) | Subir la evidencia de TEXTO (`POST /habit-tracks/{id}/evidence`, las dos preguntas con sus respuestas) y después `POST /habit-tracks/{id}/complete`; SER hace lo mismo en `AudioterapiaDelAprendizService` |
+
+- **Qué cuenta como «tiene el texto».** Una evidencia de tipo `TEXTO` del registro con al menos
+  `PoliticaAudioterapia.LARGO_MINIMO_DEL_TEXTO` = 30 caracteres sin los espacios de los bordes (2 respuestas × los 15 que
+  exige la app, `RESPUESTA_MIN_LENGTH`), en cualquier estado de validación. Lo pregunta `RegistroService` con
+  `evidence.api.RegistrosConTextoFinder.conTextoDeAlMenos(ids, largo)` (una consulta que mide el largo en la base, sobre
+  `evidencias_registro_idx`) y llega a la política por `ContextoCompletar.tieneLasRespuestasDelAudio()`, perezoso y
+  memoizado como el hecho del Muro: los demás hábitos no pagan la consulta.
+- **El servidor no separa las respuestas.** El texto lleva las preguntas en medio y la app puede cambiarlas, así que
+  acoplar el servidor a su redacción rompería la Audioterapia el día que cambien. Se comprueba el total.
+- **El rechazo** es el de cualquier política: `DecisionPolitica.noProcede` → `IllegalArgumentException` → 400 con
+  «Para la Pastilla Renacer, escucha el audio y responde las dos preguntas.» o «Para la Audioterapia semanal, escucha
+  el audio y responde las dos preguntas.». La app ya muestra el mensaje del servidor.
+- **No cambia** ningún otro hábito, el cálculo de puntos, el cerrojo de la Pastilla ni `/spirit-audio/submit` (que sigue
+  validando solo que el texto no esté vacío).
+- **App.** El Training nuevo (spec 014) ya no ofrece el ✓ en estos dos hábitos; el APK publicado sí, y desde este cambio
+  recibe el rechazo en vez de cerrar el hábito. No hace falta APK nuevo.
+- Pruebas: `RegistroServiceTest` (los cinco caminos), `PoliticaPastillaRenacerTest`, `PoliticaAudioterapiaTest`,
+  `PastillaRenacerHabitoServiceTest`, y con base real `EvidenciaPersistenceAdapterTest` y
+  `PastillaYAudioterapiaConRespuestasIT`.

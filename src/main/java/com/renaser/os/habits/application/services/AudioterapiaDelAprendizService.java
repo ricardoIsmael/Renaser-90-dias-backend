@@ -33,6 +33,10 @@ import java.util.UUID;
  * documenta {@code ClaseDiariaHabitoService} (hallazgo del 2026-09-21). El precio es el mismo que
  * paga la app: si completar falla despues de subir, la evidencia queda subida sin completar. Por eso
  * el estado se valida ANTES de subir nada.
+ *
+ * <p><b>Completa con el gesto generico a proposito</b> (E-652): {@code PoliticaAudioterapia} exige que el registro
+ * ya tenga el texto con las respuestas, y este servicio lo sube justo antes. Asi la misma regla vale para la app y
+ * para SER, y ninguno de los dos puede cerrar la Audioterapia sin respuestas.
  */
 @Service
 public class AudioterapiaDelAprendizService implements AudioterapiaDelAprendizPort {

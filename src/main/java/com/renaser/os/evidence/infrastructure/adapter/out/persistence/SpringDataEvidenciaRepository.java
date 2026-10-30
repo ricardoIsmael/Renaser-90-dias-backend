@@ -59,6 +59,19 @@ interface SpringDataEvidenciaRepository extends JpaRepository<EvidenciaJpaEntity
     @Query("SELECT DISTINCT e.registroHabitoId FROM EvidenciaJpaEntity e WHERE e.registroHabitoId IN :ids")
     List<UUID> registrosHabitoConEvidencia(@Param("ids") Collection<UUID> ids);
 
+    /**
+     * Como {@link #registrosHabitoConEvidencia} pero solo cuenta una evidencia de TEXTO de al menos
+     * {@code largoMinimo} caracteres sin los espacios de los bordes. Misma proyección de una columna y mismo índice
+     * parcial; el largo se mide en la base para no traer el texto al servidor.
+     */
+    @Query("""
+            SELECT DISTINCT e.registroHabitoId FROM EvidenciaJpaEntity e
+            WHERE e.registroHabitoId IN :ids AND e.tipo = :tipo AND LENGTH(TRIM(e.contenidoTexto)) >= :largoMinimo
+            """)
+    List<UUID> registrosHabitoConTextoDeAlMenos(@Param("ids") Collection<UUID> ids,
+                                                 @Param("tipo") TipoEvidenciaJpa tipo,
+                                                 @Param("largoMinimo") int largoMinimo);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "-2"))
     @Query("SELECT e FROM EvidenciaJpaEntity e WHERE e.estadoValidacion = :estado AND e.subidaEn <= :hasta "

@@ -34,6 +34,10 @@ import java.util.function.BooleanSupplier;
  * distintas ni cobrar dos consultas. Por eso NO es un record — un componente de record
  * expone el {@code BooleanSupplier} crudo y se perderia la memoizacion.
  *
+ * <p><b>Las respuestas del audio (E-652).</b> La Audioterapia semanal se cierra con el texto de sus dos respuestas, que
+ * vive en {@code evidence}: otro hecho que el catalogo no sabe y que {@link #tieneLasRespuestasDelAudio} resuelve
+ * perezoso y memoizado, igual que el del Muro.
+ *
  * <p><b>La medicion del dia (D-226).</b> Lleva tambien el numero que la persona escribio al completar
  * (los km de {@code DAILY_KM}), si escribio alguno. Es otro hecho que el catalogo no sabe y que una
  * politica mira para decidir ({@code PoliticaKilometros}: mayor que cero y con tope). No es perezoso
@@ -42,11 +46,15 @@ import java.util.function.BooleanSupplier;
 public final class ContextoCompletar {
 
     private final BooleanSupplier consulta;
+    private final BooleanSupplier consultaRespuestasDelAudio;
     private final MedicionDiaria medicion;
     private Boolean respuesta;
+    private Boolean respuestasDelAudio;
 
-    private ContextoCompletar(BooleanSupplier consulta, MedicionDiaria medicion) {
+    private ContextoCompletar(BooleanSupplier consulta, BooleanSupplier consultaRespuestasDelAudio,
+                               MedicionDiaria medicion) {
         this.consulta = consulta;
+        this.consultaRespuestasDelAudio = consultaRespuestasDelAudio;
         this.medicion = medicion;
     }
 
@@ -57,18 +65,26 @@ public final class ContextoCompletar {
      *                              02-tiempo-zonas-y-schedulers)
      */
     public static ContextoCompletar de(BooleanSupplier publicoEnElMuroEseDia) {
-        return de(publicoEnElMuroEseDia, null);
+        return de(publicoEnElMuroEseDia, sinHechosExternos().consultaRespuestasDelAudio, null);
     }
 
-    /** @param medicion lo que la persona escribio al completar, o {@code null} si no escribio nada */
-    public static ContextoCompletar de(BooleanSupplier publicoEnElMuroEseDia, MedicionDiaria medicion) {
+    /**
+     * @param tieneLasRespuestasDelAudio si el registro ya tiene el texto con las respuestas que se escriben despues de
+     *                                   escuchar un audio (la Audioterapia semanal, E-652): una evidencia de TEXTO del
+     *                                   largo que exige su politica. Perezoso por el mismo motivo que el del Muro
+     * @param medicion lo que la persona escribio al completar, o {@code null} si no escribio nada
+     */
+    public static ContextoCompletar de(BooleanSupplier publicoEnElMuroEseDia,
+                                       BooleanSupplier tieneLasRespuestasDelAudio, MedicionDiaria medicion) {
         Objects.requireNonNull(publicoEnElMuroEseDia, "publicoEnElMuroEseDia es obligatorio");
-        return new ContextoCompletar(publicoEnElMuroEseDia, medicion);
+        Objects.requireNonNull(tieneLasRespuestasDelAudio, "tieneLasRespuestasDelAudio es obligatorio");
+        return new ContextoCompletar(publicoEnElMuroEseDia, tieneLasRespuestasDelAudio, medicion);
     }
 
     /** Solo la medicion, para las pruebas de una politica que no mira el Muro. */
     public static ContextoCompletar conMedicion(MedicionDiaria medicion) {
-        return new ContextoCompletar(sinHechosExternos().consulta, medicion);
+        ContextoCompletar vacio = sinHechosExternos();
+        return new ContextoCompletar(vacio.consulta, vacio.consultaRespuestasDelAudio, medicion);
     }
 
     /**
@@ -81,6 +97,9 @@ public final class ContextoCompletar {
         return new ContextoCompletar(() -> {
             throw new IllegalStateException(
                     "Esta politica necesita saber si el participante publico en el Muro, y el contexto no lo trae");
+        }, () -> {
+            throw new IllegalStateException(
+                    "Esta politica necesita saber si el registro tiene las respuestas del audio, y el contexto no lo trae");
         }, null);
     }
 
@@ -94,5 +113,13 @@ public final class ContextoCompletar {
             respuesta = consulta.getAsBoolean();
         }
         return respuesta;
+    }
+
+    /** Si el registro ya tiene las respuestas escritas despues de escuchar el audio (E-652); se consulta una vez. */
+    public boolean tieneLasRespuestasDelAudio() {
+        if (respuestasDelAudio == null) {
+            respuestasDelAudio = consultaRespuestasDelAudio.getAsBoolean();
+        }
+        return respuestasDelAudio;
     }
 }

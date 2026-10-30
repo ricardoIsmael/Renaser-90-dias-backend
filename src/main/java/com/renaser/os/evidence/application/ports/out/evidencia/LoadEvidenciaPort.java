@@ -60,6 +60,13 @@ public interface LoadEvidenciaPort {
     Set<UUID> registrosHabitoConEvidencia(Collection<UUID> registrosHabitoIds);
 
     /**
+     * De {@code registrosHabitoIds}, los que tienen al menos una evidencia de tipo TEXTO de {@code largoMinimo}
+     * caracteres o más (sin los espacios de los bordes), en cualquier estado de validación. Una sola consulta para
+     * todo el lote. Alimenta {@link com.renaser.os.evidence.api.RegistrosConTextoFinder}, donde está el porqué.
+     */
+    Set<UUID> registrosHabitoConTextoDeAlMenos(Collection<UUID> registrosHabitoIds, int largoMinimo);
+
+    /**
      * Filtro de {@link #buscar}. {@code null} en cualquier campo = sin restringir por
      * ese campo. {@code desde}/{@code hasta} filtran por {@code creadoEn} (mismo campo
      * que ordena el keyset, para que "evidencia subida en tal rango" y "página siguiente"

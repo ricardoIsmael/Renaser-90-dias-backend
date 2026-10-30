@@ -79,6 +79,16 @@ class EvidenciaPersistenceAdapter implements LoadEvidenciaPort, SaveEvidenciaPor
         return Set.copyOf(repository.registrosHabitoConEvidencia(registrosHabitoIds));
     }
 
+    /** Mismo corte en seco con la colección vacía que {@link #registrosHabitoConEvidencia}. */
+    @Override
+    public Set<UUID> registrosHabitoConTextoDeAlMenos(Collection<UUID> registrosHabitoIds, int largoMinimo) {
+        if (registrosHabitoIds == null || registrosHabitoIds.isEmpty()) {
+            return Set.of();
+        }
+        return Set.copyOf(repository.registrosHabitoConTextoDeAlMenos(registrosHabitoIds, TipoEvidenciaJpa.TEXTO,
+                largoMinimo));
+    }
+
     @Override
     public Evidencia save(Evidencia evidencia) {
         var saved = repository.saveAndFlush(mapper.toEntity(evidencia));
