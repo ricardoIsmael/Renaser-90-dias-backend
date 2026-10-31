@@ -1,5 +1,6 @@
 package com.renaser.os.leadership;
 
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.community.api.AcompanamientoFinder;
 import com.renaser.os.habits.api.CodigoRenaserDePersonaFinder;
@@ -20,8 +21,6 @@ import com.renaser.os.points.api.ColorSemaforo;
 import com.renaser.os.points.api.DetalleDelSemaforo;
 import com.renaser.os.points.api.SemaforoFinder;
 import com.renaser.os.points.api.VentanaDelSemaforo;
-import com.renaser.os.shared.domain.Clock;
-import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
@@ -88,8 +87,12 @@ class CumplimientoDelLiderIT {
     private UUID fotoDelRitual;
     private UUID fotoDeLaAccion;
 
+    @Autowired
+    private RelojDePrueba reloj;
+
     @BeforeEach
     void sembrar() {
+        reloj.fijar(AHORA);
         jdbc.update("DELETE FROM renaser.usuarios WHERE id IN (?, ?, ?)", LIDER, MENTORA, ANA);
         usuario(LIDER, "LIDER_MENTORES", "Líder Uno");
         usuario(MENTORA, "MENTOR", "Luisa Rojas");
@@ -346,12 +349,6 @@ class CumplimientoDelLiderIT {
 
     @TestConfiguration
     static class Dobles {
-
-        @Bean
-        @Primary
-        Clock lunesALas10EnLima() {
-            return FixedClock.at(AHORA);
-        }
 
         @Bean
         @Primary

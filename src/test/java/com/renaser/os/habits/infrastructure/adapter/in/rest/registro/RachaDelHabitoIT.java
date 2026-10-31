@@ -2,20 +2,16 @@ package com.renaser.os.habits.infrastructure.adapter.in.rest.registro;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
-import com.renaser.os.shared.domain.Clock;
-import com.renaser.os.shared.domain.FixedClock;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -51,7 +47,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>Fixture coherente (regla 03): Ana esta en su Dia 12 y arranco el 23/09 = hoy − 11.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import({TestcontainersConfiguration.class, RachaDelHabitoIT.RelojDeMadrugadaUtc.class})
+@Import(TestcontainersConfiguration.class)
 class RachaDelHabitoIT {
 
     private static final Instant AHORA = Instant.parse("2026-10-05T03:00:00Z");
@@ -65,15 +61,6 @@ class RachaDelHabitoIT {
             "diaPrograma", "tipoDia", "esOpcional", "estado", "puntosOtorgados", "completadoEn", "respuestaTexto",
             "calificacionProductividad", "guia", "tituloHabito", "tipoHabito", "horaDisparo", "horaLimite",
             "puntosEnJuego", "puntosMaximos", "plazoEvidencia", "tieneEvidencia", "medicion");
-
-    @TestConfiguration
-    static class RelojDeMadrugadaUtc {
-        @Bean
-        @Primary
-        Clock relojFijo() {
-            return FixedClock.at(AHORA);
-        }
-    }
 
     @LocalServerPort
     private int puerto;
@@ -96,8 +83,12 @@ class RachaDelHabitoIT {
     private UUID enPausa;
     private UUID conOpcional;
 
+    @Autowired
+    private RelojDePrueba reloj;
+
     @BeforeEach
     void seed() {
+        reloj.fijar(AHORA);
         ana = aprendiz("Ana Constante");
         beto = aprendiz("Beto Vecino");
         meditar = habito("Meditar");

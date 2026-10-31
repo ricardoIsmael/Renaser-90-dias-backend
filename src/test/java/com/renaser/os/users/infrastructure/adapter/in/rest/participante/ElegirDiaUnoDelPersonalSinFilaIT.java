@@ -2,24 +2,22 @@ package com.renaser.os.users.infrastructure.adapter.in.rest.participante;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
-import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.application.ports.out.participante.LoadParticipacionProgramaPort;
 import com.renaser.os.users.domain.model.participante.ParticipacionPrograma;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContext;
@@ -54,22 +52,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  * /mentor/activate-tracking}, que tiene que seguir creando la fila activada HOY (D-07), como siempre.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import({TestcontainersConfiguration.class, ElegirDiaUnoDelPersonalSinFilaIT.RelojDeLaPrueba.class})
+@Import(TestcontainersConfiguration.class)
 class ElegirDiaUnoDelPersonalSinFilaIT {
 
     private static final Instant MADRUGADA_UTC = Instant.parse("2026-10-08T03:30:00Z");
     private static final String ACTIVAR = "/api/v1/onboarding/activate-program";
     private static final String SEGUIMIENTO = "/api/v1/mentor/activate-tracking";
     private static final String CONTEXTO = "/api/v1/mentor/context";
-
-    @TestConfiguration
-    static class RelojDeLaPrueba {
-        @Bean
-        @Primary
-        Clock relojEnLaMadrugadaUtc() {
-            return FixedClock.at(MADRUGADA_UTC);
-        }
-    }
 
     @LocalServerPort
     private int puerto;
@@ -88,6 +77,14 @@ class ElegirDiaUnoDelPersonalSinFilaIT {
     void limpiar() {
         // ON DELETE CASCADE arrastra participantes_programa.
         usuarios.reversed().forEach(id -> jdbcTemplate.update("DELETE FROM renaser.usuarios WHERE id = ?", id));
+    }
+
+    @Autowired
+    private RelojDePrueba reloj;
+
+    @BeforeEach
+    void fijarElReloj() {
+        reloj.fijar(MADRUGADA_UTC);
     }
 
     @ParameterizedTest(name = "{0} sin fila elige su Día 1: se crea la fila con esa fecha y el Día 1 es ese día")

@@ -1,20 +1,17 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUseCase;
 import com.renaser.os.points.api.ConteoDelDia;
 import com.renaser.os.points.api.ConteoDiarioHabitosFinder;
-import com.renaser.os.shared.domain.Clock;
-import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,7 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * ignorar el ajuste den la respuesta contraria a la correcta.
  */
 @SpringBootTest
-@Import({TestcontainersConfiguration.class, CicloIntoxicacionGeneracionIT.RelojTresAmUtc.class})
+@Import(TestcontainersConfiguration.class)
 @Transactional
 class CicloIntoxicacionGeneracionIT {
 
@@ -48,21 +45,20 @@ class CicloIntoxicacionGeneracionIT {
     /** POST DIARIO EN COMUNIDAD, id de produccion preservado (V4, V24). */
     private static final UUID POST_DIARIO = UUID.fromString("830c3d76-888a-4aef-bb30-fb0f0cc7ca73");
 
-    @TestConfiguration
-    static class RelojTresAmUtc {
-        @Bean
-        @Primary
-        Clock relojTresAmUtc() {
-            return FixedClock.at(TRES_AM_UTC);
-        }
-    }
-
     @Autowired
     private GenerarTracksDelDiaUseCase generarTracks;
     @Autowired
     private ConteoDiarioHabitosFinder conteoDelSemaforo;
     @Autowired
     private JdbcClient jdbcClient;
+
+    @Autowired
+    private RelojDePrueba reloj;
+
+    @BeforeEach
+    void fijarElReloj() {
+        reloj.fijar(TRES_AM_UTC);
+    }
 
     @Test
     @DisplayName("dia 10 en Lima (en UTC ya seria el 11): intoxicacion, solo el post sigue exigible")

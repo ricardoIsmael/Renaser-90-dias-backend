@@ -1,5 +1,6 @@
 package com.renaser.os.habits.infrastructure.adapter.in.scheduler;
 
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase.CompletarRegistroCommand;
@@ -7,7 +8,6 @@ import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDia
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase.TrackDelDiaConCatalogo;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
-import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,11 +15,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.ApplicationContext;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -32,14 +29,12 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -63,7 +58,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * Fixture coherente (regla 03): el programa arranco el 30/10, asi que el 9/11 es el Dia 11 y el 10/11 el Dia 12.
  */
 @SpringBootTest
-@Import({TestcontainersConfiguration.class, ExpiracionPorZonaIT.RelojDeLaPrueba.class})
+@Import(TestcontainersConfiguration.class)
 class ExpiracionPorZonaIT {
 
     private static final ZoneId LIMA = ZoneId.of("America/Lima");
@@ -76,38 +71,6 @@ class ExpiracionPorZonaIT {
     private static final UUID DESPERTAR = UUID.fromString("899a2151-e98c-4b61-a46c-b55134240d17");
     private static final UUID DORMIR = UUID.fromString("48d68c12-72a9-428c-a8c6-02b9b01bc2fe");
     private static final Instant COMPLETADO_ANTES = Instant.parse("2026-11-08T14:00:00Z");
-
-    /** El reloj que la prueba mueve: lo usan el barrido, completar y la agenda, como en produccion. */
-    @TestConfiguration
-    static class RelojDeLaPrueba {
-        @Bean
-        @Primary
-        RelojQueAvanza relojQueAvanza() {
-            return new RelojQueAvanza(ARRANQUE);
-        }
-    }
-
-    static final class RelojQueAvanza implements Clock {
-        private final AtomicReference<Instant> ahora;
-
-        RelojQueAvanza(Instant inicial) {
-            this.ahora = new AtomicReference<>(inicial);
-        }
-
-        void fijar(Instant instante) {
-            ahora.set(instante);
-        }
-
-        @Override
-        public Instant now() {
-            return ahora.get();
-        }
-
-        @Override
-        public LocalDate today() {
-            return ahora.get().atZone(ZoneOffset.UTC).toLocalDate();
-        }
-    }
 
     /** Una fila PENDIENTE sembrada: con la zona de su participante, para saber que deberia pasarle a cada hora. */
     private record Pendiente(UUID id, ZoneId zona, LocalDate fecha) {
@@ -122,7 +85,7 @@ class ExpiracionPorZonaIT {
     @Autowired
     private ApplicationContext contexto;
     @Autowired
-    private RelojQueAvanza reloj;
+    private RelojDePrueba reloj;
     @Autowired
     private CompletarRegistroUseCase completar;
     @Autowired

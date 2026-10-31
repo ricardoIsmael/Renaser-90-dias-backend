@@ -1,13 +1,12 @@
 package com.renaser.os.chat.application.services;
 
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.chat.application.ports.in.semaforo.EnviarTarjetasDelSemaforoUseCase;
 import com.renaser.os.chat.application.ports.in.semaforo.EnviarTarjetasDelSemaforoUseCase.ResultadoDeTarjetas;
 import com.renaser.os.notifications.application.ports.out.push.PushPort;
 import com.renaser.os.notifications.domain.model.tokenpush.TokenPush;
 import com.renaser.os.points.application.ports.out.semaforo.mensaje.AzarPort;
-import com.renaser.os.shared.domain.Clock;
-import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.users.api.FasePrograma;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,7 +50,7 @@ import static org.mockito.Mockito.when;
  * está fijado en el primero (la prueba es determinista): sin eso «distinto del de Hoy» pasaría por suerte.
  */
 @SpringBootTest
-@Import({TestcontainersConfiguration.class, TarjetaDelSemaforoIT.RelojDeLas2352DeLima.class})
+@Import({TestcontainersConfiguration.class, TarjetaDelSemaforoIT.AzarFijoDeLaPrueba.class})
 class TarjetaDelSemaforoIT {
 
     private static final Instant LAS_2352_DEL_28_EN_LIMA = Instant.parse("2026-09-29T04:52:00Z");
@@ -59,12 +58,7 @@ class TarjetaDelSemaforoIT {
     private static final LocalDate DIA_29 = LocalDate.of(2026, 9, 29);
 
     @TestConfiguration
-    static class RelojDeLas2352DeLima {
-        @Bean
-        @Primary
-        Clock relojDeLas2352DeLima() {
-            return FixedClock.at(LAS_2352_DEL_28_EN_LIMA);
-        }
+    static class AzarFijoDeLaPrueba {
 
         /** Siempre el primer candidato (ordenados por id): el mensaje de la noche deja de depender de la suerte. */
         @Bean
@@ -89,8 +83,12 @@ class TarjetaDelSemaforoIT {
     private UUID soporteDeAna;
     private UUID soporteDeBeto;
 
+    @Autowired
+    private RelojDePrueba reloj;
+
     @BeforeEach
     void semilla() {
+        reloj.fijar(LAS_2352_DEL_28_EN_LIMA);
         when(pushPort.enviar(anyList(), any())).thenReturn(List.of());
         admin = persona("ADMIN", "ACTIVO", "Kelin Admin");
         ana = aprendizConDia("ACTIVO", "Ana Pérez");

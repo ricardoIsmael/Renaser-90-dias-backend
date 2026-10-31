@@ -69,6 +69,27 @@ En particular, revisar si el bug se escondía en el **fixture**: el bug del relo
 durante días porque todos los tests fijaban el reloj a las 10:00 UTC, una hora que cae en el mismo
 día calendario en Lima. El código estaba mal; el fixture lo tapaba.
 
+## El caché de contextos de Spring: no partirlo (E-649)
+
+Cada contexto de Spring de las pruebas de integración arranca su propio Postgres y su propio Redis y tarda 6–10 s.
+La suite arrancaba **103** (≈ 610 s, el 62 % del tiempo de pruebas; auditoría del 28/10). Spring reutiliza un
+contexto solo si dos clases tienen **la misma configuración**: mismo `@Import`, mismo `@TestConfiguration`
+anidado, mismas propiedades, mismos `@MockitoBean`, mismo `webEnvironment`.
+
+- **Una IT que necesita otra hora no declara su propio `@Primary Clock`.** Inyecta el `RelojDePrueba` compartido
+  (lo registra `TestcontainersConfiguration`, una sola vez) y lo fija como **primera** línea de su `@BeforeEach`:
+  `reloj.fijar(Instant.parse("2026-10-06T01:25:00Z"))`. También `reloj.avanzar(Duration)`. Mientras nadie lo fije
+  es el reloj del sistema. `RestablecerRelojDePrueba` (oyente de Spring, en `META-INF/spring.factories`) lo vuelve a
+  hora real al terminar **cada** prueba, también si falla: ninguna clase hereda el reloj movido de otra. La hora ya
+  no sobrevive entre pruebas: si la necesitas desde un `@BeforeAll`, pásala al `@BeforeEach`.
+- `NingunaPruebaDeclaraSuPropioRelojTest` rompe el build si una clase de prueba declara un `@Bean` que devuelve un
+  `Clock` o un `@MockitoBean Clock`.
+- Antes de sumar a una IT un `@TestConfiguration`, un `@MockitoBean`, `properties = …` o un `@DirtiesContext`,
+  pregúntate si de verdad lo necesita: **cada combinación nueva es un contexto nuevo** (≈ 8 s). Dos clases con
+  exactamente el mismo conjunto de dobles ya comparten contexto.
+- Una IT comparte contexto —y base de datos— con las demás: limpia lo que siembra (`@AfterEach`) y no cuentes filas
+  de toda la tabla.
+
 ## Mocks
 
 - Para re-stubear un método que ya lanza (o un ayudante que stubea en bucle varios rechazos), usar
@@ -87,3 +108,18 @@ laptop es `America/Lima`. Con eso, un `clean verify` local **nunca** ve el desfa
 05:00 UTC. Toda fecha que el dominio compara con el día local del participante (`fecha_inicio`, periodos) se calcula
 en Java desde el `Clock` de la prueba en la zona del participante, con ese reloj en la madrugada UTC. Para reproducir
 lo que ve el CI: `TZ=UTC ./mvnw ...`.
+
+## La base y los contenedores de las pruebas de integración (E-651)
+
+`TestcontainersConfiguration` arranca **un solo Postgres por JVM** (surefire y failsafe son dos JVM: dos Postgres),
+en vez de uno por contexto de Spring como antes (50 en una corrida). Cada contexto sigue teniendo **su propia base**
+(`renaser_ctx_<n>_<id>`, vacía, migrada por Flyway al arrancar): ninguna clase ve los datos de un contexto ajeno, igual
+que antes. Por eso:
+
+- El `max_connections` del contenedor es alto (1000): cada contexto cacheado conserva su pool de Hikari.
+- Una prueba que necesite otra base aparte (como `BienvenidaEnGrupoIT` para probar una migración) la crea con
+  `CREATE DATABASE` desde el `DataSource` del contexto, como ya hacen; no hace falta nada más.
+- **Redis NO se comparte entre contextos**: guarda las sesiones, los contadores del límite de intentos (por IP, y toda
+  la suite llega desde 127.0.0.1) y el Pub/Sub del chat, y nada de eso se aísla por número de base. Arranca en 0,3 s.
+- El Postgres compartido no es un bean de Spring: ningún contexto lo detiene al cerrarse; lo recoge Ryuk al terminar
+  la JVM.

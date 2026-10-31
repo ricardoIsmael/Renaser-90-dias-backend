@@ -1,5 +1,6 @@
 package com.renaser.os.onboarding.infrastructure.adapter.in.rest.caja;
 
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.community.application.ports.in.celula.AsignarAprendizCelulaUseCase;
 import com.renaser.os.community.application.ports.in.celula.AsignarAprendizCelulaUseCase.AsignarAprendizCelulaCommand;
@@ -9,7 +10,6 @@ import com.renaser.os.community.domain.model.celula.CelulaId;
 import com.renaser.os.onboarding.application.ports.in.caja.BarrerCajasUseCase;
 import com.renaser.os.onboarding.application.ports.out.mapa.EtapaOnboardingPort;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoEnMemoria;
-import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -48,7 +48,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
@@ -75,25 +74,6 @@ class CajaRenaserIT {
     private static final String ADMIN_CAJA = "/api/v1/admin/caja";
     private static final ZoneId LIMA = ZoneId.of("America/Lima");
 
-    static final class RelojMovible implements Clock {
-
-        private volatile Instant ahora = Instant.now().truncatedTo(ChronoUnit.SECONDS);
-
-        void avanzar(Duration cuanto) {
-            ahora = ahora.plus(cuanto);
-        }
-
-        @Override
-        public Instant now() {
-            return ahora;
-        }
-
-        @Override
-        public LocalDate today() {
-            return ahora.atZone(ZoneOffset.UTC).toLocalDate();
-        }
-    }
-
     @TestConfiguration(proxyBeanMethods = false)
     static class Dobles {
         @Bean
@@ -102,11 +82,6 @@ class CajaRenaserIT {
             return new AlmacenamientoEnMemoria();
         }
 
-        @Bean
-        @Primary
-        RelojMovible relojMovible() {
-            return new RelojMovible();
-        }
     }
 
     @LocalServerPort
@@ -118,7 +93,7 @@ class CajaRenaserIT {
     @Autowired
     private AlmacenamientoEnMemoria almacenamiento;
     @Autowired
-    private RelojMovible reloj;
+    private RelojDePrueba reloj;
     @Autowired
     private BarrerCajasUseCase barrido;
     @Autowired
@@ -145,6 +120,7 @@ class CajaRenaserIT {
 
     @BeforeEach
     void padron() {
+        reloj.fijar(Instant.now().truncatedTo(ChronoUnit.SECONDS));
         LocalDate hoyEnLima = reloj.now().atZone(LIMA).toLocalDate();
         LocalDate inicio = hoyEnLima.minusDays(9);
         admin = usuario("ADMIN", "Kelin Rojas", "ACTIVO");

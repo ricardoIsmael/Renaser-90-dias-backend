@@ -25,6 +25,9 @@ import java.util.Objects;
 @EqualsAndHashCode(of = "id")
 public final class HorarioHabito {
 
+    /** El primer dia del programa: desde ahi rige el horario con el que nace un habito del catalogo (E-659). */
+    public static final int PRIMER_DIA_DEL_PROGRAMA = 1;
+
     private final HorarioHabitoId id;
     private final HabitoId habitoId;
     private int diaInicio; // mutable desde 2026-08-26 (hueco #11): el panel admin puede correr el rango de dias
@@ -53,6 +56,17 @@ public final class HorarioHabito {
         LocalTime disparo = VentanaDelDia.requireHoraDisparoDentroDelDia(horaDisparo);
         return new HorarioHabito(id, habitoId, diaInicio, diaFin, tipoDia, disparo,
                 VentanaDelDia.horaLimiteAjustada(disparo, horaLimite), ahora, ahora);
+    }
+
+    /**
+     * El horario con el que nace un habito del catalogo creado desde el panel (E-659, issue #44): del Dia 1
+     * en adelante, todos los dias de la semana, sin dia final y sin hora de cierre. {@code horaDisparo} nula
+     * es "todo el dia", como DESPERTAR: sin esta fila {@code RegistroService} no genera el registro de nadie,
+     * y un habito activo que no le aparece a nadie es justo lo que reporto el dueño.
+     */
+    public static HorarioHabito todoElPrograma(HorarioHabitoId id, HabitoId habitoId, LocalTime horaDisparo,
+                                                Instant ahora) {
+        return crear(id, habitoId, PRIMER_DIA_DEL_PROGRAMA, null, TipoDia.TODOS, horaDisparo, null, ahora);
     }
 
     /** Solo para el adaptador de persistencia. */

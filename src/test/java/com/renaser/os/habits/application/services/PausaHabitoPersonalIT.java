@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.habits.application.ports.in.desbloqueo.CambiarEstadoHabitoDelPlanUseCase;
 import com.renaser.os.habits.application.ports.in.desbloqueo.CambiarEstadoHabitoDelPlanUseCase.CambiarEstadoHabitoCommand;
@@ -13,8 +14,6 @@ import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.PlantillaHabitoPersonal;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
-import com.renaser.os.shared.domain.Clock;
-import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.AfterEach;
@@ -23,10 +22,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -79,7 +75,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code DesbloqueoHabitoConcurrenciaTest}.
  */
 @SpringBootTest
-@Import({TestcontainersConfiguration.class, PausaHabitoPersonalIT.FixedClockConfig.class})
+@Import(TestcontainersConfiguration.class)
 class PausaHabitoPersonalIT {
 
     private static final int DIA_PROGRAMA = 10;
@@ -120,8 +116,12 @@ class PausaHabitoPersonalIT {
     private UserId participanteId;
     private Habito habitoPersonal;
 
+    @Autowired
+    private RelojDePrueba reloj;
+
     @BeforeEach
     void seedParticipanteConHabitoPropio() {
+        reloj.fijar(AHORA);
         participanteId = UserId.of(UUID.randomUUID());
         transactionTemplate.executeWithoutResult(status -> {
             entityManager.createNativeQuery("""
@@ -220,15 +220,6 @@ class PausaHabitoPersonalIT {
         return jdbcTemplate.queryForObject(
                 "SELECT pausado_hasta FROM renaser.desbloqueos_habito WHERE participante_id = ? AND habito_id = ?",
                 LocalDate.class, participanteId.value(), habitoPersonal.id().value());
-    }
-
-    @TestConfiguration
-    static class FixedClockConfig {
-        @Bean
-        @Primary
-        Clock relojFijo() {
-            return FixedClock.at(AHORA);
-        }
     }
 
     /**

@@ -81,12 +81,22 @@ según la **última** audiencia guardada (los "para todos" incluidos). `role` de
   "evidenceRequirement": "OPTIONAL",
   "isOptional": false,
   "mandatoryOnIntoxication": false,
-  "targetRoles": ["MENTOR"]
+  "targetRoles": ["MENTOR"],
+  "defaultTriggerTime": "07:30"
 }
 ```
 
 - `targetRoles` ausente o `null` → para todos. `[]` → para todos. Con códigos → esos roles.
 - Crea la versión 1 de la audiencia (rige desde la creación, research R-2). → `201` + el hábito.
+- **Corregido 2026-10-31 (E-659, issue #44).** El alta crea también el horario del hábito
+  (`horarios_habito`), en la misma transacción: sin esa fila el hábito, aunque esté activo y tenga
+  audiencia, no se genera para nadie. Nace del Día 1 en adelante, todos los días, sin día final y sin
+  hora de cierre. `defaultTriggerTime` (`"HH:mm"`, **opcional y aditivo**, el nombre es el de
+  `HabitScheduleResponse` y `CreateScheduleRequest`) es la hora del hábito; ausente o `null` = todo el
+  día, como DESPERTAR. Una hora posterior a las 23:40 → `400` y no se guarda nada. Antes de este arreglo
+  el alta no escribía el horario y había que crearlo aparte con `POST /{id}/schedules`; el endpoint
+  sigue igual, pero ya no hace falta para que el hábito aparezca (ojo: no sumar un segundo horario que
+  cubra los mismos días; se edita el que ya existe con `POST /schedules/{scheduleId}`).
 
 ## `POST /{id}` (extendido)
 

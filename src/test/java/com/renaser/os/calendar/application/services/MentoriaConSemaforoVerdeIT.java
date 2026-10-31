@@ -1,5 +1,6 @@
 package com.renaser.os.calendar.application.services;
 
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.calendar.api.EventosDelParticipanteFinder;
 import com.renaser.os.calendar.application.ports.in.asistencia.PersonaConvocada;
@@ -18,7 +19,6 @@ import com.renaser.os.calendar.domain.model.evento.TipoAudiencia;
 import com.renaser.os.calendar.domain.model.evento.TipoEvento;
 import com.renaser.os.calendar.domain.model.evento.TipoUbicacion;
 import com.renaser.os.points.api.ProximoEventoFinder;
-import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.AfterEach;
@@ -27,10 +27,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.sql.Timestamp;
@@ -38,7 +35,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -60,7 +56,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * se entregan despues del commit.
  */
 @SpringBootTest
-@Import({TestcontainersConfiguration.class, MentoriaConSemaforoVerdeIT.RelojDeLaPrueba.class})
+@Import(TestcontainersConfiguration.class)
 class MentoriaConSemaforoVerdeIT {
 
     private static final ZoneId LIMA = ZoneId.of("America/Lima");
@@ -72,36 +68,8 @@ class MentoriaConSemaforoVerdeIT {
     private static final Duration LUEGO_DEL_AVISO = Duration.ofMinutes(55);
     private static final String NO_ELEGIBLE = "dejo_de_ser_elegible";
 
-    static final class RelojMovible implements Clock {
-
-        private volatile Instant ahora = T0;
-
-        void poner(Instant instante) {
-            ahora = instante;
-        }
-
-        @Override
-        public Instant now() {
-            return ahora;
-        }
-
-        @Override
-        public LocalDate today() {
-            return ahora.atZone(ZoneOffset.UTC).toLocalDate();
-        }
-    }
-
-    @TestConfiguration
-    static class RelojDeLaPrueba {
-        @Bean
-        @Primary
-        Clock relojDeLaPrueba() {
-            return new RelojMovible();
-        }
-    }
-
     @Autowired
-    private Clock clock;
+    private RelojDePrueba clock;
     @Autowired
     private CrearEventoUseCase crear;
     @Autowired
@@ -134,7 +102,7 @@ class MentoriaConSemaforoVerdeIT {
     void sembrar() {
         usuarios.clear();
         eventos.clear();
-        ((RelojMovible) clock).poner(T0);
+        clock.fijar(T0);
         admin = usuario("ADMIN");
         mentor = usuario("MENTOR");
         jdbc.update("INSERT INTO renaser.perfiles_mentor (usuario_id) VALUES (?)", mentor.value());
@@ -270,7 +238,7 @@ class MentoriaConSemaforoVerdeIT {
         assertThat(recordatoriosDe(mentoria, amarillo)).isEqualTo(1);
 
         ponerSemaforo(amarillo, 7);
-        ((RelojMovible) clock).poner(T0.plus(LUEGO_DEL_AVISO));
+        clock.fijar(T0.plus(LUEGO_DEL_AVISO));
         despachar.despachar(clock.now());
 
         esperar("el aviso del verde", () -> notificacionesDe(verde) >= 1);
@@ -288,7 +256,7 @@ class MentoriaConSemaforoVerdeIT {
         assertThat(idsEnLaListaDe(verde)).doesNotContain(mentoria.value());
 
         ponerSemaforo(verde, 10);
-        ((RelojMovible) clock).poner(T0.plus(LUEGO_DEL_AVISO));
+        clock.fijar(T0.plus(LUEGO_DEL_AVISO));
         despachar.despachar(clock.now());
 
         esperar("el aviso del verde", () -> notificacionesDe(verde) >= 1);

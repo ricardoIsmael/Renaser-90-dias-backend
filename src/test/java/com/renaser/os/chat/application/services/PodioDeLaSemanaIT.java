@@ -1,5 +1,6 @@
 package com.renaser.os.chat.application.services;
 
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeDelProgramaUseCase;
 import com.renaser.os.chat.application.ports.in.ranking.PublicarPodioDeLaSemanaUseCase;
@@ -15,7 +16,6 @@ import com.renaser.os.points.api.RankingGeneralFinder;
 import com.renaser.os.points.api.RankingGeneralFinder.PuestoEnElRankingGeneral;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Clock;
-import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.junit.jupiter.api.AfterEach;
@@ -24,10 +24,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -56,20 +53,11 @@ import static org.mockito.Mockito.when;
  * cerrada es la del 1 al 7 de marzo. Una semana lejos de las demás pruebas, para que nadie más tenga hábitos en ella.
  */
 @SpringBootTest
-@Import({TestcontainersConfiguration.class, PodioDeLaSemanaIT.RelojDelLunesEnLima.class})
+@Import(TestcontainersConfiguration.class)
 class PodioDeLaSemanaIT {
 
     private static final Instant LUNES_8_A_LAS_22_DE_LIMA = Instant.parse("2027-03-09T03:00:00Z");
     private static final SemanaDelRanking SEMANA = new SemanaDelRanking(LocalDate.of(2027, 3, 1));
-
-    @TestConfiguration
-    static class RelojDelLunesEnLima {
-        @Bean
-        @Primary
-        Clock relojDelLunesEnLima() {
-            return FixedClock.at(LUNES_8_A_LAS_22_DE_LIMA);
-        }
-    }
 
     @MockitoBean
     private PushPort pushPort;
@@ -99,8 +87,12 @@ class PodioDeLaSemanaIT {
     /** El grupo general lo crea la primera persona que entra ({@code ConversacionService.unirse}); si falta, se crea acá. */
     private UUID grupoGeneralCreadoAca;
 
+    @Autowired
+    private RelojDePrueba reloj;
+
     @BeforeEach
     void padron() {
+        reloj.fijar(LUNES_8_A_LAS_22_DE_LIMA);
         when(pushPort.enviar(anyList(), any())).thenReturn(List.of());
         if (conversaciones.global().isEmpty()) {
             grupoGeneralCreadoAca = UUID.randomUUID();

@@ -2,6 +2,7 @@ package com.renaser.os.points.infrastructure.adapter.in.rest.home;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.points.api.DiaDelSemaforo;
 import com.renaser.os.points.api.HabitosDelDiaFinder;
@@ -11,7 +12,6 @@ import com.renaser.os.points.application.ports.out.semaforo.mensaje.CatalogoDeMe
 import com.renaser.os.points.domain.model.semaforo.CumplimientoDelDia;
 import com.renaser.os.points.domain.model.semaforo.mensaje.CumplimientoDeHoy;
 import com.renaser.os.shared.domain.UserId;
-import com.renaser.os.shared.domain.Clock;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -20,11 +20,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContext;
@@ -38,9 +35,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -64,8 +61,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * pasa por HTTP, así que la prueba limpia lo que siembra.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import({TestcontainersConfiguration.class, HomeMensajeDelSemaforoIT.RelojDeLaPrueba.class,
-        MedidorDeConsultas.class})
+@Import({TestcontainersConfiguration.class, MedidorDeConsultas.class})
 class HomeMensajeDelSemaforoIT {
 
     /** 10:00 en Lima del lunes 19 de octubre. */
@@ -74,38 +70,6 @@ class HomeMensajeDelSemaforoIT {
     /** Día 20 el 19 de octubre. */
     private static final LocalDate INICIO_DIA_20 = HOY.minusDays(19);
 
-    static final class RelojMovible implements Clock {
-
-        private volatile Instant ahora = LUNES_10_LIMA;
-
-        void poner(Instant instante) {
-            ahora = instante;
-        }
-
-        void avanzarUnDia() {
-            ahora = ahora.plusSeconds(24 * 3600L);
-        }
-
-        @Override
-        public Instant now() {
-            return ahora;
-        }
-
-        @Override
-        public LocalDate today() {
-            return ahora.atZone(ZoneOffset.UTC).toLocalDate();
-        }
-    }
-
-    @TestConfiguration
-    static class RelojDeLaPrueba {
-        @Bean
-        @Primary
-        Clock relojDeLaPrueba() {
-            return new RelojMovible();
-        }
-    }
-
     @LocalServerPort
     private int puerto;
     @Autowired
@@ -113,7 +77,7 @@ class HomeMensajeDelSemaforoIT {
     @Autowired
     private JdbcClient jdbcClient;
     @Autowired
-    private Clock clock;
+    private RelojDePrueba reloj;
     @Autowired
     private CatalogoDeMensajesPort catalogo;
     @Autowired
@@ -128,13 +92,9 @@ class HomeMensajeDelSemaforoIT {
     private final List<UUID> usuarios = new ArrayList<>();
     private final List<UUID> habitos = new ArrayList<>();
 
-    private RelojMovible reloj() {
-        return (RelojMovible) clock;
-    }
-
     @BeforeEach
     void relojAlLunes() {
-        reloj().poner(LUNES_10_LIMA);
+        reloj.fijar(LUNES_10_LIMA);
     }
 
     @AfterEach
@@ -181,7 +141,7 @@ class HomeMensajeDelSemaforoIT {
         for (int dia = 0; dia < 15; dia++) {
             String id = home(sesion).at("/semaforo/mensaje/id").asText();
             assertThat(vistos.add(id)).as("el día %d repitió %s", dia, id).isTrue();
-            reloj().avanzarUnDia();
+            reloj.avanzar(Duration.ofDays(1));
         }
         assertThat(filasElegidas(persona)).isEqualTo(15);
     }
@@ -189,7 +149,7 @@ class HomeMensajeDelSemaforoIT {
     @Test
     @DisplayName("con el reloj en la madrugada UTC, el día es el de Lima: la elección queda en el día local anterior")
     void elDiaEsElLocalEnLaMadrugadaUtc() throws Exception {
-        reloj().poner(Instant.parse("2026-10-19T03:00:00Z"));
+        reloj.fijar(Instant.parse("2026-10-19T03:00:00Z"));
         UUID persona = aprendiz("Lucía Mendoza", INICIO_DIA_20);
         ventanaTodosLosDias(persona, 10, 10);
 

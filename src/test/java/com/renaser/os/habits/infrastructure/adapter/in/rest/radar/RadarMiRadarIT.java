@@ -2,18 +2,16 @@ package com.renaser.os.habits.infrastructure.adapter.in.rest.radar;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
-import com.renaser.os.shared.domain.Clock;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -28,7 +26,6 @@ import java.net.http.HttpResponse;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -43,7 +40,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * (regla 02): 14:06 Lima son las 19:06Z, 22:00 Lima son las 03:00Z del dia siguiente, 01:30 Lima son las 06:30Z.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import({TestcontainersConfiguration.class, RadarMiRadarIT.RelojConfig.class})
+@Import(TestcontainersConfiguration.class)
 class RadarMiRadarIT {
 
     private static final ZoneId LIMA = ZoneId.of("America/Lima");
@@ -60,42 +57,23 @@ class RadarMiRadarIT {
             {"whatAmIDoing":"Trabajando","whatAmIThinking":"En la reunion","whatAmIFeeling":"Tranquila",
              "energyLevel":7,"whatAmIAvoiding":"El correo"}""";
 
-    @TestConfiguration
-    static class RelojConfig {
-        @Bean
-        @Primary
-        RelojMovible relojMiRadar() {
-            return new RelojMovible();
-        }
-    }
-
-    static final class RelojMovible implements Clock {
-        volatile Instant ahora = A_LAS_14_06_EN_LIMA;
-
-        @Override
-        public Instant now() {
-            return ahora;
-        }
-
-        @Override
-        public LocalDate today() {
-            return ahora.atZone(ZoneOffset.UTC).toLocalDate();
-        }
-    }
-
     @Autowired JdbcTemplate jdbc;
-    @Autowired RelojMovible reloj;
+    @Autowired RelojDePrueba reloj;
     @Autowired SessionRepository<? extends Session> sesiones;
     @LocalServerPort int puerto;
     private final List<UUID> usuarios = new ArrayList<>();
     private final HttpClient http = HttpClient.newHttpClient();
     private final ObjectMapper json = new ObjectMapper();
 
+    @BeforeEach
+    void fijarElReloj() {
+        reloj.fijar(A_LAS_14_06_EN_LIMA);
+    }
+
     @AfterEach
     void limpiar() {
         usuarios.forEach(id -> jdbc.update("DELETE FROM renaser.usuarios WHERE id = ?", id));
         usuarios.clear();
-        reloj.ahora = A_LAS_14_06_EN_LIMA;
     }
 
     // ── el flujo del dia 10 ─────────────────────────────────────────────────
@@ -272,7 +250,7 @@ class RadarMiRadarIT {
         String sesion = sesionDe(sesiones, persona);
         put("/mi-radar", sesion, FIN_DE_SEMANA_PERSONALIZADO);
         post("", sesion, REGISTRO);
-        reloj.ahora = A_LAS_15_20_EN_LIMA;
+        reloj.fijar(A_LAS_15_20_EN_LIMA);
 
         HttpResponse<String> apagado = put("/mi-radar", sesion, "{\"encendido\":false}");
 
@@ -303,7 +281,7 @@ class RadarMiRadarIT {
         assertThat(libre.statusCode()).isEqualTo(200);
         assertThat(json.readTree(libre.body()).get("horaPrevista").isNull()).isTrue();
 
-        reloj.ahora = Instant.parse("2026-10-20T21:10:00Z");
+        reloj.fijar(Instant.parse("2026-10-20T21:10:00Z"));
         HttpResponse<String> prevista = post("", sesion, REGISTRO);
         assertThat(prevista.statusCode()).isEqualTo(200);
         assertThat(json.readTree(prevista.body()).get("horaPrevista").asInt()).isEqualTo(16);
@@ -315,7 +293,7 @@ class RadarMiRadarIT {
         UUID persona = participanteConHorario(10, "APRENDIZ", "05:30", "22:30");
         String sesion = sesionDe(sesiones, persona);
         put("/mi-radar", sesion, "{\"encendido\":true}");
-        reloj.ahora = A_LAS_22_00_EN_LIMA_ES_03_UTC;
+        reloj.fijar(A_LAS_22_00_EN_LIMA_ES_03_UTC);
 
         HttpResponse<String> registro = post("", sesion, REGISTRO);
 
@@ -329,7 +307,7 @@ class RadarMiRadarIT {
         UUID persona = participanteConHorario(10, "APRENDIZ", "05:30", "22:30");
         String sesion = sesionDe(sesiones, persona);
         put("/mi-radar", sesion, "{\"encendido\":true}");
-        reloj.ahora = A_LAS_01_30_EN_LIMA_ES_06_UTC;
+        reloj.fijar(A_LAS_01_30_EN_LIMA_ES_06_UTC);
 
         HttpResponse<String> registro = post("", sesion, REGISTRO);
 
@@ -346,7 +324,7 @@ class RadarMiRadarIT {
         put("/mi-radar", sesion, "{\"encendido\":true}");
 
         String primero = json.readTree(post("", sesion, REGISTRO).body()).get("id").asText();
-        reloj.ahora = A_LAS_14_06_EN_LIMA.plusSeconds(600);
+        reloj.fijar(A_LAS_14_06_EN_LIMA.plusSeconds(600));
         String segundo = json.readTree(post("", sesion, REGISTRO).body()).get("id").asText();
 
         assertThat(segundo).isEqualTo(primero);
@@ -361,9 +339,9 @@ class RadarMiRadarIT {
         UUID persona = participante(5, "APRENDIZ", true);
         String sesion = sesionDe(sesiones, persona);
 
-        reloj.ahora = A_LAS_11_00_EN_LIMA;
+        reloj.fijar(A_LAS_11_00_EN_LIMA);
         HttpResponse<String> enFranja = post("", sesion, REGISTRO);
-        reloj.ahora = A_LAS_22_00_EN_LIMA_ES_03_UTC;
+        reloj.fijar(A_LAS_22_00_EN_LIMA_ES_03_UTC);
         HttpResponse<String> fueraDeFranja = post("", sesion, REGISTRO);
 
         assertThat(enFranja.statusCode()).isEqualTo(200);
@@ -399,7 +377,7 @@ class RadarMiRadarIT {
     @DisplayName("FR-019: Mi Radar es para todos los roles que hacen los 90 dias: con su programa activado cada rol lee, configura y registra (ningun filtro por rol)")
     void todosLosRolesConPrograma() throws Exception {
         for (String rol : List.of("APRENDIZ", "GUIA_APRENDIZ", "MENTOR", "LIDER_MENTORES", "ADMIN", "ALQUIMISTA")) {
-            reloj.ahora = A_LAS_14_06_EN_LIMA;
+            reloj.fijar(A_LAS_14_06_EN_LIMA);
             UUID persona = participanteConHorario(10, rol, "05:30", "22:30");
             String sesion = sesionDe(sesiones, persona);
 

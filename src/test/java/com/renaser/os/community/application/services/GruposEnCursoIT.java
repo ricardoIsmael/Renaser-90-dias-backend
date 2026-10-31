@@ -1,5 +1,6 @@
 package com.renaser.os.community.application.services;
 
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.community.application.ports.in.acompanamiento.ConsultarContextoAcompanamientoUseCase;
 import com.renaser.os.community.application.ports.in.acompanamiento.TrasladarAprendicesUseCase;
@@ -13,7 +14,6 @@ import com.renaser.os.community.application.ports.in.celula.ConsultarMiCelulaUse
 import com.renaser.os.community.application.ports.in.celula.ConsultarMisCelulasUseCase;
 import com.renaser.os.community.domain.model.celula.CelulaId;
 import com.renaser.os.community.domain.model.cohorte.CohorteId;
-import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.AfterEach;
@@ -22,10 +22,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.sql.Timestamp;
@@ -33,11 +30,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -60,7 +55,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * siempre el caso que antes dependía de cuándo corriera el CI (regla 03).
  */
 @SpringBootTest
-@Import({TestcontainersConfiguration.class, GruposEnCursoIT.RelojDeLaPrueba.class})
+@Import(TestcontainersConfiguration.class)
 class GruposEnCursoIT {
 
     private static final ZoneId LIMA = ZoneId.of("America/Lima");
@@ -68,38 +63,6 @@ class GruposEnCursoIT {
     private static final Instant MADRUGADA_UTC = Instant.parse("2026-10-06T01:25:00Z");
     /** Hoy para el participante y para su cohorte (los dos en Lima): el 5/10, no el 6/10 de la base en UTC. */
     private static final LocalDate HOY = MADRUGADA_UTC.atZone(LIMA).toLocalDate();
-
-    /** El mismo reloj para el traslado, la vigencia de los grupos y el día derivado del aprendiz. */
-    @TestConfiguration
-    static class RelojDeLaPrueba {
-        @Bean
-        @Primary
-        RelojFijable relojFijable() {
-            return new RelojFijable();
-        }
-    }
-
-    /**
-     * Fijo pero movible: el traslado cierra la asignación a la bienvenida, y {@code PeriodoAsignacion} no admite
-     * una que se abra y se cierre en el mismo instante. Con un reloj congelado eso pasaba; en la vida real no.
-     */
-    static final class RelojFijable implements Clock {
-        private final AtomicReference<Instant> ahora = new AtomicReference<>(MADRUGADA_UTC);
-
-        void fijar(Instant instante) {
-            ahora.set(instante);
-        }
-
-        @Override
-        public Instant now() {
-            return ahora.get();
-        }
-
-        @Override
-        public LocalDate today() {
-            return ahora.get().atZone(ZoneOffset.UTC).toLocalDate();
-        }
-    }
 
     @Autowired
     private ConsultarMisCelulasUseCase misCelulas;
@@ -118,7 +81,7 @@ class GruposEnCursoIT {
     @Autowired
     private JdbcTemplate jdbcTemplate;
     @Autowired
-    private RelojFijable reloj;
+    private RelojDePrueba reloj;
 
     private UUID cohorteId;
     private UserId admin;

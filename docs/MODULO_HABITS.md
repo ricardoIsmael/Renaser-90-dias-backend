@@ -733,6 +733,13 @@ guiaadmin/      (nuevo) — Consultar/Upsert/EliminarGuiaHabitoUseCase, Crear/El
                 GuiaHabitoAdminService, GuiaHabitoAdminController + GuiaAdjuntoAdminController
 ```
 
+- **Corregido 2026-10-31 (E-659, issue #44).** `HabitoAdminService.crear` no escribía el horario del hábito y
+  `RegistroService` solo genera el registro del día si algún horario lo cubre: un hábito creado desde el panel
+  quedaba activo, con audiencia y invisible para todos. Ahora el alta crea su fila de `horarios_habito` en la misma
+  transacción (`HorarioHabito.todoElPrograma`: Día 1 en adelante, todos los días, sin día final ni cierre; la hora
+  de disparo es opcional y sin ella el hábito vale todo el día, como DESPERTAR) y la migración `V123` completó los
+  hábitos del programa que ya estaban activos y sin horario. Activar desde el panel uno inactivo que no tenga
+  ninguna fila (los cuatro heredados de `V9`) repite el síntoma: queda anotado en E-659 como pendiente.
 - **`HorarioHabito` ganó `actualizarRango` y `diaInicio` pasó a mutable** (antes `final`) — el panel
   admin puede correr el rango de días de un horario existente; no hay ningún consumidor que
   dependiera de que `diaInicio` fuera inmutable (a diferencia de `tipo`/`claveSistema` en `Habito`).
