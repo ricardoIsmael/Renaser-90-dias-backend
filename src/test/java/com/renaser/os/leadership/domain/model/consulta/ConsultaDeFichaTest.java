@@ -66,16 +66,25 @@ class ConsultaDeFichaTest {
     }
 
     @Test
-    @DisplayName("sin consultor, persona, grupo o semana no hay consulta")
+    @DisplayName("sin consultor, persona o semana no hay consulta")
     void obligatorios() {
         assertThatThrownBy(() -> new Contenido(null, UserRole.ADMIN, ANA, GRUPO, LUISA, SEMANA))
                 .isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> new Contenido(LIDER, UserRole.ADMIN, null, GRUPO, LUISA, SEMANA))
                 .isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> new Contenido(LIDER, UserRole.ADMIN, ANA, null, LUISA, SEMANA))
-                .isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> new Contenido(LIDER, UserRole.ADMIN, ANA, GRUPO, LUISA, null))
                 .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    @DisplayName("spec 021: una persona que no esta en ningun grupo se registra con el grupo y el mentor en null")
+    void sinGrupo() {
+        ConsultaDeFicha consulta = ConsultaDeFicha.registrar(ID,
+                new Contenido(LIDER, UserRole.MENTOR_LEAD, ANA, null, null, SEMANA), CLOCK);
+
+        assertThat(consulta.grupoId()).isNull();
+        assertThat(consulta.mentorId()).isNull();
+        assertThat(consulta.personaId()).isEqualTo(ANA);
     }
 
     @Test

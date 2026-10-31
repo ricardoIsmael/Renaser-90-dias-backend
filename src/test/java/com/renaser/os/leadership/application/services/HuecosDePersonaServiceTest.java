@@ -74,7 +74,7 @@ class HuecosDePersonaServiceTest {
     }
 
     private HuecosDePersonaService servicioCon(GuardarConsultaDeFichaPort consultas) {
-        return new HuecosDePersonaService(banco.acceso(), banco.personas(), calculo, consultas, banco.ids,
+        return new HuecosDePersonaService(banco.acceso(), banco.personas(), banco.programa(), calculo, consultas, banco.ids,
                 banco.reloj);
     }
 

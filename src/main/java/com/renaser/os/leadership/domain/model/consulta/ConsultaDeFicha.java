@@ -21,6 +21,10 @@ import java.util.UUID;
  * <p><b>Append-only</b>, como {@code ObservacionDeMentor}: no tiene un solo método que la cambie y la base lo hace
  * cumplir con un trigger (V109). No lleva ningún nombre ni texto, solo ids: sobrevive al borrado de las cuentas.
  *
+ * <p>Desde la spec 021 el líder también abre a una persona sin pasar por un grupo, así que el grupo puede faltar: una
+ * persona que no está en ninguno se registra con {@code grupoId} en null (V124).
+ *
+ * @param grupoId  el grupo desde el que se la miró; null si la persona no está en ninguno (spec 021)
  * @param mentorId el mentor vigente del grupo al consultar, o null si no tenía: es a quien se le avisa
  */
 public record ConsultaDeFicha(UUID id, UserId consultorId, UserRole rolConsultor, UserId personaId, UUID grupoId,
@@ -49,7 +53,6 @@ public record ConsultaDeFicha(UUID id, UserId consultorId, UserRole rolConsultor
             Objects.requireNonNull(consultorId, "consultorId es obligatorio");
             Objects.requireNonNull(rolConsultor, "rolConsultor es obligatorio");
             Objects.requireNonNull(personaId, "personaId es obligatorio");
-            Objects.requireNonNull(grupoId, "grupoId es obligatorio");
             Objects.requireNonNull(semanaDesde, "semanaDesde es obligatoria");
             if (!CONSULTORES.contains(rolConsultor)) {
                 throw new IllegalArgumentException("Solo MENTOR_LEAD, ADMIN o ALCHEMIST abren esta ficha: " + rolConsultor);

@@ -68,7 +68,8 @@ class CierresDePersonaServiceTest {
     }
 
     private CierresDePersonaService servicioCon(GuardarConsultaDeFichaPort consultas) {
-        return new CierresDePersonaService(banco.acceso(), banco.personas(), lectura, consultas, banco.ids, banco.reloj);
+        return new CierresDePersonaService(banco.acceso(), banco.personas(), banco.programa(), lectura, consultas, banco.ids,
+                banco.reloj);
     }
 
     @BeforeEach

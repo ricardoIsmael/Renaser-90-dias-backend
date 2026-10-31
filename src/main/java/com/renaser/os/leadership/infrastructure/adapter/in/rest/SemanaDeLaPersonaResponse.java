@@ -19,21 +19,26 @@ import java.util.UUID;
  * más lo que la respalda: la respuesta escrita, las evidencias y la publicación del Muro.
  *
  * @param semanaEnCurso true si la ventana todavía no es una semana cerrada (es la vigente, o una que aún corre)
+ * @param grupoId       el grupo con que se la mira; null si la persona no está en ninguno (spec 021)
  * @param mentor        null si no hay a quién avisar (grupo sin mentor, o la persona es el propio mentor)
+ * @param puedeAvisarAlMentor spec 021: true si hay mentor a quien avisarle (es {@code mentor != null}); false si la
+ *                      persona no tiene grupo, está en la recepción o su grupo no tiene mentor. Aditivo y opcional: una
+ *                      app anterior lo ignora
  * @param programacion  spec 018: el «¿Programó?» de HOY; null si no hay nada que programar. Campo aditivo y opcional:
  *                      una app anterior lo ignora y la nueva, contra un servidor anterior, no dibuja la tarjeta
  */
 public record SemanaDeLaPersonaResponse(UUID grupoId, UUID personaId, String nombre, String avatarUrl, String rol,
                                         LocalDate desde, LocalDate hasta, String zona, boolean semanaEnCurso,
                                         boolean cerrada, LocalDate primeraSemana, MentorResponse mentor,
-                                        ResumenSemana resumen, String color, String etiqueta, BigDecimal porcentaje,
-                                        List<DiaResponse> dias, ProgramacionResponse programacion) {
+                                        boolean puedeAvisarAlMentor, ResumenSemana resumen, String color,
+                                        String etiqueta, BigDecimal porcentaje, List<DiaResponse> dias,
+                                        ProgramacionResponse programacion) {
 
     public static SemanaDeLaPersonaResponse from(SemanaDeLaPersona semana) {
         return new SemanaDeLaPersonaResponse(semana.grupoId(), semana.personaId(), semana.nombre(),
                 semana.avatarUrl(), semana.rol() == null ? null : semana.rol().name(), semana.desde(), semana.hasta(),
                 semana.zona(), !semana.cerrada(), semana.cerrada(), semana.primeraSemana(),
-                MentorResponse.from(semana.mentor()), semana.resumen(), semana.color().name(),
+                MentorResponse.from(semana.mentor()), semana.mentor() != null, semana.resumen(), semana.color().name(),
                 semana.color().etiqueta(), semana.porcentaje(),
                 semana.dias().stream().map(DiaResponse::from).toList(), ProgramacionResponse.from(semana.programacion()));
     }

@@ -43,4 +43,19 @@ public class CumplimientoDePrueba {
     RadarDePersonaService radarDePersonaService(BancoDeCumplimiento banco) {
         return banco.radarService();
     }
+
+    @Bean
+    PersonasDelProgramaService personasDelProgramaService(BancoDeCumplimiento banco) {
+        return banco.personasDelProgramaService();
+    }
+
+    @Bean
+    HuecosDePersonaService huecosDePersonaService(BancoDeCumplimiento banco) {
+        return banco.huecosService();
+    }
+
+    @Bean
+    CierresDePersonaService cierresDePersonaService(BancoDeCumplimiento banco) {
+        return banco.cierresService();
+    }
 }

@@ -12,6 +12,8 @@ import com.renaser.os.leadership.application.ports.out.GuardarConsultaDeFichaPor
 import com.renaser.os.leadership.domain.model.consulta.ConsultaDeFicha;
 import com.renaser.os.leadership.domain.model.cumplimiento.VentanaDeLaFicha;
 import com.renaser.os.mentoring.api.DiaDelAlumno;
+import com.renaser.os.mentoring.api.HuecosDeHorarioFinder;
+import com.renaser.os.mentoring.application.services.SemanasDeHuecosDePrueba;
 import com.renaser.os.mentoring.api.ObligacionDelDia;
 import com.renaser.os.mentoring.api.ResumenSemana;
 import com.renaser.os.mentoring.api.SemanaDelAlumno;
@@ -24,6 +26,7 @@ import com.renaser.os.points.api.EstadoDiaSemaforo;
 import com.renaser.os.points.api.SemaforoFinder;
 import com.renaser.os.points.api.VentanaDelSemaforo;
 import com.renaser.os.rocks.api.AccionesDelDiaFinder;
+import com.renaser.os.rocks.api.CierresDelDiaFinder;
 import com.renaser.os.rocks.api.AccionesDelDiaFinder.AccionDelDia;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
@@ -86,6 +89,8 @@ public class BancoDeCumplimiento {
     final Map<UserId, ParticipacionPrograma> participaciones = new LinkedHashMap<>();
     final Map<UUID, GrupoAcompanado> gruposConMentor = new LinkedHashMap<>();
     final Map<UUID, List<UserId>> aprendicesPorGrupo = new LinkedHashMap<>();
+    /** Spec 021: grupos en curso sin mentor y la recepción; no entran entre los «con mentor». */
+    final Map<UUID, OtroGrupo> otrosGrupos = new LinkedHashMap<>();
     final Set<UserId> cuentasDePrueba = new HashSet<>();
 
     final Map<LocalDate, Map<UserId, VentanaDelSemaforo>> ventanasPorSemana = new LinkedHashMap<>();
@@ -113,6 +118,10 @@ public class BancoDeCumplimiento {
     final Map<UserId, CodigoRenaserDePersona> radares = new LinkedHashMap<>();
     /** Cada lectura del Radar que llego a {@code habits}: quien, desde que cursor y de a cuantos. */
     public final List<LecturaDelRadarPedida> lecturasDelRadar = new ArrayList<>();
+
+    /** Un grupo en curso sin mentor, o la recepción. */
+    record OtroGrupo(UUID grupoId, String nombre, boolean recepcion) {
+    }
 
     /** @param cursor el que pidio quien llamo; null = la pagina mas reciente */
     public record LecturaDelRadarPedida(UserId persona, Instant cursor, int tamanoPagina) {
@@ -147,7 +156,8 @@ public class BancoDeCumplimiento {
 
         @Override
         public List<UserSummary> aprendicesActivos() {
-            return List.of();
+            return usuarios.values().stream()
+                    .filter(u -> u.role() == UserRole.TRAINEE && u.status() == UserStatus.ACTIVE).toList();
         }
 
         @Override
@@ -184,7 +194,9 @@ public class BancoDeCumplimiento {
 
         @Override
         public List<UserId> participantesInscritosActivos() {
-            return List.of();
+            return participaciones.values().stream().filter(ParticipacionPrograma::inscrito)
+                    .map(ParticipacionPrograma::participanteId)
+                    .filter(id -> usuarios.get(id) != null && usuarios.get(id).status() == UserStatus.ACTIVE).toList();
         }
 
         @Override
@@ -257,7 +269,12 @@ public class BancoDeCumplimiento {
 
         @Override
         public List<GrupoConAprendices> gruposOperativos(Instant instante) {
-            return List.of();
+            List<GrupoConAprendices> operativos = new ArrayList<>();
+            gruposConMentor.values().forEach(g -> operativos.add(new GrupoConAprendices(g.grupoId(), g.nombre(), false,
+                    g.mentorId(), aprendicesPorGrupo.getOrDefault(g.grupoId(), List.of()))));
+            otrosGrupos.values().forEach(g -> operativos.add(new GrupoConAprendices(g.grupoId(), g.nombre(),
+                    g.recepcion(), null, aprendicesPorGrupo.getOrDefault(g.grupoId(), List.of()))));
+            return operativos;
         }
     };
 
@@ -364,6 +381,7 @@ public class BancoDeCumplimiento {
         participaciones.clear();
         gruposConMentor.clear();
         aprendicesPorGrupo.clear();
+        otrosGrupos.clear();
         cuentasDePrueba.clear();
         ventanasPorSemana.clear();
         ventanasVigentes.clear();
@@ -382,6 +400,27 @@ public class BancoDeCumplimiento {
     public void grupoConMentor(UUID grupoId, String nombre, UserId mentor, String nombreDelMentor) {
         gruposConMentor.put(grupoId, new GrupoAcompanado(grupoId, nombre, mentor, COHORTE, LIMA.getId(), 3));
         usuario(mentor, nombreDelMentor, UserRole.MENTOR, UserStatus.ACTIVE);
+    }
+
+    /** Spec 021: un grupo en curso sin mentor. */
+    public void grupoSinMentor(UUID grupoId, String nombre) {
+        otrosGrupos.put(grupoId, new OtroGrupo(grupoId, nombre, false));
+    }
+
+    /** Spec 021: la recepción (grupo de bienvenida, sin mentor). */
+    public void recepcion(UUID grupoId, String nombre) {
+        otrosGrupos.put(grupoId, new OtroGrupo(grupoId, nombre, true));
+    }
+
+    /** Spec 021: marca la cuenta como de prueba de «ver como»: la lista y las fichas del líder no la muestran. */
+    public void cuentaDePrueba(UserId id) {
+        cuentasDePrueba.add(id);
+    }
+
+    /** Spec 021: un aprendiz con su programa activado que no está en ningún grupo. */
+    public void aprendizSinGrupo(UserId id, String nombre) {
+        usuario(id, nombre, UserRole.TRAINEE, UserStatus.ACTIVE);
+        programa(id, UserRole.TRAINEE, LocalDate.of(2026, 8, 17), true);
     }
 
     public void usuario(UserId id, String nombre, UserRole rol, UserStatus estado) {
@@ -499,6 +538,14 @@ public class BancoDeCumplimiento {
         return new SemaforoDeLaPersona(semaforo);
     }
 
+    PersonasDelPrograma programa() {
+        return new PersonasDelPrograma(acompanamiento, participacionFinder, usuariosFinder, pruebas);
+    }
+
+    public PersonasDelProgramaService personasDelProgramaService() {
+        return new PersonasDelProgramaService(acceso(), programa(), reloj);
+    }
+
     public GrupoDelLiderService grupoService() {
         return new GrupoDelLiderService(acceso(), personas(), semaforoDeLaPersona(), tabla, usuariosFinder, reloj);
     }
@@ -508,11 +555,26 @@ public class BancoDeCumplimiento {
     }
 
     public SemanaDePersonaService semanaService() {
-        return new SemanaDePersonaService(acceso(), personas(), new LecturaDeLaFicha(seguimiento, semaforoDeLaPersona(),
+        return new SemanaDePersonaService(acceso(), personas(), programa(), new LecturaDeLaFicha(seguimiento, semaforoDeLaPersona(),
                 accionesFinder, usuariosFinder, programacionDeLaPersona()), guardarConsulta, ids, reloj);
     }
 
+    /** Los huecos de la persona sobre un cálculo de {@code mentoring} que responde siempre la misma semana de prueba. */
+    public HuecosDePersonaService huecosService() {
+        HuecosDeHorarioFinder calculo = (persona, lunes) -> SemanasDeHuecosDePrueba.respuestaDelContrato(
+                lunes == null ? LocalDate.of(2026, 10, 19) : lunes, LocalDate.of(2026, 8, 17), false);
+        return new HuecosDePersonaService(acceso(), personas(), programa(), calculo, guardarConsulta, ids, reloj);
+    }
+
+    /** Los cierres de la persona sobre una lectura de {@code rocks} que responde la semana pedida, vacía. */
+    public CierresDePersonaService cierresService() {
+        CierresDelDiaFinder lectura = (persona, lunes) -> new CierresDelDiaFinder.CierresDeLaSemana(
+                lunes == null ? LocalDate.of(2026, 10, 19) : lunes, LocalDate.of(2026, 8, 17), List.of(),
+                new CierresDelDiaFinder.ResumenDeCierres(0, 0, List.of()));
+        return new CierresDePersonaService(acceso(), personas(), programa(), lectura, guardarConsulta, ids, reloj);
+    }
+
     public RadarDePersonaService radarService() {
-        return new RadarDePersonaService(acceso(), personas(), radarFinder, reloj);
+        return new RadarDePersonaService(acceso(), personas(), programa(), radarFinder, reloj);
     }
 }

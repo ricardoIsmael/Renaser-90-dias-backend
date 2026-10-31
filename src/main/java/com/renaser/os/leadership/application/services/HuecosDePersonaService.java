@@ -4,6 +4,7 @@ import com.renaser.os.community.api.AcompanamientoFinder.GrupoAcompanado;
 import com.renaser.os.leadership.application.ports.in.ConsultarHuecosDePersonaUseCase;
 import com.renaser.os.leadership.application.ports.out.GuardarConsultaDeFichaPort;
 import com.renaser.os.leadership.application.services.PersonasDelGrupo.Miembro;
+import com.renaser.os.leadership.application.services.PersonasDelPrograma.Mirada;
 import com.renaser.os.leadership.domain.model.consulta.ConsultaDeFicha;
 import com.renaser.os.leadership.domain.model.consulta.ConsultaDeFicha.Contenido;
 import com.renaser.os.mentoring.api.HuecosDeHorarioFinder;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDate;
 
 /**
  * Los huecos de horario de una persona para el líder (spec 015). Autoriza primero y lee después, igual que
@@ -40,15 +42,18 @@ public class HuecosDePersonaService implements ConsultarHuecosDePersonaUseCase {
 
     private final AccesoDeLiderazgo acceso;
     private final PersonasDelGrupo personas;
+    private final PersonasDelPrograma programa;
     private final HuecosDeHorarioFinder huecos;
     private final GuardarConsultaDeFichaPort consultas;
     private final IdGenerator idGenerator;
     private final Clock clock;
 
-    HuecosDePersonaService(AccesoDeLiderazgo acceso, PersonasDelGrupo personas, HuecosDeHorarioFinder huecos,
-                           GuardarConsultaDeFichaPort consultas, IdGenerator idGenerator, Clock clock) {
+    HuecosDePersonaService(AccesoDeLiderazgo acceso, PersonasDelGrupo personas, PersonasDelPrograma programa,
+                           HuecosDeHorarioFinder huecos, GuardarConsultaDeFichaPort consultas, IdGenerator idGenerator,
+                           Clock clock) {
         this.acceso = acceso;
         this.personas = personas;
+        this.programa = programa;
         this.huecos = huecos;
         this.consultas = consultas;
         this.idGenerator = idGenerator;
@@ -62,16 +67,24 @@ public class HuecosDePersonaService implements ConsultarHuecosDePersonaUseCase {
         Instant ahora = clock.now();
         GrupoAcompanado grupo = personas.requireGrupoConMentor(consulta.grupoId(), ahora);
         Miembro miembro = personas.requireMiembro(grupo, UserId.of(consulta.personaId()), ahora);
-        HuecosDeLaSemana semana = huecos.semanaDe(miembro.perfil().id(), consulta.semana());
-        // El lunes que de verdad se miró (la respuesta lo trae resuelto aunque no se haya pedido uno), no el pedido.
-        registrar(consulta.actorId(), rol, miembro, grupo, semana);
-        return semana;
+        return leerYRegistrar(consulta.actorId(), rol, Mirada.deUnGrupo(miembro, grupo), consulta.semana());
     }
 
-    private void registrar(UserId actorId, UserRole rol, Miembro miembro, GrupoAcompanado grupo,
-                           HuecosDeLaSemana semana) {
-        Contenido contenido = new Contenido(actorId, rol, miembro.perfil().id(), grupo.grupoId(), grupo.mentorId(),
+    /** Lo mismo sin pasar por un grupo (spec 021): la persona es cualquier aprendiz que se muestre. */
+    @Override
+    @Transactional
+    public HuecosDeLaSemana huecosDeUnaPersona(ConsultaHuecosDeUnaPersona consulta) {
+        UserRole rol = acceso.requireLiderazgoActivo(consulta.actorId());
+        Mirada mirada = programa.mirar(UserId.of(consulta.personaId()), clock.now());
+        return leerYRegistrar(consulta.actorId(), rol, mirada, consulta.semana());
+    }
+
+    private HuecosDeLaSemana leerYRegistrar(UserId actorId, UserRole rol, Mirada mirada, LocalDate lunes) {
+        HuecosDeLaSemana semana = huecos.semanaDe(mirada.personaId(), lunes);
+        // El lunes que de verdad se miró (la respuesta lo trae resuelto aunque no se haya pedido uno), no el pedido.
+        Contenido contenido = new Contenido(actorId, rol, mirada.personaId(), mirada.grupoId(), mirada.mentorId(),
                 semana.semana());
         consultas.insertar(ConsultaDeFicha.registrar(idGenerator.newId(), contenido, clock));
+        return semana;
     }
 }

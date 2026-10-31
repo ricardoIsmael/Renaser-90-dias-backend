@@ -1,8 +1,7 @@
 package com.renaser.os.leadership.application.services;
 
-import com.renaser.os.community.api.AcompanamientoFinder.GrupoAcompanado;
 import com.renaser.os.leadership.application.ports.in.ConsultarSemanaDePersonaUseCase.MentorDelGrupo;
-import com.renaser.os.leadership.application.services.PersonasDelGrupo.Miembro;
+import com.renaser.os.leadership.application.services.PersonasDelPrograma.Mirada;
 import com.renaser.os.leadership.domain.model.cumplimiento.ProgramacionDelDia;
 import com.renaser.os.leadership.domain.model.cumplimiento.VentanaDeLaFicha;
 import com.renaser.os.mentoring.api.SemanaDelAlumno;
@@ -41,24 +40,27 @@ class LecturaDeLaFicha {
         this.programacion = programacion;
     }
 
-    Lectura leer(Miembro miembro, GrupoAcompanado grupo, VentanaDeLaFicha ventana) {
-        UserId persona = miembro.perfil().id();
-        SemanaDelAlumno semana = seguimiento.semanaDe(persona, grupo.grupoId(), ventana.desde(), ventana.hasta());
+    /** @param mirada la persona y el grupo con que se la mira, que puede ser ninguno (spec 021) */
+    Lectura leer(Mirada mirada, VentanaDeLaFicha ventana) {
+        UserId persona = mirada.personaId();
+        SemanaDelAlumno semana = seguimiento.semanaDe(persona, mirada.grupoId(), ventana.desde(), ventana.hasta());
         return new Lectura(semana, semaforo.ventanaDe(persona, ventana),
-                acciones.accionesEntre(persona, ventana.desde(), ventana.hasta()), mentorDe(grupo, persona),
-                programacion.deHoy(miembro));
+                acciones.accionesEntre(persona, ventana.desde(), ventana.hasta()), mentorDe(mirada),
+                programacion.deHoy(mirada.miembro()));
     }
 
     /**
-     * El mentor al que se le avisa. Null cuando la persona ES el mentor del grupo: no tiene sentido «avisar a su
-     * mentor» sobre sí mismo, y el servidor rechazaría esa observación (spec 005, R-7).
+     * El mentor al que se le avisa. Null cuando no hay: la persona no tiene grupo, está en la recepción o su grupo no
+     * tiene mentor. Y null cuando la persona ES el mentor del grupo: no tiene sentido «avisar a su mentor» sobre sí
+     * mismo, y el servidor rechazaría esa observación (spec 005, R-7).
      */
-    private MentorDelGrupo mentorDe(GrupoAcompanado grupo, UserId persona) {
-        if (grupo.mentorId() == null || grupo.mentorId().equals(persona)) {
+    private MentorDelGrupo mentorDe(Mirada mirada) {
+        UserId mentor = mirada.mentorId();
+        if (mentor == null || mentor.equals(mirada.personaId())) {
             return null;
         }
-        String nombre = usuarios.findById(grupo.mentorId()).map(UserSummary::fullName).orElse(null);
-        return new MentorDelGrupo(grupo.mentorId().value(), nombre);
+        String nombre = usuarios.findById(mentor).map(UserSummary::fullName).orElse(null);
+        return new MentorDelGrupo(mentor.value(), nombre);
     }
 
     /**

@@ -5,6 +5,7 @@ import com.renaser.os.habits.api.CodigoRenaserDePersonaFinder;
 import com.renaser.os.habits.api.CodigoRenaserDePersonaFinder.CodigoRenaserDePersona;
 import com.renaser.os.leadership.application.ports.in.ConsultarRadarDePersonaUseCase;
 import com.renaser.os.leadership.application.services.PersonasDelGrupo.Miembro;
+import com.renaser.os.leadership.application.services.PersonasDelPrograma.Mirada;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
@@ -31,13 +32,15 @@ public class RadarDePersonaService implements ConsultarRadarDePersonaUseCase {
 
     private final AccesoDeLiderazgo acceso;
     private final PersonasDelGrupo personas;
+    private final PersonasDelPrograma programa;
     private final CodigoRenaserDePersonaFinder radar;
     private final Clock clock;
 
-    RadarDePersonaService(AccesoDeLiderazgo acceso, PersonasDelGrupo personas, CodigoRenaserDePersonaFinder radar,
-                          Clock clock) {
+    RadarDePersonaService(AccesoDeLiderazgo acceso, PersonasDelGrupo personas, PersonasDelPrograma programa,
+                          CodigoRenaserDePersonaFinder radar, Clock clock) {
         this.acceso = acceso;
         this.personas = personas;
+        this.programa = programa;
         this.radar = radar;
         this.clock = clock;
     }
@@ -49,5 +52,13 @@ public class RadarDePersonaService implements ConsultarRadarDePersonaUseCase {
         GrupoAcompanado grupo = personas.requireGrupoConMentor(consulta.grupoId(), ahora);
         Miembro miembro = personas.requireMiembro(grupo, UserId.of(consulta.personaId()), ahora);
         return radar.de(miembro.perfil().id(), consulta.cursor(), TAMANO_PAGINA);
+    }
+
+    /** Lo mismo sin pasar por un grupo (spec 021): la persona es cualquier aprendiz que se muestre. */
+    @Override
+    public CodigoRenaserDePersona radarDeUnaPersona(ConsultaRadarDeUnaPersona consulta) {
+        acceso.requireLiderazgoActivo(consulta.actorId());
+        Mirada mirada = programa.mirar(UserId.of(consulta.personaId()), clock.now());
+        return radar.de(mirada.personaId(), consulta.cursor(), TAMANO_PAGINA);
     }
 }
