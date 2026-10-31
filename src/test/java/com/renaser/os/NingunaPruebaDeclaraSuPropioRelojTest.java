@@ -26,10 +26,12 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noMethods;
  * igual a las vecinas. Veinticinco clases lo hacían y sumaban 266 s de la suite (130 pruebas). Y con
  * dos {@code @Primary Clock} en el mismo contexto, Spring no sabe cuál elegir.
  *
- * <p>Las tres únicas excepciones son los dobles en memoria de los controladores del líder, del mentor y
- * del semáforo ({@code CumplimientoDePrueba}, {@code LiderazgoDePrueba}, {@code VistasDelSemaforoDePrueba}):
- * los importan pruebas de {@code @WebMvcTest}, que no arrancan contenedores ni el contexto completo y no
- * ven el {@link RelojDePrueba}. Si una de ellas pasa a un contexto completo, debe usar el reloj compartido.
+ * <p>Las únicas excepciones son los dobles en memoria de los controladores del líder, del mentor y
+ * del semáforo ({@code CumplimientoDePrueba}, {@code LiderazgoDePrueba}, {@code VistasDelSemaforoDePrueba})
+ * y el reloj fijo que declaran tres pruebas de controlador de las specs 015 y 017
+ * ({@code RELOJES_DE_WEBMVC}): los importan pruebas de {@code @WebMvcTest}, que no arrancan contenedores ni
+ * el contexto completo y no ven el {@link RelojDePrueba}. Si una de ellas pasa a un contexto completo, debe
+ * usar el reloj compartido. (Ampliado al juntar #31 con master: esas tres pruebas son posteriores a la #31.)
  */
 class NingunaPruebaDeclaraSuPropioRelojTest {
 
@@ -37,6 +39,15 @@ class NingunaPruebaDeclaraSuPropioRelojTest {
     private static final JavaClasses PRUEBAS = new ClassFileImporter()
             .withImportOption(location -> location.contains("/test-classes/"))
             .importPackages("com.renaser.os");
+
+    /**
+     * Los relojes fijos de tres pruebas de {@code @WebMvcTest}. Se nombran por texto porque son clases anidadas
+     * sin visibilidad desde aquí (y las tres se llaman {@code RelojDePrueba}).
+     */
+    private static final String[] RELOJES_DE_WEBMVC = {
+            "com.renaser.os.leadership.infrastructure.adapter.in.rest.HuecosDeLaPersonaControllerTest$RelojDePrueba",
+            "com.renaser.os.mentoring.infrastructure.adapter.in.rest.HuecosDelAlumnoControllerTest$RelojDePrueba",
+            "com.renaser.os.rocks.infrastructure.adapter.in.rest.cierre.CierreDelAlumnoControllerTest$RelojDePrueba"};
 
     @Test
     @DisplayName("ningún método @Bean de una prueba devuelve un Clock, salvo el RelojDePrueba compartido")
@@ -46,6 +57,9 @@ class NingunaPruebaDeclaraSuPropioRelojTest {
                 .and().areNotDeclaredIn(CumplimientoDePrueba.class)
                 .and().areNotDeclaredIn(LiderazgoDePrueba.class)
                 .and().areNotDeclaredIn(VistasDelSemaforoDePrueba.class)
+                .and().areNotDeclaredIn(RELOJES_DE_WEBMVC[0])
+                .and().areNotDeclaredIn(RELOJES_DE_WEBMVC[1])
+                .and().areNotDeclaredIn(RELOJES_DE_WEBMVC[2])
                 .should().haveRawReturnType(assignableTo(Clock.class))
                 .because("un reloj propio parte el caché de contextos (E-649): usa RelojDePrueba y fíjalo en el @BeforeEach")
                 .check(PRUEBAS);

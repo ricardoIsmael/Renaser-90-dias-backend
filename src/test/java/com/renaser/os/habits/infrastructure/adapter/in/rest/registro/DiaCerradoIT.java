@@ -2,20 +2,18 @@ package com.renaser.os.habits.infrastructure.adapter.in.rest.registro;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
-import com.renaser.os.shared.domain.Clock;
 import jakarta.persistence.EntityManagerFactory;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -30,7 +28,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -56,7 +53,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * </ul>
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import({TestcontainersConfiguration.class, DiaCerradoIT.RelojConfig.class})
+@Import(TestcontainersConfiguration.class)
 @TestPropertySource(properties = "spring.jpa.properties.hibernate.generate_statistics=true")
 class DiaCerradoIT {
 
@@ -66,22 +63,18 @@ class DiaCerradoIT {
     private static final LocalDate MARTES_27 = LocalDate.of(2026, 10, 27);
     private static final LocalDate MIERCOLES_28 = LocalDate.of(2026, 10, 28);
 
-    @TestConfiguration static class RelojConfig {
-        @Bean @Primary RelojFijo relojDiaCerrado() { return new RelojFijo(); }
-    }
-
-    static final class RelojFijo implements Clock {
-        public Instant now() { return MIERCOLES_NOCHE_EN_LIMA; }
-        public LocalDate today() { return MIERCOLES_NOCHE_EN_LIMA.atZone(ZoneOffset.UTC).toLocalDate(); }
-    }
-
     @Autowired JdbcTemplate jdbc;
+    @Autowired RelojDePrueba reloj;
     @Autowired SessionRepository<? extends Session> sesiones;
     @Autowired EntityManagerFactory entityManagerFactory;
     @LocalServerPort int puerto;
     private final List<UUID> usuarios = new ArrayList<>();
     private final HttpClient http = HttpClient.newHttpClient();
     private final ObjectMapper json = new ObjectMapper();
+
+    @BeforeEach void fijarElReloj() {
+        reloj.fijar(MIERCOLES_NOCHE_EN_LIMA);
+    }
 
     @AfterEach void limpiar() {
         usuarios.forEach(id -> jdbc.update("DELETE FROM renaser.usuarios WHERE id = ?", id));

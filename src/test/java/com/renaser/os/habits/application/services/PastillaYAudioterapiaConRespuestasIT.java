@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.evidence.api.TipoEvidencia;
 import com.renaser.os.habits.api.AudioterapiaDelAprendizPort;
@@ -13,8 +14,6 @@ import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
-import com.renaser.os.shared.domain.Clock;
-import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,10 +21,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -53,7 +49,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * completar son dos pedidos).
  */
 @SpringBootTest
-@Import({TestcontainersConfiguration.class, PastillaYAudioterapiaConRespuestasIT.RelojFijoConfig.class})
+@Import(TestcontainersConfiguration.class)
 class PastillaYAudioterapiaConRespuestasIT {
 
     /** 10:00Z = 05:00 en Lima: por delante del ancla de los dos habitos. */
@@ -77,6 +73,9 @@ class PastillaYAudioterapiaConRespuestasIT {
             ¿Qué te llevas de este audio para tu día de hoy?
             Me llevo respirar antes de contestar.""";
 
+    /** Fija el puntaje de los dos habitos en 10 a cualquier hora (ver javadoc de la clase). */
+    @Autowired
+    private RelojDePrueba reloj;
     @Autowired
     private CompletarRegistroUseCase completarRegistro;
     @Autowired
@@ -94,6 +93,7 @@ class PastillaYAudioterapiaConRespuestasIT {
 
     @BeforeEach
     void seedFixtures() {
+        reloj.fijar(AHORA);
         participanteId = UserId.of(UUID.randomUUID());
         jdbcTemplate.update("""
                 INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado)
@@ -244,16 +244,5 @@ class PastillaYAudioterapiaConRespuestasIT {
                 .hasMessage(MENSAJE_AUDIOTERAPIA);
 
         exigirQueNoSeCerroNiSePago(id);
-    }
-
-    @TestConfiguration
-    static class RelojFijoConfig {
-
-        /** Ver javadoc de la clase: fija el puntaje de los dos habitos en 10 a cualquier hora. */
-        @Bean
-        @Primary
-        Clock relojFijo() {
-            return FixedClock.at(AHORA);
-        }
     }
 }
