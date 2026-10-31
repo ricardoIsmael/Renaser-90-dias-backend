@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-31
 
-**Status**: Draft — con 3 preguntas abiertas que cambian el alcance (ver «Dudas para el dueño»)
+**Status**: Aprobada por el dueño el 2026-10-31 (todas las dudas resueltas; ver «Decisiones del dueño (31/10)»). En implementación.
 
 **Input**: Pedido del dueño del 2026-10-31, textual: «El sistema debe estar compuesto por 3 instituciones: Escuela RENASER;
 Diplomado Renaser, que tendrá una duración de 3 meses o 1 año; y Certificación, que durará 3 meses o 90 días, igual que la
@@ -171,7 +171,7 @@ Administración define cuánto dura cada formación (en la Escuela y la Certific
 2. **Given** un aprendiz del Diplomado de 3 meses y otro de la Escuela, **When** abre Hoy, **Then** ambos ven «Día N de 90».
 3. **Given** una formación con una sola opción de duración, **When** se acepta a alguien, **Then** se aplica esa duración sin preguntar (se muestra como dato, no como elección).
 4. **Given** Administración que cambia las opciones de duración del Diplomado, **When** guarda, **Then** las personas que ya empezaron **no cambian**; las próximas aceptaciones usan la nueva.
-5. **Given** una persona de 1 año, **When** consulta sus fases, semanas y meses, **Then** siguen su duración. *(Cómo se reparten las fases en 1 año: pregunta abierta Q2.)*
+5. **Given** una persona de 1 año, **When** consulta sus fases, semanas y meses, **Then** siguen su duración. *(Las 4 fases, estiradas en proporción: decisión Q2-A.)*
 6. **Given** un aprendiz de cualquier duración, **When** el programa llega a su último día, **Then** todo lo que hoy ocurre al cerrar el día 90 (cierre, fase final, avisos) ocurre en su último día.
 
 ---
@@ -212,7 +212,7 @@ formación y deja de ver la anterior.
 1. **Given** un aprendiz que terminó la Escuela, **When** Administración lo pasa al Diplomado de 1 año, **Then** queda en el Diplomado, elige su nuevo Día 1, sale de los grupos de la Escuela, y la Escuela
    deja de verlo y de contarlo (ranking, semáforo, listas).
 2. **Given** ese aprendiz, **When** abre su historial, **Then** ve la formación anterior (cuál, fechas, resultado) y sus registros conservados, sin mezclarse con la nueva.
-3. **Given** un aprendiz que **todavía no terminó** su formación, **When** Administración intenta pasarlo, **Then** el sistema se comporta según la respuesta a la pregunta Q1.
+3. **Given** un aprendiz que **todavía no terminó** su formación, **When** Administración intenta pasarlo, **Then** el sistema lo rechaza con un mensaje claro, salvo que Administración dé por terminada su participación con un motivo escrito (Q1-A); en ese caso el traslado se hace al instante.
 4. **Given** una persona que todavía no empezó (sin Día 1 elegido), **When** Administración corrige su formación o duración, **Then** se cambia sin dejar historia (nunca empezó nada).
 
 ---
@@ -260,9 +260,9 @@ formación y deja de ver la anterior.
 - **FR-012**: Al iniciar sesión, el sistema MUST informar a la app la formación de la persona (o sus formaciones y la última elegida), sin que la persona tenga que elegirla si solo tiene una.
 - **FR-013**: Quien trabaja en varias formaciones MUST elegir una como «formación activa» al entrar (se recuerda la última), poder cambiarla desde Yo, y ver siempre cuál está activa.
 - **FR-014**: Toda pantalla de la app MUST mostrar únicamente contenido de la formación de la persona (o de la activa), con el nombre de la formación visible en un lugar fijo y discreto cuando la persona tiene más de una o es de una formación distinta de la Escuela.
-- **FR-015**: La estructura de la app (las cinco pestañas y sus secciones) MUST ser la misma en las tres formaciones; lo que cambia es el contenido, los nombres y el calendario. *(Confirmación pendiente: Q3.)*
+- **FR-015**: La estructura de la app (las cinco pestañas y sus secciones) MUST ser la misma en las tres formaciones; lo que cambia es el contenido, los nombres y el calendario. *(Confirmado: Q3-A, misma forma y contenido propio.)*
 - **FR-016**: Los textos «Día N de M», fases, semanas y meses del programa MUST salir de la duración de la persona, no de un valor fijo de 90 días.
-- **FR-017**: El último día del programa (cierre, fase final, avisos, graduación) MUST ocurrir en el último día de la duración de cada persona. *(Reparto de fases en 1 año: Q2.)*
+- **FR-017**: El último día del programa (cierre, fase final, avisos, graduación) MUST ocurrir en el último día de la duración de cada persona. *(Reparto de fases en 1 año: Q2-A, estiradas en proporción.)*
 - **FR-018**: Una app publicada antes de esta función MUST seguir funcionando sin cambios para las personas de la Escuela; una app nueva MUST tolerar un servidor que todavía no informa la formación, tratándola como Escuela.
 
 **Aislamiento total**
@@ -282,7 +282,7 @@ formación y deja de ver la anterior.
 
 **Pasar de formación**
 
-- **FR-028**: Administración MUST poder pasar a un aprendiz a otra formación (con su duración), en las condiciones de la pregunta Q1.
+- **FR-028**: Administración MUST poder pasar a un aprendiz a otra formación (con su duración), (solo al terminar, o dándola por terminada con un motivo escrito: Q1-A).
 - **FR-029**: Al pasar de formación, el sistema MUST conservar la historia de la formación anterior (cuál, fechas, resultado, registros) y MUST NOT mezclarla con la nueva; la persona elige un nuevo Día 1 y sale de los grupos de la formación anterior.
 - **FR-030**: Corregir la formación o la duración de alguien que todavía no empezó (sin Día 1 elegido) MUST ser posible sin dejar historia.
 
@@ -351,13 +351,13 @@ Reglas del dueño del 2026-10-31 para todas las specs de esta tanda:
 
 ## Dudas para el dueño
 
-Todas las dudas reales, aunque ya tengan supuesto. Las marcadas **(cambia el alcance)** requieren respuesta antes de planificar.
+Todas las dudas reales, aunque ya tengan supuesto. **Todas quedaron resueltas el 2026-10-31** (ver la sección siguiente).
 
 | # | Duda | Opciones (la recomendada primero) | ¿Cambia el alcance? |
 |---|---|---|---|
-| Q1 | [NEEDS CLARIFICATION: ¿se puede pasar a un aprendiz de formación **antes** de que termine la suya, o solo cuando termina?] | A) Solo cuando terminó; antes, Administración debe dar por terminada su participación con un motivo escrito (queda en el historial). B) Solo cuando terminó, sin excepciones. C) En cualquier momento. | **Sí** |
-| Q2 | [NEEDS CLARIFICATION: ¿cómo se reparten las 4 fases del programa (1–7, 8–34, 35–64, 65–90) en un Diplomado de 1 año?] | A) Mismas cuatro fases estiradas en proporción (automático, sin inventar contenido). B) Administración define los cortes de cada duración. C) Una sola etapa para el Diplomado de 1 año. | **Sí** |
-| Q3 | [NEEDS CLARIFICATION: «mostrar las vistas de acuerdo a la formación»: ¿la forma de la app (cinco pestañas y secciones) es igual en las tres y solo cambia el contenido, o cada formación tiene pantallas distintas?] | A) Misma forma, contenido propio por formación. B) Pantallas distintas por formación (requiere definir cuáles, una spec por formación). | **Sí** |
+| Q1 | ¿se puede pasar a un aprendiz de formación **antes** de que termine la suya, o solo cuando termina? **Resuelta: A.** | A) Solo cuando terminó; antes, Administración debe dar por terminada su participación con un motivo escrito (queda en el historial). B) Solo cuando terminó, sin excepciones. C) En cualquier momento. | resuelta (A) |
+| Q2 | ¿cómo se reparten las 4 fases del programa (1–7, 8–34, 35–64, 65–90) en un Diplomado de 1 año? **Resuelta: A.** | A) Mismas cuatro fases estiradas en proporción (automático, sin inventar contenido). B) Administración define los cortes de cada duración. C) Una sola etapa para el Diplomado de 1 año. | resuelta (A) |
+| Q3 | «mostrar las vistas de acuerdo a la formación»: ¿la forma de la app (cinco pestañas y secciones) es igual en las tres y solo cambia el contenido, o cada formación tiene pantallas distintas? **Resuelta: A.** | A) Misma forma, contenido propio por formación. B) Pantallas distintas por formación (requiere definir cuáles, una spec por formación). | resuelta (A) |
 | Q4 | ¿3 meses son 90 días y 1 año son 365? | A) Sí (365). B) 1 año = 360. C) Otros valores. | No (cambia números) |
 | Q5 | ¿Soporte TI ve las tres formaciones? | A) Sí, como Administración. B) Solo las que se le asignen. | No |
 | Q6 | ¿Se necesitará crear formaciones nuevas desde la app más adelante? | A) No: tres fijas (recomendada para esta versión). B) Sí: administrar formaciones. | No (afecta el diseño futuro) |
@@ -366,3 +366,46 @@ Todas las dudas reales, aunque ya tengan supuesto. Las marcadas **(cambia el alc
 | Q9 | Si el personal hace su propio programa de 90 días, ¿en cuál de sus formaciones lo hace? | A) En la que elija al escoger su Día 1. B) Solo en la Escuela. | No |
 | Q10 | Nombre oficial del Diplomado en la app: ¿«Diplomado Renaser» o «Diplomado Riqueza con Propósito: Maestría de Vida» (el título que usa el formulario de diagnóstico)? | A) «Diplomado Renaser» con la descripción larga editable. B) El nombre largo. | No |
 | Q11 | Si Administración cambia las formaciones de un integrante del personal con la sesión abierta, ¿se aplica al instante o en su siguiente apertura? | A) Al instante (en su siguiente pedido). B) Al volver a abrir la app. | No |
+
+## Decisiones del dueño (31/10)
+
+Fuente: página de decisiones del 2026-10-31 (`~/.config/renaser-e2e/formaciones/decisiones-del-dueno-2026-10-31.md`, secciones «Base» y 022).
+**Lo que el dueño no listó es la opción A, la recomendada en la tabla de dudas.**
+
+| # | Decisión | Opción |
+|---|---|---|
+| Q1 | Un aprendiz pasa a otra formación **solo cuando termina la suya**; antes, Administración la da por terminada con un **motivo escrito** (queda en el historial). El cambio rige **al instante** (decisión 024-9-B). | A |
+| Q2 | En el Diplomado de 1 año, las **mismas 4 fases estiradas en proporción** (1–7, 8–34, 35–64, 65–90 sobre 90 días; los cortes se escalan con la duración, sin inventar contenido). | A |
+| Q3 | Misma forma de la app (cinco pestañas y secciones) en las tres; el contenido es propio de cada formación. | A |
+| Q4 | 3 meses = 90 días; 1 año = 365 días. | A |
+| Q5 | Soporte TI ve las tres formaciones, como Administración. | A |
+| Q6 | Tres formaciones **fijas**; no se crean ni se borran desde la app. Se edita nombre, descripción y duraciones. | A |
+| Q7 | En el Diplomado, 3 meses y 1 año **comparten** grupo, Muro y ranking. | A |
+| Q8 | Al pasar de formación los **puntos empiezan en cero**; los anteriores quedan en el historial. | A |
+| Q9 | El personal que hace su propio programa lo hace en la formación que elija al escoger su Día 1. | A |
+| Q10 | Nombre oficial: **«Diplomado Renaser»**, con descripción larga editable. | A |
+| Q11 | Un cambio de las formaciones del personal rige **al instante** (en su siguiente pedido). | A |
+
+Decisiones de la «Base» (tomadas antes, ya recogidas en las Clarifications): aprendiz con **una** formación; personal con una o varias (elige la activa y se
+recuerda la última); Administración, Alquimista y Soporte TI ven las tres; mismos roles en las tres, aislados; todo lo que existe hoy pasa a la Escuela; duración
+configurable por Administración.
+
+### Supuestos de diseño que fija la implementación (a la vista, sin inventar reglas de negocio)
+
+1. **Las tres formaciones son filas fijas de un catálogo** (`formaciones`), con clave natural `codigo` (`ESCUELA`, `DIPLOMADO`, `CERTIFICACION`). Sus opciones de duración son una
+   columna (`duraciones_dias`), no otra tabla. El resto del modelo se resuelve con columnas en tablas que ya existen: `participantes_programa.formacion` y `.duracion_dias`,
+   `celulas.formacion` y `usuarios.formacion_activa`. Lo único nuevo además del catálogo es la relación N:M `formaciones_personal` y el historial `participaciones_anteriores`
+   (Participación anterior de la spec): ninguna columna existente puede guardar «varias» ni «lo que fue».
+2. **Un único punto para saber la formación de una persona y para filtrar**: `users.api.AlcanceDeFormacionFinder` (qué formaciones puede ver quien actúa y cuál es la de una
+   persona) + `shared.domain.AlcanceDeFormacion` (valor) + `shared.infrastructure.persistence.FiltroDeFormacionSql` (el predicado SQL). Las specs 023 y 024 solo lo aplican a
+   sus consultas.
+3. **La formación activa del personal la guarda el servidor** (`usuarios.formacion_activa`); la app no manda la formación en cada pedido. Es una preferencia de uso, no un
+   permiso: el servidor la valida contra las asignaciones y, si ya no vale, cae a otra asignada. Administración, Alquimista y Soporte TI no tienen formación activa: su alcance
+   es «todas» y filtran con el parámetro `formacion` de cada lista.
+4. **Pedir algo de otra formación responde 404** (`ObjetoDeOtraFormacionException`), igual que algo inexistente.
+5. **Alcance de esta tarea (022)**: el modelo, la sesión, los días/fases por duración, el selector del personal, el centro «Formaciones» de Administración, el traslado y la
+   migración, **más el aislamiento de personas y grupos** (listas de Administración, grupos, «Mi grupo», líder, directorio de chat y búsqueda de personas). El aislamiento del
+   **contenido** (hábitos, Muro, cursos, eventos, testimonios, ranking, chats de comunidad) lo hacen las specs 023 y 024 sobre el punto único del punto 2.
+6. **Solicitudes**: una solicitud pendiente todavía no tiene formación (la elige Administración al aceptar, spec 025); por eso «Solicitudes» no lleva el filtro hasta la 025.
+7. **El historial de un traslado** guarda la formación anterior, sus fechas, su duración, el día final, los puntos y la racha, y el motivo; los registros de hábito, evidencias
+   y puntos quedan donde estaban (no se borran ni se reescriben): la participación nueva empieza limpia.
