@@ -29,6 +29,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * {@code despachar()} del repo viejo: toma los recordatorios vencidos y PUBLICA
@@ -60,6 +61,11 @@ import java.util.Optional;
  * esa clave viajaba como si fuera el inicio: «Nuevo evento: Clase desde la app. Es el sabado 26 de setiembre
  * a las 20:02», la hora en que se creo, cuando la clase era el domingo a las 19:00. Ahora el anuncio lleva
  * el inicio real: el del evento, o el de su proxima ocurrencia si es una serie.
+ *
+ * <p><b>Un aviso de alguien que dejo de ser elegible no sale (D-293, 2026-10-30).</b> La Mentoria del Alquimista
+ * exige semaforo verde y se evalua con el semaforo de AHORA: el recordatorio generado cuando la persona estaba en
+ * verde se cancela al despacharlo si ya no lo esta, con {@link RecordatorioEvento#MOTIVO_NO_ELEGIBLE}
+ * ({@link ElegibilidadDeLosAvisos}). Su respuesta «Voy» no se toca.
  */
 @Service
 public class DespachoDeRecordatoriosService implements DespacharRecordatoriosUseCase {
@@ -79,19 +85,22 @@ public class DespachoDeRecordatoriosService implements DespacharRecordatoriosUse
     private final LoadEventoPort loadEventoPort;
     private final LoadExcepcionPort loadExcepcionPort;
     private final LoadConfirmacionPort loadConfirmacionPort;
+    private final ElegibilidadDeLosAvisos elegibilidad;
     private final ApplicationEventPublisher events;
     private final TransactionTemplate transaccionDelLote;
 
     public DespachoDeRecordatoriosService(LoadRecordatorioPort loadRecordatorioPort,
                                           SaveRecordatorioPort saveRecordatorioPort, LoadEventoPort loadEventoPort,
                                           LoadExcepcionPort loadExcepcionPort,
-                                          LoadConfirmacionPort loadConfirmacionPort, ApplicationEventPublisher events,
+                                          LoadConfirmacionPort loadConfirmacionPort,
+                                          ElegibilidadDeLosAvisos elegibilidad, ApplicationEventPublisher events,
                                           PlatformTransactionManager transactionManager) {
         this.loadRecordatorioPort = loadRecordatorioPort;
         this.saveRecordatorioPort = saveRecordatorioPort;
         this.loadEventoPort = loadEventoPort;
         this.loadExcepcionPort = loadExcepcionPort;
         this.loadConfirmacionPort = loadConfirmacionPort;
+        this.elegibilidad = elegibilidad;
         this.events = events;
         this.transaccionDelLote = new TransactionTemplate(transactionManager);
     }
@@ -116,11 +125,12 @@ public class DespachoDeRecordatoriosService implements DespacharRecordatoriosUse
             return new ResultadoDelLote(0, 0);
         }
         Lote lote = new Lote(AsistenciasConfirmadasDelLote.de(pendientes, loadConfirmacionPort), ahora);
+        lote.prepararse(pendientes);
         pendientes.forEach(lote::clasificar);
         marcar(lote, ahora);
         lote.avisos.forEach(events::publishEvent);
-        log.debug("[DespachoDeRecordatoriosService] {} despachado(s) y {} cancelado(s) de {} pendiente(s)",
-                lote.avisos.size(), lote.cancelados.size(), pendientes.size());
+        log.debug("[DespachoDeRecordatoriosService] {} despachado(s), {} cancelado(s) y {} sin elegibilidad de {} pendiente(s)",
+                lote.avisos.size(), lote.cancelados.size(), lote.noElegibles.size(), pendientes.size());
         return new ResultadoDelLote(pendientes.size(), lote.avisos.size());
     }
 
@@ -133,6 +143,9 @@ public class DespachoDeRecordatoriosService implements DespacharRecordatoriosUse
     private void marcar(Lote lote, Instant ahora) {
         if (!lote.cancelados.isEmpty()) {
             saveRecordatorioPort.cancelarPorIds(lote.cancelados, RecordatorioEvento.MOTIVO_EVENTO_CANCELADO);
+        }
+        if (!lote.noElegibles.isEmpty()) {
+            saveRecordatorioPort.cancelarPorIds(lote.noElegibles, RecordatorioEvento.MOTIVO_NO_ELEGIBLE);
         }
         if (!lote.avisos.isEmpty()) {
             saveRecordatorioPort.marcarEnviados(lote.avisos.stream().map(RecordatorioEventoDebidoEvent::recordatorioId)
@@ -171,10 +184,22 @@ public class DespachoDeRecordatoriosService implements DespacharRecordatoriosUse
         private final Map<EventoId, Instant> inicioAnunciado = new HashMap<>();
         private final List<RecordatorioEventoDebidoEvent> avisos = new ArrayList<>();
         private final List<Long> cancelados = new ArrayList<>();
+        private final List<Long> noElegibles = new ArrayList<>();
+        /** Los avisos cuyo destinatario ya no pasa la elegibilidad del tipo del evento (D-293). */
+        private Set<Long> sinElegibilidad = Set.of();
 
         private Lote(AsistenciasConfirmadasDelLote asistencias, Instant ahora) {
             this.asistencias = asistencias;
             this.ahora = ahora;
+        }
+
+        /**
+         * Cada evento se lee una vez, antes de clasificar, y se pregunta la elegibilidad de los destinatarios de
+         * una sola vez (D-293): un aviso cuya persona dejo de ser elegible desde que se genero no sale.
+         */
+        private void prepararse(List<RecordatorioEvento> pendientes) {
+            pendientes.forEach(r -> eventos.computeIfAbsent(r.eventoId(), loadEventoPort::byId));
+            sinElegibilidad = elegibilidad.dejaronDeSerElegibles(pendientes, eventos);
         }
 
         /** Arma el aviso o anota la cancelacion; todavia no publica ni escribe nada. */
@@ -186,6 +211,10 @@ public class DespachoDeRecordatoriosService implements DespacharRecordatoriosUse
             }
             if (evento.get().estado() == EstadoEvento.CANCELADO) {
                 cancelados.add(recordatorio.id());
+                return;
+            }
+            if (sinElegibilidad.contains(recordatorio.id())) {
+                noElegibles.add(recordatorio.id());
                 return;
             }
             avisos.add(aviso(recordatorio, evento.get()));

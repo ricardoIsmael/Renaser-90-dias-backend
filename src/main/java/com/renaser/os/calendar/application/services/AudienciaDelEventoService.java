@@ -9,12 +9,15 @@ import com.renaser.os.calendar.application.ports.out.participante.ResolverAudien
 import com.renaser.os.calendar.domain.model.evento.Evento;
 import com.renaser.os.calendar.domain.model.evento.ReglasPorTipoEvento;
 import com.renaser.os.calendar.domain.model.evento.RolUsuario;
+import com.renaser.os.calendar.domain.model.evento.TipoEvento;
 import com.renaser.os.calendar.domain.model.nivelmembresia.NivelMembresia;
 import com.renaser.os.calendar.domain.model.nivelmembresia.ProgresoNivel;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -27,6 +30,10 @@ import java.util.stream.Collectors;
  * <p><b>Extraído de {@code RecordatorioService} el 2026-10-06 (D-256)</b>, sin cambiar una regla: la hoja
  * «Quién respondió» llama «Sin respuesta» a esta MISMA audiencia menos quienes respondieron, y tenía que ser
  * exactamente la de los recordatorios — una segunda copia se desincronizaría en cuanto cambie una de las dos.
+ *
+ * <p><b>Corregido 2026-10-30 (D-293).</b> La elegibilidad ya no es «cara, por persona»: para un aprendiz es el
+ * semáforo (la Mentoría del Alquimista, solo con verde) y se lee en lote, una vez para toda la audiencia. El resto
+ * de esta clase no cambia.
  */
 @Component
 class AudienciaDelEventoService {
@@ -55,13 +62,8 @@ class AudienciaDelEventoService {
         if (candidatos.isEmpty() || !ReglasPorTipoEvento.requiereElegibilidad(evento.tipoEvento())) {
             return candidatos;
         }
-        List<UserId> elegibles = new ArrayList<>();
-        for (UserId candidato : candidatos) {
-            if (esElegible(candidato, evento)) {
-                elegibles.add(candidato);
-            }
-        }
-        return elegibles;
+        Set<UserId> elegibles = quienesPasan(candidatos, evento.tipoEvento());
+        return candidatos.stream().filter(elegibles::contains).toList();
     }
 
     /**
@@ -72,16 +74,34 @@ class AudienciaDelEventoService {
         if (!audiencia(evento).contains(persona)) {
             return false;
         }
-        return !ReglasPorTipoEvento.requiereElegibilidad(evento.tipoEvento()) || esElegible(persona, evento);
+        return !ReglasPorTipoEvento.requiereElegibilidad(evento.tipoEvento())
+                || quienesPasan(List.of(persona), evento.tipoEvento()).contains(persona);
     }
 
-    /** rol_privilegiado del repo viejo: ADMIN/ALCHEMIST/MENTOR siempre elegibles; solo TRAINEE se consulta. */
-    private boolean esElegible(UserId candidato, Evento evento) {
-        var progreso = progresoPort.deParticipante(candidato);
-        if (progreso.isEmpty()) {
-            return false;
+    /**
+     * De estas personas, las que el tipo de evento deja pasar. rol_privilegiado del repo viejo: el personal
+     * (guia, mentor, lider, admin, alquimista, Soporte TI) siempre; solo un aprendiz se consulta, y se consulta de
+     * a todos juntos (D-293: el criterio es el semaforo, que se lee en lote). Quien no existe no pasa.
+     *
+     * <p>Lo usan la generacion de avisos, «Quien respondio» y el despacho, que vuelve a preguntarlo al enviar
+     * ({@link ElegibilidadDeLosAvisos}).
+     */
+    Set<UserId> quienesPasan(Collection<UserId> personas, TipoEvento tipo) {
+        Set<UserId> pasan = new HashSet<>();
+        List<UserId> aprendices = new ArrayList<>();
+        for (UserId persona : personas) {
+            progresoPort.deParticipante(persona).ifPresent(progreso -> {
+                if (progreso.rol() == RolUsuario.TRAINEE) {
+                    aprendices.add(persona);
+                } else {
+                    pasan.add(persona);
+                }
+            });
         }
-        return progreso.get().rol() != RolUsuario.TRAINEE || elegibilidadPort.esElegible(candidato, evento.tipoEvento());
+        if (!aprendices.isEmpty()) {
+            pasan.addAll(elegibilidadPort.elegiblesEntre(aprendices, tipo));
+        }
+        return pasan;
     }
 
     private List<UserId> audiencia(Evento evento) {

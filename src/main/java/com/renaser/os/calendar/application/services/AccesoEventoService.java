@@ -65,18 +65,19 @@ class AccesoEventoService {
         return new VisorContexto(progreso.rol(), rango, progreso.celulaId());
     }
 
-    /** checkAccess() del repo viejo: audiencia + (si el tipo lo exige) elegibilidad. */
+    /**
+     * checkAccess() del repo viejo: audiencia + (si el tipo lo exige) elegibilidad. Primero la audiencia, que es
+     * barata; la elegibilidad de un aprendiz es una lectura del semaforo (D-293) y solo se paga si la audiencia
+     * ya lo deja pasar.
+     */
     boolean puedeAcceder(UserId actorId, ProgresoParticipanteCalendar progreso, VisorContexto visor, Evento evento) {
-        if (visor.rol() != RolUsuario.ALCHEMIST && visor.rol() != RolUsuario.ADMIN
-                && ReglasPorTipoEvento.requiereElegibilidad(evento.tipoEvento())) {
-            // rol_privilegiado del repo viejo: ADMIN/ALCHEMIST/MENTOR siempre elegibles; solo TRAINEE se consulta.
-            if (visor.rol() == RolUsuario.TRAINEE && !elegibilidadPort.esElegible(actorId, evento.tipoEvento())) {
-                return false;
-            }
-        }
-
         EventoAudiencia audiencia = proyectarAudiencia(evento);
-        return ResolverAudiencia.puedeVer(visor, audiencia, perteneceAlDestino(actorId, visor, evento));
+        if (!ResolverAudiencia.puedeVer(visor, audiencia, perteneceAlDestino(actorId, visor, evento))) {
+            return false;
+        }
+        // rol_privilegiado del repo viejo: ADMIN/ALCHEMIST/MENTOR siempre elegibles; solo TRAINEE se consulta.
+        return visor.rol() != RolUsuario.TRAINEE || !ReglasPorTipoEvento.requiereElegibilidad(evento.tipoEvento())
+                || elegibilidadPort.esElegible(actorId, evento.tipoEvento());
     }
 
     /**

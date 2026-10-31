@@ -23,6 +23,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -92,11 +93,19 @@ class EventosDeGrupoYMentoriaIT {
         jdbc.update("DELETE FROM renaser.cohortes WHERE id = ?", cohorte);
     }
 
+    /**
+     * <b>Corregido 2026-10-30 (D-293).</b> Este caso decia que la Mentoria "para todos" le llega a cualquier aprendiz
+     * de la audiencia. Desde que el dueño cerro D-213 le llega solo si su semaforo esta en VERDE, asi que el aprendiz
+     * se siembra con siete dias de semaforo al 100 %. Que NO le llegue con otro color, y todo el resto de la regla,
+     * esta en {@code MentoriaConSemaforoVerdeIT}.
+     */
     @Test
-    @DisplayName("A2: una Mentoria del Alquimista para todos la ve el aprendiz, la abre, y le genera su recordatorio")
+    @DisplayName("A2: una Mentoria del Alquimista para todos la ve el aprendiz con semaforo verde, la abre, y le genera "
+            + "su recordatorio")
     void laMentoriaLeLlegaAlAprendiz() {
         UUID grupo = grupo(usuarioMentor());
         UserId aprendiz = aprendizCon(grupo);
+        conSemaforoVerde(aprendiz);
         EventoId mentoria = evento(TipoEvento.MENTORIA_ALQUIMISTA, TipoAudiencia.TODOS, null);
 
         assertThat(obtener.obtener(aprendiz, mentoria).evento().id()).isEqualTo(mentoria);
@@ -197,6 +206,20 @@ class EventosDeGrupoYMentoriaIT {
                 """, aprendiz.value(), grupoPrincipal);
         asignar(grupoPrincipal, aprendiz, "APRENDIZ");
         return aprendiz;
+    }
+
+    /** Programa activado y los siete dias cerrados de ayer hacia atras, todos al 100 %: el semaforo vigente en verde. */
+    private void conSemaforoVerde(UserId aprendiz) {
+        LocalDate hoy = LocalDate.now(LIMA);
+        jdbc.update("UPDATE renaser.participantes_programa SET fecha_inicio = ?, programa_activado_en = now() WHERE usuario_id = ?",
+                hoy.minusDays(9), aprendiz.value());
+        for (int atras = 1; atras <= 7; atras++) {
+            jdbc.update("""
+                    INSERT INTO renaser.semaforo_dias (participante_id, fecha, habitos_programados, habitos_cumplidos,
+                                                       objetivos_programados, objetivos_cumplidos, calculado_en)
+                    VALUES (?, ?, 10, 10, 0, 0, now())
+                    """, aprendiz.value(), hoy.minusDays(atras));
+        }
     }
 
     private void asignar(UUID grupo, UserId usuario, String funcion) {

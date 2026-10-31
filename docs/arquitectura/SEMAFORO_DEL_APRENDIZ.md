@@ -103,6 +103,10 @@ después; `ElegibilidadEventoNoOpAdapter` no se toca.
 inusable; lo reemplazó `ElegibilidadSegunAudienciaAdapter` (decide la audiencia del evento). Conectar la
 mentoría al semáforo sigue siendo una opción pendiente del dueño, no algo hecho.*
 
+*Corregido 2026-10-30 (D-293): el dueño decidió conectarla. Un aprendiz solo ve la Mentoría del Alquimista (y recibe sus
+avisos) con el semáforo vigente en **verde**: `calendar.ElegibilidadPorSemaforoAdapter` lee `SemaforoFinder.vigenteDe` y
+no calcula nada. Lo de arriba («fuera de alcance») era del 2026-09-25 y queda como historia.*
+
 ### 1.3 Tarjeta diaria en el chat de soporte (D-223, 2026-09-29)
 
 Pedido del dueño: todos los días, a las **23:50 hora local de cada aprendiz** (`participantes_programa.timezone`),
