@@ -71,6 +71,8 @@ class DespachoDeRecordatoriosServiceTest {
     @Mock
     private LoadConfirmacionPort loadConfirmacionPort;
     @Mock
+    private ElegibilidadDeLosAvisos elegibilidad;
+    @Mock
     private ApplicationEventPublisher events;
     @Mock
     private PlatformTransactionManager transactionManager;
@@ -82,7 +84,7 @@ class DespachoDeRecordatoriosServiceTest {
     @BeforeEach
     void setUp() {
         service = new DespachoDeRecordatoriosService(loadRecordatorioPort, saveRecordatorioPort, loadEventoPort,
-                loadExcepcionPort, loadConfirmacionPort, events, transactionManager);
+                loadExcepcionPort, loadConfirmacionPort, elegibilidad, events, transactionManager);
         when(loadRecordatorioPort.vencidosPendientes(any(), anyInt())).thenReturn(List.of());
     }
 
@@ -209,6 +211,51 @@ class DespachoDeRecordatoriosServiceTest {
 
         verify(loadRecordatorioPort, times(DespachoDeRecordatoriosService.MAXIMO_LOTES_POR_PASADA))
                 .vencidosPendientes(any(), anyInt());
+    }
+
+    // ── D-293: quien dejo de ser elegible no recibe el aviso que ya estaba generado ─────────────────────
+
+    /**
+     * La Mentoria del Alquimista exige semaforo verde y se evalua con el de AHORA: el recordatorio se genero cuando
+     * la persona estaba en verde y a la hora de enviarlo ya no lo esta. Contra el codigo anterior falla: el aviso
+     * salia igual y nunca se escribia {@code dejo_de_ser_elegible}.
+     */
+    @Test
+    @DisplayName("D-293: el aviso de quien dejo de ser elegible se cancela con dejo_de_ser_elegible y no se publica; "
+            + "el de otra persona del mismo lote sale")
+    void elAvisoDeQuienDejoDeSerElegibleNoSale() {
+        RecordatorioEvento deQuienYaNoEsElegible = recordatorio(1L, Instant.parse("2026-09-10T19:00:00Z"),
+                Instant.parse("2026-09-10T18:50:00Z"));
+        RecordatorioEvento deOtraPersona = RecordatorioEvento.rehydrate(2L, eventoId,
+                Instant.parse("2026-09-10T19:00:00Z"), UserId.of(UUID.randomUUID()),
+                Instant.parse("2026-09-10T18:50:00Z"), null, null, Instant.parse("2026-09-01T00:00:00Z"));
+        List<RecordatorioEvento> lote = List.of(deQuienYaNoEsElegible, deOtraPersona);
+        when(loadRecordatorioPort.vencidosPendientes(any(), anyInt())).thenReturn(lote);
+        when(loadEventoPort.byId(eventoId)).thenReturn(Optional.of(eventoCreadoDiasAntes()));
+        when(elegibilidad.dejaronDeSerElegibles(any(), any())).thenReturn(Set.of(1L));
+
+        int despachados = service.despachar(CLOCK.now());
+
+        assertThat(despachados).isEqualTo(1);
+        assertThat(unicoPublicado().recordatorioId()).isEqualTo(2L);
+        verify(saveRecordatorioPort).cancelarPorIds(List.of(1L), RecordatorioEvento.MOTIVO_NO_ELEGIBLE);
+        verify(saveRecordatorioPort).marcarEnviados(List.of(2L), CLOCK.now());
+        verify(saveRecordatorioPort, never()).cancelarPorIds(anyList(), org.mockito.ArgumentMatchers.eq(
+                RecordatorioEvento.MOTIVO_EVENTO_CANCELADO));
+    }
+
+    @Test
+    @DisplayName("D-293: la elegibilidad se pregunta una vez por lote con todos los avisos y los eventos ya leidos")
+    void laElegibilidadSePreguntaUnaVezPorLote() {
+        List<RecordatorioEvento> lote = recordatorios(1, 5);
+        when(loadRecordatorioPort.vencidosPendientes(any(), anyInt())).thenReturn(lote);
+        when(loadEventoPort.byId(eventoId)).thenReturn(Optional.of(eventoCreadoDiasAntes()));
+
+        service.despachar(CLOCK.now());
+
+        verify(elegibilidad, times(1)).dejaronDeSerElegibles(org.mockito.ArgumentMatchers.eq(lote), any());
+        verify(saveRecordatorioPort, never()).cancelarPorIds(anyList(), org.mockito.ArgumentMatchers.eq(
+                RecordatorioEvento.MOTIVO_NO_ELEGIBLE));
     }
 
     // ── E-361: el anuncio dice cuando es el evento ──────────────────────────

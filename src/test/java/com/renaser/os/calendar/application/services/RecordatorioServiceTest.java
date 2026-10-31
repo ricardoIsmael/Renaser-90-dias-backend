@@ -38,6 +38,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -83,8 +84,9 @@ class RecordatorioServiceTest {
 
     /**
      * HALLAZGO-A2 (E-362): con el adaptador anterior la elegibilidad respondia {@code false} a todo aprendiz y
-     * una Mentoria "para todos" no generaba ningun recordatorio. Aca el puerto responde lo que responde el
-     * adaptador de hoy ({@code ElegibilidadSegunAudienciaAdapter}: la audiencia decide).
+     * una Mentoria "para todos" no generaba ningun recordatorio. Aca el puerto responde que el aprendiz es
+     * elegible, como lo hace el adaptador de hoy ({@code ElegibilidadPorSemaforoAdapter}) con el semaforo en
+     * verde (D-293; antes, {@code ElegibilidadSegunAudienciaAdapter} dejaba pasar a toda la audiencia).
      */
     @Test
     @DisplayName("E-362: una Mentoria del Alquimista para todos le genera su recordatorio al aprendiz")
@@ -96,7 +98,8 @@ class RecordatorioServiceTest {
         when(audienciaMasivaPort.traineesActivos()).thenReturn(List.of(usuarioId));
         when(progresoPort.deParticipante(usuarioId)).thenReturn(Optional.of(new ProgresoParticipanteCalendar(12,
                 ZoneId.of("America/Lima"), RolUsuario.TRAINEE, false, null)));
-        when(elegibilidadPort.esElegible(usuarioId, TipoEvento.MENTORIA_ALQUIMISTA)).thenReturn(true);
+        when(elegibilidadPort.elegiblesEntre(anyCollection(), org.mockito.ArgumentMatchers.eq(TipoEvento.MENTORIA_ALQUIMISTA)))
+                .thenReturn(Set.of(usuarioId));
         when(saveRecordatorioPort.encolarSiFalta(anyList())).thenAnswer(inv -> ((List<?>) inv.getArgument(0)).size());
 
         assertThat(service.generar(CLOCK.now())).as("el de 10 minutos antes").isEqualTo(1);

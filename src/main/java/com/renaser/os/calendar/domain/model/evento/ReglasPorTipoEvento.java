@@ -63,6 +63,12 @@ public final class ReglasPorTipoEvento {
      * <p><b>Corregido 2026-09-27 (E-362, D-213).</b> "Requiere elegibilidad" dice que el tipo tiene un enchufe
      * para un criterio extra, no cual es: el 80 % semanal del repo viejo no esta confirmado para este sistema,
      * y mientras el dueño no lo defina el adaptador deja pasar a toda la audiencia declarada.
+     *
+     * <p><b>Corregido 2026-10-30 (D-293, cierra D-213).</b> El dueño lo definio: un APRENDIZ ve la Mentoria del
+     * Alquimista solo si su semaforo vigente (D-168) esta en VERDE; amarillo, rojo, sin datos y sin semaforo no. Se
+     * evalua con el semaforo del momento (lista, detalle, agenda, «Proximo evento», responder «Voy», avisos y
+     * recordatorios, incluidos los ya generados). El personal no cambia, ni los demas tipos. Lo implementa
+     * {@code ElegibilidadPorSemaforoAdapter}; el puerto no cambia de forma.
      */
     public static boolean requiereElegibilidad(TipoEvento tipo) {
         return REQUIERE_ELEGIBILIDAD.get(tipo);
