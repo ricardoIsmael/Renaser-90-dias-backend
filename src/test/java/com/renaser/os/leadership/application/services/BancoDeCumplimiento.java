@@ -574,7 +574,42 @@ public class BancoDeCumplimiento {
         return new CierresDePersonaService(acceso(), personas(), programa(), lectura, guardarConsulta, ids, reloj);
     }
 
+    /**
+     * Si «Código Renaser en las fichas» (spec 034) está prendido para quien pide. Prendido de entrada: las pruebas que no son
+     * del interruptor leen el Código Renaser como siempre. {@code interruptores} lo apaga para un actor en concreto.
+     */
+    public final InterruptorDePrueba interruptores = new InterruptorDePrueba();
+
     public RadarDePersonaService radarService() {
-        return new RadarDePersonaService(acceso(), personas(), programa(), radarFinder, reloj);
+        return new RadarDePersonaService(acceso(), personas(), programa(), radarFinder, interruptores, reloj);
+    }
+
+    /** Un {@code Interruptores} de prueba: todo prendido salvo las claves apagadas para el actor. */
+    public static final class InterruptorDePrueba implements com.renaser.os.shared.application.Interruptores {
+
+        private final java.util.Set<UserId> sinRadarEnFichas = new java.util.HashSet<>();
+        public final List<String> consultas = new ArrayList<>();
+
+        public void apagarElRadarEnFichasPara(UserId actor) {
+            sinRadarEnFichas.add(actor);
+        }
+
+        @Override
+        public boolean prendida(String clave) {
+            return true;
+        }
+
+        @Override
+        public boolean prendidaPara(String clave, UserId actor) {
+            return !(com.renaser.os.shared.domain.ClavesDeFuncionalidad.RADAR_EN_FICHAS.equals(clave) && sinRadarEnFichas.contains(actor));
+        }
+
+        @Override
+        public void exigirPrendidaPara(String clave, UserId actor) {
+            consultas.add(clave);
+            if (!prendidaPara(clave, actor)) {
+                throw new com.renaser.os.shared.domain.FuncionalidadNoDisponibleException(clave);
+            }
+        }
     }
 }

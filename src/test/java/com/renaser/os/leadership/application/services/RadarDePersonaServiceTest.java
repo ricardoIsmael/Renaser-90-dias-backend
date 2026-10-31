@@ -5,6 +5,8 @@ import com.renaser.os.habits.api.CodigoRenaserDePersonaFinder.DiaDeLaPersona;
 import com.renaser.os.habits.api.CodigoRenaserDePersonaFinder.MiRadarDeLaPersona;
 import com.renaser.os.habits.api.CodigoRenaserDePersonaFinder.RegistroDelRadar;
 import com.renaser.os.leadership.application.ports.in.ConsultarRadarDePersonaUseCase.ConsultaRadarDePersona;
+import com.renaser.os.shared.domain.ClavesDeFuncionalidad;
+import com.renaser.os.shared.domain.FuncionalidadNoDisponibleException;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -185,5 +187,32 @@ class RadarDePersonaServiceTest {
     @DisplayName("el guard de rol corre antes que el alcance: sin permiso no se sabe si la persona existe")
     void elRolCorreAntesQueElAlcance() {
         assertThatThrownBy(() -> de(ANA, FENIX, id("ff"), null)).isInstanceOf(NotAuthorizedException.class);
+    }
+
+    // ── «Código Renaser en las fichas» (spec 034, D-299) ────────────────────
+
+    @Test
+    @DisplayName("034: con el interruptor apagado para el lider recibe «no disponible» y no se lee nada; Administracion y el alquimista siguen leyendo")
+    void conElInterruptorApagadoElLiderNoLee() {
+        banco.interruptores.apagarElRadarEnFichasPara(LIDER);
+
+        assertThatThrownBy(() -> de(LIDER, FENIX, ANA, null)).isInstanceOf(FuncionalidadNoDisponibleException.class);
+        assertThat(banco.lecturasDelRadar).isEmpty();
+
+        assertThat(de(ADMIN, FENIX, ANA, null).registros()).hasSize(1);
+        assertThat(de(ALQUIMISTA, FENIX, ANA, null).registros()).hasSize(1);
+        assertThat(banco.lecturasDelRadar).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("034: el 403 de siempre gana al «no disponible»: sin permiso ni se pregunta por el interruptor; y encendido todo es como antes")
+    void elRechazoPorRolGanaAlInterruptor() {
+        banco.interruptores.apagarElRadarEnFichasPara(MENTORA);
+
+        assertThatThrownBy(() -> de(MENTORA, FENIX, ANA, null)).isInstanceOf(NotAuthorizedException.class);
+        assertThat(banco.interruptores.consultas).isEmpty();
+
+        de(LIDER, FENIX, ANA, null);
+        assertThat(banco.interruptores.consultas).containsExactly(ClavesDeFuncionalidad.RADAR_EN_FICHAS);
     }
 }

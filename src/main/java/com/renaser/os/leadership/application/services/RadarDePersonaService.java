@@ -6,6 +6,8 @@ import com.renaser.os.habits.api.CodigoRenaserDePersonaFinder.CodigoRenaserDePer
 import com.renaser.os.leadership.application.ports.in.ConsultarRadarDePersonaUseCase;
 import com.renaser.os.leadership.application.services.PersonasDelGrupo.Miembro;
 import com.renaser.os.leadership.application.services.PersonasDelPrograma.Mirada;
+import com.renaser.os.shared.application.Interruptores;
+import com.renaser.os.shared.domain.ClavesDeFuncionalidad;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
@@ -34,20 +36,23 @@ public class RadarDePersonaService implements ConsultarRadarDePersonaUseCase {
     private final PersonasDelGrupo personas;
     private final PersonasDelPrograma programa;
     private final CodigoRenaserDePersonaFinder radar;
+    private final Interruptores interruptores;
     private final Clock clock;
 
     RadarDePersonaService(AccesoDeLiderazgo acceso, PersonasDelGrupo personas, PersonasDelPrograma programa,
-                          CodigoRenaserDePersonaFinder radar, Clock clock) {
+                          CodigoRenaserDePersonaFinder radar, Interruptores interruptores, Clock clock) {
         this.acceso = acceso;
         this.personas = personas;
         this.programa = programa;
         this.radar = radar;
+        this.interruptores = interruptores;
         this.clock = clock;
     }
 
     @Override
     public CodigoRenaserDePersona radarDe(ConsultaRadarDePersona consulta) {
         acceso.requireLiderazgoActivo(consulta.actorId());
+        exigirQueSePuedaVer(consulta.actorId());
         Instant ahora = clock.now();
         GrupoAcompanado grupo = personas.requireGrupoConMentor(consulta.grupoId(), ahora);
         Miembro miembro = personas.requireMiembro(grupo, UserId.of(consulta.personaId()), ahora);
@@ -58,7 +63,17 @@ public class RadarDePersonaService implements ConsultarRadarDePersonaUseCase {
     @Override
     public CodigoRenaserDePersona radarDeUnaPersona(ConsultaRadarDeUnaPersona consulta) {
         acceso.requireLiderazgoActivo(consulta.actorId());
+        exigirQueSePuedaVer(consulta.actorId());
         Mirada mirada = programa.mirar(UserId.of(consulta.personaId()), clock.now());
         return radar.de(mirada.personaId(), consulta.cursor(), TAMANO_PAGINA);
+    }
+
+    /**
+     * Spec 034 (D-299): Administración decide si el líder ve el Código Renaser. Después de autorizar (el 403 de siempre gana) y
+     * antes de leer. Apagado, el líder recibe «no disponible» (404); Administración y Alquimista no están entre los roles que
+     * la funcionalidad apaga, así que siguen viéndolo.
+     */
+    private void exigirQueSePuedaVer(UserId actor) {
+        interruptores.exigirPrendidaPara(ClavesDeFuncionalidad.RADAR_EN_FICHAS, actor);
     }
 }

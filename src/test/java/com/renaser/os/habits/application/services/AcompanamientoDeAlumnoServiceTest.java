@@ -13,7 +13,10 @@ import com.renaser.os.habits.application.ports.out.radar.LoadRegistroRadarPort;
 import com.renaser.os.habits.domain.model.radar.MiRadar;
 import com.renaser.os.habits.domain.model.radar.RegistroRadar;
 import com.renaser.os.habits.domain.model.radar.RegistroRadarId;
+import com.renaser.os.shared.application.Interruptores;
+import com.renaser.os.shared.domain.ClavesDeFuncionalidad;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.FuncionalidadNoDisponibleException;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -69,6 +73,8 @@ class AcompanamientoDeAlumnoServiceTest {
     private LoadMiRadarPort miRadarPort;
     @Mock
     private HorarioDelDiaFinder horarios;
+    @Mock
+    private Interruptores interruptores;
 
     private AcompanamientoDeAlumnoService service;
     private UserId mentor;
@@ -81,7 +87,8 @@ class AcompanamientoDeAlumnoServiceTest {
         var habitosDeAprendiz = new HabitosDeAprendizAdminService(guardDeAdmin, progresoPort, leerHabitosPort,
                 historialPort, CLOCK, CatalogoAplicableDePrueba.sinAudiencias());
         service = new AcompanamientoDeAlumnoService(acompanamientoFinder, habitosDeAprendiz,
-                new LecturaDelRadar(loadRadarPort, miRadarPort, progresoPort, new AgendaDelRadar(horarios, CLOCK)), CLOCK);
+                new LecturaDelRadar(loadRadarPort, miRadarPort, progresoPort, new AgendaDelRadar(horarios, CLOCK)),
+                interruptores, CLOCK);
     }
 
     // ─── habitos del alumno ────────────────────────────────────────────────
@@ -221,6 +228,62 @@ class AcompanamientoDeAlumnoServiceTest {
                 null, 84)).isInstanceOf(NotAuthorizedException.class);
 
         verify(loadRadarPort, never()).historialDeParticipante(any(), any(), anyInt());
+    }
+
+    // ─── «Código Renaser en las fichas» (spec 034, D-299) ──────────────────────────
+
+    /** Apagado, el mentor recibe «no disponible» y no se lee ni una fila del Radar del alumno. */
+    @Test
+    void conElInterruptorApagadoElMentorNoLeeElCodigoRenaser() {
+        acompanaDeVerdad();
+        doThrow(new FuncionalidadNoDisponibleException(ClavesDeFuncionalidad.RADAR_EN_FICHAS))
+                .when(interruptores).exigirPrendidaPara(ClavesDeFuncionalidad.RADAR_EN_FICHAS, mentor);
+
+        assertThatThrownBy(() -> service.codigoRenaserDeAlumno(new ConsultaDeAcompanante(mentor, GRUPO, alumno),
+                null, 84)).isInstanceOf(FuncionalidadNoDisponibleException.class);
+
+        verifyNoInteractions(loadRadarPort, miRadarPort, progresoPort);
+    }
+
+    /** Encendido pregunta al interruptor por el mentor que lee, y lee como siempre. */
+    @Test
+    void conElInterruptorEncendidoLeeComoSiempre() {
+        acompanaDeVerdad();
+        when(loadRadarPort.historialDeParticipante(alumno, null, 84)).thenReturn(List.of(registro()));
+        enElDia(10);
+        when(miRadarPort.deParticipante(alumno)).thenReturn(MiRadar.apagado());
+        HorarioDeRadarDePrueba.siempre(horarios, LocalTime.of(6, 0), LocalTime.of(22, 0));
+
+        var pagina = service.codigoRenaserDeAlumno(new ConsultaDeAcompanante(mentor, GRUPO, alumno), null, 84);
+
+        assertThat(pagina.entradas()).hasSize(1);
+        verify(interruptores).exigirPrendidaPara(ClavesDeFuncionalidad.RADAR_EN_FICHAS, mentor);
+    }
+
+    /** El 403 de siempre gana al 404: quien no acompaña ese grupo no se entera de que existe un interruptor. */
+    @Test
+    void elRechazoPorNoAcompanarGanaAlDelInterruptor() {
+        when(acompanamientoFinder.acompanaVigente(mentor, GRUPO, CLOCK.now())).thenReturn(false);
+
+        assertThatThrownBy(() -> service.codigoRenaserDeAlumno(new ConsultaDeAcompanante(mentor, GRUPO, alumno),
+                null, 84)).isInstanceOf(NotAuthorizedException.class);
+
+        verifyNoInteractions(interruptores);
+    }
+
+    /** El interruptor es solo del Código Renaser: los hábitos del alumno no lo consultan. */
+    @Test
+    void losHabitosDelAlumnoNoPreguntanAlInterruptor() {
+        acompanaDeVerdad();
+        when(progresoPort.deParticipante(alumno))
+                .thenReturn(Optional.of(new ProgresoParticipanteHabits(12, "America/Lima", RolParticipante.TRAINEE,
+                        false, true)));
+        when(leerHabitosPort.deAprendiz(any(), anyInt(), any(), any())).thenReturn(List.of());
+        when(historialPort.distintosHabitosCambiadosDesde(any(), any())).thenReturn(List.of());
+
+        service.habitosDeAlumno(new ConsultaDeAcompanante(mentor, GRUPO, alumno));
+
+        verifyNoInteractions(interruptores);
     }
 
     private void enElDia(int dia) {
