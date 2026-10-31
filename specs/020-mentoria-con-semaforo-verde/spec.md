@@ -22,6 +22,14 @@ siempre «sí»).
   que su audiencia dice.
 - **Los demás tipos de evento** (Espontáneo, Semana de Manifestación, Sesión especial): **no cambian**.
 
+### Respuestas del dueño a las dos dudas (2026-10-30, después de la implementación)
+
+1. **Días 1 a 7: manda solo el color.** Un aprendiz del Día 4 en verde la ve; el Día 1, «sin datos», no. No hay mínimo de días medidos
+   ni espera al Día 8. Es lo que ya hace el adaptador: no cambia nada en el código.
+2. **La alarma local de un «Voy» se deja como está.** Textual: «si sigue verde manda; digamos ayer sale verde, hoy el evento es a las 7,
+   pero ayer fuiste verde o seguiste verde, normal le sale». Es decir, si viene en verde, la mentoría le sale normal; el servidor no
+   manda un aviso para cortar la alarma local de quien dejó de estar en verde (el límite aceptado del plan queda como está).
+
 ### Lo que decidió quien implementa (a revisar por el dueño; nada nuevo para el usuario final)
 
 1. **«Verde» es el color del semáforo vigente, y nada más.** Se lee con `points.api.SemaforoFinder.vigenteDe` (los últimos
@@ -136,6 +144,9 @@ entrar a Eventos. **Sin textos nuevos y sin APK nuevo.** Los tabs no se tocan.
 - **SC-004**: En el emulador, el verde ve la mentoría en Comunidad → Eventos y en Hoy, el amarillo no, y el mentor sí.
 
 ## Dudas para el dueño
+
+> **Resueltas 2026-10-30.** El dueño respondió las dos (ver «Respuestas del dueño a las dos dudas»): (1) manda solo el color, también los
+> Días 1 a 7; (2) la alarma local se deja como está. Lo de abajo es lo que se preguntó.
 
 1. **Primera semana.** Hoy un aprendiz del Día 2 al 7 con todo cumplido está en verde y ve la mentoría. ¿Debe esperar al
    Día 8, o a tener un mínimo de días medidos? (Solo cambiaría el adaptador.)
