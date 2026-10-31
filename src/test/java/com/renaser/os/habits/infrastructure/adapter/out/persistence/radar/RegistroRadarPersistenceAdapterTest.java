@@ -75,6 +75,43 @@ class RegistroRadarPersistenceAdapterTest {
     }
 
     @Test
+    void guardaYRecuperaElDictado() {
+        RegistroRadar escrito = RegistroRadar.registrar(RegistroRadarId.of(UUID.randomUUID()), participanteId,
+                "h", "p", "s", 7, "e", AHORA.minus(2, ChronoUnit.HOURS));
+        RegistroRadar dictado = RegistroRadar.registrar(RegistroRadarId.of(UUID.randomUUID()), participanteId,
+                "h", "p", "s", 7, "e", AHORA).conHoraPrevista(9).comoDictado();
+        adapter.save(escrito);
+        adapter.save(dictado);
+        entityManager.flush();
+        entityManager.clear();
+
+        List<RegistroRadar> pagina = adapter.historialDeParticipante(participanteId, null, 10);
+
+        assertThat(pagina).extracting(RegistroRadar::id).containsExactly(dictado.id(), escrito.id());
+        assertThat(pagina.get(0).dictado()).isTrue();
+        assertThat(pagina.get(0).horaPrevista()).isEqualTo(9);
+        assertThat(pagina.get(1).dictado()).isFalse();
+    }
+
+    @Test
+    void unRegistroAnteriorAV132ValeFalse() {
+        // Una fila escrita sin nombrar la columna (como las de antes de V132) toma el valor por defecto.
+        UUID id = UUID.randomUUID();
+        entityManager.createNativeQuery("""
+                        INSERT INTO renaser.registros_radar (id, participante_id, que_hago, que_pienso, que_siento,
+                                                              nivel_energia, que_evito, creado_en)
+                        VALUES (:id, :p, 'h', 'p', 's', 5, 'e', :cuando)
+                        """)
+                .setParameter("id", id)
+                .setParameter("p", participanteId.value())
+                .setParameter("cuando", java.sql.Timestamp.from(AHORA))
+                .executeUpdate();
+        entityManager.clear();
+
+        assertThat(adapter.ultimoDeParticipante(participanteId)).get().extracting(RegistroRadar::dictado).isEqualTo(false);
+    }
+
+    @Test
     void ultimoDeParticipanteDevuelveElMasReciente() {
         adapter.save(RegistroRadar.registrar(RegistroRadarId.of(UUID.randomUUID()), participanteId, "h1", "p1", "s1", 3,
                 "e1", AHORA.minus(2, ChronoUnit.HOURS)));

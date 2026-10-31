@@ -26,11 +26,12 @@ public interface RegistrarCheckInRadarUseCase {
                                          @NotBlank @Size(max = RegistroRadar.TEXTO_MAX_LENGTH) String queSiento,
                                          @NotNull @Min(RegistroRadar.NIVEL_ENERGIA_MIN)
                                          @Max(RegistroRadar.NIVEL_ENERGIA_MAX) Integer nivelEnergia,
-                                         @NotBlank @Size(max = RegistroRadar.TEXTO_MAX_LENGTH) String queEvito) {
+                                         @NotBlank @Size(max = RegistroRadar.TEXTO_MAX_LENGTH) String queEvito,
+                                         boolean dictado) {
 
         public RegistrarCheckInRadarCommand {
             SelfValidating.validateConstructorArgs(RegistrarCheckInRadarCommand.class, actorId, participanteId,
-                    queHago, quePienso, queSiento, nivelEnergia, queEvito);
+                    queHago, quePienso, queSiento, nivelEnergia, queEvito, dictado);
         }
     }
 }
