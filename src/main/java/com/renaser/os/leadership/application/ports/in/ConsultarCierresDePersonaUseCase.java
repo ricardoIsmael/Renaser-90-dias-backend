@@ -16,6 +16,18 @@ public interface ConsultarCierresDePersonaUseCase {
 
     CierresDeLaSemana cierresDe(ConsultaCierresDePersona consulta);
 
+    /** Los mismos cierres, sin pasar por un grupo (spec 021); deja el mismo registro de consulta. */
+    CierresDeLaSemana cierresDeUnaPersona(ConsultaCierresDeUnaPersona consulta);
+
+    /** @param semana igual que en {@link ConsultaCierresDePersona} */
+    record ConsultaCierresDeUnaPersona(UserId actorId, UUID personaId, LocalDate semana) {
+
+        public ConsultaCierresDeUnaPersona {
+            Objects.requireNonNull(actorId, "actorId es obligatorio");
+            Objects.requireNonNull(personaId, "personaId es obligatorio");
+        }
+    }
+
     /** @param semana el lunes de la semana pedida; {@code null} = la semana en curso de la persona, en SU zona */
     record ConsultaCierresDePersona(UserId actorId, UUID grupoId, UUID personaId, LocalDate semana) {
 

@@ -16,6 +16,18 @@ public interface ConsultarRadarDePersonaUseCase {
 
     CodigoRenaserDePersona radarDe(ConsultaRadarDePersona consulta);
 
+    /** El mismo Código Renaser, sin pasar por un grupo (spec 021). */
+    CodigoRenaserDePersona radarDeUnaPersona(ConsultaRadarDeUnaPersona consulta);
+
+    /** @param cursor el {@code nextCursor} de la página anterior; null trae la más reciente */
+    record ConsultaRadarDeUnaPersona(UserId actorId, UUID personaId, Instant cursor) {
+
+        public ConsultaRadarDeUnaPersona {
+            Objects.requireNonNull(actorId, "actorId es obligatorio");
+            Objects.requireNonNull(personaId, "personaId es obligatorio");
+        }
+    }
+
     /** @param cursor el {@code nextCursor} de la página anterior; null trae la más reciente */
     record ConsultaRadarDePersona(UserId actorId, UUID grupoId, UUID personaId, Instant cursor) {
 

@@ -16,6 +16,18 @@ public interface ConsultarHuecosDePersonaUseCase {
 
     HuecosDeLaSemana huecosDe(ConsultaHuecosDePersona consulta);
 
+    /** Los mismos huecos, sin pasar por un grupo (spec 021); deja el mismo registro de consulta. */
+    HuecosDeLaSemana huecosDeUnaPersona(ConsultaHuecosDeUnaPersona consulta);
+
+    /** @param semana igual que en {@link ConsultaHuecosDePersona} */
+    record ConsultaHuecosDeUnaPersona(UserId actorId, UUID personaId, LocalDate semana) {
+
+        public ConsultaHuecosDeUnaPersona {
+            Objects.requireNonNull(actorId, "actorId es obligatorio");
+            Objects.requireNonNull(personaId, "personaId es obligatorio");
+        }
+    }
+
     /**
      * @param semana el lunes de la semana pedida; {@code null} = la semana en curso de la persona, en SU zona
      */

@@ -10,6 +10,6 @@ import org.springframework.context.annotation.Import;
  * propia prueba.
  */
 @TestConfiguration(proxyBeanMethods = false)
-@Import({AccesoDeLiderazgo.class, PersonasDelGrupo.class, HuecosDePersonaService.class})
+@Import({AccesoDeLiderazgo.class, PersonasDelGrupo.class, PersonasDelPrograma.class, HuecosDePersonaService.class})
 public class HuecosDePersonaDePrueba {
 }

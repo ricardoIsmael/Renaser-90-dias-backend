@@ -202,6 +202,18 @@ acción, paga puntos ni toca el semáforo.** Todo exige sesión y responde con `
 | GET | `/api/v1/mentor/groups/{groupId}/learners/{userId}/cierres?semana=YYYY-MM-DD` | mentor o guía · acompaña vigentemente el grupo, cuenta activa y el alumno es del grupo (mismo guardián que `…/radar` y `…/huecos`) |
 | GET | `/api/v1/leadership/groups/{groupId}/people/{personId}/cierres?semana=YYYY-MM-DD` | líder de mentores, admin, alquimista · `AccesoDeLiderazgo`; **deja constancia** en `consultas_de_ficha` solo si responde 200 |
 
+El líder ve a todos los aprendices, sin grupo (spec 021, D-294). Solo lectura; mismo guardián (`AccesoDeLiderazgo`: líder de mentores, admin, alquimista activos) y misma funcionalidad `lider.cumplimiento` que las rutas por grupo. Mentor, guía, aprendiz y Soporte TI, 403; una persona que no existe, suspendida, de prueba o que no es aprendiz, 404.
+
+| Verbo | Ruta | Respuesta |
+|---|---|---|
+| GET | `/api/v1/leadership/people?q=&page=0&size=30` | `{items:[{personId, nombre, photoPath, grupoId, grupoNombre, mentorNombre, diaPrograma}], page, size, total}`; por nombre sin tildes; sin correo; no registra consulta |
+| GET | `/api/v1/leadership/people/{personId}/week?semanaHasta=YYYY-MM-DD` | el mismo cuerpo que `/groups/{g}/people/{p}/week` (`hasta` se acepta de alias); **deja constancia** (grupo y mentor en NULL si no tiene grupo) |
+| GET | `/api/v1/leadership/people/{personId}/radar?cursor=` | el mismo cuerpo que la ruta por grupo; no deja constancia |
+| GET | `/api/v1/leadership/people/{personId}/huecos?semana=YYYY-MM-DD` | el mismo cuerpo que la ruta por grupo; **deja constancia** |
+| GET | `/api/v1/leadership/people/{personId}/cierres?semana=YYYY-MM-DD` | el mismo cuerpo que la ruta por grupo; **deja constancia** |
+
+La respuesta de la semana (por la ruta nueva y por la del grupo) suma `puedeAvisarAlMentor` (`true` si hay un mentor a quien avisarle).
+
 Interruptores de Soporte TI: `plan` (la persona), `mentor.mi_grupo` y `lider.cumplimiento` (las fichas). `semana` es el lunes; sin ella, la
 semana en curso de la persona; una semana futura, anterior a la primera de su programa o que no es lunes responde 400.
 
