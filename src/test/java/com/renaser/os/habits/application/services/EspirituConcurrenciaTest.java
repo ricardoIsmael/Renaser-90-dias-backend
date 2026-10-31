@@ -1,10 +1,9 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.habits.application.ports.in.espiritu.ConsultarEstadoEspirituUseCase;
 import com.renaser.os.habits.application.ports.out.espiritu.AudioCatalogPort;
-import com.renaser.os.shared.domain.Clock;
-import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -67,8 +66,12 @@ class EspirituConcurrenciaTest {
 
     private UUID participanteId;
 
+    @Autowired
+    private RelojDePrueba reloj;
+
     @BeforeEach
     void seedParticipante() {
+        reloj.fijar(Instant.parse("2026-08-24T10:00:00Z"));
         participanteId = UUID.randomUUID();
         jdbcTemplate.update("""
                         INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado)
@@ -130,13 +133,6 @@ class EspirituConcurrenciaTest {
 
     @TestConfiguration
     static class CatalogoFijoConfig {
-
-        /** 10:00 UTC: pasada la HORA_DESBLOQUEO de las 07:00, con el dia todavia lejos del limite. */
-        @Bean
-        @Primary
-        Clock relojFijo() {
-            return FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"));
-        }
 
         @Bean
         @Primary

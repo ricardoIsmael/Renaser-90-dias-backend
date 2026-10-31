@@ -1,19 +1,16 @@
 package com.renaser.os.habits.infrastructure.adapter.in.scheduler;
 
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
-import com.renaser.os.shared.domain.Clock;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.ApplicationContext;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -33,7 +30,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.TreeSet;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -58,7 +54,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * arranca con su "hoy" local ya generado, como en regimen.
  */
 @SpringBootTest
-@Import({TestcontainersConfiguration.class, GeneracionYPromocionPorZonaIT.RelojDeLaPrueba.class})
+@Import(TestcontainersConfiguration.class)
 class GeneracionYPromocionPorZonaIT {
 
     private static final ZoneId LIMA = ZoneId.of("America/Lima");
@@ -74,37 +70,6 @@ class GeneracionYPromocionPorZonaIT {
     private static final UUID DORMIR = UUID.fromString("48d68c12-72a9-428c-a8c6-02b9b01bc2fe");
     private static final Instant CREADO = Instant.parse("2026-11-01T12:00:00Z");
 
-    @TestConfiguration
-    static class RelojDeLaPrueba {
-        @Bean
-        @Primary
-        RelojQueAvanza relojQueAvanza() {
-            return new RelojQueAvanza(ARRANQUE);
-        }
-    }
-
-    static final class RelojQueAvanza implements Clock {
-        private final AtomicReference<Instant> ahora;
-
-        RelojQueAvanza(Instant inicial) {
-            this.ahora = new AtomicReference<>(inicial);
-        }
-
-        void fijar(Instant instante) {
-            ahora.set(instante);
-        }
-
-        @Override
-        public Instant now() {
-            return ahora.get();
-        }
-
-        @Override
-        public LocalDate today() {
-            return ahora.get().atZone(ZoneOffset.UTC).toLocalDate();
-        }
-    }
-
     /** Una persona sembrada: su zona y el dia local en el que arranco la simulacion (ya generado). */
     private record Persona(UUID id, ZoneId zona, LocalDate hoyAlArrancar) {
         LocalDate manana() {
@@ -117,7 +82,7 @@ class GeneracionYPromocionPorZonaIT {
     @Autowired
     private ApplicationContext contexto;
     @Autowired
-    private RelojQueAvanza reloj;
+    private RelojDePrueba reloj;
 
     private final List<Persona> personas = new ArrayList<>();
     private final List<UUID> habitos = new ArrayList<>();

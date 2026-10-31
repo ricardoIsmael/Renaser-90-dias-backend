@@ -4,6 +4,7 @@ import com.redis.testcontainers.RedisContainer;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
@@ -16,8 +17,12 @@ import org.testcontainers.utility.DockerImageName;
  * instancias — CLAUDE.MD §5.2.1). `@ServiceConnection` autoconfigura
  * `spring.data.redis.host/port` contra el contenedor, sin tocar el bean de Postgres de
  * arriba.
+ *
+ * <p>Importa también el {@link RelojDePrueba} compartido (E-649): el reloj de las pruebas de
+ * integración vive aquí, en la configuración común, y no en una por clase.
  */
 @TestConfiguration(proxyBeanMethods = false)
+@Import(RelojDePruebaConfiguration.class)
 public class TestcontainersConfiguration {
 
     @Bean

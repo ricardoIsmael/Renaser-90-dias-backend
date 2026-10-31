@@ -69,6 +69,27 @@ En particular, revisar si el bug se escondía en el **fixture**: el bug del relo
 durante días porque todos los tests fijaban el reloj a las 10:00 UTC, una hora que cae en el mismo
 día calendario en Lima. El código estaba mal; el fixture lo tapaba.
 
+## El caché de contextos de Spring: no partirlo (E-649)
+
+Cada contexto de Spring de las pruebas de integración arranca su propio Postgres y su propio Redis y tarda 6–10 s.
+La suite arrancaba **103** (≈ 610 s, el 62 % del tiempo de pruebas; auditoría del 28/10). Spring reutiliza un
+contexto solo si dos clases tienen **la misma configuración**: mismo `@Import`, mismo `@TestConfiguration`
+anidado, mismas propiedades, mismos `@MockitoBean`, mismo `webEnvironment`.
+
+- **Una IT que necesita otra hora no declara su propio `@Primary Clock`.** Inyecta el `RelojDePrueba` compartido
+  (lo registra `TestcontainersConfiguration`, una sola vez) y lo fija como **primera** línea de su `@BeforeEach`:
+  `reloj.fijar(Instant.parse("2026-10-06T01:25:00Z"))`. También `reloj.avanzar(Duration)`. Mientras nadie lo fije
+  es el reloj del sistema. `RestablecerRelojDePrueba` (oyente de Spring, en `META-INF/spring.factories`) lo vuelve a
+  hora real al terminar **cada** prueba, también si falla: ninguna clase hereda el reloj movido de otra. La hora ya
+  no sobrevive entre pruebas: si la necesitas desde un `@BeforeAll`, pásala al `@BeforeEach`.
+- `NingunaPruebaDeclaraSuPropioRelojTest` rompe el build si una clase de prueba declara un `@Bean` que devuelve un
+  `Clock` o un `@MockitoBean Clock`.
+- Antes de sumar a una IT un `@TestConfiguration`, un `@MockitoBean`, `properties = …` o un `@DirtiesContext`,
+  pregúntate si de verdad lo necesita: **cada combinación nueva es un contexto nuevo** (≈ 8 s). Dos clases con
+  exactamente el mismo conjunto de dobles ya comparten contexto.
+- Una IT comparte contexto —y base de datos— con las demás: limpia lo que siembra (`@AfterEach`) y no cuentes filas
+  de toda la tabla.
+
 ## Mocks
 
 - Para re-stubear un método que ya lanza (o un ayudante que stubea en bucle varios rechazos), usar

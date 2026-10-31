@@ -1,5 +1,6 @@
 package com.renaser.os.leadership;
 
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.community.api.AcompanamientoFinder;
 import com.renaser.os.community.api.AcompanamientoFinder.GrupoAcompanado;
@@ -7,11 +8,10 @@ import com.renaser.os.leadership.application.ports.in.ResumirConsultasDelLiderUs
 import com.renaser.os.leadership.application.ports.out.GuardarConsultaDeFichaPort;
 import com.renaser.os.leadership.domain.model.consulta.ConsultaDeFicha;
 import com.renaser.os.leadership.domain.model.consulta.ReglaDelResumenDeConsultas;
-import com.renaser.os.shared.domain.Clock;
-import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Timeout;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -65,6 +65,14 @@ class ResumirConsultasDelLiderSchedulerIT {
     private GuardarConsultaDeFichaPort consultas;
     @Autowired
     private JdbcTemplate jdbc;
+
+    @Autowired
+    private RelojDePrueba reloj;
+
+    @BeforeEach
+    void fijarElReloj() {
+        reloj.fijar(LAS_VEINTE_DIEZ_EN_LIMA);
+    }
 
     @Test
     @Timeout(value = 90, unit = TimeUnit.SECONDS)
@@ -132,12 +140,6 @@ class ResumirConsultasDelLiderSchedulerIT {
 
     @TestConfiguration
     static class Dobles {
-
-        @Bean
-        @Primary
-        Clock domingoALas2010EnLima() {
-            return FixedClock.at(LAS_VEINTE_DIEZ_EN_LIMA);
-        }
 
         @Bean
         @Primary

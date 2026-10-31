@@ -2,19 +2,16 @@ package com.renaser.os.calendar.infrastructure.adapter.in.rest.evento;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
-import com.renaser.os.shared.domain.Clock;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContext;
@@ -30,8 +27,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -56,7 +51,6 @@ class AsistenciaAEventosIT {
 
     private static final Instant INICIO = Instant.parse("2026-10-06T01:00:00Z");
     private static final Instant LAS_1945_EN_LIMA = Instant.parse("2026-10-06T00:45:00Z");
-    private static final RelojMovible RELOJ = new RelojMovible();
 
     @LocalServerPort
     private int puerto;
@@ -81,9 +75,12 @@ class AsistenciaAEventosIT {
     private UUID olga;
     private UUID suspendido;
 
+    @Autowired
+    private RelojDePrueba reloj;
+
     @BeforeEach
     void sembrar() {
-        RELOJ.fijar(LAS_1945_EN_LIMA);
+        reloj.fijar(LAS_1945_EN_LIMA);
         mara = usuario("MENTOR", "Mara Mentora", "ACTIVO");
         kelin = usuario("ADMIN", "Kelin Rojas", "ACTIVO");
         zoe = usuario("ALQUIMISTA", "Zoe Alquimia", "ACTIVO");
@@ -124,7 +121,7 @@ class AsistenciaAEventosIT {
     @DisplayName("Quién respondió: Admin ve Van / No van / Sin respuesta (la audiencia del grupo) y el historial de quien cambió")
     void quienRespondioConHistorial() throws Exception {
         assertThat(rsvp(ana, "NOT_GOING").statusCode()).isEqualTo(200);
-        RELOJ.fijar(LAS_1945_EN_LIMA.plusSeconds(60));
+        reloj.fijar(LAS_1945_EN_LIMA.plusSeconds(60));
         assertThat(rsvp(ana, "GOING").statusCode()).isEqualTo(200);
         assertThat(rsvp(ana, "GOING").statusCode()).as("repetir no ensucia el historial").isEqualTo(200);
         assertThat(rsvp(beto, "NOT_GOING").statusCode()).isEqualTo(200);
@@ -175,7 +172,7 @@ class AsistenciaAEventosIT {
     @DisplayName("Marcar es idempotente: repetir A_TIEMPO no mueve la hora; TARDE la cambia; null deja ausente (sin fila)")
     void marcarEsIdempotente() throws Exception {
         HttpResponse<String> primera = marcar(kelin, ana, "A_TIEMPO");
-        RELOJ.fijar(LAS_1945_EN_LIMA.plusSeconds(120));
+        reloj.fijar(LAS_1945_EN_LIMA.plusSeconds(120));
         HttpResponse<String> segunda = marcar(kelin, ana, "A_TIEMPO");
 
         assertThat(primera.statusCode()).isEqualTo(200);
@@ -198,7 +195,7 @@ class AsistenciaAEventosIT {
     @Test
     @DisplayName("Ventana con el reloj en la madrugada UTC: 00:20 UTC (19:20 en Lima) es 409; 00:45 UTC (19:45) marca; 14:01 UTC ya venció")
     void ventanaDeTiempo() throws Exception {
-        RELOJ.fijar(Instant.parse("2026-10-06T00:20:00Z"));
+        reloj.fijar(Instant.parse("2026-10-06T00:20:00Z"));
         HttpResponse<String> temprano = marcar(kelin, ana, "A_TIEMPO");
         JsonNode lista = json.readTree(pedir("GET", "/attendance" + ocurrencia(), kelin, null).body());
 
@@ -207,10 +204,10 @@ class AsistenciaAEventosIT {
         assertThat(lista.get("opensAt").asText()).isEqualTo("2026-10-06T00:30:00Z");
         assertThat(lista.get("closesAt").asText()).isEqualTo("2026-10-06T14:00:00Z");
 
-        RELOJ.fijar(LAS_1945_EN_LIMA);
+        reloj.fijar(LAS_1945_EN_LIMA);
         assertThat(marcar(kelin, ana, "A_TIEMPO").statusCode()).isEqualTo(200);
 
-        RELOJ.fijar(Instant.parse("2026-10-06T14:01:00Z"));
+        reloj.fijar(Instant.parse("2026-10-06T14:01:00Z"));
         assertThat(marcar(kelin, beto, "TARDE").statusCode()).isEqualTo(409);
         assertThat(pedir("GET", "/attendance" + ocurrencia(), kelin, null).statusCode()).as("leer sigue").isEqualTo(200);
     }
@@ -219,10 +216,10 @@ class AsistenciaAEventosIT {
     @DisplayName("Cerrar: la lista cerrada no se marca (409); cerrar dos veces conserva quién y cuándo; reabrir deja corregir")
     void cerrarYReabrir() throws Exception {
         marcar(kelin, ana, "A_TIEMPO");
-        RELOJ.fijar(Instant.parse("2026-10-06T02:06:00Z"));
+        reloj.fijar(Instant.parse("2026-10-06T02:06:00Z"));
 
         JsonNode cerrada = json.readTree(pedir("POST", "/attendance/close", kelin, cuerpoOcurrencia()).body());
-        RELOJ.fijar(Instant.parse("2026-10-06T02:10:00Z"));
+        reloj.fijar(Instant.parse("2026-10-06T02:10:00Z"));
         JsonNode otraVez = json.readTree(pedir("POST", "/attendance/close", lia, cuerpoOcurrencia()).body());
 
         assertThat(cerrada.get("closed").get("byName").asText()).isEqualTo("Kelin Rojas");
@@ -353,35 +350,5 @@ class AsistenciaAEventosIT {
                 VALUES (?, 10, 'America/Lima', ?)
                 """, id, grupo);
         return id;
-    }
-
-    @TestConfiguration
-    static class RelojDeLaPrueba {
-
-        @Bean
-        @Primary
-        Clock relojMovible() {
-            return RELOJ;
-        }
-    }
-
-    /** Reloj que la prueba mueve entre pedidos; {@code today()} es el del instante en UTC, como el de producción. */
-    static final class RelojMovible implements Clock {
-
-        private volatile Instant ahora = LAS_1945_EN_LIMA;
-
-        void fijar(Instant instante) {
-            this.ahora = instante;
-        }
-
-        @Override
-        public Instant now() {
-            return ahora;
-        }
-
-        @Override
-        public LocalDate today() {
-            return ahora.atZone(ZoneOffset.UTC).toLocalDate();
-        }
     }
 }

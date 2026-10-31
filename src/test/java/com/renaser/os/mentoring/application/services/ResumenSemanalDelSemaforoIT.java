@@ -1,5 +1,6 @@
 package com.renaser.os.mentoring.application.services;
 
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.community.api.AcompanamientoFinder;
 import com.renaser.os.mentoring.application.ports.in.ResumirSemanaDelSemaforoUseCase;
@@ -9,10 +10,9 @@ import com.renaser.os.points.api.DetalleDelSemaforo;
 import com.renaser.os.points.api.SemaforoFinder;
 import com.renaser.os.points.api.SemanaDelSemaforoCerradaEvent;
 import com.renaser.os.points.api.VentanaDelSemaforo;
-import com.renaser.os.shared.domain.Clock;
-import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Timeout;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -77,6 +77,14 @@ class ResumenSemanalDelSemaforoIT {
     private PlatformTransactionManager transacciones;
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private RelojDePrueba reloj;
+
+    @BeforeEach
+    void fijarElReloj() {
+        reloj.fijar(SABADO_0040_LIMA);
+    }
 
     @Test
     @Timeout(value = 90, unit = TimeUnit.SECONDS)
@@ -168,12 +176,6 @@ class ResumenSemanalDelSemaforoIT {
 
     @TestConfiguration
     static class Dobles {
-
-        @Bean
-        @Primary
-        Clock sabadoALas0040EnLima() {
-            return FixedClock.at(SABADO_0040_LIMA);
-        }
 
         @Bean
         @Primary

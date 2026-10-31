@@ -1,5 +1,6 @@
 package com.renaser.os.points.application.services;
 
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.points.api.ColorSemaforo;
 import com.renaser.os.points.api.DiaDelSemaforo;
@@ -7,7 +8,6 @@ import com.renaser.os.points.api.EstadoDiaSemaforo;
 import com.renaser.os.points.api.SemaforoFinder;
 import com.renaser.os.points.api.VentanaDelSemaforo;
 import com.renaser.os.points.application.ports.in.semaforo.CerrarSemaforoUseCase;
-import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.application.ports.in.admin.UpdateUserStatusUseCase;
@@ -21,10 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -34,7 +31,6 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
@@ -61,41 +57,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 42,9: rojo. Ahora se miden el sábado, el domingo y el viernes: 100, verde.
  */
 @SpringBootTest
-@Import({TestcontainersConfiguration.class, SuspensionEnElSemaforoIT.RelojDeLaPrueba.class})
+@Import(TestcontainersConfiguration.class)
 class SuspensionEnElSemaforoIT {
 
     private static final LocalDate INICIO = LocalDate.of(2026, 9, 8);
     private static final LocalDate SABADO_19 = LocalDate.of(2026, 9, 19);
     private static final LocalDate VIERNES_25 = LocalDate.of(2026, 9, 25);
-
-    /** Un reloj que la prueba mueve: el mismo que usan {@code users} (instante del evento) y el barrido. */
-    static final class RelojMovible implements Clock {
-
-        private volatile Instant ahora = Instant.parse("2026-09-22T02:00:00Z");
-
-        void poner(String instante) {
-            ahora = Instant.parse(instante);
-        }
-
-        @Override
-        public Instant now() {
-            return ahora;
-        }
-
-        @Override
-        public LocalDate today() {
-            return ahora.atZone(ZoneOffset.UTC).toLocalDate();
-        }
-    }
-
-    @TestConfiguration
-    static class RelojDeLaPrueba {
-        @Bean
-        @Primary
-        RelojMovible relojMovible() {
-            return new RelojMovible();
-        }
-    }
 
     @Autowired
     private UpdateUserStatusUseCase cambiarEstado;
@@ -108,7 +75,7 @@ class SuspensionEnElSemaforoIT {
     @Autowired
     private DataSource dataSource;
     @Autowired
-    private RelojMovible reloj;
+    private RelojDePrueba reloj;
 
     private UUID admin;
     private UUID ana;
@@ -116,6 +83,7 @@ class SuspensionEnElSemaforoIT {
 
     @BeforeEach
     void semanaDeAna() {
+        reloj.fijar(Instant.parse("2026-09-22T02:00:00Z"));
         admin = usuario("ADMIN");
         ana = usuario("APRENDIZ");
         jdbcClient.sql("""
@@ -153,7 +121,7 @@ class SuspensionEnElSemaforoIT {
     @Test
     @Timeout(value = 60, unit = TimeUnit.SECONDS)
     void suspenderYReactivarDejaEsosDiasSinMedirYLaSemanaNoQuedaEnRojo() throws InterruptedException {
-        reloj.poner("2026-09-22T02:00:00Z");   // lunes 21, 21:00 en Lima
+        reloj.fijar(Instant.parse("2026-09-22T02:00:00Z"));   // lunes 21, 21:00 en Lima
         cambiarEstado.updateStatus(new UpdateUserStatusCommand(UserId.of(admin), UserId.of(ana), UserStatus.SUSPENDED));
 
         Map<String, Object> suspension = esperar(() -> suspensionDeAna().filter(s -> s.get("desde") != null));
@@ -161,13 +129,13 @@ class SuspensionEnElSemaforoIT {
                 .containsEntry("reanudada_el", null);
         assertThat(((java.sql.Date) suspension.get("desde")).toLocalDate()).isEqualTo(LocalDate.of(2026, 9, 21));
 
-        reloj.poner("2026-09-25T04:30:00Z");   // jueves 24, 23:30 en Lima
+        reloj.fijar(Instant.parse("2026-09-25T04:30:00Z"));   // jueves 24, 23:30 en Lima
         cambiarEstado.updateStatus(new UpdateUserStatusCommand(UserId.of(admin), UserId.of(ana), UserStatus.ACTIVE));
 
         Map<String, Object> terminada = esperar(() -> suspensionDeAna().filter(s -> s.get("reanudada_el") != null));
         assertThat(((java.sql.Date) terminada.get("reanudada_el")).toLocalDate()).isEqualTo(VIERNES_25);
 
-        reloj.poner("2026-09-26T05:30:00Z");   // sábado 26, 00:30 en Lima
+        reloj.fijar(Instant.parse("2026-09-26T05:30:00Z"));   // sábado 26, 00:30 en Lima
         cerrarSemaforo.cerrarPendientes();
 
         VentanaDelSemaforo semana = semaforoFinder.semanaDe(List.of(UserId.of(ana)), VIERNES_25).get(UserId.of(ana));

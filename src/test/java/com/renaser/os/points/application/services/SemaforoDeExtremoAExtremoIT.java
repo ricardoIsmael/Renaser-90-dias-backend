@@ -1,5 +1,6 @@
 package com.renaser.os.points.application.services;
 
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.points.api.ColorSemaforo;
 import com.renaser.os.points.api.EstadoDiaSemaforo;
@@ -8,17 +9,12 @@ import com.renaser.os.points.api.SemanaDelSemaforoCerradaEvent;
 import com.renaser.os.points.api.VentanaDelSemaforo;
 import com.renaser.os.points.application.ports.in.semaforo.CerrarSemaforoUseCase;
 import com.renaser.os.points.application.ports.in.semaforo.CerrarSemaforoUseCase.ResultadoDelCierre;
-import com.renaser.os.shared.domain.Clock;
-import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.event.ApplicationEvents;
 import org.springframework.test.context.event.RecordApplicationEvents;
@@ -37,7 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * los cuatro módulos por sus APIs públicas (users, habits, rocks, points), sin dobles.
  */
 @SpringBootTest
-@Import({TestcontainersConfiguration.class, SemaforoDeExtremoAExtremoIT.RelojDelSabado.class})
+@Import(TestcontainersConfiguration.class)
 @RecordApplicationEvents
 @Transactional
 class SemaforoDeExtremoAExtremoIT {
@@ -47,15 +43,6 @@ class SemaforoDeExtremoAExtremoIT {
     private static final LocalDate SABADO_19 = LocalDate.of(2026, 9, 19);
     private static final LocalDate LUNES_21 = LocalDate.of(2026, 9, 21);
     private static final LocalDate VIERNES_25 = LocalDate.of(2026, 9, 25);
-
-    @TestConfiguration
-    static class RelojDelSabado {
-        @Bean
-        @Primary
-        Clock relojDelSabado() {
-            return FixedClock.at(SABADO_0030_LIMA);
-        }
-    }
 
     @Autowired
     private CerrarSemaforoUseCase cerrarSemaforo;
@@ -73,8 +60,12 @@ class SemaforoDeExtremoAExtremoIT {
      * jueves 23 y uno solo el 24 y el 25. Un opcional sin cumplir el lunes (no cuenta). El lunes además
      * planificó dos objetivos y cumplió uno. Días: 100, 100, 75, 100, 100, 50, 50 → promedio 82,1.
      */
+    @Autowired
+    private RelojDePrueba reloj;
+
     @BeforeEach
     void semanaDeAna() {
+        reloj.fijar(SABADO_0030_LIMA);
         ana = aprendizConProgramaDesde(SABADO_19);
         UUID meditar = habito("Meditar");
         UUID agua = habito("Agua");
