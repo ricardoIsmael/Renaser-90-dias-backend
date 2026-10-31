@@ -2,9 +2,10 @@
 
 **Feature Branch**: `034-codigo-renaser-visible-por-admin` (backend y app)
 **Created**: 2026-10-31
-**Status**: Borrador, a la espera de las respuestas del dueño (3 preguntas marcadas; ver «Preguntas abiertas»). No se implementa hasta resolverlas.
+**Status**: En implementación. El dueño respondió el 2026-10-31 (ver «Decisiones del dueño (31/10)»): las tres preguntas son la opción A, y quien lo decide incluye también a Soporte TI.
 **Input**: Pedido del dueño (2026-10-31), textual: «El líder de mentores y el mentor no pueden ver el Código Renaser: un interruptor para activar y desactivar.»
 Decisión del dueño sobre quién lo decide: **Administración** (con un interruptor). No lo decide el aprendiz ni el mentor.
+*(Ampliado el 2026-10-31, 034-4 B: lo deciden Administración, Alquimista **y también Soporte TI**.)*
 
 ## Clarifications
 
@@ -16,6 +17,26 @@ Decisión del dueño sobre quién lo decide: **Administración** (con un interru
   (o la desnormalización correcta), buenas prácticas y SOLID, en backend y frontend. Ver «Restricciones del dueño».
 - **Todo queda dentro de la formación de la persona** (spec 022). El interruptor no amplía lo que nadie ve: el líder sigue viendo solo a los alumnos de sus formaciones.
 - **El dueño hará todas las preguntas antes de implementar.** Esta spec deja sus dudas a la vista, entre ellas **cuál es el estado inicial** del interruptor.
+
+### Decisiones del dueño (31/10)
+
+Fuente: `decisiones-del-dueno-2026-10-31.md`, sección 034. Lo no listado = la opción A (recomendada) de cada pregunta.
+
+| # | Pregunta | Decisión |
+|---|---|---|
+| 1 | Estado inicial (FR-005) | **A, apagado.** Al publicar, el mentor, la guía y el líder dejan de ver el Código Renaser hasta que alguien lo encienda. |
+| 2 | Un interruptor o más (FR-006) | **A, uno solo** para el mentor, la guía y el líder juntos. |
+| 3 | Qué ven con el interruptor apagado (FR-013) | **A, nada.** Ni respuestas, ni horas, ni el estado de Mi Radar, ni un indicador de «registró / no registró». |
+| 4 | Quién lo decide (dudas menores) | **B, Administración, Alquimista y también Soporte TI.** |
+| 5 | Motivo escrito | **No.** Cambia con una confirmación, sin motivo. |
+| 6 | Avisar a la persona | **No.** No se avisa al aprendiz ni al mentor ni al líder de que cambió. |
+| 7 | ADMIN y ALQUIMISTA | El mismo poder. |
+
+**Cómo se resolvió, sin tabla nueva** (plan en `plan.md`): el interruptor es **una funcionalidad más del catálogo de Soporte TI**, `radar.fichas`
+(«Código Renaser en las fichas», hija de `radar`), que nace apagada **para MENTOR, TRAINEE_GUIDE y MENTOR_LEAD** y prendida para el resto. Sus filas
+(`funcionalidades_estado`, `funcionalidades_estado_rol`), la copia en memoria, el canal Redis y la auditoría append-only (`cambios_auditados`) son
+las que ya existen. Apagada **se esconde** (404 `FUNCIONALIDAD_NO_DISPONIBLE`, como «no disponible» de la fase 2) en vez de mostrar el aviso de mantenimiento.
+Administración y Alquimista lo cambian con un endpoint propio y angosto; Soporte TI, desde su consola (rol por rol) o por ese mismo endpoint.
 
 ### Lo que hay hoy (verificado en el código y en `AGENTS.md` el 2026-10-31)
 
@@ -47,7 +68,7 @@ no hay sección «Código Renaser».
 2. **Given** que toca el interruptor, **When** cambia el estado, **Then** una confirmación le dice qué va a pasar («El mentor, la guía y el líder dejarán de ver el Código Renaser de los aprendices. Tú y la propia persona lo seguirán viendo.») y, al
    aceptar, el cambio rige en el acto.
 3. **Given** que cambió el estado, **Then** aparece una confirmación en línea («Listo: el mentor y el líder ya no ven el Código Renaser») y la pantalla muestra «Último cambio: <nombre>, <fecha y hora>».
-4. **Given** una cuenta que no es de Administración (mentor, líder, aprendiz, Soporte TI), **When** abre su app, **Then** la fila ni la pantalla existen; si pide el cambio por otro camino, el servidor lo rechaza.
+4. **Given** una cuenta que no decide esto (mentor, guía, líder, aprendiz), **When** abre su app, **Then** la fila ni la pantalla existen; si pide el cambio por otro camino, el servidor lo rechaza. **Soporte TI** lo decide desde su consola de interruptores (la funcionalidad «Código Renaser en las fichas», rol por rol, con su motivo y su auditoría de siempre) y también puede usar el endpoint de Administración.
 5. **Given** que el cambio falla (sin red), **Then** el interruptor vuelve a su estado real y se dice qué pasó, con «Reintentar».
 
 ---
@@ -108,7 +129,7 @@ Como administrador, quiero saber quién y cuándo cambió el interruptor, para r
 ### Edge Cases
 
 - **Cambiar con una ficha abierta**: la sección aparece o desaparece cuando la ficha se vuelve a leer; no queda a medias ni muestra un error.
-- **Los días 1 a 7**: el Código Renaser es obligatorio para el aprendiz y el mentor suele mirarlo para acompañar. Con el interruptor apagado el mentor no lo ve esos días tampoco. [NEEDS CLARIFICATION: ¿con el interruptor apagado el mentor y el líder deben poder ver al menos si la persona lo registró (sin su contenido)? Opciones: A (recomendada) no, nada del Código Renaser, tal como pidió el dueño; B sí, solo un indicador «registró / no registró» los días 1 a 7; C sí, siempre, un indicador de cuántos registros hizo hoy, sin contenido.]
+- **Los días 1 a 7**: el Código Renaser es obligatorio para el aprendiz y el mentor suele mirarlo para acompañar. Con el interruptor apagado el mentor no lo ve esos días tampoco. **Decidido (31/10, opción A): nada.** Con el interruptor apagado el mentor y el líder no ven nada que venga del Código Renaser, tampoco un indicador sin contenido.
 - **Los datos no se tocan**: apagar no borra, anonimiza ni mueve nada.
 - **Rol personalizado** que hereda de Mentor o de Líder: se trata como su rol base.
 - **Cuenta suspendida o sin red**: no cambia nada; el servidor sigue siendo la autoridad.
@@ -125,12 +146,12 @@ Como administrador, quiero saber quién y cuándo cambió el interruptor, para r
 **El interruptor**
 
 - **FR-001**: Administración (ADMIN y ALQUIMISTA) MUST tener, en Yo → Administración → Más opciones, una pantalla «Código Renaser en las fichas» con un interruptor que decide si el mentor, la guía y el líder de mentores ven el Código Renaser en las fichas de los aprendices. La fila y la pantalla MUST
-  existir solo para esos dos roles.
-- **FR-002**: Cualquier otro rol (mentor, guía, líder, aprendiz, Soporte TI) MUST recibir un rechazo si intenta leer o cambiar este ajuste, y una cuenta suspendida también, aunque su sesión siga viva.
+  existir solo para esos dos roles. **Soporte TI** MUST poder decidir lo mismo desde su consola de interruptores (la funcionalidad `radar.fichas`) y por el mismo endpoint (decisión 034-4 B).
+- **FR-002**: Cualquier otro rol (mentor, guía, líder, aprendiz) MUST recibir un rechazo si intenta leer o cambiar este ajuste, y una cuenta suspendida también, aunque su sesión siga viva.
 - **FR-003**: Cambiar el interruptor MUST pedir una confirmación que diga qué va a pasar, MUST regir en el acto para todas las personas y MUST NOT exigir reinstalar la app.
 - **FR-004**: Todo cambio MUST quedar registrado: quién, cuándo, valor anterior y valor nuevo, sin posibilidad de editarlo ni borrarlo. La pantalla MUST mostrar el último cambio.
-- **FR-005**: El estado inicial del interruptor al publicarse MUST ser el que decida el dueño. [NEEDS CLARIFICATION: ¿cómo debe quedar el interruptor al publicar? Opciones: A (recomendada) apagado, porque el dueño dijo que el mentor y el líder «no pueden ver» el Código Renaser, y Administración lo enciende si quiere; B encendido, para no cambiar lo que hoy ven hasta que Administración decida.]
-- **FR-006**: El alcance del interruptor MUST ser el que decida el dueño. [NEEDS CLARIFICATION: ¿un solo interruptor o más? Opciones: A (recomendada) uno solo para el mentor, la guía y el líder juntos, como dijo el dueño; B uno para el mentor (y la guía) y otro para el líder; C uno por formación.]
+- **FR-005**: El estado inicial del interruptor al publicarse MUST ser **apagado** (decisión 034-1 A): sin ninguna fila guardada, el mentor, la guía y el líder no ven el Código Renaser.
+- **FR-006**: MUST haber **un solo interruptor** para el mentor, la guía y el líder juntos (decisión 034-2 A). Encender lo enciende para los tres; apagar lo apaga para los tres.
 
 **Qué se esconde**
 
@@ -140,7 +161,7 @@ Como administrador, quiero saber quién y cuándo cambió el interruptor, para r
 - **FR-010**: Administración y Alquimista MUST seguir viendo el Código Renaser de todas las personas, y cada persona MUST seguir viendo el suyo, sin importar el interruptor.
 - **FR-011**: Apagar y encender MUST NOT borrar, alterar ni mover ningún dato; al encender MUST reaparecer todo, incluido lo registrado mientras estuvo apagado.
 - **FR-012**: Cualquier otra forma de ver las respuestas del Código Renaser que agreguen otras specs (por ejemplo la 030, con audio) MUST respetar este mismo interruptor.
-- **FR-013**: Mientras el dueño no responda la pregunta 3 (ver «Edge Cases»), el mentor y el líder con el interruptor apagado MUST NOT ver nada que venga del Código Renaser, tampoco un indicador sin contenido.
+- **FR-013**: Con el interruptor apagado, el mentor y el líder MUST NOT ver nada que venga del Código Renaser, tampoco un indicador sin contenido (decisión 034-3 A).
 
 **Formación, experiencia y compatibilidad**
 
@@ -152,7 +173,7 @@ Como administrador, quiero saber quién y cuándo cambió el interruptor, para r
 
 ### Key Entities
 
-- **Ajuste «el mentor y el líder ven el Código Renaser»**: un valor (sí o no) que decide Administración. Según la pregunta del alcance, uno solo, uno por rol o uno por formación.
+- **Ajuste «el mentor y el líder ven el Código Renaser»**: un valor (sí o no) que deciden Administración, Alquimista y Soporte TI. Uno solo, global. Vive como la funcionalidad `radar.fichas` del catálogo de Soporte TI: «sí» = prendida para los tres roles, «no» = apagada para los tres.
 - **Cambio del ajuste**: quién lo hizo, cuándo, el valor anterior y el nuevo. Solo se agrega; no se edita ni se borra.
 - **Código Renaser de una persona**: sus registros y su configuración de Mi Radar (specs 012 y 019). No cambia.
 
@@ -183,25 +204,18 @@ Reglas del dueño (2026-10-31) que valen para esta spec:
 
 ## Assumptions
 
-- «Administración» es ADMIN y ALQUIMISTA, quienes ya administran en la app; Soporte TI no decide esto. *(a confirmar)*
+- «Administración» es ADMIN y ALQUIMISTA, quienes ya administran en la app; **Soporte TI también lo decide** (034-4 B), desde su consola. *(confirmado el 2026-10-31)*
 - «Mentor» incluye a la guía de aprendiz, que tiene los mismos permisos de ficha.
-- La propia persona siempre ve su Código Renaser; Administración y Alquimista lo ven siempre. *(a confirmar)*
-- El cambio pide una confirmación pero **no** un motivo escrito (a diferencia de la consola de Soporte TI). *(a confirmar)*
+- La propia persona siempre ve su Código Renaser; Administración y Alquimista lo ven siempre. *(confirmado el 2026-10-31)*
+- El cambio pide una confirmación pero **no** un motivo escrito (a diferencia de la consola de Soporte TI, que conserva el suyo). *(confirmado el 2026-10-31)* La auditoría guarda un motivo fijo («Cambio desde Administración») para que el registro quede completo.
 - Apagado, lo que se esconde es todo el Código Renaser de la ficha, no solo las respuestas: también el estado y las horas de Mi Radar.
 - Los datos se siguen guardando mientras el interruptor está apagado; el interruptor solo decide quién los ve.
 - Cualquier cambio posterior (por ejemplo el audio de la spec 030) depende de este mismo interruptor; no hay uno por función.
-- La Política de Privacidad no se modifica. *(a confirmar: el dueño podría querer decir en la app quién puede ver el Código Renaser; no se agrega texto en esta spec.)*
+- La Política de Privacidad no se modifica y **no se avisa a la persona** del cambio. *(confirmado el 2026-10-31)*
 - Hace falta publicar el backend antes que el APK nuevo.
 - Todo se prueba en local, con base clonada y build debug; nunca contra producción.
 
 ## Preguntas abiertas
 
-**Las tres que cambian el alcance (marcadas arriba):**
-
-| # | Pregunta | Opciones |
-|---|---|---|
-| 1 | ¿Cómo queda el interruptor al publicar? (FR-005) | **A (recomendada)** apagado: el mentor y el líder no lo ven hasta que Administración lo encienda. B: encendido: todo igual que hoy hasta que Administración decida. |
-| 2 | ¿Un interruptor o más? (FR-006) | **A (recomendada)** uno solo para el mentor, la guía y el líder. B: uno para el mentor y otro para el líder. C: uno por formación. |
-| 3 | Apagado, ¿ven al menos si la persona lo registró, sin contenido? (Edge Cases, FR-013) | **A (recomendada)** no, nada. B: sí, solo «registró / no registró» los días 1 a 7. C: sí, siempre, cuántos registros hizo hoy. |
-
-**Dudas menores asumidas (no cambian el alcance; ver «Assumptions»)**: si Soporte TI también debería poder cambiarlo; si el cambio pide un motivo escrito; si hay que avisar a la persona o actualizar la Política de Privacidad; si ADMIN y ALQUIMISTA tienen el mismo poder.
+Ninguna. Respondidas por el dueño el 2026-10-31 (ver «Decisiones del dueño (31/10)»): estado inicial **apagado**, **un solo** interruptor, apagado **nada** (ni un indicador),
+lo deciden **Administración, Alquimista y también Soporte TI**, sin motivo escrito y sin avisar a la persona.

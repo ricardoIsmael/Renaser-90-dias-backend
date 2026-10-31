@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] Sin marcadores [NEEDS CLARIFICATION]: **quedan 3 a propósito** (FR-005: estado inicial; FR-006: uno o más interruptores; Edge Cases: indicador sin contenido). El dueño quiere responderlas él antes de implementar.
+- [x] Sin marcadores [NEEDS CLARIFICATION]: las 3 preguntas se respondieron el 2026-10-31 (opción A en las tres; ver «Decisiones del dueño (31/10)»).
 - [x] Los requisitos son comprobables y sin ambigüedad.
 - [x] Los criterios de éxito son medibles (100 % de lecturas rechazadas o permitidas, 0 diferencias, 0 pérdidas, 3 toques).
 - [x] Los criterios de éxito no dependen de la tecnología.
