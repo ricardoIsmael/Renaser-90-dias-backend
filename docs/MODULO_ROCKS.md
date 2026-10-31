@@ -469,6 +469,15 @@ dejar una nota. Opcional y sin puntos. Spec y contrato: `specs/017-cierre-del-di
   (`rocks.api.CierresDelDiaFinder`, la lectura por semana de las fichas), `CierresDelAlumnoService` (guardián del mentor).
 - **Dependencia nueva**: `rocks → habits.api` (`EvaluacionDelDiaPort`); `leadership → rocks.api.CierresDelDiaFinder`.
 
+> **Corregido 2026-10-30 (D-290).** «Cierra tu día» ya no tiene una hora de aparición en la app (era Dormir − 30 minutos, o 21:30): está
+> siempre, como la última fila de hoy, sin depender de Despertar ni de Dormir (pedido del dueño). El servidor **nunca** validó ni sugirió
+> una hora —`CierreDelDiaService` solo exige que la fecha sea hoy en la zona de la persona—, así que no cambió.
+
+> **Corregido 2026-10-30 (D-290, segunda parte).** La regla «una respuesta por pendiente» de arriba ya no es de todas: se exige una
+> respuesta por cada pendiente **cuya hora de inicio ya llegó** en la zona de la persona (`MomentoDelCierre`, con el `Clock`) o que no
+> tiene hora; las de hora futura no se exigen (se aceptan sin respuesta, y si viene una, se guarda). `CierreDelDia.seExigeRespuesta`
+> es la regla única, y `GET /rocks/day-closure` dice por cuáles preguntar (`exigeRespuesta` por acción, solo en esa ruta).
+
 ## Auditoría de arquitectura (2026-08-28) — agente automático
 
 Auditoría de solo lectura de `src/main/java/com/renaser/os/rocks/`, 105 archivos `.java`, contra las reglas de CLAUDE.md §5.1/§5.4. No se modificó código fuente.

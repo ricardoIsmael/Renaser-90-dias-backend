@@ -511,6 +511,36 @@ enaserPlayStore\src\lib\supabase.ts` sigue existiendo en el frontend — mismo p
 > Sin migración ni endpoint nuevo. Código: `VentanaDeLaFicha.de`, `GrupoDelLiderService`, `SemaforoDeLaPersona`, `ArmadoDeLaFicha`;
 > prueba: `MismaVentanaEnLasTresPantallasTest`.
 
+> **Corregido 2026-10-30 (D-290, pedido del dueño: «Cierra tu día» está siempre y no depende de Dormir).** La fila de D-290 decía, en su
+> punto (5)(i), que la hora a la que la app muestra la fila (30 minutos antes de Dormir de ese día, 21:30 sin Dormir, 00:00 si Dormir cae
+> pasada la medianoche) **la calcula la app**. Textual del dueño: «el tema de Dormir, y que salga ahí "Cerrar tu día", está mal. Motivo:
+> personas que trabajan en la noche o de día. No debiste juntar lógica de ese lado… como botón: ingresa "Cerrar el día", y es todos los
+> días, y debe guardarse y mostrarse en su ficha». Ahora **la fila está SIEMPRE** (todos los días, a cualquier hora) como **la última fila
+> de la lista de hoy en Training**, después de todo lo del día (incluido Dormir), **sin hora** y sin depender de Despertar, de Dormir ni de
+> ninguna hora. Todo lo demás de D-290 sigue igual: lo cumplido llega marcado y solo se pregunta por lo pendiente y por mañana; no da
+> puntos ni cumple acciones y es opcional; ya cerrado queda en verde; los días anteriores dicen «Cerrado» o «Sin cerrar» y no se cierran
+> tarde (D-259); el cierre se guarda en el servidor y se ve en las fichas del mentor, el líder y Administración. **El día sigue siendo el día
+> calendario de la persona** (su zona); lo que eso significa para quien trabaja de noche (cerrar después de medianoche, cerrar temprano con
+> acciones cuya hora no llegó) se describe en `specs/017-cierre-del-dia/spec.md` («Session 2026-10-30») y queda como pregunta al dueño: no
+> se inventó ninguna regla. **El servidor no cambió** (nunca validó ni sugirió una hora; solo se corrigió el comentario de
+> `CierreDelDiaService`); el cambio es de la app (`017b-cierre-siempre-al-final`: se borró `cierre/utils/horaDelCierre`, la lista de hoy
+> entrega el cierre aparte y lo dibuja de última). Sin migración ni endpoint nuevo. Orden de publicación: ninguno en particular (el
+> backend no cambia); la app necesita un APK nuevo.
+>
+> **Corregido 2026-10-30, segunda parte (D-290, decisiones del dueño sobre los casos de quien trabaja de noche).** (1) *Después de
+> medianoche, se queda como está* («déjalo como está; con los hábitos, lo de no cruzar el horario ya se soluciona para esas
+> personas»): el día es el del calendario y el anterior queda «Sin cerrar» (409 si se intenta cerrar). (2) *Cerrar temprano: se
+> pregunta SOLO por las acciones cuya hora ya pasó.* El punto (2) de D-290 decía que el servidor exigía **una respuesta por cada
+> acción pendiente**; ahora exige una por cada pendiente cuya `horaInicio` **ya llegó en la zona de la persona** (con el `Clock`; una
+> hora igual a la actual ya llegó) **o que no tiene hora** («las acciones sin hora se preguntan como hoy»). Las pendientes de hora
+> futura no se exigen: se aceptan sin respuesta (si viene una, se guarda) y guardar reemplaza lo del día, así que sin respuesta
+> quedan limpias. Lo hace `CierreDelDia.cerrar` con un valor nuevo del dominio, `MomentoDelCierre` (el instante y la hora local de
+> la persona); la lectura de hoy suma `exigeRespuesta` por acción para que la app pregunte por lo mismo que exige el servidor.
+> Sigue valiendo que cerrar no completa nada, no paga puntos y no publica eventos. Contrato en `specs/017-cierre-del-dia/contracts/api.md`.
+> (3) *Cerrar temprano y luego cumplir una acción, se queda como está*: el día sigue cerrado y se puede reabrir. Sin migración ni
+> endpoint nuevo; un campo opcional en la respuesta. Orden de publicación: el backend primero (la app nueva contra el anterior
+> pregunta por todas, como antes); el APK anterior contra el backend nuevo pregunta por todas y el servidor acepta las de hora futura.
+
 ### D-267 · agente B — circuito automático e interruptores de SER (2026-10-13)
 
 Parte de D-267 (spec 002, US2, FR-015 a FR-017; plan.md §D7; contrato §10). Rama `claude/plataforma-ia`, sobre el núcleo.

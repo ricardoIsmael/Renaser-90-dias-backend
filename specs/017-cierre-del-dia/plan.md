@@ -79,6 +79,10 @@ leadership/infrastructure/adapter/in/rest/CierresDeLaPersonaController
 | `UPDATE` dirigido en vez de `save` | Evita pisar `completada`/puntos si la persona cumple una acción mientras cierra | `byIdParaEscritura` con bloqueo por roca: más caro y deja la puerta abierta a un mapper que sobrescriba |
 | La hora de la fila vive en la app | Training ya lee la hora de Dormir de hoy; el servidor no tiene `claveSistema` en master | Agregar `claveSistema` a `HorarioResuelto` (choca con la rama 015) |
 
+> **Corregido 2026-10-30.** La fila de arriba ya no aplica: no hay hora de la fila. «Cierra tu día» está siempre y es la última de hoy,
+> sin depender de Despertar ni de Dormir (pedido del dueño; `spec.md`, «Session 2026-10-30»). El servidor no cambió: nunca validó ni
+> sugirió una hora. Solo se actualizó el comentario de `CierreDelDiaService` que nombraba a Dormir.
+
 ## Orden de publicación
 
 Backend (V121) antes que la app. La app nueva contra el backend anterior no muestra la fila (404). **Aviso de migraciones:** la rama 015

@@ -90,12 +90,24 @@ class CierreDelDiaIT {
     }
 
     private UUID sembrarRoca(int posicion, String titulo, boolean completada, int puntos) {
+        return sembrarRoca(posicion, titulo, completada, puntos, "CUERPO");
+    }
+
+    /** Hay una restricción única (persona, fecha, eje, posición): otra acción en el mismo día va en otro eje. */
+    private UUID sembrarRoca(int posicion, String titulo, boolean completada, int puntos, String eje) {
         UUID id = UUID.randomUUID();
         jdbc.update("INSERT INTO renaser.rocas_diarias (id, participante_id, fecha, posicion, titulo, color, puntaje_impacto, eje, "
                         + "completada, completada_en, puntos_otorgados) VALUES (?, ?, ?, ?, ?, ?::renaser.color_pareto, 5, "
-                        + "'CUERPO'::renaser.eje_objetivo, ?, ?, ?)",
-                id, persona.value(), hoy, posicion, titulo, posicion == 1 ? "VERDE" : "AMARILLA", completada,
+                        + "?::renaser.eje_objetivo, ?, ?, ?)",
+                id, persona.value(), hoy, posicion, titulo, posicion == 1 ? "VERDE" : "AMARILLA", eje, completada,
                 completada ? java.sql.Timestamp.from(clock.now()) : null, puntos);
+        return id;
+    }
+
+    /** Una acción pendiente con hora de inicio (`HH:mm:ss`). */
+    private UUID sembrarPendienteConHora(String eje, String titulo, String hora) {
+        UUID id = sembrarRoca(1, titulo, false, 0, eje);
+        jdbc.update("UPDATE renaser.rocas_diarias SET hora_inicio = ?::time WHERE id = ?", hora, id);
         return id;
     }
 
@@ -202,5 +214,30 @@ class CierreDelDiaIT {
         assertThat(hoyDelCierre.acciones()).filteredOn(a -> !a.cumplida()).singleElement()
                 .satisfies(a -> assertThat(a.cierre().motivo()).isEqualTo("SIN_TIEMPO"));
         assertThat(lectura.resumen().cerrados()).isGreaterThanOrEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("solo se exige lo que ya llegó a su hora: la de las 23:59:59 no, la de las 00:00 sí y la sin hora sí (hora de la persona)")
+    void soloSeExigeLoQueYaLlego() {
+        UUID futura = sembrarPendienteConHora("TRABAJO", "Cena con el equipo", "23:59:59");
+        UUID pasada = sembrarPendienteConHora("RELACIONES", "Madrugar a revisar", "00:00:00");
+
+        assertThat(consultar.consultar(persona, null).exigidas()).contains(pendiente, pasada).doesNotContain(futura, cumplida);
+        // Sin la respuesta de la que ya pasó (y de la sin hora) no se puede cerrar: 400 y nada queda a medio guardar.
+        assertThatThrownBy(() -> cerrar.cerrar(new CerrarElDia(persona, hoy,
+                List.of(new RespuestaDeAccion(pendiente, "SIN_TIEMPO", "OTRA_HORA", null)), null)))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(fila(pendiente).get("cierre_motivo")).isNull();
+
+        // Con las exigidas basta: la de hora futura queda sin respuesta, pendiente y sin puntos.
+        cerrar.cerrar(new CerrarElDia(persona, hoy, List.of(
+                new RespuestaDeAccion(pendiente, "SIN_TIEMPO", "OTRA_HORA", null),
+                new RespuestaDeAccion(pasada, "SIN_ENERGIA", "MAS_CORTA", null)), null));
+
+        assertThat(fila(pasada).get("cierre_motivo")).isEqualTo("SIN_ENERGIA");
+        assertThat(fila(futura).get("cierre_motivo")).isNull();
+        assertThat(fila(futura).get("completada")).isEqualTo(false);
+        assertThat(((Number) fila(futura).get("puntos_otorgados")).intValue()).isZero();
+        assertThat(consultar.consultar(persona, null).dia().estado()).isEqualTo("CERRADO");
     }
 }

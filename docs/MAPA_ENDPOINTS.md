@@ -198,12 +198,16 @@ persona cuenta, de cada acción que le quedó pendiente, qué pasó y qué hará
 acción, paga puntos ni toca el semáforo.** Todo exige sesión y responde con `Cache-Control: no-store`.
 
 | GET | `/api/v1/rocks/day-closure?date=YYYY-MM-DD` | la propia persona (`FOLLOW_OWN_PROGRAM`); aprendiz o personal con su programa activado; sin `date`, hoy en su zona; una fecha futura es 400 |
-| PUT | `/api/v1/rocks/day-closure` | ídem; cierra el de HOY (idempotente); un día que ya pasó es 409 «Ese día ya cerró…»; falta la respuesta de una pendiente, 400 |
+| PUT | `/api/v1/rocks/day-closure` | ídem; cierra el de HOY (idempotente); un día que ya pasó es 409 «Ese día ya cerró…»; falta la respuesta de una pendiente **cuya hora ya llegó** (o sin hora), 400 |
 | GET | `/api/v1/mentor/groups/{groupId}/learners/{userId}/cierres?semana=YYYY-MM-DD` | mentor o guía · acompaña vigentemente el grupo, cuenta activa y el alumno es del grupo (mismo guardián que `…/radar` y `…/huecos`) |
 | GET | `/api/v1/leadership/groups/{groupId}/people/{personId}/cierres?semana=YYYY-MM-DD` | líder de mentores, admin, alquimista · `AccesoDeLiderazgo`; **deja constancia** en `consultas_de_ficha` solo si responde 200 |
 
 Interruptores de Soporte TI: `plan` (la persona), `mentor.mi_grupo` y `lider.cumplimiento` (las fichas). `semana` es el lunes; sin ella, la
 semana en curso de la persona; una semana futura, anterior a la primera de su programa o que no es lunes responde 400.
+
+> **Corregido 2026-10-30 (D-290).** La fila del `PUT /rocks/day-closure` decía «falta la respuesta de una pendiente, 400». Ahora solo se
+> exige la de una pendiente **cuya hora de inicio ya llegó** en la zona de la persona, o sin hora; las de hora futura no (decisión del
+> dueño). El `GET` de hoy suma `exigeRespuesta` por acción para decir por cuáles preguntar. Contrato en `specs/017-cierre-del-dia/contracts/api.md`.
 
 ### `academy`
 
