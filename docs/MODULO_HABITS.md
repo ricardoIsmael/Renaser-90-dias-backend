@@ -291,6 +291,7 @@ Ver también la pregunta #5 agregada en §5. Resumen:
 | `participantes_programa` | `horas_mi_radar smallint[]` | Las horas de TODOS los días. `NULL` = apagado. Si no, 1 a 12 horas entre 3 y 23 (CHECK). Apagar guarda `NULL` |
 | `participantes_programa` | `dias_mi_radar jsonb` | Los días con horas propias: `[{"dia": 6, "horas": [11]}, {"dia": 7, "horas": []}]`, lunes = 1; `horas: []` = «Sin Radar ese día»; `NULL` = ningún día propio. CHECK: es un arreglo y hay `horas_mi_radar`. El resto de la forma lo valida el dominio |
 | `registros_radar` | `hora_prevista smallint` | La hora local (0–23) a la que respondía; `NULL` = registro libre o anterior a V119 (no se rellenó) |
+| `registros_radar` | `dictado boolean NOT NULL DEFAULT false` | (V132, spec 030, D-297) `true` si al menos una de las cuatro respuestas se dictó con el reconocimiento de voz del teléfono; lo declara la app, el audio nunca se guarda ni viaja. Registros anteriores y los de SER: `false` |
 
 **Por qué jsonb y no una tabla de días.** El dueño pidió no crear tablas, y son a lo sumo siete elementos que siempre se leen y se
 escriben juntos (no se consulta «quién tiene Radar los sábados»). El costo: la base no ve dentro del arreglo, y lo impone `MiRadar`.
@@ -328,6 +329,8 @@ historial para la persona, su mentor y liderazgo; en esa página `miRadar` es `n
 
 `POST /radar` suma `horaPrevista` a su respuesta; `/radar/history` y la lectura del mentor suman `miRadar` (`{ encendido, horas, dias }`;
 `null` en la semana 1) y `horaPrevista` por registro. `leadership` lee por `habits.api.CodigoRenaserDePersonaFinder` y no deja registro de consulta propio.
+
+**Código Renaser con la voz (spec 030, D-297).** `POST /radar` acepta `dictado` (opcional; ausente o `null` = `false`) y, junto con `/radar/history`, la lectura del mentor y la de `leadership`, devuelve `dictado` (booleano) en cada registro. Sin rutas ni permisos nuevos: el dato viaja en las mismas filas, así que lo ve exactamente quien ve el Código Renaser (y se oculta con él si la spec 034 lo oculta). El segundo intento de la misma hora devuelve el primer registro con su propio `dictado`. Contrato en `specs/030-codigo-renaser-con-audio/contracts/api.md`.
 
 **Pruebas.** `MiRadarTest`, `HorarioDelRadarTest`, `RegistroRadarTest`, `RadarServiceTest` (con el reloj en la madrugada UTC),
 `MiRadarServiceTest`, `AcompanamientoDeAlumnoServiceTest`, `RadarDePersonaServiceTest`, `RadarControllerMiRadarTest` y
