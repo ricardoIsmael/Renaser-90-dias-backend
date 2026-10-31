@@ -2,10 +2,27 @@
 
 **Feature Branch**: `030-codigo-renaser-con-audio` (backend y app; el cambio es casi todo de la app)
 **Created**: 2026-10-31
-**Status**: Draft
+**Status**: Aclarada (decisiones del dueño del 2026-10-31); lista para planificar e implementar
 **Input**: Pedido del dueño (2026-10-31), textual: «Tarea: Código Renaser. El sistema debe poder ofrecer el servicio de audios
 al responder el radar.» Es la primera mitad de la tarea «Código Renaser»; la segunda mitad (el análisis 80/20 con IA) es la
 spec 031. La app pasa a tener 3 formaciones (spec 022): todo lo de esta spec queda dentro de la formación de la persona.
+
+## Clarifications
+
+### Session 2026-10-31
+
+Decisiones del dueño (`~/.config/renaser-e2e/formaciones/decisiones-del-dueno-2026-10-31.md`, sección 030):
+
+- **030-1 = A** → «el servicio de audios» es **dictar la respuesta** (voz a texto) y **escuchar la pregunta** con la voz Dora, grabada y sin
+  red. La energía se toca, no se dicta. No se guarda audio, no hay nota de voz, no hay SER por voz, no se ofrece un audio del programa.
+- **030-2 = B** → **el registro dice «dictado»**, y lo ven el **mentor (o guía), el líder y Administración** (Administración y Alquimista, igual
+  que hoy ven el Radar). Cambia el registro: una columna nueva, sin tablas nuevas. Se respeta el interruptor de la **spec 034**: el
+  «dictado» viaja dentro de las mismas filas del Código Renaser, así que si el interruptor oculta el Código Renaser a mentor/líder/Admin,
+  tampoco ven «dictado». Esta spec no agrega ninguna ruta de lectura ni ningún permiso.
+- Cómo se decide el «dictado» (decisión de implementación, anotada para que el dueño la corrija si no es lo que quiso): es **un solo dato
+  por registro**, `true` si **al menos una** de las cuatro respuestas llevó algo dictado con el micrófono y esa parte sigue en el texto que
+  se registra. Lo declara la app al registrar (el servidor no oye audio ni puede comprobarlo); si la persona borra por completo un campo
+  dictado, ese campo deja de contar. Un registro hecho por otro camino (p. ej. por SER) es `false`.
 
 ## Qué hay hoy (verificado en el código y en `AGENTS.md` el 2026-10-31)
 
@@ -153,8 +170,8 @@ el mismo lugar, con la misma forma y el mismo comportamiento.
   siempre, con las mismas validaciones (cuatro respuestas, energía de 1 a 10, 2 000 caracteres por campo).
 - **FR-004**: MUST haber como máximo un micrófono abierto a la vez en el formulario.
 - **FR-005**: El audio MUST NOT guardarse ni enviarse a los servidores de Renaser; lo único que se guarda es el texto que la
-  persona confirma al registrar. [NEEDS CLARIFICATION: ¿basta con dictar y escuchar la pregunta, o el dueño quiere además guardar
-  la respuesta como audio, conversar con SER por voz o que se ofrezca un audio del programa al terminar? Ver «Puntos abiertos».]
+  persona confirma al registrar (y la marca «dictado», FR-013). Decisión 030-1 = A: sin nota de voz, sin SER por voz, sin audio del
+  programa al terminar.
 - **FR-006**: Sin reconocimiento de voz en el teléfono, el micrófono MUST NOT mostrarse y el formulario MUST ser idéntico al de hoy.
 - **FR-007**: Con falta de permiso, de red, de motor en español o con el reconocimiento ocupado, el sistema MUST decirlo en una
   línea clara y MUST permitir seguir escribiendo; MUST NOT perder lo escrito ni lo dictado antes.
@@ -166,32 +183,38 @@ el mismo lugar, con la misma forma y el mismo comportamiento.
   detiene al salir del formulario.
 - **FR-012**: Las reglas del formulario MUST NOT cambiar: obligatorio y sin cerrar para el aprendiz en los días 1 a 7, opcional y
   cerrable para el resto, un registro por hora, borrador conservado, horas y avisos.
-- **FR-013**: El registro de una respuesta dictada MUST ser indistinguible del de una escrita: mismo contenido, mismos límites,
-  mismo destino y mismo acceso. [NEEDS CLARIFICATION: ¿se quiere marcar el registro como «dictado» para medir su uso o para que
-  quien acompaña sepa que puede haber errores de transcripción? Marcarlo cambia el registro.]
+- **FR-013**: El registro MUST decir si se dictó (decisión 030-2 = B): un dato `dictado` (verdadero/falso) en el registro, **sin
+  tabla nueva**, que viaja al registrar y que **ven el mentor o guía, el líder y Administración (y Alquimista)** en las mismas lecturas del
+  Código Renaser que ya usan. Lo demás del registro MUST ser indistinguible de uno escrito: mismo contenido, mismos límites, mismo destino,
+  mismo acceso y mismo 409. Los registros anteriores y los hechos por otro camino MUST valer `false`. Si la spec 034 oculta el Código
+  Renaser a quien acompaña, MUST ocultar también el «dictado» (porque viaja en las mismas filas); la voz no agrega ningún camino de lectura.
+- **FR-013b**: Donde mentor, líder o Administración leen el Código Renaser de una persona, cada registro dictado MUST decir «Dictado» con
+  una pista de que puede haber errores de transcripción; MUST NOT cambiar nada del texto ni de la hora. El texto del aviso está en tuteo
+  de Perú y no culpa a la persona.
 - **FR-014**: Los botones nuevos MUST tener área táctil de 48 a 52 px, nombre para el lector de pantalla, estado anunciado
   («Escuchando», «Detenido») y contraste del tema en claro y oscuro; MUST verse completos con la letra grande del sistema.
 - **FR-015**: Dictar en el Código Renaser MUST NOT depender de que SER o su IA estén encendidos (el reconocimiento es del
   teléfono). Si Soporte TI apaga el Código Renaser, la voz se apaga con él, sin interruptor nuevo.
 - **FR-016**: La Política de Privacidad MUST decir, antes de publicar la app con esta función, que el Código Renaser también se
   puede dictar con el reconocimiento de voz del teléfono y que el audio no se guarda.
-- **FR-017**: La voz MUST NOT agregar datos nuevos ni abrir nuevos accesos: los registros siguen siendo de la persona, dentro de
-  su formación, y los ve exactamente quien los ve hoy.
+- **FR-017**: La voz MUST NOT abrir nuevos accesos: los registros siguen siendo de la persona, dentro de su formación, y los ve
+  exactamente quien los ve hoy. El único dato nuevo es el «dictado» de FR-013.
 - **FR-018**: El cambio MUST anotarse en `AGENTS.md` del frontend con fecha, alcance y «lo que cambia y nada más», porque toca la
   pantalla obligatoria de Hoy y Mi Radar de Yo.
 
 ### Key Entities *(include if feature involves data)*
 
-- **Respuesta del Código Renaser**: el registro de siempre (cuatro textos, energía, hora prevista). No cambia.
+- **Respuesta del Código Renaser**: el registro de siempre (cuatro textos, energía, hora prevista) más **`dictado`** (verdadero si alguna
+  respuesta se dictó; falso por defecto). Es una columna en `registros_radar`, no una entidad nueva.
 - **Dictado**: lo que la persona dice mientras el micrófono está abierto. Es transitorio: se convierte en texto en el campo y no se
   guarda como audio.
 - **Pregunta hablada**: la versión en voz de cada una de las cuatro preguntas. Es contenido fijo de la app, no de la persona.
 
-## Puntos abiertos (los decide el dueño)
+## Puntos abiertos (resueltos el 2026-10-31: pregunta 1 = A, pregunta 2 = B)
 
 Cada uno cambia el resultado. Va primero la opción que recomienda el equipo.
 
-**Pregunta 1 — ¿Qué es «el servicio de audios» al responder el radar?**
+**Pregunta 1 — ¿Qué es «el servicio de audios» al responder el radar?** → **Elegida por el dueño: A.**
 
 - **A (recomendada): dictar la respuesta y escuchar la pregunta.** Es lo que esta spec describe. La app ya sabe dictar (chat de
   SER), no guarda audio, no crea tablas ni cambia el registro, y funciona con la voz de la app sin conexión.
@@ -203,7 +226,7 @@ Cada uno cambia el resultado. Va primero la opción que recomienda el equipo.
 - **D: ofrecer un audio del programa al terminar** (por ejemplo la Pastilla o una clase según la energía que se respondió). Es otra
   función (una recomendación), no «responder con la voz».
 
-**Pregunta 2 — ¿Se marca el registro como «dictado»?**
+**Pregunta 2 — ¿Se marca el registro como «dictado»?** → **Elegida por el dueño: B** (la recomendada del equipo era A).
 
 - **A (recomendada): no.** El registro no cambia y no hay migración. El uso se mide con una prueba con personas, no con un dato.
 - **B: sí, con una marca en el registro** para saber cuántas respuestas se dictan y mostrar a quien acompaña que pudo haber
@@ -216,7 +239,7 @@ desnormalización correcta), buenas prácticas y SOLID, en backend y frontend.»
 
 1. **Reutilizar lo que existe**: el micrófono de dictado y el reconocimiento de voz del teléfono que ya usa SER; las voces
    grabadas de la app (Dora); el formulario, el borrador y el registro del Código Renaser tal como están; Mi Radar. **No se crean
-   tablas** ni columnas si la respuesta A de la Pregunta 1 se mantiene. Datos normalizados: el texto dictado es el mismo dato que el
+   tablas**; la única columna nueva es `dictado` (030-2 = B). Datos normalizados: el texto dictado es el mismo dato que el
    texto escrito, no se duplica.
 2. **No romper la lógica actual**: obligatoriedad de la primera semana, un registro por hora, el 409, horas de Mi Radar,
    semáforo y puntos quedan exactamente como están. Las pruebas existentes del Código Renaser siguen en verde.
@@ -227,8 +250,7 @@ desnormalización correcta), buenas prácticas y SOLID, en backend y frontend.»
    el Radar. Criterio verificable por E2E: con cuentas de dos formaciones, un registro dictado por la persona A lo lee A, su
    mentor o guía vigente, el líder, Administración y Alquimista (la cadena de hoy), y no lo lee ninguna cuenta de la otra
    formación ni un mentor que no la acompaña; el resultado es idéntico al de un registro escrito.
-5. **Preguntas antes de implementar**: las dudas que siguen abiertas están en «Puntos abiertos» y en el informe de esta spec; el
-   dueño las responde antes de planificar.
+5. **Preguntas antes de implementar**: respondidas por el dueño el 2026-10-31 (ver *Clarifications*).
 
 ## Success Criteria *(mandatory)*
 
@@ -239,9 +261,10 @@ desnormalización correcta), buenas prácticas y SOLID, en backend y frontend.»
 - **SC-002**: El 100 % de las fallas simuladas del reconocimiento (sin permiso, sin red, sin motor, silencio, ocupado) permiten
   terminar y registrar escribiendo, y conservan lo escrito y lo dictado antes.
 - **SC-003**: Cero audios guardados o enviados a los servidores de Renaser: la inspección de los pedidos de un registro dictado
-  muestra el mismo contenido que el de uno escrito y ningún archivo de audio.
-- **SC-004**: Un registro dictado y uno escrito son idénticos en el servidor (mismo contrato, mismo acceso, mismo 409), verificado
-  con la matriz de acceso por rol y formación de la restricción 4.
+  muestra el mismo contenido que el de uno escrito, más el dato `dictado`, y ningún archivo de audio.
+- **SC-004**: Un registro dictado y uno escrito se distinguen **solo** por `dictado` (mismo contrato, mismo acceso, mismo 409),
+  verificado con la matriz de acceso por rol y formación de la restricción 4; y `dictado` lo leen mentor/guía, líder, Administración y
+  Alquimista donde ya leen el Código Renaser, y nadie más.
 - **SC-005**: «Escuchar» empieza a sonar en menos de 1 segundo y sin conexión en el 100 % de las pruebas, y se detiene antes de
   que el micrófono abra en el 100 % de los casos.
 - **SC-006**: Las cuatro entradas al formulario muestran los mismos botones, en la misma posición y con el mismo comportamiento
@@ -267,7 +290,8 @@ desnormalización correcta), buenas prácticas y SOLID, en backend y frontend.»
 - La energía de 1 a 10 no se dicta: es un control de un toque y decirla por voz sería más lento y ambiguo.
 - La voz está disponible para todos los roles que ven el formulario, como hoy; ninguna pieza filtra por rol.
 - Hoy la app es solo Android; se aplica donde la app ya ofrece dictado.
-- Sin cambios de servidor previstos mientras la Pregunta 2 sea «no» y la Pregunta 1 sea «A»: el contrato del registro no cambia. La
-  spec vive en el repo del backend porque ahí viven `specs/` y `.specify/`.
+- **Cambio de servidor mínimo** (decisión 030-2 = B): una columna `dictado` en `registros_radar` (migración V132, decisión D-297) y un
+  campo opcional `dictado` en el pedido y en las respuestas del Código Renaser. Es aditivo: un APK anterior no lo manda (vale `false`) y
+  lo ignora al leer. La spec vive en el repo del backend porque ahí viven `specs/` y `.specify/`.
 - La spec 022 define cómo una persona pertenece a una formación. Esta spec solo exige que la voz no cruce datos entre formaciones.
 - No hay datos que migrar.

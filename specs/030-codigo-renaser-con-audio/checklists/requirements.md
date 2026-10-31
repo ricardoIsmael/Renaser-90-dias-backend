@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain — quedan 2, a propósito: el dueño las responde antes de planificar (FR-005 y FR-013, ver «Puntos abiertos»)
+- [x] No [NEEDS CLARIFICATION] markers remain — resueltos el 2026-10-31 (030-1 = A, 030-2 = B; ver *Clarifications*)
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -31,7 +31,6 @@
 
 ## Notes
 
-- Las dos marcas abiertas cambian el alcance (Pregunta 1) y el registro (Pregunta 2). Con las recomendadas (A y A) la spec está lista
-  para `/speckit-plan` sin cambios.
+- Resueltas: Pregunta 1 = A (dictar y escuchar) y Pregunta 2 = B (el registro dice «dictado»). La spec está lista para `/speckit-plan`.
 - Mencionados por nombre de producto, no por diseño: SER, Dora, Mi Radar, Soporte TI, Política de Privacidad.
 - Depende de la spec 022 (formaciones) solo en cómo se define la pertenencia; esta spec no la redefine.
