@@ -13,13 +13,13 @@
 
 ## Requirement Completeness
 
-- [ ] Sin marcadores [NEEDS CLARIFICATION]: **quedan 3 a propósito** (FR-001, FR-014, FR-023). El dueño quiere responderlas él antes de implementar.
+- [x] Sin marcadores [NEEDS CLARIFICATION]: el dueño respondió las 3 (2026-10-31): FR-001 A; FR-014 = el plan de objetivos de Plan (mes del programa); FR-023 = repetir es de hábitos.
 - [x] Los requisitos son comprobables y sin ambigüedad (cada FR tiene su criterio en las historias o en el éxito).
 - [x] Los criterios de éxito son medibles (toques, segundos, 0 diferencias, 0 cambios en otra formación).
 - [x] Los criterios de éxito no dependen de la tecnología.
 - [x] Escenarios de aceptación definidos para las cuatro historias.
 - [x] Casos borde identificados (hoy y pasado, pausas, otra formación, red, doble toque, dos teléfonos, APK anterior).
-- [x] Alcance acotado: solo hábitos (a confirmar con la pregunta 3); no se tocan Plan ni el recordatorio de los domingos.
+- [x] Alcance acotado: repetir la semana es de hábitos; el mes es el plan de objetivos de Plan (reutiliza lo que ya hay); no se mueve el recordatorio de los domingos.
 - [x] Dependencias y supuestos identificados (022, 023; hueco entre lo que se guarda por fecha y por día de la semana).
 
 ## Feature Readiness
@@ -31,5 +31,5 @@
 
 ## Notes
 
-- Quedan 3 marcadores pendientes: la spec no pasa a `/speckit-plan` hasta que el dueño responda (FR-001: cómo se planifica una semana concreta; FR-014: mes de calendario o del programa; FR-023: solo hábitos o también acciones).
-- Depende de las specs 022 (formaciones) y 023 (hábitos por formación), que escribe otra persona.
+- Las tres preguntas quedaron resueltas el 2026-10-31 con las decisiones del dueño (sección 028 de `decisiones-del-dueno-2026-10-31.md`). La spec ya puede pasar a `/speckit-plan`.
+- Depende, hacia el futuro, de las specs 022 (formaciones) y 023 (hábitos por formación): hoy el aislamiento es por persona y por audiencia de rol (ver el plan).
