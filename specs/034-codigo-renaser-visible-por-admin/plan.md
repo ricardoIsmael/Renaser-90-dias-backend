@@ -68,7 +68,7 @@ specs/034-codigo-renaser-visible-por-admin/
 ```text
 src/main/java/com/renaser/os/
 ├── shared/
-│   ├── application/ClavesDeFuncionalidad.java            # NUEVO: RADAR_EN_FICHAS = "radar.fichas" (la nombran habits, leadership y plataforma)
+│   ├── domain/ClavesDeFuncionalidad.java                 # NUEVO: RADAR_EN_FICHAS = "radar.fichas" (la nombran habits, leadership y plataforma)
 │   └── domain/Permission.java                            # + MANAGE_RADAR_VISIBILITY
 ├── plataforma/
 │   ├── domain/model/catalogo/

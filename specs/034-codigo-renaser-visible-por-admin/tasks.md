@@ -9,7 +9,7 @@ Reglas: sin tablas ni migración nuevas (V133 no se usa); D-299; commits por pas
 
 ## Phase 2: Foundational (bloquea todo)
 
-- [ ] T002 `shared/application/ClavesDeFuncionalidad.java`: `RADAR_EN_FICHAS = "radar.fichas"` (la nombran `habits`, `leadership` y `plataforma`)
+- [ ] T002 `shared/domain/ClavesDeFuncionalidad.java`: `RADAR_EN_FICHAS = "radar.fichas"` (la nombran `habits`, `leadership` y `plataforma`)
 - [ ] T003 `plataforma/domain/model/catalogo/DefinicionDeFuncionalidad.java`: sumar `apagadaPorDefectoPara` (Set<UserRole>, copia inmutable, vacío por omisión) y `seEsconde` (boolean); el constructor de 9 argumentos se conserva para no tocar las pruebas existentes
 - [ ] T004 `plataforma/domain/model/estado/EvaluacionDeFuncionalidades.java`: sin fila, si `apagadaPorDefectoPara` contiene el rol del actor está apagada (el rol se lee solo cuando hace falta); con `seEsconde` el resultado es `noDisponible` (en el apagado manual también)
 - [ ] T005 `EntradasDelCatalogo.java`: `radar.fichas` («Código Renaser en las fichas», área «Programa», roles MENTOR, TRAINEE_GUIDE, MENTOR_LEAD, `apagadaPorDefectoPara` los mismos, `seEsconde`) + nota en el javadoc; `CatalogoDeFuncionalidadesTest` suma la clave y la excepción de «Soporte TI figura en todas»
