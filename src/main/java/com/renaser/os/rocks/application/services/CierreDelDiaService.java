@@ -32,8 +32,8 @@ import java.util.List;
  * {@code CompletarRocaDiariaUseCase}, ni {@code AjustarPuntosPort}, ni publica eventos. Todo en una transacción: si falla un paso no
  * queda la marca sin las respuestas.
  *
- * <p>«Hoy» es el de la zona de la persona (regla 02). La hora a la que la app muestra la fila (30 minutos antes de Dormir) no se
- * impone acá: la decide la app con lo que Training ya lee.
+ * <p>«Hoy» es el de la zona de la persona (regla 02) y es lo único que se exige del día. No hay hora de cierre: la fila de la app está
+ * siempre, todos los días y a cualquier hora (corregido el 2026-10-30, pedido del dueño), y no depende de Despertar ni de Dormir.
  */
 @Service
 public class CierreDelDiaService implements CerrarElDiaUseCase, ConsultarCierreDelDiaUseCase {

@@ -3,6 +3,7 @@
 **Feature Branch**: `017-cierre-del-dia` (backend y app; la app en la rama `017-cierre-del-dia` del frontend, sobre `015-huecos-de-horario`)
 **Created**: 2026-10-29
 **Status**: Aprobada por el dueño (vista previa y decisiones del 2026-10-29); lista para implementar
+**Corregida**: 2026-10-30 (pedido del dueño: «Cierra tu día» está siempre y no depende de Dormir; ver «Session 2026-10-30» y las notas `> **Corregido 2026-10-30.**`)
 **Vista previa aprobada**: `vista-previa.html` (copia local de https://claude.ai/artifact/Lr8upa6x1nswBja6GFxUsc, pestaña «1 · Cierra tu día»)
 **Input**: Encargo de gerencia «Cerrar y evaluar mi día» (https://claude.ai/artifact/VCFE5EYjVa6BCWv3iz7ef7). El dueño pidió que
 esté en Training «para los aprendices», es decir, para quien hace su programa de 90 días, también el personal que lo hace.
@@ -25,6 +26,8 @@ esté en Training «para los aprendices», es decir, para quien hace su programa
 
 - **La hora a la que aparece la fila** (30 minutos antes de Dormir de ese día; a las 21:30 si Dormir no tiene hora) **la calcula la
   app** con lo que Training ya lee de hoy. El servidor no la impone: solo exige que la fecha sea la de hoy en la zona de la persona.
+  > **Corregido 2026-10-30.** Ya no hay hora: la fila está siempre y es la última de hoy, sin depender de Despertar ni de Dormir (pedido
+  > del dueño, ver «Session 2026-10-30»). Se borró `cierre/utils/horaDelCierre` de la app; el servidor no cambió.
 - **La nota es por acción pendiente**, como en la vista previa (la caja de texto vive dentro de la tarjeta de la acción). En un día
   sin acciones pendientes hay **una nota del día**. Las dos tienen el mismo tope (500 caracteres).
 - **Guardar vuelve a escribirlo todo.** Reabrir y guardar reemplaza las respuestas del día. Una acción que ya se cumplió deja de tener
@@ -34,6 +37,39 @@ esté en Training «para los aprendices», es decir, para quien hace su programa
 - **Leer el cierre de una persona deja constancia** para el líder, Administración y Alquimista (misma tabla `consultas_de_ficha` que la
   ficha semanal y los huecos). Es lo que decidió el dueño para los huecos (spec 015, FR-027) y esto es más sensible.
 
+### Session 2026-10-30 (corrección del dueño: «Cierra tu día» está siempre y no depende de Dormir)
+
+> **Corregido 2026-10-30.** Pedido textual del dueño: «el tema de Dormir, y que salga ahí "Cerrar tu día", está mal. Motivo: personas
+> que trabajan en la noche o de día. No debiste juntar lógica de ese lado… como botón: ingresa "Cerrar el día", y es todos los días, y
+> debe guardarse y mostrarse en su ficha». Lo que decían la vista previa aprobada (`vista-previa.html`: «Es la última fila de hoy, media
+> hora antes de tu hora de Dormir. Si Dormir no tiene hora, sale a las 21:30») y los puntos de esta spec marcados con esta nota **ya no
+> rige**. La regla nueva:
+>
+> - **«Cierra tu día» está SIEMPRE**: todos los días y a cualquier hora, como **la última fila de la lista de hoy en Training**, después
+>   de todo lo del día, incluido Dormir.
+> - **No depende** de Despertar, de Dormir ni de ninguna hora, y **no lleva hora** (ni «22:00» ni otra calculada).
+> - **Todo lo demás de la 017 sigue igual**: lo cumplido llega marcado y solo se pregunta por lo pendiente y por mañana; no da puntos ni
+>   cumple acciones y es opcional; ya cerrado, la fila queda en verde; los días anteriores dicen «Cerrado» o «Sin cerrar» y no se cierran
+>   tarde (D-259); el cierre se guarda en el servidor y se ve en las fichas del mentor, el líder y Administración («Cierres del día»).
+> - **El día sigue siendo el día calendario de la persona** (su zona horaria). Lo que eso significa para quien trabaja de noche
+>   (cerrar después de medianoche, cerrar temprano) se **describe** abajo y se le pregunta al dueño; **no se inventó ninguna regla**.
+> - **Servidor**: no cambia. Nunca validó ni sugirió una hora (`GET/PUT /rocks/day-closure` solo exigen que la fecha sea la de hoy en la
+>   zona de la persona); la hora vivía solo en la app y se borró de ahí.
+>
+> **Casos descritos (sin regla nueva), con la regla de «hoy = el día calendario de la persona»:**
+> 1. *Turno de noche que cierra a las 23:50*: se guarda en el día de hoy (el calendario de su zona) y la fila queda en verde.
+> 2. *La misma persona cierra después de la medianoche* (00:30, 02:00): ve el día **nuevo**; la fila «Cierra tu día» es la del día nuevo
+>    y cerrar guarda el día nuevo. El día anterior queda «Sin cerrar» y ya no se puede cerrar (409). Una hoja que estaba abierta al
+>    pasar la medianoche se cierra y no envía nada. Las fichas dicen «Sin cerrar» para el día anterior y «Cerrado» para el nuevo.
+> 3. *Cierra temprano* (06:00): se puede; el servidor pide una respuesta por cada acción que **siga pendiente** en ese momento, aunque
+>    su hora del día todavía no haya llegado (y la hoja la nombra «Era a las 20:30 · quedó pendiente»). Si después cumple algo, el día
+>    **sigue cerrado** (verde), la lectura deja de mostrar lo que dijo de la acción cumplida y se puede volver a abrir y cambiar el
+>    mismo día.
+> 4. *Día normal* (Despertar 06:00, Dormir 22:30) que cierra a las 21:00: cierra el día de hoy y se ve en la ficha.
+>
+> Las decisiones que le tocan al dueño (cerrar después de medianoche, acciones cuya hora no llegó, etc.) están en el informe de esta
+> corrección y en D-290 (corrección 2026-10-30).
+
 ## User Scenarios & Testing
 
 ### User Story 1 — Cierro mi día en dos minutos (Priority: P1)
@@ -42,6 +78,8 @@ Al final de la tarde, en Training, aparece una fila «Cierra tu día · 2 minuto
 completa. Lo que ya cumplí llega marcado y no se me pregunta nada. Por cada acción que quedó pendiente respondo, con un toque,
 «¿Qué pasó?» y «¿Qué harás mañana?», y si quiero escribo una nota. Veo cuántos hábitos hice hoy y cuántas acciones de la semana
 llevo, sin preguntarme nada. «Guardar mi cierre» se apaga hasta que respondí las dos preguntas de cada pendiente y una línea dice qué falta.
+
+> **Corregido 2026-10-30.** La fila no espera a la tarde: está siempre, a cualquier hora, como la última de hoy (ver «Session 2026-10-30»).
 
 **Why this priority**: es la funcionalidad; sin ella no hay nada que ver en las fichas.
 
@@ -101,6 +139,8 @@ cerrar todavía), las acciones pendientes con su motivo y su plan de mañana, la
 
 - **Dormir sin hora o sin Dormir hoy** (pausado, no le toca): la fila sale a las 21:30. **Dormir a las 00:10** (se acuesta pasada la
   medianoche): 30 minutos antes sería el día anterior, así que la fila se ancla a las 00:00 de ese día (siempre disponible). Lo calcula la app.
+  > **Corregido 2026-10-30.** Ya no aplica: no hay hora, así que Dormir (con hora, sin hora, pausado o pasada la medianoche) no cambia
+  > nada. La fila está siempre.
 - **Una acción cumplida después de cerrar**: se ve cumplida; su respuesta vieja queda en la base pero la lectura no la muestra.
 - **Acción sin hora**: la hoja dice solo «Quedó pendiente».
 - **Cuenta suspendida o personal sin su programa activado**: 403, como cualquier operación de rocas.
@@ -131,6 +171,9 @@ cerrar todavía), las acciones pendientes con su motivo y su plan de mañana, la
 - **FR-010 (app)**: Training muestra la fila «Cierra tu día · 2 minutos» desde 30 minutos antes de Dormir (21:30 sin Dormir), la
   última de hoy, con fondo dorado suave y la luna; no cuenta en «N de M hechos» ni en puntos; no se «atrasa». Cerrada, queda verde con
   «Día cerrado» y lo de mañana.
+  > **Corregido 2026-10-30.** Training muestra la fila «Cierra tu día · 2 minutos» **siempre** (todos los días, a cualquier hora), como la
+  > **última fila de la lista de hoy**, después de todo lo del día (también de Dormir y de lo hecho), **sin hora** y sin depender de
+  > Despertar, de Dormir ni de ninguna hora. El resto (fondo dorado suave, luna, no cuenta, no se atrasa, verde al cerrar) no cambia.
 - **FR-011 (app)**: La hoja (completa) muestra lo cumplido marcado, por cada pendiente «¿Qué pasó?» y «¿Qué harás mañana?» con chips y una
   nota, «Tus hábitos: N de M hechos hoy», «Tu semana: N de M acciones cumplidas hasta hoy» (solo lectura), y «Guardar mi cierre», que
   se apaga hasta que cada pendiente tenga sus dos chips y dice qué falta. Al guardar: «Día cerrado», lo de mañana y «Ver mañana en

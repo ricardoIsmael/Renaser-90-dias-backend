@@ -511,6 +511,22 @@ enaserPlayStore\src\lib\supabase.ts` sigue existiendo en el frontend — mismo p
 > Sin migración ni endpoint nuevo. Código: `VentanaDeLaFicha.de`, `GrupoDelLiderService`, `SemaforoDeLaPersona`, `ArmadoDeLaFicha`;
 > prueba: `MismaVentanaEnLasTresPantallasTest`.
 
+> **Corregido 2026-10-30 (D-290, pedido del dueño: «Cierra tu día» está siempre y no depende de Dormir).** La fila de D-290 decía, en su
+> punto (5)(i), que la hora a la que la app muestra la fila (30 minutos antes de Dormir de ese día, 21:30 sin Dormir, 00:00 si Dormir cae
+> pasada la medianoche) **la calcula la app**. Textual del dueño: «el tema de Dormir, y que salga ahí "Cerrar tu día", está mal. Motivo:
+> personas que trabajan en la noche o de día. No debiste juntar lógica de ese lado… como botón: ingresa "Cerrar el día", y es todos los
+> días, y debe guardarse y mostrarse en su ficha». Ahora **la fila está SIEMPRE** (todos los días, a cualquier hora) como **la última fila
+> de la lista de hoy en Training**, después de todo lo del día (incluido Dormir), **sin hora** y sin depender de Despertar, de Dormir ni de
+> ninguna hora. Todo lo demás de D-290 sigue igual: lo cumplido llega marcado y solo se pregunta por lo pendiente y por mañana; no da
+> puntos ni cumple acciones y es opcional; ya cerrado queda en verde; los días anteriores dicen «Cerrado» o «Sin cerrar» y no se cierran
+> tarde (D-259); el cierre se guarda en el servidor y se ve en las fichas del mentor, el líder y Administración. **El día sigue siendo el día
+> calendario de la persona** (su zona); lo que eso significa para quien trabaja de noche (cerrar después de medianoche, cerrar temprano con
+> acciones cuya hora no llegó) se describe en `specs/017-cierre-del-dia/spec.md` («Session 2026-10-30») y queda como pregunta al dueño: no
+> se inventó ninguna regla. **El servidor no cambió** (nunca validó ni sugirió una hora; solo se corrigió el comentario de
+> `CierreDelDiaService`); el cambio es de la app (`017b-cierre-siempre-al-final`: se borró `cierre/utils/horaDelCierre`, la lista de hoy
+> entrega el cierre aparte y lo dibuja de última). Sin migración ni endpoint nuevo. Orden de publicación: ninguno en particular (el
+> backend no cambia); la app necesita un APK nuevo.
+
 ### D-267 · agente B — circuito automático e interruptores de SER (2026-10-13)
 
 Parte de D-267 (spec 002, US2, FR-015 a FR-017; plan.md §D7; contrato §10). Rama `claude/plataforma-ia`, sobre el núcleo.
