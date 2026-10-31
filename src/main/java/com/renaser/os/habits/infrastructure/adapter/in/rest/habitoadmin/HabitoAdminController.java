@@ -85,7 +85,8 @@ public class HabitoAdminController {
     public ResponseEntity<AdminHabitResponse> crear(@ActorAutenticado UserId actor,
                                                       @RequestBody @Valid CreateHabitRequest request) {
         var habito = crearUseCase.crear(new CrearHabitoCommand(actor, request.title(),
-                request.habitType().toDomain(), request.toDetalles(), request.toAudiencia()));
+                request.habitType().toDomain(), request.toDetalles(), request.toAudiencia(),
+                request.defaultTriggerTime()));
         return ResponseEntity.status(HttpStatus.CREATED).body(AdminHabitResponse.from(habito));
     }
 
