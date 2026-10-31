@@ -8,6 +8,7 @@ import com.renaser.os.rocks.application.ports.out.participante.ConsultarProgreso
 import com.renaser.os.rocks.application.ports.out.participante.ConsultarProgresoParticipanteRocksPort.ProgresoParticipanteRocks;
 import com.renaser.os.rocks.application.ports.out.rocadiaria.LoadRocaDiariaPort;
 import com.renaser.os.rocks.application.ports.out.rocadiaria.SaveRocaDiariaPort;
+import com.renaser.os.rocks.domain.model.cierre.MomentoDelCierre;
 import com.renaser.os.rocks.domain.model.cierre.MotivoDeAccionPendiente;
 import com.renaser.os.rocks.domain.model.cierre.NotaDeCierre;
 import com.renaser.os.rocks.domain.model.cierre.PlanDeManana;
@@ -23,6 +24,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * «Cierra tu día» de la propia persona (spec 017): consultar el cierre de un día y cerrar el de hoy.
@@ -34,6 +38,11 @@ import java.util.List;
  *
  * <p>«Hoy» es el de la zona de la persona (regla 02) y es lo único que se exige del día. No hay hora de cierre: la fila de la app está
  * siempre, todos los días y a cualquier hora (corregido el 2026-10-30, pedido del dueño), y no depende de Despertar ni de Dormir.
+ *
+ * <p><b>Solo se exige respuesta de las pendientes cuya hora ya llegó</b> (decisión del dueño, 2026-10-30): la hora local sale del
+ * {@code Clock} y la zona de la persona, nunca del teléfono ni de la zona del servidor. Las de hora futura no se preguntan; las que no
+ * tienen hora se preguntan como siempre. La lectura de hoy dice cuáles se preguntan ({@code exigidas}) para que la app y el servidor no
+ * puedan discrepar.
  */
 @Service
 public class CierreDelDiaService implements CerrarElDiaUseCase, ConsultarCierreDelDiaUseCase {
@@ -61,7 +70,8 @@ public class CierreDelDiaService implements CerrarElDiaUseCase, ConsultarCierreD
         CierreDelDia.exigirQueSeaHoy(pedido.fecha(), hoy);
         String notaDelDia = NotaDeCierre.limpiar(pedido.nota());
         List<RocaDiaria> delDia = cargar.deParticipanteYFecha(pedido.actorId(), hoy);
-        List<RocaDiaria> cambiadas = CierreDelDia.cerrar(delDia, respuestasDe(pedido), clock.now());
+        MomentoDelCierre momento = MomentoDelCierre.de(clock.now(), progreso.zona());
+        List<RocaDiaria> cambiadas = CierreDelDia.cerrar(delDia, respuestasDe(pedido), momento);
         guardar.guardarSoloElCierre(cambiadas);
         marcas.dejarCerrado(pedido.actorId(), hoy, notaDelDia);
         return vistaDe(progreso, pedido.actorId(), hoy, hoy);
@@ -84,7 +94,14 @@ public class CierreDelDiaService implements CerrarElDiaUseCase, ConsultarCierreD
         MarcaDeCierre marca = marcas.marcasEntre(actorId, dia, dia).stream().findFirst().orElse(null);
         boolean esHoy = dia.equals(hoy);
         return new VistaDelCierre(ArmadoDelCierre.dia(dia, hoy, rocas, marca), esHoy,
-                esHoy ? avanceDeLaSemana(progreso, actorId, hoy) : null);
+                esHoy ? avanceDeLaSemana(progreso, actorId, hoy) : null, esHoy ? exigidas(rocas, progreso) : Set.of());
+    }
+
+    /** Las acciones por las que hoy se pregunta: pendientes cuya hora ya llegó, o sin hora. Un día anterior no pregunta nada. */
+    private Set<UUID> exigidas(List<RocaDiaria> rocas, ProgresoParticipanteRocks progreso) {
+        MomentoDelCierre momento = MomentoDelCierre.de(clock.now(), progreso.zona());
+        return rocas.stream().filter(roca -> CierreDelDia.seExigeRespuesta(roca, momento))
+                .map(roca -> roca.id().value()).collect(Collectors.toSet());
     }
 
     /** Las acciones de la semana de programa hasta hoy (D-203): la misma cuenta que {@code progresoSemanalPct} del tablero. */

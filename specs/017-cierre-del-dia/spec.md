@@ -61,14 +61,27 @@ esté en Training «para los aprendices», es decir, para quien hace su programa
 > 2. *La misma persona cierra después de la medianoche* (00:30, 02:00): ve el día **nuevo**; la fila «Cierra tu día» es la del día nuevo
 >    y cerrar guarda el día nuevo. El día anterior queda «Sin cerrar» y ya no se puede cerrar (409). Una hoja que estaba abierta al
 >    pasar la medianoche se cierra y no envía nada. Las fichas dicen «Sin cerrar» para el día anterior y «Cerrado» para el nuevo.
+>    **Decisión del dueño (2026-10-30): se queda como está.** Textual: «déjalo como está; con los hábitos, lo de no cruzar el horario ya
+>    se soluciona para esas personas». El día es el del calendario y el anterior queda «Sin cerrar». Sin código nuevo.
 > 3. *Cierra temprano* (06:00): se puede; el servidor pide una respuesta por cada acción que **siga pendiente** en ese momento, aunque
 >    su hora del día todavía no haya llegado (y la hoja la nombra «Era a las 20:30 · quedó pendiente»). Si después cumple algo, el día
 >    **sigue cerrado** (verde), la lectura deja de mostrar lo que dijo de la acción cumplida y se puede volver a abrir y cambiar el
 >    mismo día.
+>    **Decisión del dueño (2026-10-30), dos partes.** (a) *Cerrar temprano: se pregunta SOLO por las acciones cuya hora ya pasó.* Las
+>    de hora futura no se preguntan ni se exigen. **Las acciones sin hora se preguntan como hoy.** Cambia también el servidor: ya no
+>    exige una respuesta por cada pendiente, sino por cada pendiente cuya `horaInicio` ya llegó en la zona de la persona (con el
+>    `Clock`) o que no tiene hora; las de hora futura se aceptan sin respuesta (y si viene una, se guarda). `GET /rocks/day-closure`
+>    dice por cuáles preguntar con `exigeRespuesta` por acción (ver `contracts/api.md`), para que la app y el servidor no discrepen
+>    por un reloj distinto. La hoja muestra las de hora futura como una línea quieta, «Es a las 20:30 · todavía no llega», sin
+>    preguntas. Si la hora llega con la hoja abierta, el servidor responde 400, la hoja relee el día sin perder lo elegido y avisa.
+>    (b) *Cerrar temprano y después cumplir una acción: se queda como está.* El cierre sigue verde (cerrado) y se puede reabrir y
+>    cambiar el mismo día; lo que dijo de la acción ya cumplida deja de mostrarse.
 > 4. *Día normal* (Despertar 06:00, Dormir 22:30) que cierra a las 21:00: cierra el día de hoy y se ve en la ficha.
 >
-> Las decisiones que le tocan al dueño (cerrar después de medianoche, acciones cuya hora no llegó, etc.) están en el informe de esta
-> corrección y en D-290 (corrección 2026-10-30).
+> Las decisiones del dueño sobre estos casos (2026-10-30) están anotadas arriba, en cada caso, y en D-290 (corrección 2026-10-30).
+>
+> **FR-002, corregido 2026-10-30.** Cerrar exige, por cada acción del día que siga pendiente **y cuya hora de inicio ya llegó (o que no
+> tiene hora)**, un motivo y un plan de mañana. Las pendientes de hora futura no se preguntan ni se exigen.
 
 ## User Scenarios & Testing
 

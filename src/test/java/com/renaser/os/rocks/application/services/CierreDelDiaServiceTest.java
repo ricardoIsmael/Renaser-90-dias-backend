@@ -51,6 +51,8 @@ class CierreDelDiaServiceTest {
     private static final LocalDate HOY = LocalDate.of(2026, 10, 28);
     private static final Instant NOCHE_EN_LIMA = Instant.parse("2026-10-29T03:00:00Z");
     private static final Instant MADRUGADA_SIGUIENTE_EN_LIMA = Instant.parse("2026-10-29T06:00:00Z");
+    private static final Instant SEIS_DE_LA_MANANA_EN_LIMA = Instant.parse("2026-10-28T11:00:00Z");
+    private static final Instant NUEVE_DE_LA_NOCHE_EN_LIMA = Instant.parse("2026-10-29T02:00:00Z");
     private static final LocalDate DIA_UNO = LocalDate.of(2026, 10, 12);
 
     private final ConsultarProgresoParticipanteRocksPort progreso = mock(ConsultarProgresoParticipanteRocksPort.class);
@@ -246,5 +248,69 @@ class CierreDelDiaServiceTest {
 
         persona(RolParticipante.TRAINEE, false, true, null);
         assertThat(servicio(NOCHE_EN_LIMA).consultar(ANA, HOY).semana()).isNull();
+    }
+
+    // ---- Solo se exige lo que ya llegó a su hora, con el reloj y la zona de la persona (2026-10-30) ----
+
+    @Test
+    @DisplayName("cerrar a las 06:00 sin respuestas: las de las 17:30 y 20:30 no se exigen, se guarda la marca y nada más")
+    void cerrarTemprano() {
+        unAprendizEnSuDia17();
+
+        servicio(SEIS_DE_LA_MANANA_EN_LIMA).cerrar(new CerrarElDia(ANA, HOY, List.of(), null));
+
+        verify(guardar).guardarSoloElCierre(List.of());
+        verify(marcas).dejarCerrado(ANA, HOY, null);
+        assertThat(llamada.completada()).isFalse();
+        assertThat(facturas.completada()).isFalse();
+        assertThat(propuesta.completada()).isTrue();
+    }
+
+    @Test
+    @DisplayName("a las 21:00 en Lima (02:00 UTC del 29) la de las 20:30 sí se exige: falta su respuesta, 400 y nada se guarda")
+    void cerrarEnLaNocheExigeLaQueYaPaso() {
+        unAprendizEnSuDia17();
+        CerrarElDia soloLaLlamada = new CerrarElDia(ANA, HOY, List.of(responde(llamada, "SIN_TIEMPO", "DEJARLA")), null);
+
+        assertThatThrownBy(() -> servicio(NUEVE_DE_LA_NOCHE_EN_LIMA).cerrar(soloLaLlamada))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Revisar las facturas");
+        verifyNoInteractions(guardar, marcas);
+    }
+
+    @Test
+    @DisplayName("la lectura de hoy a las 06:00 no marca ninguna como exigida; a las 21:00 marca las pendientes ya pasadas")
+    void lecturaDiceCualesSeExigen() {
+        unAprendizEnSuDia17();
+        when(marcas.marcasEntre(ANA, HOY, HOY)).thenReturn(List.of());
+        when(cargar.deParticipanteEntreFechas(eq(ANA), any(), any())).thenReturn(List.of(propuesta, llamada, facturas));
+
+        assertThat(servicio(SEIS_DE_LA_MANANA_EN_LIMA).consultar(ANA, null).exigidas()).isEmpty();
+        assertThat(servicio(NUEVE_DE_LA_NOCHE_EN_LIMA).consultar(ANA, null).exigidas())
+                .containsExactlyInAnyOrder(llamada.id().value(), facturas.id().value());
+    }
+
+    @Test
+    @DisplayName("una pendiente sin hora se exige siempre, también a las 06:00")
+    void sinHoraSeExigeSiempre() {
+        persona(RolParticipante.TRAINEE, false, true, DIA_UNO);
+        RocaDiaria sinHora = pendiente(HOY, 1, "Ordenar el escritorio", null);
+        when(cargar.deParticipanteYFecha(ANA, HOY)).thenReturn(List.of(sinHora, facturas));
+        when(marcas.marcasEntre(ANA, HOY, HOY)).thenReturn(List.of());
+        when(cargar.deParticipanteEntreFechas(eq(ANA), any(), any())).thenReturn(List.of(sinHora, facturas));
+
+        assertThat(servicio(SEIS_DE_LA_MANANA_EN_LIMA).consultar(ANA, null).exigidas()).containsExactly(sinHora.id().value());
+        assertThatThrownBy(() -> servicio(SEIS_DE_LA_MANANA_EN_LIMA).cerrar(new CerrarElDia(ANA, HOY, List.of(), null)))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Ordenar el escritorio");
+    }
+
+    @Test
+    @DisplayName("un día anterior no pregunta nada: no hay exigidas")
+    void ayerNoExigeNada() {
+        persona(RolParticipante.TRAINEE, false, true, DIA_UNO);
+        LocalDate ayer = HOY.minusDays(1);
+        when(cargar.deParticipanteYFecha(ANA, ayer)).thenReturn(List.of(pendiente(ayer, 1, "Se quedó sin hacer", null)));
+        when(marcas.marcasEntre(ANA, ayer, ayer)).thenReturn(List.of());
+
+        assertThat(servicio(NOCHE_EN_LIMA).consultar(ANA, ayer).exigidas()).isEmpty();
     }
 }

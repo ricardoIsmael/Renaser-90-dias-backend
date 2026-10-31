@@ -41,6 +41,11 @@ Permiso `FOLLOW_OWN_PROGRAM`; `@Funcionalidad("plan")`. Aprendiz, o personal con
   hoy y la persona ya eligió su Día 1; si no, `null`.
 - Orden de `acciones`: hora de inicio (sin hora, al final), luego posición.
 - `horaInicio` viaja como `HH:mm:ss` (la serialización de siempre del servidor); la app acepta también `HH:mm`.
+- > **Agregado 2026-10-30.** Cada acción de esta ruta lleva `exigeRespuesta` (booleano): `true` si al cerrar hoy se pregunta por ella
+  > —está pendiente y su `horaInicio` **ya llegó** en la zona de la persona, o no tiene hora— y `false` si no se pregunta (cumplida, o
+  > pendiente de **hora futura**). Lo calcula el servidor con su `Clock` y la zona de la persona; en un día que no es hoy vale `false`
+  > para todas. Es propio de `GET/PUT /rocks/day-closure`: la ficha del acompañamiento no lo lleva. Es opcional para la app: sin él
+  > (un servidor anterior) se pregunta por todas las pendientes, como siempre.
 - `semana` también es `null` cuando la semana no tiene acciones planificadas hasta hoy (nunca «0 de 0»).
 
 ### `PUT /api/v1/rocks/day-closure`
@@ -52,6 +57,10 @@ Cierra (o vuelve a cerrar) **el día de hoy**. Idempotente: reemplaza todas las 
 ```
 - Respuesta **200** con la misma forma del `GET` (estado `CERRADO`).
 - Hace falta **una respuesta por cada acción que siga pendiente**; las de acciones ya cumplidas se ignoran (y limpian cualquier respuesta vieja).
+  > **Corregido 2026-10-30 (decisión del dueño).** Solo se exige una respuesta por cada pendiente **cuya hora de inicio ya llegó** en la zona
+  > de la persona (con su `Clock`), y por las que **no tienen hora** (como hoy). Una pendiente de **hora futura** no se exige: si viene
+  > con respuesta se guarda, y si no viene queda sin respuesta (guardar reemplaza lo del día, así que también limpia la que tuviera).
+  > Una hora igual a la actual ya llegó. Sin la respuesta de una exigida, 400 con el nombre de la acción, y no se guarda nada.
 - **400**: motivo o plan desconocido; falta la respuesta de una pendiente; una acción que no es de ese día o de esa persona; una acción
   repetida; nota > 500 caracteres.
 - **409**: `fecha` no es hoy en la zona de la persona. Mensaje: «Ese día ya cerró y no se puede cerrar tarde.» (lleva «ese día ya cerró»,

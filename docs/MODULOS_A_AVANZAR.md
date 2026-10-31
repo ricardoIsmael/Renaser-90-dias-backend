@@ -526,6 +526,20 @@ enaserPlayStore\src\lib\supabase.ts` sigue existiendo en el frontend — mismo p
 > `CierreDelDiaService`); el cambio es de la app (`017b-cierre-siempre-al-final`: se borró `cierre/utils/horaDelCierre`, la lista de hoy
 > entrega el cierre aparte y lo dibuja de última). Sin migración ni endpoint nuevo. Orden de publicación: ninguno en particular (el
 > backend no cambia); la app necesita un APK nuevo.
+>
+> **Corregido 2026-10-30, segunda parte (D-290, decisiones del dueño sobre los casos de quien trabaja de noche).** (1) *Después de
+> medianoche, se queda como está* («déjalo como está; con los hábitos, lo de no cruzar el horario ya se soluciona para esas
+> personas»): el día es el del calendario y el anterior queda «Sin cerrar» (409 si se intenta cerrar). (2) *Cerrar temprano: se
+> pregunta SOLO por las acciones cuya hora ya pasó.* El punto (2) de D-290 decía que el servidor exigía **una respuesta por cada
+> acción pendiente**; ahora exige una por cada pendiente cuya `horaInicio` **ya llegó en la zona de la persona** (con el `Clock`; una
+> hora igual a la actual ya llegó) **o que no tiene hora** («las acciones sin hora se preguntan como hoy»). Las pendientes de hora
+> futura no se exigen: se aceptan sin respuesta (si viene una, se guarda) y guardar reemplaza lo del día, así que sin respuesta
+> quedan limpias. Lo hace `CierreDelDia.cerrar` con un valor nuevo del dominio, `MomentoDelCierre` (el instante y la hora local de
+> la persona); la lectura de hoy suma `exigeRespuesta` por acción para que la app pregunte por lo mismo que exige el servidor.
+> Sigue valiendo que cerrar no completa nada, no paga puntos y no publica eventos. Contrato en `specs/017-cierre-del-dia/contracts/api.md`.
+> (3) *Cerrar temprano y luego cumplir una acción, se queda como está*: el día sigue cerrado y se puede reabrir. Sin migración ni
+> endpoint nuevo; un campo opcional en la respuesta. Orden de publicación: el backend primero (la app nueva contra el anterior
+> pregunta por todas, como antes); el APK anterior contra el backend nuevo pregunta por todas y el servidor acepta las de hora futura.
 
 ### D-267 · agente B — circuito automático e interruptores de SER (2026-10-13)
 

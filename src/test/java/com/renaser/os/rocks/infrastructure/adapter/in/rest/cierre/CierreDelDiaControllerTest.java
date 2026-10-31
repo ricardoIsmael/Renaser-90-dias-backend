@@ -28,6 +28,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -74,7 +75,7 @@ class CierreDelDiaControllerTest {
                                 Instant.parse("2026-10-28T15:20:00Z"), null),
                         new AccionDelCierre(FACTURAS, "Revisar las facturas", LocalTime.of(20, 30), false, null,
                                 new RespuestaDelCierre("SIN_TIEMPO", "OTRA_HORA", "Se alargó la reunión")))),
-                true, new AvanceDeLaSemana(7, 12));
+                true, new AvanceDeLaSemana(7, 12), Set.of(FACTURAS));
         when(consultar.consultar(any(), any())).thenReturn(vista);
         when(cerrar.cerrar(any())).thenReturn(vista);
     }
@@ -111,6 +112,8 @@ class CierreDelDiaControllerTest {
                 .andExpect(jsonPath("$.acciones[1].cierre.motivo").value("SIN_TIEMPO"))
                 .andExpect(jsonPath("$.acciones[1].cierre.manana").value("OTRA_HORA"))
                 .andExpect(jsonPath("$.acciones[1].cierre.nota").value("Se alargó la reunión"))
+                .andExpect(jsonPath("$.acciones[0].exigeRespuesta").value(false))
+                .andExpect(jsonPath("$.acciones[1].exigeRespuesta").value(true))
                 .andExpect(jsonPath("$.semana.cumplidas").value(7))
                 .andExpect(jsonPath("$.semana.planificadas").value(12));
         verify(consultar).consultar(ANA, null);
@@ -131,7 +134,7 @@ class CierreDelDiaControllerTest {
     @DisplayName("sin «tu semana» el campo semana va en null")
     void sinSemana() throws Exception {
         when(consultar.consultar(any(), any())).thenReturn(new VistaDelCierre(
-                new DiaDelCierre(HOY.minusDays(1), "SIN_CERRAR", null, null, List.of()), false, null));
+                new DiaDelCierre(HOY.minusDays(1), "SIN_CERRAR", null, null, List.of()), false, null, Set.of()));
 
         mockMvc.perform(get("/api/v1/rocks/day-closure?date=2026-10-27").header("X-Actor-Id", ANA.toString()))
                 .andExpect(jsonPath("$.estado").value("SIN_CERRAR"))
