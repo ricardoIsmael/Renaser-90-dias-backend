@@ -73,7 +73,7 @@ Cada ítem de `habits` suma `dateOverrides`: las fechas con fila propia desde la
   "alarm": { "sound": true, "vibration": true, "voice": false, "repeat": false }, "customAlarm": false }
 ```
 
-Ausente o vacío ⇒ ninguna fecha propia (la app se comporta como siempre).
+**Siempre presente en el servidor nuevo** (lista vacía si no hay ninguna fecha propia). Ausente ⇒ servidor anterior: la app no ofrece «Solo esta semana» y se comporta como siempre.
 
 ## Errores
 
