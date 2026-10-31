@@ -2,7 +2,7 @@
 
 **Feature Branch**: `033-cierre-del-dia-en-plan` (app; el servidor no cambia)
 **Created**: 2026-10-31
-**Status**: Borrador, a la espera de las respuestas del dueño (3 preguntas marcadas; ver «Preguntas abiertas»). No se implementa hasta resolverlas.
+**Status**: En implementación (solo la app; el servidor no cambia). El dueño respondió el 2026-10-31: «todo A» (ver «Decisiones del dueño (31/10)»).
 **Input**: Pedido del dueño (2026-10-31), textual: «Cerrar el día se mueve a Plan, todo de acuerdo a Plan.»
 
 ## Clarifications
@@ -12,11 +12,29 @@
 - **Se mueve, no se rehace.** «Cierra tu día» (spec 017) ya existe, ya se guarda y ya se ve en las fichas. Esta spec cambia **dónde vive** y **cómo se presenta**; lo que
   pregunta, lo que guarda y sus reglas se quedan.
 - **«Todo de acuerdo a Plan»** se lee así: el cierre habla el idioma de Plan (las acciones del día por eje y con el ícono de su eje, «mañana» es lo que Plan muestra de
-  mañana) y usa las mismas piezas que Plan (tarjeta, hoja desde abajo, confirmación en línea), sin inventar patrones. *(a confirmar con la pregunta 2)*
+  mañana) y usa las mismas piezas que Plan (tarjeta, hoja desde abajo, confirmación en línea), sin inventar patrones. *(confirmado el 2026-10-31: solo mover)*
 - **Reglas generales del dueño para todas las specs de este lote**: respetar las reglas y no romper la lógica, reutilizar, no crear tablas innecesarias, normalizar siempre
   (o la desnormalización correcta), buenas prácticas y SOLID, en backend y frontend. Ver «Restricciones del dueño».
 - **Todo queda dentro de la formación de la persona** (spec 022). El cierre es personal, pero lo ve su acompañamiento, y eso ya está limitado por quién acompaña a quién.
 - **El dueño hará todas las preguntas antes de implementar.** Esta spec deja sus dudas a la vista.
+
+### Decisiones del dueño (31/10)
+
+Fuente: `decisiones-del-dueno-2026-10-31.md`, sección 033: **todo A** (la opción recomendada de cada pregunta y de cada duda menor).
+
+| # | Pregunta | Decisión |
+|---|---|---|
+| 1 | Dónde se ven los cierres de días anteriores (FR-011) | **A, solo en Plan, en la misma tarjeta** (la semana de lunes a domingo). Training no los muestra. Se leen solo al tocar un día, una vez por fecha y cuenta, como hasta hoy. |
+| 2 | Solo mover o conectar con planificar mañana (FR-010) | **A, solo mover.** «Ver mañana en Plan» lleva a las acciones que Plan muestra de mañana, sin automatismos ni atajos nuevos. |
+| 3 | Persona sin Mapa activo (FR-007) | **A, sí, siempre.** Con o sin Mapa, con o sin acciones agendadas. |
+| — | Lugar de la tarjeta | Bajo «Acciones que mueven la meta» (cerrar es lo último que se hace); sin Mapa, bajo «Primero tu Mapa de Renacimiento». |
+| — | «Ver mañana» el domingo | Sí, todos los días (Plan muestra lo que viene). |
+| — | Interruptor | Se mantiene `plan` de Soporte TI. |
+| — | Formación sin objetivos | El cierre sigue disponible, con su nota del día. |
+
+**Cómo se resuelve** (plan en `plan.md`): es un cambio **solo de la app**. La hoja (`HojaDelCierre`), las lecturas (`useCierreDeHoy`, `useCierresAnteriores`), el guardado y las fichas
+de la spec 017 **no se reescriben**: se montan en Plan en lugar de Training. Lo único que no vive en el servidor y hay que armar en la app es el ícono de eje de cada acción
+pendiente (`GET /rocks/day-closure` no trae el eje): sale de las acciones que Plan ya lee (`GET /rocks/today`).
 
 ### Lo que hay hoy (verificado en el código y en `AGENTS.md` el 2026-10-31)
 
@@ -118,7 +136,7 @@ Como mentor, guía, líder o administrador, quiero ver los cierres de las person
 
 ### Edge Cases
 
-- **Sin el Mapa de Renacimiento activo**: hoy Plan reemplaza lo del eje por «Primero tu Mapa de Renacimiento». El cierre no depende de los objetivos (puede cerrarse un día sin acciones). [NEEDS CLARIFICATION: ¿la persona sin Mapa activo también ve «Cierra tu día» en Plan? Opciones: A (recomendada) sí, siempre, como pidió el dueño el 2026-10-30 («es todos los días»); B no, solo con el Mapa activo y acciones agendadas; C sí, pero solo para registrar la nota del día.]
+- **Sin el Mapa de Renacimiento activo**: hoy Plan reemplaza lo del eje por «Primero tu Mapa de Renacimiento». El cierre no depende de los objetivos (puede cerrarse un día sin acciones). **Decidido (31/10, opción A): sí, siempre,** como pidió el dueño el 2026-10-30 («es todos los días»).
 - **Cambio de día con la hoja abierta**: igual que hoy; no se envía nada, se cierra la hoja, se relee y se avisa («Ese día ya cerró»). No se pasa el cierre al día nuevo.
 - **Día = día calendario de la persona** en su zona. Se prueba con el reloj en la madrugada UTC (todavía es el día anterior en Lima).
 - **Cerrar temprano o después de la medianoche**: se queda como lo decidió el dueño el 2026-10-30 (se pregunta solo por las acciones cuya hora ya pasó; el día anterior queda «Sin cerrar»).
@@ -128,7 +146,7 @@ Como mentor, guía, líder o administrador, quiero ver los cierres de las person
 - **APK anterior** (cierre en Training) **y servidor igual**: sigue funcionando; un cierre hecho en cualquiera de las dos versiones se ve en la otra y en las fichas. **APK nuevo contra el servidor anterior** (sin la spec 017): ni la tarjeta ni nada, como hoy.
 - **Letra grande y teléfono angosto**: nada se corta; un solo scroll; el botón de SER no tapa la tarjeta ni su chevron.
 - **Web**: igual que en el teléfono.
-- **Una formación sin objetivos ni acciones**: si la spec 022 define formaciones sin objetivos, el cierre sigue disponible con su nota del día. *(a confirmar)*
+- **Una formación sin objetivos ni acciones**: si la spec 022 define formaciones sin objetivos, el cierre sigue disponible con su nota del día. *(confirmado el 2026-10-31)*
 
 ## Requirements *(mandatory)*
 
@@ -143,7 +161,7 @@ Como mentor, guía, líder o administrador, quiero ver los cierres de las person
 - **FR-004**: Guardar el cierre MUST NOT completar una acción, pagar o anunciar puntos, ni tocar la coherencia, la racha ni el semáforo.
 - **FR-005**: Cerrada, la tarjeta MUST quedar en verde con «Día cerrado» y lo dicho para mañana; la hoja MUST poder reabrirse y cambiarse mientras el día no termine.
 - **FR-006**: El día del cierre MUST ser el día calendario de la persona en su zona. Si el día cambia con la hoja abierta, MUST NOT enviarse nada, MUST cerrarse la hoja, releerse el cierre y avisarse; MUST NOT reasignarse el cierre al día nuevo.
-- **FR-007**: Mientras el dueño no responda la pregunta 3 (ver «Edge Cases»), el cierre MUST seguir disponible para todos, también para quien no tiene acciones agendadas ni el Mapa activo (solo con la nota del día), como hoy.
+- **FR-007**: El cierre MUST estar disponible para todos, también para quien no tiene acciones agendadas ni el Mapa activo (solo con la nota del día), como hoy (decisión 033-3 A).
 
 **Training**
 
@@ -152,8 +170,8 @@ Como mentor, guía, líder o administrador, quiero ver los cierres de las person
 
 **Mañana y días anteriores**
 
-- **FR-010**: Después de guardar, «Ver mañana» MUST llevar a lo que Plan muestra de mañana, cualquier día de la semana. [NEEDS CLARIFICATION: ¿basta con mover el lugar o también hay que conectar «¿Qué harás mañana?» con planificar mañana? Opciones: A (recomendada) solo mover, y «Ver mañana en Plan» lleva a las acciones de mañana, sin automatismos (como en la 017); B además, al guardar, ofrecer «Agendar mañana» como atajo hacia el flujo de agendar de Plan; C automatizar: «Hacerla a otra hora» abre el selector de hora de esa acción.]
-- **FR-011**: Los cierres de días anteriores MUST seguir pudiéndose ver, solo de lectura, como «Cerrado» (con la hora si hubo) o «Sin cerrar»; un día que terminó MUST NOT poder cerrarse. [NEEDS CLARIFICATION: ¿dónde se ven? Opciones: A (recomendada) solo en Plan, en la misma tarjeta (la semana de lunes a domingo); B en Plan y también en el día anterior de Training; C solo en las fichas del acompañamiento.]
+- **FR-010**: Después de guardar, «Ver mañana» MUST llevar a lo que Plan muestra de mañana, cualquier día de la semana. **Decidido (31/10, opción A): solo mover**, sin automatismos ni atajos.
+- **FR-011**: Los cierres de días anteriores MUST seguir pudiéndose ver, solo de lectura, como «Cerrado» (con la hora si hubo) o «Sin cerrar»; un día que terminó MUST NOT poder cerrarse. **Decidido (31/10, opción A): solo en Plan**, en la misma tarjeta.
 
 **Fichas, interruptores y compatibilidad**
 
@@ -197,10 +215,10 @@ Reglas del dueño (2026-10-31) que valen para esta spec:
 
 ## Assumptions
 
-- La tarjeta va en la pantalla principal de Plan, bajo las acciones del día, porque cerrar es lo último que se hace; su lugar exacto lo fija el diseño con el dueño. *(a confirmar)*
+- La tarjeta va en la pantalla principal de Plan, bajo las acciones del día, porque cerrar es lo último que se hace; su lugar exacto lo fija el diseño con el dueño. *(confirmado el 2026-10-31)*
 - Lo que Plan ya muestra de «mañana» son las acciones que vienen; «Ver mañana en Plan» las usa. No se agrega ninguna vista nueva de mañana.
 - «Ver mañana en Plan» se ofrece todos los días, también el domingo (en Training el domingo no se ofrecía porque mañana caía fuera de la semana).
-- Un día anterior se lee solo desde Plan, y solo la semana en curso (la regla de la spec 017). *(a confirmar con la pregunta 1)*
+- Un día anterior se lee solo desde Plan, y solo la semana en curso (la regla de la spec 017). *(confirmado el 2026-10-31)*
 - La spec no agrega avisos nuevos: el cierre nunca tuvo recordatorio y no lo tiene.
 - Se mantiene el interruptor `plan` de Soporte TI de la spec 017; si el dueño prefiere uno propio para el cierre, lo decide el plan.
 - Hace falta un APK nuevo (solo cambio de la app). No hace falta publicar el backend.
@@ -208,12 +226,4 @@ Reglas del dueño (2026-10-31) que valen para esta spec:
 
 ## Preguntas abiertas
 
-**Las tres que cambian el alcance (marcadas arriba):**
-
-| # | Pregunta | Opciones |
-|---|---|---|
-| 1 | ¿Dónde se ven los cierres de días anteriores? (FR-011) | **A (recomendada)** solo en Plan. B: en Plan y también en el día anterior de Training. C: solo en las fichas del acompañamiento (la persona ya no los ve). |
-| 2 | ¿Basta con mover el lugar, o también se conecta con planificar mañana? (FR-010) | **A (recomendada)** solo mover; «Ver mañana en Plan», sin automatismos. B: además un atajo «Agendar mañana». C: automatizar «Hacerla a otra hora». |
-| 3 | ¿La persona sin Mapa activo también ve «Cierra tu día» en Plan? (Edge Cases, FR-007) | **A (recomendada)** sí, siempre. B: no, solo con Mapa y acciones agendadas. C: sí, pero solo para la nota del día. |
-
-**Dudas menores asumidas (no cambian el alcance; ver «Assumptions»)**: el lugar exacto de la tarjeta en Plan; si «Ver mañana» se ofrece también el domingo; si se mantiene el interruptor `plan`; qué pasa con una formación sin objetivos.
+Ninguna. Respondidas por el dueño el 2026-10-31 (ver «Decisiones del dueño (31/10)»): todo A.

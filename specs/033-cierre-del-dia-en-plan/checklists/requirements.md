@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] Sin marcadores [NEEDS CLARIFICATION]: **quedan 3 a propósito** (Edge Cases: persona sin Mapa activo; FR-010: conectar con planificar mañana; FR-011: dónde se ven los días anteriores). El dueño quiere responderlas él antes de implementar.
+- [x] Sin marcadores [NEEDS CLARIFICATION]: las 3 preguntas se respondieron el 2026-10-31 (todo A; ver «Decisiones del dueño (31/10)»).
 - [x] Los requisitos son comprobables y sin ambigüedad.
 - [x] Los criterios de éxito son medibles (una sola entrada, mismos pasos, 0 diferencias en fichas, 100 % de cierres previos visibles).
 - [x] Los criterios de éxito no dependen de la tecnología.
