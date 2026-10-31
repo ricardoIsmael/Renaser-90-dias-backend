@@ -7,6 +7,7 @@ import com.renaser.os.habits.application.ports.in.habitoadmin.EliminarHabitoUseC
 import com.renaser.os.habits.application.ports.out.audiencia.ContarRegistrosDeHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.SaveHabitoPort;
+import com.renaser.os.habits.application.ports.out.horario.SaveHorarioHabitoPort;
 import com.renaser.os.habits.application.ports.in.habitoadmin.ConsultarRolesElegiblesUseCase.RolElegible;
 import com.renaser.os.habits.domain.model.audiencia.Audiencia;
 import com.renaser.os.habits.domain.model.audiencia.CodigoDeRol;
@@ -14,7 +15,9 @@ import com.renaser.os.habits.domain.model.habito.DetallesHabito;
 import com.renaser.os.habits.domain.model.habito.ExigenciaEvidencia;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
+import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
+import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -27,10 +30,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
@@ -57,6 +62,8 @@ class HabitoAdminServiceTest {
     @Mock
     private SaveHabitoPort savePort;
     @Mock
+    private SaveHorarioHabitoPort saveHorarioPort;
+    @Mock
     private UserSummaryFinder userSummaryFinder;
     @Mock
     private IdGenerator idGenerator;
@@ -73,8 +80,8 @@ class HabitoAdminServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new HabitoAdminService(loadPort, savePort, new HabitoAdminGuard(userSummaryFinder), CLOCK,
-                idGenerator, new AudienciasDelCatalogo(audiencias, audiencias, userSummaryFinder, CLOCK), registrosPort);
+        service = new HabitoAdminService(loadPort, savePort, saveHorarioPort,
+                new HabitoAdminGuard(userSummaryFinder), CLOCK, idGenerator, new AudienciasDelCatalogo(audiencias, audiencias, userSummaryFinder, CLOCK), registrosPort);
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(userSummaryFinder.findById(admin))
                 .thenReturn(Optional.of(new UserSummary(admin, "Admin", null, UserRole.ADMIN, UserStatus.ACTIVE)));
@@ -115,6 +122,56 @@ class HabitoAdminServiceTest {
         assertThat(creado.esDeSistema()).isTrue();
         assertThat(creado.claveSistema()).isNull();
         verify(savePort).save(any());
+    }
+
+    @Test
+    @DisplayName("E-659: crear un hábito crea también su horario, del Día 1 en adelante y todos los días")
+    void crearCreaSuHorario() {
+        Habito creado = service.crear(new CrearHabitoCommand(admin, "Revisión del grupo", TipoHabito.CHECKBOX,
+                detalles())).habito();
+
+        HorarioHabito horario = horarioGuardado();
+        assertThat(horario.habitoId()).isEqualTo(creado.id());
+        assertThat(horario.diaInicio()).isEqualTo(1);
+        assertThat(horario.diaFin()).as("sin día final: rige hasta el final del programa").isNull();
+        assertThat(horario.tipoDia()).isEqualTo(TipoDia.TODOS);
+        assertThat(horario.horaDisparo()).as("sin hora, el hábito vale todo el día, como DESPERTAR").isNull();
+        assertThat(horario.horaLimite()).isNull();
+    }
+
+    @Test
+    @DisplayName("E-659: la hora opcional del alta es la hora de disparo del horario")
+    void crearConHoraLaGuardaEnElHorario() {
+        service.crear(new CrearHabitoCommand(admin, "Estiramientos", TipoHabito.CHECKBOX, detalles(),
+                Audiencia.PARA_TODOS, LocalTime.of(7, 30)));
+
+        assertThat(horarioGuardado().horaDisparo()).isEqualTo(LocalTime.of(7, 30));
+    }
+
+    @Test
+    @DisplayName("E-659: una hora fuera del día se rechaza sin guardar ni el hábito ni su horario")
+    void horaFueraDelDiaNoGuardaNada() {
+        var command = new CrearHabitoCommand(admin, "Tarde", TipoHabito.CHECKBOX, detalles(), Audiencia.PARA_TODOS,
+                LocalTime.of(23, 55));
+
+        assertThatThrownBy(() -> service.crear(command)).isInstanceOf(IllegalArgumentException.class);
+        verify(savePort, never()).save(any());
+        verify(saveHorarioPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("E-659: quien no puede crear el hábito tampoco crea su horario")
+    void sinPermisoNoSeCreaHorario() {
+        var command = new CrearHabitoCommand(mentor, "Titulo", TipoHabito.CHECKBOX, detalles());
+
+        assertThatThrownBy(() -> service.crear(command)).isInstanceOf(NotAuthorizedException.class);
+        verify(saveHorarioPort, never()).save(any());
+    }
+
+    private HorarioHabito horarioGuardado() {
+        ArgumentCaptor<HorarioHabito> captor = ArgumentCaptor.forClass(HorarioHabito.class);
+        verify(saveHorarioPort).save(captor.capture());
+        return captor.getValue();
     }
 
     @Test

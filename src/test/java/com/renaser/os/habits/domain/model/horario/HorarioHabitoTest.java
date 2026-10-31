@@ -151,4 +151,36 @@ class HorarioHabitoTest {
         assertThat(horario.horaDisparo()).isEqualTo(LocalTime.of(6, 0));
         assertThat(horario.horaLimite()).isEqualTo(LocalTime.of(9, 0));
     }
+
+    @Test
+    void todoElProgramaRigeDesdeElDia1TodosLosDiasSinFinNiCierre() {
+        HorarioHabito horario = HorarioHabito.todoElPrograma(HorarioHabitoId.of(UUID.randomUUID()),
+                HabitoId.of(UUID.randomUUID()), LocalTime.of(6, 30), AHORA);
+
+        assertThat(horario.diaInicio()).isEqualTo(1);
+        assertThat(horario.diaFin()).isNull();
+        assertThat(horario.tipoDia()).isEqualTo(TipoDia.TODOS);
+        assertThat(horario.horaDisparo()).isEqualTo(LocalTime.of(6, 30));
+        assertThat(horario.horaLimite()).isNull();
+        for (int dia : new int[] {1, 45, 90}) {
+            assertThat(horario.aplicaEnDia(dia, TipoDia.DISCIPLINA)).as("día " + dia).isTrue();
+            assertThat(horario.aplicaEnDia(dia, TipoDia.DOMINGO)).as("domingo del día " + dia).isTrue();
+        }
+    }
+
+    @Test
+    void todoElProgramaSinHoraEsTodoElDia() {
+        HorarioHabito horario = HorarioHabito.todoElPrograma(HorarioHabitoId.of(UUID.randomUUID()),
+                HabitoId.of(UUID.randomUUID()), null, AHORA);
+
+        assertThat(horario.horaDisparo()).isNull();
+        assertThat(horario.horaLimite()).isNull();
+    }
+
+    @Test
+    void todoElProgramaConHoraDespuesDeLas2340Falla() {
+        assertThatThrownBy(() -> HorarioHabito.todoElPrograma(HorarioHabitoId.of(UUID.randomUUID()),
+                HabitoId.of(UUID.randomUUID()), LocalTime.of(23, 41), AHORA))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

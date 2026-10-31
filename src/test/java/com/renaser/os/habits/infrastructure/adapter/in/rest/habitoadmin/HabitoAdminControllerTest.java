@@ -45,6 +45,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -196,6 +197,30 @@ class HabitoAdminControllerTest {
         ArgumentCaptor<CrearHabitoCommand> captor = ArgumentCaptor.forClass(CrearHabitoCommand.class);
         verify(crearHabito).crear(captor.capture());
         assertThat(captor.getValue().audiencia().paraTodos()).isTrue();
+    }
+
+    @Test
+    @DisplayName("E-659: crear con defaultTriggerTime lleva la hora al caso de uso; sin ella, el hábito vale todo el día")
+    void crearLlevaLaHoraDelHorario() throws Exception {
+        when(crearHabito.crear(any())).thenReturn(HabitoDelCatalogo.sinAudiencia(postDeComunidad()));
+        crearConCuerpo("""
+                {"title": "Con hora", "habitType": "CHECKBOX", "category": "BODY",
+                 "evidenceRequirement": "OPTIONAL", "isOptional": false, "mandatoryOnIntoxication": false,
+                 "defaultTriggerTime": "07:30"}""");
+        crearConCuerpo("""
+                {"title": "Sin hora", "habitType": "CHECKBOX", "category": "BODY",
+                 "evidenceRequirement": "OPTIONAL", "isOptional": false, "mandatoryOnIntoxication": false}""");
+
+        ArgumentCaptor<CrearHabitoCommand> captor = ArgumentCaptor.forClass(CrearHabitoCommand.class);
+        verify(crearHabito, times(2)).crear(captor.capture());
+        assertThat(captor.getAllValues()).extracting(CrearHabitoCommand::horaDisparo)
+                .containsExactly(java.time.LocalTime.of(7, 30), null);
+    }
+
+    private void crearConCuerpo(String cuerpo) throws Exception {
+        mockMvc.perform(post("/api/v1/admin/habits").header("X-Actor-Id", admin.toString())
+                        .contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+                .andExpect(status().isCreated());
     }
 
     @Test
