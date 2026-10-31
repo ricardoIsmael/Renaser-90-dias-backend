@@ -108,3 +108,18 @@ laptop es `America/Lima`. Con eso, un `clean verify` local **nunca** ve el desfa
 05:00 UTC. Toda fecha que el dominio compara con el día local del participante (`fecha_inicio`, periodos) se calcula
 en Java desde el `Clock` de la prueba en la zona del participante, con ese reloj en la madrugada UTC. Para reproducir
 lo que ve el CI: `TZ=UTC ./mvnw ...`.
+
+## La base y los contenedores de las pruebas de integración (E-651)
+
+`TestcontainersConfiguration` arranca **un solo Postgres por JVM** (surefire y failsafe son dos JVM: dos Postgres),
+en vez de uno por contexto de Spring como antes (50 en una corrida). Cada contexto sigue teniendo **su propia base**
+(`renaser_ctx_<n>_<id>`, vacía, migrada por Flyway al arrancar): ninguna clase ve los datos de un contexto ajeno, igual
+que antes. Por eso:
+
+- El `max_connections` del contenedor es alto (1000): cada contexto cacheado conserva su pool de Hikari.
+- Una prueba que necesite otra base aparte (como `BienvenidaEnGrupoIT` para probar una migración) la crea con
+  `CREATE DATABASE` desde el `DataSource` del contexto, como ya hacen; no hace falta nada más.
+- **Redis NO se comparte entre contextos**: guarda las sesiones, los contadores del límite de intentos (por IP, y toda
+  la suite llega desde 127.0.0.1) y el Pub/Sub del chat, y nada de eso se aísla por número de base. Arranca en 0,3 s.
+- El Postgres compartido no es un bean de Spring: ningún contexto lo detiene al cerrarse; lo recoge Ryuk al terminar
+  la JVM.
