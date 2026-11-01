@@ -113,6 +113,8 @@ public class MisCelulasService implements ConsultarMisCelulasUseCase {
     public List<IntegranteDelGrupo> integrantesDe(UserId actorId, CelulaId celulaId) {
         requireActorActivo(actorId);
         Instant ahora = clock.now();
+        // Spec 022, FR-021: el grupo de otra formación (un mentor con dos formaciones y la otra activa) es un 404, no un 200 ni un 403.
+        loadCelulaPort.porId(celulaId).ifPresent(celula -> formaciones.exigirQueLaVea(actorId, celula.formacion()));
         ConjuntoAsignaciones delGrupo = ConjuntoAsignaciones.de(loadAsignacionesPort.porCelula(celulaId));
         /* Lo que se abre es lo que se lista (D-240): un grupo cerrado o programado no aparece en
            `/me/cells`, y su padron tampoco se lee por id aunque la asignacion siga abierta. */

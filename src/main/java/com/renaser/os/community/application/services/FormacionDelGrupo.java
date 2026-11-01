@@ -29,6 +29,16 @@ class FormacionDelGrupo {
         this.catalogo = catalogo;
     }
 
+    /**
+     * Abrir un grupo por su id: es un 404 si es de una formación que quien actúa no ve (spec 022, FR-021). Un mentor con dos formaciones solo abre los grupos de la
+     * que tiene activa, igual que en sus listas.
+     *
+     * @throws com.renaser.os.shared.domain.ObjetoDeOtraFormacionException (404)
+     */
+    void exigirQueLoVea(UserId actor, Celula grupo) {
+        pertenencias.exigirQueLaVea(actor, grupo.formacion());
+    }
+
     /** @throws AsignacionInvalidaException (409) si el aprendiz no es de la formación del grupo */
     void exigirQueElAprendizSea(UserId aprendiz, Celula grupo) {
         exigir(aprendiz, grupo);

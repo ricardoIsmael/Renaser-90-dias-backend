@@ -192,6 +192,7 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         UserSummary actor = requireActorActivo(actorId);
         Celula celula = requireCelula(celulaId);
         if (actor.role().actuaComoMentor()) {
+            formacionDelGrupo.exigirQueLoVea(actorId, celula);
             /* > **Corregido 2026-10-01 (D-240, E-477/E-479).** Miraba `celulas.mentor_id`, y con eso
                > un mentor abria un grupo cerrado o programado que no ve en ninguna lista. Ahora pide
                > lo mismo que el acceso: ser el MENTOR vigente y que el grupo este en curso. */
