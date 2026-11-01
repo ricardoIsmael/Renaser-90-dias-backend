@@ -1508,3 +1508,18 @@ una fila por persona y fecha (`UNIQUE`), con la nota del día en `contenido_text
   acompañamiento no es material para el análisis de una IA); el dato se lee por el puerto de arriba.
 - `LoadEntradaDiarioPort.entreFechasDeTipo` es la lectura por tipo y rango.
 
+
+
+## 29. Hábitos y categorías por formación (spec 023, D-300, 2026-10-31)
+
+- **Pertenencia.** `categorias_habito.formacion` y `habitos.formacion` (solo el catálogo; un hábito propio no tiene formación y sigue a su dueño). Una llave compuesta
+  `(formacion, categoria_clave)` obliga a que un hábito esté en una categoría de SU formación. Título y `clave_sistema` son únicos **por formación**.
+- **Qué hábitos le tocan a una persona** = `CatalogoAplicable` (spec 001): audiencia por rol **y** formación del programa de la persona (`ProgresoParticipanteHabits.formacion`).
+  Un hábito de otra formación sale en `globalesQueNoLeTocan`.
+- **Flujos propios.** `LoadHabitoPort.porClaveSistema(clave, formacion)`: una formación sin ese hábito no tiene el flujo (`Optional.empty`).
+- **Otra formación = 404.** `Habito.exigirQueSeaVisibleEn(formacion)` en elegir, pausar, quitar, preferencias, día semanal y renombre.
+- **Categorías** (`CategoriaHabito`, `CategoriasDeHabitoAdminService`): nombre 2–40 único en la formación; ícono de una lista cerrada que la app ya dibuja; una con hábitos
+  activos no se desactiva ni se elimina; con hábitos de cualquier estado no se elimina. Cada cambio queda en `auditoria_catalogo_habitos`.
+- **Copiar** (`CopiarHabitoService`): hábito + horarios + guía (textos) + audiencia; no copia adjuntos de S3. La copia conserva la `clave_sistema`.
+- **API abierta de categorías:** `CodigoDeCategoria` (`CUERPO↔BODY`, …; el resto, la clave).
+- **Topes de día:** desbloqueo y huecos leen la duración de la persona; Audioterapia y Pastilla usan `ProgresoParticipanteHabits.diaEnEscalaBase()`.

@@ -395,3 +395,23 @@ Vos avanzás con el frontend usando §1. Cuando te choques con algo:
 **Antes de construir cualquier cosa nueva voy a verificar primero si se puede reutilizar** — es la regla que pediste, y §2 muestra que en la mayoría de los casos aplica.
 
 **Queda para después** (decisión tuya de hoy): el motor diario del programa (generar tracks → coherencia → semáforo → Verdugo) y el resto del análisis de cumplimiento de los 45 requisitos, que está en [`CUMPLIMIENTO_REQUISITOS.md`](CUMPLIMIENTO_REQUISITOS.md).
+
+
+---
+
+## Hábitos y categorías por formación (spec 023, D-300, 2026-10-31)
+
+| Método | Ruta | Para qué |
+|---|---|---|
+| GET | `/api/v1/habit-categories` | Las categorías activas (dimensiones de Training) de la formación de la persona: `{ formation, categories:[{ key, code, name, icon, order }] }` |
+| GET | `/api/v1/admin/habits?formation=` | Catálogo de UNA formación (ausente = Escuela; `ALL` = las tres, solo lectura). ADMIN/ALCHEMIST |
+| POST | `/api/v1/admin/habits/{id}/copy` | «Copiar a otra formación» `{ formation, category }`: copia independiente (horarios, guía y audiencia). ADMIN/ALCHEMIST |
+| GET | `/api/v1/admin/habit-categories?formation=` | Categorías con sus conteos y qué se puede hacer con cada una. ADMIN/ALCHEMIST |
+| POST | `/api/v1/admin/habit-categories` | Crear `{ formation, name, icon? }` |
+| PUT | `/api/v1/admin/habit-categories/{key}` | Renombrar / cambiar el ícono `{ name?, icon?, changesIcon }` |
+| PUT | `/api/v1/admin/habit-categories/{key}/active` | Activar o desactivar `{ isActive }` (409 con hábitos activos) |
+| PUT | `/api/v1/admin/habit-categories/order` | Ordenar `{ formation, keys:[…] }` |
+| DELETE | `/api/v1/admin/habit-categories/{key}` | Eliminar (409 con hábitos o historial) |
+
+`category` de los hábitos (`/habits`, `/admin/habits`, `/admin/trainees/{id}/habits`) es un string abierto (`BODY`, `MIND`, `CONSCIENCE`, `SPIRIT` en la Escuela; la clave en las
+demás) y suma `categoryKey`. Detalle en `specs/023-habitos-por-formacion/contracts/habitos-por-formacion-api.md`.
