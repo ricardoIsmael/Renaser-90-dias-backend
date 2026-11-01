@@ -66,9 +66,10 @@ class CategoriaHabitoTest {
     }
 
     @Test
-    @DisplayName("la clave nunca pasa de 60 caracteres y siempre es valida")
+    @DisplayName("con el nombre más largo permitido (40) la clave sigue siendo válida y de 60 caracteres o menos")
     void claveLarga() {
-        String clave = CategoriaHabito.claveNueva(Formacion.CERTIFICACION, "a".repeat(40) + " " + "b".repeat(40).substring(0, 5));
+        String clave = CategoriaHabito.claveNueva(Formacion.CERTIFICACION, "a".repeat(19) + " " + "b".repeat(20));
+        assertThat(clave).isEqualTo("CERTIFICACION_" + "A".repeat(19) + "_" + "B".repeat(20));
         assertThat(clave.length()).isLessThanOrEqualTo(60);
         CategoriaHabito.crear(clave, Formacion.CERTIFICACION, "Larga", 1, null, AHORA);
     }
