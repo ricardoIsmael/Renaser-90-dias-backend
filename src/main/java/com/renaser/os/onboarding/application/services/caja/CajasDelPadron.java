@@ -126,7 +126,7 @@ class CajasDelPadron {
             return SituacionDelAprendiz.noAplica(suspendido, ficha.esDelPeru());
         }
         return new SituacionDelAprendiz(true, suspendido, ficha.esDelPeru(), programa.zona(),
-                programa.primeraFecha(), habitos);
+                programa.primeraFecha(), habitos, programa.duracionDias());
     }
 
     private Map<UserId, List<DiaDeHabitos>> habitosDeLaFaseUno(Collection<ProgramaActivado> activados) {

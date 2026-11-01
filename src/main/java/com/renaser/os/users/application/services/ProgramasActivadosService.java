@@ -69,6 +69,6 @@ public class ProgramasActivadosService implements ProgramasActivadosFinder {
 
     private static ProgramaActivado aProgramaActivado(ParticipacionPrograma participacion) {
         return new ProgramaActivado(participacion.participanteId(), participacion.timezone(),
-                participacion.primeraFechaDelPrograma(), participacion.ultimaFechaDelPrograma());
+                participacion.primeraFechaDelPrograma(), participacion.ultimaFechaDelPrograma(), participacion.duracionDias());
     }
 }

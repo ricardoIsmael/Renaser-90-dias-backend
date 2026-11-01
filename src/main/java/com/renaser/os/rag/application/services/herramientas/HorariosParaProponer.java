@@ -27,9 +27,8 @@ import java.util.UUID;
  */
 final class HorariosParaProponer {
 
-    /** Regla 02: {@code dia_programa} se acota a [0, 90], igual que en {@code consultar_horarios}. */
+    /** Regla 02: {@code dia_programa} se acota a [0, duracion de SU programa], igual que en {@code consultar_horarios}. */
     private static final int PRIMER_DIA_DEL_PROGRAMA = 0;
-    private static final int ULTIMO_DIA_DEL_PROGRAMA = 90;
 
     private static final Logger log = LoggerFactory.getLogger(HorariosParaProponer.class);
 
@@ -61,15 +60,15 @@ final class HorariosParaProponer {
     /** La misma cuenta que usa {@code habits} para el dia de una fecha: el de hoy mas los dias que faltan. */
     private static boolean enElPrograma(LocalDate fecha, HorariosDelDia hoy) {
         long dia = hoy.diaPrograma() + ChronoUnit.DAYS.between(hoy.fecha(), fecha);
-        return dia >= PRIMER_DIA_DEL_PROGRAMA && dia <= ULTIMO_DIA_DEL_PROGRAMA;
+        return dia >= PRIMER_DIA_DEL_PROGRAMA && dia <= hoy.duracionDias();
     }
 
     /** @param fecha {@code null} = hoy en la zona del participante */
     static HorariosDelDia de(ConsultarHorariosPort puerto, UserId actorId, LocalDate fecha) {
         HorariosDelDia dia = leer(puerto, actorId, fecha);
-        if (dia.diaPrograma() < PRIMER_DIA_DEL_PROGRAMA || dia.diaPrograma() > ULTIMO_DIA_DEL_PROGRAMA) {
+        if (dia.diaPrograma() < PRIMER_DIA_DEL_PROGRAMA || dia.diaPrograma() > dia.duracionDias()) {
             throw new PropuestaImposibleException("El " + ArgumentosDeHorario.texto(dia.fecha())
-                    + " queda fuera de sus 90 dias de programa: no hay horario que cambiar ese dia."
+                    + " queda fuera de sus " + dia.duracionDias() + " dias de programa: no hay horario que cambiar ese dia."
                     + conLaFechaDeHoy(puerto, actorId, fecha));
         }
         return dia;
@@ -88,7 +87,7 @@ final class HorariosParaProponer {
         try {
             HorariosDelDia hoy = leer(puerto, actorId, null);
             return " Hoy es " + ArgumentosDeHorario.texto(hoy.fecha()) + ", su dia " + hoy.diaPrograma()
-                    + " de 90: revisa el año y la fecha que pediste y vuelve a intentar.";
+                    + " de " + hoy.duracionDias() + ": revisa el año y la fecha que pediste y vuelve a intentar.";
         } catch (RuntimeException sinHoy) {
             return "";
         }
