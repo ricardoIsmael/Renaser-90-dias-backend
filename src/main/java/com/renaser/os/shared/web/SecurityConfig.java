@@ -163,6 +163,11 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/home", "/api/v1/users/me/**").authenticated()
                         .requestMatchers("/api/v1/habits", "/api/v1/habit-preferences/**",
                                 "/api/v1/habit-tracks/**", "/api/v1/habit-unlocks/**").authenticated()
+                        // Spec 023: las categorias de habito de la formacion de la persona (la lectura de Training). La administracion de
+                        // las categorias vive bajo `/api/v1/admin/**`, que ya tiene su matcher.
+                        .requestMatchers("/api/v1/habit-categories").authenticated()
+                        // Spec 026: el diagnostico de ingreso de la persona (`/mio`). Lo decide `@RequiresPermission`; aca solo se pide sesion.
+                        .requestMatchers("/api/v1/diagnostico/**").authenticated()
                         .requestMatchers("/api/v1/evidence", "/api/v1/evidence/**").authenticated()
                         .requestMatchers("/api/v1/classroom/**", "/api/v1/cursos/**",
                                 "/api/v1/lecciones/**").authenticated()
