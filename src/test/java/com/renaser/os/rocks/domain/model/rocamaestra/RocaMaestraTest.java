@@ -271,4 +271,35 @@ class RocaMaestraTest {
         assertThat(roca.esLaMismaDefinicion("Pesar 75 kg", null)).isFalse();
         assertThat(roca.esLaMismaDefinicion(null, roca.meta())).isFalse();
     }
+
+    // ---------------------------------------------------------------------------------------
+    // Spec 026: el objetivo que nace del diagnostico puede traer su meta medible
+    // ---------------------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("del diagnostico: nace por confirmar y con la meta que la persona declaro")
+    void delDiagnosticoConMeta() {
+        MetaCuantitativa declarada = MetaCuantitativa.desde(new BigDecimal("92"), new BigDecimal("85"), "kg");
+
+        RocaMaestra roca = RocaMaestra.delDiagnostico(ID, PARTICIPANTE, EjeObjetivo.CUERPO, "Bajar de peso", declarada, AYER);
+
+        assertThat(roca.origen()).isEqualTo(OrigenDelObjetivo.DIAGNOSTICO);
+        assertThat(roca.estaPorConfirmar()).isTrue();
+        assertThat(roca.tieneMeta()).isTrue();
+        assertThat(roca.meta()).isEqualTo(declarada);
+    }
+
+    @Test
+    @DisplayName("confirmar solo con el texto no borra la meta declarada; si manda otra meta, esa manda")
+    void confirmarConservaLaMeta() {
+        MetaCuantitativa declarada = MetaCuantitativa.desde(new BigDecimal("92"), new BigDecimal("85"), "kg");
+        RocaMaestra roca = RocaMaestra.delDiagnostico(ID, PARTICIPANTE, EjeObjetivo.CUERPO, "Bajar de peso", declarada, AYER);
+
+        RocaMaestra soloTexto = roca.recibirDefinicion("Bajar a 85 kg", null, HOY);
+        assertThat(soloTexto.estaPorConfirmar()).isFalse();
+        assertThat(soloTexto.meta()).isEqualTo(declarada);
+
+        MetaCuantitativa otra = MetaCuantitativa.desde(new BigDecimal("92"), new BigDecimal("88"), "kg");
+        assertThat(roca.recibirDefinicion("Bajar a 88 kg", otra, HOY).meta()).isEqualTo(otra);
+    }
 }

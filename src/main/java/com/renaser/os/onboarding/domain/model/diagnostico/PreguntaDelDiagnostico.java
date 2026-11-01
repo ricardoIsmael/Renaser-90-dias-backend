@@ -28,6 +28,8 @@ public record PreguntaDelDiagnostico(int id, String clave, int seccionId, int or
     /** El tope de un objetivo de 90 días ({@code RocaMaestra.MAX_OBJETIVO}); lo exige el diagnóstico desde que se escribe, sin recortes silenciosos. */
     public static final int MAX_OBJETIVO = 500;
     public static final int MAX_RESPUESTA_LIBRE = 4000;
+    /** El tope de la unidad de una meta ({@code MetaCuantitativa.MAX_UNIDAD} de {@code rocks}). */
+    public static final int MAX_UNIDAD = 20;
     public static final String PRECARGA_NOMBRE = "NOMBRE_COMPLETO";
 
     private static final Set<TipoPreguntaOnboarding> TIPOS_PERMITIDOS = EnumSet.of(
@@ -84,6 +86,9 @@ public record PreguntaDelDiagnostico(int id, String clave, int seccionId, int or
 
     /** El tope de caracteres de lo que se escribe; {@code null} si no tiene uno propio (el general de {@link #MAX_RESPUESTA_LIBRE} aplica igual). */
     public Integer largoMaximo() {
+        if (alimenta != null && alimenta.parteDeLaMeta().orElse(null) == DestinoDeRespuesta.ParteDeLaMeta.UNIDAD) {
+            return MAX_UNIDAD;
+        }
         return alimenta != null && (alimenta.esObjetivo() || alimenta == DestinoDeRespuesta.PRIMERA_ACCION) ? MAX_OBJETIVO : null;
     }
 
@@ -170,6 +175,14 @@ public record PreguntaDelDiagnostico(int id, String clave, int seccionId, int or
         boolean libre = tipo == TipoPreguntaOnboarding.TEXTO || tipo == TipoPreguntaOnboarding.AREA_TEXTO;
         if ((destino.esObjetivo() || destino == DestinoDeRespuesta.PRIMERA_ACCION) && !libre) {
             throw new IllegalArgumentException("«" + destino.etiqueta() + "» se responde con texto");
+        }
+        if (destino.esParteDeUnaMeta()) {
+            TipoPreguntaOnboarding esperado = destino.parteDeLaMeta().orElseThrow() == DestinoDeRespuesta.ParteDeLaMeta.UNIDAD
+                    ? TipoPreguntaOnboarding.TEXTO : TipoPreguntaOnboarding.NUMERO;
+            if (tipo != esperado) {
+                throw new IllegalArgumentException("«" + destino.etiqueta() + "» se responde con "
+                        + (esperado == TipoPreguntaOnboarding.NUMERO ? "un número" : "un texto corto"));
+            }
         }
         destino.valoresPermitidos().ifPresent(permitidos -> {
             if (tipo != TipoPreguntaOnboarding.SELECCION_UNICA) {

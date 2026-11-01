@@ -2,6 +2,7 @@ package com.renaser.os.onboarding.domain.model.diagnostico;
 
 import com.renaser.os.onboarding.domain.model.respuesta.Respuesta;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.ResolverStyle;
@@ -12,6 +13,9 @@ import java.util.Set;
 
 /** Qué respuestas acepta cada tipo de pregunta del diagnóstico y cuándo cuenta una como respondida. Sin Spring. */
 public final class ReglasDeRespuesta {
+
+    /** Lo que cabe en {@code numeric(14, 2)} de las rocas: por debajo de mil millones de millones. */
+    static final BigDecimal TOPE_DE_UNA_META = new BigDecimal("1000000000000");
 
     private static final DateTimeFormatter FECHA = DateTimeFormatter.ofPattern("dd/MM/uuuu").withResolverStyle(ResolverStyle.STRICT);
 
@@ -30,7 +34,7 @@ public final class ReglasDeRespuesta {
         }
         return switch (p.tipo()) {
             case TEXTO, AREA_TEXTO -> texto(p, r);
-            case NUMERO -> numero(r);
+            case NUMERO -> numero(p, r);
             case FECHA -> fecha(r);
             case SELECCION_UNICA -> unica(p, r);
             case SELECCION_MULTIPLE -> multiple(p, r);
@@ -83,9 +87,29 @@ public final class ReglasDeRespuesta {
         return new RespuestaEntrante(r.preguntaId(), t, null, null, null, null);
     }
 
-    private static RespuestaEntrante numero(RespuestaEntrante r) {
+    private static RespuestaEntrante numero(PreguntaDelDiagnostico p, RespuestaEntrante r) {
         requerirSolo(r, false, true, false, false, false);
+        if (p.alimenta() != null && p.alimenta().esParteDeUnaMeta()) {
+            validarNumeroDeUnaMeta(p.alimenta(), r.valorNumero());
+        }
         return new RespuestaEntrante(r.preguntaId(), null, r.valorNumero(), null, null, null);
+    }
+
+    /**
+     * La meta y el punto de partida de un objetivo (spec 026): cero o más y que quepan en la columna (14 cifras con 2 decimales). Los de Relaciones son una
+     * calificación del 1 al 10 y van enteros, como la escala del Mapa que reemplazan.
+     */
+    private static void validarNumeroDeUnaMeta(DestinoDeRespuesta destino, BigDecimal valor) {
+        if (valor.signum() < 0) {
+            throw new IllegalArgumentException("«" + destino.etiqueta() + "» no puede ser negativo");
+        }
+        if (valor.compareTo(TOPE_DE_UNA_META) >= 0) {
+            throw new IllegalArgumentException("«" + destino.etiqueta() + "» es demasiado grande");
+        }
+        if (destino.ejeDeLaMeta().orElse(null) == EjeDelDiagnostico.RELACIONES
+                && (valor.compareTo(BigDecimal.ONE) < 0 || valor.compareTo(BigDecimal.TEN) > 0 || valor.stripTrailingZeros().scale() > 0)) {
+            throw new IllegalArgumentException("«" + destino.etiqueta() + "» es un número entero del 1 al 10");
+        }
     }
 
     private static RespuestaEntrante fecha(RespuestaEntrante r) {

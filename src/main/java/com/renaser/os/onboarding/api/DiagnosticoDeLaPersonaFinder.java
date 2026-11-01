@@ -2,6 +2,7 @@ package com.renaser.os.onboarding.api;
 
 import com.renaser.os.shared.domain.UserId;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 
@@ -83,6 +84,15 @@ public interface DiagnosticoDeLaPersonaFinder {
         }
     }
 
-    record ObjetivoPreparado(String eje, String texto) {
+    /** {@code meta} es {@code null} cuando no respondió la parte medible (el objetivo vale en palabras). */
+    record ObjetivoPreparado(String eje, String texto, MetaPreparada meta) {
+
+        public ObjetivoPreparado(String eje, String texto) {
+            this(eje, texto, null);
+        }
+    }
+
+    /** A dónde quiere llegar, desde dónde parte y en qué unidad (spec 026). En Relaciones la unidad es la escala «/10». */
+    record MetaPreparada(BigDecimal meta, BigDecimal partida, String unidad) {
     }
 }

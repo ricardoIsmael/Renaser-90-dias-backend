@@ -9,6 +9,7 @@ import com.renaser.os.rocks.application.ports.out.participante.ConsultarProgreso
 import com.renaser.os.rocks.application.ports.out.rocamaestra.LoadRocaMaestraPort;
 import com.renaser.os.rocks.application.ports.out.rocamensual.LoadRocaMensualPort;
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
+import com.renaser.os.rocks.domain.model.rocamaestra.OrigenDelObjetivo;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestra;
 import com.renaser.os.rocks.domain.model.rocamensual.DatosDelEje;
 import com.renaser.os.rocks.domain.model.rocamensual.ObjetivoDelMes;
@@ -124,6 +125,11 @@ public class ObjetivoDelMesService implements ConsultarObjetivoDelMesUseCase {
      * viven enteros en el Mapa.
      */
     private static DatosDelEje datosDe(RocaMaestra maestra, MedicionDelParticipante medicion) {
+        /* Spec 026: el objetivo que nacio del diagnostico trae su propia meta medible (a donde llegar, desde donde parte, en que unidad); no hay Mapa del que
+           leer que se mide. Sin meta declarada sigue el camino de siempre y queda «sin cifra». */
+        if (maestra.origen() == OrigenDelObjetivo.DIAGNOSTICO && maestra.tieneMeta()) {
+            return DatosDelEje.delObjetivo(maestra.eje(), maestra.meta());
+        }
         return switch (maestra.eje()) {
             case CUERPO -> DatosDelEje.deSalud(maestra.meta(), medicion.saludTipo(), medicion.saludUnidad());
             case TRABAJO -> DatosDelEje.deNegocio(maestra.meta(), medicion.negocioTipo(), medicion.negocioPeriodo());

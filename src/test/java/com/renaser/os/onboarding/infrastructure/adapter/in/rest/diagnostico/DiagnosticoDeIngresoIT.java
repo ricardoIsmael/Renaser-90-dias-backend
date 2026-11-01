@@ -64,10 +64,10 @@ class DiagnosticoDeIngresoIT {
         String aprendiz = sesion(aprendizId, "APRENDIZ", true);
         String mentor = sesion(UUID.randomUUID(), "MENTOR", false);
 
-        // 1. El borrador sembrado: portada y seis secciones, 31 preguntas; no se puede publicar con la declaración de relleno
+        // 1. El borrador sembrado: portada y seis secciones, 39 preguntas (las 31 del formulario del dueño y las 8 de la meta medible); no se puede publicar con la declaración de relleno
         JsonNode borrador = ok(pedir("GET", ADMIN, admin, null));
         assertThat(borrador.get("secciones")).hasSize(7);
-        assertThat(borrador.get("totales").get("preguntas").asInt()).isEqualTo(31);
+        assertThat(borrador.get("totales").get("preguntas").asInt()).isEqualTo(39);
         assertThat(borrador.get("puedePublicar").get("ok").asBoolean()).isFalse();
         assertThat(borrador.get("publicada").isNull()).isTrue();
         assertThat(pedir("POST", ADMIN + "/publicar", admin, Map.of("versionBase", 0)).statusCode()).isEqualTo(400);
@@ -128,8 +128,25 @@ class DiagnosticoDeIngresoIT {
             assertThat(roca.get("origin").asText()).isEqualTo("DIAGNOSTICO");
             assertThat(roca.get("confirmed").asBoolean()).isFalse();
         });
+        // ...con la meta medible que declaró en el diagnóstico: Cuerpo de 92 a 85 kg, Negocio de 10 000 a 15 000 soles al mes, Relaciones de 5 a 8 sobre 10
+        Map<String, JsonNode> porEje = new java.util.HashMap<>();
+        rocas.forEach(roca -> porEje.put(roca.get("eje").asText(), roca));
+        assertThat(porEje.get("CUERPO").get("meta").decimalValue()).isEqualByComparingTo("85");
+        assertThat(porEje.get("CUERPO").get("lineaBase").decimalValue()).isEqualByComparingTo("92");
+        assertThat(porEje.get("CUERPO").get("unidad").asText()).isEqualTo("kg");
+        assertThat(porEje.get("TRABAJO").get("meta").decimalValue()).isEqualByComparingTo("15000");
+        assertThat(porEje.get("TRABAJO").get("unidad").asText()).isEqualTo("S/ al mes");
+        assertThat(porEje.get("RELACIONES").get("meta").decimalValue()).isEqualByComparingTo("8");
+        assertThat(porEje.get("RELACIONES").get("unidad").asText()).isEqualTo("/10");
+
+        // ...y con ella el plan mensual saca la cifra del mes
+        for (JsonNode plan : ok(pedir("GET", "/api/v1/rocks/monthly/plan", aprendiz, null))) {
+            assertThat(plan.get("meses").get(0).get("estado").asText()).as(plan.get("eje").asText()).isEqualTo("CON_CIFRA");
+        }
+
         JsonNode confirmada = ok(pedir("PUT", "/api/v1/rocks/master/CUERPO", aprendiz, Map.of("objetivo", "Entrenar cuatro días por semana")));
         assertThat(confirmada.get("confirmed").asBoolean()).isTrue();
+        assertThat(confirmada.get("meta").decimalValue()).as("confirmar solo con el texto no borra la meta").isEqualByComparingTo("85");
         assertThat(confirmada.get("objetivo").asText()).isEqualTo("Entrenar cuatro días por semana");
         HttpResponse<String> fijo = pedir("PUT", "/api/v1/rocks/master/CUERPO", aprendiz, Map.of("objetivo", "Otra cosa"));
         assertThat(fijo.statusCode()).isEqualTo(409);
@@ -162,8 +179,8 @@ class DiagnosticoDeIngresoIT {
                 Map<String, Object> r = new java.util.LinkedHashMap<>();
                 r.put("preguntaId", p.get("id").asInt());
                 switch (p.get("tipo").asText()) {
-                    case "TEXTO", "AREA_TEXTO" -> r.put("valorTexto", "Respuesta de prueba");
-                    case "NUMERO" -> r.put("valorNumero", 34);
+                    case "TEXTO", "AREA_TEXTO" -> r.put("valorTexto", textoDeLaMeta(p));
+                    case "NUMERO" -> r.put("valorNumero", numeroDeLaMeta(p));
                     case "SELECCION_UNICA" -> r.put("valorTexto", valorDeLaOpcion(p));
                     case "CUADRICULA" -> r.put("valorJson", filasConPuntaje(p));
                     case "CASILLA" -> r.put("valorBooleano", true);
@@ -175,6 +192,32 @@ class DiagnosticoDeIngresoIT {
             }
         }
         return respuestas;
+    }
+
+    /** La unidad de la meta lleva una unidad de verdad (kg, soles); el resto, un texto cualquiera. */
+    private static String textoDeLaMeta(JsonNode p) {
+        return switch (destinoDe(p)) {
+            case "UNIDAD_CUERPO" -> "kg";
+            case "UNIDAD_NEGOCIO" -> "S/ al mes";
+            default -> "Respuesta de prueba";
+        };
+    }
+
+    /** Cuerpo: de 92 a 85 kg; Negocio: de 10 000 a 15 000 soles al mes; Relaciones: de 5 a 8 sobre 10. Cualquier otro número: la edad. */
+    private static int numeroDeLaMeta(JsonNode p) {
+        return switch (destinoDe(p)) {
+            case "PARTIDA_CUERPO" -> 92;
+            case "META_CUERPO" -> 85;
+            case "PARTIDA_NEGOCIO" -> 10000;
+            case "META_NEGOCIO" -> 15000;
+            case "PARTIDA_RELACIONES" -> 5;
+            case "META_RELACIONES" -> 8;
+            default -> 34;
+        };
+    }
+
+    private static String destinoDe(JsonNode p) {
+        return p.get("alimenta").isNull() ? "" : p.get("alimenta").asText();
     }
 
     private static String valorDeLaOpcion(JsonNode p) {

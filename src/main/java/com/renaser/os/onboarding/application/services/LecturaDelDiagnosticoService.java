@@ -83,8 +83,13 @@ public class LecturaDelDiagnosticoService implements DiagnosticoDeLaPersonaFinde
         }
         ObjetivosDelDiagnostico nacidos = ObjetivosDelDiagnostico.de(vigente.fichaDe(persona, estado.get().fichaVersion()),
                 vigente.respuestasPorPregunta(persona));
-        return new ObjetivosPreparados(nacidos.objetivos().stream().map(o -> new ObjetivoPreparado(o.eje().name(), o.texto())).toList(),
+        return new ObjetivosPreparados(nacidos.objetivos().stream().map(o -> new ObjetivoPreparado(o.eje().name(), o.texto(), metaDe(o))).toList(),
                 nacidos.prioridad() == null ? null : nacidos.prioridad().name(), nacidos.primeraAccion());
+    }
+
+    private static MetaPreparada metaDe(ObjetivosDelDiagnostico.ObjetivoPorEje objetivo) {
+        var meta = objetivo.meta();
+        return meta == null ? null : new MetaPreparada(meta.meta(), meta.partida(), meta.unidad());
     }
 
     @Override

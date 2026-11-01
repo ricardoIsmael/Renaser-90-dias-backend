@@ -98,7 +98,16 @@ public record RocaMaestra(RocaMaestraId id, UserId participanteId, EjeObjetivo e
      * confirmarlo queda fijo como cualquier otro. Es cualitativo (sin meta numérica): el diagnóstico pregunta en palabras.
      */
     public static RocaMaestra delDiagnostico(RocaMaestraId id, UserId participanteId, EjeObjetivo eje, String objetivo, Instant ahora) {
-        return new RocaMaestra(id, participanteId, eje, objetivo, null, ahora, ahora, OrigenDelObjetivo.DIAGNOSTICO, null);
+        return delDiagnostico(id, participanteId, eje, objetivo, null, ahora);
+    }
+
+    /**
+     * Igual, con la meta medible que la persona declaró en el diagnóstico (a dónde llegar, desde dónde parte, en qué unidad). Con ella el plan mensual saca la
+     * cifra del mes; sin ella ({@code null}) el objetivo vale en palabras.
+     */
+    public static RocaMaestra delDiagnostico(RocaMaestraId id, UserId participanteId, EjeObjetivo eje, String objetivo, MetaCuantitativa meta,
+                                             Instant ahora) {
+        return new RocaMaestra(id, participanteId, eje, objetivo, meta, ahora, ahora, OrigenDelObjetivo.DIAGNOSTICO, null);
     }
 
     /** {@code true} mientras la persona no confirma un objetivo que nació del diagnóstico. */
@@ -138,7 +147,8 @@ public record RocaMaestra(RocaMaestraId id, UserId participanteId, EjeObjetivo e
      * identidad y la fecha de creación, para que lo que ya cuelgue de la roca (objetivos del mes, semanales, acciones) siga apuntando a ella.
      */
     private RocaMaestra confirmadaConLaDefinicion(String objetivoPedido, MetaCuantitativa metaPedida, Instant ahora) {
-        return new RocaMaestra(id, participanteId, eje, objetivoPedido, metaPedida, creadoEn, ahora, origen, ahora);
+        /* Confirmar con solo el texto (lo que manda la hoja de Plan) no borra la meta que la persona declaró en el diagnóstico. */
+        return new RocaMaestra(id, participanteId, eje, objetivoPedido, metaPedida != null ? metaPedida : meta, creadoEn, ahora, origen, ahora);
     }
 
     /**

@@ -136,6 +136,28 @@ class PlantillaDeImportacionTest {
     }
 
     @Test
+    @DisplayName("la meta, la unidad y el punto de partida se importan y se exportan con su nombre; con el tipo equivocado se rechazan")
+    void destinosDeLaMeta() {
+        LecturaDeImportacion lectura = leer(String.join("\n",
+                "A,p1,¿En qué unidad?,,Texto corto,No,,,,Unidad de Cuerpo,",
+                "A,p2,¿Desde dónde partes?,,Número,No,,,,Punto de partida de Cuerpo,",
+                "A,p3,¿A cuánto quieres llegar?,,Número,No,,,,Meta de Cuerpo,",
+                "A,p4,¿A cuánto llegas en Relaciones?,,Texto corto,No,,,,Meta de Relaciones,"));
+
+        assertThat(porClave(lectura, "p1").pregunta().alimenta()).isEqualTo(DestinoDeRespuesta.UNIDAD_CUERPO);
+        assertThat(porClave(lectura, "p2").pregunta().alimenta()).isEqualTo(DestinoDeRespuesta.PARTIDA_CUERPO);
+        assertThat(porClave(lectura, "p3").pregunta().alimenta()).isEqualTo(DestinoDeRespuesta.META_CUERPO);
+        assertThat(lectura.errores()).anyMatch(e -> e.fila() == 5 && e.mensaje().contains("número"));
+
+        FichaDelDiagnostico ficha = new FichaDelDiagnostico(List.of(new SeccionDelDiagnostico(1, "s1", "Primera", null, 0, List.of(
+                PreguntaDelDiagnostico.nueva(1, 0, "diag_p1", "¿A cuánto?", null, TipoPreguntaOnboarding.NUMERO, false, null, List.of(), null, null,
+                        DestinoDeRespuesta.META_NEGOCIO, java.util.Set.of(), null)))));
+        LecturaDeImportacion vuelta = PlantillaDeImportacion.leer(PlantillaDeImportacion.exportar(ficha), Map.of());
+        assertThat(vuelta.errores()).isEmpty();
+        assertThat(vuelta.preguntas().get(0).pregunta().alimenta()).isEqualTo(DestinoDeRespuesta.META_NEGOCIO);
+    }
+
+    @Test
     @DisplayName("exportar y volver a leer da las mismas preguntas")
     void exportarYLeer() {
         PreguntaDelDiagnostico p = PreguntaDelDiagnostico.nueva(1, 0, "diag_p1", "¿Cuál?", "Elige una", TipoPreguntaOnboarding.SELECCION_UNICA, true, null,

@@ -282,6 +282,42 @@ class RocaMaestraServiceTest {
     }
 
     @Test
+    @DisplayName("la meta medible que declaro en el diagnostico viaja con el objetivo")
+    void laMetaDelDiagnosticoViajaConElObjetivo() {
+        UserId id = traineeActivo();
+        when(loadRocaMaestraPort.deParticipante(id)).thenReturn(List.of());
+        when(diagnosticoPort.de(id)).thenReturn(List.of(new ObjetivoDelDiagnostico(EjeObjetivo.CUERPO, "Bajar de peso",
+                new ConsultarObjetivosDelDiagnosticoPort.MetaDelDiagnostico(new BigDecimal("85"), new BigDecimal("92"), "kg"))));
+
+        service.misRocasMaestras(id);
+
+        ArgumentCaptor<RocaMaestra> creada = ArgumentCaptor.forClass(RocaMaestra.class);
+        verify(guardarRocaMaestraPort).guardar(creada.capture());
+        assertThat(creada.getValue().meta().objetivo()).isEqualByComparingTo("85");
+        assertThat(creada.getValue().meta().lineaBase()).isEqualByComparingTo("92");
+        assertThat(creada.getValue().meta().unidad()).isEqualTo("kg");
+        assertThat(creada.getValue().estaPorConfirmar()).isTrue();
+    }
+
+    @Test
+    @DisplayName("una meta que no es meta (igual a donde parte, o una unidad larga) no impide el objetivo: nace en palabras")
+    void unaMetaInvalidaNoImpideElObjetivo() {
+        UserId id = traineeActivo();
+        when(loadRocaMaestraPort.deParticipante(id)).thenReturn(List.of());
+        when(diagnosticoPort.de(id)).thenReturn(List.of(
+                new ObjetivoDelDiagnostico(EjeObjetivo.CUERPO, "Sostener mi peso",
+                        new ConsultarObjetivosDelDiagnosticoPort.MetaDelDiagnostico(new BigDecimal("85"), new BigDecimal("85"), "kg")),
+                new ObjetivoDelDiagnostico(EjeObjetivo.TRABAJO, "Facturar mas",
+                        new ConsultarObjetivosDelDiagnosticoPort.MetaDelDiagnostico(new BigDecimal("15000"), new BigDecimal("10000"), "soles peruanos de facturacion"))));
+
+        service.misRocasMaestras(id);
+
+        ArgumentCaptor<RocaMaestra> creadas = ArgumentCaptor.forClass(RocaMaestra.class);
+        verify(guardarRocaMaestraPort, org.mockito.Mockito.times(2)).guardar(creadas.capture());
+        assertThat(creadas.getAllValues()).allSatisfy(r -> assertThat(r.tieneMeta()).isFalse());
+    }
+
+    @Test
     @DisplayName("con las tres rocas ya creadas ni siquiera se le pregunta al diagnostico")
     void conLasTresNoSePregunta() {
         UserId id = traineeActivo();
