@@ -573,7 +573,7 @@ class PublicacionMuroServiceTest {
     @DisplayName("feed(): cuenta SUSPENDIDA -> 403, nunca consulta el feed")
     void feedConActorSuspendidoFalla() {
         assertThatThrownBy(() -> service.feed(suspendido, null, null, null)).isInstanceOf(NotAuthorizedException.class);
-        verify(loadPublicacionPort, never()).feed(any(), anyInt(), any());
+        verify(loadPublicacionPort, never()).feed(any(), anyInt(), any(), any());
     }
 
     @Test
@@ -677,7 +677,7 @@ class PublicacionMuroServiceTest {
     @DisplayName("ultimoAutor(): cuenta SUSPENDIDA -> 403, no filtra el nombre del ultimo autor")
     void ultimoAutorConActorSuspendidoFalla() {
         assertThatThrownBy(() -> service.ultimoAutor(suspendido)).isInstanceOf(NotAuthorizedException.class);
-        verify(loadPublicacionPort, never()).ultimaVisible();
+        verify(loadPublicacionPort, never()).ultimaVisible(any());
     }
 
     @Test
