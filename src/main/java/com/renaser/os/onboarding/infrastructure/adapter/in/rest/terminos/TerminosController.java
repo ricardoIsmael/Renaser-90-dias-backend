@@ -46,7 +46,12 @@ public class TerminosController {
         }
 
         private static String pendiente(QuePideLaAceptacion pide) {
-            return pide == QuePideLaAceptacion.NADA ? "NONE" : pide.name();
+            return switch (pide) {
+                case NADA -> "NONE";
+                case PRIMERA_VEZ -> "FIRST_TIME";
+                case NUEVA_VERSION -> "NEW_VERSION";
+                case PRIMERA_EN_LA_FORMACION -> "FIRST_IN_FORMATION";
+            };
         }
     }
 

@@ -222,7 +222,8 @@ class TerminosEditablesIT {
 
         // el borrador igual a lo vigente: sin cambios
         JsonNode vigente = json.readTree(paraLeer(enviar("GET", "/api/v1/admin/terms/ESCUELA", admin, null))).get("current");
-        assertThat(guardar(admin, "ESCUELA", vigente.get("title").asText(), vigente.get("clauses"), vigente.get("checkboxText").asText(), 1).statusCode()).isEqualTo(200);
+        assertThat(guardar(admin, "ESCUELA", vigente.get("title").asText(), vigente.get("introduction").asText(), vigente.get("clauses"),
+                vigente.get("checkboxText").asText(), 1).statusCode()).isEqualTo(200);
         assertThat(enviar("POST", "/api/v1/admin/terms/ESCUELA/publish", admin, Map.of("asksNewAcceptance", false, "baseNumber", 1)).statusCode()).as("sin cambios").isEqualTo(409);
 
         // una cláusula vacía se guarda pero no se publica
@@ -390,11 +391,16 @@ class TerminosEditablesIT {
     }
 
     private HttpResponse<String> guardar(String sesion, String formacion, String titulo, Iterable<?> clausulas, String casilla, Integer base) throws Exception {
+        return guardar(sesion, formacion, titulo, "", clausulas, casilla, base);
+    }
+
+    private HttpResponse<String> guardar(String sesion, String formacion, String titulo, String introduccion, Iterable<?> clausulas, String casilla, Integer base)
+            throws Exception {
         List<Object> lista = new ArrayList<>();
         clausulas.forEach(lista::add);
         java.util.HashMap<String, Object> cuerpo = new java.util.HashMap<>();
         cuerpo.put("title", titulo);
-        cuerpo.put("introduction", "");
+        cuerpo.put("introduction", introduccion);
         cuerpo.put("clauses", lista.stream().map(c -> c instanceof JsonNode n ? n.asText() : String.valueOf(c)).toList());
         cuerpo.put("checkboxText", casilla);
         cuerpo.put("baseNumber", base);
