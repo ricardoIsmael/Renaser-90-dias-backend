@@ -62,7 +62,7 @@ public class SemanaDePersonaService implements ConsultarSemanaDePersonaUseCase {
     public SemanaDeLaPersona semanaDe(ConsultaSemanaDePersona consulta) {
         UserRole rol = acceso.requireLiderazgoActivo(consulta.actorId());
         Instant ahora = clock.now();
-        GrupoAcompanado grupo = personas.requireGrupoConMentor(consulta.grupoId(), ahora);
+        GrupoAcompanado grupo = personas.requireGrupoConMentor(consulta.actorId(), consulta.grupoId(), ahora);
         Miembro miembro = personas.requireMiembro(grupo, UserId.of(consulta.personaId()), ahora);
         return leerYRegistrar(consulta.actorId(), rol, Mirada.deUnGrupo(miembro, grupo), consulta.semanaHasta(), ahora);
     }
@@ -72,7 +72,7 @@ public class SemanaDePersonaService implements ConsultarSemanaDePersonaUseCase {
     public SemanaDeLaPersona semanaDeUnaPersona(ConsultaSemanaDeUnaPersona consulta) {
         UserRole rol = acceso.requireLiderazgoActivo(consulta.actorId());
         Instant ahora = clock.now();
-        Mirada mirada = programa.mirar(UserId.of(consulta.personaId()), ahora);
+        Mirada mirada = programa.mirar(consulta.actorId(), UserId.of(consulta.personaId()), ahora);
         return leerYRegistrar(consulta.actorId(), rol, mirada, consulta.semanaHasta(), ahora);
     }
 

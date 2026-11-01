@@ -1,6 +1,8 @@
 package com.renaser.os.users.domain.model.participante;
 
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.DuracionDelPrograma;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FasePrograma;
 import lombok.AccessLevel;
@@ -43,7 +45,8 @@ import java.util.UUID;
 @EqualsAndHashCode(of = "participanteId")
 public final class ParticipacionPrograma {
 
-    private static final int DURACION_PROGRAMA_DIAS = 90;
+    /** La duración de siempre: la de las filas anteriores a las formaciones y la de las altas que no la dicen (Escuela). */
+    private static final int DURACION_PROGRAMA_DIAS = DuracionDelPrograma.POR_DEFECTO;
     /** Mismo default que la columna `participantes_programa.timezone` del baseline. */
     private static final ZoneId ZONA_POR_DEFECTO = ZoneId.of("America/Lima");
 
@@ -66,7 +69,7 @@ public final class ParticipacionPrograma {
     /** Maximo de dias tras firmar Terminos que el aprendiz puede esperar para elegir
      * su Dia 1 (D-66): hoy, +1, +2 o +3 — 4 opciones, nunca "sin elegir". */
     private static final int MAX_DIAS_ESPERA_ACTIVACION = 3;
-    /** Extremos de {@link #fijarDia} (D-194): ni 0 ni 90 se fijan a mano. */
+    /** Extremos de {@link #fijarDia} (D-194): ni 0 ni el último día se fijan a mano. {@code ULTIMO_DIA_AJUSTABLE} es el de la Escuela (89); el real de cada persona es su duración − 1. */
     public static final int PRIMER_DIA_AJUSTABLE = 1;
     public static final int ULTIMO_DIA_AJUSTABLE = 89;
     /** Mensaje del 409 de {@link #fijarDia} antes del Dia 1 (D-195); lo lee tal cual el panel. */
@@ -81,7 +84,7 @@ public final class ParticipacionPrograma {
     private LocalDate fechaInicio;
     private Instant programaActivadoEn;
     private ZoneId timezone;
-    /** `programa_completado` — la graduacion, ver {@link #graduarSiLlegoAlDiaNoventa}. */
+    /** `programa_completado` — la graduacion, ver {@link #graduarSiLlegoAlUltimoDia}. */
     private boolean programaCompletado;
     /** `dia_post_programa` — dias vividos DESPUES del dia 90. Queda en 0 al graduarse
      * (regla confirmada 2026-09-14) y hoy nadie lo avanza: cuando exista el
@@ -96,7 +99,7 @@ public final class ParticipacionPrograma {
     /** `nombre_reto_personal` — self-editable via {@link #renombrarRetoPersonal}. */
     private String nombreRetoPersonal;
     /** `programa_completado_en` — ver docs/FEATURE_POST_PROGRAM.md. Lo escribe
-     * {@link #graduarSiLlegoAlDiaNoventa}, desde el barrido del reloj, una sola vez.
+     * {@link #graduarSiLlegoAlUltimoDia}, desde el barrido del reloj, una sola vez.
      * (Hasta el 2026-09-15 este javadoc decia "ningun caso de uso marca la graduacion
      * hoy": era cierto — los tres campos existian sin un solo escritor.) */
     private Instant programaCompletadoEn;
@@ -112,6 +115,10 @@ public final class ParticipacionPrograma {
      * anterior sin castigarle el puntaje ya ganado); negativo = se lo ADELANTA. Es el
      * unico knob del reloj: {@link #fijarDia} no escribe el dia, escribe este ajuste. */
     private int diasAjuste;
+    /** La formación en la que hace su programa (V125, spec 022). Un aprendiz pertenece a una sola. */
+    private Formacion formacion;
+    /** SU duración en días (90 o 365): tope del día y día de la graduación. Cambiar el catálogo no la mueve. */
+    private int duracionDias;
 
     /**
      * Alta de "seguimiento personal" (Habitos/Rocas opcional para staff — MENTOR,
@@ -122,11 +129,18 @@ public final class ParticipacionPrograma {
      * 'America/Lima' por defecto.
      */
     public static ParticipacionPrograma activarSeguimientoPersonal(UserId participanteId, Clock clock) {
+        return activarSeguimientoPersonal(participanteId, clock, Formacion.POR_DEFECTO, DURACION_PROGRAMA_DIAS);
+    }
+
+    /** El seguimiento personal en la formación en la que trabaja la persona (spec 022, Q9-A). */
+    public static ParticipacionPrograma activarSeguimientoPersonal(UserId participanteId, Clock clock, Formacion formacion,
+                                                                  int duracionDias) {
         Objects.requireNonNull(participanteId, "participanteId es obligatorio");
         Instant now = clock.now();
         return new ParticipacionPrograma(participanteId, null, null, 1, FasePrograma.initial(),
                 hoyDelParticipante(clock),
-                now, ZONA_POR_DEFECTO, false, 0, now, now, null, null, null, null, 0);
+                now, ZONA_POR_DEFECTO, false, 0, now, now, null, null, null, null, 0,
+                Objects.requireNonNull(formacion, "formacion es obligatoria"), DuracionDelPrograma.validar(duracionDias));
     }
 
     /**
@@ -139,7 +153,13 @@ public final class ParticipacionPrograma {
      * de inicio = manana (no hoy), fase inicial, sin mentor ni celula todavia.
      */
     public static ParticipacionPrograma inscribirTraineeAprobado(UserId participanteId, Clock clock) {
-        return pendienteDeElegirDiaUno(participanteId, clock);
+        return pendienteDeElegirDiaUno(participanteId, clock, Formacion.POR_DEFECTO, DURACION_PROGRAMA_DIAS);
+    }
+
+    /** Igual que {@link #inscribirTraineeAprobado(UserId, Clock)} pero en la formación y con la duración que Administración eligió al aceptarlo (spec 025). */
+    public static ParticipacionPrograma inscribirTraineeAprobado(UserId participanteId, Clock clock,
+                                                                 Formacion formacion, int duracionDias) {
+        return pendienteDeElegirDiaUno(participanteId, clock, formacion, duracionDias);
     }
 
     /**
@@ -155,15 +175,23 @@ public final class ParticipacionPrograma {
      * llaman los APK 1.5.0 y anteriores.
      */
     public static ParticipacionPrograma inscribirPersonalSinActivar(UserId participanteId, Clock clock) {
-        return pendienteDeElegirDiaUno(participanteId, clock);
+        return pendienteDeElegirDiaUno(participanteId, clock, Formacion.POR_DEFECTO, DURACION_PROGRAMA_DIAS);
     }
 
-    private static ParticipacionPrograma pendienteDeElegirDiaUno(UserId participanteId, Clock clock) {
+    /** El personal elige su Día 1 en la formación en la que trabaja (Q9-A) y con la duración que esa formación ofrece. */
+    public static ParticipacionPrograma inscribirPersonalSinActivar(UserId participanteId, Clock clock,
+                                                                    Formacion formacion, int duracionDias) {
+        return pendienteDeElegirDiaUno(participanteId, clock, formacion, duracionDias);
+    }
+
+    private static ParticipacionPrograma pendienteDeElegirDiaUno(UserId participanteId, Clock clock,
+                                                                 Formacion formacion, int duracionDias) {
         Objects.requireNonNull(participanteId, "participanteId es obligatorio");
+        Objects.requireNonNull(formacion, "formacion es obligatoria");
         Instant now = clock.now();
         return new ParticipacionPrograma(participanteId, null, null, 0, FasePrograma.initial(),
                 hoyDelParticipante(clock).plusDays(1), null, ZONA_POR_DEFECTO, false, 0, now, now, null,
-                null, null, null, 0);
+                null, null, null, 0, formacion, DuracionDelPrograma.validar(duracionDias));
     }
 
     /** El día en que vive la cuenta de prueba de «ver como» con rol aprendiz (D-273): a mitad del programa. */
@@ -190,7 +218,9 @@ public final class ParticipacionPrograma {
         return new ParticipacionPrograma(participanteId, anterior == null ? null : anterior.mentorId,
                 anterior == null ? null : anterior.celulaId, dia, FasePrograma.paraDiaPrograma(dia),
                 hoy.minusDays(dia - 1L), now, ZONA_POR_DEFECTO, false, 0,
-                anterior == null ? now : anterior.creadoEn, now, null, null, null, hoy, 0);
+                anterior == null ? now : anterior.creadoEn, now, null, null, null, hoy, 0,
+                anterior == null ? Formacion.POR_DEFECTO : anterior.formacion,
+                anterior == null ? DURACION_PROGRAMA_DIAS : anterior.duracionDias);
     }
 
     /**
@@ -246,7 +276,7 @@ public final class ParticipacionPrograma {
                 nombreRetoPersonal, programaCompletadoEn, diaProgramaAvanzadoEl, 0);
     }
 
-    /** Solo para el adaptador de persistencia: reconstruye una fila ya existente. */
+    /** Firma de 17 campos (sin formación ni duración): una fila anterior a las formaciones es de la Escuela y dura 90 días. */
     public static ParticipacionPrograma rehydrate(UserId participanteId, UserId mentorId, UUID celulaId,
                                                    int diaPrograma, FasePrograma fase, LocalDate fechaInicio,
                                                    Instant programaActivadoEn, ZoneId timezone,
@@ -254,9 +284,25 @@ public final class ParticipacionPrograma {
                                                    Instant actualizadoEn, TipoMeta tipoMeta,
                                                    String nombreRetoPersonal, Instant programaCompletadoEn,
                                                    LocalDate diaProgramaAvanzadoEl, int diasAjuste) {
+        return rehydrate(participanteId, mentorId, celulaId, diaPrograma, fase, fechaInicio, programaActivadoEn,
+                timezone, programaCompletado, diaPostPrograma, creadoEn, actualizadoEn, tipoMeta,
+                nombreRetoPersonal, programaCompletadoEn, diaProgramaAvanzadoEl, diasAjuste,
+                Formacion.POR_DEFECTO, DURACION_PROGRAMA_DIAS);
+    }
+
+    /** Solo para el adaptador de persistencia: reconstruye una fila ya existente. */
+    public static ParticipacionPrograma rehydrate(UserId participanteId, UserId mentorId, UUID celulaId,
+                                                   int diaPrograma, FasePrograma fase, LocalDate fechaInicio,
+                                                   Instant programaActivadoEn, ZoneId timezone,
+                                                   boolean programaCompletado, int diaPostPrograma, Instant creadoEn,
+                                                   Instant actualizadoEn, TipoMeta tipoMeta,
+                                                   String nombreRetoPersonal, Instant programaCompletadoEn,
+                                                   LocalDate diaProgramaAvanzadoEl, int diasAjuste,
+                                                   Formacion formacion, int duracionDias) {
         return new ParticipacionPrograma(participanteId, mentorId, celulaId, diaPrograma, fase, fechaInicio,
                 programaActivadoEn, timezone, programaCompletado, diaPostPrograma, creadoEn, actualizadoEn,
-                tipoMeta, nombreRetoPersonal, programaCompletadoEn, diaProgramaAvanzadoEl, diasAjuste);
+                tipoMeta, nombreRetoPersonal, programaCompletadoEn, diaProgramaAvanzadoEl, diasAjuste,
+                formacion, duracionDias);
     }
 
     /**
@@ -267,7 +313,7 @@ public final class ParticipacionPrograma {
      * del baseline, que ignora el ajuste; manda este metodo.
      */
     public LocalDate fechaGraduacionEsperada() {
-        return fechaInicio.plusDays(DURACION_PROGRAMA_DIAS + (long) diasAjuste);
+        return fechaInicio.plusDays(duracionDias + (long) diasAjuste);
     }
 
     /**
@@ -310,7 +356,7 @@ public final class ParticipacionPrograma {
      * incrementaba: una cuenta no se puede "atrasar" por una corrida que no ocurrio.
      */
     public int diaProgramaDerivado(LocalDate hoyEnZonaParticipante) {
-        return diaProgramaDerivado(fechaInicio, hoyEnZonaParticipante, diasAjuste, estaActivado());
+        return diaProgramaDerivado(fechaInicio, hoyEnZonaParticipante, diasAjuste, estaActivado(), duracionDias);
     }
 
     /**
@@ -327,12 +373,20 @@ public final class ParticipacionPrograma {
      */
     public static int diaProgramaDerivado(LocalDate fechaInicio, LocalDate hoyEnZonaParticipante,
                                           int diasAjuste, boolean activado) {
+        return diaProgramaDerivado(fechaInicio, hoyEnZonaParticipante, diasAjuste, activado, DURACION_PROGRAMA_DIAS);
+    }
+
+    /**
+     * La misma cuenta, acotada a la duración PROPIA de la persona ({@code duracionDias}: 90 o 365, spec 022) en vez de a un 90 escrito de antemano.
+     */
+    public static int diaProgramaDerivado(LocalDate fechaInicio, LocalDate hoyEnZonaParticipante,
+                                          int diasAjuste, boolean activado, int duracionDias) {
         Objects.requireNonNull(hoyEnZonaParticipante, "hoyEnZonaParticipante es obligatorio");
         if (!activado || fechaInicio == null || fechaInicio.isAfter(hoyEnZonaParticipante)) {
             return 0;
         }
         long transcurridos = ChronoUnit.DAYS.between(fechaInicio, hoyEnZonaParticipante) + 1;
-        return (int) Math.clamp(transcurridos - diasAjuste, 0, DURACION_PROGRAMA_DIAS);
+        return (int) Math.clamp(transcurridos - diasAjuste, 0, duracionDias);
     }
 
     /**
@@ -384,9 +438,10 @@ public final class ParticipacionPrograma {
      * @throws IllegalStateException si la persona todavia no empezo su Dia 1 (409)
      */
     public void fijarDia(int nuevoDia, Clock clock) {
-        if (nuevoDia < PRIMER_DIA_AJUSTABLE || nuevoDia > ULTIMO_DIA_AJUSTABLE) {
+        int ultimoAjustable = duracionDias - 1;
+        if (nuevoDia < PRIMER_DIA_AJUSTABLE || nuevoDia > ultimoAjustable) {
             throw new IllegalArgumentException("El dia del programa se puede fijar entre " + PRIMER_DIA_AJUSTABLE
-                    + " y " + ULTIMO_DIA_AJUSTABLE + " (el 90 gradua y no se fija a mano), recibido: " + nuevoDia);
+                    + " y " + ultimoAjustable + " (el " + duracionDias + " gradua y no se fija a mano), recibido: " + nuevoDia);
         }
         LocalDate hoy = hoyEnMiZona(clock);
         if (!estaActivado() || fechaInicio.isAfter(hoy)) {
@@ -398,7 +453,32 @@ public final class ParticipacionPrograma {
         // D-67: la fase SIEMPRE se deriva del dia, nunca se deja "colgada" del valor
         // anterior — este ajuste manual es justo la via que dejaba una fase vieja
         // conviviendo con un dia nuevo (el bug real de docs/MODULO_PHASECONTRACTS.md §0.2).
-        this.fase = FasePrograma.paraDiaPrograma(nuevoDia);
+        this.fase = FasePrograma.paraDiaPrograma(nuevoDia, duracionDias);
+        this.actualizadoEn = clock.now();
+    }
+
+    /**
+     * Cambia cuánto dura el programa de alguien (spec 025, 025-2 A). <b>Conserva su día</b>: lo derivado de las fechas no se toca y solo se mueve el
+     * último; la fase se recalcula porque sus cortes se estiran con la duración. No se puede si ya terminó (la graduación ya ocurrió) ni bajar la
+     * duración hasta o por debajo del día en que va (se graduaría en el acto o el CHECK de la base lo rechazaría).
+     *
+     * @throws IllegalStateException (409) si ya tiene esa duración, ya terminó, o su día actual no cabe en la nueva
+     */
+    public void cambiarDuracion(int nueva, Clock clock) {
+        DuracionDelPrograma.validar(nueva);
+        if (nueva == duracionDias) {
+            throw new IllegalStateException("Esta persona ya tiene un programa de " + DuracionDelPrograma.etiqueta(nueva) + ".");
+        }
+        if (programaCompletado) {
+            throw new IllegalStateException("Esta persona ya terminó su programa: su duración no se puede cambiar.");
+        }
+        int dia = diaVigente(clock);
+        if (nueva <= dia) {
+            throw new IllegalStateException("Esta persona va en el día " + dia + ": un programa de " + DuracionDelPrograma.etiqueta(nueva)
+                    + " termina antes. Elige una duración mayor al día en que va.");
+        }
+        this.duracionDias = nueva;
+        this.fase = FasePrograma.paraDiaPrograma(dia, nueva);
         this.actualizadoEn = clock.now();
     }
 
@@ -479,13 +559,13 @@ public final class ParticipacionPrograma {
             return false;
         }
         int derivado = diaProgramaDerivado(hoyEnZonaParticipante);
-        boolean graduo = graduarSiLlegoAlDiaNoventa(derivado, clock);
+        boolean graduo = graduarSiLlegoAlUltimoDia(derivado, clock);
         if (derivado == diaPrograma && hoyEnZonaParticipante.equals(diaProgramaAvanzadoEl)) {
             return graduo;
         }
         this.diaPrograma = derivado;
         this.diaProgramaAvanzadoEl = hoyEnZonaParticipante;
-        this.fase = FasePrograma.paraDiaPrograma(derivado);
+        this.fase = FasePrograma.paraDiaPrograma(derivado, duracionDias);
         this.actualizadoEn = clock.now();
         return true;
     }
@@ -514,8 +594,8 @@ public final class ParticipacionPrograma {
      *         guardar la fila aunque el dia ya estuviera en 90 desde antes — que es justamente el
      *         caso de las filas de hoy, con dia 90 y la bandera en falso porque nadie la escribia.
      */
-    private boolean graduarSiLlegoAlDiaNoventa(int diaDerivado, Clock clock) {
-        if (programaCompletado || diaDerivado < DURACION_PROGRAMA_DIAS) {
+    private boolean graduarSiLlegoAlUltimoDia(int diaDerivado, Clock clock) {
+        if (programaCompletado || diaDerivado < duracionDias) {
             return false;
         }
         this.programaCompletado = true;
@@ -567,6 +647,32 @@ public final class ParticipacionPrograma {
 
     public boolean estaActivado() {
         return programaActivadoEn != null;
+    }
+
+    /**
+     * Pasa a la persona a otra formación con la duración que esa formación le ofrece (spec 022, Q1-A): la participación EMPIEZA DE CERO.
+     * Queda como la de un aprendiz recién aprobado —día 0, reloj pausado hasta que elija su nuevo Día 1, fase inicial, sin grupo ni mentor,
+     * sin ajuste de días y sin graduación— y su {@code fechaInicio} vuelve a ser provisional (mañana en su zona, igual que en el alta).
+     *
+     * <p>No borra nada fuera de este agregado: los registros de hábito, evidencias y publicaciones siguen donde estaban, y la foto de lo que
+     * fue la guarda quien traslada ({@code participaciones_anteriores}) ANTES de llamar a este método. Las reglas de cuándo se puede trasladar
+     * son de {@link com.renaser.os.users.domain.model.formacion.ReglasDeTraslado}, no de este método.
+     */
+    public void trasladarA(Formacion destino, int duracion, Clock clock) {
+        this.formacion = Objects.requireNonNull(destino, "destino es obligatorio");
+        this.duracionDias = DuracionDelPrograma.validar(duracion);
+        this.diaPrograma = 0;
+        this.fase = FasePrograma.initial();
+        this.mentorId = null;
+        this.celulaId = null;
+        this.programaActivadoEn = null;
+        this.programaCompletado = false;
+        this.programaCompletadoEn = null;
+        this.diaPostPrograma = 0;
+        this.diasAjuste = 0;
+        this.diaProgramaAvanzadoEl = null;
+        this.fechaInicio = hoyEnMiZona(clock).plusDays(1);
+        this.actualizadoEn = clock.now();
     }
 
     /**

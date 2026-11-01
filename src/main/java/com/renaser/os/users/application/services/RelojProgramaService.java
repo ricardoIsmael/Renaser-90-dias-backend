@@ -15,6 +15,7 @@ import com.renaser.os.users.domain.model.participante.ParticipacionPrograma;
 import com.renaser.os.users.domain.model.user.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,12 +49,29 @@ public class RelojProgramaService
     private final Clock clock;
     private final BloquearActivacionProgramaPort bloquearActivacionProgramaPort;
 
+    private final ProgramaPropioDelPersonal programaPropio;
+
+    /** Firma de antes de las formaciones: el personal que elige su Día 1 lo hace en la Escuela. */
     public RelojProgramaService(RequireActiveUserGuard requireActiveUserGuard,
                                  LoadParticipacionProgramaPort loadParticipacionProgramaPort,
                                  SaveParticipacionProgramaPort saveParticipacionProgramaPort,
                                  ListarParticipantesConProgramaActivoPort listarParticipantesConProgramaActivoPort,
                                  GuardarAvanceDelRelojPort guardarAvanceDelRelojPort, Clock clock,
                                  BloquearActivacionProgramaPort bloquearActivacionProgramaPort) {
+        this(requireActiveUserGuard, loadParticipacionProgramaPort, saveParticipacionProgramaPort,
+                listarParticipantesConProgramaActivoPort, guardarAvanceDelRelojPort, clock, bloquearActivacionProgramaPort,
+                ProgramaPropioDelPersonal.escuela());
+    }
+
+    @Autowired
+    RelojProgramaService(RequireActiveUserGuard requireActiveUserGuard,
+                                 LoadParticipacionProgramaPort loadParticipacionProgramaPort,
+                                 SaveParticipacionProgramaPort saveParticipacionProgramaPort,
+                                 ListarParticipantesConProgramaActivoPort listarParticipantesConProgramaActivoPort,
+                                 GuardarAvanceDelRelojPort guardarAvanceDelRelojPort, Clock clock,
+                                 BloquearActivacionProgramaPort bloquearActivacionProgramaPort,
+                                 ProgramaPropioDelPersonal programaPropio) {
+        this.programaPropio = programaPropio;
         this.requireActiveUserGuard = requireActiveUserGuard;
         this.loadParticipacionProgramaPort = loadParticipacionProgramaPort;
         this.saveParticipacionProgramaPort = saveParticipacionProgramaPort;
@@ -217,6 +235,8 @@ public class RelojProgramaService
         if (!actor.role().can(Permission.TRACK_PROGRAM_AS_STAFF)) {
             return Optional.empty();
         }
-        return Optional.of(ParticipacionPrograma.inscribirPersonalSinActivar(actor.id(), clock));
+        var programa = programaPropio.para(actor.id());
+        return Optional.of(ParticipacionPrograma.inscribirPersonalSinActivar(actor.id(), clock, programa.formacion(),
+                programa.duracionDias()));
     }
 }

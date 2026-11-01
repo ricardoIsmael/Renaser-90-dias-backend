@@ -22,6 +22,7 @@ import com.renaser.os.users.application.ports.out.user.SaveUserPort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequest;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequestId;
+import com.renaser.os.users.domain.model.accountrequest.EleccionDeIngreso;
 import com.renaser.os.users.domain.model.participante.ParticipacionPrograma;
 import com.renaser.os.users.domain.model.user.Email;
 import com.renaser.os.users.domain.model.user.User;
@@ -92,6 +93,12 @@ class AccountRequestServiceTest {
     private IdGenerator idGenerator;
     @Mock
     private com.renaser.os.users.application.ports.in.user.UpdateUserRoleUseCase updateUserRole;
+    @Mock
+    private com.renaser.os.users.application.ports.out.formacion.CatalogoDeFormacionesPort catalogoDeFormaciones;
+    @Mock
+    private com.renaser.os.users.application.ports.out.formacion.FormacionesDelPersonalPort formacionesDelPersonal;
+    @Mock
+    private org.springframework.beans.factory.ObjectProvider<com.renaser.os.users.api.FichaAlAceptar> fichaAlAceptar;
 
     private AccountRequestService service;
 
@@ -99,9 +106,22 @@ class AccountRequestServiceTest {
     void setUp() {
         service = new AccountRequestService(loadAccountRequestPort, saveAccountRequestPort, deleteAccountRequestPort,
                 loadUserPort, saveUserPort, deleteUserPort, saveCredencialPort, saveIdentidadExternaPort,
-                passwordEncoder, saveParticipacionProgramaPort, tokenVerificacionEmailPort,
+                passwordEncoder,
+                new IngresoPorAceptacion(catalogoDeFormaciones, saveParticipacionProgramaPort, formacionesDelPersonal,
+                        fichaAlAceptar, CLOCK),
+                tokenVerificacionEmailPort,
                 limitarSolicitudesResetPort, new RequireActiveUserGuard(loadUserPort),
                 new RequireAdminGuard(loadUserPort), updateUserRole, events, CLOCK, idGenerator);
+        lenient().when(catalogoDeFormaciones.todas()).thenReturn(java.util.List.of(
+                new com.renaser.os.users.api.FormacionConfigurada(com.renaser.os.shared.domain.Formacion.ESCUELA, "Escuela Renaser", "", true,
+                        java.util.List.of(90), 1),
+                new com.renaser.os.users.api.FormacionConfigurada(com.renaser.os.shared.domain.Formacion.DIPLOMADO, "Diplomado Renaser", "", true,
+                        java.util.List.of(90, 365), 1),
+                new com.renaser.os.users.api.FormacionConfigurada(com.renaser.os.shared.domain.Formacion.CERTIFICACION, "Certificación Renaser", "",
+                        true, java.util.List.of(90), 1)));
+        // Decidir una solicitud la lee con candado (spec 025): en estas pruebas es la misma que `byId`.
+        lenient().when(loadAccountRequestPort.byIdParaDecidir(any()))
+                .thenAnswer(inv -> loadAccountRequestPort.byId(inv.getArgument(0)));
         lenient().when(saveAccountRequestPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveUserPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(saveParticipacionProgramaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -367,11 +387,11 @@ class AccountRequestServiceTest {
 
         service.approve(new ApproveAccountRequestCommand(request.id(), actorId, UserRole.TRAINEE_GUIDE));
 
-        var orden = org.mockito.Mockito.inOrder(saveParticipacionProgramaPort, updateUserRole, events);
-        orden.verify(saveParticipacionProgramaPort).save(any());
+        var orden = org.mockito.Mockito.inOrder(updateUserRole, saveParticipacionProgramaPort, events);
         orden.verify(updateUserRole).updateRole(
                 new com.renaser.os.users.application.ports.in.user.UpdateUserRoleUseCase.UpdateUserRoleCommand(
                         request.usuarioId(), UserRole.TRAINEE_GUIDE, actorId));
+        orden.verify(saveParticipacionProgramaPort).save(any());
         orden.verify(events).publishEvent(any(com.renaser.os.users.api.UsuarioRegistradoEvent.class));
     }
 
@@ -572,8 +592,8 @@ class AccountRequestServiceTest {
     void listarAceptaAdminActivo() {
         UserId actorId = id();
         when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
-        when(loadAccountRequestPort.pagina(null, 0, 20)).thenReturn(java.util.List.of());
-        when(loadAccountRequestPort.contar(null)).thenReturn(0L);
+        when(loadAccountRequestPort.pagina(null, null, 0, 20)).thenReturn(java.util.List.of());
+        when(loadAccountRequestPort.contar(null, null)).thenReturn(0L);
 
         var pagina = service.listar(new ListAccountRequestsCommand(actorId, null, 0, 20));
 
@@ -651,7 +671,7 @@ class AccountRequestServiceTest {
         User actor = activo(actorId, UserRole.ADMIN);
         User aprobado = pendienteDeAprobacion(request);
         aprobado.aprobar();
-        request.approve(actor, request.usuarioId(), CLOCK);
+        request.approve(actor, request.usuarioId(), EleccionDeIngreso.anteriorALasFormaciones(), CLOCK);
         when(loadAccountRequestPort.byId(request.id())).thenReturn(Optional.of(request));
         when(loadUserPort.byId(actorId)).thenReturn(Optional.of(actor));
         lenient().when(loadUserPort.byId(request.usuarioId())).thenReturn(Optional.of(aprobado));
@@ -681,5 +701,134 @@ class AccountRequestServiceTest {
 
         assertThat(vista.status()).isEqualTo(com.renaser.os.users.domain.model.accountrequest.AccountRequestStatus.PENDING);
         assertThat(vista.rejectionReason()).isNull();
+    }
+
+    // ─── spec 025: aceptar eligiendo formación, duración, rol y ficha ───────────────────────────────
+
+    private static com.renaser.os.users.domain.model.accountrequest.PedidoDeIngreso pedido(
+            Integer duracion, boolean conDiagnostico, com.renaser.os.shared.domain.Formacion... formaciones) {
+        return new com.renaser.os.users.domain.model.accountrequest.PedidoDeIngreso(java.util.Set.of(formaciones), duracion, conDiagnostico);
+    }
+
+    private AccountRequest aceptarCon(UserId actorId, UserRole rol,
+                                      com.renaser.os.users.domain.model.accountrequest.PedidoDeIngreso pedido) {
+        AccountRequest request = pendiente();
+        when(loadAccountRequestPort.byId(request.id())).thenReturn(Optional.of(request));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+        stubUsuarioPendiente(request);
+        service.approve(new ApproveAccountRequestCommand(request.id(), actorId, rol, null, pedido));
+        return request;
+    }
+
+    @Test
+    @DisplayName("025: un aprendiz del Diplomado de 1 año queda inscrito en el Diplomado a 365 días con el reloj en pausa, y la solicitud recuerda lo elegido")
+    void aprendizDelDiplomadoDeUnAnio() {
+        UserId actorId = id();
+
+        AccountRequest request = aceptarCon(actorId, UserRole.TRAINEE,
+                pedido(365, false, com.renaser.os.shared.domain.Formacion.DIPLOMADO));
+
+        var captor = org.mockito.ArgumentCaptor.forClass(ParticipacionPrograma.class);
+        verify(saveParticipacionProgramaPort).save(captor.capture());
+        assertThat(captor.getValue().formacion()).isEqualTo(com.renaser.os.shared.domain.Formacion.DIPLOMADO);
+        assertThat(captor.getValue().duracionDias()).isEqualTo(365);
+        assertThat(captor.getValue().estaActivado()).as("el reloj queda en pausa hasta elegir su Día 1").isFalse();
+        assertThat(request.eleccion().formaciones()).containsExactly(com.renaser.os.shared.domain.Formacion.DIPLOMADO);
+        assertThat(request.eleccion().duracionElegidaDias()).isEqualTo(365);
+        assertThat(request.eleccion().rol()).isEqualTo(UserRole.TRAINEE);
+        assertThat(request.eleccion().conDiagnostico()).isFalse();
+        verify(formacionesDelPersonal, never()).reemplazar(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("025: el personal queda asignado a todas las formaciones que se marcaron y trabaja en la primera")
+    void elPersonalQuedaEnSusFormaciones() {
+        UserId actorId = id();
+
+        AccountRequest request = aceptarCon(actorId, UserRole.MENTOR, pedido(null, false,
+                com.renaser.os.shared.domain.Formacion.ESCUELA, com.renaser.os.shared.domain.Formacion.DIPLOMADO));
+
+        verify(formacionesDelPersonal).reemplazar(request.usuarioId(),
+                java.util.EnumSet.of(com.renaser.os.shared.domain.Formacion.ESCUELA, com.renaser.os.shared.domain.Formacion.DIPLOMADO),
+                com.renaser.os.shared.domain.Formacion.ESCUELA, actorId);
+        var captor = org.mockito.ArgumentCaptor.forClass(ParticipacionPrograma.class);
+        verify(saveParticipacionProgramaPort).save(captor.capture());
+        assertThat(captor.getValue().formacion()).isEqualTo(com.renaser.os.shared.domain.Formacion.ESCUELA);
+        assertThat(request.eleccion().duracionElegidaDias()).isNull();
+    }
+
+    @Test
+    @DisplayName("025: Administración no recibe formaciones (ve las tres)")
+    void administracionNoRecibeFormaciones() {
+        UserId actorId = id();
+
+        AccountRequest request = aceptarCon(actorId, UserRole.ADMIN, pedido(null, false, com.renaser.os.shared.domain.Formacion.DIPLOMADO));
+
+        verify(formacionesDelPersonal, never()).reemplazar(any(), any(), any(), any());
+        assertThat(request.eleccion().formaciones()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("025: sin diagnóstico no se llama a la ficha; con diagnóstico se llama una vez, con la persona y quien la acepta")
+    void elDiagnosticoSeAsignaAlAceptar() {
+        UserId actorId = id();
+        var ficha = org.mockito.Mockito.mock(com.renaser.os.users.api.FichaAlAceptar.class);
+        when(ficha.hayDiagnosticoPublicado()).thenReturn(true);
+        when(fichaAlAceptar.getIfAvailable()).thenReturn(ficha);
+        when(fichaAlAceptar.getObject()).thenReturn(ficha);
+
+        aceptarCon(actorId, UserRole.TRAINEE, pedido(null, false, com.renaser.os.shared.domain.Formacion.ESCUELA));
+        verify(ficha, never()).conDiagnostico(any(), any());
+
+        AccountRequest conDiagnostico = aceptarCon(actorId, UserRole.MENTOR, pedido(null, true, com.renaser.os.shared.domain.Formacion.ESCUELA));
+        verify(ficha).conDiagnostico(conDiagnostico.usuarioId(), actorId);
+    }
+
+    @Test
+    @DisplayName("025: pedir el diagnóstico sin que la ficha con diagnóstico esté instalada o sin uno publicado FALLA con un aviso (409) y no acepta a nadie")
+    void sinDiagnosticoPublicadoNoSeAcepta() {
+        UserId actorId = id();
+
+        // Hasta integrar la 026 nadie implementa FichaAlAceptar: no puede quedar un «con diagnóstico» que en silencio no hace nada.
+        assertThatThrownBy(() -> aceptarCon(actorId, UserRole.TRAINEE, pedido(null, true, com.renaser.os.shared.domain.Formacion.ESCUELA)))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("diagnóstico");
+
+        var ficha = org.mockito.Mockito.mock(com.renaser.os.users.api.FichaAlAceptar.class);
+        when(ficha.hayDiagnosticoPublicado()).thenReturn(false);
+        when(fichaAlAceptar.getIfAvailable()).thenReturn(ficha);
+        assertThatThrownBy(() -> aceptarCon(actorId, UserRole.TRAINEE, pedido(null, true, com.renaser.os.shared.domain.Formacion.ESCUELA)))
+                .isInstanceOf(IllegalStateException.class);
+        verify(ficha, never()).conDiagnostico(any(), any());
+        verify(saveAccountRequestPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("025: un pedido que no cumple las reglas de su rol falla antes de guardar la solicitud")
+    void unPedidoInvalidoNoGuardaLaSolicitud() {
+        UserId actorId = id();
+
+        assertThatThrownBy(() -> aceptarCon(actorId, UserRole.TRAINEE, pedido(null, false, com.renaser.os.shared.domain.Formacion.DIPLOMADO)))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Elige la duración");
+
+        verify(saveAccountRequestPort, never()).save(any());
+        verify(events, never()).publishEvent(any(com.renaser.os.users.api.UsuarioRegistradoEvent.class));
+    }
+
+    @Test
+    @DisplayName("025: el listado dice quién decidió cada solicitud, con una sola lectura de usuarios")
+    void listarTraeElNombreDeQuienDecidio() {
+        UserId actorId = id();
+        User admin = activo(actorId, UserRole.ADMIN);
+        AccountRequest aceptada = pendiente();
+        aceptada.approve(admin, aceptada.usuarioId(), EleccionDeIngreso.anteriorALasFormaciones(), CLOCK);
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(admin));
+        when(loadAccountRequestPort.pagina(null, com.renaser.os.shared.domain.Formacion.DIPLOMADO, 0, 20)).thenReturn(java.util.List.of(aceptada));
+        when(loadAccountRequestPort.contar(null, com.renaser.os.shared.domain.Formacion.DIPLOMADO)).thenReturn(1L);
+        when(loadUserPort.byIds(java.util.Set.of(actorId))).thenReturn(java.util.List.of(admin));
+
+        var pagina = service.listar(new ListAccountRequestsCommand(actorId, null, com.renaser.os.shared.domain.Formacion.DIPLOMADO, 0, 20));
+
+        assertThat(pagina.nombresDeQuienDecidio()).containsEntry(actorId, admin.fullName());
+        verify(loadUserPort).byIds(any());
     }
 }

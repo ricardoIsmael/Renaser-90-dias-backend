@@ -1,5 +1,6 @@
 package com.renaser.os.users.infrastructure.adapter.out.persistence.accountrequest;
 
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.application.ports.out.accountrequest.DeleteAccountRequestPort;
 import com.renaser.os.users.application.ports.out.accountrequest.LoadAccountRequestPort;
@@ -10,7 +11,6 @@ import com.renaser.os.users.domain.model.accountrequest.AccountRequestStatus;
 import com.renaser.os.users.domain.model.accountrequest.OrigenSocial;
 import com.renaser.os.users.domain.model.user.Email;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -51,6 +51,11 @@ class AccountRequestPersistenceAdapter implements LoadAccountRequestPort, SaveAc
     }
 
     @Override
+    public Optional<AccountRequest> byIdParaDecidir(AccountRequestId id) {
+        return repository.bloquearPorId(id.value()).map(mapper::toDomain);
+    }
+
+    @Override
     public boolean existePorEmail(Email email) {
         // Email ya normaliza a minusculas en su constructor, que es como se guarda la columna.
         return repository.existsByEmail(email.value());
@@ -67,19 +72,24 @@ class AccountRequestPersistenceAdapter implements LoadAccountRequestPort, SaveAc
         return repository.countByIpSolicitudAndCreadoEnAfter(requestIp, since);
     }
 
-    /** Panel admin de solicitudes de cuenta (gap #9). `statusFilter == null` = cualquier estado. */
+    /** Panel admin de solicitudes de cuenta (gap #9). `statusFilter == null` = cualquier estado; `formacion == null` = de cualquier formación. */
     @Override
-    public List<AccountRequest> pagina(AccountRequestStatus statusFilter, int page, int size) {
-        var pageable = PageRequest.of(page, tamanoAcotado(size), Sort.by(Sort.Direction.DESC, "creadoEn"));
-        var entidades = statusFilter == null
-                ? repository.findAll(pageable).getContent()
-                : repository.findByEstado(mapper.toJpaStatusPublic(statusFilter), pageable);
-        return entidades.stream().map(mapper::toDomain).toList();
+    public List<AccountRequest> pagina(AccountRequestStatus statusFilter, Formacion formacion, int page, int size) {
+        var pageable = PageRequest.of(page, tamanoAcotado(size));
+        return repository.cola(estadoDe(statusFilter), codigoDe(formacion), pageable).stream().map(mapper::toDomain).toList();
     }
 
     @Override
-    public long contar(AccountRequestStatus statusFilter) {
-        return statusFilter == null ? repository.count() : repository.countByEstado(mapper.toJpaStatusPublic(statusFilter));
+    public long contar(AccountRequestStatus statusFilter, Formacion formacion) {
+        return repository.contarCola(estadoDe(statusFilter), codigoDe(formacion));
+    }
+
+    private String estadoDe(AccountRequestStatus status) {
+        return status == null ? null : mapper.toJpaStatusPublic(status).name();
+    }
+
+    private static String codigoDe(Formacion formacion) {
+        return formacion == null ? null : formacion.codigo();
     }
 
     @Override

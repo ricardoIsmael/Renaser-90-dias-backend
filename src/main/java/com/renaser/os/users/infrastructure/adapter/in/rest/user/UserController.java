@@ -17,6 +17,7 @@ import com.renaser.os.users.application.ports.in.user.UpdateMyProfileUseCase;
 import com.renaser.os.users.application.ports.in.user.UpdateMyProfileUseCase.UpdateMyProfileCommand;
 import com.renaser.os.users.application.ports.in.user.UpdateUserRoleUseCase;
 import com.renaser.os.users.application.ports.in.user.UpdateUserRoleUseCase.UpdateUserRoleCommand;
+import com.renaser.os.users.infrastructure.adapter.in.rest.formacion.ArmadorDeLaSesion;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -43,25 +44,27 @@ public class UserController {
     private final UpdateUserRoleUseCase updateUserRoleUseCase;
     private final SolicitarUrlAvatarUseCase solicitarUrlAvatarUseCase;
     private final ConfirmarAvatarUseCase confirmarAvatarUseCase;
+    private final ArmadorDeLaSesion armadorDeLaSesion;
 
     public UserController(GetMyFullProfileUseCase getMyFullProfileUseCase,
                            UpdateMyProfileUseCase updateMyProfileUseCase,
                            InviteAndCreateUserUseCase inviteUseCase, UpdateUserRoleUseCase updateUserRoleUseCase,
                            SolicitarUrlAvatarUseCase solicitarUrlAvatarUseCase,
-                           ConfirmarAvatarUseCase confirmarAvatarUseCase) {
+                           ConfirmarAvatarUseCase confirmarAvatarUseCase, ArmadorDeLaSesion armadorDeLaSesion) {
         this.getMyFullProfileUseCase = getMyFullProfileUseCase;
         this.updateMyProfileUseCase = updateMyProfileUseCase;
         this.inviteUseCase = inviteUseCase;
         this.updateUserRoleUseCase = updateUserRoleUseCase;
         this.solicitarUrlAvatarUseCase = solicitarUrlAvatarUseCase;
         this.confirmarAvatarUseCase = confirmarAvatarUseCase;
+        this.armadorDeLaSesion = armadorDeLaSesion;
     }
 
     @RequiresPermission(value = Permission.USE_APP, scope = "self")
     @SinInterruptor(motivo = "Lectura del perfil propio, que la app usa al entrar; perfil apaga solo la edición")
     @PostMapping("/me")
     public UserResponse me(@ActorAutenticado UserId actor) {
-        return UserResponse.from(getMyFullProfileUseCase.getMyFullProfile(actor));
+        return armadorDeLaSesion.conFormacion(UserResponse.from(getMyFullProfileUseCase.getMyFullProfile(actor)), actor);
     }
 
     @RequiresPermission(value = Permission.USE_APP, scope = "self")

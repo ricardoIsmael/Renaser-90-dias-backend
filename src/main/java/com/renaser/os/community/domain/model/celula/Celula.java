@@ -3,6 +3,7 @@ package com.renaser.os.community.domain.model.celula;
 import com.renaser.os.community.domain.model.acompanamiento.CupoCelula;
 import com.renaser.os.community.domain.model.acompanamiento.TipoCelula;
 import com.renaser.os.community.domain.model.cohorte.CohorteId;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -52,6 +53,8 @@ public final class Celula {
      * de consulta de abajo tienen que responder para ese caso, y no pueden delegar a ciegas.
      */
     private PeriodoGrupo periodo;
+    /** La formación del grupo (V125, spec 022): su mentor y todos sus integrantes son de ella. Un grupo no cambia de formación. */
+    private final Formacion formacion;
 
     /**
      * El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
@@ -67,11 +70,18 @@ public final class Celula {
     /** V48: la misma alta, con el periodo que el administrador escribio. {@code periodo} nulo = sin periodo. */
     public static Celula crear(CelulaId id, String nombre, CohorteId cohorteId, String urlVideollamada,
                                 PeriodoGrupo periodo, Instant ahora) {
+        return crear(id, nombre, cohorteId, urlVideollamada, periodo, Formacion.POR_DEFECTO, ahora);
+    }
+
+    /** Un grupo nuevo nace en una formación (spec 022); sin decirla es de la Escuela, como todo lo anterior. */
+    public static Celula crear(CelulaId id, String nombre, CohorteId cohorteId, String urlVideollamada,
+                                PeriodoGrupo periodo, Formacion formacion, Instant ahora) {
         Objects.requireNonNull(id, "id es obligatorio");
         requireNombreValido(nombre);
         Objects.requireNonNull(cohorteId, "cohorteId es obligatorio");
+        Objects.requireNonNull(formacion, "formacion es obligatoria");
         return new Celula(id, nombre, null, cohorteId, urlVideollamada, null, ahora, ahora,
-                TipoCelula.REGULAR, null, periodo);
+                TipoCelula.REGULAR, null, periodo, formacion);
     }
 
     /**
@@ -98,8 +108,18 @@ public final class Celula {
                                     String urlVideollamada, Instant proximaSesionEn, Instant creadoEn,
                                     Instant actualizadoEn, TipoCelula tipo, Integer capacidadMaxima,
                                     PeriodoGrupo periodo) {
+        return rehydrate(id, nombre, mentorId, cohorteId, urlVideollamada, proximaSesionEn, creadoEn,
+                actualizadoEn, tipo, capacidadMaxima, periodo, Formacion.POR_DEFECTO);
+    }
+
+    /** Solo para el adaptador de persistencia: reconstruye una fila con su formación (V125). */
+    public static Celula rehydrate(CelulaId id, String nombre, UserId mentorId, CohorteId cohorteId,
+                                    String urlVideollamada, Instant proximaSesionEn, Instant creadoEn,
+                                    Instant actualizadoEn, TipoCelula tipo, Integer capacidadMaxima,
+                                    PeriodoGrupo periodo, Formacion formacion) {
         return new Celula(id, nombre, mentorId, cohorteId, urlVideollamada, proximaSesionEn, creadoEn,
-                actualizadoEn, tipo != null ? tipo : TipoCelula.REGULAR, capacidadMaxima, periodo);
+                actualizadoEn, tipo != null ? tipo : TipoCelula.REGULAR, capacidadMaxima, periodo,
+                formacion != null ? formacion : Formacion.POR_DEFECTO);
     }
 
     /**

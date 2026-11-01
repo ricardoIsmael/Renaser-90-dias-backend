@@ -102,7 +102,8 @@ class ComposicionDeCelulaServiceTest {
         service = new ComposicionDeCelulaService(loadCelulaPort, saveCelulaPort, loadAsignacionesPort,
                 saveAsignacionPort, loadPoliticaMentoriaPort, existePerfilMentorPort,
                 consultarCelulaDeParticipantePort, userSummaryFinder,
-                asignacionCelulaPort, consultarCelulas, eventos, CLOCK, idGenerator);
+                asignacionCelulaPort, consultarCelulas, eventos, CLOCK, idGenerator,
+                FormacionDelGrupoDePrueba.permisivo());
         lenient().when(idGenerator.newId()).thenAnswer(inv -> UUID.randomUUID());
         lenient().when(loadPoliticaMentoriaPort.porCohorte(any())).thenReturn(Optional.empty());
         lenient().when(loadAsignacionesPort.porCelula(any())).thenReturn(List.of());
