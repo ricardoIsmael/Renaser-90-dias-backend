@@ -31,7 +31,8 @@
 
 ## Phase 4: Cierre
 
-- [x] T015 Unir los tres frentes en la rama de la app, resolver conflictos de `.maestro/README.md` y correr `tsc` y Jest de lo tocado.
+- [x] T015 Unir los tres frentes en la rama de la app, resolver conflictos de `.maestro/README.md` y correr `tsc` y Jest. Comprobado el 2026-10-31 sobre el árbol final: `tsc --noEmit` sin errores y Jest completo de la app, 563 suites y 6161 pruebas en verde. Las ramas ayudantes `028-alarmas` y `028-mes` ya estaban dentro (cherry-pick; fusionarlas no cambia el árbol) y se borraron con sus worktrees.
 - [x] T016 Entrada fechada 2026-10-31 en `AGENTS.md` de la app (solo suma).
-- [x] T017 `graphify update .` en los dos repos.
+- [x] T017 `graphify update .` en los dos repos (hecho el 2026-10-31 después de la integración final; `graphify-out/` no se versiona).
+- [x] T019 `./mvnw -o verify` completo del backend sobre esta rama, el 2026-10-31 (sin producción, base de Testcontainers): BUILD SUCCESS en 12 min; 7942 pruebas de unidad y 636 de integración, 0 fallos, 0 errores, 0 omitidas (incluye `ArchitectureTest`, las pruebas de declaración de permiso y de funcionalidad y las de las V130 y V131).
 - [ ] T018 (pendiente del dueño / siguiente turno) E2E en el emulador y Maestro de los tres flujos; verificar con `dumpsys alarm` el SC-005. No se hizo: la regla de esta entrega fue no usar el emulador.
