@@ -1,5 +1,7 @@
 package com.renaser.os.plataforma.domain.model.estado;
 
+import com.renaser.os.plataforma.domain.model.catalogo.DefinicionDeFuncionalidad;
+import com.renaser.os.plataforma.domain.model.catalogo.ValorPorDefecto;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
 
@@ -44,9 +46,9 @@ public record EstadoDeFuncionalidad(String clave, boolean prendidaGlobal, Set<Us
         return foto(prendidaGlobal, apagadaPara, aviso);
     }
 
-    /** La misma forma para el estado por defecto de una funcionalidad sin fila. */
-    public static Map<String, Object> porDefectoParaAuditoria(boolean prendida) {
-        return foto(prendida, Set.of(), null);
+    /** La misma forma para el estado por defecto de una funcionalidad sin fila, con los roles para los que nace apagada (spec 034). */
+    public static Map<String, Object> porDefectoParaAuditoria(DefinicionDeFuncionalidad definicion) {
+        return foto(definicion.porDefecto() == ValorPorDefecto.PRENDIDA, definicion.apagadaPorDefectoPara(), null);
     }
 
     /** Sin espacios de más; vacío es «sin aviso» (se muestra el genérico). Más de 200 caracteres es un error. */

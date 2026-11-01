@@ -34,6 +34,8 @@ import java.util.UUID;
 class FuncionalidadCambiadaNotificationListener {
 
     static final String TITULO = "Soporte TI cambió una funcionalidad";
+    /** Cuando lo cambió Administración (spec 034: el interruptor «Código Renaser en las fichas»), el título no puede decir «Soporte TI». */
+    static final String TITULO_DE_ADMINISTRACION = "Se cambió una funcionalidad";
     static final String RUTA_DE_LA_CONSOLA = "/soporte-ti";
     private static final Set<UserRole> ADMINISTRACION = Set.of(UserRole.ADMIN, UserRole.ALCHEMIST);
 
@@ -52,28 +54,29 @@ class FuncionalidadCambiadaNotificationListener {
     void on(FuncionalidadCambiadaEvent evento) {
         UUID origen = UUID.nameUUIDFromBytes(("plataforma:" + evento.clave() + ":" + evento.occurredAt())
                 .getBytes(StandardCharsets.UTF_8));
-        String cuerpo = cuerpo(evento);
+        UserSummary quienLoHizo = evento.actor() == null ? null : usuarios.findById(evento.actor()).orElse(null);
+        String cuerpo = cuerpo(evento, quienLoHizo);
+        String titulo = quienLoHizo != null && quienLoHizo.role() != UserRole.IT_SUPPORT ? TITULO_DE_ADMINISTRACION : TITULO;
         Set<UserId> soporte = new LinkedHashSet<>(participaciones.usuariosActivosConRol(Set.of(UserRole.IT_SUPPORT)));
         for (UserId destinatario : soporte) {
-            emitir.emitir(new EmitirNotificacionCommand(destinatario, TipoNotificacion.OPERACION_PLATAFORMA, TITULO,
+            emitir.emitir(new EmitirNotificacionCommand(destinatario, TipoNotificacion.OPERACION_PLATAFORMA, titulo,
                     cuerpo, RUTA_DE_LA_CONSOLA, origen));
         }
         if (evento.critica() || evento.apagadaParaTodos()) {
             for (UserId destinatario : participaciones.usuariosActivosConRol(ADMINISTRACION)) {
                 if (!soporte.contains(destinatario)) {
                     emitir.emitir(new EmitirNotificacionCommand(destinatario, TipoNotificacion.OPERACION_PLATAFORMA,
-                            TITULO, cuerpo, null, origen));
+                            titulo, cuerpo, null, origen));
                 }
             }
         }
     }
 
     /** «Chat de grupo: Apagada para todos. Lo hizo Ana. Motivo: …». Sin el aviso: eso lo ve la gente en la app. */
-    private String cuerpo(FuncionalidadCambiadaEvent evento) {
+    private String cuerpo(FuncionalidadCambiadaEvent evento, UserSummary actor) {
         String nombre = evento.nombre() == null || evento.nombre().isBlank() ? evento.clave() : evento.nombre();
         String resumen = evento.resumen() == null || evento.resumen().isBlank() ? "cambió" : evento.resumen();
-        String quien = evento.actor() == null ? null : usuarios.findById(evento.actor())
-                .map(UserSummary::fullName).filter(n -> !n.isBlank()).orElse(null);
+        String quien = actor == null || actor.fullName() == null || actor.fullName().isBlank() ? null : actor.fullName();
         StringBuilder texto = new StringBuilder(nombre).append(": ").append(resumen).append('.');
         if (quien != null) {
             texto.append(" Lo hizo ").append(quien).append('.');

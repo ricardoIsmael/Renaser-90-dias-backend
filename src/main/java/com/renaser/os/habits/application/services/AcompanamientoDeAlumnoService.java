@@ -7,6 +7,8 @@ import com.renaser.os.habits.application.ports.in.acompanamiento.ConsultarHabito
 import com.renaser.os.habits.application.ports.in.habitosaprendiz.ConsultarHabitosDeAprendizUseCase.VistaHabitosDeAprendiz;
 import com.renaser.os.habits.application.ports.in.radar.ConsultarHistorialRadarUseCase.HistorialRadarPage;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
+import com.renaser.os.shared.application.Interruptores;
+import com.renaser.os.shared.domain.ClavesDeFuncionalidad;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import org.springframework.stereotype.Service;
@@ -32,14 +34,16 @@ public class AcompanamientoDeAlumnoService
     private final AcompanamientoFinder acompanamientoFinder;
     private final HabitosDeAprendizAdminService habitosDeAprendiz;
     private final LecturaDelRadar lecturaDelRadar;
+    private final Interruptores interruptores;
     private final Clock clock;
 
     AcompanamientoDeAlumnoService(AcompanamientoFinder acompanamientoFinder,
                                    HabitosDeAprendizAdminService habitosDeAprendiz,
-                                   LecturaDelRadar lecturaDelRadar, Clock clock) {
+                                   LecturaDelRadar lecturaDelRadar, Interruptores interruptores, Clock clock) {
         this.acompanamientoFinder = acompanamientoFinder;
         this.habitosDeAprendiz = habitosDeAprendiz;
         this.lecturaDelRadar = lecturaDelRadar;
+        this.interruptores = interruptores;
         this.clock = clock;
     }
 
@@ -54,6 +58,9 @@ public class AcompanamientoDeAlumnoService
     public HistorialRadarPage codigoRenaserDeAlumno(ConsultaDeAcompanante consulta, Instant cursor,
                                                      int tamanoPagina) {
         requireAcompananteVigente(consulta);
+        // Spec 034 (D-299): Administración decide si quien acompaña ve el Código Renaser. Después de autorizar (el 403 de
+        // siempre gana) y antes de leer: apagado, la lectura es «no disponible» (404) y no toca el Radar de nadie.
+        interruptores.exigirPrendidaPara(ClavesDeFuncionalidad.RADAR_EN_FICHAS, consulta.actorId());
         return lecturaDelRadar.pagina(consulta.alumnoId(), cursor, tamanoPagina);
     }
 
