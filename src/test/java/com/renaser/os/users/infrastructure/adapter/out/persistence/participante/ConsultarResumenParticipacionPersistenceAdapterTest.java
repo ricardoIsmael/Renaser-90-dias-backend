@@ -421,6 +421,34 @@ class ConsultarResumenParticipacionPersistenceAdapterTest {
                 .doesNotContainAnyElementsOf(pagina1.stream().map(ResumenTraineeAdmin::id).toList());
     }
 
+    /**
+     * E2E de las formaciones (01/11/2026, J2-1): el padrón trae también las solicitudes que esperan aprobación (cuentas INACTIVAS, sin programa) y
+     * «Asignar a varias personas» las ofrecía. Con {@code soloActivas} salen solo las ACTIVAS, en el listado y en el conteo; sin él, todas, como siempre.
+     */
+    @Test
+    void soloActivasDejaFueraLasSolicitudesQueEsperanAprobacionEnElListadoYEnElConteo() {
+        String marca = "SoloActivas" + UUID.randomUUID().toString().substring(0, 8);
+        UserId activa = crearUsuarioLlamado("APRENDIZ", marca + " Activa");
+        crearParticipante(activa, 1, "America/Lima", null, null);
+        UserId pendiente = UserId.of(UUID.randomUUID());
+        entityManager.createNativeQuery("""
+                        INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado)
+                        VALUES (:id, :email, :nombre, CAST('APRENDIZ' AS renaser.rol_usuario), CAST('INACTIVO' AS renaser.estado_usuario))
+                        """)
+                .setParameter("id", pendiente.value())
+                .setParameter("email", pendiente + "@renaser.test")
+                .setParameter("nombre", marca + " Pendiente")
+                .executeUpdate();
+        var todas = com.renaser.os.shared.domain.AlcanceDeFormacion.todas();
+
+        assertThat(adapter.listarAprendices(0, 20, marca, false, null, todas, false)).extracting(ResumenTraineeAdmin::id)
+                .containsExactlyInAnyOrder(activa, pendiente);
+        assertThat(adapter.contarAprendices(marca, false, null, todas, false)).isEqualTo(2);
+
+        assertThat(adapter.listarAprendices(0, 20, marca, false, null, todas, true)).extracting(ResumenTraineeAdmin::id).containsExactly(activa);
+        assertThat(adapter.contarAprendices(marca, false, null, todas, true)).isEqualTo(1);
+    }
+
     private UserId crearAprendizDadoDeAltaEn(String nombreCompleto, String creadoEn) {
         UserId id = UserId.of(UUID.randomUUID());
         entityManager.createNativeQuery("""
