@@ -17,6 +17,7 @@ import com.renaser.os.leadership.application.ports.in.ConsultarSemanaDePersonaUs
 import com.renaser.os.leadership.domain.model.cumplimiento.ColorDeLaFila;
 import com.renaser.os.leadership.domain.model.cumplimiento.PersonaDeLaLista;
 import com.renaser.os.mentoring.api.ObligacionDelDia;
+import com.renaser.os.plataforma.application.services.CopiaDeEstados;
 import com.renaser.os.points.api.ColorSemaforo;
 import com.renaser.os.points.api.DetalleDelSemaforo;
 import com.renaser.os.points.api.SemaforoFinder;
@@ -79,6 +80,8 @@ class CumplimientoDelLiderIT {
     private ConsultarRadarDePersonaUseCase radar;
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired
+    private CopiaDeEstados copiaDeEstados;
 
     private UUID ritual;
     private UUID postDiario;
@@ -93,6 +96,11 @@ class CumplimientoDelLiderIT {
     @BeforeEach
     void sembrar() {
         reloj.fijar(AHORA);
+        // Spec 034: de fábrica el líder no ve el Código Renaser (Administración lo enciende). Esta prueba es de lo que ve cuando se lo permiten.
+        jdbc.update("DELETE FROM renaser.funcionalidades_estado WHERE clave = 'radar.fichas'");
+        jdbc.update("INSERT INTO renaser.funcionalidades_estado (clave, prendida_global, version, actualizado_por, actualizado_en) "
+                + "VALUES ('radar.fichas', true, nextval('renaser.funcionalidades_version_seq'), ?, now())", LIDER);
+        copiaDeEstados.recargar();
         jdbc.update("DELETE FROM renaser.usuarios WHERE id IN (?, ?, ?)", LIDER, MENTORA, ANA);
         usuario(LIDER, "LIDER_MENTORES", "Líder Uno");
         usuario(MENTORA, "MENTOR", "Luisa Rojas");
@@ -119,6 +127,12 @@ class CumplimientoDelLiderIT {
                 + "subida_en, es_principal, estado_validacion) VALUES (?, ?, ?, CAST('FOTO' AS renaser.tipo_evidencia), "
                 + "'renaser', ?, TIMESTAMPTZ '2026-10-14 17:00:00+00', true, CAST('VALIDA' AS renaser.estado_validacion))",
                 fotoDeLaAccion, ANA, accion, "rocas/" + ANA + "/foto.jpg");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void volverAlValorDeFabricaDelRadarEnFichas() {
+        jdbc.update("DELETE FROM renaser.funcionalidades_estado WHERE clave = 'radar.fichas'");
+        copiaDeEstados.recargar();
     }
 
     private void usuario(UUID id, String rol, String nombre) {

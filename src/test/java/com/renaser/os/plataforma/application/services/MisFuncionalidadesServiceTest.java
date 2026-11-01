@@ -30,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -62,13 +63,28 @@ class MisFuncionalidadesServiceTest {
     }
 
     @Test
-    @DisplayName("nada apagado: lista vacía, versión 0 y sin leer el rol")
+    @DisplayName("nada apagado: lista vacía, versión 0 y el rol se lee UNA sola vez (por radar.fichas, que nace apagada para quien acompaña)")
     void nadaApagado() {
         MisFuncionalidades mias = service.mias(aprendiz);
 
         assertThat(mias.apagadas()).isEmpty();
+        assertThat(mias.noDisponibles()).as("el aprendiz ve radar.fichas prendida").isEmpty();
         assertThat(mias.version()).isZero();
-        verify(usuarios, never()).findById(any());
+        verify(usuarios, times(1)).findById(any());
+    }
+
+    @Test
+    @DisplayName("034: el mentor ve radar.fichas en noDisponibles de fábrica (la app la esconde), el aprendiz no")
+    void radarFichasNoDisponibleParaElMentor() {
+        UserId mentor = UserId.of(UUID.randomUUID());
+        when(usuarios.findById(mentor)).thenReturn(Optional.of(
+                new UserSummary(mentor, "M", null, UserRole.MENTOR, UserStatus.ACTIVE)));
+
+        MisFuncionalidades delMentor = service.mias(mentor);
+
+        assertThat(delMentor.noDisponibles()).containsExactly("radar.fichas");
+        assertThat(delMentor.apagadas()).isEmpty();
+        assertThat(service.mias(aprendiz).noDisponibles()).isEmpty();
     }
 
     @Test
@@ -113,7 +129,7 @@ class MisFuncionalidadesServiceTest {
         assertThat(mias.apagadas()).isEmpty();
         assertThat(mias.noDisponibles()).isNotEmpty().allMatch(clave -> clave.equals("eventos")
                 || clave.startsWith("eventos."));
-        verify(usuarios, never()).findById(any());
+        verify(usuarios, times(1)).findById(any()); // solo por radar.fichas: lo que deja fuera una regla no lee el rol
     }
 
     @Test

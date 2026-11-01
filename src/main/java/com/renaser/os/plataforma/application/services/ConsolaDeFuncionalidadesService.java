@@ -1,6 +1,5 @@
 package com.renaser.os.plataforma.application.services;
 
-import com.renaser.os.plataforma.api.FuncionalidadCambiadaEvent;
 import com.renaser.os.plataforma.application.ports.in.AccesoDeConsola;
 import com.renaser.os.plataforma.application.ports.in.CambiarFuncionalidadUseCase;
 import com.renaser.os.plataforma.application.ports.in.ConsultarFuncionalidadesUseCase;
@@ -8,9 +7,7 @@ import com.renaser.os.plataforma.application.ports.in.FuncionalidadEnConsola;
 import com.renaser.os.plataforma.application.ports.out.GuardarEstadoPort;
 import com.renaser.os.plataforma.application.ports.out.RegistrarCambioAuditadoPort;
 import com.renaser.os.plataforma.application.ports.out.TokensDeConsolaPort;
-import com.renaser.os.plataforma.domain.model.auditoria.CambioAuditado;
 import com.renaser.os.plataforma.domain.model.catalogo.DefinicionDeFuncionalidad;
-import com.renaser.os.plataforma.domain.model.catalogo.ValorPorDefecto;
 import com.renaser.os.plataforma.domain.model.estado.CambioDeFuncionalidad;
 import com.renaser.os.plataforma.domain.model.estado.EstadoDeFuncionalidad;
 import com.renaser.os.shared.domain.Clock;
@@ -21,7 +18,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * La consola de interruptores (contrato §6): listar y cambiar. Un cambio, en este orden:
@@ -40,12 +36,8 @@ class ConsolaDeFuncionalidadesService implements ConsultarFuncionalidadesUseCase
     private final GuardiaDeSoporteTi guardia;
     private final FuncionalidadesEnConsola vistas;
     private final EstadoVigente estado;
-    private final GuardarEstadoPort guardarEstadoPort;
-    private final RegistrarCambioAuditadoPort auditoria;
+    private final EscrituraDeEstado escritura;
     private final TokensDeConsolaPort tokens;
-    private final ApplicationEventPublisher events;
-    private final IdGenerator idGenerator;
-    private final Clock clock;
 
     ConsolaDeFuncionalidadesService(GuardiaDeSoporteTi guardia, FuncionalidadesEnConsola vistas, EstadoVigente estado,
                                     GuardarEstadoPort guardarEstadoPort, RegistrarCambioAuditadoPort auditoria,
@@ -54,12 +46,8 @@ class ConsolaDeFuncionalidadesService implements ConsultarFuncionalidadesUseCase
         this.guardia = guardia;
         this.vistas = vistas;
         this.estado = estado;
-        this.guardarEstadoPort = guardarEstadoPort;
-        this.auditoria = auditoria;
+        this.escritura = new EscrituraDeEstado(guardarEstadoPort, auditoria, events, idGenerator, clock);
         this.tokens = tokens;
-        this.events = events;
-        this.idGenerator = idGenerator;
-        this.clock = clock;
     }
 
     @Override
@@ -82,17 +70,9 @@ class ConsolaDeFuncionalidadesService implements ConsultarFuncionalidadesUseCase
         if (cambio.esCritico(definicion)) {
             exigirReautenticacion(command);
         }
-        EstadoDeFuncionalidad nuevo = cambio.aplicar(guardarEstadoPort.siguienteVersion(), command.acceso().actor(),
-                clock.now());
-        if (!guardarEstadoPort.guardar(nuevo, cambio.versionEsperada())) {
-            throw new IllegalStateException("Otra persona cambió esta funcionalidad recién. Vuelve a cargarla.");
-        }
-        auditoria.registrar(CambioAuditado.manual(idGenerator.newId(), nuevo.actualizadoPor(), nuevo.clave(),
-                antesParaAuditoria(definicion, anterior), nuevo.paraAuditoria(), cambio.motivo(),
-                command.dispositivo(), nuevo.actualizadoEn()));
-        events.publishEvent(new FuncionalidadCambiadaEvent(nuevo.clave(), definicion.critica(),
-                !nuevo.prendidaGlobal(), nuevo.actualizadoPor(), cambio.motivo(), nuevo.actualizadoEn(),
-                definicion.nombre(), cambio.resumen()));
+        EstadoDeFuncionalidad nuevo = escritura
+                .aplicar(definicion, anterior, cambio, command.acceso().actor(), command.dispositivo())
+                .orElseThrow(() -> new IllegalStateException("Otra persona cambió esta funcionalidad recién. Vuelve a cargarla."));
         return vistas.una(nuevo.clave());
     }
 
@@ -109,11 +89,5 @@ class ConsolaDeFuncionalidadesService implements ConsultarFuncionalidadesUseCase
                 || !tokens.gastarReautenticacion(token, command.acceso().actor(), command.acceso().sesion())) {
             throw new ReautenticacionRequeridaException();
         }
-    }
-
-    private static Map<String, Object> antesParaAuditoria(DefinicionDeFuncionalidad definicion,
-                                                          EstadoDeFuncionalidad anterior) {
-        return anterior != null ? anterior.paraAuditoria()
-                : EstadoDeFuncionalidad.porDefectoParaAuditoria(definicion.porDefecto() == ValorPorDefecto.PRENDIDA);
     }
 }

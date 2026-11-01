@@ -262,6 +262,86 @@ class EvaluacionDeFuncionalidadesTest {
                 Instant.parse("2026-10-13T22:00:00Z"));
     }
 
+    // ── «Código Renaser en las fichas» (spec 034, D-299): nace apagada para ciertos roles y se esconde ─────────────────
+
+    @Test
+    @DisplayName("034: sin fila nace apagada para MENTOR, la guía y el líder, y se esconde (noDisponible, sin aviso de mantenimiento)")
+    void radarFichasNaceApagadaParaQuienAcompana() {
+        for (UserRole rol : List.of(UserRole.MENTOR, UserRole.TRAINEE_GUIDE, UserRole.MENTOR_LEAD)) {
+            ResultadoDeEvaluacion resultado = evaluar("radar.fichas", FotoDeEstados.vacia(), rol);
+
+            assertThat(resultado.prendida()).as(rol.name()).isFalse();
+            assertThat(resultado.noDisponible()).as(rol.name()).isTrue();
+            assertThat(resultado.apagadaEn()).isEqualTo("radar.fichas");
+        }
+    }
+
+    @Test
+    @DisplayName("034: sin fila la ven prendida Administración, Alquimista, Soporte TI, el aprendiz y un proceso sin actor")
+    void radarFichasLaVenElResto() {
+        for (UserRole rol : List.of(UserRole.ADMIN, UserRole.ALCHEMIST, UserRole.IT_SUPPORT, UserRole.TRAINEE)) {
+            assertThat(evaluar("radar.fichas", FotoDeEstados.vacia(), rol).prendida()).as(rol.name()).isTrue();
+        }
+        assertThat(evaluacion.evaluar("radar.fichas", FotoDeEstados.vacia(), null, SIN_AUTOMATICOS).prendida()).isTrue();
+    }
+
+    @Test
+    @DisplayName("034: con fila manda la fila: encendida para los tres, o apagada solo para uno")
+    void radarFichasConFilaMandaLaFila() {
+        FotoDeEstados encendida = foto(estado("radar.fichas", true, Set.of(), null));
+        FotoDeEstados soloElLiderLoVe = foto(estado("radar.fichas", true,
+                Set.of(UserRole.MENTOR, UserRole.TRAINEE_GUIDE), null));
+
+        for (UserRole rol : List.of(UserRole.MENTOR, UserRole.TRAINEE_GUIDE, UserRole.MENTOR_LEAD)) {
+            assertThat(evaluar("radar.fichas", encendida, rol).prendida()).as(rol.name()).isTrue();
+        }
+        assertThat(evaluar("radar.fichas", soloElLiderLoVe, UserRole.MENTOR_LEAD).prendida()).isTrue();
+        assertThat(evaluar("radar.fichas", soloElLiderLoVe, UserRole.MENTOR).noDisponible()).isTrue();
+    }
+
+    @Test
+    @DisplayName("034: apagada para todos por Soporte TI también se esconde; y apagar la madre «radar» sigue siendo mantenimiento")
+    void radarFichasApagadaParaTodosYLaMadre() {
+        assertThat(evaluar("radar.fichas", foto(estado("radar.fichas", false, Set.of(), "x")), UserRole.ADMIN)
+                .noDisponible()).isTrue();
+
+        ResultadoDeEvaluacion madre = evaluar("radar.fichas", foto(estado("radar", false, Set.of(), "Radar en mantenimiento")),
+                UserRole.ADMIN);
+        assertThat(madre.noDisponible()).isFalse();
+        assertThat(madre.aviso()).isEqualTo("Radar en mantenimiento");
+        assertThat(madre.apagadaEn()).isEqualTo("radar");
+    }
+
+    @Test
+    @DisplayName("034: evaluar cualquier otra clave no pide el rol, aunque radar.fichas nazca apagada para ciertos roles (FR-011)")
+    void otrasClavesNoPidenElRol() {
+        ActorEvaluado sinRol = new ActorEvaluado() {
+            @Override
+            public UserId id() {
+                return APRENDIZ;
+            }
+
+            @Override
+            public UserRole rol() {
+                throw new AssertionError("evaluar esta clave no debería leer el rol");
+            }
+        };
+
+        for (String clave : List.of("chat.grupos", "radar", "muro", "plan", "mentor.mi_grupo")) {
+            assertThat(evaluacion.evaluar(clave, FotoDeEstados.vacia(), sinRol, SIN_AUTOMATICOS).prendida()).as(clave).isTrue();
+        }
+    }
+
+    @Test
+    @DisplayName("la foto para la auditoría de una funcionalidad sin fila lista los roles para los que nace apagada")
+    void fotoPorDefectoConRolesApagados() {
+        Map<String, Object> foto = EstadoDeFuncionalidad.porDefectoParaAuditoria(
+                CatalogoDeFuncionalidades.inicial().definicion("radar.fichas").orElseThrow());
+
+        assertThat(foto).containsEntry("prendidaGlobal", true)
+                .containsEntry("apagadaPara", List.of("MENTOR", "MENTOR_LEAD", "TRAINEE_GUIDE"));
+    }
+
     @Test
     @DisplayName("la foto para la auditoría lista los roles apagados ordenados y el aviso")
     void fotoParaLaAuditoria() {

@@ -386,6 +386,19 @@ class LiderVeATodosServiceTest {
     }
 
     @Test
+    @DisplayName("034: sin grupo, con el interruptor apagado el lider recibe «no disponible» y no se lee el Radar; Administracion sigue leyendo")
+    void radarSinGrupoConElInterruptorApagado() {
+        banco.interruptores.apagarElRadarEnFichasPara(LIDER);
+
+        assertThatThrownBy(() -> radar.radarDeUnaPersona(new ConsultaRadarDeUnaPersona(LIDER, BETO.value(), null)))
+                .isInstanceOf(com.renaser.os.shared.domain.FuncionalidadNoDisponibleException.class);
+        assertThat(banco.lecturasDelRadar).isEmpty();
+
+        radar.radarDeUnaPersona(new ConsultaRadarDeUnaPersona(ADMIN, BETO.value(), null));
+        assertThat(banco.lecturasDelRadar).extracting(l -> l.persona()).containsExactly(BETO);
+    }
+
+    @Test
     @DisplayName("el Radar: 403 para quien no es del liderazgo y 404 para quien no se muestra, sin leer nada")
     void radarSinPermisoONoSeMuestra() {
         assertThatThrownBy(() -> radar.radarDeUnaPersona(new ConsultaRadarDeUnaPersona(OTRO_MENTOR, BETO.value(), null)))

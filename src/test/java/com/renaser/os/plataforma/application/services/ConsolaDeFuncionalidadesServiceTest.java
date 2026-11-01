@@ -100,7 +100,7 @@ class ConsolaDeFuncionalidadesServiceTest {
     void listaElCatalogo() {
         var lista = service.listar(acceso());
 
-        assertThat(lista).hasSize(53); // 52 de la spec 002 + lider.cumplimiento (spec 005)
+        assertThat(lista).hasSize(54); // 52 de la spec 002 + lider.cumplimiento (spec 005) + radar.fichas (spec 034)
         FuncionalidadEnConsola chatGrupos = lista.stream().filter(f -> f.clave().equals("chat.grupos")).findFirst()
                 .orElseThrow();
         assertThat(chatGrupos.madre()).isEqualTo("chat");
@@ -108,6 +108,32 @@ class ConsolaDeFuncionalidadesServiceTest {
         assertThat(chatGrupos.porRol()).hasSize(UserRole.values().length).doesNotContainValue(false);
         assertThat(chatGrupos.version()).isZero();
         assertThat(chatGrupos.actualizadoPor()).isNull();
+    }
+
+    @Test
+    @DisplayName("034: radar.fichas sin fila se lista apagada para el mentor, la guía y el líder (de fábrica), prendida para el resto")
+    void radarFichasDeFabrica() {
+        FuncionalidadEnConsola fichas = service.listar(acceso()).stream().filter(f -> f.clave().equals("radar.fichas"))
+                .findFirst().orElseThrow();
+
+        assertThat(fichas.madre()).isEqualTo("radar");
+        assertThat(fichas.prendidaGlobal()).isTrue();
+        assertThat(fichas.porRol()).containsEntry(UserRole.MENTOR, false).containsEntry(UserRole.TRAINEE_GUIDE, false)
+                .containsEntry(UserRole.MENTOR_LEAD, false).containsEntry(UserRole.ADMIN, true)
+                .containsEntry(UserRole.ALCHEMIST, true).containsEntry(UserRole.TRAINEE, true);
+        assertThat(fichas.version()).isZero();
+    }
+
+    @Test
+    @DisplayName("034: Soporte TI enciende radar.fichas desde su consola: la auditoría dice que antes estaba apagada para los tres")
+    void soporteTiLaEnciendeDesdeLaConsola() {
+        FuncionalidadEnConsola resultado = service.cambiar(comando("radar.fichas", true, Map.of(), null, 0L, null));
+
+        assertThat(resultado.porRol()).doesNotContainValue(false);
+        CambioAuditado fila = auditoria.filas.getFirst();
+        assertThat(fila.clave()).isEqualTo("radar.fichas");
+        assertThat(fila.antes()).containsEntry("apagadaPara", java.util.List.of("MENTOR", "MENTOR_LEAD", "TRAINEE_GUIDE"));
+        assertThat(fila.despues()).containsEntry("apagadaPara", java.util.List.of());
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.renaser.os.leadership;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.renaser.os.TestcontainersConfiguration;
+import com.renaser.os.plataforma.application.services.CopiaDeEstados;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -54,6 +55,8 @@ class LiderVeATodosIT {
     private SessionRepository<? extends Session> sesiones;
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired
+    private CopiaDeEstados copiaDeEstados;
 
     private final HttpClient http = HttpClient.newHttpClient();
     private final ObjectMapper json = new ObjectMapper();
@@ -94,12 +97,19 @@ class LiderVeATodosIT {
         jdbc.update("INSERT INTO renaser.cohortes (id, nombre, fecha_inicio) VALUES (?, ?, CURRENT_DATE - 60)",
                 cohorte, "Cohorte " + marca);
         fenix = grupo("Fénix " + marca, mentora);
+        // Spec 034: de fábrica el líder no ve el Código Renaser (Administración lo enciende). Esta prueba es de lo que ve cuando se lo permiten.
+        jdbc.update("DELETE FROM renaser.funcionalidades_estado WHERE clave = 'radar.fichas'");
+        jdbc.update("INSERT INTO renaser.funcionalidades_estado (clave, prendida_global, version, actualizado_por, actualizado_en) "
+                + "VALUES ('radar.fichas', true, nextval('renaser.funcionalidades_version_seq'), ?, now())", lider);
+        copiaDeEstados.recargar();
         asignar(fenix, mentora, "MENTOR");
         asignar(fenix, ana, "APRENDIZ");
     }
 
     @AfterEach
     void limpiar() {
+        jdbc.update("DELETE FROM renaser.funcionalidades_estado WHERE clave = 'radar.fichas'");
+        copiaDeEstados.recargar();
         grupos.forEach(id -> {
             jdbc.update("UPDATE renaser.celulas SET mentor_id = NULL WHERE id = ?", id);
             jdbc.update("DELETE FROM renaser.celulas WHERE id = ?", id);
