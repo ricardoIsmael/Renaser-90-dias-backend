@@ -37,15 +37,15 @@ class IngresoPorAceptacion {
     private final SaveParticipacionProgramaPort participaciones;
     private final FormacionesDelPersonalPort personal;
     private final CargarRolesPersonalizadosPort rolesPersonalizados;
-    /** Hasta integrar la 026 (ficha con diagnóstico) nadie la implementa en esta rama: sin ella, «con diagnóstico» se rechaza con un aviso claro. */
-    private final ObjectProvider<FichaAlAceptar> ficha;
+    /** La ficha con diagnóstico (spec 026): la implementa {@code onboarding}. Sin un diagnóstico publicado, «con diagnóstico» se rechaza con un aviso claro. */
+    private final FichaAlAceptar ficha;
     /** Spec 027: sin la implementación (otra rama sin términos editables) no se exige nada, como hasta hoy. */
     private final ObjectProvider<TerminosPublicados> terminos;
     private final Clock clock;
 
     IngresoPorAceptacion(CatalogoDeFormacionesPort catalogo, SaveParticipacionProgramaPort participaciones,
                          FormacionesDelPersonalPort personal, CargarRolesPersonalizadosPort rolesPersonalizados,
-                         ObjectProvider<FichaAlAceptar> ficha, ObjectProvider<TerminosPublicados> terminos, Clock clock) {
+                         FichaAlAceptar ficha, ObjectProvider<TerminosPublicados> terminos, Clock clock) {
         this.catalogo = catalogo;
         this.participaciones = participaciones;
         this.personal = personal;
@@ -105,17 +105,16 @@ class IngresoPorAceptacion {
         return publicados == null || publicados.estanPublicados(formacion);
     }
 
-    /** ¿Se puede ofrecer «Con diagnóstico»? Sin la ficha con diagnóstico instalada, o sin uno publicado, no. */
+    /** ¿Se puede ofrecer «Con diagnóstico»? Solo si hay un diagnóstico publicado. */
     boolean diagnosticoDisponible() {
-        FichaAlAceptar disponible = ficha.getIfAvailable();
-        return disponible != null && disponible.hayDiagnosticoPublicado();
+        return ficha.hayDiagnosticoPublicado();
     }
 
     private void asignarDiagnostico(UserId persona, UserId actor) {
         if (!diagnosticoDisponible()) {
             throw new IllegalStateException("Todavía no hay un diagnóstico publicado: acepta a la persona sin diagnóstico.");
         }
-        ficha.getObject().conDiagnostico(persona, actor);
+        ficha.conDiagnostico(persona, actor);
     }
 
     private Map<Formacion, FormacionConfigurada> catalogoPorFormacion() {

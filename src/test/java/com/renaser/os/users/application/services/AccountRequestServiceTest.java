@@ -101,7 +101,7 @@ class AccountRequestServiceTest {
     @Mock
     private com.renaser.os.users.application.ports.out.rolpersonalizado.CargarRolesPersonalizadosPort rolesPersonalizados;
     @Mock
-    private org.springframework.beans.factory.ObjectProvider<com.renaser.os.users.api.FichaAlAceptar> fichaAlAceptar;
+    private com.renaser.os.users.api.FichaAlAceptar fichaAlAceptar;
     @Mock
     private org.springframework.beans.factory.ObjectProvider<com.renaser.os.users.api.TerminosPublicados> terminosPublicados;
 
@@ -785,10 +785,8 @@ class AccountRequestServiceTest {
     @DisplayName("025: sin diagnóstico no se llama a la ficha; con diagnóstico se llama una vez, con la persona y quien la acepta")
     void elDiagnosticoSeAsignaAlAceptar() {
         UserId actorId = id();
-        var ficha = org.mockito.Mockito.mock(com.renaser.os.users.api.FichaAlAceptar.class);
+        var ficha = fichaAlAceptar;
         when(ficha.hayDiagnosticoPublicado()).thenReturn(true);
-        when(fichaAlAceptar.getIfAvailable()).thenReturn(ficha);
-        when(fichaAlAceptar.getObject()).thenReturn(ficha);
 
         aceptarCon(actorId, UserRole.TRAINEE, pedido(null, false, com.renaser.os.shared.domain.Formacion.ESCUELA));
         verify(ficha, never()).conDiagnostico(any(), any());
@@ -798,17 +796,13 @@ class AccountRequestServiceTest {
     }
 
     @Test
-    @DisplayName("025: pedir el diagnóstico sin que la ficha con diagnóstico esté instalada o sin uno publicado FALLA con un aviso (409) y no acepta a nadie")
+    @DisplayName("025: pedir el diagnóstico sin que haya uno publicado FALLA con un aviso (409) y no acepta a nadie")
     void sinDiagnosticoPublicadoNoSeAcepta() {
         UserId actorId = id();
 
-        // Hasta integrar la 026 nadie implementa FichaAlAceptar: no puede quedar un «con diagnóstico» que en silencio no hace nada.
-        assertThatThrownBy(() -> aceptarCon(actorId, UserRole.TRAINEE, pedido(null, true, com.renaser.os.shared.domain.Formacion.ESCUELA)))
-                .isInstanceOf(IllegalStateException.class).hasMessageContaining("diagnóstico");
-
-        var ficha = org.mockito.Mockito.mock(com.renaser.os.users.api.FichaAlAceptar.class);
+        // Sin un diagnóstico publicado no puede quedar un «con diagnóstico» que en silencio no hace nada.
+        var ficha = fichaAlAceptar;
         when(ficha.hayDiagnosticoPublicado()).thenReturn(false);
-        when(fichaAlAceptar.getIfAvailable()).thenReturn(ficha);
         assertThatThrownBy(() -> aceptarCon(actorId, UserRole.TRAINEE, pedido(null, true, com.renaser.os.shared.domain.Formacion.ESCUELA)))
                 .isInstanceOf(IllegalStateException.class);
         verify(ficha, never()).conDiagnostico(any(), any());
