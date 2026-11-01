@@ -137,22 +137,22 @@ class TraineeAdminControllerTest {
         mockMvc.perform(put("/api/v1/admin/trainees/{id}/program-day", UUID.randomUUID())
                         .header("X-Actor-Id", UserId.of(UUID.randomUUID()).toString())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"programDay\":91}"))
+                        .content("{\"programDay\":365}"))
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(setTraineeProgramDayUseCase);
     }
 
-    /** D-194: 0 y 90 ya no se fijan por esta via. Contra el codigo viejo (0..90) daban 204. */
+    /** D-194: el 0 ya no se fija por esta via (y el último día de cada programa tampoco: lo aplica el dominio con la duración de la persona). */
     @Test
-    void fijarDiaCeroONoventaDevuelve400ConMensajeClaroYNoLlegaAlCasoDeUso() throws Exception {
-        for (int dia : new int[] {0, 90}) {
+    void fijarDiaCeroOLoQueNingunProgramaAdmiteDevuelve400ConMensajeClaroYNoLlegaAlCasoDeUso() throws Exception {
+        for (int dia : new int[] {0, 365}) {
             mockMvc.perform(put("/api/v1/admin/trainees/{id}/program-day", UUID.randomUUID())
                             .header("X-Actor-Id", UserId.of(UUID.randomUUID()).toString())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"programDay\":" + dia + "}"))
                     .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("entre 1 y 89")));
+                    .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("entre 1 y 364")));
         }
 
         verifyNoInteractions(setTraineeProgramDayUseCase);

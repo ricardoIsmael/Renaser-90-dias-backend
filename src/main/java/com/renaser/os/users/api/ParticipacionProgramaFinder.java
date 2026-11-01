@@ -1,5 +1,6 @@
 package com.renaser.os.users.api;
 
+import com.renaser.os.shared.domain.DuracionDelPrograma;
 import com.renaser.os.shared.domain.UserId;
 
 import java.util.List;
@@ -50,7 +51,12 @@ public interface ParticipacionProgramaFinder {
     /** Usuarios ACTIVOS que ademas tienen fila en `participantes_programa`, sin importar el rol. */
     List<UserId> participantesInscritosActivos();
 
-    record UsuarioConDiaPrograma(UserId id, Integer diaPrograma) {
+    /** {@code duracionDias}: la duración de SU programa (90 o 365, spec 022); 90 si no está inscrito. */
+    record UsuarioConDiaPrograma(UserId id, Integer diaPrograma, int duracionDias) {
+
+        public UsuarioConDiaPrograma(UserId id, Integer diaPrograma) {
+            this(id, diaPrograma, DuracionDelPrograma.POR_DEFECTO);
+        }
     }
 
     /** Cantidad total de participantes con esa celula asignada (cualquier estado). */

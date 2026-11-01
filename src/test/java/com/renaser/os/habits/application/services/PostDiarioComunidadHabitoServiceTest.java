@@ -199,8 +199,6 @@ class PostDiarioComunidadHabitoServiceTest {
     @DisplayName("quien publica sin ser participante del programa (mentor, admin) no dispara nada")
     void autorSinParticipacionNoDisparaNada() {
         UserId autor = participante();
-        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA, Formacion.ESCUELA))
-                .thenReturn(Optional.of(habitoPostDiario()));
         when(progresoPort.deParticipante(autor)).thenReturn(Optional.empty());
 
         service().alPublicarEnElMuro(autor, Instant.parse("2026-08-24T15:00:00Z"));
@@ -213,8 +211,6 @@ class PostDiarioComunidadHabitoServiceTest {
     @DisplayName("una cuenta suspendida no cierra el habito publicando")
     void cuentaSuspendidaNoCierraElHabito() {
         UserId autor = participante();
-        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA, Formacion.ESCUELA))
-                .thenReturn(Optional.of(habitoPostDiario()));
         when(progresoPort.deParticipante(autor)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, true, false)));
 
@@ -290,14 +286,15 @@ class PostDiarioComunidadHabitoServiceTest {
     }
 
     @Test
-    @DisplayName("sin el habito en el catalogo de este entorno no se consulta nada mas")
+    @DisplayName("sin el habito en el catalogo de la formacion de la persona no se busca ni se cierra ningun registro")
     void sinHabitoEnCatalogoNoHaceNada() {
         UserId autor = participante();
+        mockParticipanteEnLima(autor);
         when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA, Formacion.ESCUELA)).thenReturn(Optional.empty());
 
         service().alPublicarEnElMuro(autor, Instant.parse("2026-08-24T15:00:00Z"));
 
-        verify(progresoPort, never()).deParticipante(any());
+        verify(loadRegistroPort, never()).porParticipanteHabitoYFechaParaEscritura(any(), any(), any());
         verify(completarRegistroUseCase, never()).completar(any());
     }
     /**

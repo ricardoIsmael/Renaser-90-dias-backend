@@ -190,9 +190,10 @@ class PastillaRenacerHabitoServiceTest {
     }
 
     @Test
-    @DisplayName("Sin el habito en el catalogo de este entorno devuelve vacio, sin tocar el progreso del participante")
+    @DisplayName("Sin el habito en el catalogo de la formacion de la persona devuelve vacio, sin cerrar nada")
     void sinHabitoEnElCatalogoDevuelveVacio() {
         UserId participanteId = participante();
+        mockProgresoActivo(participanteId);
         when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_PASTILLA_RENACER, Formacion.ESCUELA)).thenReturn(Optional.empty());
 
         assertThat(service().completarDeHoy(participanteId, RESUMEN)).isEmpty();
@@ -203,7 +204,6 @@ class PastillaRenacerHabitoServiceTest {
     @DisplayName("Cuenta suspendida -> NotAuthorizedException (CLAUDE.MD §0.3), aunque el llamador no lo haya chequeado")
     void rechazaSuspendido() {
         UserId participanteId = participante();
-        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_PASTILLA_RENACER, Formacion.ESCUELA)).thenReturn(Optional.of(habitoPastilla()));
         when(progresoPort.deParticipante(participanteId))
                 .thenReturn(Optional.of(new ProgresoParticipanteHabits(8, "UTC", RolParticipante.TRAINEE, true, false)));
 

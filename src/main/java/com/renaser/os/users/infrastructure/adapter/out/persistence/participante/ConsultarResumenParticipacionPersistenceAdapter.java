@@ -295,7 +295,8 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
                 .map(fila -> new ParticipacionProgramaFinder.UsuarioConDiaPrograma(UserId.of(aUuid(fila[0])),
                         fila[1] == null ? null
                                 : diaVigente((Number) fila[1], aLocalDate(fila[2]), aZona(fila[3]), fila[4],
-                                        (Number) fila[5], ((Number) fila[6]).intValue())))
+                                        (Number) fila[5], ((Number) fila[6]).intValue()),
+                        ((Number) fila[6]).intValue()))
                 .collect(Collectors.toList());
     }
 

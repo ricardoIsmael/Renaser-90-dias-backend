@@ -60,7 +60,7 @@ class AccesoEventoService {
         int rango = 0;
         if (progreso.rol() == RolUsuario.TRAINEE) {
             List<NivelMembresia> niveles = nivelPort.listar();
-            rango = ProgresoNivel.resolverRango(ProgresoNivel.porcentajeDeProgreso(progreso.diaPrograma()), niveles);
+            rango = ProgresoNivel.resolverRango(ProgresoNivel.porcentajeDeProgreso(progreso.diaPrograma(), progreso.duracionDias()), niveles);
         }
         return new VisorContexto(progreso.rol(), rango, progreso.celulaId());
     }

@@ -158,7 +158,6 @@ class ClaseDiariaHabitoServiceTest {
         UserId participanteId = participante();
         when(progresoPort.deParticipante(participanteId)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, true, false)));
-        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_DAILY_CLASS, Formacion.ESCUELA)).thenReturn(Optional.of(habitoDailyClass()));
 
         assertThatThrownBy(() -> service().completarDeHoy(
                 new CompletarClaseDiariaHabitoCommand(participanteId, "resumen valido de mas de veinte caracteres")))
@@ -170,6 +169,7 @@ class ClaseDiariaHabitoServiceTest {
     @DisplayName("completarDeHoy(): sin habito DAILY_CLASS en el catalogo -> NoSuchElementException")
     void completarDeHoySinHabitoEnCatalogo() {
         UserId participanteId = participante();
+        mockProgresoActivo(participanteId);
         when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_DAILY_CLASS, Formacion.ESCUELA)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service().completarDeHoy(
