@@ -2,6 +2,7 @@ package com.renaser.os.users.application.services;
 
 import com.renaser.os.users.domain.model.user.PlazoDeGracia;
 
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -246,14 +247,16 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
     @Override
     public PaginaTrainees listar(ListTraineesCommand command) {
         requireAdminGuard.requireAdminActivo(command.actorId());
+        // Administración y Alquimista ven las tres formaciones; el filtro «Formación» solo acota (spec 022, FR-024).
+        AlcanceDeFormacion alcance = AlcanceDeFormacion.todas().acotadoA(command.formacion());
         var contenido = consultarResumenParticipacionPort.listarAprendices(command.page() * command.size(),
-                        command.size(), command.busqueda(), command.soloSinGrupo(), command.rol()).stream()
+                        command.size(), command.busqueda(), command.soloSinGrupo(), command.rol(), alcance).stream()
                 .map(resumen -> resumen.conBorradoProgramado(plazoDeGracia))
                 .toList();
         // El total se cuenta CON los mismos filtros: si contara el padron entero, la pantalla
         // diria "1 de 340" y el paginador ofreceria paginas que no existen.
         long total = consultarResumenParticipacionPort.contarAprendices(command.busqueda(), command.soloSinGrupo(),
-                command.rol());
+                command.rol(), alcance);
         return new PaginaTrainees(contenido, total, command.page(), command.size());
     }
 

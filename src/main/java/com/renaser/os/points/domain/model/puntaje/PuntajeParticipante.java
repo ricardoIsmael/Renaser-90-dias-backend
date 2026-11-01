@@ -72,6 +72,19 @@ public final class PuntajeParticipante {
         return diaHabitosPerfecto && correspondeBonoDeRacha(nuevaRacha);
     }
 
+    /**
+     * Empieza de cero en otra formación (spec 022, Q8-A): la coherencia, la racha y su máximo vuelven al inicio. Los puntos de la liga NO se
+     * borran aquí: se reinician con un ajuste del ledger ({@link #registrarAjuste}), que deja a la vista de dónde venían — el ledger es append-only.
+     * Devuelve el ajuste que lleva el saldo al inicial, o 0 si ya estaba ahí.
+     */
+    public int reiniciarParaOtraFormacion(Clock clock) {
+        this.coherencia = COHERENCIA_INICIAL;
+        this.rachaActual = 0;
+        this.rachaMaxima = 0;
+        this.actualizadoEn = clock.now();
+        return PUNTOS_LIGA_INICIAL - this.puntosLiga;
+    }
+
     public static boolean correspondeBonoDeRacha(int racha) {
         return racha > 0 && racha % RACHA_BONO_CADA_DIAS == 0;
     }
