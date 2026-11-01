@@ -2,7 +2,7 @@
 
 **Feature Branch**: `029-lider-ve-todos-los-habitos` (backend y app)
 **Created**: 2026-10-31
-**Status**: Borrador, a la espera de las respuestas del dueño (2 preguntas marcadas; ver «Preguntas abiertas»). No se implementa hasta resolverlas.
+**Status**: Implementada (backend y app) el 2026-10-31, con las decisiones del dueño del mismo día; ver «Decisiones del dueño (2026-10-31)».
 **Input**: Pedido del dueño (2026-10-31), textual: «El sistema, con el rol de líder de mentores, debe poder ver todos los hábitos de todos los alumnos.»
 
 ## Clarifications
@@ -31,6 +31,21 @@
 
 **Lo que esto significa**: el líder ve a cada persona con todos sus hábitos, pero no ve **un hábito con todos sus alumnos**. Esta spec agrega esa segunda
 mirada, solo de lectura, y reutiliza la ficha para llegar al detalle.
+
+### Decisiones del dueño (2026-10-31)
+
+Fuente: `~/.config/renaser-e2e/formaciones/decisiones-del-dueno-2026-10-31.md` («029 Líder: todos los hábitos — todo A»). Mandan sobre el resto del documento.
+
+1. **Qué es «ver todos los hábitos de todos los alumnos» (A):** por hábito, quién cumplió y quién no, con la hora (planificada y de cumplimiento). Sin la tabla alumno × hábito
+   de la semana y sin una vista de «solo lo planificado».
+2. **Período (A):** un día a la vez; hoy por defecto y hasta 7 días atrás.
+3. **Solo aprendices** (los mentores y guías con programa propio no entran) y **orden por menor cumplimiento** primero.
+4. Administración y Alquimista usan la misma lectura (ven las tres formaciones); la entrada en la app es del líder.
+5. Las listas **no dejan constancia de consulta**; abrir la ficha o una evidencia sí, como hoy. Se apaga con el mismo interruptor de Soporte TI del cumplimiento del líder.
+6. **Formaciones (specs 022 y 023):** el líder ve a los alumnos y los hábitos de SU formación (con varias, la activa); Administración, Alquimista y Soporte TI ven todas
+   (Soporte TI no usa esta lectura: recibe 403, como en «Todos los aprendices»).
+
+Las dos preguntas abiertas de la primera versión y sus marcadores `[NEEDS CLARIFICATION]` (FR-006 y FR-011) quedan resueltas así.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -144,15 +159,13 @@ Como líder, quiero mirar ayer o un día de esta semana, y filtrar por grupo, fo
 
 - **FR-005**: La vista MUST contar solo alumnos: aprendices con cuenta activa y programa, sin cuentas de prueba, suspendidas ni cerradas (la regla de «Todos los aprendices»).
 - **FR-006**: La vista MUST mostrar, para el día elegido, un resumen y la lista de hábitos de las formaciones del líder, y para cada hábito: nombre, dimensión, cuántos cumplieron sobre cuántos les toca
-  y cuántos están pendientes (hoy) o sin cumplir (días cerrados). [NEEDS CLARIFICATION: ¿qué necesita ver el líder con «todos los hábitos de todos los alumnos»? Opciones: A (recomendada) quién cumplió y quién no, hábito por hábito, de todos los alumnos, con
-  la hora planificada; B además una tabla alumno × hábito de la semana (difícil de leer en un teléfono); C solo lo que cada alumno tiene planificado (qué hábitos y a qué hora), sin cumplimiento.]
+  y cuántos están pendientes (hoy) o sin cumplir (días cerrados). *(Decisión del dueño 1: opción A.)*
 - **FR-007**: Los estados MUST ser los mismos de la ficha de la persona (cumplido, pendiente, sin cumplir, en pausa, antes del Día 1, sin nada planificado, cuenta suspendida) para que las cifras coincidan. La
   falta de datos MUST NOT contarse como incumplimiento.
 - **FR-008**: Los hábitos MUST ordenarse por menor cumplimiento primero (desempate por nombre). Un hábito que a nadie le toca ese día MUST NOT aparecer.
 - **FR-009**: Al tocar un hábito, la vista MUST mostrar a los alumnos agrupados por estado, con foto o iniciales, nombre, grupo o «Sin grupo», hora planificada y hora en que cumplió, con búsqueda por nombre sin tildes ni mayúsculas.
 - **FR-010**: Tocar a un alumno MUST abrir su ficha de siempre en el mismo día; tocar «Ver evidencia» MUST abrir la hoja de evidencia de siempre. Al volver MUST conservarse hábito, filtros y posición.
-- **FR-011**: La vista MUST permitir cambiar de día (hasta 7 días hacia atrás, nunca el futuro ni antes del Día 1) y filtrar por formación (si el líder tiene más de una), grupo (con «Sin grupo») y dimensión.
-  [NEEDS CLARIFICATION: ¿qué período mira la vista? Opciones: A (recomendada) un día a la vez, hoy por defecto y hasta 7 días atrás; B la semana entera por hábito (lunes a domingo) con el detalle de un día al tocar; C las dos cosas.]
+- **FR-011**: La vista MUST permitir cambiar de día (hasta 7 días hacia atrás, nunca el futuro ni antes del Día 1) y filtrar por formación (si el líder tiene más de una), grupo (con «Sin grupo») y dimensión. *(Decisión del dueño 2: opción A.)*
 - **FR-012**: La vista MUST NOT permitir registrar, editar, marcar ni borrar nada: es solo lectura.
 
 **Formación, privacidad y datos**

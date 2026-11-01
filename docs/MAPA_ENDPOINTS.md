@@ -415,3 +415,15 @@ Vos avanzás con el frontend usando §1. Cuando te choques con algo:
 
 `category` de los hábitos (`/habits`, `/admin/habits`, `/admin/trainees/{id}/habits`) es un string abierto (`BODY`, `MIND`, `CONSCIENCE`, `SPIRIT` en la Escuela; la clave en las
 demás) y suma `categoryKey`. Detalle en `specs/023-habitos-por-formacion/contracts/habitos-por-formacion-api.md`.
+
+
+---
+
+## Hábitos de todos — el líder ve hábito por hábito (spec 029, D-305, 2026-10-31)
+
+| Método | Ruta | Para qué |
+|---|---|---|
+| GET | `/api/v1/leadership/habits?date=&group=&formation=&category=` | El día (hoy y hasta 7 atrás): resumen y hábitos con `expected/done/pending/missed`, los de menos cumplimiento primero. MENTOR_LEAD/ADMIN/ALCHEMIST |
+| GET | `/api/v1/leadership/habits/{habitId}/people?date=&group=&formation=&q=&page=&size=` | Las personas de ese hábito con su estado, hora planificada y hora de cumplimiento |
+
+Solo lectura, sin constancia de consulta, `no-store`. Detalle en `specs/029-lider-ve-todos-los-habitos/contracts/habitos-de-todos-api.md`.
