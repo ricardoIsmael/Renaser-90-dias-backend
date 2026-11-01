@@ -36,11 +36,11 @@ final class TextoDeObjetivos {
         return texto.toString();
     }
 
-    static String noventa(List<ObjetivoDeNoventaDias> objetivos) {
+    static String noventa(List<ObjetivoDeNoventaDias> objetivos, String plazoDelObjetivo) {
         if (objetivos.isEmpty()) {
-            return "Todavia no definio sus objetivos de los 90 dias (Rocas Maestras).";
+            return "Todavia no definio sus objetivos de " + plazoDelObjetivo + " (Rocas Maestras).";
         }
-        StringBuilder texto = new StringBuilder("Objetivos de los 90 dias (Rocas Maestras), por eje:\n");
+        StringBuilder texto = new StringBuilder("Objetivos de ").append(plazoDelObjetivo).append(" (Rocas Maestras), por eje:\n");
         objetivos.forEach(objetivo -> texto.append(lineaDe(objetivo)).append('\n'));
         return texto.toString().trim();
     }

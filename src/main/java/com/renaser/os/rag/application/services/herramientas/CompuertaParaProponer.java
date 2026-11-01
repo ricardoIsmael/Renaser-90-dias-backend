@@ -1,5 +1,6 @@
 package com.renaser.os.rag.application.services.herramientas;
 
+import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort;
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarCompuertaDeRocasPort;
 import com.renaser.os.shared.domain.UserId;
 import org.slf4j.Logger;
@@ -31,20 +32,29 @@ public class CompuertaParaProponer {
 
     static final String SIN_PROPUESTA = "No se creó ninguna propuesta: ";
 
-    static final String SIN_OBJETIVOS = SIN_PROPUESTA + "todavía no tiene escritos sus tres objetivos de 90 días, y sin ellos no se "
-            + "pueden planificar objetivos. Invítala a escribirlos en la pestaña Plan (o a confirmar los que nacieron de su "
-            + "diagnóstico). No le propongas otro plan ni otra acción de objetivos hasta que los tenga (sus hábitos sí se pueden ajustar).";
+    /** El aviso con el plazo de siempre (90 días); cada persona recibe el suyo con {@link #sinObjetivos(String)}. */
+    static final String SIN_OBJETIVOS = sinObjetivos("90 días");
+
+    /** «Sus tres objetivos de 90 días» (o «de 3 meses», «de 1 año»): el plazo es el del programa de ESA persona. */
+    static String sinObjetivos(String plazoDelObjetivo) {
+        return SIN_PROPUESTA + "todavía no tiene escritos sus tres objetivos de " + plazoDelObjetivo + ", y sin ellos no se "
+                + "pueden planificar objetivos. Invítala a escribirlos en la pestaña Plan (o a confirmar los que nacieron de su "
+                + "diagnóstico). No le propongas otro plan ni otra acción de objetivos hasta que los tenga (sus hábitos sí se pueden ajustar).";
+    }
 
     private final ConsultarCompuertaDeRocasPort compuertaPort;
+    private final ConsultarSituacionDelAprendizPort situacion;
 
-    public CompuertaParaProponer(ConsultarCompuertaDeRocasPort compuertaPort) {
+    public CompuertaParaProponer(ConsultarCompuertaDeRocasPort compuertaPort, ConsultarSituacionDelAprendizPort situacion) {
         this.compuertaPort = compuertaPort;
+        this.situacion = situacion;
     }
 
     /** Para el plan de la semana y los cambios a sus objetivos: solo hace falta la llave (las Rocas Maestras). */
     public Optional<String> bloqueoDeObjetivos(UserId actorId) {
         try {
-            return compuertaPort.rocasMaestrasCompletas(actorId) ? Optional.empty() : Optional.of(SIN_OBJETIVOS);
+            return compuertaPort.rocasMaestrasCompletas(actorId) ? Optional.empty()
+                    : Optional.of(sinObjetivos(PlazoDelObjetivoDeLaPersona.de(situacion, actorId)));
         } catch (RuntimeException falla) {
             log.info("[rag] la propuesta sale sin consultar la compuerta de rocas: {}", falla.toString());
             return Optional.empty();

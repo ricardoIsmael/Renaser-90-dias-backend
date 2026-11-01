@@ -1,5 +1,7 @@
 package com.renaser.os.rag.application.services.herramientas;
 
+import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort;
+import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz;
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort;
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort.BalanceDelEje;
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort.CierreDeLaSemanaAnterior;
@@ -15,6 +17,7 @@ import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizP
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort.RocasDelDia;
 import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.DisplayName;
@@ -49,7 +52,8 @@ class ConsultarRocasHerramientaTest {
     private static final PlanDeManana PLAN_PENDIENTE = new PlanDeManana(false, 0, true, LocalTime.of(18, 0), true);
 
     private final ConsultarRocasDelAprendizPort puerto = mock(ConsultarRocasDelAprendizPort.class);
-    private final ConsultarRocasHerramienta herramienta = new ConsultarRocasHerramienta(puerto);
+    private final ConsultarSituacionDelAprendizPort situacion = mock(ConsultarSituacionDelAprendizPort.class);
+    private final ConsultarRocasHerramienta herramienta = new ConsultarRocasHerramienta(puerto, situacion);
 
     @Test
     @DisplayName("sin alcance es hoy: rocas con franja, estado, evidencia, Pareto y el plan de manana")
@@ -192,6 +196,24 @@ class ConsultarRocasHerramientaTest {
                         + "avance=28% del camino")
                 .contains("- TRABAJO | Facturar | meta=S/ 15000 | lleva=S/ 7500 | avance=50% del camino")
                 .contains("- RELACIONES | Estar presente | sin meta numerica");
+    }
+
+    @Test
+    @DisplayName("noventa: el objetivo grande lleva el plazo de la persona (90 días, 3 meses o 1 año), no un 90 fijo")
+    void noventaConElPlazoDeLaPersona() {
+        when(puerto.objetivosDeNoventaDias(APRENDIZ)).thenReturn(List.of(
+                new ObjetivoDeNoventaDias("RELACIONES", "Estar presente", null, null, null, false, null, null)));
+
+        assertThat(texto(herramienta.ejecutar(APRENDIZ, conAlcance("noventa")))).startsWith("Objetivos de 90 días (Rocas Maestras), por eje:");
+
+        when(situacion.de(APRENDIZ)).thenReturn(Optional.of(new SituacionDelAprendiz(12, 2).conDuracion(365).conFormacion(Formacion.DIPLOMADO)));
+        assertThat(texto(herramienta.ejecutar(APRENDIZ, conAlcance("noventa")))).startsWith("Objetivos de 1 año (Rocas Maestras), por eje:");
+
+        when(situacion.de(APRENDIZ)).thenReturn(Optional.of(new SituacionDelAprendiz(12, 2).conDuracion(90).conFormacion(Formacion.DIPLOMADO)));
+        assertThat(texto(herramienta.ejecutar(APRENDIZ, conAlcance("noventa")))).startsWith("Objetivos de 3 meses (Rocas Maestras), por eje:");
+
+        when(situacion.de(APRENDIZ)).thenThrow(new IllegalStateException("sin lectura"));
+        assertThat(texto(herramienta.ejecutar(APRENDIZ, conAlcance("noventa")))).as("si la situación falla, el de siempre").startsWith("Objetivos de 90 días");
     }
 
     @Test

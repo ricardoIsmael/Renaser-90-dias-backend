@@ -24,6 +24,21 @@ final class CompuertasDePrueba {
         return compuerta(true, ejes);
     }
 
+    /** Sin Rocas Maestras, de una persona cuyo programa y formación se dicen con otro plazo (spec 022). */
+    static CompuertaParaProponer sinRocasMaestrasDe(com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort situacion) {
+        return new CompuertaParaProponer(new ConsultarCompuertaDeRocasPort() {
+            @Override
+            public boolean rocasMaestrasCompletas(UserId aprendizId) {
+                return false;
+            }
+
+            @Override
+            public List<String> ejesSinObjetivoSemanal(UserId aprendizId, LocalDate fecha) {
+                return List.of("CUERPO", "TRABAJO", "RELACIONES");
+            }
+        }, situacion);
+    }
+
     private static CompuertaParaProponer compuerta(boolean maestras, List<String> sinSemanal) {
         ConsultarCompuertaDeRocasPort port = new ConsultarCompuertaDeRocasPort() {
             @Override
@@ -36,6 +51,6 @@ final class CompuertasDePrueba {
                 return sinSemanal;
             }
         };
-        return new CompuertaParaProponer(port);
+        return new CompuertaParaProponer(port, participanteId -> java.util.Optional.empty());
     }
 }

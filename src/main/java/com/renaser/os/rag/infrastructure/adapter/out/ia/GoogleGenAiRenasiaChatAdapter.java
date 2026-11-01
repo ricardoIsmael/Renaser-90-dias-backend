@@ -269,22 +269,21 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
         }
         String fecha = situacion.hoy() == null ? "" : situacion.hoy().format(FECHA_DE_HOY) + ", ";
         return "Hoy es " + fecha + "su dia " + situacion.diaPrograma() + " de " + situacion.duracionDias() + ", en la fase " + situacion.fase()
-                + " de 4.\n" + nombreDelObjetivoGrande(situacion.duracionDias()) + tratoDe(situacion.trato()) + "\n"
+                + " de 4.\n" + nombreDelObjetivoGrande(situacion.plazoDelObjetivo()) + tratoDe(situacion.trato()) + "\n"
                 + MapaEnElPrompt.linea(situacion.mapa(), situacion.diaPrograma())
                 + HabitosDeHoyEnElPrompt.texto(situacion.habitos());
     }
 
     /**
-     * Su objetivo grande se llama «objetivo de 1 año» si su programa dura un año (decision del dueno, 2026-10-31): el modelo lo nombra asi y no como
-     * «de 90 dias», que es lo que dicen algunos textos de las herramientas. En el programa de 90 dias no se dice nada (es el nombre de siempre).
+     * Su objetivo grande se llama «objetivo de 1 año» si su programa dura un año, «objetivo de 3 meses» en el Diplomado de 90 dias (decision del dueno, 2026-10-31): el modelo
+     * lo nombra asi y no como «de 90 dias», que es lo que dicen el material y algunos textos fijos. En la Escuela y la Certificacion (90 dias) no se dice nada: es el nombre de siempre.
      */
-    static String nombreDelObjetivoGrande(int duracionDias) {
-        String plazo = DuracionDelPrograma.plazoDelObjetivo(duracionDias);
+    static String nombreDelObjetivoGrande(String plazo) {
         if (plazo.equals(DuracionDelPrograma.plazoDelObjetivo(DuracionDelPrograma.POR_DEFECTO))) {
             return "";
         }
-        return "Su objetivo grande se llama \"objetivo de " + plazo + "\" (su programa dura " + plazo + "): nombralo asi y nunca como \"objetivo de 90 dias\", "
-                + "aunque algun dato de las herramientas lo diga.\n";
+        return "Su objetivo grande se llama \"objetivo de " + plazo + "\": nombralo asi y nunca como \"objetivo de 90 dias\", "
+                + "aunque algun dato de las herramientas o del material lo diga.\n";
     }
 
     /**

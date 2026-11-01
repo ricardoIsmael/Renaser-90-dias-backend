@@ -28,6 +28,17 @@ class DuracionDelProgramaTest {
     }
 
     @Test
+    @DisplayName("Sabiendo la formación: el Diplomado dice 3 meses o 1 año; la Escuela y la Certificación, 90 días")
+    void plazoDelObjetivoConFormacion() {
+        assertThat(DuracionDelPrograma.plazoDelObjetivo(90, Formacion.DIPLOMADO)).isEqualTo("3 meses");
+        assertThat(DuracionDelPrograma.plazoDelObjetivo(365, Formacion.DIPLOMADO)).isEqualTo("1 año");
+        assertThat(DuracionDelPrograma.plazoDelObjetivo(90, Formacion.ESCUELA)).isEqualTo("90 días");
+        assertThat(DuracionDelPrograma.plazoDelObjetivo(90, Formacion.CERTIFICACION)).isEqualTo("90 días");
+        assertThat(DuracionDelPrograma.plazoDelObjetivo(365, Formacion.ESCUELA)).isEqualTo("1 año");
+        assertThat(DuracionDelPrograma.plazoDelObjetivo(90, null)).isEqualTo("90 días");
+    }
+
+    @Test
     @DisplayName("Con 90 días el día no cambia; con 365 se lleva a la escala de 90 sin pasarse de 90")
     void enEscalaBase() {
         assertThat(DuracionDelPrograma.enEscalaBase(37, 90)).isEqualTo(37);

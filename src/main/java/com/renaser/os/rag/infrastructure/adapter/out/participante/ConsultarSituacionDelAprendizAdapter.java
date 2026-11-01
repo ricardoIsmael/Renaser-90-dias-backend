@@ -34,7 +34,7 @@ class ConsultarSituacionDelAprendizAdapter implements ConsultarSituacionDelApren
         return participacionFinder.deParticipante(participanteId)
                 .filter(ParticipacionPrograma::inscrito)
                 .map(p -> new SituacionDelAprendiz(p.diaPrograma(), numeroDeFase(p.diaPrograma(), p.duracionDias()),
-                        clock.now().atZone(p.zona()).toLocalDate()).conDuracion(p.duracionDias()));
+                        clock.now().atZone(p.zona()).toLocalDate()).conDuracion(p.duracionDias()).conFormacion(p.formacion()));
     }
 
     /**

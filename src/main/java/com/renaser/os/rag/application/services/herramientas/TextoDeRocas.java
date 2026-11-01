@@ -42,13 +42,13 @@ final class TextoDeRocas {
         return texto.toString().trim();
     }
 
-    static String delMes(List<ObjetivoDelMes> objetivos) {
+    static String delMes(List<ObjetivoDelMes> objetivos, String plazoDelObjetivo) {
         if (objetivos.isEmpty()) {
             return "No tiene objetivo del mes: todavia no definio sus Rocas Maestras o el programa no esta en curso.";
         }
         StringBuilder texto = new StringBuilder("Objetivo del mes en curso, por eje (cifra = donde tiene que "
                 + "estar al cierre del mes; en una meta que se acumula, lo que tiene que sumar ese mes):\n");
-        objetivos.forEach(objetivo -> texto.append(lineaDe(objetivo)).append('\n'));
+        objetivos.forEach(objetivo -> texto.append(lineaDe(objetivo, plazoDelObjetivo)).append('\n'));
         return texto.toString().trim();
     }
 
@@ -111,7 +111,7 @@ final class TextoDeRocas {
         return linea.toString();
     }
 
-    private static String lineaDe(ObjetivoDelMes objetivo) {
+    private static String lineaDe(ObjetivoDelMes objetivo, String plazoDelObjetivo) {
         StringBuilder linea = new StringBuilder("- ").append(objetivo.eje()).append(" | mes ")
                 .append(objetivo.numeroMes()).append(" (cierra el dia ").append(objetivo.diaDeCierre())
                 .append(" del programa)");
@@ -119,7 +119,7 @@ final class TextoDeRocas {
             linea.append(" | objetivo escrito por la persona: ").append(objetivo.tituloPropio());
         }
         if (objetivo.metaAlcanzada()) {
-            return linea.append(" | ya alcanzo la meta de los 90 dias (").append(cifraDe(objetivo))
+            return linea.append(" | ya alcanzo la meta del objetivo de ").append(plazoDelObjetivo).append(" (").append(cifraDe(objetivo))
                     .append("): el mes es sostenerla").toString();
         }
         if (objetivo.cifra() != null) {

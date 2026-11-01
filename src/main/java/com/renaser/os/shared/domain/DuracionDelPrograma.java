@@ -53,6 +53,17 @@ public final class DuracionDelPrograma {
     }
 
     /**
+     * Lo mismo sabiendo la formación: en el Diplomado el plazo se dice en meses o años («objetivo de 3 meses», «objetivo de 1 año»), como lo eligió la persona
+     * al aceptarla; en la Escuela y la Certificación se dice en días («90 días»), salvo el año completo.
+     */
+    public static String plazoDelObjetivo(int dias, Formacion formacion) {
+        if (formacion == Formacion.DIPLOMADO && dias > 0) {
+            return etiqueta(dias);
+        }
+        return plazoDelObjetivo(dias);
+    }
+
+    /**
      * Cómo se dice la duración: «1 año", «2 años», «3 meses» o «90 días». Los meses y los años son los del dueño (3 meses = 90 días,
      * 1 año = 365); otro valor se dice en días.
      */

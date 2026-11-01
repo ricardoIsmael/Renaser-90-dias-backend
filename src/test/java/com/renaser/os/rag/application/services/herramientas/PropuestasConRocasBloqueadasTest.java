@@ -119,6 +119,21 @@ class PropuestasConRocasBloqueadasTest {
     }
 
     @Test
+    @DisplayName("el aviso de «sin objetivos» nombra el plazo de la persona: 90 días, 3 meses o 1 año")
+    void elAvisoNombraElPlazoDeLaPersona() {
+        var unAnio = CompuertasDePrueba.sinRocasMaestrasDe(participanteId -> java.util.Optional.of(
+                new com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz(5, 1)
+                        .conDuracion(365).conFormacion(com.renaser.os.shared.domain.Formacion.DIPLOMADO)));
+        var tresMeses = CompuertasDePrueba.sinRocasMaestrasDe(participanteId -> java.util.Optional.of(
+                new com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz(5, 1)
+                        .conDuracion(90).conFormacion(com.renaser.os.shared.domain.Formacion.DIPLOMADO)));
+
+        assertThat(unAnio.bloqueoDeObjetivos(APRENDIZ).orElseThrow()).contains("sus tres objetivos de 1 año").doesNotContain("90 días");
+        assertThat(tresMeses.bloqueoDeObjetivos(APRENDIZ).orElseThrow()).contains("sus tres objetivos de 3 meses");
+        assertThat(CompuertasDePrueba.sinRocasMaestras().bloqueoDeObjetivos(APRENDIZ)).contains(CompuertaParaProponer.SIN_OBJETIVOS);
+    }
+
+    @Test
     @DisplayName("sin objetivo semanal del eje: no se propone la accion del dia y se ofrece primero el de la semana")
     void sinObjetivoSemanal() {
         CompuertaParaProponer sinCuerpo = CompuertasDePrueba.sinObjetivoSemanal(List.of("CUERPO", "TRABAJO"));
@@ -164,7 +179,7 @@ class PropuestasConRocasBloqueadasTest {
                     public List<String> ejesSinObjetivoSemanal(UserId aprendizId, LocalDate fecha) {
                         throw new IllegalStateException("rocks caido");
                     }
-                });
+                }, participanteId -> java.util.Optional.empty());
 
         assertThat(agregarAccion(caida)).isInstanceOf(ResultadoHerramienta.Exito.class);
     }
@@ -179,7 +194,7 @@ class PropuestasConRocasBloqueadasTest {
                 new PlanificarRocasPort.ResultadoPlan.Rechazado(PlanificarRocasPort.Motivo.ROCAS_BLOQUEADAS));
         when(planificar.crearPlanDeLaSemana(any(), any())).thenReturn(
                 new PlanificarRocasPort.ResultadoPlan.Rechazado(PlanificarRocasPort.Motivo.ROCAS_BLOQUEADAS));
-        String esperado = "No se pudo: primero escribe tus tres objetivos de 90 días en Plan (o confirma los de tu "
+        String esperado = "No se pudo: primero escribe tus tres objetivos en Plan (o confirma los de tu "
                 + "diagnóstico). Sin ellos todavía no se pueden planificar acciones ni objetivos.";
 
         assertThat(new AgregarAccionConfirmable(agregar, planificar).aplicar(APRENDIZ, new InvocacionHerramienta(
