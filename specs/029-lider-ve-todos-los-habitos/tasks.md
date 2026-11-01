@@ -11,5 +11,5 @@ Estado al 2026-10-31. `[x]` = hecho y probado.
 - [x] T006 Documentación: D-305, `MAPA_ENDPOINTS`
 
 ## App
-- [ ] T020 Fila «Hábitos de todos» en Yo → «Mis mentores» (solo si el servidor la ofrece), pantalla del día y lista de un hábito, abrir ficha y evidencia
-- [ ] T021 Pruebas Jest, Maestro (`.maestro/habitos-de-todos/`) y `AGENTS.md`
+- [x] T020 Fila «Hábitos de todos» en Yo → «Mis mentores» (solo si el servidor la ofrece), pantalla del día y lista de un hábito, abrir ficha y evidencia
+- [x] T021 Pruebas Jest, Maestro (`.maestro/habitos-de-todos/`) y `AGENTS.md`
