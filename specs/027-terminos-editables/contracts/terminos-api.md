@@ -20,7 +20,10 @@ Todo es **aditivo**. Un cliente anterior ignora lo nuevo y un servidor anterior 
 El hito de siempre; con `TERMINOS` además deja la **constancia** (persona, versión, hora y la firma que dibujó), todo en la misma transacción. `termsVersionId` es opcional: sin él (una app anterior) se anota la
 vigente de su formación. **409** `Los términos cambiaron mientras leías: léelos de nuevo.` si esa versión ya no es la vigente (nada queda registrado contra la equivocada).
 
-### `GET /api/v1/onboarding/terms/accepted`  → `{ "version": {…}, "acceptedAt": "…" }`  ·  **404** si nunca aceptó
+### `GET /api/v1/onboarding/terms/accepted`  → `{ "version": {…}, "acceptedAt": "…", "signatureUrl": "https://…" | null }`  ·  **404** si nunca aceptó
+La versión que la persona aceptó por última vez (la de su formación; si no, la más reciente de cualquiera), **aunque haya una más nueva**, con los marcadores `{formacion}` y `{duracion}` ya reemplazados.
+`signatureUrl` es el enlace de lectura (vence a los 15 minutos) de la firma que dibujó **ella** al aceptar; `null` si no quedó firma (aceptó antes de las versiones sin firma guardada) o el archivo ya no está.
+Solo ve lo suyo: la persona nunca recibe la constancia de otra. La app lo muestra en Yo → Mi onboarding → Términos y condiciones (P3, FR-023).
 El texto de la versión que aceptó por última vez (de su formación; si no, la última de cualquiera), aunque haya una más nueva.
 
 ## Administración (ADMIN y ALQUIMISTA activos; el guard real es `GuardiaDeTerminos`, y responde 403 a cualquier otro rol o a una cuenta suspendida)

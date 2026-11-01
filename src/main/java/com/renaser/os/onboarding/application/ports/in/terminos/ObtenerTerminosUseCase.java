@@ -27,6 +27,7 @@ public interface ObtenerTerminosUseCase {
                                  Optional<Integer> ultimaAceptada, Optional<String> nota) {
     }
 
-    record TerminosAceptados(VersionDeTerminos version, Instant aceptadaEn) {
+    /** @param firmaUrl enlace de lectura de la firma que dibujó al aceptar (vence a los 15 minutos); vacío si no quedó firma o el archivo ya no está */
+    record TerminosAceptados(VersionDeTerminos version, Instant aceptadaEn, Optional<String> firmaUrl) {
     }
 }

@@ -130,8 +130,39 @@ class TerminosEditablesIT {
         assertThat(json.readTree(paraLeer(enviar("GET", "/api/v1/onboarding/terms", sesion, null))).get("pending").asText()).isEqualTo("NONE");
         JsonNode aceptados = json.readTree(paraLeer(enviar("GET", "/api/v1/onboarding/terms/accepted", sesion, null)));
         assertThat(aceptados.get("version").get("number").asInt()).isEqualTo(1);
+        assertThat(aceptados.get("acceptedAt").asText()).isNotBlank();
+        assertThat(aceptados.get("signatureUrl").isNull()).as("sin firma dibujada no hay enlace").isTrue();
+        // P3: con la firma que dibujó al aceptar, la relectura trae su enlace de lectura (solo la suya).
+        Long firma = jdbc.queryForObject("INSERT INTO renaser.medias_onboarding (usuario_id, flujo, clave_pregunta, clase, bucket, ruta_storage, mime) "
+                + "VALUES (?, 'terminos', 'terms_signature', 'firma', 'renaser-test', ?, 'image/png') RETURNING id", Long.class, ana, "onboarding/" + ana + "/firma.png");
+        jdbc.update("UPDATE renaser.aceptaciones_de_terminos SET firma_media_id = ? WHERE usuario_id = ?", firma, ana);
+        JsonNode conFirma = json.readTree(paraLeer(enviar("GET", "/api/v1/onboarding/terms/accepted", sesion, null)));
+        assertThat(conFirma.get("signatureUrl").asText()).contains("firma.png");
+        assertThat(conFirma.get("version").get("clauses")).hasSize(23);
         JsonNode constancia = json.readTree(paraLeer(enviar("GET", "/api/v1/admin/terms/people/" + ana, sesionDe(usuario("ADMIN")), null)));
         assertThat(constancia.get(0).get("number").asInt()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("P3: quien nunca aceptó unos términos no tiene nada que releer (404), y cada quien relee la versión que aceptó él, aunque haya una más nueva")
+    void releerLoAceptado() throws Exception {
+        UUID ana = aprendiz("ESCUELA");
+        UUID beto = aprendiz("ESCUELA");
+        String sesionDeAna = sesionDe(ana);
+        assertThat(enviar("GET", "/api/v1/onboarding/terms/accepted", sesionDeAna, null).statusCode()).as("nunca aceptó").isEqualTo(404);
+        String version = json.readTree(paraLeer(enviar("GET", "/api/v1/onboarding/terms", sesionDeAna, null))).get("version").get("id").asText();
+        assertThat(enviar("POST", "/api/v1/onboarding/milestones", sesionDeAna, Map.of("milestone", "TERMINOS", "termsVersionId", version)).statusCode()).isEqualTo(200);
+
+        String admin = sesionDe(usuario("ADMIN"));
+        JsonNode vigente = json.readTree(paraLeer(enviar("GET", "/api/v1/admin/terms/ESCUELA", admin, null))).get("current");
+        assertThat(guardar(admin, "ESCUELA", "Términos nuevos", vigente.get("introduction").asText(), vigente.get("clauses"), vigente.get("checkboxText").asText(), 1)
+                .statusCode()).isEqualTo(200);
+        assertThat(enviar("POST", "/api/v1/admin/terms/ESCUELA/publish", admin, Map.of("note", "Cambió el título", "asksNewAcceptance", false, "baseNumber", 1))
+                .statusCode()).isEqualTo(200);
+
+        JsonNode loDeAna = json.readTree(paraLeer(enviar("GET", "/api/v1/onboarding/terms/accepted", sesionDeAna, null)));
+        assertThat(loDeAna.get("version").get("number").asInt()).as("relee la que aceptó, no la nueva").isEqualTo(1);
+        assertThat(enviar("GET", "/api/v1/onboarding/terms/accepted", sesionDe(beto), null).statusCode()).as("Beto nunca aceptó").isEqualTo(404);
     }
 
     @Test

@@ -25,4 +25,4 @@ persona (`aceptaciones_de_terminos`). La aceptación sigue siendo el hito de Té
 7. **Marcadores** `{formacion}` y `{duracion}` se reemplazan al servir el texto a cada persona.
 
 ## Fuera de esta entrega
-Releer los términos aceptados desde una pantalla de Yo (el endpoint existe; falta la entrada), notificaciones push (Q9-A: no), formato del texto (Q7-A: plano).
+Notificaciones push (Q9-A: no), formato del texto (Q7-A: plano).

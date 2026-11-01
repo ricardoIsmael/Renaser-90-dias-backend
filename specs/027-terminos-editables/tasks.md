@@ -6,6 +6,7 @@
 - [x] T003 Dominio: `ContenidoDeTerminos`, `VersionDeTerminos`, `QuePideLaAceptacion`, `ReglasDeTerminos` + pruebas
 - [x] T004 Puertos y adaptadores JDBC (`TerminosPort`, `AceptacionesDeTerminosPort`, `LiteralDeArreglo`)
 - [x] T005 `ObtenerTerminosUseCase` (los de mi formación, marcadores, releer) y `GET /onboarding/terms[/accepted]`
+- [x] T005b `GET /onboarding/terms/accepted` trae también la firma de la persona (`signatureUrl`, enlace de 15 min; `FirmaDeLaAceptacion`, compartida con la constancia de Administración)
 - [x] T006 La constancia en el hito de Términos (`termsVersionId`, 409 si cambió)
 - [x] T007 `GestionarTerminosUseCase` / `ConsultarTerminosUseCase` y `/admin/terms/**`
 - [x] T008 `users.api.TerminosPublicados` + `IntegrantesDeFormacionFinder`; la 025 rechaza una formación sin términos

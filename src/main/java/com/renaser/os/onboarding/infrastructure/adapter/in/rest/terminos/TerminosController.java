@@ -55,10 +55,11 @@ public class TerminosController {
         }
     }
 
-    public record TerminosAceptadosResponse(VersionDeTerminosResponse version, Instant acceptedAt) {
+    /** @param signatureUrl la firma que dibujó al aceptar (el enlace vence a los 15 minutos); {@code null} si no quedó o ya no está */
+    public record TerminosAceptadosResponse(VersionDeTerminosResponse version, Instant acceptedAt, String signatureUrl) {
 
         static TerminosAceptadosResponse from(TerminosAceptados t) {
-            return new TerminosAceptadosResponse(VersionDeTerminosResponse.from(t.version()), t.aceptadaEn());
+            return new TerminosAceptadosResponse(VersionDeTerminosResponse.from(t.version()), t.aceptadaEn(), t.firmaUrl().orElse(null));
         }
     }
 

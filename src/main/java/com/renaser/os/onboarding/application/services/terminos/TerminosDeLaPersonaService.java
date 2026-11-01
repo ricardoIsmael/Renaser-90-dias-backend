@@ -31,14 +31,16 @@ class TerminosDeLaPersonaService implements ObtenerTerminosUseCase {
     private final AlcanceDeFormacionFinder formaciones;
     private final FormacionesFinder catalogo;
     private final ParticipacionProgramaFinder participaciones;
+    private final FirmaDeLaAceptacion firmas;
 
     TerminosDeLaPersonaService(TerminosPort terminos, AceptacionesDeTerminosPort aceptaciones, AlcanceDeFormacionFinder formaciones,
-                               FormacionesFinder catalogo, ParticipacionProgramaFinder participaciones) {
+                               FormacionesFinder catalogo, ParticipacionProgramaFinder participaciones, FirmaDeLaAceptacion firmas) {
         this.terminos = terminos;
         this.aceptaciones = aceptaciones;
         this.formaciones = formaciones;
         this.catalogo = catalogo;
         this.participaciones = participaciones;
+        this.firmas = firmas;
     }
 
     @Override
@@ -60,7 +62,7 @@ class TerminosDeLaPersonaService implements ObtenerTerminosUseCase {
         List<Aceptacion> suyas = aceptaciones.delUsuario(persona);
         Optional<Aceptacion> ultima = suyas.stream().filter(a -> a.formacion() == formacion).findFirst().or(() -> suyas.stream().findFirst());
         return ultima.flatMap(a -> terminos.porId(a.versionId()).map(v -> new TerminosAceptados(conMarcadores(v, catalogo.de(v.formacion()).nombre(), persona),
-                a.aceptadaEn())));
+                a.aceptadaEn(), firmas.urlDe(a.firmaMediaId()))));
     }
 
     /** La formación de los términos de la persona: la suya (la activa, si es personal); Administración y Alquimista, que no tienen una, firman los de la Escuela. */

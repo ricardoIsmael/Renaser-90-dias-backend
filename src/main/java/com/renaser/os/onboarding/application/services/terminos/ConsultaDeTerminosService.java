@@ -1,12 +1,9 @@
 package com.renaser.os.onboarding.application.services.terminos;
 
 import com.renaser.os.onboarding.application.ports.in.terminos.ConsultarTerminosUseCase;
-import com.renaser.os.onboarding.application.ports.out.media.LoadMediaPort;
 import com.renaser.os.onboarding.application.ports.out.terminos.AceptacionesDeTerminosPort;
 import com.renaser.os.onboarding.application.ports.out.terminos.TerminosPort;
-import com.renaser.os.onboarding.domain.model.media.MediaOnboarding;
 import com.renaser.os.onboarding.domain.model.terminos.VersionDeTerminos;
-import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FormacionesFinder;
@@ -15,7 +12,6 @@ import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.springframework.stereotype.Service;
 
-import java.time.Duration;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -29,29 +25,23 @@ import java.util.Set;
 @Service
 class ConsultaDeTerminosService implements ConsultarTerminosUseCase {
 
-    /** La misma validez que la firma del Pacto y las fotos de evidencia. */
-    private static final Duration VALIDEZ_DE_LA_FIRMA = Duration.ofMinutes(15);
-
     private final GuardiaDeTerminos guardia;
     private final TerminosPort terminos;
     private final AceptacionesDeTerminosPort aceptaciones;
     private final FormacionesFinder catalogo;
     private final IntegrantesDeFormacionFinder integrantes;
     private final UserSummaryFinder usuarios;
-    private final LoadMediaPort medias;
-    private final AlmacenamientoPort almacenamiento;
+    private final FirmaDeLaAceptacion firmas;
 
     ConsultaDeTerminosService(GuardiaDeTerminos guardia, TerminosPort terminos, AceptacionesDeTerminosPort aceptaciones, FormacionesFinder catalogo,
-                              IntegrantesDeFormacionFinder integrantes, UserSummaryFinder usuarios, LoadMediaPort medias,
-                              AlmacenamientoPort almacenamiento) {
+                              IntegrantesDeFormacionFinder integrantes, UserSummaryFinder usuarios, FirmaDeLaAceptacion firmas) {
         this.guardia = guardia;
         this.terminos = terminos;
         this.aceptaciones = aceptaciones;
         this.catalogo = catalogo;
         this.integrantes = integrantes;
         this.usuarios = usuarios;
-        this.medias = medias;
-        this.almacenamiento = almacenamiento;
+        this.firmas = firmas;
     }
 
     @Override
@@ -97,15 +87,8 @@ class ConsultaDeTerminosService implements ConsultarTerminosUseCase {
     @Override
     public List<ConstanciaDeUnaPersona> constanciaDe(UserId actor, UserId persona) {
         guardia.exigirAdministracion(actor);
-        return aceptaciones.delUsuario(persona).stream().map(a -> new ConstanciaDeUnaPersona(a.formacion(), a.numero(), a.aceptadaEn(), firmaDe(a.firmaMediaId())))
+        return aceptaciones.delUsuario(persona).stream().map(a -> new ConstanciaDeUnaPersona(a.formacion(), a.numero(), a.aceptadaEn(), firmas.urlDe(a.firmaMediaId()).orElse(null)))
                 .toList();
-    }
-
-    private String firmaDe(Long mediaId) {
-        if (mediaId == null) {
-            return null;
-        }
-        return medias.porId(mediaId).filter(MediaOnboarding::esFirma).map(m -> almacenamiento.firmarLectura(m.rutaStorage(), VALIDEZ_DE_LA_FIRMA).toString()).orElse(null);
     }
 
     private static List<Persona> personas(Set<UserId> ids, Map<UserId, UserSummary> nombres) {

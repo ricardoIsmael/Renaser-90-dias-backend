@@ -38,7 +38,7 @@ Fuente: `~/.config/renaser-e2e/formaciones/decisiones-del-dueno-2026-10-31.md`. 
 | Q3 A | En una nueva aceptación, casilla y firma. | La misma pantalla de siempre con otro titular. |
 | Q4 A | El personal firma los de cada formación en la que trabaja, la primera vez que entra a ella; Administración y Alquimista, los de la Escuela. | `QuePideLaAceptacion.PRIMERA_EN_LA_FORMACION`; la formación de los términos de una persona es `AlcanceDeFormacionFinder.formacionDe`, o la Escuela. |
 | Q5 A | El texto actual nunca cambió. | Las aceptaciones de antes se atribuyen a la versión 1 (V150). |
-| Q6 A | La persona puede releer lo que aceptó. | `GET /onboarding/terms/accepted` (sin pantalla nueva en Yo: ver el reporte). |
+| Q6 A | La persona puede releer lo que aceptó. | `GET /onboarding/terms/accepted` (con la firma) y la fila «Términos y condiciones» en Yo → Mi onboarding. |
 | Q7 A | Texto plano. | Sin formato. |
 | Q8 A | Editan Administrador y Alquimista. | `GuardiaDeTerminos`. |
 | Q9 A | Sin push: se ve al abrir la app. | — |
