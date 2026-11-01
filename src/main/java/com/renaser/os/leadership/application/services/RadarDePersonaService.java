@@ -49,7 +49,7 @@ public class RadarDePersonaService implements ConsultarRadarDePersonaUseCase {
     public CodigoRenaserDePersona radarDe(ConsultaRadarDePersona consulta) {
         acceso.requireLiderazgoActivo(consulta.actorId());
         Instant ahora = clock.now();
-        GrupoAcompanado grupo = personas.requireGrupoConMentor(consulta.grupoId(), ahora);
+        GrupoAcompanado grupo = personas.requireGrupoConMentor(consulta.actorId(), consulta.grupoId(), ahora);
         Miembro miembro = personas.requireMiembro(grupo, UserId.of(consulta.personaId()), ahora);
         return radar.de(miembro.perfil().id(), consulta.cursor(), TAMANO_PAGINA);
     }
@@ -58,7 +58,7 @@ public class RadarDePersonaService implements ConsultarRadarDePersonaUseCase {
     @Override
     public CodigoRenaserDePersona radarDeUnaPersona(ConsultaRadarDeUnaPersona consulta) {
         acceso.requireLiderazgoActivo(consulta.actorId());
-        Mirada mirada = programa.mirar(UserId.of(consulta.personaId()), clock.now());
+        Mirada mirada = programa.mirar(consulta.actorId(), UserId.of(consulta.personaId()), clock.now());
         return radar.de(mirada.personaId(), consulta.cursor(), TAMANO_PAGINA);
     }
 }

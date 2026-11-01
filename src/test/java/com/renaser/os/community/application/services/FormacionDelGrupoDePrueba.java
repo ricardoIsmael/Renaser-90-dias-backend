@@ -1,18 +1,12 @@
 package com.renaser.os.community.application.services;
 
-import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.Formacion;
-import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.AlcanceDeFormacionFinder;
+import com.renaser.os.users.api.AlcanceDeFormacionPermisivo;
 import com.renaser.os.users.api.FormacionConfigurada;
 import com.renaser.os.users.api.FormacionesFinder;
 
-import java.util.Collection;
-import java.util.EnumSet;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
-import java.util.Set;
 
 /**
  * Un {@link FormacionDelGrupo} para las pruebas que no hablan de formaciones (spec 022): todas las personas pertenecen a todas las formaciones,
@@ -24,43 +18,11 @@ final class FormacionDelGrupoDePrueba {
     }
 
     static FormacionDelGrupo permisivo() {
-        return con(new Permisivo());
+        return con(new AlcanceDeFormacionPermisivo());
     }
 
     static FormacionDelGrupo con(AlcanceDeFormacionFinder pertenencias) {
         return new FormacionDelGrupo(pertenencias, new CatalogoDePrueba());
-    }
-
-    /** Nadie pertenece a nada: para probar que se rechaza. */
-    static final class Permisivo implements AlcanceDeFormacionFinder {
-
-        @Override
-        public AlcanceDeFormacion de(UserId actor) {
-            return AlcanceDeFormacion.todas();
-        }
-
-        @Override
-        public Optional<Formacion> formacionDe(UserId persona) {
-            return Optional.of(Formacion.POR_DEFECTO);
-        }
-
-        @Override
-        public Set<Formacion> formacionesDe(UserId persona) {
-            return EnumSet.allOf(Formacion.class);
-        }
-
-        @Override
-        public Set<UserId> dentroDelAlcance(Collection<UserId> personas, AlcanceDeFormacion alcance) {
-            return new HashSet<>(personas);
-        }
-
-        @Override
-        public void exigirQueLaVea(UserId actor, UserId objetivo) {
-        }
-
-        @Override
-        public void exigirQueLaVea(UserId actor, Formacion formacionDelObjeto) {
-        }
     }
 
     static final class CatalogoDePrueba implements FormacionesFinder {

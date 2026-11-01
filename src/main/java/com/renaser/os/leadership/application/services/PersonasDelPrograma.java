@@ -9,6 +9,7 @@ import com.renaser.os.leadership.application.services.PersonasDelGrupo.Miembro;
 import com.renaser.os.leadership.domain.model.cumplimiento.BusquedaPorNombre;
 import com.renaser.os.leadership.domain.model.cumplimiento.GrupoDeLaPersona;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import com.renaser.os.users.api.CuentasDePruebaFinder;
 import com.renaser.os.users.api.ParticipacionPrograma;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
@@ -45,9 +46,11 @@ class PersonasDelPrograma {
     private final ParticipacionProgramaFinder participaciones;
     private final UserSummaryFinder usuarios;
     private final CuentasDePruebaFinder pruebas;
+    private final AlcanceDeFormacionFinder formaciones;
 
     PersonasDelPrograma(AcompanamientoFinder acompanamiento, ParticipacionProgramaFinder participaciones,
-                        UserSummaryFinder usuarios, CuentasDePruebaFinder pruebas) {
+                        UserSummaryFinder usuarios, CuentasDePruebaFinder pruebas, AlcanceDeFormacionFinder formaciones) {
+        this.formaciones = formaciones;
         this.acompanamiento = acompanamiento;
         this.participaciones = participaciones;
         this.usuarios = usuarios;
@@ -55,10 +58,12 @@ class PersonasDelPrograma {
     }
 
     /** La persona y el grupo con que se la mira; 404 si no es un aprendiz del programa que se muestre. */
-    Mirada mirar(UserId personaId, Instant ahora) {
+    Mirada mirar(UserId actor, UserId personaId, Instant ahora) {
         UserSummary perfil = usuarios.findById(personaId).filter(this::seMuestra).orElseThrow(PersonasDelPrograma::noEncontrada);
         ParticipacionPrograma participacion = participaciones.deParticipante(personaId)
                 .filter(ParticipacionPrograma::inscrito).orElseThrow(PersonasDelPrograma::noEncontrada);
+        // Spec 022: una persona de otra formación se responde como si no existiera (404).
+        formaciones.exigirQueLaVea(actor, participacion.formacion());
         GrupoDeLaPersona grupo = GrupoDeLaPersona.elegir(gruposDe(Set.of(personaId), ahora).getOrDefault(personaId, List.of()),
                 participacion.celulaId()).orElse(null);
         return new Mirada(new Miembro(perfil, participacion, false), grupo);
@@ -68,8 +73,8 @@ class PersonasDelPrograma {
      * Una página de los aprendices que coinciden con la búsqueda, por nombre. El padrón se lee entero (son cientos, no
      * miles) y se filtra y ordena en memoria: lo caro —el programa y el grupo de cada uno— se pide solo para la página.
      */
-    PaginaDePersonas listar(String busqueda, int pagina, int tamano, Instant ahora) {
-        List<UserSummary> coinciden = padron().stream()
+    PaginaDePersonas listar(UserId actor, String busqueda, int pagina, int tamano, Instant ahora) {
+        List<UserSummary> coinciden = padron(actor).stream()
                 .filter(perfil -> BusquedaPorNombre.coincide(perfil.fullName(), busqueda))
                 .sorted(Comparator.comparing(UserSummary::fullName, BusquedaPorNombre.porNombre())
                         .thenComparing(perfil -> perfil.id().value()))
@@ -82,8 +87,10 @@ class PersonasDelPrograma {
     }
 
     /** Aprendices activos, que estén en el programa y no sean de prueba. */
-    private List<UserSummary> padron() {
-        Set<UserId> enElPrograma = new HashSet<>(participaciones.participantesInscritosActivos());
+    private List<UserSummary> padron(UserId actor) {
+        // Spec 022: el padrón es el de la formación de quien mira (el líder con varias, la activa); Administración ve todas.
+        Set<UserId> enElPrograma = new HashSet<>(formaciones.dentroDelAlcance(participaciones.participantesInscritosActivos(),
+                formaciones.de(actor)));
         List<UserSummary> candidatos = usuarios.aprendicesActivos().stream()
                 .filter(perfil -> perfil.role() == UserRole.TRAINEE && enElPrograma.contains(perfil.id()))
                 .toList();
