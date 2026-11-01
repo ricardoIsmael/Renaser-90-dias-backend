@@ -58,3 +58,12 @@
 - El aviso push de un evento no cambia de ruta (`/eventos/{id}`); solo el chat añade `?formacion=` (FR-032).
 - La presencia en vivo se filtra al leer quién está conectado, no al repartir el aviso.
 - `PersonasConvocadasService` (quién responde a un evento) puede seguir listando a quien respondió y luego cambió de formación; no ve nada de otra formación porque el detalle pide la formación.
+
+## Pruebas corridas (2026-11-01, con `pesado.sh`)
+
+- Unitarias y de arquitectura (4037, 0 fallos): `ArchitectureTest`, `EndpointAuthorizationDeclarationTest`, `FuncionalidadDeclaradaTest`, `RutasCubiertasPorElFiltroTest` y todo `*Test` de `chat`,
+  `community`, `calendar`, `academy`, `points`, `shared`, `users`, `plataforma`, `notifications` y `leadership`.
+- Integración, todas verdes: `ComunidadPorFormacionIT`, `FormacionesIT`, `GruposPorFormacionIT`, `CentroDeFormacionesIT` y todos los `*IT` de `chat`, `community`, `calendar` y `points`
+  (con `PodioDeLaSemanaIT`, `SoportesPaginadosIT`, `RankingConAprendizSinProgramaIT`), más los de `notifications`, `plataforma` y `cuenta`.
+- App: `npx tsc --noEmit` en 0 y Jest de `formaciones`, `ranking`, `community`, `eventos`, `academy`, `chat`, `mentor`, `admin`, `alarmas`, `navigation` y `screens` (220 suites, 1862 pruebas).
+- Falta el `clean verify` completo, que corre el coordinador con todas las ramas juntas, y el E2E (T026).
