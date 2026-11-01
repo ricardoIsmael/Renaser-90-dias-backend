@@ -33,6 +33,11 @@ Estado al 2026-10-31. `[x]` = hecho y con prueba; `[ ]` = pendiente. Los número
 - [x] T050 Mentor/guía: `/mentor/groups/{g}/learners/{u}/diagnostico`.
 - [x] T051 Líder, Admin y Alquimista: `/leadership/groups/{g}/people/{p}/diagnostico` y `/leadership/people/{p}/diagnostico`.
 
+## Fase 6b — Duración de la formación en las rocas (V156)
+- [x] T055 `ProgresoParticipanteRocks.duracionDias`; `SemanaPrograma`/`MesPrograma`/`CurvaDelPlan`/`CalculadoraObjetivoMensual` con la duración de la persona (90 o 365).
+- [x] T056 V156: CHECK de `rocas_semanales.numero_semana` a 53 y de `rocas_mensuales.numero_mes` a 12; `DuracionDelPlanTest` fija el máximo real.
+- [x] T057 `RocasDelAprendizFinder.ultimaSemanaDelPrograma` para la herramienta de SER de «la semana siguiente».
+
 ## Fase 7 — Pruebas y cierre
 - [x] T060 Pruebas unitarias de dominio, servicios, SER, mentor y líder; autorización negativa (403) y aislamiento.
 - [ ] T061 `TZ=UTC ./mvnw -B clean verify` completo (migraciones V143–V147 contra Postgres, `DiagnosticoDeIngresoIT`, `ArchitectureTest`, `EndpointAuthorizationDeclarationTest`, `FuncionalidadDeclaradaTest`).
