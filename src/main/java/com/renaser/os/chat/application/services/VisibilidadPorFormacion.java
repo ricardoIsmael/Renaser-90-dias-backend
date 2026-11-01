@@ -143,7 +143,8 @@ public class VisibilidadPorFormacion {
             Set<UserId> pertenecen = formaciones.dentroDelAlcance(candidatos, AlcanceDeFormacion.de(formacion));
             for (Conversacion directo : deEsaFormacion) {
                 UserId otro = otros.get(directo.id());
-                if (otro == null || !(pertenecen.contains(otro) || veTodasLasFormaciones(perfiles.get(otro)))) {
+                // Sin la otra persona (borraron su cuenta y se llevó su fila) no hay a quién comparar: el historial sigue a la vista de quien queda.
+                if (otro != null && !(pertenecen.contains(otro) || veTodasLasFormaciones(perfiles.get(otro)))) {
                     sinCompanero.add(directo.id());
                 }
             }

@@ -391,7 +391,7 @@ class LecturaEnVivoIT {
 
     /** La comunidad es única (índice parcial): se usa la que haya, o se crea una y se borra al final. */
     private UUID globalConParticipantes(UUID... personas) {
-        UUID global = jdbc.query("SELECT id FROM renaser.conversaciones WHERE tipo = 'GLOBAL'",
+        UUID global = jdbc.query("SELECT id FROM renaser.conversaciones WHERE tipo = 'GLOBAL' AND formacion = 'ESCUELA'",
                         (fila, n) -> fila.getObject(1, UUID.class)).stream().findFirst()
                 .orElseGet(() -> conversacion("GLOBAL", null, "Global"));
         for (UUID persona : personas) {

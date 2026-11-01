@@ -177,7 +177,7 @@ class ReferenciasDeMediaDelMuroIT {
     private UUID nuevaConversacionGlobal() {
         // La GLOBAL es unica por indice parcial: si el arranque ya creo una, se reusa.
         List<UUID> existente = jdbcTemplate.queryForList(
-                "SELECT id FROM renaser.conversaciones WHERE tipo = 'GLOBAL'", UUID.class);
+                "SELECT id FROM renaser.conversaciones WHERE tipo = 'GLOBAL' AND formacion = 'ESCUELA'", UUID.class);
         if (!existente.isEmpty()) {
             return existente.get(0);
         }

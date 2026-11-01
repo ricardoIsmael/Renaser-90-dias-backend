@@ -149,7 +149,7 @@ class ClavesCompartidasAlBorrarCuentaIT {
         // clases: si otra ya la creó, se usa esa. Sembrarla siempre dependía del orden y rompió el CD (E-497).
         if ("GLOBAL".equals(tipo)) {
             java.util.List<UUID> existente = jdbc.queryForList(
-                    "SELECT id FROM renaser.conversaciones WHERE tipo = 'GLOBAL'", UUID.class);
+                    "SELECT id FROM renaser.conversaciones WHERE tipo = 'GLOBAL' AND formacion = 'ESCUELA'", UUID.class);
             if (!existente.isEmpty()) {
                 return existente.get(0);
             }

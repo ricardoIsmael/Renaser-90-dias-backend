@@ -296,7 +296,7 @@ class ParticipantesDelChatIT {
 
     /** La GLOBAL es única por índice parcial: si el arranque ya creó una, se reusa (y no se borra). Sus participantes reales, no se tocan: se buscan por nombre. */
     private UUID conversacionGlobal() {
-        List<UUID> existente = jdbcTemplate.queryForList("SELECT id FROM renaser.conversaciones WHERE tipo = 'GLOBAL'", UUID.class);
+        List<UUID> existente = jdbcTemplate.queryForList("SELECT id FROM renaser.conversaciones WHERE tipo = 'GLOBAL' AND formacion = 'ESCUELA'", UUID.class);
         return existente.isEmpty() ? conversacion("GLOBAL", null, null, "Comunidad") : existente.get(0);
     }
 
