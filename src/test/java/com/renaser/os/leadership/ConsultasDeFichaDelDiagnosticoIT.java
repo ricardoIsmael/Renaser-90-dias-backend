@@ -138,9 +138,9 @@ class ConsultasDeFichaDelDiagnosticoIT {
             DiagnosticoConsultadoEvent evento = new DiagnosticoConsultadoEvent(UUID.randomUUID(), UserId.of(consultor), persona, GRUPO, UserId.of(consultor), CUANDO);
 
             publicar(evento);
-            esperarQueElOutboxTermine();
+            esperarQueElOutboxTermine(persona);
             publicar(evento);
-            esperarQueElOutboxTermine();
+            esperarQueElOutboxTermine(persona);
 
             List<Map<String, Object>> filas = jdbc.queryForList(
                     "SELECT rol_consultor, tipo, grupo_id, consultada_en FROM renaser.consultas_de_ficha WHERE persona_id = ?", persona.value());
@@ -159,16 +159,20 @@ class ConsultasDeFichaDelDiagnosticoIT {
         new TransactionTemplate(transacciones).executeWithoutResult(estado -> eventos.publishEvent(evento));
     }
 
-    /** Poll corto (sin Awaitility): los oyentes corren async después del commit. */
-    private void esperarQueElOutboxTermine() throws InterruptedException {
+    /**
+     * Poll corto (sin Awaitility): los oyentes corren async después del commit. Solo mira las publicaciones de ESTE evento (el de esta persona): la base
+     * es compartida con el resto de las IT de la corrida, y una publicación ajena que nunca se completa (un oyente que falló en otra prueba) no es de esta.
+     */
+    private void esperarQueElOutboxTermine(UserId persona) throws InterruptedException {
         long limite = System.currentTimeMillis() + 20_000;
-        while (pendientesEnElOutbox() > 0 && System.currentTimeMillis() < limite) {
+        while (pendientesEnElOutbox(persona) > 0 && System.currentTimeMillis() < limite) {
             Thread.sleep(200);
         }
-        assertThat(pendientesEnElOutbox()).as("publicaciones sin completar en el outbox").isZero();
+        assertThat(pendientesEnElOutbox(persona)).as("publicaciones de este evento sin completar en el outbox").isZero();
     }
 
-    private int pendientesEnElOutbox() {
-        return jdbc.queryForObject("SELECT count(*) FROM event_publication WHERE completion_date IS NULL", Integer.class);
+    private int pendientesEnElOutbox(UserId persona) {
+        return jdbc.queryForObject("SELECT count(*) FROM event_publication WHERE completion_date IS NULL AND event_type LIKE '%DiagnosticoConsultadoEvent' "
+                + "AND serialized_event::text LIKE ?", Integer.class, "%" + persona.value() + "%");
     }
 }
