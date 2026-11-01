@@ -86,13 +86,15 @@ class HomeAgregadoServiceTest {
     private HomeAgregadoService nuevoServicio() {
         return new HomeAgregadoService(consultarPuntajeUseCase, participacionProgramaFinder, habitosDelDiaFinder,
                 diasConHabitoCumplidoFinder, rocasDelDiaFinder, proximoEventoFinder, notificacionesNoLeidasFinder,
-                porcentajeRocasFinder, consultarMiSemaforo, consultarMensajeDelSemaforo, CLOCK);
+                porcentajeRocasFinder, consultarMiSemaforo, consultarMensajeDelSemaforo,
+                new com.renaser.os.users.api.AlcanceDeFormacionPermisivo(), CLOCK);
     }
 
     private HomeAgregadoService nuevoServicioCon(FixedClock reloj) {
         return new HomeAgregadoService(consultarPuntajeUseCase, participacionProgramaFinder, habitosDelDiaFinder,
                 diasConHabitoCumplidoFinder, rocasDelDiaFinder, proximoEventoFinder, notificacionesNoLeidasFinder,
-                porcentajeRocasFinder, consultarMiSemaforo, consultarMensajeDelSemaforo, reloj);
+                porcentajeRocasFinder, consultarMiSemaforo, consultarMensajeDelSemaforo,
+                new com.renaser.os.users.api.AlcanceDeFormacionPermisivo(), reloj);
     }
 
     /**
