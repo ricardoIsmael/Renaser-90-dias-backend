@@ -10,17 +10,20 @@ import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.application.ports.out.formacion.CatalogoDeFormacionesPort;
 import com.renaser.os.users.application.ports.out.formacion.FormacionesDelPersonalPort;
 import com.renaser.os.users.application.ports.out.participante.SaveParticipacionProgramaPort;
+import com.renaser.os.users.application.ports.out.rolpersonalizado.CargarRolesPersonalizadosPort;
 import com.renaser.os.users.domain.model.accountrequest.EleccionDeIngreso;
 import com.renaser.os.users.domain.model.accountrequest.PedidoDeIngreso;
 import com.renaser.os.users.domain.model.accountrequest.ReglasDeIngreso;
 import com.renaser.os.users.domain.model.accountrequest.ReglasDeIngreso.Resultado;
 import com.renaser.os.users.domain.model.formacion.ReglaDeAlcance;
 import com.renaser.os.users.domain.model.participante.ParticipacionPrograma;
+import com.renaser.os.users.domain.model.rolpersonalizado.RolPersonalizado;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 import java.util.EnumMap;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Deja a la persona que se acepta dentro de su formación (spec 025, FR-008, FR-009): decide con {@link ReglasDeIngreso}, la inscribe en el programa con
@@ -33,6 +36,7 @@ class IngresoPorAceptacion {
     private final CatalogoDeFormacionesPort catalogo;
     private final SaveParticipacionProgramaPort participaciones;
     private final FormacionesDelPersonalPort personal;
+    private final CargarRolesPersonalizadosPort rolesPersonalizados;
     /** Hasta integrar la 026 (ficha con diagnóstico) nadie la implementa en esta rama: sin ella, «con diagnóstico» se rechaza con un aviso claro. */
     private final ObjectProvider<FichaAlAceptar> ficha;
     /** Spec 027: sin la implementación (otra rama sin términos editables) no se exige nada, como hasta hoy. */
@@ -40,23 +44,25 @@ class IngresoPorAceptacion {
     private final Clock clock;
 
     IngresoPorAceptacion(CatalogoDeFormacionesPort catalogo, SaveParticipacionProgramaPort participaciones,
-                         FormacionesDelPersonalPort personal, ObjectProvider<FichaAlAceptar> ficha, ObjectProvider<TerminosPublicados> terminos,
-                         Clock clock) {
+                         FormacionesDelPersonalPort personal, CargarRolesPersonalizadosPort rolesPersonalizados,
+                         ObjectProvider<FichaAlAceptar> ficha, ObjectProvider<TerminosPublicados> terminos, Clock clock) {
         this.catalogo = catalogo;
         this.participaciones = participaciones;
         this.personal = personal;
+        this.rolesPersonalizados = rolesPersonalizados;
         this.ficha = ficha;
         this.terminos = terminos;
         this.clock = clock;
     }
 
     /**
-     * @param rolFinal el rol con el que la cuenta quedó (el base, si tiene uno personalizado)
+     * @param rolFinal            el rol con el que la cuenta quedó (el base, si tiene uno personalizado)
+     * @param rolPersonalizadoId  el rol personalizado con el que se aceptó, si fue con uno: la foto guarda su id y su nombre de este momento
      * @return lo que se decidió, para guardarlo en la solicitud
      * @throws IllegalArgumentException (400) si el pedido no cumple las reglas del rol
      * @throws IllegalStateException    (409) si se pide el diagnóstico y no hay uno publicado
      */
-    EleccionDeIngreso formalizar(UserId persona, UserId actor, UserRole rolFinal, PedidoDeIngreso pedido) {
+    EleccionDeIngreso formalizar(UserId persona, UserId actor, UserRole rolFinal, PedidoDeIngreso pedido, UUID rolPersonalizadoId) {
         Resultado resultado = ReglasDeIngreso.decidir(rolFinal, pedido, catalogoPorFormacion());
         exigirTerminosPublicados(resultado.eleccion().formaciones());
         participaciones.save(ParticipacionPrograma.inscribirTraineeAprobado(persona, clock, resultado.formacionDelPrograma(),
@@ -67,7 +73,16 @@ class IngresoPorAceptacion {
         if (pedido.conDiagnostico()) {
             asignarDiagnostico(persona, actor);
         }
-        return resultado.eleccion();
+        return conSuRolPersonalizado(resultado.eleccion(), rolPersonalizadoId);
+    }
+
+    private EleccionDeIngreso conSuRolPersonalizado(EleccionDeIngreso eleccion, UUID rolPersonalizadoId) {
+        if (rolPersonalizadoId == null) {
+            return eleccion;
+        }
+        String nombre = rolesPersonalizados.porId(rolPersonalizadoId).map(RolPersonalizado::nombre)
+                .orElseThrow(() -> new IllegalStateException("El rol personalizado con el que se acepta ya no existe."));
+        return eleccion.conRolPersonalizado(rolPersonalizadoId, nombre);
     }
 
     /** Spec 027, FR-021: una formación sin términos publicados no recibe personas nuevas (nadie podría aceptarlos). */

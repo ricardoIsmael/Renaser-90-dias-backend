@@ -37,6 +37,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -98,6 +99,8 @@ class AccountRequestServiceTest {
     @Mock
     private com.renaser.os.users.application.ports.out.formacion.FormacionesDelPersonalPort formacionesDelPersonal;
     @Mock
+    private com.renaser.os.users.application.ports.out.rolpersonalizado.CargarRolesPersonalizadosPort rolesPersonalizados;
+    @Mock
     private org.springframework.beans.factory.ObjectProvider<com.renaser.os.users.api.FichaAlAceptar> fichaAlAceptar;
     @Mock
     private org.springframework.beans.factory.ObjectProvider<com.renaser.os.users.api.TerminosPublicados> terminosPublicados;
@@ -110,7 +113,7 @@ class AccountRequestServiceTest {
                 loadUserPort, saveUserPort, deleteUserPort, saveCredencialPort, saveIdentidadExternaPort,
                 passwordEncoder,
                 new IngresoPorAceptacion(catalogoDeFormaciones, saveParticipacionProgramaPort, formacionesDelPersonal,
-                        fichaAlAceptar, terminosPublicados, CLOCK),
+                        rolesPersonalizados, fichaAlAceptar, terminosPublicados, CLOCK),
                 tokenVerificacionEmailPort,
                 limitarSolicitudesResetPort, new RequireActiveUserGuard(loadUserPort),
                 new RequireAdminGuard(loadUserPort), updateUserRole, events, CLOCK, idGenerator);
@@ -421,11 +424,19 @@ class AccountRequestServiceTest {
         when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
         stubUsuarioPendiente(request);
 
+        when(rolesPersonalizados.porId(rolPersonalizado)).thenReturn(Optional.of(com.renaser.os.users.domain.model.rolpersonalizado.RolPersonalizado.rehidratar(
+                rolPersonalizado, "Mentor junior", "", UserRole.TRAINEE, true, Set.of(), 1L, actorId, CLOCK.now(), actorId, CLOCK.now())));
+
         service.approve(new ApproveAccountRequestCommand(request.id(), actorId, UserRole.TRAINEE, rolPersonalizado));
 
         verify(updateUserRole).updateRole(
                 new com.renaser.os.users.application.ports.in.user.UpdateUserRoleUseCase.UpdateUserRoleCommand(
                         request.usuarioId(), UserRole.TRAINEE, actorId, rolPersonalizado));
+        // La foto de lo aceptado recuerda el rol personalizado con el nombre de ese día (V142).
+        var guardada = org.mockito.ArgumentCaptor.forClass(AccountRequest.class);
+        verify(saveAccountRequestPort).save(guardada.capture());
+        assertThat(guardada.getValue().eleccion().rolPersonalizadoId()).isEqualTo(rolPersonalizado);
+        assertThat(guardada.getValue().eleccion().rolPersonalizadoNombre()).isEqualTo("Mentor junior");
     }
 
     @Test

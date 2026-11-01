@@ -3,10 +3,14 @@ package com.renaser.os.users.infrastructure.adapter.in.rest.admin;
 import com.renaser.os.users.api.FasePrograma;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
+import com.renaser.os.users.application.ports.in.accountrequest.ConsultarAceptacionDeLaPersonaUseCase.AceptacionDeLaPersona;
 import com.renaser.os.users.application.ports.in.participante.GetTraineeDetailUseCase.TraineeDetail;
+import com.renaser.os.users.infrastructure.adapter.in.rest.accountrequest.AccountRequestResponse;
 import com.renaser.os.users.infrastructure.adapter.in.rest.user.RolPersonalizadoResponse;
 
+import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -22,15 +26,19 @@ import java.util.UUID;
  *
  * <p>{@code rolPersonalizado} (spec 002, fase 2; D-272): {@code { id, nombre }} si tiene un rol personalizado vigente;
  * aditivo, al final. {@code role} sigue siendo el rol base.
+ *
+ * <p>{@code acceptance}, {@code acceptedByName} y {@code acceptedAt} (spec 025, US4): lo que se decidió al aceptar a la persona —con la MISMA forma que
+ * {@code acceptance} de la lista de solicitudes— y quién la aceptó y cuándo; {@code null} si la cuenta no entró por una solicitud.
  */
 public record TraineeDetailResponse(String id, String email, String fullName, UserRole role, UserStatus status,
                                      String avatarUrl, boolean inscrito, int programDay, LocalDate startDate,
                                      FasePrograma phase, UUID cellId, String mentorId,
                                      UltimoAjusteDiaResponse lastDayAdjustment,
                                      java.time.Instant deletionScheduledFor,
-                                     RolPersonalizadoResponse rolPersonalizado, String formation, int programDuration) {
+                                     RolPersonalizadoResponse rolPersonalizado, String formation, int programDuration,
+                                     AccountRequestResponse.Acceptance acceptance, String acceptedByName, Instant acceptedAt) {
 
-    public static TraineeDetailResponse from(TraineeDetail detail) {
+    public static TraineeDetailResponse from(TraineeDetail detail, Optional<AceptacionDeLaPersona> aceptacion) {
         var user = detail.user();
         var participacion = detail.participacion();
         return new TraineeDetailResponse(user.id().toString(), user.email().value(), user.fullName(), user.role(),
@@ -39,6 +47,8 @@ public record TraineeDetailResponse(String id, String email, String fullName, Us
                 participacion.mentorId() == null ? null : participacion.mentorId().toString(),
                 UltimoAjusteDiaResponse.from(detail.ultimoAjuste()), detail.seBorraEl(),
                 RolPersonalizadoResponse.de(user.rolPersonalizado().orElse(null)),
-                participacion.inscrito() ? participacion.formacion().codigo() : null, participacion.duracionDias());
+                participacion.inscrito() ? participacion.formacion().codigo() : null, participacion.duracionDias(),
+                aceptacion.map(a -> AccountRequestResponse.Acceptance.from(a.eleccion())).orElse(null),
+                aceptacion.map(AceptacionDeLaPersona::aceptadaPorNombre).orElse(null), aceptacion.map(AceptacionDeLaPersona::aceptadaEn).orElse(null));
     }
 }

@@ -21,6 +21,9 @@ public interface LoadAccountRequestPort {
      */
     Optional<AccountRequest> byIdParaDecidir(AccountRequestId id);
 
+    /** La solicitud ACEPTADA de esta cuenta, si entró por una (spec 025): de ahí sale lo que se decidió al aceptarla. */
+    Optional<AccountRequest> aceptadaDe(com.renaser.os.shared.domain.UserId usuario);
+
     /**
      * ¿Hay ya una solicitud con este correo? Devuelve un booleano y no el agregado porque es lo
      * unico que el llamador necesita (ISP) y porque asi la consulta se resuelve dentro del

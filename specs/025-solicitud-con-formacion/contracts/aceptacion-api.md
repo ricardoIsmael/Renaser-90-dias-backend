@@ -32,10 +32,22 @@ Un servidor anterior responde 404: la app deja la hoja solo con el rol y **no ma
 ### `GET /api/v1/account-requests?status=&formation=&page=&size=`
 `formation` (opcional): las **pendientes siempre** (todavía no tienen formación) y las aceptadas que la eligieron. Cada fila suma:
 ```json
-{ "reviewedByName": "Ana",
-  "acceptance": { "formations": ["DIPLOMADO"], "durationDays": 365, "role": "TRAINEE", "withDiagnosis": true } }
+{ "reviewedByName": "Ana", "reviewedAt": "2026-10-31T15:00:00Z",
+  "acceptance": { "formations": ["DIPLOMADO"], "durationDays": 365, "role": "TRAINEE",
+                  "customRoleId": null, "customRoleName": null, "withDiagnosis": true } }
 ```
-`acceptance` es `null` en una pendiente o rechazada. Las aceptadas antes de las formaciones traen `formations: ["ESCUELA"]`, `role: null`, `durationDays: null`, `withDiagnosis: false`.
+`acceptance` es `null` en una pendiente o rechazada. Las aceptadas antes de las formaciones traen `formations: ["ESCUELA"]`, `role: null`, `durationDays: null`, `withDiagnosis: false` y sin rol personalizado.
+`customRoleId` y `customRoleName` (V142): si se aceptó con un rol personalizado, su id y **el nombre que tenía ese día** (una foto: si después se renombra, esto no cambia; si se borra, el id queda en `null` y el nombre se conserva). `role` sigue siendo el rol base. En el resto, `null`.
+
+## La ficha de la persona (US4, escenario 1)
+
+### `GET /api/v1/admin/trainees/{id}`  (MANAGE_TRAINEES)  — campos nuevos, aditivos
+```json
+{ "...": "...", "acceptance": { "formations": ["DIPLOMADO"], "durationDays": 365, "role": "TRAINEE", "customRoleId": null,
+                               "customRoleName": null, "withDiagnosis": true },
+  "acceptedByName": "Ana", "acceptedAt": "2026-10-31T15:00:00Z" }
+```
+`acceptance` tiene **exactamente la misma forma** que en la lista (`AccountRequestResponse.Acceptance`), y `acceptedByName` / `acceptedAt` son `reviewedByName` / `reviewedAt` de esa solicitud. Los tres faltan (`null`) si la cuenta no entró por una solicitud (la invitó Administración, o es anterior al panel) o su solicitud no está aceptada; `acceptedByName` es `null` si quien aceptó ya no existe. Es lo que se decidió **ese día**: la formación, la duración y el rol vivos de la persona están en `formation`, `programDuration` y `role`, y pueden haber cambiado.
 
 ## Cambiar la duración de quien ya empezó (025-2 A)
 

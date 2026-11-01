@@ -18,6 +18,8 @@ interface SpringDataAccountRequestRepository extends JpaRepository<AccountReques
 
     boolean existsByEmail(String email);
 
+    Optional<AccountRequestJpaEntity> findFirstByUsuarioIdAndEstadoOrderByRevisadaEnDesc(UUID usuarioId, EstadoSolicitudJpa estado);
+
     /**
      * Resuelve por la identidad del proveedor, nunca por correo (docs/MODULO_AUTH.md §6.4).
      * Devuelve como maximo una fila: el indice UNIQUE parcial

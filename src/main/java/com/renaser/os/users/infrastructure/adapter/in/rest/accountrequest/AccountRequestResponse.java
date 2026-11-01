@@ -21,12 +21,17 @@ public record AccountRequestResponse(UUID id, String email, String fullName, Str
                                       AccountRequestStatus status, String rejectionReason, Instant createdAt,
                                       Instant reviewedAt, String reviewedByName, Acceptance acceptance) {
 
-    /** @param role código del rol base ({@code null} en lo anterior a las formaciones); {@code durationDays}: solo el aprendiz */
-    public record Acceptance(List<String> formations, Integer durationDays, String role, boolean withDiagnosis) {
+    /**
+     * @param role           código del rol base ({@code null} en lo anterior a las formaciones); {@code durationDays}: solo el aprendiz
+     * @param customRoleId   el rol personalizado con el que entró, si entró con uno (V142); {@code customRoleName}: cómo se llamaba ese día
+     */
+    public record Acceptance(List<String> formations, Integer durationDays, String role, UUID customRoleId, String customRoleName, boolean withDiagnosis) {
 
-        static Acceptance from(EleccionDeIngreso eleccion) {
+        /** La misma proyección la usa la ficha de la persona: lo aceptado se dice igual en la lista y en la ficha. */
+        public static Acceptance from(EleccionDeIngreso eleccion) {
             return new Acceptance(eleccion.formaciones().stream().map(Formacion::codigo).toList(), eleccion.duracionElegidaDias(),
-                    eleccion.rol() == null ? null : eleccion.rol().name(), eleccion.conDiagnostico());
+                    eleccion.rol() == null ? null : eleccion.rol().name(), eleccion.rolPersonalizadoId(), eleccion.rolPersonalizadoNombre(),
+                    eleccion.conDiagnostico());
         }
     }
 
