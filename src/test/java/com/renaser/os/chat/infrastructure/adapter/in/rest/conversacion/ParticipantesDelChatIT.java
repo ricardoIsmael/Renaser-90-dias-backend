@@ -182,6 +182,8 @@ class ParticipantesDelChatIT {
     @DisplayName("soporte: quien ya no es ADMIN/ALCHEMIST no figura aunque conserve su fila, y ya no lo ve")
     void unSoporteConUnStaffDegradado() throws Exception {
         jdbcTemplate.update("UPDATE renaser.usuarios SET rol = CAST('MENTOR' AS renaser.rol_usuario) WHERE id = ?", kelin);
+        // Como el cambio de rol real: quien pasa a mentor queda con la Escuela asignada (spec 022).
+        FormacionesDePrueba.alPersonalLeAsignaLaEscuela(jdbcTemplate, kelin, "MENTOR");
 
         assertThat(nombres(obtener(ruta(soporte, ""), sesionDe(ana)))).containsExactly("Ana Pérez", "Zoe Alquimia");
         assertThat(pedir(ruta(soporte, ""), sesionDe(kelin)).statusCode()).isEqualTo(403);

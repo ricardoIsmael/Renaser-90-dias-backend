@@ -225,7 +225,7 @@ class MensajeDeChatAvisoIT {
 
             Flyway.configure().dataSource(aparte).locations("classpath:db/migration").target("83").load().migrate();
 
-            assertThat(otra.queryForObject("SELECT nombre FROM renaser.conversaciones WHERE tipo = 'GLOBAL' AND formacion = 'ESCUELA'", String.class))
+            assertThat(otra.queryForObject("SELECT nombre FROM renaser.conversaciones WHERE tipo = 'GLOBAL'", String.class))
                     .isEqualTo("Formación Renaser Global");
         } finally {
             jdbc.execute("DROP DATABASE IF EXISTS " + base + " WITH (FORCE)");
