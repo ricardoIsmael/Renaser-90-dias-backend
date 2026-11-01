@@ -150,7 +150,7 @@ class AudienciaDelEventoService {
         if (!queVenTodas.isEmpty()) {
             resultado.addAll(audienciaMasivaPort.activosConRoles(queVenTodas));
         }
-        return resultado;
+        return resultado.stream().distinct().toList();
     }
 
     private List<UserId> audienciaNivelMinimo(Evento evento) {

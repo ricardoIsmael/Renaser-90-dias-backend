@@ -79,7 +79,7 @@ class EventoServiceTest {
     @BeforeEach
     void setUp() {
         accesoEventoService = new AccesoEventoService(progresoPort, nivelPort, cursoIdNoOp(), (u, t) -> false,
-                (celula, usuario) -> false, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
+                (celula, usuario) -> false, new com.renaser.os.users.api.AlcanceDeFormacionSoloEscuela());
         service = new EventoService(loadEventoPort, saveEventoPort, loadExcepcionPort, saveExcepcionPort,
                 loadConfirmacionPort, saveRecordatorioPort, nivelPort, almacenamientoPort, accesoEventoService, CLOCK,
                 idGenerator);
