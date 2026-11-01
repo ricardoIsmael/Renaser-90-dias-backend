@@ -27,6 +27,20 @@ public enum Formacion {
     }
 
     /**
+     * Para el código que viaja en la RUTA de un recurso (`/admin/formaciones/{codigo}`): una formación que no existe es un recurso que no existe (404),
+     * no una entrada mal formada. En un parámetro de consulta o en un cuerpo se sigue usando {@link #desde(String)} (400).
+     *
+     * @throws java.util.NoSuchElementException si el código no es de una formación (404)
+     */
+    public static Formacion deLaRuta(String codigo) {
+        try {
+            return desde(codigo);
+        } catch (IllegalArgumentException noExiste) {
+            throw new java.util.NoSuchElementException(noExiste.getMessage());
+        }
+    }
+
+    /**
      * @throws IllegalArgumentException si el código no es de una formación (400)
      */
     public static Formacion desde(String codigo) {

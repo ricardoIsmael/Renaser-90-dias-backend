@@ -32,7 +32,7 @@ public class ComunidadDeLaFormacionController {
     @RequiresPermission(value = Permission.MANAGE_ROLES, scope = "el guard real es el caso de uso: ADMIN/ALCHEMIST activos")
     @GetMapping
     public ComunidadResponse ver(@PathVariable String codigo, @ActorAutenticado UserId actorId) {
-        Formacion formacion = Formacion.desde(codigo);
+        Formacion formacion = Formacion.deLaRuta(codigo);
         return new ComunidadResponse(formacion.codigo(), consultar.consultar(actorId, formacion).stream()
                 .map(t -> new TipoResponse(t.tipo().codigo(), t.prendido(), t.conversaciones())).toList());
     }
