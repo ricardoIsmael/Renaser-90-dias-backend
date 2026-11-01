@@ -15,13 +15,13 @@ class CatalogoDeFuncionalidadesTest {
 
     private final CatalogoDeFuncionalidades catalogo = CatalogoDeFuncionalidades.inicial();
 
-    /** Las 52 claves de la tabla de la spec 002 y las que se sumaron después, en su orden. Una clave nueva se suma acá y en el catálogo. */
+    /** Las 52 claves de la tabla de la spec 002 y las que se sumaron después (radar.fichas, ia.analisis…), en su orden. Una clave nueva se suma acá y en el catálogo. */
     private static final List<String> CLAVES_DE_LA_SPEC = List.of("registro", "onboarding", "dia_uno", "radar",
             "mapa", "plan", "habitos", "habitos.foto", "habitos.km", "habitos.gimnasio", "habitos.espiritu",
             "habitos.ajustes", "clase_diaria", "muro", "muro.publicar", "muro.comentarios", "muro.reacciones", "chat",
             "chat.grupos", "chat.global", "chat.soporte", "chat.directos", "chat.audio", "chat.fotos", "eventos",
             "eventos.gestion", "eventos.asistencia", "cursos", "ranking", "ranking.podio_semanal", "semaforo", "ia",
-            "ia.chat", "ia.voz", "ia.propuestas", "evidencias", "radar.fichas", "caja", "emergencia", "cuenta.eliminar",
+            "ia.chat", "ia.voz", "ia.propuestas", "ia.analisis", "evidencias", "radar.fichas", "caja", "emergencia", "cuenta.eliminar",
             "notificaciones", "mentor.mi_grupo", "lider", "lider.cumplimiento", "tickets", "admin", "admin.solicitudes", "admin.equipo",
             "admin.grupos", "admin.personas", "admin.habitos", "admin.bienvenida", "admin.fases", "perfil");
 
@@ -136,5 +136,17 @@ class CatalogoDeFuncionalidadesTest {
         String madre = clave.contains(".") ? clave.substring(0, clave.lastIndexOf('.')) : null;
         return new DefinicionDeFuncionalidad(clave, madre, "Área", clave, "Prueba", java.util.Set.of(), false,
                 ValorPorDefecto.PRENDIDA, PoliticaDeProcesos.NO_APLICA);
+    }
+
+    @Test
+    @DisplayName("ia.analisis (spec 031): cuelga de ia, le llega a todos los roles, no es crítica y apagada su proceso salta el turno")
+    void iaAnalisis() {
+        DefinicionDeFuncionalidad analisis = catalogo.definicion("ia.analisis").orElseThrow();
+
+        assertThat(analisis.madre()).isEqualTo("ia");
+        assertThat(analisis.critica()).isFalse();
+        assertThat(analisis.rolesQueLaUsan()).containsAll(java.util.EnumSet.allOf(UserRole.class));
+        assertThat(analisis.procesos()).isEqualTo(PoliticaDeProcesos.SALTA);
+        assertThat(catalogo.existe("ia.analisis")).isTrue();
     }
 }

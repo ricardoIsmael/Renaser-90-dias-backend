@@ -43,6 +43,7 @@ class PreferenciaNotificacionPersistenceMapper {
             case ARMADO_DE_GRUPOS -> TipoNotificacionJpa.ARMADO_DE_GRUPOS;
             case OPERACION_PLATAFORMA -> TipoNotificacionJpa.OPERACION_PLATAFORMA;
             case REVISION_DEL_LIDER -> TipoNotificacionJpa.REVISION_DEL_LIDER;
+            case ANALISIS_80_20 -> TipoNotificacionJpa.ANALISIS_80_20;
         };
     }
 
@@ -68,6 +69,7 @@ class PreferenciaNotificacionPersistenceMapper {
             case ARMADO_DE_GRUPOS -> TipoNotificacion.ARMADO_DE_GRUPOS;
             case OPERACION_PLATAFORMA -> TipoNotificacion.OPERACION_PLATAFORMA;
             case REVISION_DEL_LIDER -> TipoNotificacion.REVISION_DEL_LIDER;
+            case ANALISIS_80_20 -> TipoNotificacion.ANALISIS_80_20;
         };
     }
 }

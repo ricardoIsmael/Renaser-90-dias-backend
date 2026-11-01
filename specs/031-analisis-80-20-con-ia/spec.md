@@ -2,11 +2,27 @@
 
 **Feature Branch**: `031-analisis-80-20-con-ia` (backend y app)
 **Created**: 2026-10-31
-**Status**: Draft
+**Status**: Aprobada por el dueño el 2026-10-31 (decisiones abajo); en implementación
 **Input**: Pedido del dueño (2026-10-31), textual: «Tarea: Código Renaser. El sistema debe tener el 80/20 de acciones diarias,
 analizado semanal y mensualmente con IA, más las respuestas del Código Renaser, y brindar una respuesta y análisis.» Es la
 segunda mitad de la tarea «Código Renaser»; la primera (responder con la voz) es la spec 030. La app pasa a tener 3
 formaciones (spec 022): todo lo de esta spec queda dentro de la formación de la persona.
+
+## Decisiones del dueño (2026-10-31) — mandan sobre el resto de la spec
+
+Fuente: página de decisiones de las formaciones (`decisiones/dueno`). Lo no listado es la opción A (recomendada).
+
+| # | Decisión | Qué cambia en esta spec |
+|---|---|---|
+| 031-1 | **A y B a la vez** | «El 20 %» son **las acciones verdes** (regla de Pareto del producto) **y también** el 20 % de las acciones cumplidas con más impacto. Se calculan y se muestran las dos; el análisis habla de las dos. |
+| 031-2 | **A** | Lo ven la persona y la misma cadena que ve su Radar (mentor o guía vigente, líder de mentores, Administración, Alquimista), en solo lectura y con constancia de consulta; **respeta el interruptor «Código Renaser en las fichas»** (`radar.fichas`, spec 034): apagado, el mentor, la guía y el líder no lo ven (404); Administración y Alquimista sí. |
+| 031-3 | **A** | Patrones y cifras con lenguaje cuidado; **sin citar frases** de la persona ni ponerle nombre a una emoción o a un cuadro. El texto que escribió igual viaja al proveedor para leerse. |
+| 031-4 | **B** | **«Cierra tu día» entra al análisis**: el motivo por el que una acción quedó pendiente, lo que hará mañana y las notas (de acción y del día) se leen junto a las acciones y al Código Renaser. |
+| 031-5 | A | **No** se une con el Espejo de la Sombra: van separados. |
+| 031-6 | A | El «mes» es el **mes del programa** de Plan: semanas 1–4, 5–8 y 9–13 (la 13 se suma al mes 3). |
+| 031-7 | A | **No** se pide antes del cierre: solo el automático al cerrar la semana o el mes. |
+| 031-8 | **B** | **Sigue después del día 90** mientras la persona use la app: no hay tope por duración de la formación. Pasado el mes 3 los meses siguen en bloques de 4 semanas (14–17, 18–21…). La duración de la formación (90 o 365 días, spec 022) no corta nada. |
+| 031-9 | A | La persona **no** borra un análisis suelto; se borran con la cuenta. |
 
 ## Qué hay hoy (verificado en el código y en `AGENTS.md` el 2026-10-31)
 
@@ -32,7 +48,7 @@ Que cada persona tenga, **cada semana y cada mes del programa**, (1) su **80/20 
 **análisis con IA** que lo lee junto con las respuestas que dio en el Código Renaser en ese periodo, y le entrega **una respuesta**
 de SER: qué movió su avance, qué se le fue, cómo estuvo y qué hacer la próxima semana. **Lo que cambia y nada más:** la hoja «Tu
 80/20» de Plan gana las vistas Semana y Mes; hay un aviso del teléfono por análisis listo (apagable); la ficha de quien acompaña gana
-una sección de solo lectura (según el Punto abierto 2); SER puede leer y explicar el análisis. No cambian los hábitos, las
+una sección de solo lectura (según 031-2 (A)); SER puede leer y explicar el análisis. No cambian los hábitos, las
 acciones, la regla de Pareto ni sus candados, los puntos, el semáforo, la coherencia, el Radar, Hoy, Training ni Comunidad.
 
 ## User Scenarios & Testing *(mandatory)*
@@ -78,7 +94,7 @@ semana en su zona aparece el análisis con las cuatro partes y el aviso; abrirlo
 1. **Given** que terminó mi semana (lunes a domingo en mi zona) y tengo datos suficientes, **When** empieza el lunes, **Then** a más
    tardar en 24 horas tengo mi análisis y un aviso del teléfono que solo dice que está listo.
 2. **Given** el análisis, **When** lo leo, **Then** tiene cuatro partes cortas y siempre en el mismo orden: **Lo que más movió**,
-   **Lo que se te fue**, **Cómo estuviste** (energía y lo que escribí en el Código Renaser, según el Punto abierto 3) y **Para la
+   **Lo que se te fue**, **Cómo estuviste** (energía y lo que escribí en el Código Renaser, según 031-3 (A)) y **Para la
    próxima semana** (la respuesta de SER, con uno a tres pasos concretos).
 3. **Given** que las cifras del análisis (acciones cumplidas, porcentajes) aparecen en el texto, **When** las comparo con las de
    Semana, **Then** son exactamente las mismas.
@@ -200,9 +216,8 @@ criterio de aceptación de las Restricciones).
 
 - **FR-001**: El sistema MUST calcular, para cada persona y cada periodo (semana de lunes a domingo y mes del programa), su 80/20 de
   acciones diarias: cuántas acciones planificó y cumplió, y cuánto del impacto cumplido vino de las que más mueven, por eje y en
-  total. [NEEDS CLARIFICATION: ¿qué cuenta como «el 20 %»? A = las acciones verdes (la regla Pareto actual del producto); B = el 20 %
-  de las acciones con más impacto cumplido (cuenta estadística clásica); C = el eje que concentra la mayor parte. Ver «Puntos
-  abiertos».]
+  total. **Resuelto (031-1 A y B):** el 20 % son las acciones verdes **y** el 20 % de las cumplidas con más impacto; se calculan las dos
+  y por eje.
 - **FR-002**: Las cifras MUST salir del sistema, no de la IA. La IA las interpreta; MUST NOT calcularlas ni cambiarlas.
 - **FR-003**: La semana y el mes en curso MUST mostrar las cifras al día, sin IA y sin esperar al cierre.
 - **FR-004**: La regla de Pareto del producto (la verde primero, el candado de las otras) MUST NOT cambiar; el cálculo la lee, no la
@@ -221,9 +236,8 @@ criterio de aceptación de las Restricciones).
   compararse con otras personas ni nombrarlas, ni afirmar nada que no esté en los datos del periodo.
 - **FR-009**: Toda cifra que mencione el texto MUST coincidir con la calculada. Un texto con una cifra distinta, un diagnóstico o
   datos de otra persona MUST descartarse y no mostrarse.
-- **FR-010**: Cuánto del Código Renaser entra al análisis MUST seguir el Punto abierto 3. [NEEDS CLARIFICATION: ¿puede el análisis
-  citar frases de lo que la persona escribió, o solo describir patrones (energía, lo que más se repite en «qué evito») sin
-  citarla? Ver «Puntos abiertos».]
+- **FR-010**: Cuánto del Código Renaser entra al análisis MUST seguir el Punto abierto 3. **Resuelto (031-3 A):** solo patrones y cifras; nunca frases
+  citadas.
 - **FR-011**: Ante expresiones repetidas de malestar, el análisis MUST mantenerse neutro y sin clasificar; el aviso a Administración y
   Alquimista que ya existe MUST seguir funcionando igual e independiente.
 - **FR-012**: El mes MUST mirar la tendencia semana a semana (qué se sostuvo y qué cambió) y MUST contar solo las semanas con datos,
@@ -248,15 +262,14 @@ criterio de aceptación de las Restricciones).
 
 **Quién lo ve y privacidad**
 
-- **FR-020**: La persona MUST poder leer su propio análisis semanal y mensual, y nadie más hasta que el dueño responda el Punto
-  abierto 2. [NEEDS CLARIFICATION: ¿quién más lo ve? A = la misma cadena que hoy ve su Radar (mentor o guía vigente, líder,
-  Administración, Alquimista); B = solo su mentor o guía vigente; C = solo la persona. Ver «Puntos abiertos».]
+- **FR-020**: La persona MUST poder leer su propio análisis semanal y mensual, y quien acompaña según 031-2 A. **Resuelto (031-2 A):** además de la persona, la misma cadena que ve su
+  Radar, respetando `radar.fichas` (spec 034).
 - **FR-021**: Quien acompañe MUST leer solo a las personas que le corresponden, en solo lectura, y MUST NOT averiguar si existe el
   análisis de quien no le corresponde. El líder, Administración y el Alquimista dejan constancia de la consulta, reutilizando la que
   ya existe para la ficha.
 - **FR-022**: Todo MUST quedar dentro de la formación de la persona: el análisis usa solo sus datos y los de su formación, ninguna
   cifra ni texto cruza formaciones, y quien acompaña otra formación no lo ve.
-- **FR-023**: Al proveedor de IA MUST viajar solo lo necesario (acciones, cifras y, según el Punto abierto 3, lo que escribió en el
+- **FR-023**: Al proveedor de IA MUST viajar solo lo necesario (acciones, cifras y, según 031-3 (A), lo que escribió en el
   Código Renaser), sin correo, teléfono, documento ni dirección. La Política de Privacidad MUST decir, antes de activar la función,
   que las respuestas del Código Renaser se usan para este análisis.
 - **FR-024**: El contenido del análisis MUST NOT aparecer en registros técnicos ni en el texto del aviso del teléfono. El aviso dice
@@ -295,7 +308,7 @@ criterio de aceptación de las Restricciones).
 
 Cada uno cambia el resultado. Va primero la opción que recomienda el equipo.
 
-**Pregunta 1 — ¿Qué es «el 20 %» del 80/20 de acciones diarias?**
+**Pregunta 1 — ¿Qué es «el 20 %» del 80/20 de acciones diarias?** → *Decidido: A y B.*
 
 - **A (recomendada): las acciones verdes.** Es la regla que el producto ya enseña en «Tu 80/20» (la verde de cada eje es la que más
   mueve). El análisis dice cuánto del impacto cumplido vino de las verdes y cuándo se hizo lo que menos mueve. Coherente con el
@@ -305,7 +318,7 @@ Cada uno cambia el resultado. Va primero la opción que recomienda el equipo.
 - **C: por eje**: qué eje (Cuerpo, Negocio o Relaciones) concentra la mayor parte del impacto cumplido. Más simple de leer, menos
   accionable.
 
-**Pregunta 2 — ¿Quién más ve el análisis, además de la persona?**
+**Pregunta 2 — ¿Quién más ve el análisis, además de la persona?** → *Decidido: A.*
 
 - **A (recomendada): la misma cadena que hoy ve su Radar** —mentor o guía vigente, líder de mentores, Administración y
   Alquimista—, en solo lectura y con constancia de consulta. Es lo que el dueño decidió para el Radar («se tiene que analizar a los
@@ -315,9 +328,9 @@ Cada uno cambia el resultado. Va primero la opción que recomienda el equipo.
 - **C: solo la persona.** La opción más privada; el acompañamiento no gana nada nuevo. Abrirlo después es un cambio de permiso, no de
   cálculo.
 
-Hasta que se responda, la spec se construye para la opción C.
+**Decidido el 2026-10-31: A.**
 
-**Pregunta 3 — ¿Cuánto de lo emocional del Código Renaser entra al análisis?**
+**Pregunta 3 — ¿Cuánto de lo emocional del Código Renaser entra al análisis?** → *Decidido: A.*
 
 - **A (recomendada): patrones y cifras, con lenguaje cuidado.** Energía por día y momento, lo que más se repite en «qué evito», y
   cómo se relaciona con lo cumplido; sin citar frases de la persona y sin ponerle nombre a una emoción ni a un cuadro. El texto que
@@ -380,8 +393,9 @@ desnormalización correcta), buenas prácticas y SOLID, en backend y frontend.»
 - **Qué es «acción diaria»**: la acción del día (con color de Pareto y puntaje de impacto) que ya existe en Plan, no el hábito. Los
   hábitos no entran al 80/20; el pedido habla de acciones.
 - **Periodos**: la semana es de lunes a domingo (13 en el programa, la última hasta el día 90) y el mes es el mes del programa de
-  Plan (semanas 1 a 4, 5 a 8 y 9 a 13). Después del día 90 no hay más análisis; la persona conserva los que tiene. (A confirmar con
-  el dueño: si debe seguir después del día 90 o usar meses calendario.)
+  Plan (semanas 1 a 4, 5 a 8 y 9 a 13). **Decisión 031-8 B: después del día 90 el análisis sigue** mientras la persona use la app; los meses
+  siguen en bloques de 4 semanas (el mes 4 son las semanas 14 a 17). El Día 1 y la zona salen del programa de la persona; la duración de
+  su formación (spec 022) no corta nada.
 - **Automático**: se genera al cerrar cada periodo para todos los que tienen datos suficientes, sin que lo pidan. Mientras el periodo
   está en curso solo hay cifras. (A confirmar: si se quiere pedir el análisis antes del cierre; costaría una generación más.)
 - **Mínimo de datos (valor propuesto, a confirmar)**: para la semana, al menos 5 acciones planificadas repartidas en al menos 3 días;
@@ -392,9 +406,9 @@ desnormalización correcta), buenas prácticas y SOLID, en backend y frontend.»
 - **Tono**: el de SER (cálido, directo, como Darren sin decir que es Darren), con 1 a 3 emojis como máximo, y sin emojis en las cifras.
 - **Retención**: mientras exista la cuenta; se borra con ella. La persona no borra análisis sueltos en esta versión. (A confirmar: si
   debe poder verlos y borrarlos como la memoria de SER.)
-- **Fuentes**: solo las acciones del día y las respuestas del Código Renaser. No entran los hábitos, el diario ni lo que la persona
-  dijo en «Cierra tu día» (sus razones de lo pendiente serían una fuente valiosa; sumarla es una decisión aparte). No se unifica con el
-  informe del diario (Espejo de la Sombra); ese sigue como está.
+- **Fuentes**: las acciones del día, las respuestas del Código Renaser y, por la decisión **031-4 B**, lo que la persona dijo en «Cierra
+  tu día» (el motivo de cada acción pendiente, lo que hará mañana y las notas). No entran los hábitos ni el diario. No se unifica con
+  el informe del diario (Espejo de la Sombra, 031-5 A); ese sigue como está.
 - **Formación**: la spec 022 define cómo una persona pertenece a una formación. Se asume que pertenece a una a la vez y que mover a
   alguien de formación no arrastra análisis ajenos; qué pasa con sus análisis anteriores lo define la spec 022.
 - **Todos los roles que hacen el programa** lo tienen, como Mi Radar; no hay filtro por rol.
