@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-31
 
-**Status**: Draft (con 3 preguntas abiertas para el dueño, marcadas en el texto)
+**Status**: Implementada (2026-10-31; las preguntas abiertas las contestó el dueño: ver *Clarifications → Decisiones del dueño*)
 
 **Input**: Pedido del dueño (2026-10-31), textual:
 > - El sistema debe poder soportar varios tipos de comunidad por formación.
@@ -58,32 +58,30 @@ otras.
 
 ### Decisiones del dueño (2026-10-31)
 
-Son las del apartado *Contexto* y el pedido textual de arriba. No hay otras decisiones del dueño sobre esta spec todavía.
+Las del apartado *Contexto*, el pedido textual de arriba y las respuestas a las preguntas abiertas (documento `decisiones/dueno`, sección 024). Todo es la
+opción A (la recomendada) salvo lo que dice la última línea:
 
-### Preguntas abiertas (el dueño las contesta antes de implementar)
+1. **Testimonios por usuarios — A.** Los testimonios son los que escriben los usuarios de cada formación, cada uno con su autor, y se ven **solo ahí**.
+2. **Tipos de comunidad — A.** Son los cuatro de hoy (comunidad general, grupo con mentor, soporte y directos) y cada formación los tiene **prendibles y
+   apagables** por Administración. (No hay varias comunidades del mismo tipo por formación ni tipos propios de cada una.)
+3. **Puntos del ranking al cambiar de formación — A.** El ranking de cada formación cuenta solo lo hecho en ella; al entrar a la nueva **empieza de cero**
+   y lo anterior queda en su historial (`participaciones_anteriores`, spec 022) y en los cortes viejos de la formación anterior.
+4. **Nombres de los chats.** La **Escuela conserva los nombres de hoy** («Formación Renaser Global», «Pedro – Formación Renaser»); las otras formaciones
+   usan su nombre («Diplomado Renaser Global», «Pedro – Diplomado Renaser»).
+5. **Categorías del Muro** iguales en las tres formaciones. **Moderan solo Administración y Alquimista.**
+6. **Al cambiar de formación** el aprendiz sale de su grupo y entra al inicial de la nueva (spec 022).
+7. **El cambio de formación de un aprendiz rige al instante** (opción **B** de la pregunta 9 de la 024, no «desde su día siguiente»): coincide con la 022.
+   Para el personal, cambiar la formación activa también rige en el acto.
 
-Cada una tiene un «por defecto» que la spec ya usa; si el dueño elige otra opción, se corrige en el mismo cambio. La lista
-completa de dudas, incluidas las que solo llevan supuesto, está en *Assumptions*.
+### Supuestos de implementación que el dueño no tuvo que decidir
 
-1. **«Testimonios por usuarios»: ¿qué significa?**
-   - A (por defecto): son los testimonios **que escriben los usuarios de la formación**, cada uno con su autor (nombre,
-     foto), y se ven **solo dentro de esa formación**.
-   - B: los testimonios se ven como prueba social **en todas las formaciones** (rompe el aislamiento; el dueño tendría que
-     autorizarlo expresamente).
-   - C: el testimonio es de **cada persona** y se ve en su ficha, y la sección es la lista de los de la formación.
-2. **«Varios tipos de comunidad por formación»: ¿qué tipos?**
-   - A (por defecto): un *tipo de comunidad* es una clase de espacio de la Tribu —**comunidad general, grupo con mentor,
-     soporte y directos**—. Cada formación los tiene prendidos y Administración puede apagar o prender cada uno por formación.
-   - B: además, **varias comunidades del mismo tipo** dentro de una formación (por ejemplo, una por generación del Diplomado,
-     cada una con su chat y su Muro).
-   - C: tipos distintos según la formación, que el dueño define (entregar la lista: por ejemplo «aula» en el Diplomado o
-     «mesa de evaluación» en la Certificación).
-3. **Cuando un aprendiz cambia de formación, ¿qué pasa con sus puntos en el ranking?**
-   - A (por defecto): el ranking de cada formación cuenta **solo lo hecho en esa formación**. Al entrar a la nueva empieza de
-     cero; lo anterior queda en su historial y en el ranking de la formación anterior.
-   - B: los puntos de liga **viajan** con la persona (saldo único) y la coherencia, los kilómetros y los días de gimnasio se
-     cuentan por formación.
-   - C: todo lo acumulado viaja con ella y entra al ranking de la nueva formación.
+- **Un testimonio siempre tiene formación.** El camino «formulario sin cuenta» (FR-045) ya no existe desde el 2026-09-18 (solo ADMIN/ALCHEMIST crean o
+  promueven), así que no hay testimonios «sin formación»: nace en la que elige Administración o en la de la publicación que promueve.
+- **Los cursos no tienen alta en la app** (se cargan por importación o desde el panel web): lo nuevo es la columna `cursos.formacion` (Escuela por
+  defecto) y que cada lectura filtre por ella. Crear un curso en otra formación es cambiar esa columna; el servicio de alta que lo pida la exigirá.
+- **Kilómetros y Gimnasio en el ranking (FR-038):** aparecen según los hábitos que ofrezca cada formación, y eso depende de la spec 023 (hábitos por
+  formación), que se implementa aparte. Hasta que llegue, las cuatro pestañas salen en todas las formaciones; el punto de enganche queda dicho en el
+  plan.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -423,9 +421,7 @@ nombre; él ve el Muro, Tribu y Ranking del Diplomado; no ve nada de la Escuela.
 **Tipos de comunidad**
 
 - **FR-033**: Cada formación MUST tener configurados los tipos de comunidad que ofrece; los de hoy son cuatro (general, grupo
-  con mentor, soporte, directos) y MUST estar prendidos por defecto en toda formación nueva. [NEEDS CLARIFICATION: pregunta
-  abierta 2: ¿«tipos» son los cuatro de hoy prendibles y apagables (supuesto), varias comunidades del mismo tipo por
-  formación, o tipos propios de cada formación que defina el dueño?]
+  con mentor, soporte, directos) y MUST estar prendidos por defecto en toda formación nueva.  *(Resuelto por el dueño: los cuatro de hoy, prendibles y apagables.)*
 - **FR-034**: Solo ADMIN y ALQUIMISTA MUST poder prender o apagar un tipo en una formación; cualquier otro rol o cuenta
   suspendida MUST ser rechazado (403).
 - **FR-035**: Un tipo apagado MUST esconderse a todos los de la formación y MUST NOT permitir crear conversaciones nuevas de
@@ -444,15 +440,12 @@ nombre; él ve el Muro, Tribu y Ranking del Diplomado; no ve nada de la Escuela.
 - **FR-041**: La imagen descargable del podio MUST ser la del ranking de la formación que se mira y llevar su nombre; el
   permiso MUST seguir siendo el de hoy (líder, Alquimista, Administración), limitado para el líder a sus formaciones.
 - **FR-042**: Cuando un aprendiz cambia de formación, el ranking de cada formación MUST contar solo lo que hizo en ella; su
-  historial anterior MUST conservarse sin modificarse. [NEEDS CLARIFICATION: pregunta abierta 3: ¿empieza de cero en la nueva
-  (supuesto), viaja el saldo de puntos de liga o viaja todo?]
+  historial anterior MUST conservarse sin modificarse.  *(Resuelto por el dueño: empieza de cero en la nueva.)*
 
 **Testimonios**
 
 - **FR-043**: Cada testimonio MUST pertenecer a la formación de la persona que lo da, mostrar su autor (nombre, foto y etiqueta
-  de rol) y verse solo dentro de esa formación; Administración y Alquimista lo ven en la formación que eligen.
-  [NEEDS CLARIFICATION: pregunta abierta 1: ¿«testimonios por usuarios» son los de los usuarios de la formación y solo ahí
-  (supuesto), prueba social para todas las formaciones, o uno por persona en su ficha?]
+  de rol) y verse solo dentro de esa formación; Administración y Alquimista lo ven en la formación que eligen.  *(Resuelto por el dueño: los de los usuarios de la formación y solo ahí.)*
 - **FR-044**: Promover una publicación del Muro a testimonio MUST seguir siendo de ADMIN y ALQUIMISTA, y el testimonio MUST
   quedar en la formación de la publicación.
 - **FR-045**: Un testimonio recibido sin cuenta MUST quedar sin formación y visible solo para Administración hasta que le
