@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-31
 
-**Status**: Draft (con 3 preguntas abiertas para el dueño, marcadas en el texto)
+**Status**: Implementada (backend y app) el 2026-10-31, con las decisiones del dueño del mismo día; ver «Decisiones del dueño (2026-10-31)».
 
 **Input**: Pedido del dueño (2026-10-31), textual:
 > - El sistema debe configurarse las categorías de hábito por formación.
@@ -50,27 +50,22 @@ los configure por formación, y que cada persona vea solo los de la suya, en tod
 
 Son las del apartado *Contexto* y el pedido textual de arriba. No hay otras decisiones del dueño sobre esta spec todavía.
 
-### Preguntas abiertas (el dueño las contesta antes de implementar)
+### Decisiones del dueño (2026-10-31)
 
-Cada una tiene un supuesto marcado como «por defecto» que la spec ya usa; si el dueño elige otra opción, se corrige en el
-mismo cambio. La lista completa de dudas, incluidas las que solo llevan supuesto, está en *Assumptions*.
+Fuente: `~/.config/renaser-e2e/formaciones/decisiones-del-dueno-2026-10-31.md`. Todo es la opción A (recomendada) de cada pregunta. Mandan sobre lo que
+diga el resto del documento.
 
-1. **¿Un mismo hábito puede ofrecerse en varias formaciones a la vez, o cada formación tiene los suyos?**
-   - A (por defecto): cada formación tiene los suyos. Para repetir uno en otra formación, Administración usa «Copiar a otra
-     formación» y la copia queda **independiente** (editar uno no cambia el otro).
-   - B: un hábito es uno solo y se marca en qué formaciones se ofrece; un cambio vale para todas.
-   - C: ambas (copia independiente o compartido, a elección al ofrecerlo).
-2. **¿Con qué arrancan Diplomado y Certificación?**
-   - A (por defecto): vacías; Administración arma su catálogo y sus categorías (copiando de la Escuela si quiere) antes de
-     que entre el primer participante.
-   - B: con una copia inicial de las cuatro categorías y de los hábitos de la Escuela, que Administración ajusta después.
-   - C: con lo que el dueño defina hábito por hábito (entregar la lista).
-3. **El personal con varias formaciones que hace su propio programa de 90 días, ¿cómo ve «Mi programa» cuando tiene activa
-   otra formación?**
-   - A (por defecto): «Mi programa» (Training y Hoy) existe solo en la formación donde lo hace; en otra se ve un aviso de
-     una línea que lo dice y lleva a cambiar de formación.
-   - B: «Mi programa» se ve siempre, con los hábitos de la formación donde lo hace, aunque tenga activa otra.
-   - C: el personal solo puede hacer su programa propio en una formación y el resto de sus formaciones son solo de trabajo.
+1. **Cada formación tiene sus hábitos (A).** Copiar un hábito a otra formación crea una **copia independiente** (editar uno no cambia el otro). Vale igual
+   para cursos y eventos (spec 024).
+2. **Diplomado y Certificación arrancan vacías (A).** Administración arma su catálogo y sus categorías antes de que entre el primer participante.
+3. **Personal con varias formaciones (A):** «Mi programa» existe solo en la formación donde lo hace; en otra, un aviso de una línea lleva a cambiar de formación.
+4. Solo **Administración y Alquimista** configuran categorías y hábitos. Una categoría **con historial se desactiva** (no se elimina). Los **hábitos propios se
+   conservan** al cambiar de formación.
+5. **El cambio de formación de un aprendiz rige al instante** (decisión 024-9 B, que manda sobre el «desde su día siguiente» de esta spec): la participación se
+   reinicia en la transacción del traslado y, desde ese momento, la persona solo recibe y ve los hábitos de la formación nueva; su historial queda como estaba.
+
+Las preguntas abiertas de la primera versión (hábito compartido o copia, con qué arrancan las formaciones nuevas, «Mi programa» del personal) quedan
+resueltas así; los marcadores `[NEEDS CLARIFICATION]` de FR-023, FR-025 y FR-030a ya no aplican.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -351,13 +346,11 @@ antes y después del despliegue: idénticas.
   categoría con registros históricos MUST poder desactivarse pero no eliminarse.
 - **FR-023**: «Copiar a otra formación» MUST crear en la formación elegida un hábito con el mismo contenido (título,
   descripción, tipo, evidencia, opcionalidad, obligatorio en intoxicación, audiencia por rol) en la categoría que
-  Administración elija de esa formación, **sin ningún vínculo posterior** con el original. [NEEDS CLARIFICATION: pregunta
-  abierta 1: ¿copia independiente (supuesto) o un hábito compartido entre formaciones?]
+  Administración elija de esa formación, **sin ningún vínculo posterior** con el original.  *(Decisión del dueño 1: copia independiente.)*
 - **FR-024**: Cada alta, cambio o baja de una categoría o de la formación de un hábito MUST quedar registrado: quién, cuándo,
   qué cambió.
 - **FR-025**: Administración MUST poder dejar lista una formación nueva (categorías y hábitos) **antes** de que tenga
-  participantes, y la formación MUST aparecer a sus participantes sin publicar una app nueva. [NEEDS CLARIFICATION: pregunta
-  abierta 2: ¿Diplomado y Certificación arrancan vacías (supuesto), con copia de la Escuela o con lo que defina el dueño?]
+  participantes, y la formación MUST aparecer a sus participantes sin publicar una app nueva. *(Decisión del dueño 2: arrancan vacías.)*
 - **FR-026**: La regla de la spec 001 (audiencia por rol, «desde mañana», historial y configuración conservados) MUST seguir
   rigiendo **dentro de cada formación**, sin cambios.
 
@@ -377,8 +370,7 @@ antes y después del despliegue: idénticas.
   las pestañas.
 - **FR-030a**: El personal con varias formaciones que hace su propio programa en una de ellas MUST ver «Mi programa» (Training
   y Hoy) con los hábitos de esa formación; con otra activa MUST ver un aviso de una línea que lo dice y lleva a cambiar de
-  formación. [NEEDS CLARIFICATION: pregunta abierta 3: ¿«Mi programa» solo en su formación (supuesto), siempre visible o el
-  personal solo hace su programa en una?]
+  formación. *(Decisión del dueño 3.)*
 - **FR-031**: Las pantallas nuevas o cambiadas MUST cumplir las reglas de la app: un solo scroll, gesto atrás que vuelve un
   nivel, áreas táctiles de 48 px o más, tema claro y oscuro, español de Perú con tuteo, validación antes de enviar y
   confirmación en línea al guardar.
