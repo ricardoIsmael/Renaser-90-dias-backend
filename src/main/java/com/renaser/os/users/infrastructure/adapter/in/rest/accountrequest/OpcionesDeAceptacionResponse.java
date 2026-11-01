@@ -12,16 +12,18 @@ import java.util.List;
 public record OpcionesDeAceptacionResponse(List<Formation> formations, boolean diagnosisAvailable) {
 
     /** @param durationsDays las opciones en días; {@code durationLabels}, cómo se dicen («3 meses», «1 año», «90 días») */
+    /** @param termsPublished spec 027: {@code false} = la formación todavía no publicó sus términos y no recibe personas nuevas (la hoja la muestra apagada) */
     public record Formation(String code, String name, String description, List<Integer> durationsDays, List<String> durationLabels,
-                            int defaultDurationDays) {
+                            int defaultDurationDays, boolean termsPublished) {
 
-        static Formation from(FormacionConfigurada formacion) {
+        static Formation from(FormacionConfigurada formacion, boolean terminosPublicados) {
             return new Formation(formacion.formacion().codigo(), formacion.nombre(), formacion.descripcion(), formacion.duracionesDias(),
-                    formacion.etiquetasDeDuracion(), formacion.duracionPorDefecto());
+                    formacion.etiquetasDeDuracion(), formacion.duracionPorDefecto(), terminosPublicados);
         }
     }
 
     public static OpcionesDeAceptacionResponse from(OpcionesDeAceptacion opciones) {
-        return new OpcionesDeAceptacionResponse(opciones.formaciones().stream().map(Formation::from).toList(), opciones.diagnosticoDisponible());
+        return new OpcionesDeAceptacionResponse(opciones.formaciones().stream()
+                .map(f -> Formation.from(f, !opciones.sinTerminos().contains(f.formacion()))).toList(), opciones.diagnosticoDisponible());
     }
 }

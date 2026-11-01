@@ -1,5 +1,6 @@
 package com.renaser.os.users.application.services;
 
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FormacionConfigurada;
 import com.renaser.os.users.application.ports.in.accountrequest.ConsultarOpcionesDeAceptacionUseCase;
@@ -26,6 +27,7 @@ class OpcionesDeAceptacionService implements ConsultarOpcionesDeAceptacionUseCas
     public OpcionesDeAceptacion consultar(UserId actor) {
         requireAdminGuard.requireAdminActivo(actor);
         List<FormacionConfigurada> activas = catalogo.todas().stream().filter(FormacionConfigurada::activa).toList();
-        return new OpcionesDeAceptacion(activas, ingreso.diagnosticoDisponible());
+        List<Formacion> sinTerminos = activas.stream().map(FormacionConfigurada::formacion).filter(f -> !ingreso.tieneTerminos(f)).toList();
+        return new OpcionesDeAceptacion(activas, ingreso.diagnosticoDisponible(), sinTerminos);
     }
 }

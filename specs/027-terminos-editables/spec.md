@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-31
 
-**Status**: Draft — con 2 preguntas abiertas que cambian el alcance (ver «Dudas para el dueño»)
+**Status**: Implementada (2026-10-31) con las decisiones del dueño; ver «Decisiones del dueño del 31/10» y `plan.md`
 
 **Input**: Pedido del dueño del 2026-10-31, textual: «El sistema debe poder gestionar sus propios términos y condiciones, para no estar borrando ni editando código.»
 
@@ -26,6 +26,25 @@ El dueño quiere cambiar los términos él mismo, desde la app, cuando quiera, s
 
 - Q: ¿Quién gestiona los términos? → A: **El propio sistema, desde la app, para no editar ni borrar código.**
 - Q: ¿Qué se conserva de lo que existe? → A: Lo de hoy sigue valiendo: las 23 cláusulas actuales son el punto de partida y quienes ya aceptaron siguen aceptados.
+
+### Decisiones del dueño del 31/10/2026 (mandan sobre lo que dice el resto de este documento)
+
+Fuente: `~/.config/renaser-e2e/formaciones/decisiones-del-dueno-2026-10-31.md`. **Todas las dudas, la opción A (la recomendada).**
+
+| # | Decisión | Qué se implementó |
+|---|---|---|
+| Q1 A | Cada formación con los suyos; nacen como copia de los de la Escuela, en borrador «Por revisar». | `terminos_versiones` por formación; V149 deja la versión 1 de la Escuela y un borrador en las otras dos. |
+| Q2 A | Administración decide en cada publicación si quienes ya aceptaron deben aceptar de nuevo; por defecto no. | Interruptor «Pedir que acepten de nuevo» (apagado) al publicar; si sí, la app bloquea al abrir hasta aceptar. |
+| Q3 A | En una nueva aceptación, casilla y firma. | La misma pantalla de siempre con otro titular. |
+| Q4 A | El personal firma los de cada formación en la que trabaja, la primera vez que entra a ella; Administración y Alquimista, los de la Escuela. | `QuePideLaAceptacion.PRIMERA_EN_LA_FORMACION`; la formación de los términos de una persona es `AlcanceDeFormacionFinder.formacionDe`, o la Escuela. |
+| Q5 A | El texto actual nunca cambió. | Las aceptaciones de antes se atribuyen a la versión 1 (V150). |
+| Q6 A | La persona puede releer lo que aceptó. | `GET /onboarding/terms/accepted` (sin pantalla nueva en Yo: ver el reporte). |
+| Q7 A | Texto plano. | Sin formato. |
+| Q8 A | Editan Administrador y Alquimista. | `GuardiaDeTerminos`. |
+| Q9 A | Sin push: se ve al abrir la app. | — |
+| Q10 A | Bloqueo inmediato hasta aceptar. | Sin plazo de gracia. |
+| Q11 A | Al pasar de formación se aceptan los de la nueva. | Ídem Q4. |
+| Q12 A | Las constancias siguen la política de borrado de cuentas vigente. | `aceptaciones_de_terminos.usuario_id ON DELETE CASCADE`. |
 
 ## User Scenarios & Testing *(mandatory)*
 

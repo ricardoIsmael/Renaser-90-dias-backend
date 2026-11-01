@@ -5,6 +5,7 @@ import com.renaser.os.onboarding.application.ports.in.estado.AceptarHitoOnboardi
 import com.renaser.os.onboarding.application.ports.in.estado.AvanzarEstadoUseCase;
 import com.renaser.os.onboarding.application.ports.in.estado.CompletarOnboardingUseCase;
 import com.renaser.os.onboarding.application.ports.in.estado.ObtenerEstadoOnboardingUseCase;
+import com.renaser.os.onboarding.application.ports.in.terminos.RegistrarAceptacionDeTerminosUseCase;
 import com.renaser.os.onboarding.application.ports.out.actor.ConsultarActorPort;
 import com.renaser.os.onboarding.application.ports.out.estado.LoadEstadoOnboardingPort;
 import com.renaser.os.onboarding.application.ports.out.estado.SaveEstadoOnboardingPort;
@@ -25,13 +26,15 @@ public class EstadoOnboardingService implements ObtenerEstadoOnboardingUseCase, 
     private final LoadEstadoOnboardingPort loadEstadoPort;
     private final SaveEstadoOnboardingPort saveEstadoPort;
     private final ConsultarActorPort actorPort;
+    private final RegistrarAceptacionDeTerminosUseCase aceptacionDeTerminos;
     private final Clock clock;
 
     public EstadoOnboardingService(LoadEstadoOnboardingPort loadEstadoPort, SaveEstadoOnboardingPort saveEstadoPort,
-                                    ConsultarActorPort actorPort, Clock clock) {
+                                    ConsultarActorPort actorPort, RegistrarAceptacionDeTerminosUseCase aceptacionDeTerminos, Clock clock) {
         this.loadEstadoPort = loadEstadoPort;
         this.saveEstadoPort = saveEstadoPort;
         this.actorPort = actorPort;
+        this.aceptacionDeTerminos = aceptacionDeTerminos;
         this.clock = clock;
     }
 
@@ -58,6 +61,10 @@ public class EstadoOnboardingService implements ObtenerEstadoOnboardingUseCase, 
         requireActorActivo(command.usuarioId());
         EstadoOnboarding estado = requireEstado(command.usuarioId());
         estado.aceptarHito(command.hito(), clock);
+        if (command.hito() == HitoOnboarding.TERMINOS) {
+            // Spec 027: la constancia de QUÉ versión aceptó va en la misma transacción que el hito; si no se puede dejar, tampoco queda aceptado.
+            aceptacionDeTerminos.registrar(command.usuarioId(), command.versionDeTerminosId());
+        }
         return saveEstadoPort.guardar(estado);
     }
 

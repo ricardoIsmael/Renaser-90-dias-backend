@@ -42,13 +42,15 @@ class EstadoOnboardingServiceTest {
     private SaveEstadoOnboardingPort saveEstadoPort;
     @Mock
     private ConsultarActorPort actorPort;
+    @Mock
+    private com.renaser.os.onboarding.application.ports.in.terminos.RegistrarAceptacionDeTerminosUseCase aceptacionDeTerminos;
 
     private EstadoOnboardingService service;
     private UserId usuarioId;
 
     @BeforeEach
     void setUp() {
-        service = new EstadoOnboardingService(loadEstadoPort, saveEstadoPort, actorPort, CLOCK);
+        service = new EstadoOnboardingService(loadEstadoPort, saveEstadoPort, actorPort, aceptacionDeTerminos, CLOCK);
         usuarioId = UserId.of(UUID.randomUUID());
     }
 

@@ -61,7 +61,7 @@ public class EstadoOnboardingController {
     @PostMapping("/milestones")
     public EstadoOnboardingResponse aceptar(@ActorAutenticado UserId actor,
                                              @Valid @RequestBody AceptarHitoRequest request) {
-        var comando = new AceptarHitoCommand(actor, request.milestone());
+        var comando = new AceptarHitoCommand(actor, request.milestone(), request.termsVersionId());
         return EstadoOnboardingResponse.from(aceptarUseCase.aceptar(comando));
     }
 
