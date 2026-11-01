@@ -103,7 +103,7 @@ class HabitosDeTodosIT {
         asignar(fenix, ana, "APRENDIZ");
         asignar(fenix, beto, "APRENDIZ");
 
-        String categoriaDiplomado = "DIPL_" + marca;
+        String categoriaDiplomado = "DIPL_" + marca.toUpperCase(); // la clave de una categoría va en mayúsculas (CHECK de la tabla)
         categorias.add(categoriaDiplomado);
         jdbc.update("INSERT INTO renaser.categorias_habito (clave, nombre, formacion, orden) VALUES (?, 'Estudio', 'DIPLOMADO', 1) ON CONFLICT DO NOTHING",
                 categoriaDiplomado);
