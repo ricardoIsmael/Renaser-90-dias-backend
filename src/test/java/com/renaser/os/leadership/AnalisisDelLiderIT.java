@@ -47,11 +47,12 @@ class AnalisisDelLiderIT {
 
     private static final Instant AHORA = Instant.parse("2026-10-19T15:00:00Z");
     private static final LocalDate SEMANA_9 = LocalDate.of(2026, 10, 12);
-    private static final UUID FENIX = UUID.randomUUID();
+    /** El grupo, su mentora y su aprendiz son los del doble compartido: {@code GrupoFenixConAna} los responde por estos ids. */
+    private static final UUID FENIX = CumplimientoDelLiderIT.FENIX;
     private static final UUID LIDER = UUID.randomUUID();
     private static final UUID ADMIN = UUID.randomUUID();
-    private static final UUID MENTORA = UUID.randomUUID();
-    private static final UUID ANA = UUID.randomUUID();
+    private static final UUID MENTORA = CumplimientoDelLiderIT.MENTORA;
+    private static final UUID ANA = CumplimientoDelLiderIT.ANA;
     private static final UUID AJENA = UUID.randomUUID();
 
     @Autowired

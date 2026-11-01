@@ -87,7 +87,7 @@ class Analisis8020IT {
         jdbc.update("DELETE FROM renaser.funcionalidades_estado WHERE clave = 'ia.analisis'");
         copiaDeEstados.recargar();
         jdbc.update("DELETE FROM renaser.notificaciones WHERE tipo = 'ANALISIS_80_20'::renaser.tipo_notificacion");
-        jdbc.update("DELETE FROM renaser.usuarios WHERE email LIKE '%@analisis.test'");
+        jdbc.update("DELETE FROM renaser.usuarios WHERE email LIKE '%@analisis.test' OR email LIKE 'ver-como+%@renaser.invalid'");
     }
 
     /** Como lo haría una IA obediente: cita las cifras que le dieron, ni una más. */
@@ -99,8 +99,10 @@ class Analisis8020IT {
 
     private UUID persona(String nombre, boolean deCuentaDePrueba) {
         UUID id = UUID.randomUUID();
+        // Una cuenta de prueba de «ver como» (V117) lleva un correo `ver-como+…@renaser.invalid` y no tiene contraseña.
+        String correo = deCuentaDePrueba ? "ver-como+" + id + "@renaser.invalid" : id + "@analisis.test";
         jdbc.update("INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, es_cuenta_de_prueba) "
-                + "VALUES (?, ?, ?, CAST('APRENDIZ' AS renaser.rol_usuario), ?)", id, id + "@analisis.test", nombre, deCuentaDePrueba);
+                + "VALUES (?, ?, ?, CAST('APRENDIZ' AS renaser.rol_usuario), ?)", id, correo, nombre, deCuentaDePrueba);
         jdbc.update("INSERT INTO renaser.participantes_programa (usuario_id, dia_programa, fecha_inicio, programa_activado_en, timezone) "
                 + "VALUES (?, 56, DATE '2026-08-17', TIMESTAMPTZ '2026-08-16 12:00:00+00', 'America/Lima')", id);
         return id;
@@ -128,7 +130,7 @@ class Analisis8020IT {
     }
 
     private List<Map<String, Object>> filas(UUID persona) {
-        return jdbc.queryForList("SELECT estado, intentos, formacion, lo_que_mas_movio, cifras::text AS cifras FROM renaser.analisis_80_20 "
+        return jdbc.queryForList("SELECT estado, intentos, formacion, inicio::text AS inicio, lo_que_mas_movio, cifras::text AS cifras FROM renaser.analisis_80_20 "
                 + "WHERE participante_id = ? ORDER BY periodo, inicio", persona);
     }
 
@@ -152,7 +154,7 @@ class Analisis8020IT {
             assertThat(vista.analisis().loQueMasMovio()).isEqualTo("Cumpliste 7 de 9 acciones.");
             assertThat(vista.cifras().planificadas()).isEqualTo(9);
             assertThat(vista.cifras().cumplidas()).isEqualTo(7);
-            assertThat(vista.cifras().verdes().planificadas()).isEqualTo(4);
+            assertThat(vista.cifras().verdes().planificadas()).isEqualTo(5); // las cinco de posición 1
             assertThat(vista.codigoRenaser().respuestas()).isEqualTo(4);
         }
         verify(ia, times(1)).generar(any());
@@ -280,7 +282,9 @@ class Analisis8020IT {
 
         barrido.generarLosQueTocan();
 
-        assertThat(filas(ana)).isEmpty();
+        // La semana 9 (12 al 18 de oct) todavía no cerró en Lima: ni fila ni IA. Lo que sí cerró antes (la semana 8, sin acciones) queda
+        // anotado como «sin datos», sin llamar a la IA.
+        assertThat(filas(ana)).noneMatch(fila -> "2026-10-12".equals(fila.get("inicio")));
         verify(ia, never()).generar(any());
     }
 
