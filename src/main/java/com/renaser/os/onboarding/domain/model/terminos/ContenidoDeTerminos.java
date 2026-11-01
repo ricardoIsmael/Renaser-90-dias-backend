@@ -1,7 +1,7 @@
 package com.renaser.os.onboarding.domain.model.terminos;
 
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 /**
  * El texto de unos términos (spec 027, FR-002): título, introducción opcional, cláusulas y el texto de la casilla de aceptación. Texto plano, con saltos de
@@ -28,7 +28,7 @@ public record ContenidoDeTerminos(String titulo, String introduccion, List<Strin
      * Lo que impide publicar (FR-007), en una frase para quien edita; vacío si se puede. Se guarda un borrador a medias, pero no se publica uno así.
      */
     public List<String> loQueFaltaParaPublicar() {
-        java.util.ArrayList<String> faltas = new java.util.ArrayList<>();
+        ArrayList<String> faltas = new ArrayList<>();
         if (titulo.isEmpty()) {
             faltas.add("Falta el título.");
         }
@@ -69,7 +69,6 @@ public record ContenidoDeTerminos(String titulo, String introduccion, List<Strin
                 throw new IllegalArgumentException("La cláusula " + (i + 1) + " puede tener hasta " + MAX_CLAUSULA + " caracteres.");
             }
         }
-        Objects.requireNonNull(clausulas);
     }
 
     /** Si dice lo mismo que {@code otro} (ya sin los espacios de los bordes). Publicar sin cambios no crea una versión vacía (FR-007). */
