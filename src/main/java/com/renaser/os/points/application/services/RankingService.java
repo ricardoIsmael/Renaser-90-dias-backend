@@ -13,7 +13,11 @@ import com.renaser.os.points.domain.model.ranking.PosicionRanking;
 import com.renaser.os.points.domain.model.ranking.PuntajeGeneral;
 import com.renaser.os.points.domain.model.ranking.TipoRanking;
 import com.renaser.os.points.api.PorcentajeRocasFinder;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
+import com.renaser.os.shared.domain.Formacion;
+import com.renaser.os.shared.domain.FormacionDelContenido;
 import com.renaser.os.shared.domain.NotAuthorizedException;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import com.renaser.os.users.api.CuentasCerradasFinder;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummaryFinder;
@@ -44,6 +48,8 @@ public class RankingService implements ConsultarRankingUseCase, GenerarSnapshotR
     private final UserSummaryFinder userSummaryFinder;
     /** D-243: quién está cerrado esperando su borrado, para sacarlo del ranking que ven los demás. */
     private final CuentasCerradasFinder cuentasCerradas;
+    /** Spec 024: el ranking de cada formación compara solo a los suyos; quién ve cuál lo dice el punto único de la 022. */
+    private final AlcanceDeFormacionFinder formaciones;
 
     public RankingService(LoadRankingCandidatosPort loadRankingCandidatosPort,
                            SaveRankingSnapshotPort saveRankingSnapshotPort, LoadRankingPort loadRankingPort,
@@ -51,7 +57,8 @@ public class RankingService implements ConsultarRankingUseCase, GenerarSnapshotR
                            PorcentajeRocasFinder porcentajeRocasFinder,
                            PorcentajeCursosFinder porcentajeCursosFinder,
                            MedicionAcumuladaFinder medicionAcumuladaFinder, UserSummaryFinder userSummaryFinder,
-                           CuentasCerradasFinder cuentasCerradas) {
+                           CuentasCerradasFinder cuentasCerradas, AlcanceDeFormacionFinder formaciones) {
+        this.formaciones = formaciones;
         this.loadRankingCandidatosPort = loadRankingCandidatosPort;
         this.saveRankingSnapshotPort = saveRankingSnapshotPort;
         this.loadRankingPort = loadRankingPort;
@@ -84,7 +91,12 @@ public class RankingService implements ConsultarRankingUseCase, GenerarSnapshotR
             case GIMNASIO -> enDecimales(medicionAcumuladaFinder.diasDeGimnasio(idsDe(candidatos), fecha));
             default -> Map.of();
         };
-        List<PosicionRanking> posiciones = ordenarYNumerar(tipo, fecha, candidatos, puntajesCalculados);
+        // Spec 024: los puntajes se calculan en lote para todos, pero cada formación se ordena y numera aparte.
+        List<PosicionRanking> posiciones = new ArrayList<>(candidatos.size());
+        for (Formacion formacion : Formacion.values()) {
+            List<CandidatoRanking> deLaFormacion = candidatos.stream().filter(c -> c.formacion() == formacion).toList();
+            posiciones.addAll(ordenarYNumerar(tipo, fecha, deLaFormacion, puntajesCalculados, formacion));
+        }
 
         saveRankingSnapshotPort.reemplazar(tipo, fecha, posiciones);
     }
@@ -139,20 +151,24 @@ public class RankingService implements ConsultarRankingUseCase, GenerarSnapshotR
      * numera sin empates), así que la posición nueva es el lugar en la lista.
      */
     @Override
-    public List<EntradaRanking> consultar(UserId actorId, TipoRanking tipo, LocalDate fecha) {
+    public List<EntradaRanking> consultar(UserId actorId, TipoRanking tipo, LocalDate fecha, Formacion formacion) {
         requireActorActivo(actorId);
-        List<LoadRankingPort.EntradaRankingConNombre> filas = loadRankingPort.porTipoYFecha(tipo, fecha).stream()
-                .sorted(Comparator.comparingInt(LoadRankingPort.EntradaRankingConNombre::posicion))
+        AlcanceDeFormacion alcance = FormacionDelContenido.paraLeer(formaciones.de(actorId), formacion);
+        List<LoadRankingPort.EntradaRankingConNombre> filas = loadRankingPort.porTipoYFecha(tipo, fecha, alcance).stream()
+                .sorted(Comparator.comparing(LoadRankingPort.EntradaRankingConNombre::formacion)
+                        .thenComparingInt(LoadRankingPort.EntradaRankingConNombre::posicion))
                 .toList();
         Set<UserId> cerradas = cuentasCerradas.cerradasEntre(
                 filas.stream().map(LoadRankingPort.EntradaRankingConNombre::participanteId).toList());
         List<LoadRankingPort.EntradaRankingConNombre> visibles = filas.stream()
                 .filter(e -> !cerradas.contains(e.participanteId()))
                 .toList();
+        // Se renumera DENTRO de cada formación: la posición de un aprendiz es entre los de la suya (spec 024, FR-037).
+        Map<Formacion, Integer> siguientePosicion = new java.util.EnumMap<>(Formacion.class);
         List<EntradaRanking> entradas = new ArrayList<>(visibles.size());
-        for (int i = 0; i < visibles.size(); i++) {
-            var e = visibles.get(i);
-            entradas.add(new EntradaRanking(e.participanteId(), e.fullName(), i + 1, e.puntaje()));
+        for (var e : visibles) {
+            int posicion = siguientePosicion.merge(e.formacion(), 1, Integer::sum);
+            entradas.add(new EntradaRanking(e.participanteId(), e.fullName(), posicion, e.puntaje(), e.formacion()));
         }
         return entradas;
     }
@@ -169,7 +185,7 @@ public class RankingService implements ConsultarRankingUseCase, GenerarSnapshotR
 
     private List<PosicionRanking> ordenarYNumerar(TipoRanking tipo, LocalDate fecha,
                                                     List<CandidatoRanking> candidatos,
-                                                    Map<UserId, BigDecimal> puntajesCalculados) {
+                                                    Map<UserId, BigDecimal> puntajesCalculados, Formacion formacion) {
         List<CandidatoRanking> ordenados = candidatos.stream()
                 .sorted(Comparator.comparing((CandidatoRanking c) -> puntajeDe(tipo, c, puntajesCalculados))
                         .reversed()
@@ -181,7 +197,7 @@ public class RankingService implements ConsultarRankingUseCase, GenerarSnapshotR
         for (int i = 0; i < ordenados.size(); i++) {
             CandidatoRanking candidato = ordenados.get(i);
             posiciones.add(new PosicionRanking(fecha, tipo, candidato.participanteId(), i + 1,
-                    puntajeDe(tipo, candidato, puntajesCalculados)));
+                    puntajeDe(tipo, candidato, puntajesCalculados), formacion));
         }
         return posiciones;
     }

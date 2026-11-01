@@ -1,5 +1,6 @@
 package com.renaser.os.points.application.services;
 
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.points.application.ports.in.ranking.RegenerarSnapshotsRankingUseCase;
 import com.renaser.os.points.application.ports.in.ranking.RegenerarSnapshotsRankingUseCase.RegenerarSnapshotsCommand;
@@ -64,7 +65,7 @@ class RankingConAprendizSinProgramaIT {
         assertThat(resultado.fallados()).isEmpty();
         assertThat(resultado.tipos()).containsExactlyInAnyOrder("LEAGUE", "CELL", "GENERAL", "KILOMETROS", "GIMNASIO");
         for (TipoRanking tipo : TipoRanking.CON_CORTE_DIARIO) {
-            assertThat(ranking.porTipoYFecha(tipo, FECHA))
+            assertThat(ranking.porTipoYFecha(tipo, FECHA, AlcanceDeFormacion.todas()))
                     .as("corte %s", tipo)
                     .extracting(LoadRankingPort.EntradaRankingConNombre::participanteId)
                     .contains(ana, beto)

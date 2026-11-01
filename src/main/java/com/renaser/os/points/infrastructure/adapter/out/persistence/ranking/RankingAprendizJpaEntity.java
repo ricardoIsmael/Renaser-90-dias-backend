@@ -38,4 +38,7 @@ public class RankingAprendizJpaEntity {
     private Integer posicion;
 
     private BigDecimal puntaje;
+
+    /** V139: la formación en que estaba el aprendiz el día del corte (la posición se cuenta entre los de esa formación). */
+    private String formacion = "ESCUELA";
 }

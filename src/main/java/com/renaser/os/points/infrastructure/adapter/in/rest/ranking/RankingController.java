@@ -4,6 +4,7 @@ import com.renaser.os.points.application.ports.in.ranking.ConsultarRankingAgrega
 import com.renaser.os.points.application.ports.in.ranking.ConsultarRankingUseCase;
 import com.renaser.os.points.domain.model.ranking.TipoRanking;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.FormacionDelContenido;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
@@ -60,19 +61,21 @@ public class RankingController {
     @RequiresPermission(Permission.USE_APP)
     @GetMapping
     public RankingAgregadoResponse consultarAgregado(@ActorAutenticado UserId actor,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha,
+            @RequestParam(required = false) String formation) {
         LocalDate fechaConsultada = fecha != null ? fecha : hoyDelPadron();
         return RankingAgregadoResponse.from(
-                consultarRankingAgregadoUseCase.agregado(actor, fechaConsultada));
+                consultarRankingAgregadoUseCase.agregado(actor, fechaConsultada, FormacionDelContenido.pedida(formation)));
     }
 
     @RequiresPermission(Permission.USE_APP)
     @GetMapping("/{tipo}")
     public List<EntradaRankingResponse> consultar(@ActorAutenticado UserId actor,
             @PathVariable TipoRanking tipo,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha,
+            @RequestParam(required = false) String formation) {
         LocalDate fechaConsultada = fecha != null ? fecha : hoyDelPadron();
-        return consultarRankingUseCase.consultar(actor, tipo, fechaConsultada).stream()
+        return consultarRankingUseCase.consultar(actor, tipo, fechaConsultada, FormacionDelContenido.pedida(formation)).stream()
                 .map(EntradaRankingResponse::from)
                 .toList();
     }
