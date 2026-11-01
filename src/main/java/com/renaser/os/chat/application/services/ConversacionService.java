@@ -152,6 +152,12 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
         comunes.addAll(formaciones.de(command.actorId()).formaciones());
         comunes.retainAll(formaciones.de(command.otroUsuarioId()).formaciones());
         if (comunes.isEmpty()) {
+            /* El directorio del chat ofrece al personal en TODAS las formaciones que tiene asignadas, no solo en la activa (por pertenencia); si la
+               activa de la otra persona no coincide pero comparten otra, el directo se abre en esa (E2E P3-H: aparecía en el directorio y daba 404). */
+            comunes.addAll(formaciones.de(command.actorId()).formaciones());
+            comunes.retainAll(pertenenciasDe(command.otroUsuarioId()));
+        }
+        if (comunes.isEmpty()) {
             throw new ObjetoDeOtraFormacionException();
         }
         if (comunes.size() == 1) {
@@ -161,6 +167,12 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
             return command.formacion();
         }
         return comunes.contains(Formacion.POR_DEFECTO) ? Formacion.POR_DEFECTO : comunes.stream().sorted().findFirst().orElseThrow();
+    }
+
+    /** A qué formaciones pertenece la persona: las que ve, si ve todas; si no, las que tiene (el personal, todas las asignadas, no solo la activa). */
+    private Set<Formacion> pertenenciasDe(UserId persona) {
+        AlcanceDeFormacion alcance = formaciones.de(persona);
+        return alcance.esTodas() ? alcance.formaciones() : formaciones.formacionesDe(persona);
     }
 
     /**

@@ -167,6 +167,35 @@ class ConversacionServiceTest {
     }
 
     @Test
+    @DisplayName("Spec 024 (E2E P3-H): la mentora que el directorio ofrece por pertenecer al Diplomado también se puede abrir, aunque su activa sea la Escuela")
+    void elDirectoSeAbreEnUnaFormacionQueLaOtraPersonaTieneAsignadaAunqueNoSeaLaActiva() {
+        var delDiplomado = new com.renaser.os.users.api.AlcanceDeFormacionPermisivo() {
+            @Override
+            public com.renaser.os.shared.domain.AlcanceDeFormacion de(UserId actor) {
+                return com.renaser.os.shared.domain.AlcanceDeFormacion.de(actor.equals(activo)
+                        ? com.renaser.os.shared.domain.Formacion.DIPLOMADO : com.renaser.os.shared.domain.Formacion.ESCUELA);
+            }
+
+            @Override
+            public java.util.Set<com.renaser.os.shared.domain.Formacion> formacionesDe(UserId persona) {
+                return persona.equals(activo) ? java.util.Set.of(com.renaser.os.shared.domain.Formacion.DIPLOMADO)
+                        : java.util.Set.of(com.renaser.os.shared.domain.Formacion.ESCUELA, com.renaser.os.shared.domain.Formacion.DIPLOMADO);
+            }
+        };
+        var servicio = new ConversacionService(loadConversacionPort, saveConversacionPort, agregarParticipantePort,
+                esParticipantePort, new AccesoAChatsDeGrupo(pertenenciaVigentePort, gruposEnCursoPort, userSummaryFinder), marcarLeidoPort, anunciarLectura, contarNoLeidosPort,
+                loadMensajePort, listarUsuariosPort, userSummaryFinder, fotosDeGrupos,
+                new NombresDeLosChatsService(grupos -> java.util.Map.of(), userSummaryFinder, org.mockito.Mockito.mock(com.renaser.os.users.api.FormacionesFinder.class)), CLOCK, idGenerator, transactionManager, cuentasCerradas, delDiplomado, org.mockito.Mockito.mock(com.renaser.os.users.api.FormacionesFinder.class), new com.renaser.os.chat.application.services.VisibilidadPermisiva());
+        String claveEnElDiplomado = Conversacion.claveDirectaDe(activo, otroActivo, com.renaser.os.shared.domain.Formacion.DIPLOMADO);
+        when(loadConversacionPort.porClaveDirecta(claveEnElDiplomado)).thenReturn(Optional.empty());
+
+        servicio.obtenerOCrear(new CrearConversacionDirectaCommand(activo, otroActivo));
+
+        verify(saveConversacionPort).save(any());
+        verify(agregarParticipantePort, times(2)).agregar(any());
+    }
+
+    @Test
     @DisplayName("C-10: si el INSERT choca con el UNIQUE(clave_directa) por una carrera, se "
             + "devuelve la conversacion ganadora en vez de explotar")
     void obtenerOCrearRecuperaLaConversacionGanadoraDeUnaCreacionConcurrente() {
