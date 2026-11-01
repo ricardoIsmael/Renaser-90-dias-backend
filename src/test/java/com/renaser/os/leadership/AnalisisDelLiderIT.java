@@ -80,6 +80,8 @@ class AnalisisDelLiderIT {
                     + "VALUES (?, 56, DATE '2026-08-17', TIMESTAMPTZ '2026-08-16 12:00:00+00', 'America/Lima')", id);
         }
         analisisListo(ANA, "ESCUELA");
+        constanciasInicial = 0;
+        constanciasInicial = constancias();
     }
 
     @AfterEach
@@ -116,8 +118,17 @@ class AnalisisDelLiderIT {
         return analisis.analisisDe(new ConsultaAnalisisDePersona(UserId.of(actor), FENIX, persona, Tipo.SEMANA, SEMANA_9));
     }
 
+    /** `consultas_de_ficha` es append-only y otras pruebas usan los mismos ids: se cuenta lo que SUMÓ esta prueba, no lo que hay. */
+    private int constanciasInicial;
+
     private int constancias() {
-        return jdbc.queryForObject("SELECT count(*) FROM renaser.consultas_de_ficha WHERE persona_id IN (?, ?)", Integer.class, ANA, AJENA);
+        return jdbc.queryForObject("SELECT count(*) FROM renaser.consultas_de_ficha WHERE persona_id IN (?, ?)", Integer.class, ANA, AJENA)
+                - constanciasInicial;
+    }
+
+    private java.util.Map<String, Object> ultimaConstanciaDe(UUID persona) {
+        return jdbc.queryForMap("SELECT consultor_id, rol_consultor, persona_id, grupo_id, semana_desde FROM renaser.consultas_de_ficha "
+                + "WHERE persona_id = ? ORDER BY consultada_en DESC, id LIMIT 1", persona);
     }
 
     @Test
@@ -131,8 +142,8 @@ class AnalisisDelLiderIT {
         assertThat(vista.analisis().loQueMasMovio()).isEqualTo("Entrenar movió más.");
         assertThat(vista.analisis().proximosPasos()).containsExactly("Haz la llamada primero.");
         assertThat(vista.cifras().cumplidas()).isEqualTo(7);
-        assertThat(jdbc.queryForList("SELECT consultor_id, rol_consultor, persona_id, grupo_id, semana_desde FROM renaser.consultas_de_ficha "
-                + "WHERE persona_id = ?", ANA)).singleElement().satisfies(fila -> {
+        assertThat(constancias()).isEqualTo(1);
+        assertThat(ultimaConstanciaDe(ANA)).satisfies(fila -> {
             assertThat(fila.get("consultor_id")).isEqualTo(LIDER);
             assertThat(fila.get("rol_consultor")).isEqualTo("MENTOR_LEAD");
             assertThat(fila.get("grupo_id")).isEqualTo(FENIX);
@@ -147,8 +158,8 @@ class AnalisisDelLiderIT {
         assertThat(constancias()).isZero();
 
         assertThat(leer(ADMIN, ANA).estado()).isEqualTo("LISTO");
-        assertThat(jdbc.queryForObject("SELECT rol_consultor FROM renaser.consultas_de_ficha WHERE persona_id = ?", String.class, ANA))
-                .isEqualTo("ADMIN");
+        assertThat(constancias()).isEqualTo(1);
+        assertThat(ultimaConstanciaDe(ANA).get("rol_consultor")).isEqualTo("ADMIN");
     }
 
     @Test
@@ -178,13 +189,18 @@ class AnalisisDelLiderIT {
     }
 
     @Test
-    @DisplayName("FR-022: lo que quedó de otra formación no se muestra: si Ana pasó al Diplomado su análisis de la Escuela no aparece como listo")
+    @DisplayName("FR-022: lo que quedó de otra formación no se muestra: si Ana pasó al Diplomado, el líder de la Escuela ya no la ve (404) y su análisis de la Escuela no aparece como listo")
     void otraFormacion() {
         radarEnFichasPrendido();
         jdbc.update("UPDATE renaser.participantes_programa SET formacion = 'DIPLOMADO' WHERE usuario_id = ?", ANA);
 
-        assertThatThrownBy(() -> leer(LIDER, ANA)).isInstanceOf(NoSuchElementException.class);
-        VistaDelAnalisis paraAdministracion = leer(ADMIN, ANA);
+        ConsultaAnalisisDeUnaPersona delLider = new ConsultaAnalisisDeUnaPersona(UserId.of(LIDER), ANA, Tipo.SEMANA, SEMANA_9);
+        assertThatThrownBy(() -> analisis.analisisDeUnaPersona(delLider)).isInstanceOf(NoSuchElementException.class);
+        assertThat(constancias()).isZero();
+
+        // Administración ve todas las formaciones, pero la fila de la Escuela no es de la formación de hoy de Ana: no se muestra como lista.
+        VistaDelAnalisis paraAdministracion = analisis.analisisDeUnaPersona(
+                new ConsultaAnalisisDeUnaPersona(UserId.of(ADMIN), ANA, Tipo.SEMANA, SEMANA_9));
         assertThat(paraAdministracion.estado()).isNotEqualTo("LISTO");
         assertThat(paraAdministracion.analisis()).isNull();
     }
