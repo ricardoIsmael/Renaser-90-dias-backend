@@ -201,10 +201,12 @@ class ComunidadPorFormacionIT {
         PublicacionId deAna = publicacion(ana, "Mi primera publicación en la Escuela", null);
         PublicacionId deBeto = publicacion(beto, "Mi primera publicación en el Diplomado", null);
 
-        assertThat(idsDelFeed(ana, null)).containsExactly(deAna);
-        assertThat(idsDelFeed(beto, null)).containsExactly(deBeto);
+        // Los IT comparten la base y otros dejan publicaciones en la Escuela y en el Diplomado: lo que se fija es el AISLAMIENTO (qué ve cada uno y qué no),
+        // nunca que el Muro esté vacío, que depende del orden en que corran las clases (#57).
+        assertThat(idsDelFeed(ana, null)).contains(deAna).doesNotContain(deBeto);
+        assertThat(idsDelFeed(beto, null)).contains(deBeto).doesNotContain(deAna);
         assertThat(idsDelFeed(admin, null)).contains(deAna, deBeto);
-        assertThat(idsDelFeed(admin, Formacion.DIPLOMADO)).containsExactly(deBeto);
+        assertThat(idsDelFeed(admin, Formacion.DIPLOMADO)).contains(deBeto).doesNotContain(deAna);
         assertThat(idsDelFeed(admin, Formacion.ESCUELA)).contains(deAna).doesNotContain(deBeto);
         // Pedir una formación que no se ve no revela nada (el parámetro de la app no abre nada).
         assertThat(idsDelFeed(ana, Formacion.DIPLOMADO)).isEmpty();
@@ -490,8 +492,19 @@ class ComunidadPorFormacionIT {
         return PublicacionId.of(publicar.publicar(new PublicarCommand(autor, texto, media, null, formacion)).publicacion().id().value());
     }
 
+    /** Todo el Muro que ve {@code visor}, página tras página: la primera es corta y, con publicaciones de otras pruebas, la que se busca puede quedar en la segunda. */
     private List<PublicacionId> idsDelFeed(UserId visor, Formacion formacion) {
-        return feed.feed(visor, null, null, formacion).publicaciones().stream().map(v -> v.publicacion().id()).toList();
+        List<PublicacionId> ids = new ArrayList<>();
+        Instant cursor = null;
+        for (int pagina = 0; pagina < 100; pagina++) {
+            var lectura = feed.feed(visor, cursor, null, formacion);
+            lectura.publicaciones().forEach(v -> ids.add(v.publicacion().id()));
+            cursor = lectura.siguienteCursor();
+            if (cursor == null) {
+                return ids;
+            }
+        }
+        throw new AssertionError("El Muro de " + visor + " no termina en 100 páginas");
     }
 
     private List<String> nombresDeTestimonios(UserId visor, Formacion formacion) {
