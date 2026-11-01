@@ -37,12 +37,12 @@ public interface ElegirHabitoUseCase {
      * para que dia del programa quiere que empiece — "lo agrego ahora, pero lo empiezo el dia 2".
      *
      * <p>Solo hacia adelante: el dia pedido tiene que ser {@code >=} el dia actual del aprendiz
-     * y {@code <= 90}. Desbloquear hacia atras no se acepta porque los dias ya vividos ya
+     * y {@code <=} la duracion de su programa (90 o 365). Desbloquear hacia atras no se acepta porque los dias ya vividos ya
      * generaron (o no) sus registros: fingir que el habito estaba ahi le mentiria a la
      * coherencia de esos dias.
      */
     record ElegirHabitoCommand(@NotNull UserId actorId, @NotNull HabitoId habitoId,
-                                @Min(1) @Max(90) Integer diaDesbloqueo) {
+                                @Min(1) @Max(365) Integer diaDesbloqueo) {
         public ElegirHabitoCommand {
             SelfValidating.validateConstructorArgs(ElegirHabitoCommand.class, actorId, habitoId, diaDesbloqueo);
         }

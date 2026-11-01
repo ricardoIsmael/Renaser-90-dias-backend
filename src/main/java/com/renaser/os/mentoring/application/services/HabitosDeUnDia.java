@@ -5,6 +5,7 @@ import com.renaser.os.habits.api.HorarioDelDiaFinder.HorarioResuelto;
 import com.renaser.os.habits.api.HorarioDelDiaFinder.HorariosDelDia;
 import com.renaser.os.habits.api.RegistrosDeHabitoFinder.RegistroDeHabito;
 import com.renaser.os.mentoring.domain.model.huecos.Cumplible;
+import com.renaser.os.shared.domain.DuracionDelPrograma;
 import com.renaser.os.mentoring.domain.model.huecos.HabitoConHora;
 
 import java.time.LocalDate;
@@ -31,19 +32,28 @@ import java.util.stream.Collectors;
 record HabitosDeUnDia(List<HabitoConHora> ocupan, List<Cumplible> cumplibles) {
 
     private static final int PRIMER_DIA_DEL_PROGRAMA = 1;
-    private static final int ULTIMO_DIA_DEL_PROGRAMA = 90;
 
+    /** Con la duracion de siempre (90 dias): para quien no conoce la de la persona. */
     static HabitosDeUnDia de(LocalDate hoy, HorariosDelDia horarios, List<RegistroDeHabito> registros) {
+        return de(hoy, horarios, registros, DuracionDelPrograma.POR_DEFECTO);
+    }
+
+    /**
+     * Spec 023: el ultimo dia del programa es el de LA PERSONA (90 o 365; spec 022), no un 90 escrito de antemano. Un dia planificado
+     * fuera de [1, duracionDias] no ocupa nada.
+     */
+    static HabitosDeUnDia de(LocalDate hoy, HorariosDelDia horarios, List<RegistroDeHabito> registros, int duracionDias) {
         boolean sePlanea = horarios.fecha().isAfter(hoy) || (horarios.fecha().equals(hoy) && registros.isEmpty());
-        return sePlanea ? new HabitosDeUnDia(segunElPlan(horarios), List.of()) : segunLosRegistros(horarios, registros);
+        return sePlanea ? new HabitosDeUnDia(segunElPlan(horarios, duracionDias), List.of())
+                : segunLosRegistros(horarios, registros);
     }
 
     static HabitosDeUnDia ninguno() {
         return new HabitosDeUnDia(List.of(), List.of());
     }
 
-    private static List<HabitoConHora> segunElPlan(HorariosDelDia horarios) {
-        if (horarios.diaPrograma() < PRIMER_DIA_DEL_PROGRAMA || horarios.diaPrograma() > ULTIMO_DIA_DEL_PROGRAMA) {
+    private static List<HabitoConHora> segunElPlan(HorariosDelDia horarios, int duracionDias) {
+        if (horarios.diaPrograma() < PRIMER_DIA_DEL_PROGRAMA || horarios.diaPrograma() > duracionDias) {
             return List.of();
         }
         return horarios.habitos().stream()

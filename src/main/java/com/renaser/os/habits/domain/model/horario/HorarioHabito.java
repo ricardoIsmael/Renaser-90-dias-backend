@@ -28,6 +28,13 @@ public final class HorarioHabito {
     /** El primer dia del programa: desde ahi rige el horario con el que nace un habito del catalogo (E-659). */
     public static final int PRIMER_DIA_DEL_PROGRAMA = 1;
 
+    /**
+     * El dia mas alto que admite un horario: el programa mas largo (el Diplomado de 1 año, 365 dias; spec 022). Un habito del catalogo
+     * se escribe en la escala base de 90 dias; uno PROPIO nace con el dia de la persona (spec 023, V136). Hasta donde llega EL programa de
+     * cada persona lo decide su duracion, no esta constante.
+     */
+    public static final int ULTIMO_DIA_POSIBLE = 365;
+
     private final HorarioHabitoId id;
     private final HabitoId habitoId;
     private int diaInicio; // mutable desde 2026-08-26 (hueco #11): el panel admin puede correr el rango de dias
@@ -47,8 +54,8 @@ public final class HorarioHabito {
         Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(habitoId, "habitoId es obligatorio");
         Objects.requireNonNull(tipoDia, "tipoDia es obligatorio");
-        if (diaInicio < 1 || diaInicio > 90) {
-            throw new IllegalArgumentException("diaInicio fuera de rango 1..90: " + diaInicio);
+        if (diaInicio < 1 || diaInicio > ULTIMO_DIA_POSIBLE) {
+            throw new IllegalArgumentException("diaInicio fuera de rango 1.." + ULTIMO_DIA_POSIBLE + ": " + diaInicio);
         }
         if (diaFin != null && diaFin < diaInicio) {
             throw new IllegalArgumentException("diaFin no puede ser anterior a diaInicio");
@@ -67,6 +74,13 @@ public final class HorarioHabito {
     public static HorarioHabito todoElPrograma(HorarioHabitoId id, HabitoId habitoId, LocalTime horaDisparo,
                                                 Instant ahora) {
         return crear(id, habitoId, PRIMER_DIA_DEL_PROGRAMA, null, TipoDia.TODOS, horaDisparo, null, ahora);
+    }
+
+    /** Spec 023, «Copiar a otra formacion»: el mismo horario para el habito copiado (otro id, sin vinculo con el original). */
+    public HorarioHabito copiarPara(HorarioHabitoId idNuevo, HabitoId habitoNuevo, Instant ahora) {
+        Objects.requireNonNull(idNuevo, "idNuevo es obligatorio");
+        Objects.requireNonNull(habitoNuevo, "habitoNuevo es obligatorio");
+        return new HorarioHabito(idNuevo, habitoNuevo, diaInicio, diaFin, tipoDia, horaDisparo, horaLimite, ahora, ahora);
     }
 
     /** Solo para el adaptador de persistencia. */
@@ -111,8 +125,8 @@ public final class HorarioHabito {
     /** Edicion administrativa del rango de dias/tipo de dia (panel admin, hueco #11). */
     public void actualizarRango(int diaInicio, Integer diaFin, TipoDia tipoDia, Instant ahora) {
         Objects.requireNonNull(tipoDia, "tipoDia es obligatorio");
-        if (diaInicio < 1 || diaInicio > 90) {
-            throw new IllegalArgumentException("diaInicio fuera de rango 1..90: " + diaInicio);
+        if (diaInicio < 1 || diaInicio > ULTIMO_DIA_POSIBLE) {
+            throw new IllegalArgumentException("diaInicio fuera de rango 1.." + ULTIMO_DIA_POSIBLE + ": " + diaInicio);
         }
         if (diaFin != null && diaFin < diaInicio) {
             throw new IllegalArgumentException("diaFin no puede ser anterior a diaInicio");

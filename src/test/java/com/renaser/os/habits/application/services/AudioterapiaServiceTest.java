@@ -20,6 +20,7 @@ import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabitoId;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -72,7 +73,7 @@ class AudioterapiaServiceTest {
         Habito habito = Habito.crearDeSistema(AUDIOTERAPIA, "AUDIOTERAPIA SEMANAL",
                 TipoHabito.JOURNALING, new DetallesHabito(null, "ESPIRITU", ExigenciaEvidencia.OPCIONAL, false, false),
                 AHORA);
-        lenient().when(loadHabitoPort.porClaveSistema("AUDIO_THERAPY_WEEKLY")).thenReturn(Optional.of(habito));
+        lenient().when(loadHabitoPort.porClaveSistema("AUDIO_THERAPY_WEEKLY", Formacion.ESCUELA)).thenReturn(Optional.of(habito));
         HorarioHabito horario = HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), habito.id(), 11, 90,
                 TipoDia.TODOS, null, null, AHORA);
         lenient().when(loadHorarioPort.porHabito(habito.id())).thenReturn(List.of(horario));

@@ -47,8 +47,36 @@ class HorarioHabitoTest {
 
         assertThatThrownBy(() -> horario.actualizarRango(0, null, TipoDia.DISCIPLINA, AHORA))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> horario.actualizarRango(91, null, TipoDia.DISCIPLINA, AHORA))
+        // Spec 023 (V136): el programa más largo es el de 365 días (Diplomado de 1 año); un hábito propio nace con el día de la persona.
+        assertThatThrownBy(() -> horario.actualizarRango(HorarioHabito.ULTIMO_DIA_POSIBLE + 1, null, TipoDia.DISCIPLINA, AHORA))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void unHabitoPropioPuedeNacerPasadoElDia90DeUnProgramaDeUnAnio() {
+        HorarioHabito horario = HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()),
+                HabitoId.of(UUID.randomUUID()), 200, null, TipoDia.TODOS, null, null, AHORA);
+
+        assertThat(horario.diaInicio()).isEqualTo(200);
+        horario.actualizarRango(365, null, TipoDia.TODOS, AHORA);
+        assertThat(horario.diaInicio()).isEqualTo(365);
+    }
+
+    @Test
+    void copiarParaOtroHabitoConservaElRangoYLasHorasConOtraIdentidad() {
+        HorarioHabito original = HorarioHabito.crear(HorarioHabitoId.of(UUID.randomUUID()), HabitoId.of(UUID.randomUUID()), 8, 40,
+                TipoDia.DISCIPLINA, java.time.LocalTime.of(6, 0), java.time.LocalTime.of(7, 0), AHORA);
+        HabitoId otroHabito = HabitoId.of(UUID.randomUUID());
+
+        HorarioHabito copia = original.copiarPara(HorarioHabitoId.of(UUID.randomUUID()), otroHabito, AHORA.plusSeconds(5));
+
+        assertThat(copia.id()).isNotEqualTo(original.id());
+        assertThat(copia.habitoId()).isEqualTo(otroHabito);
+        assertThat(copia.diaInicio()).isEqualTo(8);
+        assertThat(copia.diaFin()).isEqualTo(40);
+        assertThat(copia.tipoDia()).isEqualTo(TipoDia.DISCIPLINA);
+        assertThat(copia.horaDisparo()).isEqualTo(java.time.LocalTime.of(6, 0));
+        assertThat(copia.creadoEn()).isEqualTo(AHORA.plusSeconds(5));
     }
 
     @Test

@@ -97,14 +97,16 @@ public class PastillaRenacerHabitoService implements CompletarPastillaRenacerUse
 
     @Override
     public Optional<RegistroCompletado> completarDeHoy(UserId participanteId, String resumen) {
-        Optional<Habito> habito = loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_PASTILLA_RENACER);
+        ProgresoParticipanteHabits progreso = requireProgresoNoSuspendido(participanteId);
+        // Spec 023: la Pastilla de la formacion de la persona; una formacion que no la ofrece no tiene este flujo (FR-005).
+        Optional<Habito> habito = loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_PASTILLA_RENACER, progreso.formacion());
         if (habito.isEmpty()) {
             // El habito puede estar fuera del catalogo de este entorno (fixtures, QA): no es
             // motivo para tumbar la entrega del resumen, que es lo que el aprendiz vino a hacer.
             return Optional.empty();
         }
 
-        LocalDate hoy = fechaHoyEnZonaDe(requireProgresoNoSuspendido(participanteId).timezone());
+        LocalDate hoy = fechaHoyEnZonaDe(progreso.timezone());
         // CON cerrojo, y esta es la PRIMERA lectura de esta fila en la transaccion anidada que
         // abre EspirituService: la guarda de abajo y el completar() que la sigue tienen que
         // decidir sobre el estado que el cerrojo protege. Ver el javadoc de la clase.

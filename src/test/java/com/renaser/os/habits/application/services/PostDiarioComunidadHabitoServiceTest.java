@@ -18,6 +18,7 @@ import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.habits.domain.model.politica.GestoCompletar;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.DisplayName;
@@ -97,7 +98,7 @@ class PostDiarioComunidadHabitoServiceTest {
         RegistroHabito registro = registroDe(autor, habito.id(), LocalDate.of(2026, 8, 24));
 
         mockParticipanteEnLima(autor);
-        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA))
+        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA, Formacion.ESCUELA))
                 .thenReturn(Optional.of(habito));
         when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(autor, habito.id(), LocalDate.of(2026, 8, 24)))
                 .thenReturn(Optional.of(registro));
@@ -126,7 +127,7 @@ class PostDiarioComunidadHabitoServiceTest {
         RegistroHabito registro = registroDe(autor, habito.id(), diaEnLima);
 
         mockParticipanteEnLima(autor);
-        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA))
+        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA, Formacion.ESCUELA))
                 .thenReturn(Optional.of(habito));
         when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(autor, habito.id(), diaEnLima))
                 .thenReturn(Optional.of(registro));
@@ -151,7 +152,7 @@ class PostDiarioComunidadHabitoServiceTest {
         yaCompletado.completar(10, null, null, null, CLOCK.now());
 
         mockParticipanteEnLima(autor);
-        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA))
+        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA, Formacion.ESCUELA))
                 .thenReturn(Optional.of(habito));
         when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(autor, habito.id(), LocalDate.of(2026, 8, 24)))
                 .thenReturn(Optional.of(yaCompletado));
@@ -182,7 +183,7 @@ class PostDiarioComunidadHabitoServiceTest {
         RegistroHabito registro = registroDe(autor, habito.id(), LocalDate.of(2026, 8, 24));
 
         mockParticipanteEnLima(autor);
-        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA))
+        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA, Formacion.ESCUELA))
                 .thenReturn(Optional.of(habito));
         when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(autor, habito.id(), LocalDate.of(2026, 8, 24)))
                 .thenReturn(Optional.of(registro));
@@ -198,7 +199,7 @@ class PostDiarioComunidadHabitoServiceTest {
     @DisplayName("quien publica sin ser participante del programa (mentor, admin) no dispara nada")
     void autorSinParticipacionNoDisparaNada() {
         UserId autor = participante();
-        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA))
+        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA, Formacion.ESCUELA))
                 .thenReturn(Optional.of(habitoPostDiario()));
         when(progresoPort.deParticipante(autor)).thenReturn(Optional.empty());
 
@@ -212,7 +213,7 @@ class PostDiarioComunidadHabitoServiceTest {
     @DisplayName("una cuenta suspendida no cierra el habito publicando")
     void cuentaSuspendidaNoCierraElHabito() {
         UserId autor = participante();
-        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA))
+        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA, Formacion.ESCUELA))
                 .thenReturn(Optional.of(habitoPostDiario()));
         when(progresoPort.deParticipante(autor)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(5, "America/Lima", RolParticipante.TRAINEE, true, false)));
@@ -228,7 +229,7 @@ class PostDiarioComunidadHabitoServiceTest {
         UserId autor = participante();
         Habito habito = habitoPostDiario();
         mockParticipanteEnLima(autor);
-        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA))
+        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA, Formacion.ESCUELA))
                 .thenReturn(Optional.of(habito));
         when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(autor, habito.id(), LocalDate.of(2026, 8, 24)))
                 .thenReturn(Optional.empty());
@@ -256,7 +257,7 @@ class PostDiarioComunidadHabitoServiceTest {
         LocalDate hoyEnLima = LocalDate.of(2026, 8, 24);
         RegistroHabito generadoAhora = registroDe(autor, habito.id(), hoyEnLima);
         mockParticipanteEnLima(autor);
-        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA))
+        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA, Formacion.ESCUELA))
                 .thenReturn(Optional.of(habito));
         when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(autor, habito.id(), hoyEnLima))
                 .thenReturn(Optional.empty(), Optional.of(generadoAhora));
@@ -276,7 +277,7 @@ class PostDiarioComunidadHabitoServiceTest {
         UserId autor = participante();
         Habito habito = habitoPostDiario();
         mockParticipanteEnLima(autor);
-        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA))
+        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA, Formacion.ESCUELA))
                 .thenReturn(Optional.of(habito));
         when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(autor, habito.id(), LocalDate.of(2026, 8, 23)))
                 .thenReturn(Optional.empty());
@@ -292,7 +293,7 @@ class PostDiarioComunidadHabitoServiceTest {
     @DisplayName("sin el habito en el catalogo de este entorno no se consulta nada mas")
     void sinHabitoEnCatalogoNoHaceNada() {
         UserId autor = participante();
-        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA)).thenReturn(Optional.empty());
+        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA, Formacion.ESCUELA)).thenReturn(Optional.empty());
 
         service().alPublicarEnElMuro(autor, Instant.parse("2026-08-24T15:00:00Z"));
 
@@ -311,7 +312,7 @@ class PostDiarioComunidadHabitoServiceTest {
         Habito habito = habitoPostDiario();
         RegistroHabito deAyer = registroDe(autor, habito.id(), LocalDate.of(2026, 8, 24));
         mockParticipanteEnLima(autor);
-        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA))
+        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA, Formacion.ESCUELA))
                 .thenReturn(Optional.of(habito));
         when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(autor, habito.id(), LocalDate.of(2026, 8, 24)))
                 .thenReturn(Optional.of(deAyer));

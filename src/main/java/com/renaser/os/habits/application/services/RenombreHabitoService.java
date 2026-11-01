@@ -66,8 +66,9 @@ public class RenombreHabitoService implements RenombrarHabitoUseCase, QuitarReno
     @Override
     @Transactional
     public RenombreHabito renombrar(RenombrarHabitoCommand command) {
-        requireProgreso(command.actorId());
+        ProgresoParticipanteHabits progreso = requireProgreso(command.actorId());
         Habito habito = requireRenombrable(command.habitoId());
+        habito.exigirQueSeaVisibleEn(progreso.formacion());
 
         Instant ahora = clock.now();
         Optional<RenombreHabito> existente = loadPort.porParticipanteYHabito(command.actorId(), command.habitoId());
@@ -82,8 +83,8 @@ public class RenombreHabitoService implements RenombrarHabitoUseCase, QuitarReno
     @Override
     @Transactional
     public void quitar(QuitarRenombreHabitoCommand command) {
-        requireProgreso(command.actorId());
-        requireRenombrable(command.habitoId());
+        ProgresoParticipanteHabits progreso = requireProgreso(command.actorId());
+        requireRenombrable(command.habitoId()).exigirQueSeaVisibleEn(progreso.formacion());
         savePort.borrar(command.actorId(), command.habitoId());
     }
 
