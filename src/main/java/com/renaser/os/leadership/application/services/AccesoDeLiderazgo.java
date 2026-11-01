@@ -1,6 +1,7 @@
 package com.renaser.os.leadership.application.services;
 
 import com.renaser.os.shared.domain.NotAuthorizedException;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import com.renaser.os.users.api.FichaDeMentorFinder;
@@ -50,6 +51,11 @@ class AccesoDeLiderazgo {
         Set<UserId> visibles = formaciones.dentroDelAlcance(todos.stream().map(FichaDeMentor::id).toList(),
                 formaciones.de(actorId));
         return todos.stream().filter(ficha -> visibles.contains(ficha.id())).toList();
+    }
+
+    /** Las formaciones que ve quien actúa (spec 022): el líder con la Escuela activa, solo la Escuela; Administración y Alquimista, las tres. */
+    AlcanceDeFormacion alcanceDe(UserId actorId) {
+        return formaciones.de(actorId);
     }
 
     /** @return el rol con el que actua: la ficha de una persona lo registra junto con la consulta (spec 005, FR-016) */

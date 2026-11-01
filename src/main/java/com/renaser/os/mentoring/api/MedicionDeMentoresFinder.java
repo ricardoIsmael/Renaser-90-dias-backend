@@ -1,5 +1,6 @@
 package com.renaser.os.mentoring.api;
 
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.UserId;
 
 import java.math.BigDecimal;
@@ -21,7 +22,16 @@ import java.util.UUID;
  */
 public interface MedicionDeMentoresFinder {
 
-    MedicionVigente vigente();
+    /**
+     * Solo los grupos de las formaciones de {@code alcance} (spec 022): un líder con la Escuela activa no ve los grupos del Diplomado de una mentora que
+     * lleva los dos, ni el semáforo de sus aprendices. Los indicadores por mentor salen de esos grupos, no de todos los suyos.
+     */
+    MedicionVigente vigente(AlcanceDeFormacion alcance);
+
+    /** Todas las formaciones: lo que ve quien las ve todas. */
+    default MedicionVigente vigente() {
+        return vigente(AlcanceDeFormacion.todas());
+    }
 
     /**
      * @param porMentor el resumen sobre TODOS los aprendices de los grupos de cada mentor (un mentor

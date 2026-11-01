@@ -41,7 +41,7 @@ public class CentroDeFormacionesController {
     @RequiresPermission(value = Permission.MANAGE_ROLES, scope = "el guard real es el servicio: ADMIN/ALCHEMIST activos")
     @GetMapping("/{codigo}")
     public DetalleResponse detalle(@PathVariable String codigo, @ActorAutenticado UserId actor) {
-        return DetalleResponse.from(centro.detalle(actor, Formacion.desde(codigo)));
+        return DetalleResponse.from(centro.detalle(actor, Formacion.deLaRuta(codigo)));
     }
 
     public record ResumenResponse(String codigo, String nombre, String descripcion, boolean activa, List<Integer> duracionesDias,

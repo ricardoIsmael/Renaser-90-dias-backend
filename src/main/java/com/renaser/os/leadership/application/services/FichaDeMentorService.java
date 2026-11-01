@@ -39,7 +39,7 @@ public class FichaDeMentorService implements ConsultarFichaDeMentorUseCase {
         acceso.requireLiderazgoActivo(actorId);
         FichaDeMentorFinder.FichaDeMentor mentor = acceso.requireMentor(mentorId);
         MesDelReporte mes = MesDelReporte.enCurso(MesDelReporte.ZONA_DEL_PROGRAMA, clock.now());
-        IndicadoresDeMentores.Lectura lectura = indicadores.leer(List.of(mentor), mes);
+        IndicadoresDeMentores.Lectura lectura = indicadores.leer(List.of(mentor), mes, acceso.alcanceDe(actorId));
         MedicionVigente medicion = lectura.medicion();
         return new FichaDeMentor(lectura.indicadores().getFirst(), mentor.estado() == UserStatus.ACTIVE,
                 mentor.perfil(), mes.mes().toString(), mes.zona().getId(), mes.corte(),

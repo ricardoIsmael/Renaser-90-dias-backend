@@ -111,7 +111,7 @@ public class BancoDeLiderazgo {
         }
     };
 
-    public final MedicionDeMentoresFinder medicion = () -> {
+    public final MedicionDeMentoresFinder medicion = alcance -> {
         if (medicionCaida) {
             throw new IllegalStateException("semaforo caido");
         }
