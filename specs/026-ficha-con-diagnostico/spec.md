@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-31
 
-**Status**: Draft — con 3 preguntas abiertas que cambian el alcance (ver «Dudas para el dueño»)
+**Status**: Aprobada por el dueño el 2026-10-31 (ver «Decisiones del dueño (31/10)»). Falta un dato suyo: el texto de la declaración de responsabilidad. En implementación.
 
 **Input**: Pedido del dueño del 2026-10-31, textual: «El sistema debe poder gestionar su ficha inicial: CRUD, importar preguntas, quitar preguntas»
 (con el enlace a su formulario de diagnóstico de Google); «Debe activarse con diagnóstico o sin diagnóstico: con diagnóstico sale el formulario de arriba,
@@ -380,3 +380,35 @@ Todas las dudas reales, aunque ya tengan supuesto. Las marcadas **Sí** cambian 
 | Q13 | Una persona con el Mapa activo, ¿sigue pudiendo ver su Mapa? | A) No: se retira de la vista; sus objetivos siguen en Plan (recomendada). B) Solo lectura en Yo. | No |
 | Q14 | ¿Qué reemplaza a los hitos de 30/60/90, a la cifra del mes y a las acciones sugeridas que daba el Mapa? | Lo decide la spec de planificación; hasta entonces se ocultan. | Sí, para esa spec |
 | Q15 | El diagnóstico precarga nombre y ciudad de la solicitud: ¿te parece bien no volver a preguntarlos? | A) Sí (recomendada). B) Preguntarlos igual. | No |
+
+## Decisiones del dueño (31/10)
+
+Fuente: `~/.config/renaser-e2e/formaciones/decisiones-del-dueno-2026-10-31.md`, sección 026. **Lo que el dueño no listó es la opción A, la recomendada en la tabla.**
+
+| # | Decisión | Opción |
+|---|---|---|
+| Q1 | Solo el diagnóstico se administra desde la app; la ficha estándar queda como hoy. | A |
+| Q2 | Los objetivos que nacen del diagnóstico: la persona los revisa y confirma **una vez** (puede reescribirlos); luego quedan fijos. | A |
+| Q3 | Las mismas dos fichas para todas las formaciones; cada pregunta puede limitarse a ciertas formaciones. | A |
+| Q4 | Importación con plantilla (CSV/Excel). Ver «Cómo quedó la importación» abajo. | A |
+| Q5 | Cada resultado (16, 17, 18) se parte en «Hoy mi situación es» y «En {duración} quiero haber conseguido»; la segunda alimenta el objetivo. | A |
+| Q6 | **Falta el texto de la declaración de responsabilidad y consentimiento.** Administración lo edita; el diagnóstico **no se publica** mientras el texto siga siendo el de relleno marcado como pendiente. | — |
+| Q7 | Se suma la pregunta «¿Cómo prefieres que nos dirijamos a ti?» (la usan SER y los avisos). | A |
+| Q8 | **SER lee el diagnóstico completo** (no solo los objetivos). | **B** |
+| Q9 | **Administración puede asignar el diagnóstico a quienes ya están dentro**, para ayudarlos a adaptarse al cambio. | **B** |
+| Q10 | El dueño no conoce un «Cuestionario Profundo»: no se toca nada de lo que exista. | — |
+| Q11 | Lo leen **Administración, Alquimista, su mentor, el líder de mentores y la propia persona**. | — |
+| Q12 | El título del diagnóstico es el nombre de la formación de la persona. | A |
+| Q13 | El Mapa activo ya no se ve; sus objetivos siguen en Plan. | A |
+| Q14 | **Los objetivos de 90 días, los hitos 30/60/90, la cifra del mes y las acciones sugeridas nacen del diagnóstico.** | **B** |
+| Q15 | El diagnóstico precarga lo que ya consta de la solicitud para confirmarlo. | A |
+| — | `ROCKS_EXIGIR_MAPA_ACTIVO` deja de exigir el Mapa: **nadie queda bloqueado**, tampoco con la app ya publicada. | — |
+
+### Cómo quedó (supuestos de diseño, para que el dueño los vea)
+
+1. **La marca «con o sin diagnóstico» es de esta spec** (el coordinador lo decidió el 31/10): vive en `estado_onboarding` (V143) y la spec 025 la escribe por `users.api.FichaAlAceptar`. Cambiar a «sin diagnóstico» solo se permite si la persona no respondió nada del diagnóstico.
+2. **Hitos y cifra del mes (Q14-B).** El diagnóstico no pregunta números: «En 90 días quiero haber conseguido…» es texto libre. Por eso el objetivo que nace del diagnóstico es **cualitativo** (sin meta numérica), igual que cualquier objetivo escrito en Plan sin cifra: el plan mensual no inventa una cifra (regla de hoy: «Cuando no hay cifra no se muestra nada») y la persona escribe lo que quiere lograr cada mes encima, con la acción sugerida a la vista. Lo que SÍ sale del diagnóstico es: los tres objetivos, cuál va primero (la prioridad principal), la acción sugerida (la primera acción) y todo lo demás para SER. Quien ya tiene Mapa conserva su cifra del mes y sus hitos tal cual. **A confirmar con el dueño**: si quiere que el diagnóstico pregunte además una meta numérica por área para calcular la cifra del mes.
+3. **Importación.** El servidor lee **CSV** (coma, punto y coma o tabulador, UTF-8) enviado como texto: la app lo recibe pegado desde la hoja de cálculo (copiar celdas de Excel o de Google Sheets produce tabuladores) o desde el archivo de plantilla. **No hay selector de archivos ni lectura de `.xlsx`** en esta versión (sumaría una dependencia nativa); se deja para cuando el dueño lo pida.
+4. **Qué es «protegida».** Una pregunta es protegida si la usa otra función: la del trato (SER y los avisos) y el consentimiento (sin él no se termina). No se quitan ni cambian de tipo. Las que alimentan un objetivo se pueden quitar con aviso (US5.9).
+5. **Cuándo se borra y cuándo se retira.** Una pregunta que nunca estuvo en una versión publicada y no tiene respuestas se **elimina**; si alguna versión publicada la incluyó, o tiene respuestas, se **retira** (deja de mostrarse a quien no la respondió, se conservan las respuestas, se puede restaurar).
+6. **Quién ve qué en la ficha de alguien.** La propia persona (`Yo`), su mentor o guía (la ficha de su aprendiz), el líder de mentores (la ficha de la persona, con grupo o sin él) y Administración/Alquimista. Es solo lectura y respeta el aislamiento de la spec 022.
