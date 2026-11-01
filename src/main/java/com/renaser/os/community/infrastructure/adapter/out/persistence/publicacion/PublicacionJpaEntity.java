@@ -42,4 +42,7 @@ public class PublicacionJpaEntity {
 
     /** V51. `Integer` y no `int`: la columna es nullable y un 0 no es un dia del programa. */
     private Integer diaPrograma;
+
+    /** V137: el código de la formación (`ESCUELA`, `DIPLOMADO`, `CERTIFICACION`). */
+    private String formacion = "ESCUELA";
 }

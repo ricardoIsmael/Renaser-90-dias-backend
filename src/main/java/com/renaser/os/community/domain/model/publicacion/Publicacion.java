@@ -1,6 +1,7 @@
 package com.renaser.os.community.domain.model.publicacion;
 
 import com.renaser.os.shared.domain.DuracionDelPrograma;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -58,6 +59,11 @@ public final class Publicacion {
      * <p>{@code final}: el dia en que algo se publico no cambia. Editar el texto no lo mueve.
      */
     private final Integer diaPrograma;
+    /**
+     * La formación en cuyo Muro se publicó (V137, spec 024). {@code final}: una publicación no cambia de formación, aunque su autor sí
+     * (FR-014); lo que escribió se queda donde lo escribió.
+     */
+    private final Formacion formacion;
 
     /** La existencia/actividad de `categoriaClave` NO se valida aca: es una consulta a
      * `categorias_muro` que el dominio no puede hacer (CLAUDE.MD sec. 5.1) — la comprueba
@@ -84,12 +90,20 @@ public final class Publicacion {
     public static Publicacion publicar(PublicacionId id, UserId autorId, String texto,
                                         List<MediaPublicacion> media, String categoriaClave, Instant ahora,
                                         Integer diaPrograma) {
+        return publicar(id, autorId, texto, media, categoriaClave, ahora, diaPrograma, Formacion.POR_DEFECTO);
+    }
+
+    /** Igual que la anterior, en el Muro de {@code formacion} (spec 024): la del autor, o la que elige Administración. */
+    public static Publicacion publicar(PublicacionId id, UserId autorId, String texto,
+                                        List<MediaPublicacion> media, String categoriaClave, Instant ahora,
+                                        Integer diaPrograma, Formacion formacion) {
         Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(autorId, "autorId es obligatorio");
+        Objects.requireNonNull(formacion, "formacion es obligatoria");
         requireTextoValido(texto);
         List<MediaPublicacion> mediaOrdenada = requireMediaValida(media);
         return new Publicacion(id, autorId, TipoPublicacion.MANUAL, categoriaClave, texto.trim(),
-                mediaOrdenada, false, ahora, ahora, requireDiaValido(diaPrograma));
+                mediaOrdenada, false, ahora, ahora, requireDiaValido(diaPrograma), formacion);
     }
 
     /**
@@ -113,12 +127,20 @@ public final class Publicacion {
     public static Publicacion publicarAutomatica(PublicacionId id, UserId autorId, String texto,
                                                   List<MediaPublicacion> media, Instant ahora,
                                                   Integer diaPrograma) {
+        return publicarAutomatica(id, autorId, texto, media, ahora, diaPrograma, Formacion.POR_DEFECTO);
+    }
+
+    /** Igual que la anterior, en el Muro de {@code formacion} (spec 024): el post diario y la evidencia publicada salen en el de la formación de la persona. */
+    public static Publicacion publicarAutomatica(PublicacionId id, UserId autorId, String texto,
+                                                  List<MediaPublicacion> media, Instant ahora,
+                                                  Integer diaPrograma, Formacion formacion) {
         Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(autorId, "autorId es obligatorio");
+        Objects.requireNonNull(formacion, "formacion es obligatoria");
         requireTextoValido(texto);
         List<MediaPublicacion> mediaOrdenada = requireMediaValida(media);
         return new Publicacion(id, autorId, TipoPublicacion.HITO_AUTOMATICO, null, texto.trim(),
-                mediaOrdenada, false, ahora, ahora, requireDiaValido(diaPrograma));
+                mediaOrdenada, false, ahora, ahora, requireDiaValido(diaPrograma), formacion);
     }
 
     /** Solo para el adaptador de persistencia. */
@@ -133,10 +155,19 @@ public final class Publicacion {
                                          String categoriaClave, String texto, List<MediaPublicacion> media,
                                          boolean oculta, Instant creadoEn, Instant actualizadoEn,
                                          Integer diaPrograma) {
+        return rehydrate(id, autorId, tipo, categoriaClave, texto, media, oculta, creadoEn, actualizadoEn, diaPrograma,
+                Formacion.POR_DEFECTO);
+    }
+
+    /** Solo para el adaptador de persistencia, con el día y la formación guardados en la fila. */
+    public static Publicacion rehydrate(PublicacionId id, UserId autorId, TipoPublicacion tipo,
+                                         String categoriaClave, String texto, List<MediaPublicacion> media,
+                                         boolean oculta, Instant creadoEn, Instant actualizadoEn,
+                                         Integer diaPrograma, Formacion formacion) {
         // Sin validar el dia: una fila vieja con un valor raro no debe impedir LEER el Muro. La
         // cota se aplica al escribir, que es donde se puede corregir.
         return new Publicacion(id, autorId, tipo, categoriaClave, texto, List.copyOf(media), oculta, creadoEn,
-                actualizadoEn, diaPrograma);
+                actualizadoEn, diaPrograma, formacion);
     }
 
     /**

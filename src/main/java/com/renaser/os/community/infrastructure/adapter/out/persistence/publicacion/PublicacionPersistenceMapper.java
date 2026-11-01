@@ -4,6 +4,7 @@ import com.renaser.os.community.domain.model.publicacion.MediaPublicacion;
 import com.renaser.os.community.domain.model.publicacion.Publicacion;
 import com.renaser.os.community.domain.model.publicacion.PublicacionId;
 import com.renaser.os.community.domain.model.publicacion.TipoPublicacion;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
 
@@ -18,12 +19,13 @@ class PublicacionPersistenceMapper {
     Publicacion toDomain(PublicacionJpaEntity e, List<MediaPublicacion> media) {
         return Publicacion.rehydrate(PublicacionId.of(e.getId()), UserId.of(e.getAutorId()), toDomainTipo(e.getTipo()),
                 e.getCategoriaClave(), e.getTexto(), media, e.isOculta(), e.getCreadoEn(), e.getActualizadoEn(),
-                e.getDiaPrograma());
+                e.getDiaPrograma(), Formacion.desde(e.getFormacion()));
     }
 
     PublicacionJpaEntity toEntity(Publicacion p) {
         return new PublicacionJpaEntity(p.id().value(), p.autorId().value(), toJpaTipo(p.tipo()), p.categoriaClave(),
-                p.texto(), p.oculta(), p.creadoEn(), p.actualizadoEn(), p.diaPrograma());
+                p.texto(), p.oculta(), p.creadoEn(), p.actualizadoEn(), p.diaPrograma(),
+                p.formacion().codigo());
     }
 
     TipoPublicacionJpa toJpaTipo(TipoPublicacion tipo) {

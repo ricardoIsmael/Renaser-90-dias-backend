@@ -3,6 +3,8 @@ package com.renaser.os.community.infrastructure.adapter.out.persistence.testimon
 import com.renaser.os.community.application.ports.out.testimonio.LoadTestimonioPort;
 import com.renaser.os.community.application.ports.out.testimonio.SaveTestimonioPort;
 import com.renaser.os.community.domain.model.testimonio.Testimonio;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
+import com.renaser.os.shared.infrastructure.persistence.FiltroDeFormacionSql;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
@@ -20,8 +22,9 @@ class TestimonioPersistenceAdapter implements LoadTestimonioPort, SaveTestimonio
     }
 
     @Override
-    public List<Testimonio> listarDestacados(int limite) {
-        return repository.findByDestacadoTrueOrderByCreadoEnDesc(PageRequest.of(0, limite)).stream()
+    public List<Testimonio> listarDestacados(int limite, AlcanceDeFormacion alcance) {
+        return repository.findByDestacadoTrueAndFormacionInOrderByCreadoEnDesc(FiltroDeFormacionSql.codigos(alcance),
+                        PageRequest.of(0, limite)).stream()
                 .map(mapper::toDomain).toList();
     }
 

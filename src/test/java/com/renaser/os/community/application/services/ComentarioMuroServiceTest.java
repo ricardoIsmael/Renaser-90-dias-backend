@@ -74,7 +74,7 @@ class ComentarioMuroServiceTest {
     @BeforeEach
     void setUp() {
         service = new ComentarioMuroService(loadPublicacionPort, loadComentarioPort, saveComentarioPort,
-                consultarPerfilUsuarioPort, userSummaryFinder, CLOCK, idGenerator, cuentasCerradas);
+                consultarPerfilUsuarioPort, userSummaryFinder, CLOCK, idGenerator, cuentasCerradas, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(consultarPerfilUsuarioPort.porId(any())).thenReturn(Optional.empty());
         lenient().when(userSummaryFinder.findById(admin))
@@ -228,7 +228,7 @@ class ComentarioMuroServiceTest {
                 autor, new ConsultarPerfilUsuarioPort.PerfilUsuario(autor, "Autor", "https://cdn/a.jpg"),
                 otro, new ConsultarPerfilUsuarioPort.PerfilUsuario(otro, "Otro", null)));
 
-        var pagina = service.pagina(publicacion.id(), null);
+        var pagina = service.pagina(autor, publicacion.id(), null);
 
         assertThat(pagina.comentarios()).extracting(c -> c.autorNombre()).containsExactly("Autor", "Otro", "Autor");
         assertThat(pagina.comentarios().get(0).autorAvatarUrl()).isEqualTo("https://cdn/a.jpg");
@@ -246,7 +246,7 @@ class ComentarioMuroServiceTest {
                 .thenReturn(List.of(comentarioDe(autor, publicacion.id())));
         when(consultarPerfilUsuarioPort.porIds(any())).thenReturn(java.util.Map.of());
 
-        var pagina = service.pagina(publicacion.id(), null);
+        var pagina = service.pagina(autor, publicacion.id(), null);
 
         assertThat(pagina.comentarios().get(0).autorNombre()).isNull();
         assertThat(pagina.comentarios().get(0).autorAvatarUrl()).isNull();
@@ -266,7 +266,7 @@ class ComentarioMuroServiceTest {
         });
         when(consultarPerfilUsuarioPort.porIds(any())).thenReturn(java.util.Map.of());
 
-        var pagina = service.pagina(publicacion.id(), null);
+        var pagina = service.pagina(autor, publicacion.id(), null);
 
         assertThat(pagina.comentarios()).extracting(c -> c.comentario().autorId()).containsExactly(autor);
         assertThat(pagina.total()).isEqualTo(4);

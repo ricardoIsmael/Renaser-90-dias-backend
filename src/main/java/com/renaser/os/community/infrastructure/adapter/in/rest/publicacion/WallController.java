@@ -18,6 +18,7 @@ import com.renaser.os.community.application.ports.in.publicacion.SolicitarUrlSub
 import com.renaser.os.community.application.ports.in.publicacion.SolicitarUrlSubidaMediaUseCase.SolicitarUrlSubidaMediaCommand;
 import com.renaser.os.community.domain.model.publicacion.PublicacionId;
 import com.renaser.os.community.domain.model.publicacion.TipoReaccion;
+import com.renaser.os.shared.domain.FormacionDelContenido;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
@@ -83,9 +84,11 @@ public class WallController {
     @GetMapping
     public WallFeedPageResponse feed(@ActorAutenticado UserId actorId,
                                       @RequestParam(required = false) String cursor,
-                                      @RequestParam(required = false) String category) {
+                                      @RequestParam(required = false) String category,
+                                      @RequestParam(required = false) String formation) {
         Instant cursorInstant = parseCursor(cursor);
-        return WallFeedPageResponse.from(consultarFeedUseCase.feed(actorId, cursorInstant, category));
+        return WallFeedPageResponse.from(consultarFeedUseCase.feed(actorId, cursorInstant, category,
+                FormacionDelContenido.pedida(formation)));
     }
 
     @RequiresPermission(Permission.PUBLISH_ON_WALL)
@@ -94,7 +97,8 @@ public class WallController {
     public ResponseEntity<WallPostResponse> publicar(@ActorAutenticado UserId actorId,
                                                        @RequestBody @Valid CreateWallPostRequest request) {
         var vista = publicarUseCase.publicar(new PublicarCommand(actorId, request.text(),
-                request.media().stream().map(MediaItemRequest::aArchivoEntrada).toList(), request.category()));
+                request.media().stream().map(MediaItemRequest::aArchivoEntrada).toList(), request.category(),
+                FormacionDelContenido.pedida(request.formation())));
         return ResponseEntity.status(HttpStatus.CREATED).body(WallPostResponse.from(vista));
     }
 
@@ -135,8 +139,10 @@ public class WallController {
     @RequiresPermission(Permission.MODERATE_WALL)
     @GetMapping("/hidden")
     public WallFeedPageResponse hidden(@ActorAutenticado UserId actorId,
-                                        @RequestParam(required = false) String cursor) {
-        return WallFeedPageResponse.from(consultarFeedUseCase.feedOculto(actorId, parseCursor(cursor)));
+                                        @RequestParam(required = false) String cursor,
+                                        @RequestParam(required = false) String formation) {
+        return WallFeedPageResponse.from(consultarFeedUseCase.feedOculto(actorId, parseCursor(cursor),
+                FormacionDelContenido.pedida(formation)));
     }
 
     /* Clasificado 2026-09-23 (E-215). Aca habia un TODO que decia que contarMisPublicaciones "no

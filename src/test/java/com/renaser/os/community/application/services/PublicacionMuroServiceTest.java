@@ -121,7 +121,7 @@ class PublicacionMuroServiceTest {
         service = new PublicacionMuroService(loadPublicacionPort, savePublicacionPort, eliminarPublicacionPort,
                 loadComentarioPort, reaccionMuroPort, categoriasUseCase, consultarPerfilUsuarioPort,
                 almacenamiento, userSummaryFinder, events, CLOCK, idGenerator,
-                participacionFinder, referenciasDeMediaPort, List.of(referenciasEnElChat), cuentasCerradas);
+                participacionFinder, referenciasDeMediaPort, List.of(referenciasEnElChat), cuentasCerradas, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
         // Por defecto nadie mas mira los objetos: cada prueba que necesite lo contrario lo dice.
         lenient().when(referenciasDeMediaPort.referenciadasFueraDe(any(), any())).thenReturn(Set.of());
         lenient().when(referenciasEnElChat.referenciadas(any())).thenReturn(Set.of());
@@ -191,9 +191,9 @@ class PublicacionMuroServiceTest {
     void laProyeccionNoConsultaUnaVezPorPublicacion() {
         List<Publicacion> veinte = java.util.stream.IntStream.range(0, 20)
                 .mapToObj(i -> publicacionVisible(autor)).toList();
-        when(loadPublicacionPort.feed(any(), anyInt(), any())).thenReturn(veinte);
+        when(loadPublicacionPort.feed(any(), anyInt(), any(), any())).thenReturn(veinte);
 
-        var pagina = service.feed(autor, null, null);
+        var pagina = service.feed(autor, null, null, null);
 
         assertThat(pagina.publicaciones()).hasSize(20);
         verify(consultarPerfilUsuarioPort, never()).porId(any());
@@ -210,9 +210,9 @@ class PublicacionMuroServiceTest {
     @Test
     @DisplayName("feed() vacio: no se consulta nada en lote — un IN () vacio no es SQL valido")
     void feedVacioNoConsultaEnLote() {
-        when(loadPublicacionPort.feed(any(), anyInt(), any())).thenReturn(List.of());
+        when(loadPublicacionPort.feed(any(), anyInt(), any(), any())).thenReturn(List.of());
 
-        assertThat(service.feed(autor, null, null).publicaciones()).isEmpty();
+        assertThat(service.feed(autor, null, null, null).publicaciones()).isEmpty();
 
         verify(reaccionMuroPort, never()).contarPorTipoDeVarias(any());
         verify(loadComentarioPort, never()).contarDeVarias(any());
@@ -424,9 +424,9 @@ class PublicacionMuroServiceTest {
         for (int i = 0; i < 21; i++) {
             filas.add(publicacionDe(i < 2 || i == 19 ? otro : autor, i));
         }
-        when(loadPublicacionPort.feed(null, 20, null)).thenReturn(filas);
+        when(loadPublicacionPort.feed(eq(null), eq(20), eq(null), any())).thenReturn(filas);
 
-        var pagina = service.feed(autor, null, null);
+        var pagina = service.feed(autor, null, null, null);
 
         assertThat(pagina.publicaciones()).hasSize(17)
                 .allSatisfy(v -> assertThat(v.publicacion().autorId()).isEqualTo(autor));
@@ -441,10 +441,10 @@ class PublicacionMuroServiceTest {
         List<Publicacion> cerradas = java.util.stream.IntStream.range(0, 21)
                 .mapToObj(i -> publicacionDe(otro, i)).toList();
         Publicacion visible = publicacionDe(autor, 30);
-        when(loadPublicacionPort.feed(null, 20, null)).thenReturn(cerradas);
-        when(loadPublicacionPort.feed(cerradas.get(19).creadoEn(), 20, null)).thenReturn(List.of(visible));
+        when(loadPublicacionPort.feed(eq(null), eq(20), eq(null), any())).thenReturn(cerradas);
+        when(loadPublicacionPort.feed(eq(cerradas.get(19).creadoEn()), eq(20), eq(null), any())).thenReturn(List.of(visible));
 
-        var pagina = service.feed(autor, null, null);
+        var pagina = service.feed(autor, null, null, null);
 
         assertThat(pagina.publicaciones()).extracting(v -> v.publicacion().id()).containsExactly(visible.id());
         assertThat(pagina.siguienteCursor()).isNull();
@@ -470,8 +470,8 @@ class PublicacionMuroServiceTest {
     void ultimoAutorSaltaLaCuentaCerrada() {
         otroCerroSuCuenta();
         Publicacion deOtro = publicacionDe(otro, 0);
-        when(loadPublicacionPort.ultimaVisible()).thenReturn(Optional.of(deOtro));
-        when(loadPublicacionPort.feed(null, 20, null)).thenReturn(List.of(deOtro, publicacionDe(autor, 5)));
+        when(loadPublicacionPort.ultimaVisible(any())).thenReturn(Optional.of(deOtro));
+        when(loadPublicacionPort.feed(eq(null), eq(20), eq(null), any())).thenReturn(List.of(deOtro, publicacionDe(autor, 5)));
         when(consultarPerfilUsuarioPort.porId(autor)).thenReturn(Optional.of(
                 new ConsultarPerfilUsuarioPort.PerfilUsuario(autor, "Autora Visible", null)));
 
@@ -572,23 +572,23 @@ class PublicacionMuroServiceTest {
     @Test
     @DisplayName("feed(): cuenta SUSPENDIDA -> 403, nunca consulta el feed")
     void feedConActorSuspendidoFalla() {
-        assertThatThrownBy(() -> service.feed(suspendido, null, null)).isInstanceOf(NotAuthorizedException.class);
+        assertThatThrownBy(() -> service.feed(suspendido, null, null, null)).isInstanceOf(NotAuthorizedException.class);
         verify(loadPublicacionPort, never()).feed(any(), anyInt(), any());
     }
 
     @Test
     @DisplayName("feedOculto(): rol sin permiso (TRAINEE) -> 403 — la cola de moderacion es ADMIN/ALCHEMIST")
     void feedOcultoComoNoModeradorEsRechazado() {
-        assertThatThrownBy(() -> service.feedOculto(otro, null)).isInstanceOf(NotAuthorizedException.class);
-        verify(loadPublicacionPort, never()).feedOculto(any(), anyInt());
+        assertThatThrownBy(() -> service.feedOculto(otro, null, null)).isInstanceOf(NotAuthorizedException.class);
+        verify(loadPublicacionPort, never()).feedOculto(any(), anyInt(), any());
     }
 
     @Test
     @DisplayName("feedOculto(): cuenta SUSPENDIDA -> 403 aunque el rol sea ADMIN")
     void feedOcultoConAdminSuspendidoFalla() {
-        assertThatThrownBy(() -> service.feedOculto(adminSuspendido, null))
+        assertThatThrownBy(() -> service.feedOculto(adminSuspendido, null, null))
                 .isInstanceOf(NotAuthorizedException.class);
-        verify(loadPublicacionPort, never()).feedOculto(any(), anyInt());
+        verify(loadPublicacionPort, never()).feedOculto(any(), anyInt(), any());
     }
 
     @Test
@@ -685,7 +685,7 @@ class PublicacionMuroServiceTest {
     void contarMisPublicacionesConActorSuspendidoFalla() {
         assertThatThrownBy(() -> service.contarMisPublicaciones(suspendido))
                 .isInstanceOf(NotAuthorizedException.class);
-        verify(loadPublicacionPort, never()).contarPorAutor(any());
+        verify(loadPublicacionPort, never()).contarPorAutor(any(), any());
     }
 
     @Test

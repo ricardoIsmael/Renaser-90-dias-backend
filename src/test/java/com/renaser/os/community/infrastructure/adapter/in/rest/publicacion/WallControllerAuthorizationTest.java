@@ -94,7 +94,7 @@ class WallControllerAuthorizationTest {
     void traineeActivoLeeElFeed() throws Exception {
         UUID actorId = UUID.randomUUID();
         mockActor(actorId, UserRole.TRAINEE, UserStatus.ACTIVE);
-        when(consultarFeedUseCase.feed(UserId.of(actorId), null, null))
+        when(consultarFeedUseCase.feed(UserId.of(actorId), null, null, null))
                 .thenReturn(new PaginaPublicaciones(List.of(), null));
 
         mockMvc.perform(get("/api/v1/wall").header("X-Actor-Id", actorId.toString()))
