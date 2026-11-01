@@ -14,8 +14,12 @@ import com.renaser.os.calendar.domain.model.evento.ResolverAudiencia.VisorContex
 import com.renaser.os.calendar.domain.model.evento.RolUsuario;
 import com.renaser.os.calendar.domain.model.nivelmembresia.NivelMembresia;
 import com.renaser.os.calendar.domain.model.nivelmembresia.ProgresoNivel;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
+import com.renaser.os.shared.domain.Formacion;
+import com.renaser.os.shared.domain.FormacionDelContenido;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -35,10 +39,13 @@ class AccesoEventoService {
     private final ResolverAudienciaCursoPort cursoPort;
     private final ConsultarElegibilidadEventoPort elegibilidadPort;
     private final ConsultarPertenenciaAGrupoPort pertenenciaAGrupoPort;
+    /** Spec 024: un evento es de una formación y solo lo ven quienes la ven; es el punto único de la 022. */
+    private final AlcanceDeFormacionFinder formaciones;
 
     AccesoEventoService(ConsultarProgresoParticipanteCalendarPort progresoPort, LoadNivelMembresiaPort nivelPort,
                          ResolverAudienciaCursoPort cursoPort, ConsultarElegibilidadEventoPort elegibilidadPort,
-                         ConsultarPertenenciaAGrupoPort pertenenciaAGrupoPort) {
+                         ConsultarPertenenciaAGrupoPort pertenenciaAGrupoPort, AlcanceDeFormacionFinder formaciones) {
+        this.formaciones = formaciones;
         this.progresoPort = progresoPort;
         this.nivelPort = nivelPort;
         this.cursoPort = cursoPort;
@@ -56,11 +63,26 @@ class AccesoEventoService {
         return progreso;
     }
 
+    /** Las formaciones cuyos eventos lee {@code actorId}; {@code pedida} (Administración) acota a una. */
+    AlcanceDeFormacion alcanceDe(UserId actorId, Formacion pedida) {
+        return FormacionDelContenido.paraLeer(formaciones.de(actorId), pedida);
+    }
+
+    /**
+     * FR-004: el evento de una formación que {@code actorId} no ve responde EXACTAMENTE lo mismo que uno que no existe (el mismo 404 y el mismo
+     * texto), antes de preguntar por su audiencia.
+     */
+    void requireEnSuFormacion(UserId actorId, Evento evento) {
+        if (!formaciones.de(actorId).incluye(evento.formacion())) {
+            throw new NoSuchElementException("Evento no encontrado: " + evento.id());
+        }
+    }
+
     VisorContexto buildVisor(ProgresoParticipanteCalendar progreso) {
         int rango = 0;
         if (progreso.rol() == RolUsuario.TRAINEE) {
             List<NivelMembresia> niveles = nivelPort.listar();
-            rango = ProgresoNivel.resolverRango(ProgresoNivel.porcentajeDeProgreso(progreso.diaPrograma()), niveles);
+            rango = ProgresoNivel.resolverRango(ProgresoNivel.porcentajeDeProgreso(progreso.diaPrograma(), progreso.duracionDias()), niveles);
         }
         return new VisorContexto(progreso.rol(), rango, progreso.celulaId());
     }

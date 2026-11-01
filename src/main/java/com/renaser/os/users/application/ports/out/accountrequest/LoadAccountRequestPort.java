@@ -1,5 +1,6 @@
 package com.renaser.os.users.application.ports.out.accountrequest;
 
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequest;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequestId;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequestStatus;
@@ -13,6 +14,15 @@ import java.util.Optional;
 public interface LoadAccountRequestPort {
 
     Optional<AccountRequest> byId(AccountRequestId id);
+
+    /**
+     * La solicitud con la fila bloqueada hasta que termine la transacción (spec 025, FR-018): para decidirla. Quien llega segundo espera y la lee
+     * ya decidida.
+     */
+    Optional<AccountRequest> byIdParaDecidir(AccountRequestId id);
+
+    /** La solicitud ACEPTADA de esta cuenta, si entró por una (spec 025): de ahí sale lo que se decidió al aceptarla. */
+    Optional<AccountRequest> aceptadaDe(com.renaser.os.shared.domain.UserId usuario);
 
     /**
      * ¿Hay ya una solicitud con este correo? Devuelve un booleano y no el agregado porque es lo
@@ -36,9 +46,10 @@ public interface LoadAccountRequestPort {
 
     /**
      * Panel admin de solicitudes de cuenta (gap #9 de docs/PLAN_INTEGRACION_FRONTEND.md):
-     * pagina de solicitudes, {@code statusFilter == null} = cualquier estado.
+     * pagina de solicitudes, {@code statusFilter == null} = cualquier estado. Con {@code formacion} (spec 025), las pendientes siempre y las
+     * aceptadas que la eligieron; {@code null} = sin filtro.
      */
-    List<AccountRequest> pagina(AccountRequestStatus statusFilter, int page, int size);
+    List<AccountRequest> pagina(AccountRequestStatus statusFilter, Formacion formacion, int page, int size);
 
-    long contar(AccountRequestStatus statusFilter);
+    long contar(AccountRequestStatus statusFilter, Formacion formacion);
 }

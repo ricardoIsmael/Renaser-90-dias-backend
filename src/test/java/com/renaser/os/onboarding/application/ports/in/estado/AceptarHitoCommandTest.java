@@ -18,27 +18,27 @@ class AceptarHitoCommandTest {
     void construyeUnComandoValidoSinExplotar() {
         UserId usuarioId = UserId.of(UUID.randomUUID());
 
-        var command = new AceptarHitoCommand(usuarioId, HitoOnboarding.PACTO);
+        var command = new AceptarHitoCommand(usuarioId, HitoOnboarding.PACTO, null);
 
         assertThat(command.hito()).isEqualTo(HitoOnboarding.PACTO);
     }
 
     @Test
     void rechazaUsuarioIdNulo() {
-        assertThatThrownBy(() -> new AceptarHitoCommand(null, HitoOnboarding.PACTO))
+        assertThatThrownBy(() -> new AceptarHitoCommand(null, HitoOnboarding.PACTO, null))
                 .isInstanceOf(ConstraintViolationException.class);
     }
 
     @Test
     void rechazaHitoNulo() {
         UserId usuarioId = UserId.of(UUID.randomUUID());
-        assertThatThrownBy(() -> new AceptarHitoCommand(usuarioId, null))
+        assertThatThrownBy(() -> new AceptarHitoCommand(usuarioId, null, null))
                 .isInstanceOf(ConstraintViolationException.class);
     }
 
     @Test
-    @DisplayName("el comando SOLO tiene usuarioId + hito (CLAUDE.MD §5.3.3)")
-    void tieneSoloDosComponentes() {
-        assertThat(AceptarHitoCommand.class.getRecordComponents()).hasSize(2);
+    @DisplayName("el comando solo tiene usuarioId, hito y la versión de términos, sin rol (CLAUDE.MD §5.3.3)")
+    void tieneSoloTresComponentes() {
+        assertThat(AceptarHitoCommand.class.getRecordComponents()).hasSize(3);
     }
 }

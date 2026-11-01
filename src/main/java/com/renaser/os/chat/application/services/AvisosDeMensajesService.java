@@ -12,6 +12,7 @@ import com.renaser.os.chat.domain.model.conversacion.NombreDelChat;
 import com.renaser.os.chat.domain.model.conversacion.TipoConversacion;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
 import com.renaser.os.chat.domain.model.mensaje.MensajeId;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
@@ -90,9 +91,13 @@ public class AvisosDeMensajesService implements AvisosDeMensajesFinder {
                         .toList());
     }
 
-    /** La ruta que abre el chat en la app (D-218 para las demás): {@code /chat/{id}}. */
+    /**
+     * La ruta que abre el chat en la app (D-218 para las demás): {@code /chat/{id}}. Spec 024: la de una formación que no es la Escuela lleva
+     * {@code ?formacion=CÓDIGO}, para que el personal con varias formaciones cambie a la del chat al tocarla (FR-032); la de la Escuela es la de siempre.
+     */
     static String rutaDe(Conversacion conversacion) {
-        return "/chat/" + conversacion.id().value();
+        String ruta = "/chat/" + conversacion.id().value();
+        return conversacion.formacion() == Formacion.POR_DEFECTO ? ruta : ruta + "?formacion=" + conversacion.formacion().codigo();
     }
 
     private List<UserId> destinatarios(Mensaje mensaje, Conversacion conversacion) {

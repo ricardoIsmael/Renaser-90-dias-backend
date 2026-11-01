@@ -11,6 +11,7 @@ import com.renaser.os.chat.application.ports.in.miembro.ListarMiembrosGlobalUseC
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.infrastructure.adapter.in.rest.miembro.MiembrosPageResponse;
+import com.renaser.os.shared.domain.FormacionDelContenido;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
@@ -65,14 +66,16 @@ public class ConversacionController {
             @ActorAutenticado UserId actorId,
             @RequestBody @Valid CrearConversacionDirectaRequest request) {
         var conversacion = crearDirectaUseCase.obtenerOCrear(new CrearConversacionDirectaCommand(
-                actorId, UserId.of(request.otherUserId())));
+                actorId, UserId.of(request.otherUserId()), FormacionDelContenido.pedida(request.formation())));
         return ResponseEntity.status(HttpStatus.CREATED).body(ConversacionResponse.from(conversacion));
     }
 
     @RequiresPermission(Permission.USE_APP)
     @GetMapping
-    public List<ConversacionResumenResponse> listar(@ActorAutenticado UserId actorId) {
-        return listarUseCase.listar(actorId).stream().map(ConversacionResumenResponse::from).toList();
+    public List<ConversacionResumenResponse> listar(@ActorAutenticado UserId actorId,
+                                                    @RequestParam(required = false) String formation) {
+        return listarUseCase.listar(actorId, FormacionDelContenido.pedida(formation)).stream()
+                .map(ConversacionResumenResponse::from).toList();
     }
 
     @RequiresPermission(value = Permission.USE_APP, scope = "participante de la conversacion")
@@ -89,9 +92,10 @@ public class ConversacionController {
     @GetMapping("/global/members")
     public MiembrosPageResponse listarMiembrosGlobal(@ActorAutenticado UserId actorId,
                                                        @RequestParam(required = false) String cursor,
-                                                       @RequestParam(required = false, defaultValue = "30") int limit) {
+                                                       @RequestParam(required = false, defaultValue = "30") int limit,
+                                                       @RequestParam(required = false) String formation) {
         UserId cursorId = cursor != null && !cursor.isBlank() ? UserId.of(cursor) : null;
-        var pagina = listarMiembrosGlobalUseCase.listar(actorId, cursorId, limit);
+        var pagina = listarMiembrosGlobalUseCase.listar(actorId, cursorId, limit, FormacionDelContenido.pedida(formation));
         return MiembrosPageResponse.from(pagina);
     }
 
@@ -104,7 +108,8 @@ public class ConversacionController {
             @ActorAutenticado UserId actorId,
             @RequestBody @Valid RenombrarConversacionGlobalRequest request) {
         Conversacion global = renombrarConversacionGlobalUseCase.renombrar(
-                new RenombrarConversacionGlobalCommand(actorId, request.name()));
+                new RenombrarConversacionGlobalCommand(actorId, request.name(),
+                        FormacionDelContenido.pedida(request.formation())));
         return ResponseEntity.ok(Map.of("id", global.id().toString(), "name", global.nombre()));
     }
 }

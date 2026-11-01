@@ -10,7 +10,7 @@ class RankingPersistenceMapper {
 
     RankingAprendizJpaEntity toEntity(PosicionRanking p) {
         return new RankingAprendizJpaEntity(p.fecha(), toJpaTipo(p.tipo()), p.participanteId().value(),
-                p.posicion(), p.puntaje());
+                p.posicion(), p.puntaje(), p.formacion().codigo());
     }
 
     TipoRankingJpa toJpaTipo(TipoRanking tipo) {

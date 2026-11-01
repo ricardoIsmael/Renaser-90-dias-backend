@@ -17,6 +17,7 @@ import com.renaser.os.leadership.application.ports.in.ConsultarSemanaDePersonaUs
 import com.renaser.os.leadership.domain.model.cumplimiento.ColorDeLaFila;
 import com.renaser.os.leadership.domain.model.cumplimiento.PersonaDeLaLista;
 import com.renaser.os.mentoring.api.ObligacionDelDia;
+import com.renaser.os.plataforma.application.services.CopiaDeEstados;
 import com.renaser.os.points.api.ColorSemaforo;
 import com.renaser.os.points.api.DetalleDelSemaforo;
 import com.renaser.os.points.api.SemaforoFinder;
@@ -66,10 +67,10 @@ class CumplimientoDelLiderIT {
     private static final LocalDate DESDE = LocalDate.of(2026, 10, 10);
     private static final LocalDate VIERNES = LocalDate.of(2026, 10, 16);
     private static final LocalDate MIERCOLES = LocalDate.of(2026, 10, 14);
-    private static final UUID FENIX = UUID.randomUUID();
+    static final UUID FENIX = UUID.randomUUID();
     private static final UUID LIDER = UUID.randomUUID();
-    private static final UUID MENTORA = UUID.randomUUID();
-    private static final UUID ANA = UUID.randomUUID();
+    static final UUID MENTORA = UUID.randomUUID();
+    static final UUID ANA = UUID.randomUUID();
 
     @Autowired
     private ConsultarGrupoDelLiderUseCase grupo;
@@ -79,6 +80,8 @@ class CumplimientoDelLiderIT {
     private ConsultarRadarDePersonaUseCase radar;
     @Autowired
     private JdbcTemplate jdbc;
+    @Autowired
+    private CopiaDeEstados copiaDeEstados;
 
     private UUID ritual;
     private UUID postDiario;
@@ -93,6 +96,11 @@ class CumplimientoDelLiderIT {
     @BeforeEach
     void sembrar() {
         reloj.fijar(AHORA);
+        // Spec 034: de fábrica el líder no ve el Código Renaser (Administración lo enciende). Esta prueba es de lo que ve cuando se lo permiten.
+        jdbc.update("DELETE FROM renaser.funcionalidades_estado WHERE clave = 'radar.fichas'");
+        jdbc.update("INSERT INTO renaser.funcionalidades_estado (clave, prendida_global, version, actualizado_por, actualizado_en) "
+                + "VALUES ('radar.fichas', true, nextval('renaser.funcionalidades_version_seq'), ?, now())", LIDER);
+        copiaDeEstados.recargar();
         jdbc.update("DELETE FROM renaser.usuarios WHERE id IN (?, ?, ?)", LIDER, MENTORA, ANA);
         usuario(LIDER, "LIDER_MENTORES", "Líder Uno");
         usuario(MENTORA, "MENTOR", "Luisa Rojas");
@@ -121,9 +129,16 @@ class CumplimientoDelLiderIT {
                 fotoDeLaAccion, ANA, accion, "rocas/" + ANA + "/foto.jpg");
     }
 
+    @org.junit.jupiter.api.AfterEach
+    void volverAlValorDeFabricaDelRadarEnFichas() {
+        jdbc.update("DELETE FROM renaser.funcionalidades_estado WHERE clave = 'radar.fichas'");
+        copiaDeEstados.recargar();
+    }
+
     private void usuario(UUID id, String rol, String nombre) {
         jdbc.update("INSERT INTO renaser.usuarios (id, email, nombre_completo, rol) "
                 + "VALUES (?, ?, ?, CAST(? AS renaser.rol_usuario))", id, id + "@renaser.test", nombre, rol);
+        com.renaser.os.FormacionesDePrueba.alPersonalLeAsignaLaEscuela(jdbc, id, rol);
     }
 
     private void programa(UUID id) {
@@ -252,6 +267,21 @@ class CumplimientoDelLiderIT {
         assertThat(resultado.registros()).extracting(RegistroDelRadar::horaPrevista).containsExactly(null, 14, 10);
         assertThat(resultado.registros().getFirst().queSiento()).isEqualTo("Tranquila");
         assertThat(resultado.siguienteCursor()).isNull();
+    }
+
+    @Test
+    @DisplayName("spec 030: el líder lee «dictado» de la base de verdad: true en el dictado y false en el escrito y en los anteriores a V132")
+    void elRadarDiceCuandoSeDicto() {
+        registroDelRadar(ANA, Instant.parse("2026-10-14T19:06:00Z"), 14);
+        jdbc.update("INSERT INTO renaser.registros_radar (id, participante_id, que_hago, que_pienso, que_siento, "
+                + "nivel_energia, que_evito, creado_en, hora_prevista, dictado) VALUES (?, ?, 'Hablando', 'En voz alta', "
+                + "'Bien', 6, 'Nada', CAST(? AS timestamptz), 15, true)", UUID.randomUUID(), ANA,
+                Instant.parse("2026-10-14T20:06:00Z").toString());
+
+        CodigoRenaserDePersona resultado = radarDeAna(LIDER, null);
+
+        assertThat(resultado.registros()).extracting(RegistroDelRadar::dictado).containsExactly(true, false);
+        assertThat(resultado.registros()).extracting(RegistroDelRadar::queHago).containsExactly("Hablando", "Trabajando");
     }
 
     @Test

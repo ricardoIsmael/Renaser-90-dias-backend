@@ -1,6 +1,7 @@
 package com.renaser.os.habits.application.ports.out.preferencia;
 
 import com.renaser.os.habits.domain.model.habito.HabitoId;
+import com.renaser.os.habits.domain.model.preferencia.FechaPropia;
 import com.renaser.os.habits.domain.model.preferencia.HorarioSemanal;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
 import com.renaser.os.shared.domain.UserId;
@@ -75,4 +76,13 @@ public interface LoadPreferenciaHorarioPort {
      * Los dos responden "va hoy?" y el generador los junta en el mismo conjunto de descarte.
      */
     List<HabitoId> habitosApagadosEnDiaSemana(UserId participanteId, DayOfWeek diaSemana);
+
+    /**
+     * Spec 028: lo que la persona decidio solo para ciertas fechas ({@code horarios_habito_por_fecha}), de TODOS sus habitos y entre
+     * esas dos fechas inclusive. Una consulta, sin N+1.
+     */
+    List<FechaPropia> fechasPropiasEntre(UserId participanteId, LocalDate desde, LocalDate hasta);
+
+    /** Lo mismo, de un solo habito. */
+    List<FechaPropia> fechasPropiasDeUnHabitoEntre(UserId participanteId, HabitoId habitoId, LocalDate desde, LocalDate hasta);
 }

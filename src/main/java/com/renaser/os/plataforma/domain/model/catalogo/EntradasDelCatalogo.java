@@ -1,5 +1,6 @@
 package com.renaser.os.plataforma.domain.model.catalogo;
 
+import com.renaser.os.shared.domain.ClavesDeFuncionalidad;
 import com.renaser.os.users.api.UserRole;
 
 import java.util.EnumSet;
@@ -25,6 +26,10 @@ import static com.renaser.os.users.api.UserRole.TRAINEE_GUIDE;
  *
  * <p>Soporte TI figura en todas las que no son de acompañar grupos: tiene lo de todos los roles (FR-023).
  *
+ * <p>{@code radar.fichas} (spec 034, D-299) tampoco está en la tabla de la spec 002: es el interruptor que decide Administración para
+ * que el mentor, la guía y el líder vean el Código Renaser en las fichas. Cuelga de {@code radar}, nace apagada para esos tres roles
+ * (sin fila) y apagada se esconde ({@code noDisponible}) en vez de avisar mantenimiento.
+ *
  * <p>{@code lider.cumplimiento} (spec 005, D-274) es la única que no está en la tabla de la spec 002: se sumó con la ficha
  * de cumplimiento por persona del líder. Cuelga de {@code lider}, y su resumen diario al mentor corre en una ventana que
  * pasa (20:00 a 20:59 de la zona del mentor), así que apagada se salta y no se pone al día.
@@ -37,6 +42,8 @@ final class EntradasDelCatalogo {
     private static final Set<UserRole> TODOS = EnumSet.allOf(UserRole.class);
     private static final Set<UserRole> NADIE = EnumSet.noneOf(UserRole.class);
     private static final Set<UserRole> ADMINISTRACION = EnumSet.of(ADMIN, ALCHEMIST, IT_SUPPORT);
+    /** Quienes acompañan a un aprendiz desde su ficha, sin ser Administración: el interruptor de la spec 034 los gobierna. */
+    private static final Set<UserRole> ACOMPANAMIENTO = EnumSet.of(MENTOR, TRAINEE_GUIDE, MENTOR_LEAD);
 
     private EntradasDelCatalogo() {
     }
@@ -47,6 +54,8 @@ final class EntradasDelCatalogo {
                 normal("onboarding", "Programa", "Onboarding", "Ficha inicial, términos, pacto y cuestionario.", TODOS, NO_APLICA),
                 normal("dia_uno", "Programa", "Elegir mi Día 1", "Elegir el Día 1 y activar el programa propio.", TODOS, NO_APLICA),
                 normal("radar", "Programa", "Código Renaser", "El Código Renaser diario.", TODOS, NO_APLICA),
+                // Spec 034 (D-299): nace apagada para quien acompaña y la decide Administración; apagada se esconde.
+                oculta(ClavesDeFuncionalidad.RADAR_EN_FICHAS, "Programa", "Código Renaser en las fichas", "Que el mentor, la guía y el líder vean el Código Renaser de los aprendices en sus fichas.", ACOMPANAMIENTO),
                 normal("mapa", "Programa", "Mapa de Renacimiento", "El Mapa de Renacimiento.", TODOS, NO_APLICA),
                 normal("plan", "Programa", "Plan", "Rocas y objetivos: maestra, del mes, de la semana y del día; Verdugo.", TODOS, SALTA),
                 normal("clase_diaria", "Programa", "Clase diaria", "La clase diaria.", TODOS, NO_APLICA),
@@ -78,6 +87,8 @@ final class EntradasDelCatalogo {
                 normal("ia.chat", "SER (IA)", "Chat de SER", "El chat de SER y el del curso.", TODOS, NO_APLICA),
                 normal("ia.voz", "SER (IA)", "Voz de SER", "La voz del orbe y la voz en vivo.", TODOS, NO_APLICA),
                 normal("ia.propuestas", "SER (IA)", "Propuestas de SER", "Las propuestas y acciones de SER.", TODOS, NO_APLICA),
+                // Spec 031 (D-306): el analisis 80/20 con IA se apaga solo, sin tocar el chat ni la voz. Las cifras de «Tu 80/20» no dependen de esto.
+                normal("ia.analisis", "SER (IA)", "Análisis 80/20 con IA", "El análisis con IA de la semana y del mes («Tu 80/20»); las cifras se siguen viendo.", TODOS, SALTA),
                 normal("evidencias", "Evidencias", "Mis evidencias", "Ver las evidencias y su revisión.", TODOS, POSPONE),
                 // MENTOR y TRAINEE_GUIDE: ven el chip de la caja en la ficha de su aprendiz (CajaDelMentorController, D-219).
                 // Faltaban (E-620): sin ellos la consola no mostraba su interruptor y un rol personalizado de esa base no
@@ -105,6 +116,16 @@ final class EntradasDelCatalogo {
                                                     Set<UserRole> roles, PoliticaDeProcesos procesos) {
         return new DefinicionDeFuncionalidad(clave, prefijo(clave), area, nombre, descripcion, roles, false,
                 ValorPorDefecto.PRENDIDA, procesos);
+    }
+
+    /**
+     * Una funcionalidad que nace apagada para {@code roles} y, apagada, se esconde en vez de avisar mantenimiento
+     * (spec 034). Prendida para todos los demás.
+     */
+    private static DefinicionDeFuncionalidad oculta(String clave, String area, String nombre, String descripcion,
+                                                    Set<UserRole> roles) {
+        return new DefinicionDeFuncionalidad(clave, prefijo(clave), area, nombre, descripcion, roles, false,
+                ValorPorDefecto.PRENDIDA, NO_APLICA, roles, true);
     }
 
     private static DefinicionDeFuncionalidad critica(String clave, String area, String nombre, String descripcion,

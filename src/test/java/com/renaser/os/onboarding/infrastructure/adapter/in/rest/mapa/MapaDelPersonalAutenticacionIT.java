@@ -62,7 +62,7 @@ class MapaDelPersonalAutenticacionIT {
         usuarios.reversed().forEach(id -> jdbc.update("DELETE FROM renaser.usuarios WHERE id = ?", id));
     }
 
-    @ParameterizedTest(name = "{0}: login, Día 1 y mapa propio con objetivos, hábitos y archivo")
+    @ParameterizedTest(name = "{0}: login, Día 1, objetivos propios sin Mapa (spec 026), hábitos y archivo; el Mapa retirado responde 409")
     @CsvSource({"MENTOR, MENTOR", "ADMIN, ADMIN", "ALQUIMISTA, ALCHEMIST"})
     void elPersonalGuardaYActivaSuMapaTrasElegirDiaUno(String rolBase, String rolApi) throws Exception {
         UUID persona = usuario(rolBase, "ACTIVO");
@@ -86,22 +86,25 @@ class MapaDelPersonalAutenticacionIT {
         }
         JsonNode habito = leer(pedir("POST", "/api/v1/habits", token, habito()), 201);
         assertThat(habito.get("id").asText()).isNotBlank();
-        guardarRespuesta(token, "map_priority_area", "salud");
-        guardarRespuesta(token, "map_health_goal_text", "Caminar cuarenta minutos tres veces por semana");
-        assertThat(pedir("PUT", MAPA + "/acciones", token, acciones()).statusCode()).isEqualTo(204);
-        assertThat(pedir("PUT", MAPA + "/reemplazos", token, reemplazos()).statusCode()).isEqualTo(204);
+        // Spec 026: el Mapa se retiro. Se lee, no se escribe, y la app publicada antes lo ve "completado" para no bloquear a nadie.
+        for (Pedido pedido : List.of(new Pedido("PUT", MAPA + "/acciones", acciones()),
+                new Pedido("PUT", MAPA + "/reemplazos", reemplazos()), new Pedido("POST", MAPA + "/completar", null),
+                new Pedido("POST", RESPUESTAS, Map.of("questionId", pregunta("map_priority_area"), "textValue", "salud")))) {
+            HttpResponse<String> respuesta = pedir(pedido.metodo(), pedido.ruta(), token, pedido.cuerpo());
+            assertThat(respuesta.statusCode()).as("%s %s", pedido.metodo(), pedido.ruta()).isEqualTo(409);
+            assertThat(json.readTree(respuesta.body()).get("codigo").asText()).isEqualTo("MAPA_RETIRADO");
+        }
+        JsonNode mapa = leer(pedir("GET", MAPA, token, null), 200);
+        assertThat(mapa.get("stageCompleted").asBoolean()).isTrue();
+        assertThat(mapa.get("actions")).isEmpty();
+        assertThat(mapa.get("protocols")).isEmpty();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM renaser.respuestas_onboarding WHERE usuario_id = ?",
+                Integer.class, persona)).as("nada del Mapa se escribio").isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM renaser.etapas_onboarding_completadas WHERE usuario_id = ?",
+                Integer.class, persona)).isZero();
         JsonNode archivo = registrarArchivo(persona, token);
         assertThat(jdbc.queryForObject("SELECT usuario_id FROM renaser.medias_onboarding WHERE id = ?",
                 UUID.class, archivo.get("id").asLong())).isEqualTo(persona);
-        assertThat(pedir("POST", MAPA + "/completar", token, null).statusCode()).isEqualTo(204);
-
-        JsonNode mapa = leer(pedir("GET", MAPA, token, null), 200);
-        assertThat(mapa.get("stageCompleted").asBoolean()).isTrue();
-        assertThat(mapa.get("actions")).hasSize(1);
-        assertThat(mapa.get("actions").get(0).get("text").asText()).isEqualTo("Caminar cuarenta minutos");
-        assertThat(mapa.get("protocols")).hasSize(1);
-        assertThat(leer(pedir("GET", RESPUESTAS + "?flow=mapa_dia7", token, null), 200).toString())
-                .contains("Caminar cuarenta minutos tres veces por semana");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM renaser.rocas_maestras WHERE participante_id = ?",
                 Integer.class, persona)).isEqualTo(3);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM renaser.acciones_mapa WHERE usuario_id = ?",
@@ -156,10 +159,6 @@ class MapaDelPersonalAutenticacionIT {
                 "mime", "application/pdf", "sizeBytes", 128)), 201);
     }
 
-    private void guardarRespuesta(String token, String clave, String valor) throws Exception {
-        leer(pedir("POST", RESPUESTAS, token, Map.of("questionId", pregunta(clave), "textValue", valor)), 200);
-    }
-
     private int pregunta(String clave) {
         return jdbc.queryForObject("SELECT id FROM renaser.preguntas_onboarding WHERE clave_pregunta = ?",
                 Integer.class, clave);
@@ -205,6 +204,7 @@ class MapaDelPersonalAutenticacionIT {
                 VALUES (?, ?, ?, CAST(? AS renaser.rol_usuario), CAST(? AS renaser.estado_usuario), ?)
                 """, id, id + "@renaser.test", "Mapa IT " + rol, rol, estado, encoder.encode(CLAVE));
         usuarios.add(id);
+        com.renaser.os.FormacionesDePrueba.alPersonalLeAsignaLaEscuela(jdbc, id, rol);
         return id;
     }
 

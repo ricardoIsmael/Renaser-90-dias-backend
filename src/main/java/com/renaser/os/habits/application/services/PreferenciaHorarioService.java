@@ -535,6 +535,7 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
     @Transactional(readOnly = true)
     public List<DiaDeLaSemana> consultar(UserId actorId, HabitoId habitoId) {
         Habito habito = requireHabito(habitoId);
+        exigirDeSuFormacion(actorId, habito);
         var propios = loadPreferenciaPort.horarioSemanalDe(actorId, habitoId).stream()
                 .collect(Collectors.toMap(HorarioSemanal::diaSemana, h -> h));
         var general = loadPreferenciaPort.porParticipanteYHabito(actorId, habitoId).orElse(null);
@@ -587,10 +588,16 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
      * profundidad (E-214): las escrituras ya van con el {@code actorId}, pero no hay motivo para
      * dejar que alguien arme horarios sobre el habito privado de otra persona.
      */
-    private static void requirePropio(UserId actorId, Habito habito) {
+    private void requirePropio(UserId actorId, Habito habito) {
         if (habito.participanteId() != null && !habito.participanteId().equals(actorId)) {
             throw new NotAuthorizedException("Solo puedes editar tus propios habitos");
         }
+        exigirDeSuFormacion(actorId, habito);
+    }
+
+    /** Spec 023, FR-028: un habito del catalogo de otra formacion responde 404, como si no existiera. */
+    private void exigirDeSuFormacion(UserId actorId, Habito habito) {
+        progresoPort.deParticipante(actorId).ifPresent(progreso -> habito.exigirQueSeaVisibleEn(progreso.formacion()));
     }
 
     private ProgresoParticipanteHabits requireProgreso(UserId participanteId) {

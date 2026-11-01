@@ -41,6 +41,9 @@ public class HabitoJpaEntity {
 
     private UUID participanteId;
 
+    /** Spec 023 (V134): el codigo de la formacion de un habito del catalogo; nulo en uno PERSONAL. */
+    private String formacion;
+
     private String titulo;
 
     private String descripcion;

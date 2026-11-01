@@ -101,7 +101,7 @@ class EventoServiceAutorizacionTest {
     @BeforeEach
     void setUp() {
         var acceso = new AccesoEventoService(progresoPort, nivelPort, cursoSinAcceso(), (usuario, tipo) -> false,
-                (celula, usuario) -> false);
+                (celula, usuario) -> false, new com.renaser.os.users.api.AlcanceDeFormacionSoloEscuela());
         service = new EventoService(loadEventoPort, saveEventoPort, loadExcepcionPort, saveExcepcionPort,
                 loadConfirmacionPort, saveRecordatorioPort, nivelPort, almacenamientoPort, acceso, CLOCK,
                 idGenerator);

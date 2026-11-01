@@ -54,6 +54,8 @@ public final class AccountRequest {
     private final String requestIp;
     private final Instant createdAt;
     private Instant updatedAt;
+    /** Lo que se decidió al aceptar (spec 025, V140); {@code null} mientras la solicitud no está aceptada. Es una foto para el historial. */
+    private EleccionDeIngreso eleccion;
 
     /**
      * Alta publica. Sin campo role: ver javadoc de la clase.
@@ -77,7 +79,7 @@ public final class AccountRequest {
                 Objects.requireNonNull(email, "email es obligatorio"),
                 requireNotBlank(fullName, "El nombre no puede ser vacio"),
                 normalizarOpcional(phone), city, origenSocial,
-                AccountRequestStatus.PENDING, null, null, null, null, requestIp, now, now);
+                AccountRequestStatus.PENDING, null, null, null, null, requestIp, now, now, null);
     }
 
     /** Solo para el adaptador de persistencia: reconstruye una solicitud ya existente. */
@@ -86,17 +88,27 @@ public final class AccountRequest {
                                             OrigenSocial origenSocial, AccountRequestStatus status,
                                             String rejectionReason, UserId reviewedBy, Instant reviewedAt,
                                             UserId createdUserId, String requestIp, Instant createdAt,
-                                            Instant updatedAt) {
+                                            Instant updatedAt, EleccionDeIngreso eleccion) {
         return new AccountRequest(id, usuarioId, email, fullName, phone, city, origenSocial, status,
-                rejectionReason, reviewedBy, reviewedAt, createdUserId, requestIp, createdAt, updatedAt);
+                rejectionReason, reviewedBy, reviewedAt, createdUserId, requestIp, createdAt, updatedAt, eleccion);
     }
 
-    public void approve(User actor, UserId createdUserId, Clock clock) {
+    /**
+     * Falla ya, antes de tocar nada, si {@code actor} no puede decidir o la solicitud ya se decidió: aceptar hace mucho trabajo y no tiene sentido
+     * empezarlo para descubrirlo al final.
+     */
+    public void verificarQuePuedeDecidir(User actor) {
         requireManager(actor);
         requirePending();
+    }
+
+    /** Acepta la solicitud y deja la foto de lo elegido (spec 025). */
+    public void approve(User actor, UserId createdUserId, EleccionDeIngreso eleccion, Clock clock) {
+        verificarQuePuedeDecidir(actor);
         this.status = AccountRequestStatus.APPROVED;
         this.reviewedBy = actor.id();
         this.createdUserId = Objects.requireNonNull(createdUserId, "createdUserId es obligatorio al aprobar");
+        this.eleccion = Objects.requireNonNull(eleccion, "eleccion es obligatoria al aprobar");
         this.reviewedAt = clock.now();
         this.updatedAt = this.reviewedAt;
     }

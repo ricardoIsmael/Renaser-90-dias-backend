@@ -14,6 +14,7 @@ import com.renaser.os.points.api.ObligacionEvidencia;
 import com.renaser.os.points.api.VentanaEvaluacion;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,16 +50,19 @@ public class RankingDeGruposService implements ConsultarRankingDeGruposUseCase {
     private final EntregasPorRegistroFinder entregasFinder;
     private final CalculoCumplimientoPort calculoCumplimiento;
     private final Clock clock;
+    private final AlcanceDeFormacionFinder formaciones;
 
     public RankingDeGruposService(AcompanamientoFinder acompanamientoFinder,
                                    ObligacionesHistoricasFinder obligacionesFinder,
                                    EntregasPorRegistroFinder entregasFinder,
-                                   CalculoCumplimientoPort calculoCumplimiento, Clock clock) {
+                                   CalculoCumplimientoPort calculoCumplimiento, Clock clock,
+                                   AlcanceDeFormacionFinder formaciones) {
         this.acompanamientoFinder = acompanamientoFinder;
         this.obligacionesFinder = obligacionesFinder;
         this.entregasFinder = entregasFinder;
         this.calculoCumplimiento = calculoCumplimiento;
         this.clock = clock;
+        this.formaciones = formaciones;
     }
 
     @Override
@@ -68,7 +72,12 @@ public class RankingDeGruposService implements ConsultarRankingDeGruposUseCase {
 
         // Solo grupos regulares con mentor: la recepción queda fuera del ranking (P-08), porque
         // es transitoria y comparar su cumplimiento con el de un grupo estable no dice nada.
-        List<AcompanamientoFinder.GrupoAcompanado> grupos = gruposDelMes(cohorteId, mes, ahora);
+        // Spec 022 (E2E P2-J): una cohorte puede reunir grupos de varias formaciones; cada quien ve el ranking de
+        // los de las formaciones que ve (el aprendiz y el personal con una activa, solo la suya; Administración, todas).
+        var alcance = formaciones.de(actorId);
+        List<AcompanamientoFinder.GrupoAcompanado> grupos = gruposDelMes(cohorteId, mes, ahora).stream()
+                .filter(grupo -> alcance.incluye(grupo.formacion()))
+                .toList();
         if (grupos.isEmpty()) {
             return new RankingDeGrupos(cohorteId, mes.toString(), null, null, List.of());
         }

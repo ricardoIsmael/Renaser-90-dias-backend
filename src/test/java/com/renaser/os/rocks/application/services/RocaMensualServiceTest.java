@@ -144,6 +144,13 @@ class RocaMensualServiceTest {
         assertThat(service.misRocasMensuales(id)).containsExactly(mensual);
     }
 
+    @Test
+    void laDuracionDelProgramaSaleDelProgresoDeLaPersona() {
+        UserId id = traineeActivo();
+
+        assertThat(service.duracionDelPrograma(id)).isEqualTo(90);
+    }
+
     // ---------------------------------------------------------------------------------------
     // definir(): crear o corregir el tramo del mes
     // ---------------------------------------------------------------------------------------
@@ -181,7 +188,7 @@ class RocaMensualServiceTest {
 
         assertThatThrownBy(() -> service.definir(comando(id)))
                 .isInstanceOf(NoSuchElementException.class)
-                .hasMessageContaining("objetivo de 90 dias");
+                .hasMessageContaining("objetivo de 90 días");
         verify(guardarRocaMensualPort, never()).guardar(any());
     }
 
@@ -247,11 +254,11 @@ class RocaMensualServiceTest {
     }
 
     @Test
-    @DisplayName("el comando no acepta un mes fuera de los tres del programa")
+    @DisplayName("el comando no acepta un mes fuera de los doce del programa mas largo; que sea de los meses de la persona lo exige el servicio")
     void elComandoRechazaUnMesFueraDeRango() {
         UserId id = actor();
 
-        assertThatThrownBy(() -> new DefinirRocaMensualCommand(id, EjeObjetivo.TRABAJO, 4, "Facturar",
+        assertThatThrownBy(() -> new DefinirRocaMensualCommand(id, EjeObjetivo.TRABAJO, 13, "Facturar",
                 null, null, null))
                 .isInstanceOf(ConstraintViolationException.class);
     }

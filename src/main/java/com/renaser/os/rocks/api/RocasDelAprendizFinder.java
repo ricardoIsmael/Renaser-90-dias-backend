@@ -37,6 +37,12 @@ public interface RocasDelAprendizFinder {
     /** Los objetivos semanales de la semana de programa en curso. */
     RocasDeLaSemana deLaSemana(UserId aprendizId);
 
+    /**
+     * La última semana del programa de ESTA persona: 13 en uno de 90 días, 53 en el de 365 (spec 026). Quien propone «la semana siguiente» no puede pedir una
+     * más allá de ésta. Mismas excepciones que el resto cuando no tiene el programa de rocas disponible.
+     */
+    int ultimaSemanaDelPrograma(UserId aprendizId);
+
     /** El objetivo del mes en curso, uno por eje con Roca Maestra definida. */
     List<ObjetivoDelMesDelEje> delMes(UserId aprendizId);
 

@@ -284,6 +284,11 @@ renaser:
       rag-generar-informes-semanales:
         lock-at-most-for: PT6H
         lock-at-least-for: PT1M
+      # Spec 031 (D-306): el analisis 80/20 con IA de cada semana y cada mes del programa. Corre cada hora al minuto 15.
+      # Sin lock, dos instancias pagarian dos veces la llamada a la IA por persona y periodo.
+      rag-generar-analisis-80-20:
+        lock-at-most-for: PT6H
+        lock-at-least-for: PT1M
       # D-67: avanza el dia de programa de cada participante. Sin lock, dos instancias
       # pueden avanzar al mismo aprendiz dos veces y hacerle saltar un dia del programa.
       users-avanzar-dia-programa:
@@ -387,6 +392,23 @@ renaser:
   # CUANDO SE AGREGUE un adaptador real para el Espejo o para la recomendacion, hay que ponerle
   # la condicion a su NoOp en el mismo commit. Si no, quedan dos beans para el mismo puerto y el
   # arranque falla por ambiguedad.
+  # Spec 031 (D-306): el analisis 80/20 con IA. Todos los numeros salen de la spec («a confirmar» con el dueño) y se cambian aca, sin
+  # tocar codigo; lo que no se pone toma el valor de ReglasDelAnalisis.POR_DEFECTO. La IA es la de SER (renaser.ia.*): mismo proveedor,
+  # misma credencial y mismo circuito; Soporte TI lo apaga solo con la funcionalidad `ia.analisis`.
+  analisis-80-20:
+    # Acciones planificadas que hacen falta para analizar una semana y un mes, y en cuantos dias distintos (solo la semana).
+    minimo-de-acciones-por-semana: ${ANALISIS_MIN_ACCIONES_SEMANA:5}
+    minimo-de-dias-con-acciones: ${ANALISIS_MIN_DIAS_SEMANA:3}
+    minimo-de-acciones-por-mes: ${ANALISIS_MIN_ACCIONES_MES:15}
+    # Respuestas del Codigo Renaser para leerlas; con menos, el analisis habla solo de las acciones.
+    minimo-de-respuestas-del-radar: ${ANALISIS_MIN_RESPUESTAS_RADAR:3}
+    # Intentos fallidos antes de dejar el periodo sin analisis, y espera entre uno y otro.
+    maximo-de-intentos: ${ANALISIS_MAX_INTENTOS:3}
+    espera-entre-intentos: ${ANALISIS_ESPERA_ENTRE_INTENTOS:PT6H}
+    # Cuantos dias despues de cerrar un periodo se sigue intentando (cubre un servidor caido o la IA apagada).
+    dias-de-puesta-al-dia: ${ANALISIS_DIAS_PUESTA_AL_DIA:7}
+    # Tope global de intentos en 24 horas; al alcanzarlo se difiere sin perder nada.
+    generaciones-por-dia: ${ANALISIS_GENERACIONES_POR_DIA:500}
   ia:
     proveedor: ${IA_PROVEEDOR:noop}
     # Grounding con Google Search dentro de Renasia (2026-09-04, pedido del dueño): con esto en
@@ -594,15 +616,9 @@ renaser:
   # /renaser/prod/CAJA_AVISAR_POR_REVISAR=true y reiniciar. Los avisos de 3 y 5 días no dependen de esto.
   caja:
     avisar-por-revisar: ${CAJA_AVISAR_POR_REVISAR:false}
-  # D-284 (2026-10-27, issue #20): el objetivo de 90 días (Roca Maestra) se bloquea hasta que el Mapa de
-  # Renacimiento esté activo. APAGADO por defecto, a propósito: con el Mapa sin activar, lo que escribe la
-  # activación del Mapa (PUT /rocks/master/{eje} con "origen": "MAPA") reemplaza a la roca que la persona
-  # hubiera definido en Plan, y eso ya rige apagado o prendido. Prendido, además, un PUT que NO trae ese
-  # origen y cambia algo responde 409 MAPA_PENDIENTE; el APK publicado todavía no manda el origen, así que
-  # prenderlo antes de que el APK nuevo esté en los teléfonos impide activar el Mapa a quien tiene el
-  # anterior. Prenderlo en producción: /renaser/prod/ROCKS_EXIGIR_MAPA_ACTIVO=true y reiniciar.
-  rocks:
-    exigir-mapa-activo: ${ROCKS_EXIGIR_MAPA_ACTIVO:false}
+  # D-284 (2026-10-27, issue #20) y D-303 (2026-10-31, spec 026): este interruptor (ROCKS_EXIGIR_MAPA_ACTIVO) exigia el Mapa de Renacimiento activo para
+  # escribir el objetivo de 90 dias. El Mapa se retiro y el interruptor YA NO TIENE EFECTO, sea cual sea su valor: nadie queda bloqueado. Se puede borrar de la
+  # configuracion de produccion (/renaser/prod/ROCKS_EXIGIR_MAPA_ACTIVO) una vez publicado este cambio.
   chat:
     bienvenida:
       activa: ${BIENVENIDA_ACTIVA:false}

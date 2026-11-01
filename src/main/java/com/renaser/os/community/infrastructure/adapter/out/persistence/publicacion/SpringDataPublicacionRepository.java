@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -26,34 +27,42 @@ interface SpringDataPublicacionRepository extends JpaRepository<PublicacionJpaEn
     @Query("""
             SELECT p FROM PublicacionJpaEntity p
             WHERE p.oculta = false
+              AND p.formacion IN :formaciones
             ORDER BY p.creadoEn DESC
             """)
-    List<PublicacionJpaEntity> feedSinCursorSinCategoria(Pageable pageable);
+    List<PublicacionJpaEntity> feedSinCursorSinCategoria(@Param("formaciones") Collection<String> formaciones,
+                                                         Pageable pageable);
 
     @Query("""
             SELECT p FROM PublicacionJpaEntity p
             WHERE p.oculta = false
+              AND p.formacion IN :formaciones
               AND p.categoriaClave = :categoria
             ORDER BY p.creadoEn DESC
             """)
-    List<PublicacionJpaEntity> feedSinCursorConCategoria(@Param("categoria") String categoria, Pageable pageable);
+    List<PublicacionJpaEntity> feedSinCursorConCategoria(@Param("formaciones") Collection<String> formaciones,
+                                                         @Param("categoria") String categoria, Pageable pageable);
 
     @Query("""
             SELECT p FROM PublicacionJpaEntity p
             WHERE p.oculta = false
+              AND p.formacion IN :formaciones
               AND p.creadoEn < :cursor
             ORDER BY p.creadoEn DESC
             """)
-    List<PublicacionJpaEntity> feedConCursorSinCategoria(@Param("cursor") Instant cursor, Pageable pageable);
+    List<PublicacionJpaEntity> feedConCursorSinCategoria(@Param("formaciones") Collection<String> formaciones,
+                                                         @Param("cursor") Instant cursor, Pageable pageable);
 
     @Query("""
             SELECT p FROM PublicacionJpaEntity p
             WHERE p.oculta = false
+              AND p.formacion IN :formaciones
               AND p.creadoEn < :cursor
               AND p.categoriaClave = :categoria
             ORDER BY p.creadoEn DESC
             """)
-    List<PublicacionJpaEntity> feedConCursorConCategoria(@Param("cursor") Instant cursor,
+    List<PublicacionJpaEntity> feedConCursorConCategoria(@Param("formaciones") Collection<String> formaciones,
+                                                           @Param("cursor") Instant cursor,
                                                            @Param("categoria") String categoria, Pageable pageable);
 
     /** Mismo defecto (E-31) y misma solucion que {@code feed*} de arriba, para
@@ -61,19 +70,23 @@ interface SpringDataPublicacionRepository extends JpaRepository<PublicacionJpaEn
     @Query("""
             SELECT p FROM PublicacionJpaEntity p
             WHERE p.oculta = true
+              AND p.formacion IN :formaciones
             ORDER BY p.creadoEn DESC
             """)
-    List<PublicacionJpaEntity> feedOcultoSinCursor(Pageable pageable);
+    List<PublicacionJpaEntity> feedOcultoSinCursor(@Param("formaciones") Collection<String> formaciones, Pageable pageable);
 
     @Query("""
             SELECT p FROM PublicacionJpaEntity p
             WHERE p.oculta = true
+              AND p.formacion IN :formaciones
               AND p.creadoEn < :cursor
             ORDER BY p.creadoEn DESC
             """)
-    List<PublicacionJpaEntity> feedOcultoConCursor(@Param("cursor") Instant cursor, Pageable pageable);
+    List<PublicacionJpaEntity> feedOcultoConCursor(@Param("formaciones") Collection<String> formaciones,
+                                                   @Param("cursor") Instant cursor, Pageable pageable);
 
-    long countByAutorId(UUID autorId);
+    /** «Mis publicaciones» cuenta las del autor en las formaciones que lee (spec 024): lo que escribió en otra se queda allá. */
+    long countByAutorIdAndFormacionIn(UUID autorId, Collection<String> formaciones);
 
     /**
      * {@code [desde, hasta)} — media ventana. Derivado por nombre de metodo y no con
@@ -96,5 +109,5 @@ interface SpringDataPublicacionRepository extends JpaRepository<PublicacionJpaEn
     List<Object[]> idsDeAutorEntre(@Param("autorId") UUID autorId, @Param("desde") Instant desde,
                                    @Param("hasta") Instant hasta);
 
-    Optional<PublicacionJpaEntity> findFirstByOcultaFalseOrderByCreadoEnDesc();
+    Optional<PublicacionJpaEntity> findFirstByOcultaFalseAndFormacionInOrderByCreadoEnDesc(Collection<String> formaciones);
 }

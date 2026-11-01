@@ -17,6 +17,7 @@ import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.CuentasCerradasFinder;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.springframework.stereotype.Service;
@@ -56,12 +57,13 @@ public class ConsultarPublicacionService implements ConsultarPublicacionUseCase 
     private final LoadAsignacionesPort asignaciones;
     private final AcompanamientoFinder acompanamiento;
     private final CuentasCerradasFinder cuentasCerradas;
+    private final AlcanceDeFormacionFinder formaciones;
     private final Clock clock;
 
     ConsultarPublicacionService(LoadPublicacionPort publicaciones, ConsultarPerfilUsuarioPort perfiles,
                                 AlmacenamientoPort almacenamiento, UserSummaryFinder usuarios,
                                 LoadAsignacionesPort asignaciones, AcompanamientoFinder acompanamiento,
-                                CuentasCerradasFinder cuentasCerradas, Clock clock) {
+                                CuentasCerradasFinder cuentasCerradas, AlcanceDeFormacionFinder formaciones, Clock clock) {
         this.publicaciones = publicaciones;
         this.perfiles = perfiles;
         this.almacenamiento = almacenamiento;
@@ -69,6 +71,7 @@ public class ConsultarPublicacionService implements ConsultarPublicacionUseCase 
         this.asignaciones = asignaciones;
         this.acompanamiento = acompanamiento;
         this.cuentasCerradas = cuentasCerradas;
+        this.formaciones = formaciones;
         this.clock = clock;
     }
 
@@ -79,6 +82,11 @@ public class ConsultarPublicacionService implements ConsultarPublicacionUseCase 
         Publicacion publicacion = publicaciones.porId(publicacionId).filter(p -> !p.oculta())
                 .orElseThrow(() -> new NoSuchElementException("Publicacion no encontrada: " + publicacionId));
         requirePuedeLeer(actor, publicacion.autorId());
+        /* Spec 022/024: el Muro es de la formación. Quien no es su autor y no ve la formación del post (un líder con la Escuela activa ante un post del
+           Diplomado) recibe un 404, igual que en sus comentarios y reacciones. Administración, Alquimista y Soporte TI ven las tres. */
+        if (!actor.id().equals(publicacion.autorId()) && !formaciones.de(actor.id()).incluye(publicacion.formacion())) {
+            throw new NoSuchElementException("Publicacion no encontrada: " + publicacionId);
+        }
         if (!cuentasCerradas.cerradasEntre(List.of(publicacion.autorId())).isEmpty()) {
             throw new NoSuchElementException("Publicacion no encontrada: " + publicacionId);
         }

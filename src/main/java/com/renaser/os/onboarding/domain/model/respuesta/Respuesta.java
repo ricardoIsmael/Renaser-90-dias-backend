@@ -28,6 +28,7 @@ import java.util.Objects;
  *   <li>{@code ESCALA} -> {@code valorEscala} (1..10)</li>
  *   <li>{@code SELECCION_UNICA} -> {@code valorTexto} (el {@code valor} de la opcion elegida)</li>
  *   <li>{@code SELECCION_MULTIPLE} -> {@code valorJson} (array de valores elegidos, opaco)</li>
+ *   <li>{@code CUADRICULA} -> {@code valorJson} (objeto {@code {fila: puntaje}}, spec 026)</li>
  *   <li>{@code CASILLA} -> {@code valorBooleano}</li>
  *   <li>{@code AUDIO}, {@code FIRMA}, {@code ARCHIVO} -> sin valor tipado, requiere {@code mediaId}</li>
  * </ul>
@@ -138,7 +139,7 @@ public final class Respuesta {
             case TEXTO, AREA_TEXTO, FECHA, SELECCION_UNICA -> SlotValor.TEXTO;
             case NUMERO -> SlotValor.NUMERO;
             case ESCALA -> SlotValor.ESCALA;
-            case SELECCION_MULTIPLE -> SlotValor.JSON;
+            case SELECCION_MULTIPLE, CUADRICULA -> SlotValor.JSON;
             case CASILLA -> SlotValor.BOOLEANO;
             case AUDIO, FIRMA, ARCHIVO -> SlotValor.SOLO_MEDIA;
         };

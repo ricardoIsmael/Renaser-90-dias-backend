@@ -1,5 +1,7 @@
 package com.renaser.os.rag.infrastructure.adapter.out.horarios;
 
+import com.renaser.os.users.api.ParticipacionPrograma;
+import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.habits.api.AjustarHorarioHabitoUseCase;
 import com.renaser.os.habits.api.HorarioDelDiaFinder;
 import com.renaser.os.rag.application.ports.out.horarios.ConsultarHorariosPort;
@@ -19,9 +21,11 @@ import java.time.LocalTime;
 class ConsultarHorariosAdapter implements ConsultarHorariosPort {
 
     private final HorarioDelDiaFinder horarioDelDiaFinder;
+    private final ParticipacionProgramaFinder participaciones;
 
-    ConsultarHorariosAdapter(HorarioDelDiaFinder horarioDelDiaFinder) {
+    ConsultarHorariosAdapter(HorarioDelDiaFinder horarioDelDiaFinder, ParticipacionProgramaFinder participaciones) {
         this.horarioDelDiaFinder = horarioDelDiaFinder;
+        this.participaciones = participaciones;
     }
 
     @Override
@@ -29,7 +33,9 @@ class ConsultarHorariosAdapter implements ConsultarHorariosPort {
         HorarioDelDiaFinder.HorariosDelDia dia = horarioDelDiaFinder.deFecha(participanteId, fecha);
         return new HorariosDelDia(dia.fecha(), dia.diaPrograma(),
                 dia.habitos().stream().map(ConsultarHorariosAdapter::aHorarioDeHabito).toList(),
-                aCuota(dia.cuota()));
+                aCuota(dia.cuota()),
+                // Spec 022: los días de SU programa (90 sin fila): de ahí sale hasta dónde llega el programa.
+                participaciones.deParticipante(participanteId).map(ParticipacionPrograma::duracionDias).orElse(90));
     }
 
     @Override

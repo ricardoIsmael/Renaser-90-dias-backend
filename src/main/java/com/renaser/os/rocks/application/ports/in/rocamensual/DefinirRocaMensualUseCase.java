@@ -37,7 +37,7 @@ public interface DefinirRocaMensualUseCase {
 
     record DefinirRocaMensualCommand(@NotNull UserId actorId,
                                       @NotNull EjeObjetivo eje,
-                                      @Min(1) @Max(MesPrograma.MESES) int numeroMes,
+                                      @Min(1) @Max(MesPrograma.MAXIMO_DE_MESES) int numeroMes,
                                       @NotBlank @Size(max = RocaMensual.MAX_TITULO) String titulo,
                                       BigDecimal meta,
                                       BigDecimal avance,

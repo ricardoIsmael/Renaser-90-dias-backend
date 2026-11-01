@@ -18,13 +18,20 @@ interface SpringDataConversacionRepository extends JpaRepository<ConversacionJpa
 
     List<ConversacionJpaEntity> findByCelulaIdIn(Collection<UUID> celulaIds);
 
-    /** Unica por `conversacion_global_unica_uk` (indice parcial, V1__baseline_renaser.sql:1292). */
-    Optional<ConversacionJpaEntity> findFirstByTipo(TipoConversacionJpa tipo);
+    /** Una por formación (`conversacion_global_unica_uk`, V138). */
+    Optional<ConversacionJpaEntity> findFirstByTipoAndFormacion(TipoConversacionJpa tipo, String formacion);
+
+    /** Las de un tipo en las formaciones dadas (spec 024): la comunidad general de cada una. */
+    List<ConversacionJpaEntity> findByTipoAndFormacionIn(TipoConversacionJpa tipo, Collection<String> formaciones);
 
     /** Todas las de un tipo. Hoy solo la usa SOPORTE, que tiene una por aprendiz del padron. */
     List<ConversacionJpaEntity> findByTipo(TipoConversacionJpa tipo);
 
     List<ConversacionJpaEntity> findByIdIn(List<UUID> ids);
+
+    /** Cuántas conversaciones hay de cada tipo en una formación (spec 024). */
+    @Query("select c.tipo, count(c) from ConversacionJpaEntity c where c.formacion = :formacion group by c.tipo")
+    List<Object[]> contarPorTipo(@Param("formacion") String formacion);
 
     /** Solo la clave, no la fila: quien pregunta quiere saber cuales faltan, no leerlas. */
     @Query("select c.claveDirecta from ConversacionJpaEntity c where c.claveDirecta in :claves")

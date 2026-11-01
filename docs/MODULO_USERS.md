@@ -609,6 +609,25 @@ aunque su token sea válido. El aprendiz mirado **sí** puede estar suspendido: 
 que poder auditar justamente a quien acaba de suspender. Orden E-42 respetado (el aprendiz se
 carga primero, el gate de admin va después).
 
+## 12. Formaciones — Escuela, Diplomado y Certificación (spec 022, D-295, 2026-10-31)
+
+`users` es dueño del modelo de formaciones y de **los dos puntos únicos** que usa el resto del backend; no importa a ningún otro módulo (la información inversa entra por interfaces de `users.api`).
+
+| Pieza | Dónde | Qué hace |
+|---|---|---|
+| Catálogo | tabla `formaciones` (V125); `users.api.FormacionesFinder`, `FormacionConfigurada` | Tres filas fijas: nombre, descripción, `activa`, `duraciones_dias`, `version` |
+| Pertenencia del aprendiz | `participantes_programa.formacion` + `duracion_dias` (V125) | La duración vive en la persona: cambiar el catálogo no mueve a quien ya empezó |
+| Pertenencia del personal | `formaciones_personal` (V126), una `activa` por persona (índice único parcial) | Mentor, guía y líder: una o varias; la activa la guarda el servidor |
+| Historial | `participaciones_anteriores` (V127), append-only | Foto de lo cursado al trasladar; el borrado de cuenta la arrastra |
+| **Quién ve qué** | `users.api.AlcanceDeFormacionFinder` + `users.domain.model.formacion.ReglaDeAlcance` | Admin/Alquimista/Soporte TI: las tres; aprendiz: la suya; personal: **solo la activa** (sin asignación, ninguna) |
+| **El filtro** | `shared.domain.AlcanceDeFormacion` y `shared.infrastructure.persistence.FiltroDeFormacionSql` | Valor y predicado SQL (`col IN (:p)`); alcance vacío = no trae nada |
+| Duración | `shared.domain.CortesDeFase` y `DuracionDelPrograma` | Fases estiradas `(corte−1)·d/90+1`; `enEscalaBase` lleva el día a la escala de 90 para umbrales de fase y desbloqueo |
+| Casos de uso | `ConsultarFormacionDeLaSesion`, `ElegirFormacionActiva`, `AsignarFormacionesDelPersonal`, `ConfigurarFormacion`, `TrasladarAprendizDeFormacion`, `ConsultarFormacionDeUnaPersona` | Endpoints en el contrato `specs/022-formaciones/contracts/formaciones-api.md` |
+| Evento | `AprendizTrasladadoDeFormacionEvent` | `community` reubica al aprendiz y `points` reinicia su puntaje |
+
+Reglas: pedir algo de otra formación es **404** (`ObjetoDeOtraFormacionException`); el personal nuevo queda en la Escuela (listener de `UsuarioRegistradoEvent` y `RolDeUsuarioCambiadoEvent`; las cuentas de prueba de «ver como» se asignan en el acto); no se le quita al personal una formación donde lidera un grupo; el traslado es instantáneo y solo si terminó o con un motivo escrito (3–500).
+Los topes de 90 que siguen escritos en hábitos (desbloqueo, `dia_inicio`, `HabitosDeUnDia`), RAG, la Caja y la emergencia son de las specs 023 y siguientes.
+
 ## Auditoría de arquitectura (2026-08-28) — agente automático
 
 Auditoría de solo lectura de `src/main/java/com/renaser/os/users/`. No se corrió `./mvnw` (fuera de alcance del encargo). 9 controllers REST confirmados (`VerificacionEmailController`, `LogrosController`, `UserController`, `ParticipacionProgramaController`, `TraineeAdminController`, `StaffAdminController`, `MentorProfileController`, `AutenticacionController`, `AccountRequestController`), ~209 archivos `.java` en el módulo.
@@ -670,3 +689,7 @@ Ningún método individual observado supera las 40 líneas, y no se encontraron 
 - **Frontera de módulo respetada**: `package-info.java` de `users` lleva `@ApplicationModule`; `users/api/package-info.java` lleva `@NamedInterface("api")`. `grep` de `import com.renaser.os.users.(domain|application|infrastructure)` sobre el resto del código (`com/renaser/os/**`, excluyendo el propio `users/`) da 0 resultados — ningún otro módulo importa los paquetes internos de `users`. `ArchitectureTest` cubre esta regla con `ApplicationModules.verify()`.
 - **Mapeo en la frontera de persistencia**: Two-Way Mapping a mano (no MapStruct) en los 4 agregados con tabla propia, documentado explícitamente como decisión (D-28) por la traducción de enums español↔inglés — consistente con §5.4.1/§5.4.5.
 - El enum `Permission` y `@RequiresPermission` siguen sin construirse (bloqueado por R-2, ya documentado en §3 de este archivo) — la autorización fina de este módulo se resuelve hoy con guard clauses dentro de los servicios (`RequireAdminGuard`, `RequireActiveUserGuard`, `User.canManageRoles()`), no con la anotación declarativa de CLAUDE.MD §5.3.4/§5.3.5. No es un hallazgo nuevo, pero se confirma que el mecanismo de reemplazo (guard clauses) está aplicado de forma consistente en los ~13 casos de uso que lo necesitan.
+
+## Tipos de comunidad por formación (spec 024, D-301, 2026-10-31)
+
+`formaciones.tipos_de_comunidad` (V138) guarda los tipos PRENDIDOS (`GENERAL`, `GRUPO`, `SOPORTE`, `DIRECTO`). `users` es su dueño: `ConfigurarComunidadDeLaFormacionUseCase` (ADMIN/ALCHEMIST activos) lo escribe con `PUT /admin/formaciones/{codigo}/comunidad/{tipo}` y `users.api.ComunidadDeLaFormacionFinder` lo publica para `chat`. `GET /admin/formaciones/{codigo}/comunidad` (con cuántas conversaciones esconde cada tipo) lo sirve `chat`.

@@ -39,4 +39,7 @@ public class TestimonioJpaEntity {
     private boolean destacado;
 
     private Instant creadoEn;
+
+    /** V137: el código de la formación (`ESCUELA`, `DIPLOMADO`, `CERTIFICACION`). */
+    private String formacion = "ESCUELA";
 }

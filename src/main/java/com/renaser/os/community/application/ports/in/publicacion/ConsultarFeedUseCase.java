@@ -2,6 +2,7 @@ package com.renaser.os.community.application.ports.in.publicacion;
 
 import com.renaser.os.community.domain.model.publicacion.Publicacion;
 import com.renaser.os.community.domain.model.publicacion.TipoReaccion;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 
 import java.net.URI;
@@ -12,12 +13,16 @@ import java.util.Optional;
 public interface ConsultarFeedUseCase {
 
     /** {@code categoriaClave} null = todas. Cursor-paginado, mas nueva primero
-     * (wall/service.ts:229-270). */
-    PaginaPublicaciones feed(UserId actorId, Instant cursor, String categoriaClave);
+     * (wall/service.ts:229-270).
+     *
+     * <p>{@code formacion} (spec 024): el Muro es el de la formación de quien pide. Solo Administración, Alquimista y Soporte TI
+     * eligen una; sin elegir leen «Todas», cada publicación con la suya. Pedir una que no se ve da una página vacía. */
+    PaginaPublicaciones feed(UserId actorId, Instant cursor, String categoriaClave, Formacion formacion);
 
-    /** Cola de moderacion — solo ADMIN/ALCHEMIST (wall/service.ts:283-310). */
-    PaginaPublicaciones feedOculto(UserId actorId, Instant cursor);
+    /** Cola de moderacion — solo ADMIN/ALCHEMIST (wall/service.ts:283-310). {@code formacion} null = «Todas». */
+    PaginaPublicaciones feedOculto(UserId actorId, Instant cursor, Formacion formacion);
 
+    /** Cuántas publicaciones propias tiene en las formaciones que lee. */
     int contarMisPublicaciones(UserId actorId);
 
     /** Nombre de quien publico lo mas reciente visible — invitacion a Comunidad en Inicio

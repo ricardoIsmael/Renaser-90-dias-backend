@@ -6,6 +6,7 @@ import com.renaser.os.academy.application.ports.in.curso.ConsultarMisCursosUseCa
 import com.renaser.os.academy.application.ports.in.curso.ConsultarMotivoBloqueoCursoUseCase;
 import com.renaser.os.academy.application.ports.in.curso.ConsultarSeccionesCursoUseCase;
 import com.renaser.os.academy.domain.model.curso.CursoId;
+import com.renaser.os.shared.domain.FormacionDelContenido;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
@@ -14,6 +15,7 @@ import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -48,8 +50,10 @@ public class CursoController {
 
     @RequiresPermission(Permission.USE_APP)
     @GetMapping
-    public List<MiCursoResponse> misCursos(@ActorAutenticado UserId actorId) {
-        return misCursosUseCase.misCursos(actorId).stream().map(MiCursoResponse::from).toList();
+    public List<MiCursoResponse> misCursos(@ActorAutenticado UserId actorId,
+                                           @RequestParam(required = false) String formation) {
+        return misCursosUseCase.misCursos(actorId, FormacionDelContenido.pedida(formation)).stream()
+                .map(MiCursoResponse::from).toList();
     }
 
     /**
@@ -61,8 +65,9 @@ public class CursoController {
      */
     @RequiresPermission(Permission.USE_APP)
     @GetMapping("/bloqueados")
-    public List<CursoBloqueadoResponse> bloqueados(@ActorAutenticado UserId actorId) {
-        return cursosBloqueadosUseCase.cursosBloqueados(actorId).stream()
+    public List<CursoBloqueadoResponse> bloqueados(@ActorAutenticado UserId actorId,
+                                                   @RequestParam(required = false) String formation) {
+        return cursosBloqueadosUseCase.cursosBloqueados(actorId, FormacionDelContenido.pedida(formation)).stream()
                 .map(CursoBloqueadoResponse::from)
                 .toList();
     }

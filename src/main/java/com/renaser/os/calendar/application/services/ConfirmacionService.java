@@ -53,6 +53,7 @@ public class ConfirmacionService implements ConfirmarAsistenciaUseCase {
         ProgresoParticipanteCalendar progreso = accesoEventoService.requireProgreso(actorId);
         Evento evento = loadEventoPort.byId(eventoId)
                 .orElseThrow(() -> new NoSuchElementException("Evento no encontrado: " + eventoId));
+        accesoEventoService.requireEnSuFormacion(actorId, evento);
 
         var visor = accesoEventoService.buildVisor(progreso);
         if (!accesoEventoService.puedeAcceder(actorId, progreso, visor, evento)) {

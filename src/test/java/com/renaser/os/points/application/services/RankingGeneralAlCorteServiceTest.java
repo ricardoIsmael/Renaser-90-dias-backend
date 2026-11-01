@@ -5,6 +5,7 @@ import com.renaser.os.points.api.PorcentajeHabitosFinder;
 import com.renaser.os.points.api.RankingGeneralFinder.PuestoEnElRankingGeneral;
 import com.renaser.os.points.application.ports.out.ranking.LoadRankingCandidatosPort;
 import com.renaser.os.points.application.ports.out.ranking.LoadRankingCandidatosPort.CandidatoRanking;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.CuentasCerradasFinder;
 import org.junit.jupiter.api.DisplayName;
@@ -47,7 +48,7 @@ class RankingGeneralAlCorteServiceTest {
                 beto, new BigDecimal("100.0"), cerrada, new BigDecimal("100.0")));
         when(cursos.porcentajePorParticipante(any())).thenReturn(Map.of(ana, new BigDecimal("100.0")));
 
-        List<PuestoEnElRankingGeneral> ranking = servicio.alCorte(DOMINGO);
+        List<PuestoEnElRankingGeneral> ranking = servicio.alCorte(DOMINGO, Formacion.ESCUELA);
 
         assertThat(ranking).extracting(PuestoEnElRankingGeneral::nombreCompleto).containsExactly("Beto", "Ana", "Carla");
         assertThat(ranking).extracting(PuestoEnElRankingGeneral::puntaje)
@@ -56,11 +57,26 @@ class RankingGeneralAlCorteServiceTest {
     }
 
     @Test
+    @DisplayName("spec 024: cada formación compara solo a los suyos (la otra ni se calcula)")
+    void soloLosDeLaFormacion() {
+        UserId ana = id(), rosa = id();
+        when(candidatos.aprendicesActivosConPuntaje()).thenReturn(List.of(candidato(ana, "Ana"),
+                new CandidatoRanking(rosa, "Rosa", 0, BigDecimal.ZERO, Formacion.DIPLOMADO)));
+        when(cerradas.cerradasEntre(any())).thenReturn(Set.of());
+        when(habitos.porcentajePorParticipante(any(), eq(DOMINGO))).thenReturn(Map.of(ana, new BigDecimal("50.0"), rosa, new BigDecimal("90.0")));
+        when(cursos.porcentajePorParticipante(any())).thenReturn(Map.of());
+
+        assertThat(servicio.alCorte(DOMINGO, Formacion.ESCUELA)).extracting(PuestoEnElRankingGeneral::nombreCompleto).containsExactly("Ana");
+        assertThat(servicio.alCorte(DOMINGO, Formacion.DIPLOMADO)).extracting(PuestoEnElRankingGeneral::nombreCompleto).containsExactly("Rosa");
+        assertThat(servicio.alCorte(DOMINGO, Formacion.CERTIFICACION)).isEmpty();
+    }
+
+    @Test
     @DisplayName("sin candidatos no consulta nada")
     void sinCandidatos() {
         when(candidatos.aprendicesActivosConPuntaje()).thenReturn(List.of());
 
-        assertThat(servicio.alCorte(DOMINGO)).isEmpty();
+        assertThat(servicio.alCorte(DOMINGO, Formacion.ESCUELA)).isEmpty();
     }
 
     private static UserId id() {

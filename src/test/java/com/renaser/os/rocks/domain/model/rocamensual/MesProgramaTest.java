@@ -63,11 +63,16 @@ class MesProgramaTest {
     }
 
     @Test
-    @DisplayName("solo 1, 2 y 3 son meses validos")
-    void esValidoSoloDentroDeLosTresMeses() {
+    @DisplayName("en un programa de 90 dias solo 1, 2 y 3 son meses validos; la base admite hasta 12 (el de 365)")
+    void esValidoSoloDentroDeLosMesesDelPrograma() {
+        assertThat(MesPrograma.esValido(0, 90)).isFalse();
+        assertThat(MesPrograma.esValido(1, 90)).isTrue();
+        assertThat(MesPrograma.esValido(3, 90)).isTrue();
+        assertThat(MesPrograma.esValido(4, 90)).isFalse();
+        assertThat(MesPrograma.esValido(12, 365)).isTrue();
+        assertThat(MesPrograma.esValido(13, 365)).isFalse();
         assertThat(MesPrograma.esValido(0)).isFalse();
-        assertThat(MesPrograma.esValido(1)).isTrue();
-        assertThat(MesPrograma.esValido(3)).isTrue();
-        assertThat(MesPrograma.esValido(4)).isFalse();
+        assertThat(MesPrograma.esValido(12)).isTrue();
+        assertThat(MesPrograma.esValido(13)).isFalse();
     }
 }

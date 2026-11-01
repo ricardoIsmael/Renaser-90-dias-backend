@@ -42,13 +42,15 @@ class EstadoOnboardingServiceTest {
     private SaveEstadoOnboardingPort saveEstadoPort;
     @Mock
     private ConsultarActorPort actorPort;
+    @Mock
+    private com.renaser.os.onboarding.application.ports.in.terminos.RegistrarAceptacionDeTerminosUseCase aceptacionDeTerminos;
 
     private EstadoOnboardingService service;
     private UserId usuarioId;
 
     @BeforeEach
     void setUp() {
-        service = new EstadoOnboardingService(loadEstadoPort, saveEstadoPort, actorPort, CLOCK);
+        service = new EstadoOnboardingService(loadEstadoPort, saveEstadoPort, actorPort, aceptacionDeTerminos, CLOCK);
         usuarioId = UserId.of(UUID.randomUUID());
     }
 
@@ -103,7 +105,7 @@ class EstadoOnboardingServiceTest {
         when(loadEstadoPort.deUsuario(usuarioId)).thenReturn(Optional.of(existente));
         when(saveEstadoPort.guardar(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        EstadoOnboarding resultado = service.aceptar(new AceptarHitoCommand(usuarioId, HitoOnboarding.TERMINOS));
+        EstadoOnboarding resultado = service.aceptar(new AceptarHitoCommand(usuarioId, HitoOnboarding.TERMINOS, null));
 
         assertThat(resultado.terminosAceptadosEn()).isEqualTo(CLOCK.now());
     }

@@ -25,6 +25,9 @@ import java.util.function.Function;
  * 2 (despliegue progresivo, roles personalizados): la primera que la deja fuera la vuelve <b>no disponible</b>. Un
  * apagado manual o del circuito gana siempre: es mantenimiento para todos los que la tienen.
  *
+ * <p>Una clave que {@code seEsconde} (spec 034) no se apaga con aviso sino que queda {@code noDisponible} para quien la
+ * tiene apagada; y una que nace apagada para ciertos roles ({@code apagadaPorDefectoPara}) lo está mientras no haya fila.
+ *
  * <p>El rol se pide solo si algún nivel tiene excepciones por rol: en el caso común (nada apagado) evaluar no consulta
  * a nadie, que es lo que mantiene la consulta por debajo de 2 ms (FR-011).
  */
@@ -76,16 +79,30 @@ public final class EvaluacionDeFuncionalidades {
                                                                      Function<String, Optional<String>> automatico) {
         Optional<EstadoDeFuncionalidad> fila = foto.estadoDe(nivel.clave());
         if (fila.isPresent() && apagadaManualmente(fila.get(), actor)) {
-            return Optional.of(ResultadoDeEvaluacion.apagada(nivel.clave(), fila.get().aviso(), false));
+            return Optional.of(apagadaOEscondida(nivel, fila.get().aviso()));
         }
         if (fila.isEmpty() && nivel.porDefecto() == ValorPorDefecto.APAGADA) {
-            return Optional.of(ResultadoDeEvaluacion.apagada(nivel.clave(), null, false));
+            return Optional.of(apagadaOEscondida(nivel, null));
+        }
+        if (fila.isEmpty() && nacioApagadaPara(nivel, actor)) {
+            return Optional.of(apagadaOEscondida(nivel, null));
         }
         if (nivel.esDeLaIa()) {
             return automatico.apply(nivel.clave())
                     .map(aviso -> ResultadoDeEvaluacion.apagada(nivel.clave(), aviso, true));
         }
         return Optional.empty();
+    }
+
+    /** Una funcionalidad que se esconde (spec 034) no muestra el aviso de mantenimiento: para quien la tiene apagada no existe. */
+    private static ResultadoDeEvaluacion apagadaOEscondida(DefinicionDeFuncionalidad nivel, String aviso) {
+        return nivel.seEsconde() ? ResultadoDeEvaluacion.noDisponible(nivel.clave())
+                : ResultadoDeEvaluacion.apagada(nivel.clave(), aviso, false);
+    }
+
+    /** Sin fila, el valor por defecto por rol del catálogo. El rol se lee solo si esta clave tiene algún rol por defecto. */
+    private static boolean nacioApagadaPara(DefinicionDeFuncionalidad nivel, ActorEvaluado actor) {
+        return actor != null && !nivel.apagadaPorDefectoPara().isEmpty() && nivel.nacioApagadaPara(actor.rol());
     }
 
     private static boolean apagadaManualmente(EstadoDeFuncionalidad fila, ActorEvaluado actor) {

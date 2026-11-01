@@ -1,6 +1,7 @@
 package com.renaser.os.leadership.domain.model.consulta;
 
 import com.renaser.os.leadership.domain.model.consulta.ConsultaDeFicha.Contenido;
+import com.renaser.os.leadership.domain.model.consulta.ConsultaDeFicha.ContenidoDelDiagnostico;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -95,5 +96,67 @@ class ConsultaDeFichaTest {
                 .map(Method::getName))
                 .noneMatch(nombre -> nombre.startsWith("set") || nombre.startsWith("cambiar")
                         || nombre.startsWith("editar") || nombre.startsWith("borrar"));
+    }
+
+    // ------------------------------------------------------------------------------------------------ el diagnóstico (spec 026)
+
+    private static final Instant CUANDO = Instant.parse("2026-11-01T15:30:00Z");
+
+    private static ContenidoDelDiagnostico delDiagnostico(UserId consultor, UserRole rol, UserId persona) {
+        return new ContenidoDelDiagnostico(consultor, rol, persona, GRUPO, LUISA);
+    }
+
+    @Test
+    @DisplayName("el diagnóstico queda sin semana, con el tipo DIAGNOSTICO y el instante de la lectura (no el del reloj de quien lo anota)")
+    void registraUnDiagnostico() {
+        ConsultaDeFicha consulta = ConsultaDeFicha.registrarDiagnostico(ID, delDiagnostico(LIDER, UserRole.MENTOR_LEAD, ANA), CUANDO);
+
+        assertThat(consulta.tipo()).isEqualTo(TipoDeConsulta.DIAGNOSTICO);
+        assertThat(consulta.semanaDesde()).isNull();
+        assertThat(consulta.consultadaEn()).isEqualTo(CUANDO);
+        assertThat(consulta.consultorId()).isEqualTo(LIDER);
+        assertThat(consulta.personaId()).isEqualTo(ANA);
+        assertThat(consulta.grupoId()).isEqualTo(GRUPO);
+        assertThat(consulta.mentorId()).isEqualTo(LUISA);
+    }
+
+    @Test
+    @DisplayName("lo abre también el mentor, la guía y Soporte TI, además del liderazgo; un aprendiz no")
+    void quienLoAbre() {
+        for (UserRole rol : new UserRole[]{UserRole.MENTOR_LEAD, UserRole.ADMIN, UserRole.ALCHEMIST, UserRole.MENTOR, UserRole.TRAINEE_GUIDE, UserRole.IT_SUPPORT}) {
+            assertThat(ConsultaDeFicha.registrarDiagnostico(ID, delDiagnostico(LIDER, rol, ANA), CUANDO).rolConsultor()).isEqualTo(rol);
+        }
+        assertThatThrownBy(() -> delDiagnostico(LIDER, UserRole.TRAINEE, ANA)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("la persona no deja constancia de leer su propio diagnóstico")
+    void nadieSeAnotaASiMismo() {
+        assertThatThrownBy(() -> delDiagnostico(ANA, UserRole.TRAINEE_GUIDE, ANA)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("sin grupo ni mentor (Administración, o el líder con alguien sin grupo) se registra igual")
+    void diagnosticoSinGrupo() {
+        ConsultaDeFicha consulta = ConsultaDeFicha.registrarDiagnostico(ID, new ContenidoDelDiagnostico(LIDER, UserRole.ADMIN, ANA, null, null), CUANDO);
+
+        assertThat(consulta.grupoId()).isNull();
+        assertThat(consulta.mentorId()).isNull();
+    }
+
+    @Test
+    @DisplayName("una consulta de semana sin su lunes, o de diagnóstico con uno, no existe")
+    void laSemanaVaConElTipo() {
+        assertThatThrownBy(() -> new ConsultaDeFicha(ID, LIDER, UserRole.ADMIN, ANA, GRUPO, LUISA, null, CUANDO, TipoDeConsulta.SEMANA))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new ConsultaDeFicha(ID, LIDER, UserRole.ADMIN, ANA, GRUPO, LUISA, SEMANA, CUANDO, TipoDeConsulta.DIAGNOSTICO))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("la forma de siempre (ocho datos) sigue siendo una consulta de semana")
+    void laFormaDeSiempre() {
+        assertThat(new ConsultaDeFicha(ID, LIDER, UserRole.ADMIN, ANA, GRUPO, LUISA, SEMANA, CUANDO).tipo()).isEqualTo(TipoDeConsulta.SEMANA);
+        assertThat(ConsultaDeFicha.registrar(ID, contenido(UserRole.ADMIN, LUISA), CLOCK).tipo()).isEqualTo(TipoDeConsulta.SEMANA);
     }
 }

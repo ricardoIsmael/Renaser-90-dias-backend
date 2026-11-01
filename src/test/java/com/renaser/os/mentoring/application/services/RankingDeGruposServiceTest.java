@@ -1,9 +1,14 @@
 package com.renaser.os.mentoring.application.services;
 
+import com.renaser.os.community.api.AcompanamientoFinder;
 import com.renaser.os.mentoring.application.ports.in.ConsultarRankingDeGruposUseCase.FilaDeGrupo;
 import com.renaser.os.mentoring.application.ports.in.ConsultarRankingDeGruposUseCase.RankingDeGrupos;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
+import com.renaser.os.users.api.AlcanceDeFormacionPermisivo;
+import com.renaser.os.users.api.AlcanceDeFormacionSoloEscuela;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -43,8 +48,12 @@ class RankingDeGruposServiceTest {
     }
 
     private RankingDeGruposService servicio(Instant ahora) {
+        return servicio(ahora, new AlcanceDeFormacionPermisivo());
+    }
+
+    private RankingDeGruposService servicio(Instant ahora, AlcanceDeFormacionFinder formaciones) {
         return new RankingDeGruposService(banco.acompanamiento, banco.obligacionesFinder, banco.entregasFinder,
-                banco.calculo, FixedClock.at(ahora));
+                banco.calculo, FixedClock.at(ahora), formaciones);
     }
 
     private UserId alumnoDe(UUID grupo, String nombre) {
@@ -258,5 +267,21 @@ class RankingDeGruposServiceTest {
         RankingDeGrupos ranking = servicio(CINCO_DE_OCTUBRE).ranking(ACTOR, COHORTE, SETIEMBRE);
 
         assertThat(ranking.grupos()).extracting(FilaDeGrupo::grupoId).containsExactly(GRUPO_A);
+    }
+
+    @Test
+    @DisplayName("Spec 022 (E2E P2-J): una cohorte con grupos de dos formaciones — cada quien ve el ranking de las que ve")
+    void cadaQuienVeLosGruposDeSuFormacion() {
+        banco.grupo(GRUPO_A, "Grupo Escuela", UserId.of(UUID.randomUUID()), COHORTE, 3);
+        banco.grupos.add(new AcompanamientoFinder.GrupoAcompanado(GRUPO_B, "Grupo Diplomado",
+                UserId.of(UUID.randomUUID()), COHORTE, "America/Lima", 3, Formacion.DIPLOMADO));
+        cumplimiento(alumnoDe(GRUPO_A, "a1"), 1, 4);
+        cumplimiento(alumnoDe(GRUPO_B, "b1"), 4, 4);
+
+        RankingDeGrupos deLaEscuela = servicio(AHORA, new AlcanceDeFormacionSoloEscuela()).ranking(ACTOR, COHORTE, SETIEMBRE);
+        RankingDeGrupos deAdministracion = servicio().ranking(ACTOR, COHORTE, SETIEMBRE);
+
+        assertThat(deLaEscuela.grupos()).extracting(FilaDeGrupo::grupoId).containsExactly(GRUPO_A);
+        assertThat(deAdministracion.grupos()).extracting(FilaDeGrupo::grupoId).containsExactly(GRUPO_B, GRUPO_A);
     }
 }

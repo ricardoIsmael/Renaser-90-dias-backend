@@ -124,7 +124,7 @@ public class EspirituService implements ConsultarEstadoEspirituUseCase, Entregar
         ProgresoParticipanteHabits progreso = requireParticipanteHabilitado(actorId);
         ZoneId zona = ZoneId.of(progreso.timezone());
         Instant ahora = clock.now();
-        asegurarAvance(actorId, progreso.diaPrograma(), zona, ahora);
+        asegurarAvance(actorId, progreso.diaEnEscalaBase(), zona, ahora);
         return construirVista(actorId);
     }
 
@@ -134,7 +134,7 @@ public class EspirituService implements ConsultarEstadoEspirituUseCase, Entregar
         ProgresoParticipanteHabits progreso = requireParticipanteHabilitado(command.actorId());
         ZoneId zona = ZoneId.of(progreso.timezone());
         Instant ahora = clock.now();
-        asegurarAvance(command.actorId(), progreso.diaPrograma(), zona, ahora);
+        asegurarAvance(command.actorId(), progreso.diaEnEscalaBase(), zona, ahora);
 
         RegistroEspiritu registro = loadPort.porParticipanteYDia(command.actorId(), command.dia())
                 .orElseThrow(() -> new NoSuchElementException("Ese dia no esta desbloqueado"));

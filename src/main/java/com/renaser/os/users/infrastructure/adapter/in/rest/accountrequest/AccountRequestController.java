@@ -1,6 +1,7 @@
 package com.renaser.os.users.infrastructure.adapter.in.rest.accountrequest;
 
 import com.renaser.os.shared.web.DireccionIpDelCliente;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
@@ -12,6 +13,7 @@ import com.renaser.os.users.application.ports.in.accountrequest.ApproveAccountRe
 import com.renaser.os.users.application.ports.in.accountrequest.ApproveAccountRequestUseCase.ApproveAccountRequestCommand;
 import com.renaser.os.users.application.ports.in.accountrequest.CheckAccountRequestStatusUseCase;
 import com.renaser.os.users.application.ports.in.accountrequest.ConsultarEmailRegistradoUseCase;
+import com.renaser.os.users.application.ports.in.accountrequest.ConsultarOpcionesDeAceptacionUseCase;
 import com.renaser.os.users.application.ports.in.accountrequest.VerificarDominioEmailUseCase;
 import com.renaser.os.users.application.ports.in.accountrequest.DeleteAccountRequestUseCase;
 import com.renaser.os.users.application.ports.in.accountrequest.DeleteAccountRequestUseCase.DeleteAccountRequestCommand;
@@ -23,6 +25,7 @@ import com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountReq
 import com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase.SubmitAccountRequestCommand;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequestId;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequestStatus;
+import com.renaser.os.users.domain.model.accountrequest.PedidoDeIngreso;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -66,6 +69,7 @@ public class AccountRequestController {
     private final CheckAccountRequestStatusUseCase checkStatusUseCase;
     private final ConsultarEmailRegistradoUseCase consultarEmailRegistradoUseCase;
     private final VerificarDominioEmailUseCase verificarDominioEmailUseCase;
+    private final ConsultarOpcionesDeAceptacionUseCase opcionesUseCase;
 
     public AccountRequestController(SubmitAccountRequestUseCase submitUseCase,
                                      ApproveAccountRequestUseCase approveUseCase,
@@ -74,7 +78,8 @@ public class AccountRequestController {
                                      DeleteAccountRequestUseCase deleteUseCase,
                                      CheckAccountRequestStatusUseCase checkStatusUseCase,
                                      ConsultarEmailRegistradoUseCase consultarEmailRegistradoUseCase,
-                                     VerificarDominioEmailUseCase verificarDominioEmailUseCase) {
+                                     VerificarDominioEmailUseCase verificarDominioEmailUseCase,
+                                     ConsultarOpcionesDeAceptacionUseCase opcionesUseCase) {
         this.submitUseCase = submitUseCase;
         this.approveUseCase = approveUseCase;
         this.rejectUseCase = rejectUseCase;
@@ -83,6 +88,7 @@ public class AccountRequestController {
         this.checkStatusUseCase = checkStatusUseCase;
         this.consultarEmailRegistradoUseCase = consultarEmailRegistradoUseCase;
         this.verificarDominioEmailUseCase = verificarDominioEmailUseCase;
+        this.opcionesUseCase = opcionesUseCase;
     }
 
     /**
@@ -143,8 +149,20 @@ public class AccountRequestController {
                                          @RequestBody(required = false) ApproveAccountRequestRequest request) {
         UserRole rol = request == null || request.role() == null ? UserRole.defaultForSelfRegistration() : request.role();
         approveUseCase.approve(new ApproveAccountRequestCommand(AccountRequestId.of(id), actor, rol,
-                request == null ? null : request.rolPersonalizadoId()));
+                request == null ? null : request.rolPersonalizadoId(),
+                request == null ? PedidoDeIngreso.deSiempre() : request.pedidoDeIngreso()));
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Spec 025: lo que ofrece la hoja «Aceptar» —las formaciones activas con sus duraciones y si «Con diagnóstico» se puede ofrecer—. Lo decide el
+     * servidor; la app no escribe a mano ningún nombre.
+     */
+    @RequiresPermission(Permission.APPROVE_ACCOUNT_REQUEST)
+    @Funcionalidad("admin.solicitudes")
+    @GetMapping("/acceptance-options")
+    public OpcionesDeAceptacionResponse opcionesDeAceptacion(@ActorAutenticado UserId actor) {
+        return OpcionesDeAceptacionResponse.from(opcionesUseCase.consultar(actor));
     }
 
     @RequiresPermission(Permission.APPROVE_ACCOUNT_REQUEST)
@@ -163,9 +181,11 @@ public class AccountRequestController {
     @GetMapping
     public AccountRequestPageResponse listar(@ActorAutenticado UserId actor,
                                               @RequestParam(required = false) AccountRequestStatus status,
+                                              @RequestParam(required = false) String formation,
                                               @RequestParam(defaultValue = "0") int page,
                                               @RequestParam(defaultValue = "20") int size) {
-        var pagina = listUseCase.listar(new ListAccountRequestsCommand(actor, status, page, size));
+        Formacion formacion = formation == null || formation.isBlank() ? null : Formacion.desde(formation);
+        var pagina = listUseCase.listar(new ListAccountRequestsCommand(actor, status, formacion, page, size));
         return AccountRequestPageResponse.from(pagina);
     }
 

@@ -36,6 +36,10 @@ spec. El resto (Hoy breve, Preparar mañana, bloques, cierre del día…) va en 
   administrador y el alquimista, en la ficha de la persona. El dueño se apoya en la Política de Privacidad, que dice
   «tus datos los ven solo las personas que los necesitan: tu mentor, quienes coordinan tu grupo y el equipo de
   administración». Esto **cambia lo que pedía gerencia** («los registros son privados»): hay que avisarle.
+  > **Corregido 2026-10-31 (spec 034, D-299; pedido del dueño: «el líder de mentores y el mentor no pueden ver el Código Renaser: un
+  > interruptor para activar y desactivar»).** Lo de «su mentor, el líder de mentores…» **ya no es siempre cierto**: el mentor, la guía y
+  > el líder lo ven **solo si Administración (o Soporte TI) lo enciende** con «Código Renaser en las fichas»; de fábrica está **apagado**. Administración,
+  > Alquimista y la propia persona lo ven siempre. Ver `specs/034-codigo-renaser-visible-por-admin/`.
 - **Invitación al terminar la semana 1**: un aviso único el día 8 que lleva a Yo → Mi Radar.
 - **Queda para otra spec** (pedido del dueño: «con otro spec la misma ficha pero para los mentores»): la ficha de un
   mentor o de otra persona del equipo que hace su propio programa, para que la vean el líder de mentores, el

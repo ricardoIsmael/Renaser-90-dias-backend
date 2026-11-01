@@ -85,16 +85,19 @@ class FuncionalidadesEnConsola {
                 autores.containsKey(fila.actualizadoPor()) ? autores.get(fila.actualizadoPor()).fullName() : null);
         return new FuncionalidadEnConsola(definicion.clave(), definicion.madre(), definicion.area(),
                 definicion.nombre(), definicion.descripcion(), definicion.rolesQueLaUsan(), definicion.critica(),
-                definicion.porDefecto(), definicion.procesos(), prendida, porRol(fila),
+                definicion.porDefecto(), definicion.procesos(), prendida, porRol(definicion, fila),
                 fila == null ? null : fila.aviso(), fila == null ? 0L : fila.version(), autor,
                 fila == null ? null : fila.actualizadoEn(), circuitos.get(definicion.clave()), null);
     }
 
-    /** Los siete roles, en el orden de {@code UserRole}: {@code false} solo los que tienen excepción propia. */
-    private static Map<UserRole, Boolean> porRol(EstadoDeFuncionalidad fila) {
+    /**
+     * Los siete roles, en el orden de {@code UserRole}: {@code false} solo los que tienen excepción propia. Sin fila, los
+     * roles para los que la funcionalidad nace apagada (spec 034).
+     */
+    private static Map<UserRole, Boolean> porRol(DefinicionDeFuncionalidad definicion, EstadoDeFuncionalidad fila) {
         Map<UserRole, Boolean> porRol = new EnumMap<>(UserRole.class);
         for (UserRole rol : UserRole.values()) {
-            porRol.put(rol, fila == null || !fila.apagadaPara(rol));
+            porRol.put(rol, fila == null ? !definicion.nacioApagadaPara(rol) : !fila.apagadaPara(rol));
         }
         return porRol;
     }

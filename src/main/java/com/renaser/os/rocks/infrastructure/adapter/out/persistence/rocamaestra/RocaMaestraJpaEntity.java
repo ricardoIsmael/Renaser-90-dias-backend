@@ -49,4 +49,10 @@ public class RocaMaestraJpaEntity {
     private Instant creadoEn;
 
     private Instant actualizadoEn;
+
+    /** {@code PLAN}, {@code MAPA} o {@code DIAGNOSTICO} (V146). */
+    private String origen;
+
+    /** {@code null} = nacio del diagnostico y la persona aun no lo confirma (V146). */
+    private Instant confirmadaEn;
 }

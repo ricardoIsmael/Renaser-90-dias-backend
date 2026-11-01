@@ -8,8 +8,11 @@ import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPo
 import com.renaser.os.chat.application.ports.out.participante.EsParticipantePort;
 import com.renaser.os.chat.application.ports.out.participante.ListarUsuariosDeConversacionPort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
+import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
@@ -20,6 +23,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
 /**
  * Directorio de usuarios (#27) y roster del grupo GLOBAL (#28). Ambos casos de uso se
@@ -49,10 +53,13 @@ public class MiembroService implements ListarDirectorioMiembrosUseCase, ListarMi
     private final ListarUsuariosDeConversacionPort listarUsuariosDeConversacionPort;
     private final EsParticipantePort esParticipantePort;
     private final UserSummaryFinder userSummaryFinder;
+    private final AlcanceDeFormacionFinder formaciones;
 
     public MiembroService(LoadConversacionPort loadConversacionPort,
                            ListarUsuariosDeConversacionPort listarUsuariosDeConversacionPort,
-                           EsParticipantePort esParticipantePort, UserSummaryFinder userSummaryFinder) {
+                           EsParticipantePort esParticipantePort, UserSummaryFinder userSummaryFinder,
+                           AlcanceDeFormacionFinder formaciones) {
+        this.formaciones = formaciones;
         this.loadConversacionPort = loadConversacionPort;
         this.listarUsuariosDeConversacionPort = listarUsuariosDeConversacionPort;
         this.esParticipantePort = esParticipantePort;
@@ -62,9 +69,9 @@ public class MiembroService implements ListarDirectorioMiembrosUseCase, ListarMi
     @Override
     public PaginaMiembros listar(UserId actorId, String query, UserId cursor, int limite) {
         requireActivo(actorId);
-        Conversacion global = requireGlobal();
+        List<Conversacion> globales = requireGlobales(actorId, null);
 
-        List<MiembroResumen> candidatos = destinatariosPosiblesDeUnDmNuevo(global, actorId).stream()
+        List<MiembroResumen> candidatos = destinatariosPosiblesDeUnDmNuevo(globales, actorId).stream()
                 .filter(m -> coincideConLaBusqueda(m, query))
                 .sorted(POR_NOMBRE)
                 .toList();
@@ -72,14 +79,14 @@ public class MiembroService implements ListarDirectorioMiembrosUseCase, ListarMi
     }
 
     @Override
-    public PaginaMiembros listar(UserId actorId, UserId cursor, int limite) {
+    public PaginaMiembros listar(UserId actorId, UserId cursor, int limite, Formacion formacion) {
         requireActivo(actorId);
-        Conversacion global = requireGlobal();
-        requireParticipante(global, actorId);
+        List<Conversacion> globales = requireGlobales(actorId, formacion);
+        requireParticipante(globales, actorId);
 
         // Roster informativo ("quien es miembro"), no un directorio para escribir:
         // a proposito NO filtra por UserStatus (a diferencia de la sobrecarga de arriba).
-        List<MiembroResumen> miembros = resolverParticipantesDe(global).stream()
+        List<MiembroResumen> miembros = resolverParticipantesDe(globales, actorId).stream()
                 .map(MiembroService::aResumen)
                 .sorted(POR_NOMBRE)
                 .toList();
@@ -90,8 +97,8 @@ public class MiembroService implements ListarDirectorioMiembrosUseCase, ListarMi
      * GLOBAL que siguen habilitados para recibirlo, ya proyectados a {@link MiembroResumen}.
      * Es la regla de "a quien se le puede escribir" y nada mas — la busqueda por nombre, el
      * orden y la paginacion son del caso de uso, no de esta regla. */
-    private List<MiembroResumen> destinatariosPosiblesDeUnDmNuevo(Conversacion global, UserId actorId) {
-        return resolverParticipantesDe(global).stream()
+    private List<MiembroResumen> destinatariosPosiblesDeUnDmNuevo(List<Conversacion> globales, UserId actorId) {
+        return resolverParticipantesDe(globales, actorId).stream()
                 .filter(u -> u.status() == UserStatus.ACTIVE)  // SUSPENDED no sirve como destino de un DM nuevo
                 .filter(u -> !u.id().equals(actorId))           // nunca mandarse un DM a uno mismo
                 .map(MiembroService::aResumen)
@@ -102,12 +109,28 @@ public class MiembroService implements ListarDirectorioMiembrosUseCase, ListarMi
      * LOTE (participantes + `users.api`) — nunca una por miembro. Devuelve
      * {@code UserSummary} crudo (no {@link MiembroResumen}) para que cada caller decida
      * si filtra por {@code UserStatus} antes de proyectar. */
-    private Collection<UserSummary> resolverParticipantesDe(Conversacion global) {
-        List<UserId> ids = listarUsuariosDeConversacionPort.usuariosDe(global.id());
+    /**
+     * Las personas que {@code actorId} puede ver en el directorio (spec 022, FR-019): solo las de SU formación — para el personal con varias, la
+     * activa —. Administración, Alquimista y Soporte TI se ven desde todas las formaciones (no pertenecen a una): se les puede escribir siempre.
+     */
+    private Collection<UserSummary> resolverParticipantesDe(List<Conversacion> globales, UserId actorId) {
+        // Spec 024: la comunidad general es una por formación; el directorio junta las de las formaciones que la persona ve (la suya, o las tres).
+        List<UserId> ids = globales.stream()
+                .flatMap(global -> listarUsuariosDeConversacionPort.usuariosDe(global.id()).stream())
+                .distinct()
+                .toList();
         if (ids.isEmpty()) {
             return List.of();
         }
-        return userSummaryFinder.findByIds(ids).values();
+        var alcance = formaciones.de(actorId);
+        Set<UserId> deMiFormacion = formaciones.dentroDelAlcance(ids, alcance);
+        return userSummaryFinder.findByIds(ids).values().stream()
+                .filter(u -> alcance.esTodas() || deMiFormacion.contains(u.id()) || veTodasLasFormaciones(u))
+                .toList();
+    }
+
+    private static boolean veTodasLasFormaciones(UserSummary u) {
+        return u.role() == UserRole.ADMIN || u.role() == UserRole.ALCHEMIST || u.role() == UserRole.IT_SUPPORT;
     }
 
     private static MiembroResumen aResumen(UserSummary u) {
@@ -145,15 +168,19 @@ public class MiembroService implements ListarDirectorioMiembrosUseCase, ListarMi
         return 0;
     }
 
-    private void requireParticipante(Conversacion conversacion, UserId usuarioId) {
-        if (!esParticipantePort.esParticipante(conversacion.id(), usuarioId)) {
+    private void requireParticipante(List<Conversacion> globales, UserId usuarioId) {
+        if (globales.stream().noneMatch(global -> esParticipantePort.esParticipante(global.id(), usuarioId))) {
             throw new NotAuthorizedException("No eres participante de esta conversación");
         }
     }
 
-    private Conversacion requireGlobal() {
-        return loadConversacionPort.global()
-                .orElseThrow(() -> new NoSuchElementException("La conversacion GLOBAL todavia no existe"));
+    /** Las comunidades generales de las formaciones que {@code actorId} ve (o la que pidió, si es Administración). */
+    private List<Conversacion> requireGlobales(UserId actorId, Formacion pedida) {
+        List<Conversacion> globales = loadConversacionPort.globales(formaciones.de(actorId).acotadoA(pedida).formaciones());
+        if (globales.isEmpty()) {
+            throw new NoSuchElementException("La conversacion GLOBAL todavia no existe");
+        }
+        return globales;
     }
 
     private void requireActivo(UserId usuarioId) {

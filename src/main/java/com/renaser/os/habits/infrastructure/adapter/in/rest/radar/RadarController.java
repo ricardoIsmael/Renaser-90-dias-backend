@@ -72,7 +72,7 @@ public class RadarController {
                                             @RequestBody @Valid RegistrarCheckInRadarRequest request) {
         var registro = registrarUseCase.registrar(new RegistrarCheckInRadarCommand(actor, actor,
                 request.whatAmIDoing(), request.whatAmIThinking(), request.whatAmIFeeling(), request.energyLevel(),
-                request.whatAmIAvoiding()));
+                request.whatAmIAvoiding(), request.fueDictado()));
         return RegistroRadarResponse.from(registro);
     }
 

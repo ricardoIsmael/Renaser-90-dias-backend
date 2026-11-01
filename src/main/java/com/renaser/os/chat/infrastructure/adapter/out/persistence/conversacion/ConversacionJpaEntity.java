@@ -36,4 +36,7 @@ public class ConversacionJpaEntity {
     private String nombre;
 
     private Instant creadoEn;
+
+    /** V138: el código de la formación (`ESCUELA`, `DIPLOMADO`, `CERTIFICACION`). */
+    private String formacion = "ESCUELA";
 }

@@ -33,9 +33,8 @@ final class TextoDePlanDeRocas {
      * Maestras) para poder planificar.": hablaba de la persona en tercera y nombraba un "onboarding" que en
      * la app no existe con ese nombre; no decia donde ir.
      */
-    static final String ROCAS_BLOQUEADAS = "No se pudo: primero completa tu Mapa de Renacimiento (en Plan, "
-            + "\"Ir al Mapa de Renacimiento\"). De ahí salen tus tres objetivos de 90 días, y sin ellos todavía no "
-            + "se pueden planificar acciones ni objetivos.";
+    static final String ROCAS_BLOQUEADAS = "No se pudo: primero escribe tus tres objetivos en Plan (o confirma los de tu "
+            + "diagnóstico). Sin ellos todavía no se pueden planificar acciones ni objetivos.";
 
     private static final String[] DIAS = {"lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"};
 

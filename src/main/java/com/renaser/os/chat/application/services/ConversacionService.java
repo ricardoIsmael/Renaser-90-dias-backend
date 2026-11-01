@@ -18,14 +18,21 @@ import com.renaser.os.chat.application.ports.out.participante.MarcarLeidoPort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.TipoConversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
+import com.renaser.os.chat.domain.model.conversacion.NombreDelChat;
 import com.renaser.os.chat.domain.model.conversacion.Participante;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
 import com.renaser.os.community.api.FotoPropiaDelGrupoFinder;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.Formacion;
+import com.renaser.os.shared.domain.ObjetoDeOtraFormacionException;
+import com.renaser.os.shared.domain.TipoDeComunidad;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import com.renaser.os.users.api.CuentasCerradasFinder;
+import com.renaser.os.users.api.FormacionesFinder;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
@@ -38,6 +45,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -76,6 +84,10 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
     private final TransactionTemplate transaccionPropia;
     /** D-243: un chat directo con una cuenta cerrada esperando su borrado no se lista. */
     private final CuentasCerradasFinder cuentasCerradas;
+    /** Spec 024: la formación de cada persona, el catálogo (nombres) y la regla única de quién ve cada conversación. */
+    private final AlcanceDeFormacionFinder formaciones;
+    private final FormacionesFinder catalogo;
+    private final VisibilidadPorFormacion visibilidad;
 
     public ConversacionService(LoadConversacionPort loadConversacionPort, SaveConversacionPort saveConversacionPort,
                                 AgregarParticipantePort agregarParticipantePort,
@@ -86,7 +98,11 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
                                 ListarUsuariosDeConversacionPort listarUsuariosPort,
                                 UserSummaryFinder userSummaryFinder, FotoPropiaDelGrupoFinder fotosDeGrupos,
                                 NombresDeLosChatsService nombresDeLosChats, Clock clock, IdGenerator idGenerator, PlatformTransactionManager transactionManager,
-                                CuentasCerradasFinder cuentasCerradas) {
+                                CuentasCerradasFinder cuentasCerradas, AlcanceDeFormacionFinder formaciones,
+                                FormacionesFinder catalogo, VisibilidadPorFormacion visibilidad) {
+        this.formaciones = formaciones;
+        this.catalogo = catalogo;
+        this.visibilidad = visibilidad;
         this.cuentasCerradas = cuentasCerradas;
         this.loadConversacionPort = loadConversacionPort;
         this.saveConversacionPort = saveConversacionPort;
@@ -116,10 +132,47 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
         }
         requireActivo(command.otroUsuarioId());
 
-        String clave = Conversacion.claveDirectaDe(command.actorId(), command.otroUsuarioId());
+        Formacion donde = formacionDelDirecto(command);
+        if (!visibilidad.tipoPrendido(donde, TipoDeComunidad.DIRECTO)) {
+            throw new NotAuthorizedException("Los chats directos no estan disponibles en esta formacion");
+        }
+        String clave = Conversacion.claveDirectaDe(command.actorId(), command.otroUsuarioId(), donde);
         return loadConversacionPort.porClaveDirecta(clave)
                 .orElseGet(() -> crearDirectaConAmbosParticipantes(clave, command.actorId(),
-                        command.otroUsuarioId()));
+                        command.otroUsuarioId(), donde));
+    }
+
+    /**
+     * En qué formación se abre el directo (spec 024, FR-029): una que las DOS personas comparten. Con una sola en común es esa (el caso de
+     * siempre: aprendiz con aprendiz, mentor con su aprendiz, Administración con cualquiera); con varias (dos administradores) la que se elija, o la
+     * Escuela; con ninguna, la otra persona es como si no existiera (404).
+     */
+    private Formacion formacionDelDirecto(CrearConversacionDirectaCommand command) {
+        Set<Formacion> comunes = EnumSet.noneOf(Formacion.class);
+        comunes.addAll(formaciones.de(command.actorId()).formaciones());
+        comunes.retainAll(formaciones.de(command.otroUsuarioId()).formaciones());
+        if (comunes.isEmpty()) {
+            /* El directorio del chat ofrece al personal en TODAS las formaciones que tiene asignadas, no solo en la activa (por pertenencia); si la
+               activa de la otra persona no coincide pero comparten otra, el directo se abre en esa (E2E P3-H: aparecía en el directorio y daba 404). */
+            comunes.addAll(formaciones.de(command.actorId()).formaciones());
+            comunes.retainAll(pertenenciasDe(command.otroUsuarioId()));
+        }
+        if (comunes.isEmpty()) {
+            throw new ObjetoDeOtraFormacionException();
+        }
+        if (comunes.size() == 1) {
+            return comunes.iterator().next();
+        }
+        if (command.formacion() != null && comunes.contains(command.formacion())) {
+            return command.formacion();
+        }
+        return comunes.contains(Formacion.POR_DEFECTO) ? Formacion.POR_DEFECTO : comunes.stream().sorted().findFirst().orElseThrow();
+    }
+
+    /** A qué formaciones pertenece la persona: las que ve, si ve todas; si no, las que tiene (el personal, todas las asignadas, no solo la activa). */
+    private Set<Formacion> pertenenciasDe(UserId persona) {
+        AlcanceDeFormacion alcance = formaciones.de(persona);
+        return alcance.esTodas() ? alcance.formaciones() : formaciones.formacionesDe(persona);
     }
 
     /**
@@ -141,12 +194,12 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
      * {@code obtenerOCrear} sigue sana y puede releer con normalidad la fila que gano,
      * ya comprometida (Postgres bloquea el segundo INSERT hasta que el primero termina).
      */
-    private Conversacion crearDirectaConAmbosParticipantes(String clave, UserId a, UserId b) {
+    private Conversacion crearDirectaConAmbosParticipantes(String clave, UserId a, UserId b, Formacion formacion) {
         try {
             return transaccionPropia.execute(status -> {
                 // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD §5.4.7).
                 Conversacion guardada = saveConversacionPort.save(
-                        Conversacion.crearDirecta(ConversacionId.of(idGenerator.newId()), clave, clock.now()));
+                        Conversacion.crearDirecta(ConversacionId.of(idGenerator.newId()), clave, clock.now(), formacion));
                 agregarParticipantePort.agregar(Participante.unirse(guardada.id(), a, clock.now()));
                 agregarParticipantePort.agregar(Participante.unirse(guardada.id(), b, clock.now()));
                 return guardada;
@@ -157,9 +210,10 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
     }
 
     @Override
-    public List<ConversacionResumen> listar(UserId actorId) {
+    public List<ConversacionResumen> listar(UserId actorId, Formacion formacion) {
         requireActivo(actorId);
-        List<Conversacion> abribles = lasQuePuedeAbrir(actorId);
+        AlcanceDeFormacion alcance = visibilidad.alcanceDe(actorId, formacion);
+        List<Conversacion> abribles = visibilidad.visiblesPara(lasQuePuedeAbrir(actorId), actorId, alcance);
         /* Con quien habla en cada DIRECTA, en UNA consulta. Se pide para todas y se usa solo en
            las DIRECTAS: filtrar antes obligaria a recorrer dos veces para ahorrar nada. */
         Map<ConversacionId, UserId> otros = listarUsuariosPort.otroParticipanteDeDirectas(
@@ -224,7 +278,11 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
     private List<Conversacion> lasQuePuedeAbrir(UserId actorId) {
         AccesoAChatsDeGrupo.VistaDeGrupos vista = accesoAChatsDeGrupo.vistaDe(actorId);
         Map<ConversacionId, Conversacion> todas = new LinkedHashMap<>();
-        loadConversacionPort.misConversaciones(actorId).forEach(c -> todas.put(c.id(), c));
+        List<Conversacion> mias = loadConversacionPort.misConversaciones(actorId);
+        if (unirseALasComunidadesQueFaltan(actorId, mias)) {
+            mias = loadConversacionPort.misConversaciones(actorId);
+        }
+        mias.forEach(c -> todas.put(c.id(), c));
         if (!vista.gruposPorSuRol().isEmpty()) {
             loadConversacionPort.porCelulaIds(vista.gruposPorSuRol()).forEach(c -> todas.putIfAbsent(c.id(), c));
         }
@@ -273,12 +331,54 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
     @Override
     @Transactional
     public void unirse(UserId usuarioId) {
-        Conversacion global = loadConversacionPort.global()
-                .orElseGet(() -> saveConversacionPort.save(
-                        Conversacion.crearGlobal(ConversacionId.of(idGenerator.newId()), clock.now())));
+        for (Formacion formacion : comunidadesDe(usuarioId)) {
+            unirseA(formacion, usuarioId);
+        }
+    }
+
+    /**
+     * Las comunidades generales a las que pertenece la persona (spec 024, FR-026): la de su formación; el personal, la de cada formación que
+     * tiene asignada (aunque no sea la activa, para que le lleguen los avisos); Administración y Alquimista, las tres. Sin ninguna todavía
+     * (una cuenta recién creada a la que aún no se le asignó formación) cae en la Escuela, como siempre.
+     */
+    private Set<Formacion> comunidadesDe(UserId usuarioId) {
+        AlcanceDeFormacion alcance = formaciones.de(usuarioId);
+        if (alcance.esTodas()) {
+            return alcance.formaciones();
+        }
+        Set<Formacion> suyas = formaciones.formacionesDe(usuarioId);
+        return suyas.isEmpty() ? Set.of(Formacion.POR_DEFECTO) : suyas;
+    }
+
+    private void unirseA(Formacion formacion, UserId usuarioId) {
+        Conversacion global = loadConversacionPort.global(formacion).orElseGet(() -> crearComunidad(formacion));
         if (!esParticipantePort.esParticipante(global.id(), usuarioId)) {
             agregarParticipantePort.agregar(Participante.unirse(global.id(), usuarioId, clock.now()));
         }
+    }
+
+    /** La Escuela conserva el nombre de siempre; las demás llevan el de su formación («Diplomado Renaser Global»). */
+    private Conversacion crearComunidad(Formacion formacion) {
+        String nombre = formacion == Formacion.POR_DEFECTO ? NombreDelChat.DE_LA_COMUNIDAD
+                : NombreDelChat.deLaComunidad(catalogo.de(formacion).nombre());
+        return saveConversacionPort.save(Conversacion.crearGlobal(ConversacionId.of(idGenerator.newId()), nombre, clock.now(), formacion));
+    }
+
+    /**
+     * Quien pasó a una formación nueva, o a quien Administración le asignó otra, no tiene todavía la comunidad general de ella: se lo une al abrir la
+     * Tribu (idempotente). En el caso de siempre —ya está en la suya— no cuesta nada más que la comparación.
+     */
+    private boolean unirseALasComunidadesQueFaltan(UserId actorId, List<Conversacion> mias) {
+        Set<Formacion> conComunidad = EnumSet.noneOf(Formacion.class);
+        mias.stream().filter(c -> c.tipo() == TipoConversacion.GLOBAL).forEach(c -> conComunidad.add(c.formacion()));
+        boolean unio = false;
+        for (Formacion formacion : comunidadesDe(actorId)) {
+            if (!conComunidad.contains(formacion)) {
+                unirseA(formacion, actorId);
+                unio = true;
+            }
+        }
+        return unio;
     }
 
     @Override
@@ -287,15 +387,17 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
         if (loadConversacionPort.porCelulaId(celulaId).isPresent()) {
             return;
         }
+        Formacion formacion = nombresDeLosChats.formacionDelGrupo(celulaId);
         saveConversacionPort.save(
-                Conversacion.crearCelula(ConversacionId.of(idGenerator.newId()), celulaId, clock.now()));
+                Conversacion.crearCelula(ConversacionId.of(idGenerator.newId()), celulaId, clock.now(), formacion));
     }
 
     @Override
     @Transactional
     public Conversacion renombrar(RenombrarConversacionGlobalCommand command) {
         requireActivoAdmin(command.actorId());
-        Conversacion global = loadConversacionPort.global()
+        Formacion formacion = command.formacion() == null ? Formacion.POR_DEFECTO : command.formacion();
+        Conversacion global = loadConversacionPort.global(formacion)
                 .orElseThrow(() -> new NoSuchElementException("La conversacion GLOBAL todavia no existe"));
         return saveConversacionPort.save(global.renombrada(command.nuevoNombre()));
     }
@@ -322,6 +424,7 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
      * {@code AutorizacionDeConversacionService}; si se toca una, se tocan las cuatro.</b>
      */
     private void requireParticipante(Conversacion conversacion, UserId usuarioId) {
+        visibilidad.exigirQueLaVea(conversacion, usuarioId);
         if (conversacion.tipo() == TipoConversacion.CELULA) {
             if (!accesoAChatsDeGrupo.puedeVer(conversacion.celulaId(), usuarioId)) {
                 throw new NotAuthorizedException("Tu asignacion cambio: ya no perteneces a ese grupo");

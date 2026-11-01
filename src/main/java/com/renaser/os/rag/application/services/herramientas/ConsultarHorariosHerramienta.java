@@ -34,9 +34,8 @@ public class ConsultarHorariosHerramienta implements HerramientaAgente {
     public static final String NOMBRE = "consultar_horarios";
     public static final String ARGUMENTO_FECHA = "fecha";
 
-    /** Regla 02: {@code dia_programa} se acota a [0, 90]. Fuera de eso no hay programa que mostrar. */
+    /** Regla 02: {@code dia_programa} se acota a [0, duracion de SU programa] (90, o 365 en el Diplomado de un año). Fuera de eso no hay programa que mostrar. */
     private static final int PRIMER_DIA_DEL_PROGRAMA = 0;
-    private static final int ULTIMO_DIA_DEL_PROGRAMA = 90;
 
     private static final Logger log = LoggerFactory.getLogger(ConsultarHorariosHerramienta.class);
 
@@ -88,14 +87,14 @@ public class ConsultarHorariosHerramienta implements HerramientaAgente {
             return ResultadoHerramienta.fallo("No pude consultar sus horarios en este momento.");
         }
         if (fueraDelPrograma(dia)) {
-            return ResultadoHerramienta.fallo("El " + dia.fecha() + " queda fuera de sus 90 dias de programa: "
+            return ResultadoHerramienta.fallo("El " + dia.fecha() + " queda fuera de sus " + dia.duracionDias() + " dias de programa: "
                     + "no hay horario que consultar para esa fecha.");
         }
         return ResultadoHerramienta.exito(textoDe(dia));
     }
 
     private static boolean fueraDelPrograma(HorariosDelDia dia) {
-        return dia.diaPrograma() < PRIMER_DIA_DEL_PROGRAMA || dia.diaPrograma() > ULTIMO_DIA_DEL_PROGRAMA;
+        return dia.diaPrograma() < PRIMER_DIA_DEL_PROGRAMA || dia.diaPrograma() > dia.duracionDias();
     }
 
     /**

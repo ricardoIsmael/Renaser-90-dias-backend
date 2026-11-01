@@ -27,6 +27,7 @@ class ConsultarActorPersistenceAdapter implements ConsultarActorPort {
     }
 
     private static ActorOnboarding aActor(UserSummary resumen) {
-        return new ActorOnboarding(resumen.id(), !resumen.status().allowsAccess());
+        return new ActorOnboarding(resumen.id(), !resumen.status().allowsAccess(), resumen.fullName(),
+                resumen.role().canManageRoles());
     }
 }

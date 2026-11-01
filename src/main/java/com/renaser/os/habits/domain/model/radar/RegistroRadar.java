@@ -34,6 +34,11 @@ public final class RegistroRadar {
     private final Instant creadoEn;
     /** Spec 012 (V119): la hora local (0-23) a la que respondia, o {@code null} si el registro fue libre. */
     private final Integer horaPrevista;
+    /**
+     * Spec 030 (V132, D-297): {@code true} si al menos una de las cuatro respuestas se dicto con el reconocimiento de voz
+     * del telefono y sigue en el texto registrado. Lo declara la app; el servidor no oye audio. Nace en {@code false}.
+     */
+    private final boolean dictado;
 
     /**
      * El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
@@ -51,7 +56,7 @@ public final class RegistroRadar {
         }
         return new RegistroRadar(id, participanteId, requireNotBlank(queHago, "queHago"),
                 requireNotBlank(quePienso, "quePienso"), requireNotBlank(queSiento, "queSiento"), nivelEnergia,
-                requireNotBlank(queEvito, "queEvito"), ahora, null);
+                requireNotBlank(queEvito, "queEvito"), ahora, null, false);
     }
 
     /** El mismo registro, respondiendo a la hora local {@code hora} (0-23) que le tocaba: Mi Radar o las franjas de la semana 1. */
@@ -60,15 +65,21 @@ public final class RegistroRadar {
             throw new IllegalArgumentException("horaPrevista fuera de rango 0..23: " + hora);
         }
         return new RegistroRadar(id, participanteId, queHago, quePienso, queSiento, nivelEnergia, queEvito, creadoEn,
-                hora);
+                hora, dictado);
+    }
+
+    /** El mismo registro, marcado como dictado (spec 030): al menos una respuesta se hablo en vez de escribirse. */
+    public RegistroRadar comoDictado() {
+        return new RegistroRadar(id, participanteId, queHago, quePienso, queSiento, nivelEnergia, queEvito, creadoEn,
+                horaPrevista, true);
     }
 
     /** Solo para el adaptador de persistencia. */
     public static RegistroRadar rehydrate(RegistroRadarId id, UserId participanteId, String queHago,
                                            String quePienso, String queSiento, int nivelEnergia, String queEvito,
-                                           Instant creadoEn, Integer horaPrevista) {
+                                           Instant creadoEn, Integer horaPrevista, boolean dictado) {
         return new RegistroRadar(id, participanteId, queHago, quePienso, queSiento, nivelEnergia, queEvito, creadoEn,
-                horaPrevista);
+                horaPrevista, dictado);
     }
 
     private static String requireNotBlank(String value, String campo) {

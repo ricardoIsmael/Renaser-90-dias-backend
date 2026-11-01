@@ -74,7 +74,7 @@ class ComentarioMuroServiceTest {
     @BeforeEach
     void setUp() {
         service = new ComentarioMuroService(loadPublicacionPort, loadComentarioPort, saveComentarioPort,
-                consultarPerfilUsuarioPort, userSummaryFinder, CLOCK, idGenerator, cuentasCerradas);
+                consultarPerfilUsuarioPort, userSummaryFinder, CLOCK, idGenerator, cuentasCerradas, new com.renaser.os.users.api.AlcanceDeFormacionSoloEscuela());
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(consultarPerfilUsuarioPort.porId(any())).thenReturn(Optional.empty());
         lenient().when(userSummaryFinder.findById(admin))
@@ -104,6 +104,7 @@ class ComentarioMuroServiceTest {
     @Test
     void editarUnComentarioAjenoFalla() {
         Publicacion publicacion = publicacionVisible();
+        org.mockito.Mockito.lenient().when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
         Comentario comentario = comentarioDe(autor, publicacion.id());
         when(loadComentarioPort.porId(comentario.id())).thenReturn(Optional.of(comentario));
 
@@ -115,6 +116,7 @@ class ComentarioMuroServiceTest {
     @Test
     void ocultarUnComentarioAjenoSinModerarFalla() {
         Publicacion publicacion = publicacionVisible();
+        org.mockito.Mockito.lenient().when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
         Comentario comentario = comentarioDe(autor, publicacion.id());
         when(loadComentarioPort.porId(comentario.id())).thenReturn(Optional.of(comentario));
 
@@ -131,6 +133,7 @@ class ComentarioMuroServiceTest {
     @Test
     void ocultarConActorInexistenteEsRechazadoComo403NoComo404() {
         Publicacion publicacion = publicacionVisible();
+        org.mockito.Mockito.lenient().when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
         Comentario comentario = comentarioDe(autor, publicacion.id());
         when(loadComentarioPort.porId(comentario.id())).thenReturn(Optional.of(comentario));
         UserId fantasma = UserId.of(UUID.randomUUID());
@@ -143,6 +146,7 @@ class ComentarioMuroServiceTest {
     @Test
     void moderadorPuedeOcultarUnComentarioAjeno() {
         Publicacion publicacion = publicacionVisible();
+        org.mockito.Mockito.lenient().when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
         Comentario comentario = comentarioDe(autor, publicacion.id());
         when(loadComentarioPort.porId(comentario.id())).thenReturn(Optional.of(comentario));
         when(loadComentarioPort.contarPorAutor(publicacion.id())).thenReturn(java.util.Map.of());
@@ -180,6 +184,7 @@ class ComentarioMuroServiceTest {
     @Test
     void editarConActorSuspendidoFalla() {
         Publicacion publicacion = publicacionVisible();
+        org.mockito.Mockito.lenient().when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
         Comentario comentario = comentarioDe(suspendido, publicacion.id());
         when(loadComentarioPort.porId(comentario.id())).thenReturn(Optional.of(comentario));
 
@@ -191,6 +196,7 @@ class ComentarioMuroServiceTest {
     @Test
     void ocultarConActorSuspendidoFalla() {
         Publicacion publicacion = publicacionVisible();
+        org.mockito.Mockito.lenient().when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
         Comentario comentario = comentarioDe(suspendido, publicacion.id());
         when(loadComentarioPort.porId(comentario.id())).thenReturn(Optional.of(comentario));
 
@@ -203,6 +209,7 @@ class ComentarioMuroServiceTest {
     @DisplayName("ocultar(): un moderador SUSPENDIDO no modera un comentario ajeno -> 403")
     void moderadorSuspendidoNoPuedeOcultarUnComentarioAjeno() {
         Publicacion publicacion = publicacionVisible();
+        org.mockito.Mockito.lenient().when(loadPublicacionPort.porId(publicacion.id())).thenReturn(Optional.of(publicacion));
         Comentario comentario = comentarioDe(autor, publicacion.id());
         when(loadComentarioPort.porId(comentario.id())).thenReturn(Optional.of(comentario));
 
@@ -228,7 +235,7 @@ class ComentarioMuroServiceTest {
                 autor, new ConsultarPerfilUsuarioPort.PerfilUsuario(autor, "Autor", "https://cdn/a.jpg"),
                 otro, new ConsultarPerfilUsuarioPort.PerfilUsuario(otro, "Otro", null)));
 
-        var pagina = service.pagina(publicacion.id(), null);
+        var pagina = service.pagina(autor, publicacion.id(), null);
 
         assertThat(pagina.comentarios()).extracting(c -> c.autorNombre()).containsExactly("Autor", "Otro", "Autor");
         assertThat(pagina.comentarios().get(0).autorAvatarUrl()).isEqualTo("https://cdn/a.jpg");
@@ -246,7 +253,7 @@ class ComentarioMuroServiceTest {
                 .thenReturn(List.of(comentarioDe(autor, publicacion.id())));
         when(consultarPerfilUsuarioPort.porIds(any())).thenReturn(java.util.Map.of());
 
-        var pagina = service.pagina(publicacion.id(), null);
+        var pagina = service.pagina(autor, publicacion.id(), null);
 
         assertThat(pagina.comentarios().get(0).autorNombre()).isNull();
         assertThat(pagina.comentarios().get(0).autorAvatarUrl()).isNull();
@@ -266,7 +273,7 @@ class ComentarioMuroServiceTest {
         });
         when(consultarPerfilUsuarioPort.porIds(any())).thenReturn(java.util.Map.of());
 
-        var pagina = service.pagina(publicacion.id(), null);
+        var pagina = service.pagina(autor, publicacion.id(), null);
 
         assertThat(pagina.comentarios()).extracting(c -> c.comentario().autorId()).containsExactly(autor);
         assertThat(pagina.total()).isEqualTo(4);

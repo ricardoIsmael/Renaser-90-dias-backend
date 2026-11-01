@@ -89,7 +89,7 @@ public class DiarioYRadarService implements DiarioYRadarPort {
         Optional<RegistroRadar> previo = ultimoRadar.ultimo(actorId, actorId);
         RegistroRadar registro = registrarRadar.registrar(new RegistrarCheckInRadarCommand(actorId, actorId,
                 respuestas.queHago(), respuestas.quePienso(), respuestas.queSiento(), respuestas.nivelEnergia(),
-                respuestas.queEvito()));
+                respuestas.queEvito(), false));
         boolean yaExistia = previo.map(anterior -> anterior.id().equals(registro.id())).orElse(false);
         return new CheckInRadarRegistrado(horaLocal(registro, actorId), yaExistia);
     }

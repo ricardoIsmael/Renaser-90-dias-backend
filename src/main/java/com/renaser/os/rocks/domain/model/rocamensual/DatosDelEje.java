@@ -1,8 +1,11 @@
 package com.renaser.os.rocks.domain.model.rocamensual;
 
+import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
 import com.renaser.os.rocks.domain.model.rocamaestra.MetaCuantitativa;
 
 import java.math.BigDecimal;
+import java.util.Locale;
+import java.util.Set;
 
 /**
  * Lo poco que la calculadora necesita de un eje, ya traducido desde donde vive cada cosa.
@@ -53,10 +56,34 @@ public record DatosDelEje(BigDecimal lineaBase, BigDecimal valorHoy, BigDecimal 
         return new DatosDelEje(base, base, meta, Magnitud.ESCALA, null, UNIDAD_ESCALA);
     }
 
-    /** El objetivo de ese mes, visto desde el mes en curso. Ver {@link CalculadoraObjetivoMensual}. */
+    private static final Set<String> UNIDADES_DE_PESO = Set.of("kg", "kgs", "kilo", "kilos", "kilogramo", "kilogramos");
+
+    /**
+     * Un objetivo cuya meta medible salio del diagnostico (spec 026), sin pasar por el Mapa: la unidad dice que clase de cosa es. Relaciones es la
+     * escala del 1 al 10 de siempre; Cuerpo en kilos lleva el tope saludable por mes del peso; el resto es un nivel sin tope absoluto.
+     */
+    public static DatosDelEje delObjetivo(EjeObjetivo eje, MetaCuantitativa meta) {
+        BigDecimal base = lineaBaseDe(meta);
+        String unidad = unidadDe(meta);
+        if (eje == EjeObjetivo.RELACIONES) {
+            return new DatosDelEje(base, avanceDe(meta), objetivoDe(meta), Magnitud.ESCALA, null, UNIDAD_ESCALA);
+        }
+        Magnitud magnitud = Magnitud.deLaUnidad(unidad);
+        boolean enKilos = eje == EjeObjetivo.CUERPO && unidad != null && UNIDADES_DE_PESO.contains(unidad.trim().toLowerCase(Locale.ROOT));
+        BigDecimal tope = enKilos ? TopeSaludableDelMes.deSalud("peso", referenciaDe(meta)) : null;
+        return new DatosDelEje(base, avanceDe(meta), objetivoDe(meta), magnitud, tope, unidad);
+    }
+
+    /** El objetivo de ese mes, visto desde el mes en curso, en un programa de 90 dias. Ver {@link CalculadoraObjetivoMensual}. */
     public ObjetivoDelMes calcular(int numeroMes, int mesActual) {
         return CalculadoraObjetivoMensual.calcular(numeroMes, mesActual, lineaBase, valorHoy, meta, magnitud,
                 topePorMes);
+    }
+
+    /** Igual, en un programa de {@code mesesDelPrograma} meses (3 o 12). */
+    public ObjetivoDelMes calcular(int numeroMes, int mesActual, int mesesDelPrograma) {
+        return CalculadoraObjetivoMensual.calcular(numeroMes, mesActual, lineaBase, valorHoy, meta, magnitud,
+                topePorMes, mesesDelPrograma);
     }
 
     /**

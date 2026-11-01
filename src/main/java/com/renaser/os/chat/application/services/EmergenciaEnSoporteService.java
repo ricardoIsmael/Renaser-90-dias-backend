@@ -5,7 +5,6 @@ import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeDelPrograma
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeDelProgramaUseCase.AvisoDeLaPieza;
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeDelProgramaUseCase.EntregaDelPrograma;
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeDelProgramaUseCase.PiezaDelPrograma;
-import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.emergencia.AvisoDeEmergencia;
 import com.renaser.os.chat.domain.model.emergencia.RespuestaAEmergencia;
@@ -37,11 +36,11 @@ public class EmergenciaEnSoporteService implements AvisarEmergenciaEnSoporteUseC
 
     private static final Logger log = LoggerFactory.getLogger(EmergenciaEnSoporteService.class);
 
-    private final LoadConversacionPort conversaciones;
+    private final SoporteVigenteDelAprendiz soportes;
     private final EnviarMensajeDelProgramaUseCase delPrograma;
 
-    EmergenciaEnSoporteService(LoadConversacionPort conversaciones, EnviarMensajeDelProgramaUseCase delPrograma) {
-        this.conversaciones = conversaciones;
+    EmergenciaEnSoporteService(SoporteVigenteDelAprendiz soportes, EnviarMensajeDelProgramaUseCase delPrograma) {
+        this.soportes = soportes;
         this.delPrograma = delPrograma;
     }
 
@@ -64,7 +63,7 @@ public class EmergenciaEnSoporteService implements AvisarEmergenciaEnSoporteUseC
     }
 
     private Optional<ConversacionId> soporteDe(UserId aprendizId, java.util.UUID solicitudId) {
-        Optional<Conversacion> soporte = conversaciones.porClaveDirecta(Conversacion.claveSoporteDe(aprendizId));
+        Optional<Conversacion> soporte = soportes.de(aprendizId);
         if (soporte.isEmpty()) {
             log.warn("[chat.emergencia] {} no tiene chat de soporte: el pedido {} no se escribe en el chat",
                     aprendizId, solicitudId);

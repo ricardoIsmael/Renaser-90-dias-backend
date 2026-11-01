@@ -1,13 +1,21 @@
 package com.renaser.os.users.infrastructure.adapter.out.persistence.accountrequest;
 
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequest;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequestId;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequestStatus;
+import com.renaser.os.users.domain.model.accountrequest.EleccionDeIngreso;
 import com.renaser.os.users.domain.model.accountrequest.OrigenSocial;
 import com.renaser.os.users.domain.model.identidadexterna.ProveedorIdentidad;
 import com.renaser.os.users.domain.model.user.Email;
 import org.springframework.stereotype.Component;
+
+import java.util.Arrays;
+import java.util.Set;
+
+import static java.util.stream.Collectors.toSet;
 
 @Component
 class AccountRequestPersistenceMapper {
@@ -28,7 +36,19 @@ class AccountRequestPersistenceMapper {
                 e.getUsuarioCreadoId() == null ? null : UserId.of(e.getUsuarioCreadoId()),
                 e.getIpSolicitud(),
                 e.getCreadoEn(),
-                e.getActualizadoEn());
+                e.getActualizadoEn(),
+                toDomainEleccion(e));
+    }
+
+    /** Sin formaciones guardadas la solicitud no está aceptada (o es de antes: V140 ya les puso la Escuela). */
+    private EleccionDeIngreso toDomainEleccion(AccountRequestJpaEntity e) {
+        if (e.getFormacionesElegidas() == null) {
+            return null;
+        }
+        Set<Formacion> formaciones = Arrays.stream(e.getFormacionesElegidas()).map(Formacion::desde).collect(toSet());
+        UserRole rol = e.getRolElegido() == null ? null : UserRole.valueOf(e.getRolElegido());
+        Integer duracion = e.getDuracionElegidaDias() == null ? null : e.getDuracionElegidaDias().intValue();
+        return new EleccionDeIngreso(rol, formaciones, duracion, Boolean.TRUE.equals(e.getConDiagnostico()), e.getRolPersonalizadoId(), e.getRolPersonalizadoNombre());
     }
 
     AccountRequestJpaEntity toEntity(AccountRequest r) {
@@ -48,7 +68,13 @@ class AccountRequestPersistenceMapper {
                 r.createdUserId() == null ? null : r.createdUserId().value(),
                 r.requestIp(),
                 r.createdAt(),
-                r.updatedAt());
+                r.updatedAt(),
+                r.eleccion() == null ? null : r.eleccion().formaciones().stream().map(Formacion::codigo).toArray(String[]::new),
+                r.eleccion() == null || r.eleccion().duracionElegidaDias() == null ? null : r.eleccion().duracionElegidaDias().shortValue(),
+                r.eleccion() == null || r.eleccion().rol() == null ? null : r.eleccion().rol().name(),
+                r.eleccion() == null ? null : r.eleccion().conDiagnostico(),
+                r.eleccion() == null ? null : r.eleccion().rolPersonalizadoId(),
+                r.eleccion() == null ? null : r.eleccion().rolPersonalizadoNombre());
     }
 
     /**

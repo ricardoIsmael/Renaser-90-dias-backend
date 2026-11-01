@@ -1,6 +1,7 @@
 package com.renaser.os.users.infrastructure.adapter.in.web.security;
 
 import com.renaser.os.TestcontainersConfiguration;
+import com.renaser.os.plataforma.application.services.CopiaDeEstados;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -55,6 +56,8 @@ class CuentaSuspendidaConSesionVivaIT {
     private SessionRepository<? extends Session> sesiones;
     @Autowired
     private JdbcTemplate jdbcTemplate;
+    @Autowired
+    private CopiaDeEstados copiaDeEstados;
 
     private final HttpClient http = HttpClient.newHttpClient();
     private final List<UUID> usuarios = new ArrayList<>();
@@ -67,6 +70,12 @@ class CuentaSuspendidaConSesionVivaIT {
 
     @BeforeEach
     void sembrar() {
+        // Spec 034: de fábrica el mentor no ve el Código Renaser (Administración lo enciende). El control con la cuenta ACTIVA de
+        // esta prueba necesita que lo vea; la cuenta SUSPENDIDA recibe 403 antes de llegar al interruptor, y eso es lo que se prueba.
+        jdbcTemplate.update("DELETE FROM renaser.funcionalidades_estado WHERE clave = 'radar.fichas'");
+        jdbcTemplate.update("INSERT INTO renaser.funcionalidades_estado (clave, prendida_global, version, actualizado_por, actualizado_en) "
+                + "VALUES ('radar.fichas', true, nextval('renaser.funcionalidades_version_seq'), gen_random_uuid(), now())");
+        copiaDeEstados.recargar();
         cohorte = UUID.randomUUID();
         jdbcTemplate.update("INSERT INTO renaser.cohortes (id, nombre, fecha_inicio) VALUES (?, 'Cohorte SUS-04', CURRENT_DATE - 20)",
                 cohorte);
@@ -97,6 +106,8 @@ class CuentaSuspendidaConSesionVivaIT {
 
     @AfterEach
     void limpiar() {
+        jdbcTemplate.update("DELETE FROM renaser.funcionalidades_estado WHERE clave = 'radar.fichas'");
+        copiaDeEstados.recargar();
         jdbcTemplate.update("DELETE FROM renaser.conversaciones WHERE id = ?", chatDelGrupo);
         jdbcTemplate.update("UPDATE renaser.celulas SET mentor_id = NULL WHERE id = ?", grupo);
         jdbcTemplate.update("DELETE FROM renaser.celulas WHERE id = ?", grupo);
@@ -167,6 +178,7 @@ class CuentaSuspendidaConSesionVivaIT {
                 INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado)
                 VALUES (?, ?, ?, CAST(? AS renaser.rol_usuario), 'ACTIVO')
                 """, id, id + "@renaser.test", nombre, rol);
+        com.renaser.os.FormacionesDePrueba.alPersonalLeAsignaLaEscuela(jdbcTemplate, id, rol);
         usuarios.add(id);
         return id;
     }

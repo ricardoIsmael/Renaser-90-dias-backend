@@ -1,8 +1,6 @@
 package com.renaser.os.chat.application.services;
 
 import com.renaser.os.chat.api.SoporteDelAprendizFinder;
-import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort;
-import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
 
@@ -13,15 +11,15 @@ import java.util.UUID;
 @Service
 public class SoporteDelAprendizService implements SoporteDelAprendizFinder {
 
-    private final LoadConversacionPort conversaciones;
+    private final SoporteVigenteDelAprendiz soportes;
 
-    SoporteDelAprendizService(LoadConversacionPort conversaciones) {
-        this.conversaciones = conversaciones;
+    SoporteDelAprendizService(SoporteVigenteDelAprendiz soportes) {
+        this.soportes = soportes;
     }
 
     @Override
     public Optional<UUID> conversacionDeSoporteDe(UserId aprendizId) {
-        return conversaciones.porClaveDirecta(Conversacion.claveSoporteDe(aprendizId))
+        return soportes.de(aprendizId)
                 .map(conversacion -> conversacion.id().value());
     }
 }

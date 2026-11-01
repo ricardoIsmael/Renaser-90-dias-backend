@@ -90,6 +90,7 @@ class RocaMensualControllerTest {
                 new UserSummary(UserId.of(actorId), "Aprendiz", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
         // Devuelve lo que le pidieron: asi la respuesta del endpoint depende del comando que armo
         // el controller, y no de un objeto fijo que taparia un mapeo equivocado.
+        when(consultarUseCase.duracionDelPrograma(UserId.of(actorId))).thenReturn(90);
         when(definirUseCase.definir(any())).thenAnswer(invocacion -> {
             DefinirRocaMensualCommand comando = invocacion.getArgument(0);
             MetaCuantitativa meta = comando.tieneMeta()
@@ -169,6 +170,20 @@ class RocaMensualControllerTest {
     }
 
     @Test
+    @DisplayName("el ultimo mes de un programa de 365 dias cierra el dia 365, no el 360 (Diplomado de 1 ano)")
+    void elUltimoMesCierraElUltimoDiaDelProgramaDeLaPersona() throws Exception {
+        when(consultarUseCase.duracionDelPrograma(UserId.of(actorId))).thenReturn(365);
+
+        mockMvc.perform(put("/api/v1/rocks/monthly/TRABAJO/12")
+                        .session(sesion)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"titulo\":\"Cerrar el ano\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.numeroMes").value(12))
+                .andExpect(jsonPath("$.diaDeCierre").value(365));
+    }
+
+    @Test
     @DisplayName("un titulo en blanco es 400, no un tramo vacio guardado")
     void tituloEnBlancoEsRechazado() throws Exception {
         mockMvc.perform(put(RUTA_TRABAJO_MES_2)
@@ -208,14 +223,14 @@ class RocaMensualControllerTest {
         verifyNoInteractions(definirUseCase);
     }
 
-    /** El programa tiene tres meses. Un mes 4 en la ruta es un 400, no una fila imposible. */
+    /** El programa mas largo tiene doce meses. Un mes 13 en la ruta es un 400, no una fila imposible (el tope de cada persona lo pone el servicio). */
     @Test
-    @DisplayName("un mes fuera de 1..3 es 400")
+    @DisplayName("un mes fuera de 1..12 es 400")
     void mesFueraDeRangoEsRechazado() throws Exception {
-        mockMvc.perform(put("/api/v1/rocks/monthly/TRABAJO/4")
+        mockMvc.perform(put("/api/v1/rocks/monthly/TRABAJO/13")
                         .session(sesion)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"titulo\":\"Un cuarto mes que no existe\"}"))
+                        .content("{\"titulo\":\"Un mes trece que no existe\"}"))
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(definirUseCase);

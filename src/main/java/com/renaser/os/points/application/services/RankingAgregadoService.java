@@ -6,6 +6,7 @@ import com.renaser.os.points.application.ports.in.ranking.ConsultarRankingAgrega
 import com.renaser.os.points.application.ports.in.ranking.ConsultarRankingUseCase;
 import com.renaser.os.points.application.ports.in.ranking.ConsultarRankingUseCase.EntradaRanking;
 import com.renaser.os.points.domain.model.ranking.TipoRanking;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
 
@@ -30,13 +31,15 @@ public class RankingAgregadoService implements ConsultarRankingAgregadoUseCase {
     }
 
     @Override
-    public RankingAgregado agregado(UserId actorId, LocalDate fecha) {
-        List<EntradaRanking> liga = consultarRankingUseCase.consultar(actorId, TipoRanking.LEAGUE, fecha);
+    public RankingAgregado agregado(UserId actorId, LocalDate fecha, Formacion formacion) {
+        List<EntradaRanking> liga = consultarRankingUseCase.consultar(actorId, TipoRanking.LEAGUE, fecha, formacion);
         List<EntradaRanking> coherenciaIndividual = consultarRankingUseCase.consultar(actorId, TipoRanking.CELL,
-                fecha);
-        List<EntradaRanking> general = consultarRankingUseCase.consultar(actorId, TipoRanking.GENERAL, fecha);
-        List<EntradaRanking> kilometros = consultarRankingUseCase.consultar(actorId, TipoRanking.KILOMETROS, fecha);
-        List<EntradaRanking> gimnasio = consultarRankingUseCase.consultar(actorId, TipoRanking.GIMNASIO, fecha);
+                fecha, formacion);
+        List<EntradaRanking> general = consultarRankingUseCase.consultar(actorId, TipoRanking.GENERAL, fecha, formacion);
+        List<EntradaRanking> kilometros = consultarRankingUseCase.consultar(actorId, TipoRanking.KILOMETROS, fecha,
+                formacion);
+        List<EntradaRanking> gimnasio = consultarRankingUseCase.consultar(actorId, TipoRanking.GIMNASIO, fecha,
+                formacion);
         RankingAgregado.CelulaResumen celula = celulaFinder.celulaDeParticipante(actorId)
                 .map(RankingAgregadoService::aCelulaResumen)
                 .orElse(null);

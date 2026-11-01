@@ -163,6 +163,11 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/home", "/api/v1/users/me/**").authenticated()
                         .requestMatchers("/api/v1/habits", "/api/v1/habit-preferences/**",
                                 "/api/v1/habit-tracks/**", "/api/v1/habit-unlocks/**").authenticated()
+                        // Spec 023: las categorias de habito de la formacion de la persona (la lectura de Training). La administracion de
+                        // las categorias vive bajo `/api/v1/admin/**`, que ya tiene su matcher.
+                        .requestMatchers("/api/v1/habit-categories").authenticated()
+                        // Spec 026: el diagnostico de ingreso de la persona (`/mio`). Lo decide `@RequiresPermission`; aca solo se pide sesion.
+                        .requestMatchers("/api/v1/diagnostico/**").authenticated()
                         .requestMatchers("/api/v1/evidence", "/api/v1/evidence/**").authenticated()
                         .requestMatchers("/api/v1/classroom/**", "/api/v1/cursos/**",
                                 "/api/v1/lecciones/**").authenticated()
@@ -186,6 +191,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/me/semaforo", "/api/v1/me/semaforo/**",
                                 "/api/v1/semaforo/**")
                         .authenticated()
+                        // La formacion de la sesion y la activa del personal (spec 022): el id sale de la sesion.
+                        .requestMatchers("/api/v1/me/formacion", "/api/v1/me/formacion/**").authenticated()
                         // «Tu Caja Renaser» (D-219): la caja propia; el id sale de la sesion.
                         .requestMatchers("/api/v1/me/caja", "/api/v1/me/caja/**").authenticated()
                         // D-244: el pedido de emergencia del aprendiz. Sin esta linea quedaba bajo
@@ -213,6 +220,10 @@ public class SecurityConfig {
                         // El Mapa de Renacimiento es contenido del propio aprendiz: sin sesion no
                         // se lee ni se escribe (V41, fase 3 del plan del Mapa).
                         .requestMatchers("/api/v1/mapa-renacimiento/**").authenticated()
+                        // El analisis 80/20 con IA de la propia persona (spec 031). Lo atrapo RutasCubiertasPorElFiltroTest: sin esta
+                        // linea la ruta quedaba sin sesion y el actor saldria del header X-Actor-Id. Las rutas de ficha cuelgan de
+                        // /api/v1/mentor/** y /api/v1/leadership/**, que ya estan arriba.
+                        .requestMatchers("/api/v1/analisis-80-20/**").authenticated()
                         .requestMatchers("/api/v1/tickets/**", "/api/v1/ranking/**").authenticated()
                         // Acompanamiento (SDD 001). Faltaba: sin esta linea las rutas caian fuera
                         // de la lista y llegaban al controller sin sesion, que respondia 400 al no

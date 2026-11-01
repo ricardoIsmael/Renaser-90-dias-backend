@@ -10,9 +10,11 @@ import com.renaser.os.rocks.application.ports.out.rocamensual.GuardarRocaMensual
 import com.renaser.os.rocks.application.ports.out.rocamensual.LoadRocaMensualPort;
 import com.renaser.os.rocks.domain.model.rocamaestra.MetaCuantitativa;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestra;
+import com.renaser.os.rocks.domain.model.rocamensual.MesPrograma;
 import com.renaser.os.rocks.domain.model.rocamensual.RocaMensual;
 import com.renaser.os.rocks.domain.model.rocamensual.RocaMensualId;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.DuracionDelPrograma;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -50,6 +52,11 @@ public class RocaMensualService implements ConsultarRocasMensualesUseCase, Defin
         return loadRocaMensualPort.deParticipante(actorId);
     }
 
+    @Override
+    public int duracionDelPrograma(UserId actorId) {
+        return requireProgreso(actorId).duracionDias();
+    }
+
     /**
      * Define el tramo de ese mes o corrige el que ya estaba. Es la misma operacion porque por
      * (eje, mes) hay un solo objetivo mensual ({@code UNIQUE (roca_maestra_id, numero_mes)}): si
@@ -57,8 +64,11 @@ public class RocaMensualService implements ConsultarRocasMensualesUseCase, Defin
      */
     @Override
     public RocaMensual definir(DefinirRocaMensualCommand command) {
-        requireProgreso(command.actorId());
-        RocaMaestra maestra = requireMaestraDelEje(command);
+        ProgresoParticipanteRocks progreso = requireProgreso(command.actorId());
+        if (!MesPrograma.esValido(command.numeroMes(), progreso.duracionDias())) {
+            throw new IllegalArgumentException("El mes tiene que estar entre 1 y " + progreso.meses() + " (los meses de tu programa)");
+        }
+        RocaMaestra maestra = requireMaestraDelEje(command, progreso.duracionDias());
         MetaCuantitativa meta = command.tieneMeta()
                 ? new MetaCuantitativa(command.meta(), command.avance(), command.unidad(), null)
                 : null;
@@ -76,11 +86,11 @@ public class RocaMensualService implements ConsultarRocasMensualesUseCase, Defin
      * Por eso falta la maestra es un 404 con un mensaje que dice que hacer, y no un alta silenciosa
      * de una maestra vacia — el aprendiz tiene que decidir su objetivo grande primero.
      */
-    private RocaMaestra requireMaestraDelEje(DefinirRocaMensualCommand command) {
+    private RocaMaestra requireMaestraDelEje(DefinirRocaMensualCommand command, int duracion) {
         return loadRocaMaestraPort.deParticipanteYEje(command.actorId(), command.eje())
                 .orElseThrow(() -> new NoSuchElementException(
-                        "Antes de definir un objetivo mensual hay que definir el objetivo de 90 dias del eje "
-                                + command.eje()));
+                        "Antes de definir un objetivo mensual hay que definir el objetivo de "
+                                + DuracionDelPrograma.plazoDelObjetivo(duracion) + " del eje " + command.eje()));
     }
 
     /**

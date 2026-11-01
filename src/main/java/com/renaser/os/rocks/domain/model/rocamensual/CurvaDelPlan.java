@@ -66,9 +66,34 @@ public final class CurvaDelPlan {
     private CurvaDelPlan() {
     }
 
-    /** Fraccion del camino total que deberia estar recorrida al cierre de ese mes: 0,40 / 0,75 / 1. */
+    /** Fraccion del camino total que deberia estar recorrida al cierre de ese mes de un programa de 3 meses: 0,40 / 0,75 / 1. */
     public static BigDecimal acumuladoAlCierreDe(int numeroMes) {
         return ACUMULADO_AL_CIERRE[acotar(numeroMes) - 1];
+    }
+
+    /**
+     * Lo mismo para un programa de {@code totalMeses} meses (spec 026: 3 o 12). La forma 40 / 75 / 100 se conserva ESTIRADA: es la poligonal que pasa por
+     * (0, 0), (1/3, 0,40), (2/3, 0,75) y (1, 1), leida en la fraccion del programa que ya paso al cierre de ese mes. Con 3 meses da exactamente
+     * 0,40 / 0,75 / 1; con 12, el primer tercio del programa (4 meses) rinde el 40 %, el segundo el 35 % y el ultimo el 25 %: el mismo
+     * "el primer tramo rinde mas" del manual, sin inventar una regla nueva. El ultimo mes siempre es 1 (la meta).
+     */
+    public static BigDecimal acumuladoAlCierreDe(int numeroMes, int totalMeses) {
+        int total = Math.max(totalMeses, 1);
+        int mes = Math.min(Math.max(numeroMes, 1), total);
+        if (mes == total) {
+            return BigDecimal.ONE;
+        }
+        if (total == ACUMULADO_AL_CIERRE.length) {
+            return ACUMULADO_AL_CIERRE[mes - 1];
+        }
+        /* Con enteros: el mes m de N cae en el tercio (3m / N) y a (3m mod N) / N del camino dentro de el. Sin pasar por una fraccion decimal que
+           arrastre error (4 de 12 es EXACTAMENTE el cierre del primer tercio: 0,40). */
+        int tercios = ACUMULADO_AL_CIERRE.length;
+        int tramo = Math.min(tercios * mes / total, tercios - 1);
+        BigDecimal desde = tramo == 0 ? BigDecimal.ZERO : ACUMULADO_AL_CIERRE[tramo - 1];
+        BigDecimal hasta = ACUMULADO_AL_CIERRE[tramo];
+        BigDecimal dentroDelTramo = BigDecimal.valueOf((long) tercios * mes - (long) tramo * total).divide(BigDecimal.valueOf(total), PRECISION);
+        return desde.add(hasta.subtract(desde).multiply(dentroDelTramo, PRECISION), PRECISION);
     }
 
     private static int acotar(int numeroMes) {

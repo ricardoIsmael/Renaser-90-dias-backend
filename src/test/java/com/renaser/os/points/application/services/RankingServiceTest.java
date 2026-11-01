@@ -8,6 +8,7 @@ import com.renaser.os.points.application.ports.out.ranking.LoadRankingPort.Entra
 import com.renaser.os.points.application.ports.out.ranking.SaveRankingSnapshotPort;
 import com.renaser.os.points.domain.model.ranking.PosicionRanking;
 import com.renaser.os.points.domain.model.ranking.TipoRanking;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.users.api.CuentasCerradasFinder;
 import com.renaser.os.users.api.UserRole;
@@ -77,7 +78,7 @@ class RankingServiceTest {
     void setUp() {
         service = new RankingService(loadRankingCandidatosPort, saveRankingSnapshotPort, loadRankingPort,
                 porcentajeHabitosFinder, porcentajeRocasFinder, porcentajeCursosFinder, medicionAcumuladaFinder,
-                userSummaryFinder, cuentasCerradas);
+                userSummaryFinder, cuentasCerradas, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
         // Actor activo por defecto: los tests de consultar() no son sobre autorizacion.
         lenient().when(userSummaryFinder.findById(any())).thenAnswer(inv ->
                 Optional.of(new UserSummary(inv.getArgument(0), "Actor", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
@@ -286,7 +287,7 @@ class RankingServiceTest {
     @DisplayName("consultar() proyecta las filas del puerto out 1:1, sin recalcular nada")
     void consultarProyectaSnapshotExistente() {
         UserId a = id();
-        when(loadRankingPort.porTipoYFecha(TipoRanking.LEAGUE, FECHA)).thenReturn(List.of(
+        when(loadRankingPort.porTipoYFecha(eq(TipoRanking.LEAGUE), eq(FECHA), any())).thenReturn(List.of(
                 new EntradaRankingConNombre(a, "A", 1, BigDecimal.valueOf(150))));
 
         List<EntradaRanking> resultado = service.consultar(id(), TipoRanking.LEAGUE, FECHA);
@@ -306,7 +307,7 @@ class RankingServiceTest {
         assertThatThrownBy(() -> service.consultar(fantasma, TipoRanking.LEAGUE, FECHA))
                 .isInstanceOf(NotAuthorizedException.class);
 
-        verify(loadRankingPort, never()).porTipoYFecha(any(), any());
+        verify(loadRankingPort, never()).porTipoYFecha(any(), any(), any());
     }
 
     @Test
@@ -326,7 +327,7 @@ class RankingServiceTest {
         UserId primero = id();
         UserId cerrado = id();
         UserId tercero = id();
-        when(loadRankingPort.porTipoYFecha(TipoRanking.GENERAL, FECHA)).thenReturn(List.of(
+        when(loadRankingPort.porTipoYFecha(eq(TipoRanking.GENERAL), eq(FECHA), any())).thenReturn(List.of(
                 new EntradaRankingConNombre(primero, "Ana", 1, BigDecimal.valueOf(90)),
                 new EntradaRankingConNombre(cerrado, "Beto", 2, BigDecimal.valueOf(80)),
                 new EntradaRankingConNombre(tercero, "Caro", 3, BigDecimal.valueOf(70))));
@@ -341,8 +342,85 @@ class RankingServiceTest {
     @Test
     @DisplayName("consultar() sin snapshot generado devuelve lista vacia, no un error")
     void consultarSinSnapshotDevuelveVacio() {
-        when(loadRankingPort.porTipoYFecha(TipoRanking.GENERAL, FECHA)).thenReturn(List.of());
+        when(loadRankingPort.porTipoYFecha(eq(TipoRanking.GENERAL), eq(FECHA), any())).thenReturn(List.of());
 
         assertThat(service.consultar(id(), TipoRanking.GENERAL, FECHA)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("spec 024: generar() numera dentro de cada formación — cada una compara solo a los suyos y su primero es el 1")
+    void generarNumeraDentroDeCadaFormacion() {
+        UserId escuelaAlta = id(), escuelaBaja = id(), diplomadoAlta = id(), diplomadoBaja = id();
+        when(loadRankingCandidatosPort.aprendicesActivosConPuntaje()).thenReturn(List.of(
+                new CandidatoRanking(escuelaBaja, "EB", 50, BigDecimal.TEN, Formacion.ESCUELA),
+                new CandidatoRanking(diplomadoAlta, "DA", 500, BigDecimal.TEN, Formacion.DIPLOMADO),
+                new CandidatoRanking(escuelaAlta, "EA", 100, BigDecimal.TEN, Formacion.ESCUELA),
+                new CandidatoRanking(diplomadoBaja, "DB", 10, BigDecimal.TEN, Formacion.DIPLOMADO)));
+
+        service.generar(TipoRanking.LEAGUE, FECHA);
+
+        ArgumentCaptor<List<PosicionRanking>> captor = ArgumentCaptor.forClass(List.class);
+        verify(saveRankingSnapshotPort).reemplazar(eq(TipoRanking.LEAGUE), eq(FECHA), captor.capture());
+        List<PosicionRanking> posiciones = captor.getValue();
+        assertThat(posiciones).hasSize(4);
+        assertThat(posiciones).filteredOn(p -> p.formacion() == Formacion.ESCUELA)
+                .extracting(PosicionRanking::participanteId, PosicionRanking::posicion)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(escuelaAlta, 1), org.assertj.core.groups.Tuple.tuple(escuelaBaja, 2));
+        assertThat(posiciones).filteredOn(p -> p.formacion() == Formacion.DIPLOMADO)
+                .extracting(PosicionRanking::participanteId, PosicionRanking::posicion)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(diplomadoAlta, 1), org.assertj.core.groups.Tuple.tuple(diplomadoBaja, 2));
+    }
+
+    @Test
+    @DisplayName("spec 024: consultar() lee solo lo de la formación de quien pide, y quien pide otra formación no ve nada")
+    void consultarLeeSoloLaFormacionDeQuienPide() {
+        UserId aprendiz = id();
+        var deDiplomado = new com.renaser.os.users.api.AlcanceDeFormacionPermisivo() {
+            @Override
+            public com.renaser.os.shared.domain.AlcanceDeFormacion de(UserId actor) {
+                return com.renaser.os.shared.domain.AlcanceDeFormacion.de(Formacion.DIPLOMADO);
+            }
+        };
+        service = new RankingService(loadRankingCandidatosPort, saveRankingSnapshotPort, loadRankingPort,
+                porcentajeHabitosFinder, porcentajeRocasFinder, porcentajeCursosFinder, medicionAcumuladaFinder,
+                userSummaryFinder, cuentasCerradas, deDiplomado);
+        UserId rosa = id();
+        // El puerto responde como la base: solo las filas de las formaciones del alcance que recibe.
+        when(loadRankingPort.porTipoYFecha(eq(TipoRanking.LEAGUE), eq(FECHA), any())).thenAnswer(inv -> {
+            com.renaser.os.shared.domain.AlcanceDeFormacion alcance = inv.getArgument(2);
+            return alcance.incluye(Formacion.DIPLOMADO)
+                    ? List.of(new EntradaRankingConNombre(rosa, "Rosa", 1, BigDecimal.TEN, Formacion.DIPLOMADO)) : List.of();
+        });
+
+        assertThat(service.consultar(aprendiz, TipoRanking.LEAGUE, FECHA)).extracting(EntradaRanking::participanteId).containsExactly(rosa);
+        assertThat(service.consultar(aprendiz, TipoRanking.LEAGUE, FECHA, Formacion.DIPLOMADO)).hasSize(1);
+        assertThat(service.consultar(aprendiz, TipoRanking.LEAGUE, FECHA, Formacion.ESCUELA))
+                .as("pedir una formación que no ve no revela nada").isEmpty();
+        ArgumentCaptor<com.renaser.os.shared.domain.AlcanceDeFormacion> pedidos = ArgumentCaptor.forClass(com.renaser.os.shared.domain.AlcanceDeFormacion.class);
+        verify(loadRankingPort, times(3)).porTipoYFecha(eq(TipoRanking.LEAGUE), eq(FECHA), pedidos.capture());
+        assertThat(pedidos.getAllValues()).doesNotContain(com.renaser.os.shared.domain.AlcanceDeFormacion.todas())
+                .noneMatch(a -> a.incluye(Formacion.ESCUELA));
+    }
+
+    @Test
+    @DisplayName("spec 024: leyendo «Todas» las posiciones se cuentan dentro de cada formación, aun con una cuenta cerrada en el medio")
+    void consultarTodasRenumeraPorFormacion() {
+        UserId e1 = id(), eCerrada = id(), e3 = id(), d1 = id(), d2 = id();
+        when(loadRankingPort.porTipoYFecha(eq(TipoRanking.GENERAL), eq(FECHA), any())).thenReturn(List.of(
+                new EntradaRankingConNombre(d1, "D1", 1, BigDecimal.valueOf(95), Formacion.DIPLOMADO),
+                new EntradaRankingConNombre(e1, "E1", 1, BigDecimal.valueOf(90), Formacion.ESCUELA),
+                new EntradaRankingConNombre(eCerrada, "E2", 2, BigDecimal.valueOf(80), Formacion.ESCUELA),
+                new EntradaRankingConNombre(d2, "D2", 2, BigDecimal.valueOf(70), Formacion.DIPLOMADO),
+                new EntradaRankingConNombre(e3, "E3", 3, BigDecimal.valueOf(60), Formacion.ESCUELA)));
+        when(cuentasCerradas.cerradasEntre(any())).thenReturn(Set.of(eCerrada));
+
+        List<EntradaRanking> resultado = service.consultar(id(), TipoRanking.GENERAL, FECHA);
+
+        assertThat(resultado).filteredOn(e -> e.formacion() == Formacion.ESCUELA)
+                .extracting(EntradaRanking::participanteId, EntradaRanking::posicion)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(e1, 1), org.assertj.core.groups.Tuple.tuple(e3, 2));
+        assertThat(resultado).filteredOn(e -> e.formacion() == Formacion.DIPLOMADO)
+                .extracting(EntradaRanking::participanteId, EntradaRanking::posicion)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(d1, 1), org.assertj.core.groups.Tuple.tuple(d2, 2));
     }
 }

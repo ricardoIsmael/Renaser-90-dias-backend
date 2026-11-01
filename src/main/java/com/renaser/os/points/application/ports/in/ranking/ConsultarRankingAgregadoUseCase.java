@@ -1,6 +1,7 @@
 package com.renaser.os.points.application.ports.in.ranking;
 
 import com.renaser.os.points.application.ports.in.ranking.ConsultarRankingUseCase.EntradaRanking;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.LocalDate;
@@ -28,7 +29,12 @@ import java.util.UUID;
  */
 public interface ConsultarRankingAgregadoUseCase {
 
-    RankingAgregado agregado(UserId actorId, LocalDate fecha);
+    default RankingAgregado agregado(UserId actorId, LocalDate fecha) {
+        return agregado(actorId, fecha, null);
+    }
+
+    /** Spec 024: el ranking de la formación de quien pide; Administración elige una o lee «Todas» ({@code formacion} null). */
+    RankingAgregado agregado(UserId actorId, LocalDate fecha, Formacion formacion);
 
     /**
      * @param celula                celula del actor, {@code null} si todavia no tiene una asignada

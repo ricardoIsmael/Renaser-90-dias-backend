@@ -146,8 +146,19 @@ class PresenciaServiceTest {
             }
 
             @Override
-            public Optional<Conversacion> global() {
+            public Optional<Conversacion> global(com.renaser.os.shared.domain.Formacion formacion) {
                 return Optional.empty();
+            }
+
+            @Override
+            public List<Conversacion> globales(java.util.Collection<com.renaser.os.shared.domain.Formacion> formaciones) {
+                return List.of();
+            }
+
+            @Override
+            public java.util.Map<com.renaser.os.chat.domain.model.conversacion.TipoConversacion, Long> contarPorTipo(
+                    com.renaser.os.shared.domain.Formacion formacion) {
+                return java.util.Map.of();
             }
 
             @Override
@@ -206,7 +217,7 @@ class PresenciaServiceTest {
         };
 
         servicio = new PresenciaService(presencia, fanout, conversacionesDe, roster, conversaciones,
-                esParticipante, new AccesoAChatsDeGrupo(pertenencia, org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.participante.GruposEnCursoPort.class), usuarios), usuarios);
+                esParticipante, new AccesoAChatsDeGrupo(pertenencia, org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.participante.GruposEnCursoPort.class), usuarios), usuarios, new com.renaser.os.chat.application.services.VisibilidadPermisiva());
     }
 
     private void siRedisCaidoFallar() {

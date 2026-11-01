@@ -19,9 +19,12 @@ import java.time.Instant;
  *
  * <p>{@code supportTraineeId} (D-244, 2026-10-02): solo en un SOPORTE, el aprendiz de ese chat. Quien atiende
  * lo usa para ver si esa persona tiene un pedido de emergencia abierto y abrir «Cambiar día del programa». Ya
- * viajaba escondido en la clave del soporte; ahora va con nombre. {@code null} en lo demás. */
+ * viajaba escondido en la clave del soporte; ahora va con nombre. {@code null} en lo demás.
+ *
+ * <p>{@code formation} (spec 024): el código de la formación de la conversación. La app de Administración rotula con él cada fila cuando lee
+ * «Todas», y la del personal con varias formaciones lo usa para cambiar de formación activa al abrir un aviso. Un cliente anterior lo ignora. */
 public record ConversacionResponse(String id, String type, String celulaId, String nombre, String createdAt,
-                                   String photoPath, String supportTraineeId) {
+                                   String photoPath, String supportTraineeId, String formation) {
 
     /** Sin saber la foto propia de un grupo ni su nombre derivado (la respuesta de abrir un 1 a 1). */
     public static ConversacionResponse from(Conversacion c) {
@@ -39,7 +42,8 @@ public record ConversacionResponse(String id, String type, String celulaId, Stri
         return new ConversacionResponse(c.id().toString(), toWireTipo(c.tipo()),
                 c.celulaId() != null ? c.celulaId().toString() : null, nombre, c.creadoEn().toString(),
                 rutaDeLaFoto(c, fotoDelGrupoCambiadaEn),
-                c.aprendizDelSoporte().map(aprendiz -> aprendiz.value().toString()).orElse(null));
+                c.aprendizDelSoporte().map(aprendiz -> aprendiz.value().toString()).orElse(null),
+                c.formacion().codigo());
     }
 
     static String toWireTipo(TipoConversacion tipo) {

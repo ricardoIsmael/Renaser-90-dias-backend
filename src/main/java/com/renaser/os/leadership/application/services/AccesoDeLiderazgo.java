@@ -1,7 +1,9 @@
 package com.renaser.os.leadership.application.services;
 
 import com.renaser.os.shared.domain.NotAuthorizedException;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import com.renaser.os.users.api.FichaDeMentorFinder;
 import com.renaser.os.users.api.FichaDeMentorFinder.FichaDeMentor;
 import com.renaser.os.users.api.UserRole;
@@ -11,6 +13,7 @@ import com.renaser.os.users.api.UserSummaryFinder;
 import org.springframework.stereotype.Component;
 
 import java.util.EnumSet;
+import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Set;
 
@@ -30,10 +33,29 @@ class AccesoDeLiderazgo {
 
     private final UserSummaryFinder userSummaryFinder;
     private final FichaDeMentorFinder fichaDeMentorFinder;
+    private final AlcanceDeFormacionFinder formaciones;
 
-    AccesoDeLiderazgo(UserSummaryFinder userSummaryFinder, FichaDeMentorFinder fichaDeMentorFinder) {
+    AccesoDeLiderazgo(UserSummaryFinder userSummaryFinder, FichaDeMentorFinder fichaDeMentorFinder,
+                      AlcanceDeFormacionFinder formaciones) {
         this.userSummaryFinder = userSummaryFinder;
         this.fichaDeMentorFinder = fichaDeMentorFinder;
+        this.formaciones = formaciones;
+    }
+
+    /**
+     * Los mentores activos que ve {@code actorId} (spec 022): los de SU formación — para el líder con varias, la activa —; Administración y Alquimista
+     * ven los de las tres. Nunca una lista con mentores de dos formaciones a la vez para quien tiene una activa.
+     */
+    List<FichaDeMentor> mentoresDelAlcance(UserId actorId) {
+        List<FichaDeMentor> todos = fichaDeMentorFinder.mentoresActivos();
+        Set<UserId> visibles = formaciones.dentroDelAlcance(todos.stream().map(FichaDeMentor::id).toList(),
+                formaciones.de(actorId));
+        return todos.stream().filter(ficha -> visibles.contains(ficha.id())).toList();
+    }
+
+    /** Las formaciones que ve quien actúa (spec 022): el líder con la Escuela activa, solo la Escuela; Administración y Alquimista, las tres. */
+    AlcanceDeFormacion alcanceDe(UserId actorId) {
+        return formaciones.de(actorId);
     }
 
     /** @return el rol con el que actua: la ficha de una persona lo registra junto con la consulta (spec 005, FR-016) */

@@ -12,7 +12,7 @@ import java.util.Map;
 /**
  * Lo que {@code rag} borra de una persona cuando su cuenta se borra para siempre (D-243): su conversación
  * con RenasIA (mensajes y sus fuentes), lo que RenasIA recuerda de ella (memoria compactada y recuerdos),
- * su agenda ocupada, sus informes del Espejo de la Sombra con sus preguntas, y las propuestas del
+ * su agenda ocupada, sus informes del Espejo de la Sombra con sus preguntas, sus análisis 80/20 con IA (spec 031, FR-025) y las propuestas del
  * acompañante. Todo es de ella sola. La base de conocimiento es catálogo y no se toca; no hay archivos.
  */
 @Component
@@ -31,7 +31,8 @@ class BorradoDeCuentaEnRagAdapter implements BorradoDeDatosDeCuenta {
             "DELETE FROM renaser.preguntas_confrontacion WHERE informe_id IN "
                     + "(SELECT id FROM renaser.informes_espejo_sombra WHERE participante_id = :id)",
             "DELETE FROM renaser.informes_espejo_sombra WHERE participante_id = :id",
-            "DELETE FROM renaser.propuestas_acompanante WHERE participante_id = :id");
+            "DELETE FROM renaser.propuestas_acompanante WHERE participante_id = :id",
+            "DELETE FROM renaser.analisis_80_20 WHERE participante_id = :id");
 
     private final NamedParameterJdbcTemplate jdbc;
 

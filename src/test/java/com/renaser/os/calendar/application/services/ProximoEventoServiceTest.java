@@ -56,7 +56,7 @@ class ProximoEventoServiceTest {
     @BeforeEach
     void setUp() {
         AccesoEventoService accesoEventoService = new AccesoEventoService(progresoPort, nivelPort, cursoNoOp(),
-                (u, t) -> false, (celula, usuario) -> false);
+                (u, t) -> false, (celula, usuario) -> false, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
         service = new ProximoEventoService(loadEventoPort, loadExcepcionPort, accesoEventoService, CLOCK);
         lenient().when(nivelPort.listar()).thenReturn(List.of());
         lenient().when(loadExcepcionPort.porEventos(any())).thenReturn(Map.of());

@@ -228,14 +228,15 @@ class RachaDelHabitoIT {
     }
 
     @Test
-    @DisplayName("GET /habits: la app vieja sigue funcionando, todos los campos de antes y rachaDias es solo uno mas")
+    @DisplayName("GET /habits: la app vieja sigue funcionando, todos los campos de antes y rachaDias y categoryKey son solo dos mas")
     void elCatalogoEsCompatible() throws Exception {
         JsonNode habito = misHabitos(ana).get(enPausa);
 
         List<String> campos = new ArrayList<>();
         habito.fieldNames().forEachRemaining(campos::add);
         assertThat(campos).containsAll(CAMPOS_DEL_CATALOGO);
-        assertThat(campos).hasSize(CAMPOS_DEL_CATALOGO.size() + 1).contains("rachaDias");
+        // rachaDias (D-254) y categoryKey (spec 023: la categoría de la formación, para que la app agrupe sin adivinar por el nombre) son los dos únicos agregados.
+        assertThat(campos).hasSize(CAMPOS_DEL_CATALOGO.size() + 2).contains("rachaDias", "categoryKey");
     }
 
     @Test

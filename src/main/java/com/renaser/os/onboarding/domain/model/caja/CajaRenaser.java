@@ -35,7 +35,6 @@ public final class CajaRenaser {
     /** El flujo del motor de formularios donde vive la caja (V82). */
     public static final String FLUJO = "caja_renaser";
     public static final int DIA_DE_LA_CAJA = 8;
-    private static final int ULTIMO_DIA = 90;
 
     private final UserId aprendizId;
     private final SituacionDelAprendiz situacion;
@@ -78,7 +77,7 @@ public final class CajaRenaser {
         return estado;
     }
 
-    /** El día del programa en la fecha local del aprendiz, de 0 a 90 (0 si la caja no le aplica). */
+    /** El día del programa en la fecha local del aprendiz, de 0 a la duración de SU programa (0 si la caja no le aplica). */
     public int diaDelPrograma() {
         return diaDelPrograma;
     }
@@ -146,6 +145,6 @@ public final class CajaRenaser {
     private static int diaLocal(SituacionDelAprendiz situacion, Instant ahora) {
         LocalDate hoy = ahora.atZone(situacion.zona()).toLocalDate();
         long dia = ChronoUnit.DAYS.between(situacion.primeraFecha(), hoy) + 1;
-        return (int) Math.max(0, Math.min(ULTIMO_DIA, dia));
+        return (int) Math.max(0, Math.min(situacion.duracionDias(), dia));
     }
 }

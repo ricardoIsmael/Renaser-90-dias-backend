@@ -1,6 +1,8 @@
 package com.renaser.os.rag.application.ports.out.participante;
 
 import com.renaser.os.rag.domain.model.mapa.ResumenDelMapa;
+import com.renaser.os.shared.domain.DuracionDelPrograma;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.LocalDate;
@@ -42,7 +44,7 @@ public interface ConsultarSituacionDelAprendizPort {
     Optional<SituacionDelAprendiz> de(UserId participanteId);
 
     /**
-     * @param diaPrograma dia de programa, de 1 a 90
+     * @param diaPrograma dia de programa, de 1 a la duracion de su programa (90, o 365 en el Diplomado de un anio)
      * @param fase        numero de fase, de 1 a 4. Se deriva del DIA y no se lee de la columna
      *                    guardada: {@code users.api.FasePrograma} documenta que hay filas con el
      *                    dia y la fase desincronizados (D-66) y que nunca hay que confiar en el
@@ -55,11 +57,29 @@ public interface ConsultarSituacionDelAprendizPort {
      *                    no se sabe (no se consulto o fallo): el prompt lo dice y el modelo vuelve a
      *                    las herramientas
      * @param trato       como tratarla (E-457): masculino, femenino o neutro. {@code null} = neutro
+     * @param duracionDias los dias de SU programa (spec 022); 90 si no se sabe
      * @param mapa        la prioridad y el proximo hito de su Mapa de Renacimiento (D-233). {@code null} =
      *                    no se consulto o fallo: el prompt no dice nada y el modelo usa consultar_mi_mapa
      */
     record SituacionDelAprendiz(int diaPrograma, int fase, LocalDate hoy, HabitosDeHoy habitos,
-                                ConsultarTratoDeLaPersonaPort.TratoDeLaPersona trato, ResumenDelMapa mapa) {
+                                ConsultarTratoDeLaPersonaPort.TratoDeLaPersona trato, ResumenDelMapa mapa, int duracionDias,
+                                Formacion formacion) {
+
+        public SituacionDelAprendiz {
+            formacion = formacion == null ? Formacion.POR_DEFECTO : formacion;
+        }
+
+        /** Sin la formación (spec 022): la de la Escuela. */
+        public SituacionDelAprendiz(int diaPrograma, int fase, LocalDate hoy, HabitosDeHoy habitos,
+                                    ConsultarTratoDeLaPersonaPort.TratoDeLaPersona trato, ResumenDelMapa mapa, int duracionDias) {
+            this(diaPrograma, fase, hoy, habitos, trato, mapa, duracionDias, Formacion.POR_DEFECTO);
+        }
+
+        /** Firma de antes de las formaciones (spec 022): el programa de 90 días. */
+        public SituacionDelAprendiz(int diaPrograma, int fase, LocalDate hoy, HabitosDeHoy habitos,
+                                    ConsultarTratoDeLaPersonaPort.TratoDeLaPersona trato, ResumenDelMapa mapa) {
+            this(diaPrograma, fase, hoy, habitos, trato, mapa, 90);
+        }
 
         public SituacionDelAprendiz(int diaPrograma, int fase, LocalDate hoy, HabitosDeHoy habitos,
                                     ConsultarTratoDeLaPersonaPort.TratoDeLaPersona trato) {
@@ -79,15 +99,30 @@ public interface ConsultarSituacionDelAprendizPort {
         }
 
         public SituacionDelAprendiz conHabitos(HabitosDeHoy habitosDeHoy) {
-            return new SituacionDelAprendiz(diaPrograma, fase, hoy, habitosDeHoy, trato, mapa);
+            return new SituacionDelAprendiz(diaPrograma, fase, hoy, habitosDeHoy, trato, mapa, duracionDias, formacion);
         }
 
         public SituacionDelAprendiz conTrato(ConsultarTratoDeLaPersonaPort.TratoDeLaPersona tratoDeLaPersona) {
-            return new SituacionDelAprendiz(diaPrograma, fase, hoy, habitos, tratoDeLaPersona, mapa);
+            return new SituacionDelAprendiz(diaPrograma, fase, hoy, habitos, tratoDeLaPersona, mapa, duracionDias, formacion);
         }
 
         public SituacionDelAprendiz conMapa(ResumenDelMapa resumenDelMapa) {
-            return new SituacionDelAprendiz(diaPrograma, fase, hoy, habitos, trato, resumenDelMapa);
+            return new SituacionDelAprendiz(diaPrograma, fase, hoy, habitos, trato, resumenDelMapa, duracionDias, formacion);
+        }
+
+        /** Los días de SU programa (spec 022): 90 en la Escuela, 365 en el Diplomado de un año. */
+        public SituacionDelAprendiz conDuracion(int dias) {
+            return new SituacionDelAprendiz(diaPrograma, fase, hoy, habitos, trato, mapa, dias, formacion);
+        }
+
+        /** La formación donde hace su programa (spec 022): de ella y de su duración sale cómo se llama su objetivo grande. */
+        public SituacionDelAprendiz conFormacion(Formacion formacionDeLaPersona) {
+            return new SituacionDelAprendiz(diaPrograma, fase, hoy, habitos, trato, mapa, duracionDias, formacionDeLaPersona);
+        }
+
+        /** Cómo se dice el plazo de su objetivo grande: «90 días», «3 meses» o «1 año» (decisión del dueño, 2026-10-31). */
+        public String plazoDelObjetivo() {
+            return DuracionDelPrograma.plazoDelObjetivo(duracionDias, formacion);
         }
     }
 }

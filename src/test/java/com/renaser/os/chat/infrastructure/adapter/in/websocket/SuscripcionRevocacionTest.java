@@ -126,7 +126,7 @@ class SuscripcionRevocacionTest {
 
     private void armarCanales(Clock reloj) {
         AutorizacionDeConversacionService regla =
-                new AutorizacionDeConversacionService(conversaciones, proyeccion, new AccesoAChatsDeGrupo(pertenenciaVigente, org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.participante.GruposEnCursoPort.class), usuarios), usuarios);
+                new AutorizacionDeConversacionService(conversaciones, proyeccion, new AccesoAChatsDeGrupo(pertenenciaVigente, org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.participante.GruposEnCursoPort.class), usuarios), usuarios, new com.renaser.os.chat.application.services.VisibilidadPermisiva());
         sesionViva = new SesionViva(sesiones, reloj);
         autorizacionViva = new AutorizacionViva(regla, reloj);
         interceptor = new SubscripcionAutorizadaInterceptor(regla, usuarios, sesionViva, autorizacionViva, (conversacion, actor) -> { });

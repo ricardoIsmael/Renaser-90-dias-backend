@@ -1,11 +1,13 @@
 package com.renaser.os.users.infrastructure.adapter.in.rest.admin;
 
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
 import com.renaser.os.shared.web.security.RequiresPermission;
+import com.renaser.os.users.application.ports.in.accountrequest.ConsultarAceptacionDeLaPersonaUseCase;
 import com.renaser.os.users.application.ports.in.participante.GetTraineeDetailUseCase;
 import com.renaser.os.users.application.ports.in.participante.GetTraineeDetailUseCase.GetTraineeDetailCommand;
 import com.renaser.os.users.application.ports.in.participante.ListTraineesUseCase;
@@ -43,13 +45,16 @@ public class TraineeAdminController {
     private final ListTraineesUseCase listTraineesUseCase;
     private final GetTraineeDetailUseCase getTraineeDetailUseCase;
     private final SetTraineeProgramDayUseCase setTraineeProgramDayUseCase;
+    private final ConsultarAceptacionDeLaPersonaUseCase aceptacionDeLaPersona;
 
     public TraineeAdminController(ListTraineesUseCase listTraineesUseCase,
                                    GetTraineeDetailUseCase getTraineeDetailUseCase,
-                                   SetTraineeProgramDayUseCase setTraineeProgramDayUseCase) {
+                                   SetTraineeProgramDayUseCase setTraineeProgramDayUseCase,
+                                   ConsultarAceptacionDeLaPersonaUseCase aceptacionDeLaPersona) {
         this.listTraineesUseCase = listTraineesUseCase;
         this.getTraineeDetailUseCase = getTraineeDetailUseCase;
         this.setTraineeProgramDayUseCase = setTraineeProgramDayUseCase;
+        this.aceptacionDeLaPersona = aceptacionDeLaPersona;
     }
 
     @RequiresPermission(Permission.MANAGE_TRAINEES)
@@ -59,13 +64,16 @@ public class TraineeAdminController {
                                        @RequestParam(defaultValue = "20") int size,
                                        @RequestParam(required = false) String q,
                                        @RequestParam(defaultValue = "false") boolean withoutGroup,
-                                       @RequestParam(required = false) UserRole role) {
+                                       @RequestParam(required = false) UserRole role,
+                                       @RequestParam(required = false) String formation) {
         // q y withoutGroup se resuelven en la BASE, no sobre la pagina: buscar sobre los veinte
         // ya descargados esconde al que esta mas atras (SDD 003, ARF-02 / V28).
         // withoutGroup=true sigue devolviendo SOLO aprendices sin celula (D-138): es la cola de
         // "a quien hay que ubicar", y el staff no se ubica en ningun grupo.
         // role (E-605): opcional; «Equipo y roles» pide role=TRAINEE para su sección de aprendices. Sin él, todos.
-        var pagina = listTraineesUseCase.listar(new ListTraineesCommand(actor, page, size, q, withoutGroup, role));
+        // formation (spec 022): el filtro «Formación» de Administración; vacío = «Todas».
+        Formacion formacion = formation == null || formation.isBlank() ? null : Formacion.desde(formation);
+        var pagina = listTraineesUseCase.listar(new ListTraineesCommand(actor, page, size, q, withoutGroup, role, formacion));
         return TraineePageResponse.from(pagina);
     }
 
@@ -73,7 +81,7 @@ public class TraineeAdminController {
     @GetMapping("/{id}")
     public TraineeDetailResponse detalle(@PathVariable UUID id, @ActorAutenticado UserId actor) {
         var detalle = getTraineeDetailUseCase.obtener(new GetTraineeDetailCommand(actor, UserId.of(id)));
-        return TraineeDetailResponse.from(detalle);
+        return TraineeDetailResponse.from(detalle, aceptacionDeLaPersona.de(actor, UserId.of(id)));
     }
 
     @RequiresPermission(Permission.MANAGE_TRAINEES)

@@ -11,7 +11,10 @@ import java.time.LocalDate;
  */
 public interface PublicarPodioDeLaSemanaUseCase {
 
-    /** El barrido del lunes: no hace nada con el interruptor {@code renaser.chat.ranking-semanal.activo} apagado. */
+    /**
+     * El barrido del lunes: no hace nada con el interruptor {@code renaser.chat.ranking-semanal.activo} apagado. Spec 024: publica UN podio por
+     * formación, cada uno en su comunidad general; el resultado junta los tres (publicó = PUBLICADO si salió alguno).
+     */
     ResultadoDelPodio publicarLaSemanaCerrada();
 
     /**

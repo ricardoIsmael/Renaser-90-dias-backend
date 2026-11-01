@@ -2,7 +2,7 @@ package com.renaser.os.habits.infrastructure.adapter.in.rest.habito;
 
 import com.renaser.os.habits.application.ports.in.habito.ConsultarMisHabitosUseCase.HabitoConDias;
 import com.renaser.os.habits.domain.model.habito.Habito;
-import com.renaser.os.habits.infrastructure.adapter.in.rest.habitoadmin.HabitCategoryDto;
+import com.renaser.os.habits.domain.model.categoria.CodigoDeCategoria;
 import com.renaser.os.habits.infrastructure.adapter.in.rest.habitoadmin.HabitEvidenceRequirementDto;
 import com.renaser.os.habits.infrastructure.adapter.in.rest.habitoadmin.HabitTypeDto;
 
@@ -47,20 +47,21 @@ import java.util.List;
  * {@code null} en la respuesta del alta de un habito PERSONAL, que no la calcula (recien creado no tiene historia).
  */
 public record MiHabitoResponse(String id, String title, String description, HabitTypeDto habitType,
-                                HabitCategoryDto category, HabitEvidenceRequirementDto evidenceRequirement,
+                                String category, HabitEvidenceRequirementDto evidenceRequirement,
                                 boolean isOptional, boolean isSystemHabit, boolean isDeactivatable,
                                 String systemKey, String iconKey, List<String> activeWeekdays,
-                                int unlockDay, int daysUntilUnlock, boolean locked, Integer rachaDias) {
+                                int unlockDay, int daysUntilUnlock, boolean locked, Integer rachaDias,
+                                String categoryKey) {
 
     public static MiHabitoResponse from(HabitoConDias vista) {
         return new MiHabitoResponse(vista.habito().id().value().toString(), vista.habito().titulo(),
                 vista.habito().descripcion(), HabitTypeDto.from(vista.habito().tipo()),
-                HabitCategoryDto.fromClave(vista.habito().categoriaClave()),
+                CodigoDeCategoria.deClave(vista.habito().categoriaClave()),
                 HabitEvidenceRequirementDto.from(vista.habito().exigenciaEvidencia()),
                 vista.habito().esOpcional(), vista.habito().esDeSistema(), vista.habito().desactivable(),
                 vista.habito().claveSistema(), vista.habito().iconoClave(),
                 diasOrdenados(vista.diasSemana()), vista.diaDesbloqueo(),
-                vista.diasParaDesbloqueo(), vista.bloqueado(), vista.rachaDias());
+                vista.diasParaDesbloqueo(), vista.bloqueado(), vista.rachaDias(), vista.habito().categoriaClave());
     }
 
     private static List<String> diasOrdenados(java.util.Set<DayOfWeek> dias) {
@@ -77,9 +78,9 @@ public record MiHabitoResponse(String id, String title, String description, Habi
 
     public static MiHabitoResponse from(Habito habito, java.util.Set<DayOfWeek> diasSemana) {
         return new MiHabitoResponse(habito.id().value().toString(), habito.titulo(), habito.descripcion(),
-                HabitTypeDto.from(habito.tipo()), HabitCategoryDto.fromClave(habito.categoriaClave()),
+                HabitTypeDto.from(habito.tipo()), CodigoDeCategoria.deClave(habito.categoriaClave()),
                 HabitEvidenceRequirementDto.from(habito.exigenciaEvidencia()), habito.esOpcional(),
                 habito.esDeSistema(), habito.desactivable(), habito.claveSistema(), habito.iconoClave(),
-                diasOrdenados(diasSemana), PRIMER_DIA, 0, false, null);
+                diasOrdenados(diasSemana), PRIMER_DIA, 0, false, null, habito.categoriaClave());
     }
 }

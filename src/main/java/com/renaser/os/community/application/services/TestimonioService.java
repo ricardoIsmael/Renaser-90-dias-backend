@@ -13,10 +13,14 @@ import com.renaser.os.community.domain.model.publicacion.Publicacion;
 import com.renaser.os.community.domain.model.testimonio.Testimonio;
 import com.renaser.os.community.domain.model.testimonio.TestimonioId;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.Formacion;
+import com.renaser.os.shared.domain.FormacionDelContenido;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import com.renaser.os.users.api.CuentasCerradasFinder;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
@@ -48,12 +52,16 @@ public class TestimonioService implements CrearTestimonioUseCase, PromoverPublic
     private final IdGenerator idGenerator;
     /** D-243: la vitrina no muestra testimonios de cuentas cerradas esperando su borrado. */
     private final SinCuentasCerradas sinCerradas;
+    /** Spec 024: cada testimonio es de una formación y se ve solo ahí. */
+    private final AlcanceDeFormacionFinder formaciones;
 
     public TestimonioService(LoadTestimonioPort loadTestimonioPort, SaveTestimonioPort saveTestimonioPort,
                               LoadPublicacionPort loadPublicacionPort,
                               ConsultarPerfilUsuarioPort consultarPerfilUsuarioPort,
                               AlmacenamientoPort almacenamientoPort, UserSummaryFinder userSummaryFinder,
-                              Clock clock, IdGenerator idGenerator, CuentasCerradasFinder cuentasCerradas) {
+                              Clock clock, IdGenerator idGenerator, CuentasCerradasFinder cuentasCerradas,
+                              AlcanceDeFormacionFinder formaciones) {
+        this.formaciones = formaciones;
         this.sinCerradas = new SinCuentasCerradas(cuentasCerradas);
         this.loadTestimonioPort = loadTestimonioPort;
         this.saveTestimonioPort = saveTestimonioPort;
@@ -84,9 +92,11 @@ public class TestimonioService implements CrearTestimonioUseCase, PromoverPublic
            controller dice "solo ADMIN/ALCHEMIST". Esto no inventa una regla: hace que los dos
            caminos al mismo efecto pidan lo mismo. */
         requireAdmin(command.actorId());
+        // Spec 024: Administración no pertenece a una formación, así que elige siempre en cuál queda el testimonio.
+        Formacion donde = FormacionDelContenido.paraCrear(formaciones.de(command.actorId()), command.formacion());
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
         Testimonio testimonio = Testimonio.crear(TestimonioId.of(idGenerator.newId()), command.actorId(), null,
-                command.nombre(), command.rolTexto(), null, null, command.texto(), command.estrellas(), clock.now());
+                command.nombre(), command.rolTexto(), null, null, command.texto(), command.estrellas(), clock.now(), donde);
         return aVista(saveTestimonioPort.save(testimonio));
     }
 
@@ -113,15 +123,16 @@ public class TestimonioService implements CrearTestimonioUseCase, PromoverPublic
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
         Testimonio testimonio = Testimonio.crear(TestimonioId.of(idGenerator.newId()), publicacion.autorId(),
                 publicacion.id(), autor.nombreCompleto(), resumenAutor.role().name(), autor.avatarUrl(),
-                fotoEventoRuta, publicacion.texto(), command.estrellas(), clock.now());
+                fotoEventoRuta, publicacion.texto(), command.estrellas(), clock.now(), publicacion.formacion());
         return aVista(saveTestimonioPort.save(testimonio));
     }
 
     @Override
-    public List<TestimonioVista> listarDestacados() {
+    public List<TestimonioVista> listarDestacados(UserId actorId, Formacion formacion) {
+        AlcanceDeFormacion alcance = FormacionDelContenido.paraLeer(formaciones.de(actorId), formacion);
         // Sin los que hablan de una cuenta cerrada (D-243). La vitrina puede quedar con menos de
         // LIMITE_LISTADO: es un tope, no una cantidad prometida, y en 30 días esas filas se borran.
-        return sinCerradas.de(loadTestimonioPort.listarDestacados(LIMITE_LISTADO), Testimonio::personaDeLaQueHabla)
+        return sinCerradas.de(loadTestimonioPort.listarDestacados(LIMITE_LISTADO, alcance), Testimonio::personaDeLaQueHabla)
                 .stream().map(this::aVista).toList();
     }
 

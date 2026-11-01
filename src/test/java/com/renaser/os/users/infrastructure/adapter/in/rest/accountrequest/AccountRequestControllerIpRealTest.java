@@ -89,6 +89,9 @@ class AccountRequestControllerIpRealTest {
     private VerificarDominioEmailUseCase verificarDominioEmailUseCase;
     @MockitoBean
     private UserSummaryFinder userSummaryFinder;
+    /** Spec 025: el controlador suma las opciones de la hoja «Aceptar»; estas pruebas no las ejercen. */
+    @MockitoBean
+    private com.renaser.os.users.application.ports.in.accountrequest.ConsultarOpcionesDeAceptacionUseCase opcionesDeAceptacion;
 
     @Test
     @DisplayName("detras de CloudFront, la IP que ve el limite de tasa es la del cliente, no la del borde")

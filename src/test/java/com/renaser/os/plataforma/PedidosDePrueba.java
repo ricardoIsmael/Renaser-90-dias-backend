@@ -52,6 +52,8 @@ public final class PedidosDePrueba {
                 INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado, hash_contrasena)
                 VALUES (?, ?, ?, CAST(? AS renaser.rol_usuario), CAST(? AS renaser.estado_usuario), ?)
                 """, id, id + "@renaser.test", "Fixture " + rol, rol, estado, passwordEncoder.encode(CONTRASENA));
+        // Como el alta real: el personal nace con la Escuela asignada (spec 022); sin ella no ve ninguna formacion.
+        com.renaser.os.FormacionesDePrueba.alPersonalLeAsignaLaEscuela(jdbc, id, rol);
         cuentas.add(id);
         return id;
     }

@@ -8,6 +8,7 @@ import com.renaser.os.habits.domain.model.audiencia.CodigoDeRol;
 import com.renaser.os.habits.domain.model.audiencia.HistorialDeAudiencia;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
 
@@ -26,6 +27,10 @@ import java.util.stream.Collectors;
  * <p>Vigencia estricta (clarify 2026-10-12): para el día {@code dia} rigen la audiencia y el rol guardados antes de
  * ese día en la zona de la persona. Dos consultas por llamada —las audiencias de todo el catálogo en lote y el
  * historial de rol de la persona—, nunca una por hábito.
+ *
+ * <p>Spec 023 (D-300): además de la audiencia, el hábito tiene que ser de la FORMACIÓN en la que la persona hace su programa
+ * ({@code progreso.formacion()}). Un hábito de otra formación no le toca a nadie de esta, y sale en {@link #globalesQueNoLeTocan}
+ * igual que uno de otro rol: así las vistas de acompañamiento muestran los mismos hábitos que ve la persona.
  *
  * <p>El código de rol sale del espejo local {@code RolParticipante}: un rol nuevo pide sumarle una constante (el
  * {@code switch} del adaptador de progreso no compila sin ella), y nada más en habits.
@@ -50,6 +55,16 @@ public class CatalogoAplicable {
     }
 
     /**
+     * Todos los hábitos que le corresponden a la persona el día local {@code dia} (spec 028): los globales que le tocan por su rol y sus
+     * hábitos personales activos. Es el conjunto sobre el que se planifica una semana o se repite: lo que queda fuera no se escribe.
+     */
+    public List<Habito> aplicablesPara(UserId persona, ProgresoParticipanteHabits progreso, LocalDate dia) {
+        List<Habito> habitos = new java.util.ArrayList<>(globalesPara(persona, progreso, dia));
+        habitos.addAll(loadHabitoPort.personalesActivosDe(persona));
+        return habitos;
+    }
+
+    /**
      * Los globales activos que NO le tocan ese día. Lo usa la vista de quien acompaña, que parte de su propia consulta
      * del catálogo y solo tiene que sacar estos (FR-013).
      */
@@ -67,7 +82,8 @@ public class CatalogoAplicable {
                 .vigenteEl(dia, zona, CodigoDeRol.of(progreso.rol().name()));
         Map<HabitoId, HistorialDeAudiencia> audiencias = audienciasPort.deHabitos(
                 activos.stream().map(Habito::id).toList());
-        return activos.stream().collect(Collectors.partitioningBy(h -> audiencias
+        Formacion formacion = progreso.formacion();
+        return activos.stream().collect(Collectors.partitioningBy(h -> h.esDeFormacion(formacion) && audiencias
                 .getOrDefault(h.id(), HistorialDeAudiencia.vacio()).vigenteEl(dia, zona).aplicaA(rol)));
     }
 }

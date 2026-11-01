@@ -10,6 +10,7 @@ import com.renaser.os.mentoring.api.EvaluacionDeMentorFinder.EvaluacionDeMentor;
 import com.renaser.os.mentoring.api.MedicionDeMentoresFinder;
 import com.renaser.os.mentoring.api.MedicionDeMentoresFinder.GrupoMedido;
 import com.renaser.os.mentoring.api.MedicionDeMentoresFinder.MedicionVigente;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FichaDeMentorFinder.FichaDeMentor;
 import org.slf4j.Logger;
@@ -51,8 +52,8 @@ class IndicadoresDeMentores {
         this.atencion = atencion;
     }
 
-    Lectura leer(List<FichaDeMentor> mentores, MesDelReporte mes) {
-        Fuente<MedicionVigente> medicion = leer("los grupos y su semaforo", medicionFinder::vigente);
+    Lectura leer(List<FichaDeMentor> mentores, MesDelReporte mes, AlcanceDeFormacion alcance) {
+        Fuente<MedicionVigente> medicion = leer("los grupos y su semaforo", () -> medicionFinder.vigente(alcance));
         Map<UserId, List<GrupoMedido>> gruposPorMentor = medicion.disponible()
                 ? medicion.valor().grupos().stream().collect(Collectors.groupingBy(GrupoMedido::mentorId))
                 : null;

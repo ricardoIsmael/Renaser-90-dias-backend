@@ -12,6 +12,7 @@ import com.renaser.os.community.domain.model.acompanamiento.PoliticaMentoria;
 import com.renaser.os.community.domain.model.celula.Celula;
 import com.renaser.os.community.domain.model.celula.CelulaId;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,9 +41,12 @@ class AcompanamientoFinderService implements AcompanamientoFinder, MentorVigente
     private final LoadCelulaPort loadCelulaPort;
     private final LoadPoliticaMentoriaPort loadPoliticaMentoriaPort;
     private final VigenciaDeGrupos vigencia;
+    /** Spec 022: quien tiene varias formaciones acompaña solo los grupos de la que tiene activa. */
+    private final AlcanceDeFormacionFinder formaciones;
 
     AcompanamientoFinderService(LoadAsignacionesPort loadAsignacionesPort, LoadCelulaPort loadCelulaPort,
-                                 LoadPoliticaMentoriaPort loadPoliticaMentoriaPort) {
+                                 LoadPoliticaMentoriaPort loadPoliticaMentoriaPort, AlcanceDeFormacionFinder formaciones) {
+        this.formaciones = formaciones;
         this.loadAsignacionesPort = loadAsignacionesPort;
         this.loadCelulaPort = loadCelulaPort;
         this.loadPoliticaMentoriaPort = loadPoliticaMentoriaPort;
@@ -127,7 +131,13 @@ class AcompanamientoFinderService implements AcompanamientoFinder, MentorVigente
                 .filter(a -> a.usuarioId().equals(actorId))
                 // Ser APRENDIZ del grupo no es acompanarlo.
                 .filter(a -> !a.funcion().consumeCupo())
-                .anyMatch(a -> a.vigenteEn(instante));
+                .anyMatch(a -> a.vigenteEn(instante))
+                // Spec 022: un grupo de la formación que el actor no tiene activa se responde como un grupo ajeno.
+                && enLaFormacionDe(actorId, grupoId);
+    }
+
+    private boolean enLaFormacionDe(UserId actorId, UUID grupoId) {
+        return loadCelulaPort.porId(CelulaId.of(grupoId)).map(grupo -> formaciones.de(actorId).incluye(grupo.formacion())).orElse(false);
     }
 
     @Override
@@ -188,7 +198,7 @@ class AcompanamientoFinderService implements AcompanamientoFinder, MentorVigente
                     .findFirst()
                     .ifPresent(mentor -> acompanados.add(new GrupoAcompanado(celula.id().value(), celula.nombre(),
                             mentor.usuarioId(), celula.cohorteId().value(), politica.zonaHoraria(),
-                            politica.diasSinActividadAlerta())));
+                            politica.diasSinActividadAlerta(), celula.formacion())));
         }
         return acompanados;
     }
@@ -237,7 +247,7 @@ class AcompanamientoFinderService implements AcompanamientoFinder, MentorVigente
         PoliticaMentoria politica = loadPoliticaMentoriaPort.porCohorte(celula.cohorteId())
                 .orElseGet(() -> PoliticaMentoria.porDefecto(celula.cohorteId()));
         return new GrupoAcompanado(celula.id().value(), celula.nombre(), mentorId, celula.cohorteId().value(),
-                politica.zonaHoraria(), politica.diasSinActividadAlerta());
+                politica.zonaHoraria(), politica.diasSinActividadAlerta(), celula.formacion());
     }
 
     @Override
@@ -262,7 +272,7 @@ class AcompanamientoFinderService implements AcompanamientoFinder, MentorVigente
                     .distinct()
                     .toList();
             operativos.add(new GrupoConAprendices(celula.id().value(), celula.nombre(), celula.esRecepcion(),
-                    mentor, aprendices));
+                    mentor, aprendices, celula.formacion()));
         }
         return operativos;
     }
@@ -278,7 +288,7 @@ class AcompanamientoFinderService implements AcompanamientoFinder, MentorVigente
         List<GrupoConSuMentor> resultado = new ArrayList<>();
         for (UUID grupoId : new LinkedHashSet<>(grupoIds)) {
             loadCelulaPort.porId(CelulaId.of(grupoId)).ifPresent(celula -> resultado.add(
-                    new GrupoConSuMentor(grupoId, celula.nombre(), mentorVigenteDe(grupoId, instante))));
+                    new GrupoConSuMentor(grupoId, celula.nombre(), mentorVigenteDe(grupoId, instante), celula.formacion())));
         }
         return resultado;
     }

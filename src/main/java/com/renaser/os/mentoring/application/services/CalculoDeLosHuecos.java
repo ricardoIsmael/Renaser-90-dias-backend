@@ -95,7 +95,8 @@ class CalculoDeLosHuecos {
         if (!persona.activado()) {
             return HabitosDeUnDia.ninguno();
         }
-        return HabitosDeUnDia.de(hoy, horarios.deFecha(persona.participanteId(), fecha), fuentes.registrosDe(fecha));
+        return HabitosDeUnDia.de(hoy, horarios.deFecha(persona.participanteId(), fecha), fuentes.registrosDe(fecha),
+                persona.duracionDias());
     }
 
     /** Lo leído de los otros módulos para la semana entera, con lo que cada día saca de ahí. */

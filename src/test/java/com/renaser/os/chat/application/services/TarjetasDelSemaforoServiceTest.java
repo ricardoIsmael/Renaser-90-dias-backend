@@ -115,7 +115,7 @@ class TarjetasDelSemaforoServiceTest {
     private TarjetasDelSemaforoService servicio(Instant ahora) {
         TarjetasDelSemaforoPublicadas publicadas = new TarjetasDelSemaforoPublicadas(almacenamiento,
                 color -> ("jpeg-" + color).getBytes());
-        TarjetaEnSoporte enSoporte = new TarjetaEnSoporte(conversaciones, mensajes, publicadas, delPrograma, mensajeDelChat);
+        TarjetaEnSoporte enSoporte = new TarjetaEnSoporte(new SoporteVigenteDelAprendiz(conversaciones, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo()), mensajes, publicadas, delPrograma, mensajeDelChat);
         return new TarjetasDelSemaforoService(programas, usuarios, semaforo, enSoporte, FixedClock.at(ahora));
     }
 

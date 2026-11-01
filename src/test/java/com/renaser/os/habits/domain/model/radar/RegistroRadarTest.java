@@ -120,7 +120,7 @@ class RegistroRadarTest {
     void rehydrateNoRevalidaRangosNiRecorta() {
         RegistroRadarId id = RegistroRadarId.of(UUID.randomUUID());
 
-        RegistroRadar registro = RegistroRadar.rehydrate(id, PARTICIPANTE, "  h  ", "p", "s", 5, "e", AHORA, 14);
+        RegistroRadar registro = RegistroRadar.rehydrate(id, PARTICIPANTE, "  h  ", "p", "s", 5, "e", AHORA, 14, false);
 
         assertThat(registro.id()).isEqualTo(id);
         assertThat(registro.queHago()).isEqualTo("  h  ");
@@ -143,6 +143,38 @@ class RegistroRadarTest {
         assertThat(prevista.queHago()).isEqualTo(libre.queHago());
         assertThat(prevista.creadoEn()).isEqualTo(libre.creadoEn());
         assertThat(libre.horaPrevista()).isNull();
+    }
+
+    @Test
+    void unRegistroNuevoNoEsDictado() {
+        assertThat(registrar("h", "p", "s", 5, "e").dictado()).isFalse();
+    }
+
+    @Test
+    void comoDictadoMarcaElRegistroYConservaTodoLoDemas() {
+        RegistroRadar escrito = registrar("h", "p", "s", 5, "e").conHoraPrevista(14);
+
+        RegistroRadar dictado = escrito.comoDictado();
+
+        assertThat(dictado.dictado()).isTrue();
+        assertThat(dictado).isEqualTo(escrito);
+        assertThat(dictado.queHago()).isEqualTo("h");
+        assertThat(dictado.nivelEnergia()).isEqualTo(5);
+        assertThat(dictado.horaPrevista()).isEqualTo(14);
+        assertThat(dictado.creadoEn()).isEqualTo(escrito.creadoEn());
+        assertThat(escrito.dictado()).isFalse();
+    }
+
+    @Test
+    void conHoraPrevistaConservaElDictado() {
+        assertThat(registrar("h", "p", "s", 5, "e").comoDictado().conHoraPrevista(9).dictado()).isTrue();
+    }
+
+    @Test
+    void rehydrateRespetaElDictadoGuardado() {
+        RegistroRadarId id = RegistroRadarId.of(UUID.randomUUID());
+        assertThat(RegistroRadar.rehydrate(id, PARTICIPANTE, "h", "p", "s", 5, "e", AHORA, null, true).dictado()).isTrue();
+        assertThat(RegistroRadar.rehydrate(id, PARTICIPANTE, "h", "p", "s", 5, "e", AHORA, null, false).dictado()).isFalse();
     }
 
     @Test

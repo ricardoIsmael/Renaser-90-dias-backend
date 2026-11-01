@@ -42,6 +42,10 @@ import java.util.Objects;
  * > Esa era la regla de D-119; el dueno la cambio. Se conserva lo de arriba porque sigue siendo
  * > cierto por que la escritura vive en {@code rocks} y no en {@code onboarding}.
  *
+ * > <b>Corregido 2026-10-31 (spec 026, D-303).</b> El Mapa se retiro y ya no decide nada: el objetivo queda fijo desde que se define, con una sola
+ * > salvedad: el que nace del diagnostico llega «por confirmar» y la persona lo puede reescribir una vez ({@link #estaPorConfirmar}). Lo de abajo
+ * > describe la regla anterior y se conserva por la historia.
+ *
  * <p><b>Fija desde que el Mapa esta ACTIVO, no desde que se definio (D-284, 2026-10-27).</b> "Nace del
  * Mapa" suponia que el Mapa siempre iba primero, y no es asi: el Mapa es opcional y Plan deja definir el
  * objetivo antes. Esa roca provisional dejaba la activacion del Mapa con un 409 {@code ROCA_MAESTRA_FIJA}
@@ -51,7 +55,14 @@ import java.util.Objects;
  * sabe del Mapa; el agregado solo sabe hacer cada cosa.
  */
 public record RocaMaestra(RocaMaestraId id, UserId participanteId, EjeObjetivo eje, String objetivo,
-                           MetaCuantitativa meta, Instant creadoEn, Instant actualizadoEn) {
+                           MetaCuantitativa meta, Instant creadoEn, Instant actualizadoEn, OrigenDelObjetivo origen,
+                           Instant confirmadaEn) {
+
+    /** Un objetivo escrito en Plan, ya confirmado: la firma de antes del diagnóstico (spec 026). */
+    public RocaMaestra(RocaMaestraId id, UserId participanteId, EjeObjetivo eje, String objetivo, MetaCuantitativa meta, Instant creadoEn,
+                       Instant actualizadoEn) {
+        this(id, participanteId, eje, objetivo, meta, creadoEn, actualizadoEn, OrigenDelObjetivo.PLAN, creadoEn);
+    }
 
     /**
      * Tope de la frase del objetivo. Mismo criterio y mismo valor que
@@ -66,6 +77,7 @@ public record RocaMaestra(RocaMaestraId id, UserId participanteId, EjeObjetivo e
         Objects.requireNonNull(eje, "eje es obligatorio");
         Objects.requireNonNull(creadoEn, "creadoEn es obligatorio");
         Objects.requireNonNull(actualizadoEn, "actualizadoEn es obligatorio");
+        Objects.requireNonNull(origen, "origen es obligatorio");
         if (objetivo == null || objetivo.isBlank()) {
             throw new IllegalArgumentException("objetivo es obligatorio");
         }
@@ -78,7 +90,29 @@ public record RocaMaestra(RocaMaestraId id, UserId participanteId, EjeObjetivo e
     /** Roca Maestra recien definida. {@code meta} puede ser {@code null}: objetivo cualitativo. */
     public static RocaMaestra definir(RocaMaestraId id, UserId participanteId, EjeObjetivo eje, String objetivo,
                                        MetaCuantitativa meta, Instant ahora) {
-        return new RocaMaestra(id, participanteId, eje, objetivo, meta, ahora, ahora);
+        return new RocaMaestra(id, participanteId, eje, objetivo, meta, ahora, ahora, OrigenDelObjetivo.PLAN, ahora);
+    }
+
+    /**
+     * El objetivo que nace de las respuestas del diagnóstico (spec 026, Q2-A): llega «por confirmar». La persona lo lee y lo puede reescribir UNA vez; al
+     * confirmarlo queda fijo como cualquier otro. Es cualitativo (sin meta numérica): el diagnóstico pregunta en palabras.
+     */
+    public static RocaMaestra delDiagnostico(RocaMaestraId id, UserId participanteId, EjeObjetivo eje, String objetivo, Instant ahora) {
+        return delDiagnostico(id, participanteId, eje, objetivo, null, ahora);
+    }
+
+    /**
+     * Igual, con la meta medible que la persona declaró en el diagnóstico (a dónde llegar, desde dónde parte, en qué unidad). Con ella el plan mensual saca la
+     * cifra del mes; sin ella ({@code null}) el objetivo vale en palabras.
+     */
+    public static RocaMaestra delDiagnostico(RocaMaestraId id, UserId participanteId, EjeObjetivo eje, String objetivo, MetaCuantitativa meta,
+                                             Instant ahora) {
+        return new RocaMaestra(id, participanteId, eje, objetivo, meta, ahora, ahora, OrigenDelObjetivo.DIAGNOSTICO, null);
+    }
+
+    /** {@code true} mientras la persona no confirma un objetivo que nació del diagnóstico. */
+    public boolean estaPorConfirmar() {
+        return confirmadaEn == null;
     }
 
     /**
@@ -96,6 +130,9 @@ public record RocaMaestra(RocaMaestraId id, UserId participanteId, EjeObjetivo e
      * devuelve {@code 30000.00} y el cliente manda {@code 30000}, y eso es la misma meta.
      */
     public RocaMaestra recibirDefinicion(String objetivoPedido, MetaCuantitativa metaPedida, Instant ahora) {
+        if (estaPorConfirmar()) {
+            return confirmadaConLaDefinicion(objetivoPedido, metaPedida, ahora);
+        }
         if (!esLaMismaDefinicion(objetivoPedido, metaPedida)) {
             throw new RocaMaestraFijaException();
         }
@@ -106,21 +143,12 @@ public record RocaMaestra(RocaMaestraId id, UserId participanteId, EjeObjetivo e
     }
 
     /**
-     * La roca que escribe el Mapa de Renacimiento mientras el Mapa todavia no esta activo (D-284).
-     *
-     * <p>Lo que el Mapa dice manda: si la persona ya habia definido este eje desde Plan, el objetivo, la
-     * meta, la unidad, el punto de partida y el avance se reemplazan por los del Mapa. Se conservan la
-     * identidad y la fecha de creacion, para que lo que ya cuelgue de la roca (objetivos del mes,
-     * semanales, acciones) siga apuntando a ella.
-     *
-     * <p>Si lo que llega es lo mismo que ya hay —el reintento de una activacion que fallo a mitad—, se
-     * trata como siempre ({@link #recibirDefinicion}): se devuelve esta misma roca sin tocar.
+     * La persona confirma (y, si quiere, reescribe) un objetivo que nació del diagnóstico: es la única vez que el objetivo se puede cambiar. Se conservan la
+     * identidad y la fecha de creación, para que lo que ya cuelgue de la roca (objetivos del mes, semanales, acciones) siga apuntando a ella.
      */
-    public RocaMaestra reemplazarPorLaDelMapa(String objetivoPedido, MetaCuantitativa metaPedida, Instant ahora) {
-        if (esLaMismaDefinicion(objetivoPedido, metaPedida)) {
-            return recibirDefinicion(objetivoPedido, metaPedida, ahora);
-        }
-        return new RocaMaestra(id, participanteId, eje, objetivoPedido, metaPedida, creadoEn, ahora);
+    private RocaMaestra confirmadaConLaDefinicion(String objetivoPedido, MetaCuantitativa metaPedida, Instant ahora) {
+        /* Confirmar con solo el texto (lo que manda la hoja de Plan) no borra la meta que la persona declaró en el diagnóstico. */
+        return new RocaMaestra(id, participanteId, eje, objetivoPedido, metaPedida != null ? metaPedida : meta, creadoEn, ahora, origen, ahora);
     }
 
     /**
@@ -131,7 +159,7 @@ public record RocaMaestra(RocaMaestraId id, UserId participanteId, EjeObjetivo e
         if (!tieneMeta()) {
             throw new IllegalStateException("Un objetivo sin meta medible no tiene avance que registrar");
         }
-        return new RocaMaestra(id, participanteId, eje, objetivo, meta.conAvance(nuevoAvance), creadoEn, ahora);
+        return new RocaMaestra(id, participanteId, eje, objetivo, meta.conAvance(nuevoAvance), creadoEn, ahora, origen, confirmadaEn);
     }
 
     /** Mismo objetivo (tras {@code trim}), meta, unidad y punto de partida; el avance no cuenta. */
@@ -162,5 +190,12 @@ public record RocaMaestra(RocaMaestraId id, UserId participanteId, EjeObjetivo e
     public static RocaMaestra rehydrate(RocaMaestraId id, UserId participanteId, EjeObjetivo eje, String objetivo,
                                          MetaCuantitativa meta, Instant creadoEn, Instant actualizadoEn) {
         return new RocaMaestra(id, participanteId, eje, objetivo, meta, creadoEn, actualizadoEn);
+    }
+
+    /** Igual, con de dónde nació y cuándo se confirmó ({@code null} = por confirmar). */
+    public static RocaMaestra rehydrate(RocaMaestraId id, UserId participanteId, EjeObjetivo eje, String objetivo,
+                                         MetaCuantitativa meta, Instant creadoEn, Instant actualizadoEn, OrigenDelObjetivo origen,
+                                         Instant confirmadaEn) {
+        return new RocaMaestra(id, participanteId, eje, objetivo, meta, creadoEn, actualizadoEn, origen, confirmadaEn);
     }
 }

@@ -1,5 +1,6 @@
 package com.renaser.os.points.api;
 
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 
 import java.math.BigDecimal;
@@ -19,7 +20,8 @@ import java.util.Objects;
  */
 public interface RankingGeneralFinder {
 
-    List<PuestoEnElRankingGeneral> alCorte(LocalDate hasta);
+    /** Solo los aprendices de {@code formacion} (spec 024, FR-040): el podio de cada formación compara a los suyos. */
+    List<PuestoEnElRankingGeneral> alCorte(LocalDate hasta, Formacion formacion);
 
     record PuestoEnElRankingGeneral(UserId participanteId, String nombreCompleto, BigDecimal puntaje) {
         public PuestoEnElRankingGeneral {

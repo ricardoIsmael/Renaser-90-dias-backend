@@ -71,4 +71,7 @@ public class EventoJpaEntity {
     private Instant creadoEn;
 
     private Instant actualizadoEn;
+
+    /** V137: el código de la formación (`ESCUELA`, `DIPLOMADO`, `CERTIFICACION`). */
+    private String formacion = "ESCUELA";
 }

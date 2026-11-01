@@ -3,6 +3,7 @@ package com.renaser.os.community.infrastructure.adapter.out.persistence.testimon
 import com.renaser.os.community.domain.model.publicacion.PublicacionId;
 import com.renaser.os.community.domain.model.testimonio.Testimonio;
 import com.renaser.os.community.domain.model.testimonio.TestimonioId;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
 
@@ -14,12 +15,13 @@ class TestimonioPersistenceMapper {
                 e.getUsuarioId() != null ? UserId.of(e.getUsuarioId()) : null,
                 e.getPublicacionMuroId() != null ? PublicacionId.of(e.getPublicacionMuroId()) : null, e.getNombre(),
                 e.getRolTexto(), e.getAvatarUrl(), e.getFotoEventoRuta(), e.getTexto(), e.getEstrellas(),
-                e.isDestacado(), e.getCreadoEn());
+                e.isDestacado(), e.getCreadoEn(), Formacion.desde(e.getFormacion()));
     }
 
     TestimonioJpaEntity toEntity(Testimonio t) {
         return new TestimonioJpaEntity(t.id().value(), t.usuarioId() != null ? t.usuarioId().value() : null,
                 t.publicacionMuroId() != null ? t.publicacionMuroId().value() : null, t.nombre(), t.rolTexto(),
-                t.avatarUrl(), t.fotoEventoRuta(), t.texto(), (short) t.estrellas(), t.destacado(), t.creadoEn());
+                t.avatarUrl(), t.fotoEventoRuta(), t.texto(), (short) t.estrellas(), t.destacado(), t.creadoEn(),
+                t.formacion().codigo());
     }
 }

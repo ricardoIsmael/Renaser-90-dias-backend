@@ -54,8 +54,8 @@ class MiembroServiceTest {
     @BeforeEach
     void setUp() {
         service = new MiembroService(loadConversacionPort, listarUsuariosDeConversacionPort, esParticipantePort,
-                userSummaryFinder);
-        lenient().when(loadConversacionPort.global()).thenReturn(Optional.of(global));
+                userSummaryFinder, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
+        lenient().when(loadConversacionPort.globales(any())).thenReturn(List.of(global));
         lenient().when(userSummaryFinder.findById(actor)).thenReturn(
                 Optional.of(new UserSummary(actor, "Actor", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
         lenient().when(userSummaryFinder.findById(suspendido)).thenReturn(

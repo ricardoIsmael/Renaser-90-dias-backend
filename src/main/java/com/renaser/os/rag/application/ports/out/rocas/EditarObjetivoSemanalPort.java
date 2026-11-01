@@ -13,7 +13,9 @@ import com.renaser.os.shared.domain.UserId;
 public interface EditarObjetivoSemanalPort {
 
     /**
-     * La ultima semana del programa: nunca hay una 14 (D-203). Espejo de
+     * La ultima semana de un programa de 90 dias: nunca hay una 14 en el (D-203). La de cada persona es la que lee
+     * {@code ConsultarRocasDelAprendizPort#ultimaSemanaDelPrograma} (13, o 53 en el Diplomado de 1 ano): la herramienta ya no usa este valor de respaldo.
+     * Espejo de
      * {@code rocks.api.EdicionDeObjetivoSemanalPort.ULTIMA_SEMANA}: {@code AjustesDeRocasAdaptersTest} rompe
      * si dejan de coincidir.
      */

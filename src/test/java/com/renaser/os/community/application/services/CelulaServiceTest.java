@@ -94,7 +94,8 @@ class CelulaServiceTest {
         service = new CelulaService(loadCelulaPort, saveCelulaPort, eliminarCelulaPort, loadCohortePort,
                 consultarMiembrosCelulaPort, consultarCelulaDeParticipantePort, consultarPerfilUsuarioPort,
                 userSummaryFinder, participacionProgramaFinder, perfilMentorFinder, loadAsignacionesPort,
-                loadPoliticaMentoriaPort, events, CLOCK, idGenerator, cuentasCerradas);
+                loadPoliticaMentoriaPort, events, CLOCK, idGenerator, cuentasCerradas,
+                FormacionDelGrupoDePrueba.permisivo());
         lenient().when(loadAsignacionesPort.porCelula(any())).thenReturn(java.util.List.of());
         lenient().when(loadPoliticaMentoriaPort.porCohorte(any())).thenReturn(Optional.empty());
         lenient().when(perfilMentorFinder.porUsuarios(any())).thenReturn(java.util.Map.of());
@@ -671,7 +672,8 @@ class CelulaServiceTest {
         return new CelulaService(loadCelulaPort, saveCelulaPort, eliminarCelulaPort, loadCohortePort,
                 consultarMiembrosCelulaPort, consultarCelulaDeParticipantePort, consultarPerfilUsuarioPort,
                 userSummaryFinder, participacionProgramaFinder, perfilMentorFinder, loadAsignacionesPort,
-                loadPoliticaMentoriaPort, events, FixedClock.at(ahora), idGenerator, cuentasCerradas);
+                loadPoliticaMentoriaPort, events, FixedClock.at(ahora), idGenerator, cuentasCerradas,
+                FormacionDelGrupoDePrueba.permisivo());
     }
 
     private static Celula grupoConPeriodo(String nombre, UserId mentorDeLaColumna, LocalDate inicio, LocalDate fin) {
@@ -762,5 +764,37 @@ class CelulaServiceTest {
 
         assertThat(service.listarPorCohorte(mentor, enCurso.cohorteId()))
                 .extracting(r -> r.celula().nombre()).containsExactly("Aurora");
+    }
+
+    @Test
+    @DisplayName("Spec 022 (E2E P3-K/P3-C): un mentor con dos formaciones lista y abre solo los grupos de la que tiene activa")
+    void mentorConDosFormacionesSoloVeLosGruposDeLaActiva() {
+        var cohorte = CohorteId.of(UUID.randomUUID());
+        Celula deLaEscuela = Celula.rehydrate(CelulaId.of(UUID.randomUUID()), "Aurora", null, cohorte, null, null,
+                CLOCK.now(), CLOCK.now(), null, null, new PeriodoGrupo(LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31)),
+                com.renaser.os.shared.domain.Formacion.ESCUELA);
+        Celula delDiplomado = Celula.rehydrate(CelulaId.of(UUID.randomUUID()), "Boreal", null, cohorte, null, null,
+                CLOCK.now(), CLOCK.now(), null, null, new PeriodoGrupo(LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31)),
+                com.renaser.os.shared.domain.Formacion.DIPLOMADO);
+        when(loadAsignacionesPort.porUsuario(mentor)).thenReturn(java.util.List.of(jefatura(deLaEscuela, mentor), jefatura(delDiplomado, mentor)));
+        when(loadCelulaPort.porId(deLaEscuela.id())).thenReturn(Optional.of(deLaEscuela));
+        when(loadCelulaPort.porId(delDiplomado.id())).thenReturn(Optional.of(delDiplomado));
+        lenient().when(loadAsignacionesPort.porCelula(delDiplomado.id())).thenReturn(java.util.List.of(jefatura(delDiplomado, mentor)));
+        CelulaService conLaEscuelaActiva = new CelulaService(loadCelulaPort, saveCelulaPort, eliminarCelulaPort, loadCohortePort,
+                consultarMiembrosCelulaPort, consultarCelulaDeParticipantePort, consultarPerfilUsuarioPort,
+                userSummaryFinder, participacionProgramaFinder, perfilMentorFinder, loadAsignacionesPort,
+                loadPoliticaMentoriaPort, events, CLOCK, idGenerator, cuentasCerradas,
+                FormacionDelGrupoDePrueba.con(new com.renaser.os.users.api.AlcanceDeFormacionSoloEscuela() {
+                    @Override
+                    public void exigirQueLaVea(UserId actor, com.renaser.os.shared.domain.Formacion formacionDelObjeto) {
+                        if (formacionDelObjeto != com.renaser.os.shared.domain.Formacion.ESCUELA) {
+                            throw new com.renaser.os.shared.domain.ObjetoDeOtraFormacionException();
+                        }
+                    }
+                }));
+
+        assertThat(conLaEscuelaActiva.listarPorCohorte(mentor, cohorte)).extracting(r -> r.celula().nombre()).containsExactly("Aurora");
+        assertThatThrownBy(() -> conLaEscuelaActiva.obtener(mentor, delDiplomado.id()))
+                .isInstanceOf(com.renaser.os.shared.domain.ObjetoDeOtraFormacionException.class);
     }
 }

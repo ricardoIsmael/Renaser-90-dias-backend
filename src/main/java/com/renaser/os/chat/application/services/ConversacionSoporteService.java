@@ -15,10 +15,14 @@ import com.renaser.os.chat.domain.model.conversacion.Participante;
 import com.renaser.os.chat.domain.model.conversacion.NombreDelChat;
 import com.renaser.os.chat.domain.model.conversacion.SoporteDeAprendizNacioEvent;
 import com.renaser.os.chat.domain.model.conversacion.TipoConversacion;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.Formacion;
+import com.renaser.os.shared.domain.TipoDeComunidad;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import com.renaser.os.users.api.ParticipacionPrograma;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.UserRole;
@@ -34,7 +38,9 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
@@ -82,6 +88,9 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
     private final IdGenerator idGenerator;
     private final TransactionTemplate transaccionPropia;
     private final ApplicationEventPublisher eventos;
+    /** Spec 024: el soporte es de la formación del aprendiz y lo apaga o prende la formación (tipo SOPORTE). */
+    private final VisibilidadPorFormacion visibilidad;
+    private final AlcanceDeFormacionFinder formaciones;
 
     public ConversacionSoporteService(LoadConversacionPort loadConversacionPort,
                                        SaveConversacionPort saveConversacionPort,
@@ -92,7 +101,10 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
                                        ParticipacionProgramaFinder participacionProgramaFinder,
                                        Clock clock, IdGenerator idGenerator,
                                        PlatformTransactionManager transactionManager,
-                                       ApplicationEventPublisher eventos) {
+                                       ApplicationEventPublisher eventos, VisibilidadPorFormacion visibilidad,
+                                       AlcanceDeFormacionFinder formaciones) {
+        this.visibilidad = visibilidad;
+        this.formaciones = formaciones;
         this.loadConversacionPort = loadConversacionPort;
         this.saveConversacionPort = saveConversacionPort;
         this.agregarParticipantePort = agregarParticipantePort;
@@ -140,11 +152,15 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
             return;
         }
         UserId aprendizId = participacion.participanteId();
-        if (loadConversacionPort.porClaveDirecta(Conversacion.claveSoporteDe(aprendizId)).isPresent()) {
+        Formacion formacion = participacion.formacion();
+        // Spec 024 (FR-035): un tipo apagado no crea conversaciones nuevas; el relleno las crea cuando se prenda.
+        if (!visibilidad.tipoPrendido(formacion, TipoDeComunidad.SOPORTE)
+                || loadConversacionPort.porClaveDirecta(Conversacion.claveSoporteDe(aprendizId, formacion)).isPresent()) {
             return;
         }
         String nombre = nombreDelSoporteDe(aprendizId);
-        crearSoporte(aprendizId, nombre, participacionProgramaFinder.usuariosActivosConRol(STAFF_ADMINISTRATIVO), true);
+        crearSoporte(aprendizId, nombre, participacionProgramaFinder.usuariosActivosConRol(STAFF_ADMINISTRATIVO), true,
+                formacion);
     }
 
     /**
@@ -161,12 +177,12 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
      * @return la conversacion creada, o vacio si ya existia (la creo otro primero)
      */
     private Optional<ConversacionId> crearSoporte(UserId aprendizId, String nombre, List<UserId> staff,
-                                                  boolean avisarQueNacio) {
+                                                  boolean avisarQueNacio, Formacion formacion) {
         ConversacionId id = ConversacionId.of(idGenerator.newId());
         try {
             transaccionPropia.executeWithoutResult(status -> {
                 Conversacion guardada = saveConversacionPort.save(Conversacion.crearSoporte(
-                        id, aprendizId, nombre, clock.now()));
+                        id, aprendizId, nombre, clock.now(), formacion));
                 agregarParticipantePort.agregar(Participante.unirse(guardada.id(), aprendizId, clock.now()));
                 for (UserId miembro : staff) {
                     agregarParticipantePort.agregar(Participante.unirse(guardada.id(), miembro, clock.now()));
@@ -296,6 +312,8 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
         Set<UserId> inscritos = Set.copyOf(participacionProgramaFinder.participantesInscritosActivos());
         Set<String> yaTienen = clavesDeSoporteExistentes();
         List<UserId> staff = participacionProgramaFinder.usuariosActivosConRol(STAFF_ADMINISTRATIVO);
+        Map<UserId, Formacion> formacionDe = formacionesDe(padron);
+        Set<Formacion> conSoporte = formacionesConSoporte();
 
         int creadas = 0;
         int existentes = 0;
@@ -304,11 +322,15 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
             if (!inscritos.contains(aprendiz.id())) {
                 continue;
             }
-            if (yaTienen.contains(Conversacion.claveSoporteDe(aprendiz.id()))) {
+            Formacion formacion = formacionDe.getOrDefault(aprendiz.id(), Formacion.POR_DEFECTO);
+            if (!conSoporte.contains(formacion)) {
+                continue;
+            }
+            if (yaTienen.contains(Conversacion.claveSoporteDe(aprendiz.id(), formacion))) {
                 existentes++;
                 continue;
             }
-            switch (intentarCrearEnElRelleno(aprendiz, staff)) {
+            switch (intentarCrearEnElRelleno(aprendiz, staff, formacion)) {
                 case CREADA -> creadas++;
                 case YA_EXISTIA -> existentes++;
                 case FALLO -> fallidas++;
@@ -328,17 +350,37 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
      */
     @Override
     public boolean rellenarDe(UserId aprendizId) {
-        boolean enElPrograma = participacionProgramaFinder.deParticipante(aprendizId)
-                .filter(p -> p.rol() == UserRole.TRAINEE && p.inscrito() && !p.suspendido())
-                .isPresent();
+        Optional<ParticipacionPrograma> participacion = participacionProgramaFinder.deParticipante(aprendizId)
+                .filter(p -> p.rol() == UserRole.TRAINEE && p.inscrito() && !p.suspendido());
         Optional<UserSummary> cuenta = userSummaryFinder.findById(aprendizId)
                 .filter(usuario -> usuario.status() == UserStatus.ACTIVE);
-        if (!enElPrograma || cuenta.isEmpty()
-                || loadConversacionPort.porClaveDirecta(Conversacion.claveSoporteDe(aprendizId)).isPresent()) {
+        if (participacion.isEmpty() || cuenta.isEmpty()) {
+            return false;
+        }
+        Formacion formacion = participacion.get().formacion();
+        if (!visibilidad.tipoPrendido(formacion, TipoDeComunidad.SOPORTE)
+                || loadConversacionPort.porClaveDirecta(Conversacion.claveSoporteDe(aprendizId, formacion)).isPresent()) {
             return false;
         }
         return crearSoporte(aprendizId, nombreDeSoporte(cuenta.get().fullName()),
-                participacionProgramaFinder.usuariosActivosConRol(STAFF_ADMINISTRATIVO), false).isPresent();
+                participacionProgramaFinder.usuariosActivosConRol(STAFF_ADMINISTRATIVO), false, formacion).isPresent();
+    }
+
+    /** La formación de cada aprendiz del padrón, en una consulta por formación (nunca una por persona). */
+    private Map<UserId, Formacion> formacionesDe(List<UserSummary> padron) {
+        List<UserId> ids = padron.stream().map(UserSummary::id).toList();
+        Map<UserId, Formacion> resultado = new HashMap<>();
+        for (Formacion formacion : Formacion.values()) {
+            formaciones.dentroDelAlcance(ids, AlcanceDeFormacion.de(formacion)).forEach(id -> resultado.putIfAbsent(id, formacion));
+        }
+        return resultado;
+    }
+
+    /** Las formaciones que tienen el tipo SOPORTE prendido: en las demás el relleno no crea nada (FR-035). */
+    private Set<Formacion> formacionesConSoporte() {
+        return java.util.Arrays.stream(Formacion.values())
+                .filter(f -> visibilidad.tipoPrendido(f, TipoDeComunidad.SOPORTE))
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     private Set<String> clavesDeSoporteExistentes() {
@@ -348,9 +390,9 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
     }
 
     /** Un aprendiz que falla no puede detener el barrido (.claude/rules/02). */
-    private ResultadoIntento intentarCrearEnElRelleno(UserSummary aprendiz, List<UserId> staff) {
+    private ResultadoIntento intentarCrearEnElRelleno(UserSummary aprendiz, List<UserId> staff, Formacion formacion) {
         try {
-            return crearSoporte(aprendiz.id(), nombreDeSoporte(aprendiz.fullName()), staff, false).isPresent()
+            return crearSoporte(aprendiz.id(), nombreDeSoporte(aprendiz.fullName()), staff, false, formacion).isPresent()
                     ? ResultadoIntento.CREADA : ResultadoIntento.YA_EXISTIA;
         } catch (RuntimeException e) {
             log.warn("[chat.soporte] relleno: fallo el aprendiz {}", aprendiz.id(), e);

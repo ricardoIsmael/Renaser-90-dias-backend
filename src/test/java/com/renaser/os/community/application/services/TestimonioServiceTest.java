@@ -14,6 +14,7 @@ import com.renaser.os.community.domain.model.publicacion.TipoPublicacion;
 import com.renaser.os.community.domain.model.testimonio.Testimonio;
 import com.renaser.os.community.domain.model.testimonio.TestimonioId;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -37,6 +38,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -73,7 +75,7 @@ class TestimonioServiceTest {
     void setUp() {
         service = new TestimonioService(loadTestimonioPort, saveTestimonioPort, loadPublicacionPort,
                 consultarPerfilUsuarioPort, new NoOpAlmacenamientoAdapter(), userSummaryFinder, CLOCK,
-                idGenerator, cuentasCerradas);
+                idGenerator, cuentasCerradas, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(saveTestimonioPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
@@ -105,8 +107,21 @@ class TestimonioServiceTest {
         UserId admin = UserId.of(UUID.randomUUID());
         when(userSummaryFinder.findById(admin))
                 .thenReturn(Optional.of(new UserSummary(admin, "A", null, UserRole.ADMIN, UserStatus.ACTIVE)));
-        var vista = service.crear(new CrearTestimonioCommand(admin, "Ana", null, "Cambio mi vida", 5));
+        var vista = service.crear(new CrearTestimonioCommand(admin, "Ana", null, "Cambio mi vida", 5, Formacion.DIPLOMADO));
         assertThat(vista.testimonio().destacado()).isTrue();
+        assertThat(vista.testimonio().formacion()).isEqualTo(Formacion.DIPLOMADO);
+    }
+
+    @Test
+    @DisplayName("spec 024: Administración no pertenece a una formación, así que tiene que elegirla al crear un testimonio")
+    void crearComoAdminSinFormacionPideElegirla() {
+        UserId admin = UserId.of(UUID.randomUUID());
+        when(userSummaryFinder.findById(admin))
+                .thenReturn(Optional.of(new UserSummary(admin, "A", null, UserRole.ADMIN, UserStatus.ACTIVE)));
+        var command = new CrearTestimonioCommand(admin, "Ana", null, "Cambio mi vida", 5);
+        assertThatThrownBy(() -> service.crear(command)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Elige la formación");
+        verify(saveTestimonioPort, never()).save(any());
     }
 
     @Test
@@ -162,13 +177,13 @@ class TestimonioServiceTest {
                 "Me cambio la vida", 5, true, CLOCK.now());
         Testimonio aMano = Testimonio.rehydrate(TestimonioId.of(UUID.randomUUID()), admin, null, "Ana Perez",
                 "Aprendiz", null, null, "Me cambio la vida", 5, true, CLOCK.now());
-        when(loadTestimonioPort.listarDestacados(50)).thenReturn(List.of(promovido, aMano));
+        when(loadTestimonioPort.listarDestacados(eq(50), any())).thenReturn(List.of(promovido, aMano));
         when(cuentasCerradas.cerradasEntre(any())).thenAnswer(inv -> {
             java.util.Collection<UserId> ids = inv.getArgument(0);
             return ids.stream().filter(id -> id.equals(autor) || id.equals(admin))
                     .collect(java.util.stream.Collectors.toSet());
         });
 
-        assertThat(service.listarDestacados()).extracting(v -> v.testimonio().id()).containsExactly(aMano.id());
+        assertThat(service.listarDestacados(admin, null)).extracting(v -> v.testimonio().id()).containsExactly(aMano.id());
     }
 }

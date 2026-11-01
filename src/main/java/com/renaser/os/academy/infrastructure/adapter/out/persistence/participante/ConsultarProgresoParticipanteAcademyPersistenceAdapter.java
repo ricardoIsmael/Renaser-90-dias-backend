@@ -38,7 +38,8 @@ class ConsultarProgresoParticipanteAcademyPersistenceAdapter implements Consulta
         Integer diaPrograma = participacion.inscrito() ? participacion.diaPrograma() : null;
         return new ProgresoParticipanteAcademy(diaPrograma,
                 participacion.inscrito() ? participacion.zona() : null,
-                mapearRol(participacion.rol()), participacion.suspendido(), participacion.activado());
+                mapearRol(participacion.rol()), participacion.suspendido(), participacion.activado(),
+                participacion.duracionDias());
     }
 
     private static RolParticipante mapearRol(UserRole rol) {

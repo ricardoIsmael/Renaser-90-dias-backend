@@ -1,5 +1,6 @@
 package com.renaser.os.academy.domain.model.curso;
 
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.users.api.UserRole;
 
 import java.time.Instant;
@@ -38,10 +39,20 @@ public final class Curso {
     private final Set<UserRole> rolesPermitidos;
     private final Instant creadoEn;
     private final Instant actualizadoEn;
+    /** La formación a la que pertenece el curso (V137, spec 024): quien es de otra no lo ve, ni siquiera como «bloqueado». */
+    private final Formacion formacion;
 
     public Curso(CursoId id, String slug, String titulo, String descripcion, String portadaRuta, int orden,
                  boolean publicado, AccesoCurso acceso, String origen, Integer diaDesbloqueo,
                  Set<UserRole> rolesPermitidos, Instant creadoEn, Instant actualizadoEn) {
+        this(id, slug, titulo, descripcion, portadaRuta, orden, publicado, acceso, origen, diaDesbloqueo, rolesPermitidos,
+                creadoEn, actualizadoEn, Formacion.POR_DEFECTO);
+    }
+
+    public Curso(CursoId id, String slug, String titulo, String descripcion, String portadaRuta, int orden,
+                 boolean publicado, AccesoCurso acceso, String origen, Integer diaDesbloqueo,
+                 Set<UserRole> rolesPermitidos, Instant creadoEn, Instant actualizadoEn, Formacion formacion) {
+        this.formacion = Objects.requireNonNull(formacion, "formacion es obligatoria");
         this.id = Objects.requireNonNull(id, "id es obligatorio");
         this.slug = Objects.requireNonNull(slug, "slug es obligatorio");
         this.titulo = Objects.requireNonNull(titulo, "titulo es obligatorio");
@@ -103,6 +114,10 @@ public final class Curso {
 
     public CursoId id() {
         return id;
+    }
+
+    public Formacion formacion() {
+        return formacion;
     }
 
     public String slug() {

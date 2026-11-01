@@ -12,12 +12,17 @@ import java.math.BigDecimal;
  */
 public sealed interface ObjetivoDelMes {
 
-    /** Mes del programa al que corresponde (1 a 3). */
+    /** Mes del programa al que corresponde (1 a 3 en un programa de 90 dias, hasta 12 en el de 365). */
     int numeroMes();
 
-    /** Dia de programa en que cierra ese mes: 30, 60 o 90. */
+    /** Dia de programa en que cierra ese mes en un programa de 90 dias: 30, 60 o 90. */
     default int diaDeCierre() {
         return MesPrograma.ultimoDiaDe(numeroMes());
+    }
+
+    /** Dia de programa en que cierra ese mes en un programa de {@code duracionDias}: el del ultimo mes es el ultimo dia del programa. */
+    default int diaDeCierre(int duracionDias) {
+        return MesPrograma.ultimoDiaDe(numeroMes(), duracionDias);
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.renaser.os.rag.application.services.herramientas;
 
+import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort;
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort;
 import com.renaser.os.rag.domain.model.herramienta.DefinicionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
@@ -48,16 +49,18 @@ public class ConsultarRocasHerramienta implements HerramientaAgente {
                     + "semanales con su obstaculo, su contingencia y como arrancaba, mas lo que escribio al cerrar "
                     + "la semana anterior (bloqueo y correccion). Con progreso: el avance de la semana en %, cada "
                     + "dia con lo completado, el ritmo de los ultimos 7 dias y si el plan de manana esta pendiente. "
-                    + "Con mes: el objetivo del mes en curso por eje. Con noventa: el objetivo de los 90 dias por "
-                    + "eje, con su meta y cuanto lleva. Usala antes de responder sobre sus rocas, su plan o sus "
+                    + "Con mes: el objetivo del mes en curso por eje. Con noventa: el objetivo grande del programa "
+                    + "(de 90 dias, 3 meses o 1 año, segun su formacion) por eje, con su meta y cuanto lleva. Usala antes de responder sobre sus rocas, su plan o sus "
                     + "objetivos; no los supongas.",
             List.of(new ParametroHerramienta(ARGUMENTO_ALCANCE, TipoParametroHerramienta.TEXTO,
                     "Uno de: hoy, manana, semana, progreso, mes, noventa. Omitelo para hoy.", false)));
 
     private final ConsultarRocasDelAprendizPort rocasPort;
+    private final ConsultarSituacionDelAprendizPort situacion;
 
-    public ConsultarRocasHerramienta(ConsultarRocasDelAprendizPort rocasPort) {
+    public ConsultarRocasHerramienta(ConsultarRocasDelAprendizPort rocasPort, ConsultarSituacionDelAprendizPort situacion) {
         this.rocasPort = rocasPort;
+        this.situacion = situacion;
     }
 
     @Override
@@ -93,8 +96,8 @@ public class ConsultarRocasHerramienta implements HerramientaAgente {
             case MANANA -> TextoDeRocas.delDia("manana", rocasPort.deManana(actorId), false);
             case SEMANA -> TextoDeRocas.deLaSemana(rocasPort.deLaSemana(actorId)) + cierreAnterior(actorId);
             case PROGRESO -> TextoDeObjetivos.progreso(rocasPort.progresoDeLaSemana(actorId));
-            case MES -> TextoDeRocas.delMes(rocasPort.delMes(actorId));
-            case NOVENTA -> TextoDeObjetivos.noventa(rocasPort.objetivosDeNoventaDias(actorId));
+            case MES -> TextoDeRocas.delMes(rocasPort.delMes(actorId), PlazoDelObjetivoDeLaPersona.de(situacion, actorId));
+            case NOVENTA -> TextoDeObjetivos.noventa(rocasPort.objetivosDeNoventaDias(actorId), PlazoDelObjetivoDeLaPersona.de(situacion, actorId));
         };
     }
 

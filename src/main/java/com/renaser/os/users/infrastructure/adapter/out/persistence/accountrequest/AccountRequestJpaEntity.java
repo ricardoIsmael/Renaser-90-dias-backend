@@ -63,4 +63,20 @@ public class AccountRequestJpaEntity {
     private Instant creadoEn;
 
     private Instant actualizadoEn;
+
+    /** V140 (spec 025): foto de lo elegido al aceptar. {@code text[]} de códigos de formación; {@code null} = sin aceptar. */
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    private String[] formacionesElegidas;
+
+    /** V140: solo el aprendiz elige duración. {@code smallint}, de ahí el {@code Short}. */
+    private Short duracionElegidaDias;
+
+    private String rolElegido;
+
+    private Boolean conDiagnostico;
+
+    /** V142: el rol personalizado con el que entró y su nombre de ese día (foto histórica). */
+    private UUID rolPersonalizadoId;
+
+    private String rolPersonalizadoNombre;
 }

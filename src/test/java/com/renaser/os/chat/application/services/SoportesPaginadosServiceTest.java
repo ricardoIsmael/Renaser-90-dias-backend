@@ -56,7 +56,7 @@ class SoportesPaginadosServiceTest {
     private final ContarNoLeidosPort noLeidos = mock(ContarNoLeidosPort.class);
     private final NombresDeLosChatsService nombres = mock(NombresDeLosChatsService.class);
     private final SoportesPaginadosService servicio = new SoportesPaginadosService(usuarios, busqueda, soportes,
-            conversaciones, mensajes, noLeidos, nombres);
+            conversaciones, mensajes, noLeidos, nombres, new com.renaser.os.chat.application.services.VisibilidadPermisiva());
 
     @BeforeEach
     void actorAdmin() {
@@ -64,7 +64,7 @@ class SoportesPaginadosServiceTest {
         when(mensajes.ultimosPorConversacion(anyList())).thenReturn(Map.of());
         when(noLeidos.contarNoLeidos(any(), anyList())).thenReturn(Map.of());
         when(nombres.nombresDe(anyCollection())).thenReturn(Map.of());
-        when(soportes.contar(any(), any())).thenReturn(new ConteoDeSoportes(30, 4));
+        when(soportes.contar(any(), any(), any())).thenReturn(new ConteoDeSoportes(30, 4));
     }
 
     @ParameterizedTest
@@ -122,7 +122,7 @@ class SoportesPaginadosServiceTest {
         assertThat(pagina.conversaciones()).hasSize(2);
         assertThat(pagina.siguiente()).isNull();
         assertThat(pagina.total()).isNull();
-        verify(soportes, never()).contar(any(), any());
+        verify(soportes, never()).contar(any(), any(), any());
     }
 
     @Test
@@ -137,8 +137,8 @@ class SoportesPaginadosServiceTest {
         ArgumentCaptor<SoportesPorActividadPort.PedidoDeSoportes> pedido =
                 ArgumentCaptor.forClass(SoportesPorActividadPort.PedidoDeSoportes.class);
         verify(soportes).pagina(pedido.capture());
-        assertThat(pedido.getValue().soloClaves()).containsExactly(Conversacion.claveSoporteDe(jose));
-        verify(soportes).contar(eq(admin), eq(Set.of(Conversacion.claveSoporteDe(jose))));
+        assertThat(pedido.getValue().soloClaves()).containsExactly(jose.value().toString());
+        verify(soportes).contar(eq(admin), eq(Set.of(jose.value().toString())), any());
     }
 
     @Test

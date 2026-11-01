@@ -54,12 +54,20 @@ class SituacionDelTurnoServiceTest {
     private final ConsultarTratoDeLaPersonaPort tratoPort = mock(ConsultarTratoDeLaPersonaPort.class);
     private final ConsultarMapaDeRenacimientoPort mapaPort = mock(ConsultarMapaDeRenacimientoPort.class);
     private final ConsultarCompuertaDeRocasPort compuertaPort = mock(ConsultarCompuertaDeRocasPort.class);
+    private final com.renaser.os.rag.application.ports.out.diagnostico.ConsultarDiagnosticoDeLaPersonaPort diagnosticoPort =
+            mock(com.renaser.os.rag.application.ports.out.diagnostico.ConsultarDiagnosticoDeLaPersonaPort.class);
     private final SituacionDelTurnoService service = new SituacionDelTurnoService(situacionPort, agendaPort, planPort,
-            FixedClock.at(TRES_AM_UTC), tratoPort, mapaPort, compuertaPort);
+            FixedClock.at(TRES_AM_UTC), tratoPort, mapaPort, compuertaPort, diagnosticoPort);
+
+    @org.junit.jupiter.api.BeforeEach
+    void sinDiagnosticoPorDefecto() {
+        when(diagnosticoPort.de(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(com.renaser.os.rag.domain.model.diagnostico.DiagnosticoDeLaPersona.ninguno());
+    }
 
     /** D-233: la prioridad y el proximo hito del Mapa viajan en la situacion; si falla, sin Mapa y el turno sigue. */
     @Test
-    @DisplayName("D-233: la situacion lleva la prioridad y el proximo hito del Mapa, y nada si falla la lectura")
+    @DisplayName("D-233: la situacion lleva la prioridad y el proximo hito del Mapa, y sin Mapa si falla la lectura")
     void resumenDelMapa() {
         when(situacionPort.de(APRENDIZ)).thenReturn(Optional.of(DIA_12));
         when(mapaPort.de(APRENDIZ)).thenReturn(new MapaDeLaPersona(true, true, "salud", List.of(),
@@ -72,7 +80,7 @@ class SituacionDelTurnoServiceTest {
         assertThat(mapa.hito().texto()).isEqualTo("89 kg");
 
         when(mapaPort.de(APRENDIZ)).thenThrow(new IllegalStateException("caida"));
-        assertThat(service.de(APRENDIZ).orElseThrow().mapa()).isNull();
+        assertThat(service.de(APRENDIZ).orElseThrow().mapa().tieneMapa()).isFalse();
     }
 
     /**
@@ -189,7 +197,11 @@ class SituacionDelTurnoServiceTest {
         when(situacionPort.de(APRENDIZ)).thenReturn(Optional.of(DIA_12));
         when(agendaPort.deHoyDe(APRENDIZ)).thenThrow(new IllegalStateException("base caida"));
 
-        assertThat(service.de(APRENDIZ)).contains(DIA_12);
+        SituacionDelAprendiz situacion = service.de(APRENDIZ).orElseThrow();
+        assertThat(situacion.diaPrograma()).isEqualTo(DIA_12.diaPrograma());
+        assertThat(situacion.fase()).isEqualTo(DIA_12.fase());
+        assertThat(situacion.hoy()).isEqualTo(DIA_12.hoy());
+        assertThat(situacion.habitos()).isNull();
     }
 
     @Test
@@ -209,5 +221,24 @@ class SituacionDelTurnoServiceTest {
 
         assertThat(service.de(APRENDIZ)).isEmpty();
         verifyNoInteractions(agendaPort, planPort);
+    }
+
+    /** Spec 026, 026-8 B: la situacion sabe si la persona tiene diagnostico y su prioridad; si no se puede leer, no dice nada. */
+    @Test
+    @DisplayName("spec 026: la situacion lleva el diagnostico (completado y su prioridad), y nada si no lo tiene o falla la lectura")
+    void resumenDelDiagnostico() {
+        when(situacionPort.de(APRENDIZ)).thenReturn(Optional.of(DIA_12));
+        when(mapaPort.de(APRENDIZ)).thenReturn(MapaDeLaPersona.sinMapa());
+        when(diagnosticoPort.de(APRENDIZ)).thenReturn(new com.renaser.os.rag.domain.model.diagnostico.DiagnosticoDeLaPersona(true, true, "CUERPO", List.of()));
+
+        var diagnostico = service.de(APRENDIZ).orElseThrow().mapa().diagnostico();
+        assertThat(diagnostico.completado()).isTrue();
+        assertThat(diagnostico.prioridad()).isEqualTo("CUERPO");
+
+        when(diagnosticoPort.de(APRENDIZ)).thenReturn(com.renaser.os.rag.domain.model.diagnostico.DiagnosticoDeLaPersona.ninguno());
+        assertThat(service.de(APRENDIZ).orElseThrow().mapa().diagnostico()).isNull();
+
+        when(diagnosticoPort.de(APRENDIZ)).thenThrow(new IllegalStateException("caida"));
+        assertThat(service.de(APRENDIZ).orElseThrow().mapa().diagnostico()).isNull();
     }
 }

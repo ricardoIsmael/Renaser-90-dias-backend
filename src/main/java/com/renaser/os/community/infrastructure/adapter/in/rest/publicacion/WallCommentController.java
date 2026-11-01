@@ -57,9 +57,9 @@ public class WallCommentController {
        para MENTOR/ADMIN/ALCHEMIST (sin matriz, A-1) sigue sin haber chequeo de suspension. */
     @RequiresPermission(Permission.USE_APP)
     @GetMapping
-    public WallCommentsPageResponse listar(@PathVariable UUID postId,
+    public WallCommentsPageResponse listar(@ActorAutenticado UserId actorId, @PathVariable UUID postId,
                                             @RequestParam(required = false) String cursor) {
-        return WallCommentsPageResponse.from(consultarUseCase.pagina(PublicacionId.of(postId), parseCursor(cursor)));
+        return WallCommentsPageResponse.from(consultarUseCase.pagina(actorId, PublicacionId.of(postId), parseCursor(cursor)));
     }
 
     /** Un cursor mal formado es un error del cliente, no del servidor: 400, no 500. */

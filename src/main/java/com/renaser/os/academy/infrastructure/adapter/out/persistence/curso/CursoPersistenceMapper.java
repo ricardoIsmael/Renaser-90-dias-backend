@@ -3,6 +3,7 @@ package com.renaser.os.academy.infrastructure.adapter.out.persistence.curso;
 import com.renaser.os.academy.domain.model.curso.AccesoCurso;
 import com.renaser.os.academy.domain.model.curso.Curso;
 import com.renaser.os.academy.domain.model.curso.CursoId;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.users.api.UserRole;
 import org.springframework.stereotype.Component;
 
@@ -20,7 +21,7 @@ class CursoPersistenceMapper {
         return new Curso(CursoId.of(e.getId()), e.getSlug(), e.getTitulo(), e.getDescripcion(), e.getPortadaRuta(),
                 e.getOrden(), e.isPublicado(), toDomainAcceso(e.getAcceso()), e.getOrigen(),
                 e.getDiaDesbloqueo() == null ? null : e.getDiaDesbloqueo().intValue(), rolesPermitidos,
-                e.getCreadoEn(), e.getActualizadoEn());
+                e.getCreadoEn(), e.getActualizadoEn(), Formacion.desde(e.getFormacion()));
     }
 
     private AccesoCurso toDomainAcceso(AccesoCursoJpa jpa) {

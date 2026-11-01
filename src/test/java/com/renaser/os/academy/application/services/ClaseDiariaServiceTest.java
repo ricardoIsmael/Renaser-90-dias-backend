@@ -73,7 +73,7 @@ class ClaseDiariaServiceTest {
 
     private ClaseDiariaService service() {
         return new ClaseDiariaService(loadCursoPort, loadSeccionCursoPort, loadLeccionPort, progresoPort,
-                loadProgresoLeccionPort, completarHabitoUseCase, completarLeccionUseCase);
+                loadProgresoLeccionPort, completarHabitoUseCase, completarLeccionUseCase, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
     }
 
     private static Curso curso(String id, Integer diaDesbloqueo) {
@@ -103,6 +103,31 @@ class ClaseDiariaServiceTest {
 
         assertThat(resolucion).isInstanceOf(Proximamente.class);
         assertThat(((Proximamente) resolucion).programDay()).isEqualTo(5);
+    }
+
+    @Test
+    @DisplayName("spec 023: pasado el ultimo dia de su programa (90) ya no hay clase, ni se busca contenido")
+    void pasadoElUltimoDiaDeSuProgramaNoSeBuscaClase() {
+        when(progresoPort.deParticipante(ACTOR_ID)).thenReturn(Optional.of(new ProgresoParticipanteAcademy(
+                120, ZoneId.of("America/Lima"), RolParticipante.TRAINEE, false, true, 90)));
+
+        ClaseDiariaResolution resolucion = service().claseDeHoy(ACTOR_ID);
+
+        assertThat(resolucion).isInstanceOf(Proximamente.class);
+        verify(loadCursoPort, never()).listarTodos();
+    }
+
+    @Test
+    @DisplayName("spec 023: en un programa de 365 dias el dia 120 todavia tiene su clase (el tope es la duracion de la formacion)")
+    void enUnProgramaDe365DiasElDia120SiBuscaClase() {
+        when(progresoPort.deParticipante(ACTOR_ID)).thenReturn(Optional.of(new ProgresoParticipanteAcademy(
+                120, ZoneId.of("America/Lima"), RolParticipante.TRAINEE, false, true, 365)));
+        when(loadCursoPort.listarTodos()).thenReturn(List.of());
+
+        ClaseDiariaResolution resolucion = service().claseDeHoy(ACTOR_ID);
+
+        assertThat(resolucion).isInstanceOf(Proximamente.class);
+        verify(loadCursoPort).listarTodos();
     }
 
     @Test

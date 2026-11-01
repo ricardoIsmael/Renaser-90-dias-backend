@@ -29,9 +29,13 @@ import com.renaser.os.academy.domain.model.curso.SeccionCurso;
 import com.renaser.os.academy.domain.model.curso.SeccionCursoId;
 import com.renaser.os.academy.domain.model.progreso.ProgresoLeccion;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.Formacion;
+import com.renaser.os.shared.domain.FormacionDelContenido;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import com.renaser.os.users.api.UserRole;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -72,6 +76,8 @@ public class CatalogoAcademyService implements ConsultarMisCursosUseCase, Consul
      *  `habits`, `rocks` y `evidence` — `academy` no conoce nada interno de ese modulo. */
     private final AjustarPuntosPort ajustarPuntosPort;
     private final Clock clock;
+    /** Spec 024: los cursos son de una formación; quien es de otra no los ve ni como «bloqueados» (punto único de la 022). */
+    private final AlcanceDeFormacionFinder formaciones;
 
     public CatalogoAcademyService(LoadCursoPort loadCursoPort, LoadSeccionCursoPort loadSeccionCursoPort,
                                    LoadLeccionPort loadLeccionPort, LoadRecursoLeccionPort loadRecursoLeccionPort,
@@ -79,7 +85,8 @@ public class CatalogoAcademyService implements ConsultarMisCursosUseCase, Consul
                                    SaveProgresoLeccionPort saveProgresoLeccionPort,
                                    ConsultarProgresoParticipanteAcademyPort progresoPort,
                                    AlmacenamientoPort almacenamientoPort, AjustarPuntosPort ajustarPuntosPort,
-                                   Clock clock) {
+                                   Clock clock, AlcanceDeFormacionFinder formaciones) {
+        this.formaciones = formaciones;
         this.ajustarPuntosPort = ajustarPuntosPort;
         this.loadCursoPort = loadCursoPort;
         this.loadSeccionCursoPort = loadSeccionCursoPort;
@@ -93,12 +100,14 @@ public class CatalogoAcademyService implements ConsultarMisCursosUseCase, Consul
     }
 
     @Override
-    public List<CursoConProgreso> misCursos(UserId actorId) {
+    public List<CursoConProgreso> misCursos(UserId actorId, Formacion formacion) {
         ProgresoParticipanteAcademy progreso = requireProgreso(actorId);
         UserRole rol = aUserRole(progreso.rol());
         Integer programDay = programDayDe(rol, progreso);
 
+        AlcanceDeFormacion alcance = FormacionDelContenido.paraLeer(formaciones.de(actorId), formacion);
         List<Curso> accesibles = loadCursoPort.listarTodos().stream()
+                .filter(c -> alcance.incluye(c.formacion()))
                 .filter(c -> c.visibleEnCatalogoPara(rol, programDay))
                 .toList();
 
@@ -121,7 +130,7 @@ public class CatalogoAcademyService implements ConsultarMisCursosUseCase, Consul
      * bloqueo por rol/publicacion/acceso.
      */
     @Override
-    public List<CursoBloqueado> cursosBloqueados(UserId actorId) {
+    public List<CursoBloqueado> cursosBloqueados(UserId actorId, Formacion formacion) {
         ProgresoParticipanteAcademy progreso = requireProgreso(actorId);
         UserRole rol = aUserRole(progreso.rol());
         if (rol != UserRole.TRAINEE) {
@@ -130,7 +139,9 @@ public class CatalogoAcademyService implements ConsultarMisCursosUseCase, Consul
         Integer programDay = programDayDe(rol, progreso);
         int actual = programDay == null ? Curso.DIA_PROGRAMA_INICIAL : programDay;
 
+        AlcanceDeFormacion alcance = FormacionDelContenido.paraLeer(formaciones.de(actorId), formacion);
         return loadCursoPort.listarTodos().stream()
+                .filter(c -> alcance.incluye(c.formacion()))
                 .filter(c -> c.bloqueadoPorDiaPara(rol, programDay))
                 .map(c -> new CursoBloqueado(c, c.diaDesbloqueo(), actual, firmarPortada(c.portadaRuta())))
                 .toList();
@@ -141,7 +152,7 @@ public class CatalogoAcademyService implements ConsultarMisCursosUseCase, Consul
         ProgresoParticipanteAcademy progreso = requireProgreso(actorId);
         UserRole rol = aUserRole(progreso.rol());
         Integer programDay = programDayDe(rol, progreso);
-        Curso curso = requireCursoAccesible(cursoId, rol, programDay);
+        Curso curso = requireCursoAccesible(cursoId, rol, programDay, formaciones.de(actorId));
         ContenidoCurso contenido = construirContenido(cursoId, rol, programDay);
         return new CursoDetalle(curso, contenido, firmarPortada(curso.portadaRuta()));
     }
@@ -151,13 +162,14 @@ public class CatalogoAcademyService implements ConsultarMisCursosUseCase, Consul
         ProgresoParticipanteAcademy progreso = requireProgreso(actorId);
         UserRole rol = aUserRole(progreso.rol());
         Integer programDay = programDayDe(rol, progreso);
-        requireCursoAccesible(cursoId, rol, programDay);
+        requireCursoAccesible(cursoId, rol, programDay, formaciones.de(actorId));
         return construirContenido(cursoId, rol, programDay).secciones();
     }
 
     @Override
     public MotivoBloqueoCurso motivo(UserId actorId, CursoId cursoId) {
-        Optional<Curso> cursoOpt = loadCursoPort.byId(cursoId);
+        AlcanceDeFormacion alcance = formaciones.de(actorId);
+        Optional<Curso> cursoOpt = loadCursoPort.byId(cursoId).filter(c -> alcance.incluye(c.formacion()));
         if (cursoOpt.isEmpty()) {
             return new NoBloqueado();
         }
@@ -191,7 +203,8 @@ public class CatalogoAcademyService implements ConsultarMisCursosUseCase, Consul
         UserRole rol = aUserRole(progreso.rol());
         Integer programDay = programDayDe(rol, progreso);
 
-        Optional<Curso> cursoOpt = loadCursoPort.byId(leccion.cursoId());
+        AlcanceDeFormacion alcance = formaciones.de(actorId);
+        Optional<Curso> cursoOpt = loadCursoPort.byId(leccion.cursoId()).filter(c -> alcance.incluye(c.formacion()));
         if (cursoOpt.isEmpty() || !cursoOpt.get().visibleEnCatalogoPara(rol, programDay)) {
             return motivo(actorId, leccion.cursoId());
         }
@@ -211,7 +224,7 @@ public class CatalogoAcademyService implements ConsultarMisCursosUseCase, Consul
         ProgresoParticipanteAcademy progreso = requireProgreso(actorId);
         UserRole rol = aUserRole(progreso.rol());
         Integer programDay = programDayDe(rol, progreso);
-        requireCursoAccesible(leccion.cursoId(), rol, programDay);
+        requireCursoAccesible(leccion.cursoId(), rol, programDay, formaciones.de(actorId));
         requireSeccionVisible(leccion, rol, programDay);
 
         List<RecursoLeccion> recursos = loadRecursoLeccionPort.porLeccion(leccionId);
@@ -243,7 +256,7 @@ public class CatalogoAcademyService implements ConsultarMisCursosUseCase, Consul
         ProgresoParticipanteAcademy progreso = requireProgreso(actorId);
         UserRole rol = aUserRole(progreso.rol());
         Integer programDay = programDayDe(rol, progreso);
-        requireCursoAccesible(leccion.cursoId(), rol, programDay);
+        requireCursoAccesible(leccion.cursoId(), rol, programDay, formaciones.de(actorId));
         requireSeccionVisible(leccion, rol, programDay);
 
         boolean yaEstabaCompletada = loadProgresoLeccionPort.estaCompletada(actorId, leccionId);
@@ -264,7 +277,7 @@ public class CatalogoAcademyService implements ConsultarMisCursosUseCase, Consul
         ProgresoParticipanteAcademy progreso = requireProgreso(actorId);
         UserRole rol = aUserRole(progreso.rol());
         Integer programDay = programDayDe(rol, progreso);
-        requireCursoAccesible(leccion.cursoId(), rol, programDay);
+        requireCursoAccesible(leccion.cursoId(), rol, programDay, formaciones.de(actorId));
         requireSeccionVisible(leccion, rol, programDay);
 
         saveProgresoLeccionPort.desmarcarCompletada(actorId, leccionId);
@@ -321,8 +334,10 @@ public class CatalogoAcademyService implements ConsultarMisCursosUseCase, Consul
         }
     }
 
-    private Curso requireCursoAccesible(CursoId cursoId, UserRole rol, Integer programDay) {
+    /** Un curso de otra formación cuenta como inexistente: el mismo 404, el mismo texto (spec 024, FR-004). */
+    private Curso requireCursoAccesible(CursoId cursoId, UserRole rol, Integer programDay, AlcanceDeFormacion alcance) {
         Curso curso = loadCursoPort.byId(cursoId)
+                .filter(c -> alcance.incluye(c.formacion()))
                 .orElseThrow(() -> new NoSuchElementException("Curso no encontrado: " + cursoId));
         if (!curso.visibleEnCatalogoPara(rol, programDay)) {
             throw new NotAuthorizedException("No tienes acceso a este curso");

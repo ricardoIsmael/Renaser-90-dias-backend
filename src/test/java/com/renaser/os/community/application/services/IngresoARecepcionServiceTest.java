@@ -62,7 +62,7 @@ class IngresoARecepcionServiceTest {
     private IngresoARecepcionService servicio(UserRole rol, Optional<CelulaId> recepcion,
                                                List<AsignacionCelula> yaTiene,
                                                List<AsignacionCelula> delGrupo) {
-        ConsultarRecepcionVigentePort recepcionPort = dia -> recepcion;
+        ConsultarRecepcionVigentePort recepcionPort = (dia, formacion) -> recepcion;
         LoadAsignacionesPort load = new LoadAsignacionesPort() {
             @Override
             public List<AsignacionCelula> porUsuario(UserId usuarioId) {

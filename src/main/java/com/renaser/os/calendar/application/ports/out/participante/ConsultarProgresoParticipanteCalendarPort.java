@@ -1,6 +1,7 @@
 package com.renaser.os.calendar.application.ports.out.participante;
 
 import com.renaser.os.calendar.domain.model.evento.RolUsuario;
+import com.renaser.os.shared.domain.DuracionDelPrograma;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.ZoneId;
@@ -45,7 +46,15 @@ public interface ConsultarProgresoParticipanteCalendarPort {
 
     Optional<ProgresoParticipanteCalendar> deParticipante(UserId participanteId);
 
+    /**
+     * @param duracionDias la duración del programa de la persona (90 o 365, spec 022): el nivel de membresía se mide sobre ella
+     */
     record ProgresoParticipanteCalendar(int diaPrograma, ZoneId zona, RolUsuario rol, boolean suspendido,
-                                         UUID celulaId) {
+                                         UUID celulaId, int duracionDias) {
+
+        /** Firma de antes de las formaciones: el programa de 90 días de siempre. */
+        public ProgresoParticipanteCalendar(int diaPrograma, ZoneId zona, RolUsuario rol, boolean suspendido, UUID celulaId) {
+            this(diaPrograma, zona, rol, suspendido, celulaId, DuracionDelPrograma.POR_DEFECTO);
+        }
     }
 }

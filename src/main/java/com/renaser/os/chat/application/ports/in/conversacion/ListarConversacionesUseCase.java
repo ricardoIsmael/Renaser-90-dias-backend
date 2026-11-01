@@ -2,6 +2,7 @@ package com.renaser.os.chat.application.ports.in.conversacion;
 
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.Instant;
@@ -11,7 +12,15 @@ public interface ListarConversacionesUseCase {
 
     /** Mis conversaciones, con el ultimo mensaje y el conteo de no-leidos resueltos en
      * lote (nunca N+1 — CLAUDE.MD del encargo). Orden: mas actividad reciente primero. */
-    List<ConversacionResumen> listar(UserId actorId);
+    default List<ConversacionResumen> listar(UserId actorId) {
+        return listar(actorId, null);
+    }
+
+    /**
+     * Spec 024: la Tribu es la de la formación de quien pide (comunidad general, su grupo, su soporte y sus directos), sin lo que la formación
+     * tenga apagado. Solo Administración, Alquimista y Soporte TI eligen una; sin elegir ven las tres, cada conversación con la suya.
+     */
+    List<ConversacionResumen> listar(UserId actorId, Formacion formacion);
 
     /** {@code ultimoMensaje} es null si la conversacion todavia no tiene ningun mensaje. */
     /**

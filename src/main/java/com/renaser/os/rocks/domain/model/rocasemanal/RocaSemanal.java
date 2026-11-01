@@ -108,8 +108,8 @@ public final class RocaSemanal {
     }
 
     private static void requireNumeroSemanaValido(int numeroSemana) {
-        if (numeroSemana < 1 || numeroSemana > 13) {
-            throw new IllegalArgumentException("numeroSemana debe estar entre 1 y 13: " + numeroSemana);
+        if (numeroSemana < 1 || numeroSemana > SemanaPrograma.MAXIMA_SEMANA) {
+            throw new IllegalArgumentException("numeroSemana debe estar entre 1 y " + SemanaPrograma.MAXIMA_SEMANA + ": " + numeroSemana);
         }
     }
 
