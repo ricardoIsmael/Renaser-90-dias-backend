@@ -102,6 +102,8 @@ class AccountRequestServiceTest {
     private com.renaser.os.users.application.ports.out.rolpersonalizado.CargarRolesPersonalizadosPort rolesPersonalizados;
     @Mock
     private org.springframework.beans.factory.ObjectProvider<com.renaser.os.users.api.FichaAlAceptar> fichaAlAceptar;
+    @Mock
+    private org.springframework.beans.factory.ObjectProvider<com.renaser.os.users.api.TerminosPublicados> terminosPublicados;
 
     private AccountRequestService service;
 
@@ -111,7 +113,7 @@ class AccountRequestServiceTest {
                 loadUserPort, saveUserPort, deleteUserPort, saveCredencialPort, saveIdentidadExternaPort,
                 passwordEncoder,
                 new IngresoPorAceptacion(catalogoDeFormaciones, saveParticipacionProgramaPort, formacionesDelPersonal,
-                        rolesPersonalizados, fichaAlAceptar, CLOCK),
+                        rolesPersonalizados, fichaAlAceptar, terminosPublicados, CLOCK),
                 tokenVerificacionEmailPort,
                 limitarSolicitudesResetPort, new RequireActiveUserGuard(loadUserPort),
                 new RequireAdminGuard(loadUserPort), updateUserRole, events, CLOCK, idGenerator);

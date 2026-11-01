@@ -5,6 +5,7 @@ import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FichaAlAceptar;
 import com.renaser.os.users.api.FormacionConfigurada;
+import com.renaser.os.users.api.TerminosPublicados;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.application.ports.out.formacion.CatalogoDeFormacionesPort;
 import com.renaser.os.users.application.ports.out.formacion.FormacionesDelPersonalPort;
@@ -38,16 +39,19 @@ class IngresoPorAceptacion {
     private final CargarRolesPersonalizadosPort rolesPersonalizados;
     /** Hasta integrar la 026 (ficha con diagnóstico) nadie la implementa en esta rama: sin ella, «con diagnóstico» se rechaza con un aviso claro. */
     private final ObjectProvider<FichaAlAceptar> ficha;
+    /** Spec 027: sin la implementación (otra rama sin términos editables) no se exige nada, como hasta hoy. */
+    private final ObjectProvider<TerminosPublicados> terminos;
     private final Clock clock;
 
     IngresoPorAceptacion(CatalogoDeFormacionesPort catalogo, SaveParticipacionProgramaPort participaciones,
                          FormacionesDelPersonalPort personal, CargarRolesPersonalizadosPort rolesPersonalizados,
-                         ObjectProvider<FichaAlAceptar> ficha, Clock clock) {
+                         ObjectProvider<FichaAlAceptar> ficha, ObjectProvider<TerminosPublicados> terminos, Clock clock) {
         this.catalogo = catalogo;
         this.participaciones = participaciones;
         this.personal = personal;
         this.rolesPersonalizados = rolesPersonalizados;
         this.ficha = ficha;
+        this.terminos = terminos;
         this.clock = clock;
     }
 
@@ -60,6 +64,7 @@ class IngresoPorAceptacion {
      */
     EleccionDeIngreso formalizar(UserId persona, UserId actor, UserRole rolFinal, PedidoDeIngreso pedido, UUID rolPersonalizadoId) {
         Resultado resultado = ReglasDeIngreso.decidir(rolFinal, pedido, catalogoPorFormacion());
+        exigirTerminosPublicados(resultado.eleccion().formaciones());
         participaciones.save(ParticipacionPrograma.inscribirTraineeAprobado(persona, clock, resultado.formacionDelPrograma(),
                 resultado.duracionDelProgramaDias()));
         if (ReglaDeAlcance.esPersonalConFormaciones(rolFinal)) {
@@ -78,6 +83,26 @@ class IngresoPorAceptacion {
         String nombre = rolesPersonalizados.porId(rolPersonalizadoId).map(RolPersonalizado::nombre)
                 .orElseThrow(() -> new IllegalStateException("El rol personalizado con el que se acepta ya no existe."));
         return eleccion.conRolPersonalizado(rolPersonalizadoId, nombre);
+    }
+
+    /** Spec 027, FR-021: una formación sin términos publicados no recibe personas nuevas (nadie podría aceptarlos). */
+    private void exigirTerminosPublicados(Iterable<Formacion> formaciones) {
+        TerminosPublicados publicados = terminos.getIfAvailable();
+        if (publicados == null) {
+            return;
+        }
+        for (Formacion formacion : formaciones) {
+            if (!publicados.estanPublicados(formacion)) {
+                throw new IllegalStateException("«" + catalogoPorFormacion().get(formacion).nombre()
+                        + "» todavía no tiene términos y condiciones publicados. Publícalos antes de aceptar a alguien ahí.");
+            }
+        }
+    }
+
+    /** ¿Tiene ya términos publicados esa formación? Sin la implementación (rama sin términos editables) se asume que sí: es lo de hoy. */
+    boolean tieneTerminos(Formacion formacion) {
+        TerminosPublicados publicados = terminos.getIfAvailable();
+        return publicados == null || publicados.estanPublicados(formacion);
     }
 
     /** ¿Se puede ofrecer «Con diagnóstico»? Sin la ficha con diagnóstico instalada, o sin uno publicado, no. */

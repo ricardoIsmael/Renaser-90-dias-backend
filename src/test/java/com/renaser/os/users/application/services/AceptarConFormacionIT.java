@@ -87,6 +87,8 @@ class AceptarConFormacionIT {
     void ficha() {
         Mockito.reset(ficha);
         when(ficha.hayDiagnosticoPublicado()).thenReturn(true);
+        /* Spec 027: una formación sin términos publicados no recibe a nadie; estas pruebas aceptan en las tres. */
+        com.renaser.os.onboarding.TerminosDePrueba.publicarEnTodas(jdbc);
     }
 
     @AfterEach
@@ -94,6 +96,7 @@ class AceptarConFormacionIT {
         jdbc.update("UPDATE renaser.formaciones SET activa = true");
         esperarLosAvisosDeEstaPrueba();
         cuentas.forEach(id -> borrado.borrar(UserId.of(id), RegistroDeEliminacion.Accion.ELIMINADA_POR_ADMIN, null));
+        com.renaser.os.onboarding.TerminosDePrueba.restablecer(jdbc);
         grupos.forEach(id -> jdbc.update("DELETE FROM renaser.celulas WHERE id = ?", id));
         if (cohorte != null) {
             jdbc.update("DELETE FROM renaser.cohortes WHERE id = ?", cohorte);
@@ -383,6 +386,34 @@ class AceptarConFormacionIT {
                 Map.of("duracionDias", 90, "motivo", "No puede")).statusCode()).as("un mentor no").isEqualTo(403);
         JsonNode ficha = json.readTree(enviar("GET", "/api/v1/admin/trainees/" + solicitud.usuario(), sesion, null).body());
         assertThat(ficha.get("lastDayAdjustment").get("newDuration").asInt()).isEqualTo(365);
+    }
+
+
+    @Test
+    @DisplayName("spec 027, FR-021: una formación sin términos publicados no recibe personas nuevas (409) y la hoja lo sabe; al publicarlos, sí")
+    void sinTerminosNoSeAcepta() throws Exception {
+        com.renaser.os.onboarding.TerminosDePrueba.restablecer(jdbc);
+        String sesion = sesionDe(usuario("ADMIN"));
+        Solicitud solicitud = solicitud("Sin Terminos");
+
+        HttpResponse<String> rechazada = aprobar(solicitud.id(), sesion, Map.of("formations", List.of("DIPLOMADO"), "durationDays", 90));
+
+        assertThat(rechazada.statusCode()).isEqualTo(409);
+        assertThat(rechazada.body()).contains("términos");
+        assertThat(rolYEstado(solicitud.usuario())).containsEntry("estado", "INACTIVO");
+        boolean diplomadoConTerminos = true;
+        for (JsonNode formacion : json.readTree(enviar("GET", "/api/v1/account-requests/acceptance-options", sesion, null).body()).get("formations")) {
+            if ("DIPLOMADO".equals(formacion.get("code").asText())) {
+                diplomadoConTerminos = formacion.get("termsPublished").asBoolean();
+            }
+        }
+        assertThat(diplomadoConTerminos).isFalse();
+        // la Escuela sí tiene los suyos (la versión 1 de la migración): aceptar ahí no se traba
+        Solicitud enLaEscuela = solicitud("Con Terminos");
+        assertThat(aprobar(enLaEscuela.id(), sesion, Map.of("formations", List.of("ESCUELA"))).statusCode()).isEqualTo(204);
+
+        com.renaser.os.onboarding.TerminosDePrueba.publicarEnTodas(jdbc);
+        assertThat(aprobar(solicitud.id(), sesion, Map.of("formations", List.of("DIPLOMADO"), "durationDays", 90)).statusCode()).isEqualTo(204);
     }
 
     // ── Semilla y pedidos ──────────────────────────────────────────────────

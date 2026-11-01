@@ -1,5 +1,6 @@
 package com.renaser.os.users.application.ports.in.accountrequest;
 
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FormacionConfigurada;
 
@@ -16,7 +17,8 @@ public interface ConsultarOpcionesDeAceptacionUseCase {
     /**
      * @param formaciones           solo las activas, en su orden
      * @param diagnosticoDisponible hay un diagnóstico publicado que asignar (spec 026); sin la ficha con diagnóstico instalada es {@code false}
+     * @param sinTerminos           las formaciones (de las activas) que todavía no tienen términos y condiciones publicados: no reciben personas nuevas (spec 027)
      */
-    record OpcionesDeAceptacion(List<FormacionConfigurada> formaciones, boolean diagnosticoDisponible) {
+    record OpcionesDeAceptacion(List<FormacionConfigurada> formaciones, boolean diagnosticoDisponible, List<Formacion> sinTerminos) {
     }
 }
