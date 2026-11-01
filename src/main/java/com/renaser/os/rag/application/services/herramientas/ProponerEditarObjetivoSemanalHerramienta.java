@@ -24,6 +24,7 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.OptionalInt;
 
 /**
  * {@code proponer_editar_objetivo_semanal} (R2, D-177): PROPONE corregir el objetivo semanal de UN eje
@@ -122,7 +123,11 @@ public class ProponerEditarObjetivoSemanalHerramienta implements HerramientaAgen
             return ResultadoHerramienta.fallo("No pude consultar su semana en este momento.");
         }
         if (pedida.siguiente()) {
-            return semana.numeroSemana() >= ultimaSemanaDe(actorId)
+            OptionalInt ultima = ultimaSemanaDe(actorId);
+            if (ultima.isEmpty()) {
+                return ResultadoHerramienta.fallo("No pude consultar su semana en este momento.");
+            }
+            return semana.numeroSemana() >= ultima.getAsInt()
                     ? ResultadoHerramienta.fallo(TextoDeAjustesDeRocas.SIN_SEMANA_SIGUIENTE)
                     : proponer(actorId, semana.numeroSemana() + 1, pedida);
         }
@@ -131,13 +136,16 @@ public class ProponerEditarObjetivoSemanalHerramienta implements HerramientaAgen
                 .orElseGet(() -> proponer(actorId, semana.numeroSemana(), pedida));
     }
 
-    /** La última de SU programa (13 o 53); si no se puede leer, la de siempre (90 días). */
-    private int ultimaSemanaDe(UserId actorId) {
+    /**
+     * La última de SU programa (13 o 53). Si no se puede leer NO se adivina la de 90 días: con un tope equivocado una persona del Diplomado de
+     * 1 año se quedaría sin «la semana siguiente» desde la 13, o una de 90 días pediría una 14 que no existe. Vacío = se dice que no se pudo.
+     */
+    private OptionalInt ultimaSemanaDe(UserId actorId) {
         try {
-            return rocasPort.ultimaSemanaDelPrograma(actorId);
+            return OptionalInt.of(rocasPort.ultimaSemanaDelPrograma(actorId));
         } catch (RuntimeException falla) {
             log.warn("[rag] la herramienta {} no pudo leer la ultima semana del programa", NOMBRE, falla);
-            return EditarObjetivoSemanalPort.ULTIMA_SEMANA;
+            return OptionalInt.empty();
         }
     }
 

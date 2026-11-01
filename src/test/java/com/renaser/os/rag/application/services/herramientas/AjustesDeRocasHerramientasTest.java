@@ -288,6 +288,22 @@ class AjustesDeRocasHerramientasTest {
         verifyNoInteractions(proponer);
     }
 
+    @Test
+    @DisplayName("si no se puede leer la ultima semana del programa no se adivina la de 90 dias: se dice que no se pudo y no se propone nada")
+    void sinLaUltimaSemanaNoSeAdivina() {
+        when(rocas.ultimaSemanaDelPrograma(APRENDIZ)).thenThrow(new IllegalStateException("sin lectura"));
+        when(rocas.deLaSemana(APRENDIZ)).thenReturn(new RocasDeLaSemana(13, LocalDate.of(2026, 11, 30),
+                LocalDate.of(2026, 12, 7), List.of(new RocaDeLaSemana("TRABAJO", "Vender 2", null, null, true, false,
+                null))));
+
+        ResultadoHerramienta resultado = editarObjetivo.ejecutar(APRENDIZ, invocacion(
+                ProponerEditarObjetivoSemanalHerramienta.NOMBRE, "eje", "TRABAJO", "titulo", "Vender 3", "semana",
+                "siguiente"));
+
+        assertThat(resultado).isEqualTo(ResultadoHerramienta.fallo("No pude consultar su semana en este momento."));
+        verifyNoInteractions(proponer);
+    }
+
     /** Spec 026: con la duracion de cada persona la ultima semana del Diplomado de 1 ano es la 53, no la 13. */
     @Test
     @DisplayName("en el programa de un ano la semana 13 todavia tiene siguiente; la 53 no")
