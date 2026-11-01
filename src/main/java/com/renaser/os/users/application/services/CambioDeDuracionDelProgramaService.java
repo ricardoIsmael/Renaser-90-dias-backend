@@ -49,10 +49,14 @@ class CambioDeDuracionDelProgramaService implements CambiarDuracionDelProgramaUs
     @Override
     @Transactional
     public void cambiar(CambiarDuracionCommand command) {
+        // El recurso se carga primero y el guard después (E-42). El rol se comprueba antes que la participación: el personal no tiene programa que
+        // cambiar y eso es un 409 del contrato (E2E P4-I), no el 404 de «no inscripto».
+        UserRole rol = usuarios.byId(command.aprendiz()).map(u -> u.role())
+                .orElseThrow(() -> new NoSuchElementException("Usuario no encontrado: " + command.aprendiz()));
+        requireAdminGuard.requireAdminActivo(command.actor());
+        exigirAprendiz(rol);
         ParticipacionPrograma participacion = participaciones.byParticipanteId(command.aprendiz())
                 .orElseThrow(() -> new NoSuchElementException("Participante no inscripto en el programa: " + command.aprendiz()));
-        requireAdminGuard.requireAdminActivo(command.actor());
-        exigirAprendiz(command.aprendiz());
         exigirMotivo(command.motivo());
         var oferta = catalogo.de(participacion.formacion());
         if (!oferta.ofrece(command.duracionDias())) {
@@ -65,8 +69,7 @@ class CambioDeDuracionDelProgramaService implements CambiarDuracionDelProgramaUs
                 participacion.diasAjuste(), anterior, command.duracionDias(), command.motivo(), command.actor(), clock));
     }
 
-    private void exigirAprendiz(UserId aprendiz) {
-        UserRole rol = usuarios.byId(aprendiz).map(u -> u.role()).orElseThrow(() -> new NoSuchElementException("Usuario no encontrado: " + aprendiz));
+    private static void exigirAprendiz(UserRole rol) {
         if (rol != UserRole.TRAINEE) {
             throw new IllegalStateException("Solo se cambia la duración de los aprendices. El personal no tiene una duración propia.");
         }
