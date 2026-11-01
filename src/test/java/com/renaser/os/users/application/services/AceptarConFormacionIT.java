@@ -128,6 +128,43 @@ class AceptarConFormacionIT {
     }
 
     @Test
+    @DisplayName("US4: la ficha de la persona dice lo mismo que la lista de «Aceptadas» —formación, duración, rol, diagnóstico, quién y cuándo—")
+    void laFichaDiceLoMismoQueLaLista() throws Exception {
+        String sesion = sesionDe(usuario("ADMIN"));
+        Solicitud solicitud = solicitud("Ana Ficha");
+        assertThat(aprobar(solicitud.id(), sesion, Map.of("formations", List.of("DIPLOMADO"), "durationDays", 365, "withDiagnosis", true)).statusCode())
+                .isEqualTo(204);
+
+        JsonNode fila = filaDelListado(solicitud.id(), sesion, "?status=APPROVED&size=200");
+        JsonNode ficha = json.readTree(enviar("GET", "/api/v1/admin/trainees/" + solicitud.usuario(), sesion, null).body());
+
+        assertThat(ficha.get("acceptance")).isEqualTo(fila.get("acceptance"));
+        assertThat(ficha.get("acceptance").get("formations").get(0).asText()).isEqualTo("DIPLOMADO");
+        assertThat(ficha.get("acceptance").get("durationDays").asInt()).isEqualTo(365);
+        assertThat(ficha.get("acceptance").get("withDiagnosis").asBoolean()).isTrue();
+        assertThat(ficha.get("acceptedByName").asText()).isEqualTo(fila.get("reviewedByName").asText()).isEqualTo("Fixture ADMIN");
+        assertThat(Instant.parse(ficha.get("acceptedAt").asText())).isEqualTo(Instant.parse(fila.get("reviewedAt").asText()));
+    }
+
+    @Test
+    @DisplayName("US4: lo aceptado antes de las formaciones figura en la ficha como «Escuela, sin diagnóstico» y sin rol ni duración")
+    void laFichaDeLoAnterior() throws Exception {
+        String sesion = sesionDe(usuario("ADMIN"));
+        Solicitud solicitud = solicitud("Ana De Antes");
+        assertThat(aprobar(solicitud.id(), sesion, Map.of()).statusCode()).isEqualTo(204);
+        // Lo que dejó V140 en lo aceptado antes de las formaciones: la Escuela, sin diagnóstico y sin rol ni duración.
+        jdbc.update("UPDATE renaser.solicitudes_cuenta SET formaciones_elegidas = ARRAY['ESCUELA'], con_diagnostico = false, duracion_elegida_dias = NULL, "
+                + "rol_elegido = NULL WHERE id = ?", solicitud.id());
+
+        JsonNode ficha = json.readTree(enviar("GET", "/api/v1/admin/trainees/" + solicitud.usuario(), sesion, null).body());
+
+        assertThat(ficha.get("acceptance").get("formations").get(0).asText()).isEqualTo("ESCUELA");
+        assertThat(ficha.get("acceptance").get("withDiagnosis").asBoolean()).isFalse();
+        assertThat(ficha.get("acceptance").get("role").isNull()).isTrue();
+        assertThat(ficha.get("acceptance").get("durationDays").isNull()).isTrue();
+    }
+
+    @Test
     @DisplayName("FR-010 y SC-007: la persona aceptada en el Diplomado entra a la recepción del Diplomado y a ninguna de la Escuela")
     void entraALaRecepcionDeSuFormacion() throws Exception {
         UUID recepcionDiplomado = recepcion("DIPLOMADO");

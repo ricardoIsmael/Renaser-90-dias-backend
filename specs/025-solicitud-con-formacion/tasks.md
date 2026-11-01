@@ -10,6 +10,8 @@
 - [x] T007 `GET /account-requests/acceptance-options`; `approve` con `formations`/`durationDays`/`withDiagnosis`
 - [x] T008 Listado: `reviewedByName`, `acceptance` y filtro `formation`
 - [x] T009 V141 + `POST /admin/trainees/{id}/duracion` (025-2 A) + `lastDayAdjustment` con la duración
+- [x] T009b V142: el rol personalizado (id y nombre de ese día) en la foto de lo aceptado
+- [x] T009c `GET /admin/trainees/{id}` suma `acceptance`, `acceptedByName` y `acceptedAt` (US4, escenario 1)
 - [x] T010 `AceptarConFormacionIT` (Postgres): Diplomado 1 año, recepción por formación, personal en dos formaciones, Administración, app anterior, pedidos inválidos, atomicidad, concurrencia, filtro, opciones, 403, cambio de duración
 - [x] T011 `FichaAlAceptarImplementadaTest` (rompe al integrar la 026 si nadie implementa la interfaz)
 - [x] T012 D-302 en `docs/MODULOS_A_AVANZAR.md`
@@ -24,4 +26,3 @@
 
 ## Fuera de esta entrega (lo dice el reporte)
 - La marca «con diagnóstico» de la persona y corregir el tipo de ficha: spec 026.
-- Mostrar `acceptance` en la ficha de la persona (US4, escenario 1): hoy se ve en «Solicitudes → Aceptadas».

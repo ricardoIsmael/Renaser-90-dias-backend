@@ -74,4 +74,9 @@ public class AccountRequestJpaEntity {
     private String rolElegido;
 
     private Boolean conDiagnostico;
+
+    /** V142: el rol personalizado con el que entró y su nombre de ese día (foto histórica). */
+    private UUID rolPersonalizadoId;
+
+    private String rolPersonalizadoNombre;
 }

@@ -281,7 +281,7 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
         // Invariante de participantes_programa (baseline V1, comentario de la tabla): la fila se crea al aprobar la cuenta, en la MISMA
         // transaccion. Desde la spec 025 nace en la formacion y con la duracion elegidas (el reloj del programa arranca pausado: lo activa el
         // primer login + Ficha + Terminos + Dia 1). Porte de onboarding/service.ts::createTraineePendingActivation (repo viejo).
-        EleccionDeIngreso eleccion = ingreso.formalizar(usuario.id(), command.actorId(), rolFinal, command.pedido());
+        EleccionDeIngreso eleccion = ingreso.formalizar(usuario.id(), command.actorId(), rolFinal, command.pedido(), command.rolPersonalizadoId());
         request.approve(actor, usuario.id(), eleccion, clock);
         saveAccountRequestPort.save(request);
 

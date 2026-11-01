@@ -56,6 +56,11 @@ class AccountRequestPersistenceAdapter implements LoadAccountRequestPort, SaveAc
     }
 
     @Override
+    public Optional<AccountRequest> aceptadaDe(UserId usuario) {
+        return repository.findFirstByUsuarioIdAndEstadoOrderByRevisadaEnDesc(usuario.value(), EstadoSolicitudJpa.APROBADA).map(mapper::toDomain);
+    }
+
+    @Override
     public boolean existePorEmail(Email email) {
         // Email ya normaliza a minusculas en su constructor, que es como se guarda la columna.
         return repository.existsByEmail(email.value());

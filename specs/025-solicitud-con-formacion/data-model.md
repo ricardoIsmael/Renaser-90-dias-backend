@@ -2,7 +2,7 @@
 
 Reutiliza `solicitudes_cuenta`, `participantes_programa` (V125), `formaciones_personal` (V126) y `ajustes_dia_programa` (V21). **No agrega tablas.**
 
-## Migraciones (V140–V142 reservadas; se usan V140 y V141)
+## Migraciones (V140–V142)
 
 ### V140 — `solicitudes_cuenta`: la foto de lo elegido al aceptar
 | Columna nueva | Tipo | Notas |
@@ -23,6 +23,14 @@ Reutiliza `solicitudes_cuenta`, `participantes_programa` (V125), `formaciones_pe
 `duracion_anterior smallint NULL`, `duracion_nueva smallint NULL` (ambas o ninguna, `CHECK`). Un cambio de duración de quien ya empezó es una corrección manual de su reloj, con motivo,
 y se anota en la misma bitácora append-only que mover el día (quién, cuándo, por qué). En ese ajuste `dia_anterior = dia_nuevo`: el día se conserva.
 
+### V142 — `solicitudes_cuenta`: el rol personalizado en la foto
+| Columna nueva | Tipo | Notas |
+|---|---|---|
+| `rol_personalizado_id` | `uuid` NULL, `REFERENCES roles_personalizados ON DELETE SET NULL` | el rol personalizado con el que entró (D-272); NULL con un rol base. Si el rol se borra, el id se suelta |
+| `rol_personalizado_nombre` | `text` NULL, `CHECK` 1 a 60 | cómo se llamaba ese día: una foto, no cambia si lo renombran. `CHECK`: con id hay nombre |
+
+`rol_elegido` sigue siendo el rol BASE. Sin tabla nueva: dos columnas de la fila que ya existe, por la misma razón que las de V140. Las solicitudes anteriores quedan con las dos en NULL.
+
 ## Dónde queda cada decisión al aceptar
 | Decisión | Aprendiz | Personal (mentor, guía, líder) | Administración / Alquimista |
 |---|---|---|---|
@@ -30,11 +38,11 @@ y se anota en la misma bitácora append-only que mover el día (quién, cuándo,
 | Duración | `participantes_programa.duracion_dias` (la elegida) | la de su programa propio = la más corta que ofrece la formación activa | 90 (Escuela) |
 | Rol | `usuarios.rol` (por `UpdateUserRoleUseCase`, como «Equipo y roles») | idem | idem |
 | Ficha | `onboarding` (`FichaAlAceptar`, spec 026) | idem | idem |
-| Historial | las 4 columnas de V140 | idem | idem |
+| Historial | las 4 columnas de V140 y las 2 de V142 | idem | idem |
 
 ## Dominio (sin Spring)
 - `PedidoDeIngreso(formaciones, duracionDias, conDiagnostico)`: lo que pide Administración (puede venir vacío: una app anterior).
-- `EleccionDeIngreso(rol, formaciones, duracionElegidaDias, conDiagnostico)`: la foto.
+- `EleccionDeIngreso(rol, formaciones, duracionElegidaDias, conDiagnostico, rolPersonalizadoId, rolPersonalizadoNombre)`: la foto. `IngresoPorAceptacion` le pone el rol personalizado con el nombre que tiene al aceptar.
 - `ReglasDeIngreso.decidir(rol, pedido, catalogo)` → `Resultado(eleccion, formacionDelPrograma, duracionDelProgramaDias)`:
   aprendiz → una formación (400 si más de una) y duración (la única, o elegida: 400 «Elige la duración»); personal → una o varias; Administración/Alquimista → ninguna;
   formación desactivada → 400; sin formación elegida (app anterior) → Escuela y su duración por defecto, sin comprobar que esté activa (FR-013).

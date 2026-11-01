@@ -48,7 +48,7 @@ class AccountRequestPersistenceMapper {
         Set<Formacion> formaciones = Arrays.stream(e.getFormacionesElegidas()).map(Formacion::desde).collect(toSet());
         UserRole rol = e.getRolElegido() == null ? null : UserRole.valueOf(e.getRolElegido());
         Integer duracion = e.getDuracionElegidaDias() == null ? null : e.getDuracionElegidaDias().intValue();
-        return new EleccionDeIngreso(rol, formaciones, duracion, Boolean.TRUE.equals(e.getConDiagnostico()));
+        return new EleccionDeIngreso(rol, formaciones, duracion, Boolean.TRUE.equals(e.getConDiagnostico()), e.getRolPersonalizadoId(), e.getRolPersonalizadoNombre());
     }
 
     AccountRequestJpaEntity toEntity(AccountRequest r) {
@@ -72,7 +72,9 @@ class AccountRequestPersistenceMapper {
                 r.eleccion() == null ? null : r.eleccion().formaciones().stream().map(Formacion::codigo).toArray(String[]::new),
                 r.eleccion() == null || r.eleccion().duracionElegidaDias() == null ? null : r.eleccion().duracionElegidaDias().shortValue(),
                 r.eleccion() == null || r.eleccion().rol() == null ? null : r.eleccion().rol().name(),
-                r.eleccion() == null ? null : r.eleccion().conDiagnostico());
+                r.eleccion() == null ? null : r.eleccion().conDiagnostico(),
+                r.eleccion() == null ? null : r.eleccion().rolPersonalizadoId(),
+                r.eleccion() == null ? null : r.eleccion().rolPersonalizadoNombre());
     }
 
     /**
