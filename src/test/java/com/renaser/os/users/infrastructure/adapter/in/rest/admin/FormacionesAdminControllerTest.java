@@ -6,6 +6,8 @@ import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FormacionConfigurada;
 import com.renaser.os.users.application.ports.in.formacion.AsignarFormacionesDelPersonalUseCase;
 import com.renaser.os.users.application.ports.in.formacion.AsignarFormacionesDelPersonalUseCase.AsignarFormacionesCommand;
+import com.renaser.os.users.application.ports.in.formacion.CambiarDuracionDelProgramaUseCase;
+import com.renaser.os.users.application.ports.in.formacion.CambiarDuracionDelProgramaUseCase.CambiarDuracionCommand;
 import com.renaser.os.users.application.ports.in.formacion.ConfigurarFormacionUseCase;
 import com.renaser.os.users.application.ports.in.formacion.ConfigurarFormacionUseCase.ConfigurarFormacionCommand;
 import com.renaser.os.users.application.ports.in.formacion.ConsultarFormacionDeUnaPersonaUseCase;
@@ -61,6 +63,8 @@ class FormacionesAdminControllerTest {
     private TrasladarAprendizDeFormacionUseCase trasladar;
     @MockitoBean
     private ConsultarFormacionDeUnaPersonaUseCase consultarPersona;
+    @MockitoBean
+    private CambiarDuracionDelProgramaUseCase cambiarDuracion;
 
     private final UserId actor = UserId.of(UUID.randomUUID());
     private final UUID persona = UUID.randomUUID();
@@ -221,5 +225,41 @@ class FormacionesAdminControllerTest {
                 .andExpect(jsonPath("$.duracionDias").value(365))
                 .andExpect(jsonPath("$.historial").isEmpty());
         mockMvc.perform(conActor(get("/api/v1/admin/users/{id}/formaciones", persona), null)).andExpect(status().isForbidden());
+    }
+
+    // ---------------------------------------------------------------------------------------------------------- POST /trainees/{id}/duracion (spec 025)
+
+    @Test
+    @DisplayName("cambiar la duración: responde 204 y manda la duración nueva y el motivo")
+    void cambiarLaDuracionResponde204() throws Exception {
+        mockMvc.perform(conActor(post("/api/v1/admin/trainees/{id}/duracion", persona), "{\"duracionDias\":365,\"motivo\":\"Pidió más tiempo\"}"))
+                .andExpect(status().isNoContent());
+
+        ArgumentCaptor<CambiarDuracionCommand> comando = ArgumentCaptor.forClass(CambiarDuracionCommand.class);
+        verify(cambiarDuracion).cambiar(comando.capture());
+        assertThat(comando.getValue().aprendiz()).isEqualTo(UserId.of(persona));
+        assertThat(comando.getValue().duracionDias()).isEqualTo(365);
+        assertThat(comando.getValue().motivo()).isEqualTo("Pidió más tiempo");
+    }
+
+    @Test
+    @DisplayName("cambiar la duración: sin duración o sin motivo es 400 y no llega al caso de uso")
+    void cambiarLaDuracionValida() throws Exception {
+        mockMvc.perform(conActor(post("/api/v1/admin/trainees/{id}/duracion", persona), "{\"motivo\":\"x\"}")).andExpect(status().isBadRequest());
+        mockMvc.perform(conActor(post("/api/v1/admin/trainees/{id}/duracion", persona), "{\"duracionDias\":365,\"motivo\":\" \"}")).andExpect(status().isBadRequest());
+
+        verifyNoInteractions(cambiarDuracion);
+    }
+
+    @Test
+    @DisplayName("cambiar la duración: 403 a quien no le toca, 409 si ya la tiene y 404 si la persona no existe")
+    void cambiarLaDuracionRechazos() throws Exception {
+        doThrow(new NotAuthorizedException("Solo ADMIN/ALCHEMIST")).doThrow(new IllegalStateException("Esa persona ya tiene esa duración."))
+                .doThrow(new NoSuchElementException("Participante no encontrado")).when(cambiarDuracion).cambiar(any());
+        String cuerpo = "{\"duracionDias\":365,\"motivo\":\"Pidió más tiempo\"}";
+
+        mockMvc.perform(conActor(post("/api/v1/admin/trainees/{id}/duracion", persona), cuerpo)).andExpect(status().isForbidden());
+        mockMvc.perform(conActor(post("/api/v1/admin/trainees/{id}/duracion", persona), cuerpo)).andExpect(status().isConflict());
+        mockMvc.perform(conActor(post("/api/v1/admin/trainees/{id}/duracion", persona), cuerpo)).andExpect(status().isNotFound());
     }
 }
