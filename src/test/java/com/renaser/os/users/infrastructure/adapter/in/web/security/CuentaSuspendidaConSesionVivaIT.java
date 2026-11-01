@@ -178,6 +178,7 @@ class CuentaSuspendidaConSesionVivaIT {
                 INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado)
                 VALUES (?, ?, ?, CAST(? AS renaser.rol_usuario), 'ACTIVO')
                 """, id, id + "@renaser.test", nombre, rol);
+        com.renaser.os.FormacionesDePrueba.alPersonalLeAsignaLaEscuela(jdbcTemplate, id, rol);
         usuarios.add(id);
         return id;
     }
