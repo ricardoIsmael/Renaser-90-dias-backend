@@ -45,6 +45,7 @@ import static com.renaser.os.rag.application.services.analisis.CifrasDePrueba.se
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -91,13 +92,13 @@ class ConsultaDelAnalisis8020ServiceTest {
     void anaEnLaEscuela() {
         lenient().when(participaciones.deParticipante(ANA)).thenReturn(Optional.of(participacion(Formacion.ESCUELA, true)));
         lenient().when(programas.de(ANA)).thenReturn(Optional.of(new ProgramaActivado(ANA, LIMA, DIA_UNO, DIA_UNO.plusDays(89))));
-        lenient().when(periodos.semanaDe(DIA_UNO, LocalDate.of(2026, 10, 21))).thenReturn(SEMANA_10);
-        lenient().when(periodos.semanaDe(DIA_UNO, LocalDate.of(2026, 10, 26))).thenReturn(SEMANA_11);
-        lenient().when(periodos.queEmpiezaEn(DIA_UNO, PeriodosDelProgramaFinder.Tipo.SEMANA, SEMANA_10.inicio())).thenReturn(Optional.of(SEMANA_10));
-        lenient().when(periodos.anteriorA(DIA_UNO, SEMANA_10)).thenReturn(Optional.of(SEMANA_9));
-        lenient().when(periodos.anteriorA(DIA_UNO, SEMANA_11)).thenReturn(Optional.of(SEMANA_10));
-        lenient().when(periodos.siguienteA(any(), any(), any())).thenReturn(Optional.empty());
-        lenient().when(periodos.siguienteA(DIA_UNO, SEMANA_10, LocalDate.of(2026, 10, 26))).thenReturn(Optional.of(SEMANA_11));
+        lenient().when(periodos.semanaDe(DIA_UNO, 90, LocalDate.of(2026, 10, 21))).thenReturn(SEMANA_10);
+        lenient().when(periodos.semanaDe(DIA_UNO, 90, LocalDate.of(2026, 10, 26))).thenReturn(SEMANA_11);
+        lenient().when(periodos.queEmpiezaEn(DIA_UNO, 90, PeriodosDelProgramaFinder.Tipo.SEMANA, SEMANA_10.inicio())).thenReturn(Optional.of(SEMANA_10));
+        lenient().when(periodos.anteriorA(DIA_UNO, 90, SEMANA_10)).thenReturn(Optional.of(SEMANA_9));
+        lenient().when(periodos.anteriorA(DIA_UNO, 90, SEMANA_11)).thenReturn(Optional.of(SEMANA_10));
+        lenient().when(periodos.siguienteA(any(), anyInt(), any(), any())).thenReturn(Optional.empty());
+        lenient().when(periodos.siguienteA(DIA_UNO, 90, SEMANA_10, LocalDate.of(2026, 10, 26))).thenReturn(Optional.of(SEMANA_11));
     }
 
     private static AnalisisDelPeriodo fila(Formacion formacion, EstadoDelAnalisis estado) {
@@ -208,8 +209,8 @@ class ConsultaDelAnalisis8020ServiceTest {
     @Test
     @DisplayName("un inicio que no es el de ningún periodo, o de un periodo que todavía no llega, es un pedido mal hecho (400)")
     void inicioInvalido() {
-        when(periodos.queEmpiezaEn(DIA_UNO, PeriodosDelProgramaFinder.Tipo.SEMANA, LocalDate.of(2026, 10, 20))).thenReturn(Optional.empty());
-        when(periodos.queEmpiezaEn(DIA_UNO, PeriodosDelProgramaFinder.Tipo.SEMANA, SEMANA_11.inicio())).thenReturn(Optional.of(SEMANA_11));
+        when(periodos.queEmpiezaEn(DIA_UNO, 90, PeriodosDelProgramaFinder.Tipo.SEMANA, LocalDate.of(2026, 10, 20))).thenReturn(Optional.empty());
+        when(periodos.queEmpiezaEn(DIA_UNO, 90, PeriodosDelProgramaFinder.Tipo.SEMANA, SEMANA_11.inicio())).thenReturn(Optional.of(SEMANA_11));
 
         assertThatThrownBy(() -> servicio(MIERCOLES_21).de(ANA, Tipo.SEMANA, LocalDate.of(2026, 10, 20))).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> servicio(MIERCOLES_21).de(ANA, Tipo.SEMANA, SEMANA_11.inicio())).isInstanceOf(IllegalArgumentException.class);
@@ -220,9 +221,9 @@ class ConsultaDelAnalisis8020ServiceTest {
     void mesEnCurso() {
         PeriodoDelPrograma mes3 = new PeriodoDelPrograma(PeriodosDelProgramaFinder.Tipo.MES, 3, LocalDate.of(2026, 10, 12), LocalDate.of(2026, 11, 14));
         PeriodoDelPrograma semana12 = new PeriodoDelPrograma(PeriodosDelProgramaFinder.Tipo.SEMANA, 12, LocalDate.of(2026, 11, 2), LocalDate.of(2026, 11, 8));
-        when(periodos.mesDe(DIA_UNO, LocalDate.of(2026, 10, 21))).thenReturn(mes3);
-        when(periodos.anteriorA(DIA_UNO, mes3)).thenReturn(Optional.empty());
-        when(periodos.semanasDelMes(DIA_UNO, mes3)).thenReturn(List.of(SEMANA_9, SEMANA_10, SEMANA_11, semana12));
+        when(periodos.mesDe(DIA_UNO, 90, LocalDate.of(2026, 10, 21))).thenReturn(mes3);
+        when(periodos.anteriorA(DIA_UNO, 90, mes3)).thenReturn(Optional.empty());
+        when(periodos.semanasDelMes(DIA_UNO, 90, mes3)).thenReturn(List.of(SEMANA_9, SEMANA_10, SEMANA_11, semana12));
         when(insumos.cifrasDe(ANA, mes3)).thenReturn(cifras(30, 20, 9));
         when(insumos.resumenesDe(ANA, List.of(SEMANA_9, SEMANA_10))).thenReturn(List.of(new ResumenDeSemana(9, 10, 8, 80, 50),
                 new ResumenDeSemana(10, 12, 9, 75, 55)));

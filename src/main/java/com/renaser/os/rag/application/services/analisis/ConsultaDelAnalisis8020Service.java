@@ -73,7 +73,7 @@ public class ConsultaDelAnalisis8020Service implements Analisis8020Finder, Consu
         if (hoy.isBefore(programa.primeraFecha())) {
             throw new NoSuchElementException("Su programa todavía no empieza");
         }
-        PeriodoDelPrograma periodo = resolver(programa.primeraFecha(), tipo, inicio, hoy);
+        PeriodoDelPrograma periodo = resolver(programa.primeraFecha(), programa.duracionDias(), tipo, inicio, hoy);
         Optional<AnalisisDelPeriodo> guardado = periodo.cerroA(hoy)
                 ? analisis.deLaPersona(personaId, TipoDePeriodo.valueOf(tipo.name()), periodo.inicio())
                         .filter(fila -> fila.formacion() == participacion.formacion())
@@ -91,12 +91,12 @@ public class ConsultaDelAnalisis8020Service implements Analisis8020Finder, Consu
                         fila.generadoEn()));
     }
 
-    private PeriodoDelPrograma resolver(LocalDate primerDia, Tipo tipo, LocalDate inicio, LocalDate hoy) {
+    private PeriodoDelPrograma resolver(LocalDate primerDia, int duracionDias, Tipo tipo, LocalDate inicio, LocalDate hoy) {
         PeriodosDelProgramaFinder.Tipo delPrograma = PeriodosDelProgramaFinder.Tipo.valueOf(tipo.name());
         if (inicio == null) {
-            return delPrograma == PeriodosDelProgramaFinder.Tipo.SEMANA ? periodos.semanaDe(primerDia, hoy) : periodos.mesDe(primerDia, hoy);
+            return delPrograma == PeriodosDelProgramaFinder.Tipo.SEMANA ? periodos.semanaDe(primerDia, duracionDias, hoy) : periodos.mesDe(primerDia, duracionDias, hoy);
         }
-        PeriodoDelPrograma pedido = periodos.queEmpiezaEn(primerDia, delPrograma, inicio)
+        PeriodoDelPrograma pedido = periodos.queEmpiezaEn(primerDia, duracionDias, delPrograma, inicio)
                 .orElseThrow(() -> new IllegalArgumentException("Ninguna " + tipo.name().toLowerCase() + " del programa empieza ese día"));
         if (pedido.inicio().isAfter(hoy)) {
             throw new IllegalArgumentException("Ese periodo todavía no llega");
@@ -109,7 +109,7 @@ public class ConsultaDelAnalisis8020Service implements Analisis8020Finder, Consu
                                               LocalDate hoy) {
         SnapshotDelAnalisis foto = JsonDelAnalisis.leer(fila.cifrasEnJson(), SnapshotDelAnalisis.class);
         return new VistaDelAnalisis(Tipo.valueOf(periodo.tipo().name()), periodo.numero(), periodo.inicio(), periodo.fin(), true,
-                vecino(periodos.anteriorA(programa.primeraFecha(), periodo)), siguiente(programa, periodo, hoy), foto.cifras(),
+                vecino(periodos.anteriorA(programa.primeraFecha(), programa.duracionDias(), periodo)), siguiente(programa, periodo, hoy), foto.cifras(),
                 foto.semanas(), "LISTO", List.of(), reglas.minimoDeAcciones(fila.tipo()), foto.codigoRenaser(),
                 aTextoVisible(fila.texto()), fila.generadoEn());
     }
@@ -121,10 +121,10 @@ public class ConsultaDelAnalisis8020Service implements Analisis8020Finder, Consu
         CifrasDel8020 cifras = insumos.cifrasDe(personaId, periodo);
         List<String> falta = reglas.loQueFalta(tipo, cifras.planificadas(), cifras.diasConAcciones());
         List<PeriodoDelPrograma> empezadas = periodo.tipo() == PeriodosDelProgramaFinder.Tipo.MES
-                ? periodos.semanasDelMes(programa.primeraFecha(), periodo).stream().filter(s -> !s.inicio().isAfter(hoy)).toList()
+                ? periodos.semanasDelMes(programa.primeraFecha(), programa.duracionDias(), periodo).stream().filter(s -> !s.inicio().isAfter(hoy)).toList()
                 : List.of();
         return new VistaDelAnalisis(Tipo.valueOf(tipo.name()), periodo.numero(), periodo.inicio(), periodo.fin(), periodo.cerroA(hoy),
-                vecino(periodos.anteriorA(programa.primeraFecha(), periodo)), siguiente(programa, periodo, hoy), cifras,
+                vecino(periodos.anteriorA(programa.primeraFecha(), programa.duracionDias(), periodo)), siguiente(programa, periodo, hoy), cifras,
                 insumos.resumenesDe(personaId, empezadas), estadoSinTexto(periodo.cerroA(hoy), falta, guardado),
                 periodo.cerroA(hoy) ? falta : List.of(), reglas.minimoDeAcciones(tipo), null, null, null);
     }
@@ -140,7 +140,7 @@ public class ConsultaDelAnalisis8020Service implements Analisis8020Finder, Consu
     }
 
     private LocalDate siguiente(ProgramaActivado programa, PeriodoDelPrograma periodo, LocalDate hoy) {
-        return vecino(periodos.siguienteA(programa.primeraFecha(), periodo, hoy));
+        return vecino(periodos.siguienteA(programa.primeraFecha(), programa.duracionDias(), periodo, hoy));
     }
 
     private static LocalDate vecino(Optional<PeriodoDelPrograma> periodo) {

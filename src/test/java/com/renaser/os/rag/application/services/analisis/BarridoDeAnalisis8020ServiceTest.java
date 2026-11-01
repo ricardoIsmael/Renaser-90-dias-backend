@@ -84,8 +84,8 @@ class BarridoDeAnalisis8020ServiceTest {
     void decidePorElDiaDeCadaPersona() {
         elPadron(ANA);
         when(decididos.estadosDe(any(), any())).thenReturn(List.of());
-        when(periodos.cerradosHastaHoy(eq(DIA_UNO), eq(LocalDate.of(2026, 10, 26)), anyInt())).thenReturn(List.of(SEMANA_10));
-        when(periodos.cerradosHastaHoy(eq(DIA_UNO), eq(LocalDate.of(2026, 10, 25)), anyInt())).thenReturn(List.of());
+        when(periodos.cerradosHastaHoy(eq(DIA_UNO), anyInt(), eq(LocalDate.of(2026, 10, 26)), anyInt())).thenReturn(List.of(SEMANA_10));
+        when(periodos.cerradosHastaHoy(eq(DIA_UNO), anyInt(), eq(LocalDate.of(2026, 10, 25)), anyInt())).thenReturn(List.of());
 
         barrido(DOMINGO_23_00_EN_LIMA).generarLosQueTocan();
         verifyNoInteractions(generar);
@@ -106,7 +106,7 @@ class BarridoDeAnalisis8020ServiceTest {
                 LUIS, new ProgramaActivado(LUIS, LIMA, DIA_UNO, DIA_UNO.plusDays(364), 365)));
         when(decididos.estadosDe(any(), any())).thenReturn(List.of());
         PeriodoDelPrograma semana = new PeriodoDelPrograma(Tipo.SEMANA, 10, LocalDate.of(2026, 10, 19), LocalDate.of(2026, 10, 25));
-        when(periodos.cerradosHastaHoy(eq(DIA_UNO), eq(hoy), anyInt())).thenReturn(List.of(semana));
+        when(periodos.cerradosHastaHoy(eq(DIA_UNO), anyInt(), eq(hoy), anyInt())).thenReturn(List.of(semana));
 
         barrido(LUNES_00_30_EN_LIMA).generarLosQueTocan();
 
@@ -119,7 +119,7 @@ class BarridoDeAnalisis8020ServiceTest {
     void semanaYMes() {
         elPadron(ANA);
         when(decididos.estadosDe(any(), any())).thenReturn(List.of());
-        when(periodos.cerradosHastaHoy(any(), any(), anyInt())).thenReturn(List.of(SEMANA_10, MES_2));
+        when(periodos.cerradosHastaHoy(any(), anyInt(), any(), anyInt())).thenReturn(List.of(SEMANA_10, MES_2));
 
         barrido(LUNES_00_30_EN_LIMA).generarLosQueTocan();
 
@@ -131,7 +131,7 @@ class BarridoDeAnalisis8020ServiceTest {
     @DisplayName("lo ya decidido (listo, sin datos, agotado) no se vuelve a pedir; un pendiente cuya espera pasó sí")
     void loDecididoNoSeToca() {
         elPadron(ANA);
-        when(periodos.cerradosHastaHoy(any(), any(), anyInt())).thenReturn(List.of(SEMANA_10, MES_2));
+        when(periodos.cerradosHastaHoy(any(), anyInt(), any(), anyInt())).thenReturn(List.of(SEMANA_10, MES_2));
         when(decididos.estadosDe(any(), any())).thenReturn(List.of(
                 new EstadoDeUnPeriodo(ANA, TipoDePeriodo.SEMANA, SEMANA_10.inicio(), EstadoDelAnalisis.LISTO, LUNES_00_30_EN_LIMA),
                 new EstadoDeUnPeriodo(ANA, TipoDePeriodo.MES, MES_2.inicio(), EstadoDelAnalisis.PENDIENTE,
@@ -147,7 +147,7 @@ class BarridoDeAnalisis8020ServiceTest {
     @DisplayName("un pendiente reintentado hace una hora todavía espera")
     void pendienteEnEspera() {
         elPadron(ANA);
-        when(periodos.cerradosHastaHoy(any(), any(), anyInt())).thenReturn(List.of(SEMANA_10));
+        when(periodos.cerradosHastaHoy(any(), anyInt(), any(), anyInt())).thenReturn(List.of(SEMANA_10));
         when(decididos.estadosDe(any(), any())).thenReturn(List.of(
                 new EstadoDeUnPeriodo(ANA, TipoDePeriodo.SEMANA, SEMANA_10.inicio(), EstadoDelAnalisis.PENDIENTE,
                         LUNES_00_30_EN_LIMA.minusSeconds(3600))));
@@ -172,7 +172,7 @@ class BarridoDeAnalisis8020ServiceTest {
     void unaFallaNoDetieneElBarrido() {
         elPadron(ANA, LUIS);
         when(decididos.estadosDe(any(), any())).thenReturn(List.of());
-        when(periodos.cerradosHastaHoy(any(), any(), anyInt())).thenReturn(List.of(SEMANA_10));
+        when(periodos.cerradosHastaHoy(any(), anyInt(), any(), anyInt())).thenReturn(List.of(SEMANA_10));
         when(generar.generar(ANA, TipoDePeriodo.SEMANA, SEMANA_10.inicio())).thenThrow(new IllegalStateException("se cayó"));
 
         barrido(LUNES_00_30_EN_LIMA).generarLosQueTocan();
@@ -185,7 +185,7 @@ class BarridoDeAnalisis8020ServiceTest {
     void unaConsultaPorLote() {
         elPadron(ANA, LUIS);
         when(decididos.estadosDe(any(), any())).thenReturn(List.of());
-        when(periodos.cerradosHastaHoy(any(), any(), anyInt())).thenReturn(List.of());
+        when(periodos.cerradosHastaHoy(any(), anyInt(), any(), anyInt())).thenReturn(List.of());
 
         barrido(LUNES_00_30_EN_LIMA).generarLosQueTocan();
 

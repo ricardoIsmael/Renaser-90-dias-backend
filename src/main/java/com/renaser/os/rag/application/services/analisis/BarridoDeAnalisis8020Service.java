@@ -97,7 +97,7 @@ public class BarridoDeAnalisis8020Service implements GenerarAnalisisPendientesUs
     private void generarSinTumbarElBarrido(ProgramaActivado programa, Map<ClaveDelPeriodo, EstadoDeUnPeriodo> yaDecididos, Instant ahora) {
         try {
             LocalDate hoy = ahora.atZone(programa.zona()).toLocalDate();
-            for (PeriodoDelPrograma periodo : periodos.cerradosHastaHoy(programa.primeraFecha(), hoy, reglas.diasDePuestaAlDia())) {
+            for (PeriodoDelPrograma periodo : periodos.cerradosHastaHoy(programa.primeraFecha(), programa.duracionDias(), hoy, reglas.diasDePuestaAlDia())) {
                 TipoDePeriodo tipo = TipoDePeriodo.valueOf(periodo.tipo().name());
                 if (toca(yaDecididos.get(new ClaveDelPeriodo(tipo, periodo.inicio())), ahora)) {
                     generar.generar(programa.participanteId(), tipo, periodo.inicio());

@@ -28,8 +28,9 @@ class QuienPuedeTenerAnalisis {
     /**
      * @param formacion la de su participación hoy (spec 022): el análisis es de una sola formación
      * @param primerDia el Día 1 con el ajuste de día ya aplicado: ancla de sus semanas y meses
+     * @param duracionDias los días de SU programa (90 o 365, spec 022): de ella sale cuántas semanas y meses son «del programa»
      */
-    record ParticipanteAnalizable(UserId id, Formacion formacion, ZoneId zona, LocalDate primerDia) {
+    record ParticipanteAnalizable(UserId id, Formacion formacion, ZoneId zona, LocalDate primerDia, int duracionDias) {
     }
 
     private final ParticipacionProgramaFinder participaciones;
@@ -56,6 +57,6 @@ class QuienPuedeTenerAnalisis {
 
     private static ParticipanteAnalizable aParticipante(ParticipacionPrograma participacion, ProgramaActivado programa) {
         return new ParticipanteAnalizable(participacion.participanteId(), participacion.formacion(), programa.zona(),
-                programa.primeraFecha());
+                programa.primeraFecha(), programa.duracionDias());
     }
 }

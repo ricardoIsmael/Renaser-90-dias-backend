@@ -16,18 +16,18 @@ import java.util.Optional;
 class PeriodosDelProgramaService implements PeriodosDelProgramaFinder {
 
     @Override
-    public PeriodoDelPrograma semanaDe(LocalDate primerDia, LocalDate fecha) {
-        return aContrato(CalendarioDelAnalisis.desde(primerDia).semanaDe(fecha));
+    public PeriodoDelPrograma semanaDe(LocalDate primerDia, int duracionDias, LocalDate fecha) {
+        return aContrato(CalendarioDelAnalisis.desde(primerDia, duracionDias).semanaDe(fecha));
     }
 
     @Override
-    public PeriodoDelPrograma mesDe(LocalDate primerDia, LocalDate fecha) {
-        return aContrato(CalendarioDelAnalisis.desde(primerDia).mesDe(fecha));
+    public PeriodoDelPrograma mesDe(LocalDate primerDia, int duracionDias, LocalDate fecha) {
+        return aContrato(CalendarioDelAnalisis.desde(primerDia, duracionDias).mesDe(fecha));
     }
 
     @Override
-    public Optional<PeriodoDelPrograma> queEmpiezaEn(LocalDate primerDia, Tipo tipo, LocalDate inicio) {
-        CalendarioDelAnalisis calendario = CalendarioDelAnalisis.desde(primerDia);
+    public Optional<PeriodoDelPrograma> queEmpiezaEn(LocalDate primerDia, int duracionDias, Tipo tipo, LocalDate inicio) {
+        CalendarioDelAnalisis calendario = CalendarioDelAnalisis.desde(primerDia, duracionDias);
         if (inicio.isBefore(primerDia)) {
             return Optional.empty();
         }
@@ -36,32 +36,32 @@ class PeriodosDelProgramaService implements PeriodosDelProgramaFinder {
     }
 
     @Override
-    public Optional<PeriodoDelPrograma> anteriorA(LocalDate primerDia, PeriodoDelPrograma periodo) {
+    public Optional<PeriodoDelPrograma> anteriorA(LocalDate primerDia, int duracionDias, PeriodoDelPrograma periodo) {
         if (periodo.numero() <= 1) {
             return Optional.empty();
         }
-        CalendarioDelAnalisis calendario = CalendarioDelAnalisis.desde(primerDia);
+        CalendarioDelAnalisis calendario = CalendarioDelAnalisis.desde(primerDia, duracionDias);
         int numero = periodo.numero() - 1;
         return Optional.of(aContrato(periodo.tipo() == Tipo.SEMANA ? calendario.semana(numero) : calendario.mes(numero)));
     }
 
     @Override
-    public Optional<PeriodoDelPrograma> siguienteA(LocalDate primerDia, PeriodoDelPrograma periodo, LocalDate hoy) {
-        CalendarioDelAnalisis calendario = CalendarioDelAnalisis.desde(primerDia);
+    public Optional<PeriodoDelPrograma> siguienteA(LocalDate primerDia, int duracionDias, PeriodoDelPrograma periodo, LocalDate hoy) {
+        CalendarioDelAnalisis calendario = CalendarioDelAnalisis.desde(primerDia, duracionDias);
         int numero = periodo.numero() + 1;
         CalendarioDelAnalisis.Periodo siguiente = periodo.tipo() == Tipo.SEMANA ? calendario.semana(numero) : calendario.mes(numero);
         return Optional.of(siguiente).filter(candidato -> !candidato.inicio().isAfter(hoy)).map(PeriodosDelProgramaService::aContrato);
     }
 
     @Override
-    public List<PeriodoDelPrograma> semanasDelMes(LocalDate primerDia, PeriodoDelPrograma mes) {
-        return CalendarioDelAnalisis.desde(primerDia).semanasDelMes(mes.numero()).stream()
+    public List<PeriodoDelPrograma> semanasDelMes(LocalDate primerDia, int duracionDias, PeriodoDelPrograma mes) {
+        return CalendarioDelAnalisis.desde(primerDia, duracionDias).semanasDelMes(mes.numero()).stream()
                 .map(PeriodosDelProgramaService::aContrato).toList();
     }
 
     @Override
-    public List<PeriodoDelPrograma> cerradosHastaHoy(LocalDate primerDia, LocalDate hoy, int diasDeVentana) {
-        return CalendarioDelAnalisis.desde(primerDia).cerrados(hoy, diasDeVentana).stream()
+    public List<PeriodoDelPrograma> cerradosHastaHoy(LocalDate primerDia, int duracionDias, LocalDate hoy, int diasDeVentana) {
+        return CalendarioDelAnalisis.desde(primerDia, duracionDias).cerrados(hoy, diasDeVentana).stream()
                 .map(PeriodosDelProgramaService::aContrato).toList();
     }
 

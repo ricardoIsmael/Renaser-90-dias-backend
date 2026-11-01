@@ -13,11 +13,13 @@ import java.util.Objects;
 /**
  * Las semanas y los meses del programa de UNA persona, tal como los cuenta Plan, y lo que sigue después (spec 031, D-306).
  *
- * <p>Las semanas 1 a 13 son las de {@link SemanaPrograma} (lunes a domingo; la 1 empieza el Día 1 y la 13 llega al último día de la
- * estructura de Plan). Los meses son bloques de cuatro semanas, con la 13 sumada al mes 3: 1–4, 5–8, 9–13. <b>Después de la 13</b> —
- * decisión del dueño 031-8 B: el análisis sigue mientras la persona use la app— el calendario continúa sin tope: la semana 14 empieza
- * al día siguiente del último de la 13 y llega a su domingo; de la 15 en adelante son de lunes a domingo; los meses siguen en bloques de
- * cuatro semanas (14–17, 18–21…). La duración de la formación (spec 022) no corta nada.
+ * <p>Las semanas del programa son las de {@link SemanaPrograma} (lunes a domingo; la 1 empieza el Día 1 y la última llega al último día
+ * del programa de ESA persona): 13 en un programa de 90 días y 53 en el de 365 (spec 022). Los meses son bloques de cuatro semanas y el
+ * último se lleva las que sobran: en 90 días, 1–4, 5–8 y 9–13; en 365, trece meses y el último llega a la 53 (los mismos que cuenta Plan).
+ * <b>Después de la última</b> —decisión del dueño 031-8 B: el análisis sigue mientras la persona use la app— el calendario continúa sin
+ * tope: la semana siguiente empieza al día siguiente del último del programa y llega a su domingo; de ahí en adelante son de lunes a
+ * domingo; los meses siguen en bloques de cuatro semanas. Antes de la spec 022 la última era siempre la 13; una persona del Diplomado
+ * de 1 año tenía las semanas 14 a 53 como «después del programa», y no lo son.
  *
  * <p>Pura y derivada (regla 02 §2): solo aritmética sobre el Día 1 y sobre «hoy», que entra en la zona de la persona. Correrla dos veces
  * da lo mismo.
@@ -46,23 +48,38 @@ public final class CalendarioDelAnalisis {
 
     private static final int SEMANAS_POR_MES = 4;
     private static final int DIAS_POR_SEMANA = 7;
-    private static final int ULTIMA_SEMANA_DE_PLAN = SemanaPrograma.ULTIMA_SEMANA;
 
     private final LocalDate primerDia;
     private final SemanaPrograma semanasDePlan;
-    private final LocalDate inicioDeLaCatorce;
-    private final LocalDate finDeLaCatorce;
+    /** La última semana del programa de esta persona (13 en 90 días, 53 en 365). */
+    private final int ultimaSemanaDePlan;
+    /** Cuántos meses de cuatro semanas tiene su programa (3 en 90 días, 13 en 365): el último se lleva las semanas que sobran. */
+    private final int mesesDePlan;
+    /** La semana que sigue a la última del programa: empieza al día siguiente del último día y llega a su domingo. */
+    private final LocalDate inicioDeLaSiguiente;
+    private final LocalDate finDeLaSiguiente;
 
-    private CalendarioDelAnalisis(LocalDate primerDia) {
+    private CalendarioDelAnalisis(LocalDate primerDia, int duracionDias) {
         this.primerDia = Objects.requireNonNull(primerDia, "primerDia es obligatorio");
-        this.semanasDePlan = SemanaPrograma.desde(primerDia);
-        this.inicioDeLaCatorce = semanasDePlan.limites(ULTIMA_SEMANA_DE_PLAN).fin().plusDays(1);
-        this.finDeLaCatorce = inicioDeLaCatorce.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY));
+        this.semanasDePlan = SemanaPrograma.desde(primerDia, duracionDias);
+        this.ultimaSemanaDePlan = semanasDePlan.ultimaSemana();
+        this.mesesDePlan = Math.max(ultimaSemanaDePlan / SEMANAS_POR_MES, 1);
+        this.inicioDeLaSiguiente = semanasDePlan.limites(ultimaSemanaDePlan).fin().plusDays(1);
+        this.finDeLaSiguiente = inicioDeLaSiguiente.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY));
     }
 
-    /** @param primerDia el Día 1 del programa con el ajuste de día ya aplicado */
+    /** El de un programa de 90 días. @param primerDia el Día 1 del programa con el ajuste de día ya aplicado */
     public static CalendarioDelAnalisis desde(LocalDate primerDia) {
-        return new CalendarioDelAnalisis(primerDia);
+        return new CalendarioDelAnalisis(primerDia, SemanaPrograma.ULTIMO_DIA);
+    }
+
+    /**
+     * El de un programa de {@code duracionDias} (90 o 365, spec 022).
+     *
+     * @param primerDia el Día 1 del programa con el ajuste de día ya aplicado
+     */
+    public static CalendarioDelAnalisis desde(LocalDate primerDia, int duracionDias) {
+        return new CalendarioDelAnalisis(primerDia, duracionDias);
     }
 
     /** La semana (desde 1) que contiene {@code fecha}; una fecha anterior al Día 1 cuenta como la 1. */
@@ -70,36 +87,36 @@ public final class CalendarioDelAnalisis {
         if (fecha.isBefore(primerDia)) {
             return 1;
         }
-        if (!fecha.isAfter(semanasDePlan.limites(ULTIMA_SEMANA_DE_PLAN).fin())) {
+        if (!fecha.isAfter(semanasDePlan.limites(ultimaSemanaDePlan).fin())) {
             return semanasDePlan.numeroSemanaParaFecha(fecha);
         }
-        if (!fecha.isAfter(finDeLaCatorce)) {
-            return ULTIMA_SEMANA_DE_PLAN + 1;
+        if (!fecha.isAfter(finDeLaSiguiente)) {
+            return ultimaSemanaDePlan + 1;
         }
-        long semanasPasadas = ChronoUnit.DAYS.between(finDeLaCatorce.plusDays(1), fecha) / DIAS_POR_SEMANA;
-        return (int) (ULTIMA_SEMANA_DE_PLAN + 2 + semanasPasadas);
+        long semanasPasadas = ChronoUnit.DAYS.between(finDeLaSiguiente.plusDays(1), fecha) / DIAS_POR_SEMANA;
+        return (int) (ultimaSemanaDePlan + 2 + semanasPasadas);
     }
 
-    /** El mes (desde 1) al que pertenece la semana: 1–4, 5–8, 9–13, 14–17… */
+    /** El mes (desde 1) al que pertenece la semana: en 90 días 1–4, 5–8, 9–13, 14–17…; en 365, 1–4 … 49–53, 54–57… */
     public int numeroDeMesDeLaSemana(int numeroDeSemana) {
-        if (numeroDeSemana <= ULTIMA_SEMANA_DE_PLAN) {
-            return Math.min((numeroDeSemana - 1) / SEMANAS_POR_MES + 1, 3);
+        if (numeroDeSemana <= ultimaSemanaDePlan) {
+            return Math.min((numeroDeSemana - 1) / SEMANAS_POR_MES + 1, mesesDePlan);
         }
-        return 4 + (numeroDeSemana - (ULTIMA_SEMANA_DE_PLAN + 1)) / SEMANAS_POR_MES;
+        return mesesDePlan + 1 + (numeroDeSemana - (ultimaSemanaDePlan + 1)) / SEMANAS_POR_MES;
     }
 
     public Periodo semana(int numero) {
         if (numero < 1) {
             throw new IllegalArgumentException("La semana empieza en 1: " + numero);
         }
-        if (numero <= ULTIMA_SEMANA_DE_PLAN) {
+        if (numero <= ultimaSemanaDePlan) {
             SemanaPrograma.LimitesSemana limites = semanasDePlan.limites(numero);
             return new Periodo(Tipo.SEMANA, numero, limites.inicio(), limites.fin());
         }
-        if (numero == ULTIMA_SEMANA_DE_PLAN + 1) {
-            return new Periodo(Tipo.SEMANA, numero, inicioDeLaCatorce, finDeLaCatorce);
+        if (numero == ultimaSemanaDePlan + 1) {
+            return new Periodo(Tipo.SEMANA, numero, inicioDeLaSiguiente, finDeLaSiguiente);
         }
-        LocalDate inicio = finDeLaCatorce.plusDays(1L + (long) DIAS_POR_SEMANA * (numero - (ULTIMA_SEMANA_DE_PLAN + 2)));
+        LocalDate inicio = finDeLaSiguiente.plusDays(1L + (long) DIAS_POR_SEMANA * (numero - (ultimaSemanaDePlan + 2)));
         return new Periodo(Tipo.SEMANA, numero, inicio, inicio.plusDays(DIAS_POR_SEMANA - 1L));
     }
 
@@ -108,7 +125,7 @@ public final class CalendarioDelAnalisis {
             throw new IllegalArgumentException("El mes empieza en 1: " + numero);
         }
         int primera = primeraSemanaDelMes(numero);
-        int ultima = numero == 3 ? ULTIMA_SEMANA_DE_PLAN : primera + SEMANAS_POR_MES - 1;
+        int ultima = numero == mesesDePlan ? ultimaSemanaDePlan : primera + SEMANAS_POR_MES - 1;
         return new Periodo(Tipo.MES, numero, semana(primera).inicio(), semana(ultima).fin());
     }
 
@@ -153,10 +170,10 @@ public final class CalendarioDelAnalisis {
         }
     }
 
-    private static int primeraSemanaDelMes(int numeroDeMes) {
-        if (numeroDeMes <= 3) {
+    private int primeraSemanaDelMes(int numeroDeMes) {
+        if (numeroDeMes <= mesesDePlan) {
             return (numeroDeMes - 1) * SEMANAS_POR_MES + 1;
         }
-        return ULTIMA_SEMANA_DE_PLAN + 1 + (numeroDeMes - 4) * SEMANAS_POR_MES;
+        return ultimaSemanaDePlan + 1 + (numeroDeMes - mesesDePlan - 1) * SEMANAS_POR_MES;
     }
 }

@@ -82,8 +82,8 @@ public class GeneracionDeAnalisis8020Service implements GenerarAnalisis8020UseCa
         if (periodo.isEmpty()) {
             return ResultadoDeLaGeneracion.NO_APLICA;
         }
-        InsumosDelAnalisis reunidos = insumos.reunir(persona, periodo.get(), participante.get().primerDia(), participante.get().zona(),
-                reglas);
+        InsumosDelAnalisis reunidos = insumos.reunir(persona, periodo.get(), participante.get().primerDia(), participante.get().duracionDias(),
+                participante.get().zona(), reglas);
         if (!reglas.alcanza(tipo, reunidos.acciones().cifras().planificadas(), reunidos.acciones().cifras().diasConAcciones())) {
             return anotarSinDatos(participante.get(), periodo.get());
         }
@@ -93,7 +93,7 @@ public class GeneracionDeAnalisis8020Service implements GenerarAnalisis8020UseCa
 
     private Optional<PeriodoDelPrograma> periodoQueCerro(ParticipanteAnalizable participante, TipoDePeriodo tipo, LocalDate inicio) {
         LocalDate hoy = clock.now().atZone(participante.zona()).toLocalDate();
-        return periodos.queEmpiezaEn(participante.primerDia(), Tipo.valueOf(tipo.name()), inicio).filter(periodo -> periodo.cerroA(hoy));
+        return periodos.queEmpiezaEn(participante.primerDia(), participante.duracionDias(), Tipo.valueOf(tipo.name()), inicio).filter(periodo -> periodo.cerroA(hoy));
     }
 
     private ResultadoDeLaGeneracion anotarSinDatos(ParticipanteAnalizable participante, PeriodoDelPrograma periodo) {

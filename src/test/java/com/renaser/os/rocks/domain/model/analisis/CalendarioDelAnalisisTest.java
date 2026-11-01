@@ -119,4 +119,62 @@ class CalendarioDelAnalisisTest {
         assertThatThrownBy(() -> desdeUnLunes.semana(0)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> desdeUnLunes.mes(0)).isInstanceOf(IllegalArgumentException.class);
     }
+
+    // ── Diplomado de 1 año (spec 022): las semanas 14 a 53 son del programa, no «después» ─────────────────────────────────────────
+
+    private final CalendarioDelAnalisis deUnAnio = CalendarioDelAnalisis.desde(LUNES_DIA_UNO, 365);
+    private final CalendarioDelAnalisis deUnAnioDesdeUnMiercoles = CalendarioDelAnalisis.desde(MIERCOLES_DIA_UNO, 365);
+
+    @Test
+    @DisplayName("con 365 días las semanas 14 a 53 son del programa: la 53 llega al último día y la 54 es la que sigue")
+    void conUnAnioLaUltimaSemanaEsLa53() {
+        assertThat(deUnAnio.semana(13)).isEqualTo(new Periodo(Tipo.SEMANA, 13, LocalDate.of(2026, 11, 9), LocalDate.of(2026, 11, 15)));
+        assertThat(deUnAnio.semana(14)).isEqualTo(new Periodo(Tipo.SEMANA, 14, LocalDate.of(2026, 11, 16), LocalDate.of(2026, 11, 22)));
+        assertThat(deUnAnio.semana(53)).isEqualTo(new Periodo(Tipo.SEMANA, 53, LocalDate.of(2027, 8, 16), LocalDate.of(2027, 8, 16)));
+        assertThat(deUnAnio.semana(54)).isEqualTo(new Periodo(Tipo.SEMANA, 54, LocalDate.of(2027, 8, 17), LocalDate.of(2027, 8, 22)));
+        assertThat(deUnAnioDesdeUnMiercoles.semana(53).fin()).isEqualTo(MIERCOLES_DIA_UNO.plusDays(364));
+        assertThat(deUnAnioDesdeUnMiercoles.semana(54)).isEqualTo(new Periodo(Tipo.SEMANA, 54, LocalDate.of(2027, 8, 19), LocalDate.of(2027, 8, 22)));
+    }
+
+    @Test
+    @DisplayName("con 365 días la semana de una fecha del programa no se acota en la 13")
+    void laSemanaDeUnaFechaConUnAnio() {
+        assertThat(deUnAnio.numeroDeSemanaDe(LocalDate.of(2026, 11, 16))).as("lunes 16 de nov: semana 14, ya del programa").isEqualTo(14);
+        assertThat(deUnAnio.numeroDeSemanaDe(LocalDate.of(2027, 3, 1))).isEqualTo(29);
+        assertThat(deUnAnio.numeroDeSemanaDe(LocalDate.of(2027, 8, 16))).isEqualTo(53);
+        assertThat(deUnAnio.numeroDeSemanaDe(LocalDate.of(2027, 8, 17))).as("recién pasado el programa").isEqualTo(54);
+        assertThat(deUnAnio.numeroDeSemanaDe(LocalDate.of(2027, 8, 23))).isEqualTo(55);
+    }
+
+    @Test
+    @DisplayName("con 365 días los meses son trece bloques de cuatro semanas y el último llega a la 53; después siguen de a cuatro")
+    void losMesesConUnAnio() {
+        assertThat(List.of(1, 4, 5, 8, 9, 12, 48, 49, 53, 54, 57, 58)).extracting(deUnAnio::numeroDeMesDeLaSemana)
+                .containsExactly(1, 1, 2, 2, 3, 3, 12, 13, 13, 14, 14, 15);
+        assertThat(deUnAnio.mes(3)).isEqualTo(new Periodo(Tipo.MES, 3, LocalDate.of(2026, 10, 12), LocalDate.of(2026, 11, 8)));
+        assertThat(deUnAnio.mes(13)).isEqualTo(new Periodo(Tipo.MES, 13, LocalDate.of(2027, 7, 19), LocalDate.of(2027, 8, 16)));
+        assertThat(deUnAnio.mes(14)).isEqualTo(new Periodo(Tipo.MES, 14, LocalDate.of(2027, 8, 17), LocalDate.of(2027, 9, 12)));
+        assertThat(deUnAnio.semanasDelMes(13)).extracting(Periodo::numero).containsExactly(49, 50, 51, 52, 53);
+    }
+
+    @Test
+    @DisplayName("lo cerrado se cuenta sobre la duración de la persona: la semana 14 de un año ya es del programa y cierra el domingo")
+    void loCerradoConUnAnio() {
+        List<Periodo> cerrados = deUnAnio.cerrados(LocalDate.of(2026, 11, 23), 7);
+
+        assertThat(cerrados).extracting(Periodo::tipo, Periodo::numero).contains(org.assertj.core.groups.Tuple.tuple(Tipo.SEMANA, 14));
+        assertThat(cerrados).filteredOn(p -> p.tipo() == Tipo.SEMANA).extracting(Periodo::fin).contains(LocalDate.of(2026, 11, 22));
+    }
+
+    @Test
+    @DisplayName("con 90 días nada cambia: el calendario con la duración explícita es el de siempre")
+    void conNoventaDiasEsElDeSiempre() {
+        CalendarioDelAnalisis explicito = CalendarioDelAnalisis.desde(MIERCOLES_DIA_UNO, 90);
+        for (int semana = 1; semana <= 20; semana++) {
+            assertThat(explicito.semana(semana)).isEqualTo(desdeUnMiercoles.semana(semana));
+        }
+        for (int mes = 1; mes <= 6; mes++) {
+            assertThat(explicito.mes(mes)).isEqualTo(desdeUnMiercoles.mes(mes));
+        }
+    }
 }

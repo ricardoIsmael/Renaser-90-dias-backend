@@ -36,9 +36,10 @@ class ReunirInsumosDelAnalisis {
         this.radar = radar;
     }
 
-    InsumosDelAnalisis reunir(UserId persona, PeriodoDelPrograma periodo, LocalDate primerDia, ZoneId zona, ReglasDelAnalisis reglas) {
+    InsumosDelAnalisis reunir(UserId persona, PeriodoDelPrograma periodo, LocalDate primerDia, int duracionDias, ZoneId zona,
+                              ReglasDelAnalisis reglas) {
         InsumosDel8020 delPeriodo = acciones.insumos(persona, periodo.inicio(), periodo.fin());
-        List<PeriodoDelPrograma> semanasDelMes = periodo.tipo() == Tipo.MES ? periodos.semanasDelMes(primerDia, periodo) : List.of();
+        List<PeriodoDelPrograma> semanasDelMes = periodo.tipo() == Tipo.MES ? periodos.semanasDelMes(primerDia, duracionDias, periodo) : List.of();
         List<RespuestaDelRadar> respuestas = radar.entre(persona, periodo.inicio().atStartOfDay(zona).toInstant(),
                 periodo.fin().plusDays(1).atStartOfDay(zona).toInstant());
         ResumenDelRadar resumen = ResumenDelCodigoRenaser.resumir(respuestas, zona, reglas.minimoDeRespuestasDelRadar(), semanasDelMes);

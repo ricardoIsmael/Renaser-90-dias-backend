@@ -42,6 +42,7 @@ import static com.renaser.os.rag.application.services.analisis.CifrasDePrueba.re
 import static com.renaser.os.rag.application.services.analisis.CifrasDePrueba.semanaDeDoce;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -90,15 +91,15 @@ class GeneracionDeAnalisis8020ServiceTest {
     @BeforeEach
     void unaPersonaConSuSemanaCerrada() {
         org.mockito.Mockito.lenient().when(analisis.deLaPersona(ANA, TipoDePeriodo.SEMANA, SEMANA_10.inicio())).thenReturn(Optional.empty());
-        org.mockito.Mockito.lenient().when(quien.de(ANA)).thenReturn(Optional.of(new ParticipanteAnalizable(ANA, Formacion.ESCUELA, LIMA, DIA_UNO)));
-        org.mockito.Mockito.lenient().when(periodos.queEmpiezaEn(DIA_UNO, Tipo.SEMANA, SEMANA_10.inicio())).thenReturn(Optional.of(SEMANA_10));
+        org.mockito.Mockito.lenient().when(quien.de(ANA)).thenReturn(Optional.of(new ParticipanteAnalizable(ANA, Formacion.ESCUELA, LIMA, DIA_UNO, 90)));
+        org.mockito.Mockito.lenient().when(periodos.queEmpiezaEn(DIA_UNO, 90, Tipo.SEMANA, SEMANA_10.inicio())).thenReturn(Optional.of(SEMANA_10));
         org.mockito.Mockito.lenient().when(registro.registrar(any())).thenReturn(true);
     }
 
     private void conDatosSuficientes() {
         List<RespuestaDelRadar> respuestas = List.of(respuesta(Instant.parse("2026-10-20T14:00:00Z"), 8, "el correo"),
                 respuesta(Instant.parse("2026-10-20T20:00:00Z"), 4, "el celular"), respuesta(Instant.parse("2026-10-21T20:00:00Z"), 5, "x"));
-        when(reunir.reunir(any(), any(), any(), any(), any())).thenReturn(insumos(semanaDeDoce(), respuestas));
+        when(reunir.reunir(any(), any(), any(), anyInt(), any(), any())).thenReturn(insumos(semanaDeDoce(), respuestas));
     }
 
     private void conLaIaAbierta() {
@@ -157,7 +158,7 @@ class GeneracionDeAnalisis8020ServiceTest {
     @Test
     @DisplayName("FR-015 / SC-008: una semana con menos del mínimo se anota como «sin datos» y NO se llama a la IA")
     void sinDatosSuficientes() {
-        when(reunir.reunir(any(), any(), any(), any(), any())).thenReturn(insumos(cifras(4, 3, 3), List.of()));
+        when(reunir.reunir(any(), any(), any(), anyInt(), any(), any())).thenReturn(insumos(cifras(4, 3, 3), List.of()));
 
         ResultadoDeLaGeneracion resultado = servicio(CERRO).generar(ANA, TipoDePeriodo.SEMANA, SEMANA_10.inicio());
 
@@ -307,7 +308,7 @@ class GeneracionDeAnalisis8020ServiceTest {
     @Test
     @DisplayName("un periodo que no existe en el programa de la persona no genera nada")
     void periodoQueNoExiste() {
-        when(periodos.queEmpiezaEn(DIA_UNO, Tipo.SEMANA, SEMANA_10.inicio())).thenReturn(Optional.empty());
+        when(periodos.queEmpiezaEn(DIA_UNO, 90, Tipo.SEMANA, SEMANA_10.inicio())).thenReturn(Optional.empty());
 
         assertThat(servicio(CERRO).generar(ANA, TipoDePeriodo.SEMANA, SEMANA_10.inicio())).isEqualTo(ResultadoDeLaGeneracion.NO_APLICA);
 
