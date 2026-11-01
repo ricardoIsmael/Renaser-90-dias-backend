@@ -39,6 +39,12 @@ class FormacionDelGrupo {
         pertenencias.exigirQueLaVea(actor, grupo.formacion());
     }
 
+    /** De estos grupos, los de las formaciones que {@code actor} ve: la lista de un mentor con dos formaciones es la de la que tiene activa. */
+    List<Celula> visiblesPara(UserId actor, List<Celula> grupos) {
+        AlcanceDeFormacion alcance = pertenencias.de(actor);
+        return grupos.stream().filter(grupo -> alcance.incluye(grupo.formacion())).toList();
+    }
+
     /** @throws AsignacionInvalidaException (409) si el aprendiz no es de la formación del grupo */
     void exigirQueElAprendizSea(UserId aprendiz, Celula grupo) {
         exigir(aprendiz, grupo);

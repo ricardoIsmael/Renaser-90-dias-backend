@@ -177,9 +177,9 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
             // Todos los que lidera en esa cohorte: desde D-141 pueden ser varios (E-371). Desde
             // D-240 salen de su asignacion de MENTOR vigente y solo los EN CURSO: un mentor no ve
             // por esta via un grupo cerrado ni uno programado (E-477).
-            celulas = gruposQueLideraEnCurso(actorId).stream()
+            celulas = formacionDelGrupo.visiblesPara(actorId, gruposQueLideraEnCurso(actorId).stream()
                     .filter(c -> c.cohorteId().equals(cohorteId))
-                    .toList();
+                    .toList());
         } else {
             requireRolAdmin(actor);
             celulas = loadCelulaPort.porCohorte(cohorteId);
