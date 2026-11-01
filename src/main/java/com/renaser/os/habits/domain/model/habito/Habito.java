@@ -1,5 +1,7 @@
 package com.renaser.os.habits.domain.model.habito;
 
+import com.renaser.os.shared.domain.Formacion;
+import com.renaser.os.shared.domain.ObjetoDeOtraFormacionException;
 import com.renaser.os.shared.domain.UserId;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -31,6 +33,8 @@ public final class Habito {
     private final HabitoId id;
     private final AmbitoHabito ambito;
     private final UserId participanteId; // null si ambito == SISTEMA
+    /** Spec 023: la formacion dueña de un habito del catalogo. {@code null} en uno PERSONAL, que sigue a su dueño. */
+    private final Formacion formacion;
     private String titulo;
     private String descripcion;
     private final TipoHabito tipo;
@@ -59,7 +63,7 @@ public final class Habito {
     public static Habito crearDeSistema(HabitoId id, String titulo, TipoHabito tipo, String categoriaClave,
                                          ExigenciaEvidencia exigenciaEvidencia, Instant ahora) {
         Objects.requireNonNull(id, "id es obligatorio");
-        return new Habito(id, AmbitoHabito.SISTEMA, null, requireTitulo(titulo), null, tipo,
+        return new Habito(id, AmbitoHabito.SISTEMA, null, Formacion.POR_DEFECTO, requireTitulo(titulo), null, tipo,
                 requireCategoria(categoriaClave), null, null, exigenciaEvidencia, false, false, true, false, null,
                 null, null, null, true, ahora, ahora);
     }
@@ -76,13 +80,40 @@ public final class Habito {
      */
     public static Habito crearDeSistema(HabitoId id, String titulo, TipoHabito tipo, DetallesHabito detalles,
                                          Instant ahora) {
+        return crearDeSistema(id, Formacion.POR_DEFECTO, titulo, tipo, detalles, ahora);
+    }
+
+    /**
+     * Spec 023: el alta desde el panel dentro de una formacion concreta. La categoria de {@code detalles} tiene que ser de esa
+     * misma formacion; lo comprueba el servicio (necesita leer la categoria) y lo impone la llave compuesta de la base.
+     */
+    public static Habito crearDeSistema(HabitoId id, Formacion formacion, String titulo, TipoHabito tipo,
+                                         DetallesHabito detalles, Instant ahora) {
         Objects.requireNonNull(id, "id es obligatorio");
+        Objects.requireNonNull(formacion, "formacion es obligatoria para un habito del catalogo");
         Objects.requireNonNull(detalles, "detalles es obligatorio");
         Objects.requireNonNull(tipo, "tipo es obligatorio");
-        return new Habito(id, AmbitoHabito.SISTEMA, null, requireTitulo(titulo), detalles.descripcion(),
+        return new Habito(id, AmbitoHabito.SISTEMA, null, formacion, requireTitulo(titulo), detalles.descripcion(),
                 tipo, requireCategoria(detalles.categoriaClave()), null, null, detalles.exigenciaEvidencia(),
                 detalles.esOpcional(), detalles.obligatorioEnIntoxicacion(), true, false, null, null, null, null,
                 true, ahora, ahora);
+    }
+
+    /**
+     * Spec 023, «Copiar a otra formacion»: el mismo habito en otra formacion y en una categoria de esa formacion, ya INDEPENDIENTE (otro
+     * id, sin ningun vinculo con el original). Conserva todo lo que lo define —titulo, descripcion, tipo, evidencia, opcionalidad,
+     * {@code claveSistema} (para que su flujo propio funcione igual), icono, ventana de entrega— y nace activo solo si el original lo estaba.
+     */
+    public Habito copiarA(HabitoId idNuevo, Formacion destino, String categoriaDestino, Instant ahora) {
+        Objects.requireNonNull(idNuevo, "idNuevo es obligatorio");
+        Objects.requireNonNull(destino, "destino es obligatorio");
+        if (!esDeSistema()) {
+            throw new IllegalStateException("Solo se copia un habito del catalogo");
+        }
+        return new Habito(idNuevo, AmbitoHabito.SISTEMA, null, destino, titulo, descripcion, tipo,
+                requireCategoria(categoriaDestino), iconoClave, claveSistema, exigenciaEvidencia, esOpcional,
+                obligatorioEnIntoxicacion, desactivable, eleccionDiaSemanal, horasExtraEvidencia,
+                diaLimiteEdicionLibre, null, null, activo, ahora, ahora);
     }
 
     /** El {@code id} entra por parametro: lo genera el caso de uso con el puerto {@code IdGenerator}. */
@@ -106,12 +137,15 @@ public final class Habito {
         // desactivable = true: un habito propio SIEMPRE lo puede quitar su dueno. Los unicos no
         // desactivables son los cuatro del catalogo que marca V18__habitos_desactivable.sql.
         // diaLimiteEdicionLibre = null: no aplica a un habito personal (es del catalogo de sistema).
-        return new Habito(id, AmbitoHabito.PERSONAL, participanteId, requireTitulo(titulo), null, tipo,
+        return new Habito(id, AmbitoHabito.PERSONAL, participanteId, null, requireTitulo(titulo), null, tipo,
                 requireCategoria(categoriaClave), iconoClave, null, ExigenciaEvidencia.OPCIONAL, false, false, true,
                 false, null, null, plantilla, etiquetaMeta, true, ahora, ahora);
     }
 
-    /** Solo para el adaptador de persistencia. */
+    /**
+     * Firma de antes de las formaciones (spec 023): un habito del catalogo sin dato es de la Escuela y uno propio no es de ninguna. La
+     * conservan las pruebas y los llamadores que no necesitan decir una formacion.
+     */
     public static Habito rehydrate(HabitoId id, AmbitoHabito ambito, UserId participanteId, String titulo,
                                     String descripcion, TipoHabito tipo, String categoriaClave, String iconoClave,
                                     String claveSistema, ExigenciaEvidencia exigenciaEvidencia, boolean esOpcional,
@@ -119,7 +153,22 @@ public final class Habito {
                                     Integer horasExtraEvidencia, Integer diaLimiteEdicionLibre,
                                     PlantillaHabitoPersonal plantillaClave, String etiquetaMeta, boolean activo,
                                     Instant creadoEn, Instant actualizadoEn) {
-        return new Habito(id, ambito, participanteId, titulo, descripcion, tipo, categoriaClave, iconoClave,
+        Formacion formacion = ambito == AmbitoHabito.SISTEMA ? Formacion.POR_DEFECTO : null;
+        return rehydrate(id, ambito, participanteId, formacion, titulo, descripcion, tipo, categoriaClave, iconoClave,
+                claveSistema, exigenciaEvidencia, esOpcional, obligatorioEnIntoxicacion, desactivable,
+                eleccionDiaSemanal, horasExtraEvidencia, diaLimiteEdicionLibre, plantillaClave, etiquetaMeta, activo,
+                creadoEn, actualizadoEn);
+    }
+
+    /** Solo para el adaptador de persistencia. */
+    public static Habito rehydrate(HabitoId id, AmbitoHabito ambito, UserId participanteId, Formacion formacion,
+                                    String titulo, String descripcion, TipoHabito tipo, String categoriaClave,
+                                    String iconoClave, String claveSistema, ExigenciaEvidencia exigenciaEvidencia,
+                                    boolean esOpcional, boolean obligatorioEnIntoxicacion, boolean desactivable,
+                                    boolean eleccionDiaSemanal, Integer horasExtraEvidencia,
+                                    Integer diaLimiteEdicionLibre, PlantillaHabitoPersonal plantillaClave,
+                                    String etiquetaMeta, boolean activo, Instant creadoEn, Instant actualizadoEn) {
+        return new Habito(id, ambito, participanteId, formacion, titulo, descripcion, tipo, categoriaClave, iconoClave,
                 claveSistema, exigenciaEvidencia, esOpcional, obligatorioEnIntoxicacion, desactivable,
                 eleccionDiaSemanal, horasExtraEvidencia, diaLimiteEdicionLibre, plantillaClave, etiquetaMeta, activo,
                 creadoEn, actualizadoEn);
@@ -173,6 +222,13 @@ public final class Habito {
     }
 
     /**
+     * Spec 023: si este habito del catalogo es de esa formacion. Un habito PERSONAL no es de ninguna: no pasa por aqui (sigue a su dueño).
+     */
+    public boolean esDeFormacion(Formacion otra) {
+        return formacion != null && formacion == otra;
+    }
+
+    /**
      * Un habito PERSONAL cuyo dueno es este participante. Falso para el catalogo SISTEMA, que no
      * tiene dueno, y falso para el habito personal de OTRO aprendiz.
      *
@@ -182,6 +238,18 @@ public final class Habito {
      */
     public boolean esPersonalDe(UserId participanteId) {
         return ambito == AmbitoHabito.PERSONAL && Objects.equals(this.participanteId, participanteId);
+    }
+
+    /**
+     * Spec 023, FR-028: pedir por id un habito del catalogo de OTRA formacion responde exactamente lo mismo que un id inexistente (404, sin
+     * pista de que existe). Un habito PERSONAL no es de ninguna formacion: de quien es lo decide {@link #esPersonalDe}.
+     *
+     * @throws ObjetoDeOtraFormacionException si es del catalogo y no es de {@code formacionDeLaPersona}
+     */
+    public void exigirQueSeaVisibleEn(Formacion formacionDeLaPersona) {
+        if (esDeSistema() && !esDeFormacion(formacionDeLaPersona)) {
+            throw new ObjetoDeOtraFormacionException();
+        }
     }
 
     public boolean esBloqueo() {

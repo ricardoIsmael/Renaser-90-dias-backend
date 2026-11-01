@@ -6,6 +6,7 @@ import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.PlantillaHabitoPersonal;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
 
@@ -14,9 +15,9 @@ class HabitoPersistenceMapper {
 
     Habito toDomain(HabitoJpaEntity e) {
         return Habito.rehydrate(HabitoId.of(e.getId()), toDomainAmbito(e.getAmbito()),
-                e.getParticipanteId() != null ? UserId.of(e.getParticipanteId()) : null, e.getTitulo(),
-                e.getDescripcion(), toDomainTipo(e.getTipo()), e.getCategoriaClave(), e.getIconoClave(),
-                e.getClaveSistema(), toDomainExigencia(e.getExigenciaEvidencia()), e.isEsOpcional(),
+                e.getParticipanteId() != null ? UserId.of(e.getParticipanteId()) : null,
+                formacionDelCatalogo(e), e.getTitulo(), e.getDescripcion(), toDomainTipo(e.getTipo()),
+                e.getCategoriaClave(), e.getIconoClave(), e.getClaveSistema(), toDomainExigencia(e.getExigenciaEvidencia()), e.isEsOpcional(),
                 e.isObligatorioEnIntoxicacion(), e.isDesactivable(), e.isEleccionDiaSemanal(),
                 e.getHorasExtraEvidencia() != null ? e.getHorasExtraEvidencia().intValue() : null,
                 e.getDiaLimiteEdicionLibre() != null ? e.getDiaLimiteEdicionLibre().intValue() : null,
@@ -24,9 +25,15 @@ class HabitoPersistenceMapper {
                 e.getActualizadoEn());
     }
 
+    /** Solo un habito del catalogo es de una formacion; en uno PERSONAL la columna no significa nada (V134). */
+    private static Formacion formacionDelCatalogo(HabitoJpaEntity e) {
+        return e.getAmbito() == AmbitoHabitoJpa.SISTEMA && e.getFormacion() != null ? Formacion.desde(e.getFormacion()) : null;
+    }
+
     HabitoJpaEntity toEntity(Habito h) {
         return new HabitoJpaEntity(h.id().value(), toJpaAmbito(h.ambito()),
-                h.participanteId() != null ? h.participanteId().value() : null, h.titulo(), h.descripcion(),
+                h.participanteId() != null ? h.participanteId().value() : null,
+                h.formacion() != null ? h.formacion().codigo() : null, h.titulo(), h.descripcion(),
                 toJpaTipo(h.tipo()), h.categoriaClave(), h.iconoClave(), h.claveSistema(),
                 toJpaExigencia(h.exigenciaEvidencia()), h.esOpcional(), h.obligatorioEnIntoxicacion(),
                 h.desactivable(), h.eleccionDiaSemanal(),

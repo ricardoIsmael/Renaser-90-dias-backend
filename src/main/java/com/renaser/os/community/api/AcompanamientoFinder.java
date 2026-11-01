@@ -1,5 +1,6 @@
 package com.renaser.os.community.api;
 
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.Instant;
@@ -128,7 +129,12 @@ public interface AcompanamientoFinder {
      * @param aprendices los aprendices vigentes del grupo, sin repetir
      */
     record GrupoConAprendices(UUID grupoId, String nombre, boolean recepcion, UserId mentorId,
-                              List<UserId> aprendices) {
+                              List<UserId> aprendices, Formacion formacion) {
+
+        /** Firma de antes de las formaciones (spec 022): un grupo sin dato es de la Escuela. */
+        public GrupoConAprendices(UUID grupoId, String nombre, boolean recepcion, UserId mentorId, List<UserId> aprendices) {
+            this(grupoId, nombre, recepcion, mentorId, aprendices, Formacion.POR_DEFECTO);
+        }
     }
 
     /**
@@ -139,6 +145,12 @@ public interface AcompanamientoFinder {
      *                               que quien barre no tenga que volver a preguntar por cohorte.
      */
     record GrupoAcompanado(UUID grupoId, String nombre, UserId mentorId, UUID cohorteId, String zonaHoraria,
-                            int diasSinActividadAlerta) {
+                            int diasSinActividadAlerta, Formacion formacion) {
+
+        /** Firma de antes de las formaciones (spec 022): un grupo sin dato es de la Escuela. */
+        public GrupoAcompanado(UUID grupoId, String nombre, UserId mentorId, UUID cohorteId, String zonaHoraria,
+                               int diasSinActividadAlerta) {
+            this(grupoId, nombre, mentorId, cohorteId, zonaHoraria, diasSinActividadAlerta, Formacion.POR_DEFECTO);
+        }
     }
 }

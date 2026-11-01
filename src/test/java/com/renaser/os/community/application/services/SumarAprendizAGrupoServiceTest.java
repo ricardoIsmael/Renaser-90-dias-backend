@@ -101,7 +101,8 @@ class SumarAprendizAGrupoServiceTest {
     void setUp() {
         service = new SumarAprendizAGrupoService(loadCelulaPort, loadAsignacionesPort, saveAsignacionPort,
                 loadPoliticaMentoriaPort, consultarCelulaDeParticipantePort, userSummaryFinder,
-                asignacionCelulaPort, consultarCelulas, eventos, CLOCK, idGenerator);
+                asignacionCelulaPort, consultarCelulas, eventos, CLOCK, idGenerator,
+                FormacionDelGrupoDePrueba.permisivo());
         lenient().when(idGenerator.newId()).thenAnswer(inv -> UUID.randomUUID());
         lenient().when(loadPoliticaMentoriaPort.porCohorte(any())).thenReturn(Optional.empty());
         lenient().when(loadAsignacionesPort.porCelula(any())).thenReturn(List.of());

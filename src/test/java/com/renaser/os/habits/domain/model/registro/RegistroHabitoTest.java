@@ -35,9 +35,18 @@ class RegistroHabitoTest {
     @Test
     void diaProgramaFueraDeRangoEsInvalido() {
         assertThatThrownBy(() -> RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()),
-                UserId.of(UUID.randomUUID()), HabitoId.of(UUID.randomUUID()), LocalDate.now(), 91, TipoDia.TODOS, false,
+                UserId.of(UUID.randomUUID()), HabitoId.of(UUID.randomUUID()), LocalDate.now(), 366, TipoDia.TODOS, false,
                 CLOCK.now()))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void elDiaDeUnProgramaDeUnAnioEsValido() {
+        // Spec 022: el Diplomado de 1 año llega al día 365; el tope del registro ya no es el 90 de la Escuela.
+        RegistroHabito r = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()),
+                UserId.of(UUID.randomUUID()), HabitoId.of(UUID.randomUUID()), LocalDate.now(), 365, TipoDia.TODOS, false,
+                CLOCK.now());
+        assertThat(r.diaPrograma()).isEqualTo(365);
     }
 
     @Test

@@ -51,7 +51,7 @@ public class ReporteDeMentoresService implements ConsultarReporteDeMentoresUseCa
         acceso.requireLiderazgoActivo(actorId);
         Instant ahora = clock.now();
         MesDelReporte mes = MesDelReporte.pedido(mesPedido, MesDelReporte.ZONA_DEL_PROGRAMA, ahora);
-        List<IndicadoresDeMentor> filas = indicadores.leer(fichaDeMentorFinder.mentoresActivos(), mes).indicadores();
+        List<IndicadoresDeMentor> filas = indicadores.leer(acceso.mentoresDelAlcance(actorId), mes).indicadores();
         Fuente<Map<UserId, ConteoDeObservaciones>> conteos = IndicadoresDeMentores.leer("las observaciones del mes",
                 () -> observaciones.conteoPorMentor(mes.desde(), mes.hasta()));
         Fuente<Integer> sinAtribucion = IndicadoresDeMentores.leer("las respuestas sin atribucion",

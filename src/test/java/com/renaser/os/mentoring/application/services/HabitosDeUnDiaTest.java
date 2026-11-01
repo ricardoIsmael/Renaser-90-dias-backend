@@ -77,6 +77,21 @@ class HabitosDeUnDiaTest {
     }
 
     @Test
+    @DisplayName("spec 023: el último día del programa es el de la persona: en un año (365) el día 200 sigue dentro y el 366 no")
+    void ultimoDiaSegunLaDuracion() {
+        UUID id = UUID.randomUUID();
+
+        assertThat(HabitosDeUnDia.de(HOY, dia(MANANA, 200, horario(id, null, LocalTime.of(7, 0), null)), List.of(), 365)
+                .ocupan()).hasSize(1);
+        assertThat(HabitosDeUnDia.de(HOY, dia(MANANA, 365, horario(id, null, LocalTime.of(7, 0), null)), List.of(), 365)
+                .ocupan()).hasSize(1);
+        assertThat(HabitosDeUnDia.de(HOY, dia(MANANA, 366, horario(id, null, LocalTime.of(7, 0), null)), List.of(), 365)
+                .ocupan()).isEmpty();
+        assertThat(HabitosDeUnDia.de(HOY, dia(MANANA, 91, horario(id, null, LocalTime.of(7, 0), null)), List.of(), 90)
+                .ocupan()).isEmpty();
+    }
+
+    @Test
     @DisplayName("un dia ya vivido usa los registros: solo ocupan los que tuvieron registro, aunque hoy figuren apagados")
     void diaVivido() {
         UUID conRegistro = UUID.randomUUID();

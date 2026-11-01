@@ -1,5 +1,6 @@
 package com.renaser.os.users.application.ports.out.participante;
 
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.ParticipacionPrograma;
 import com.renaser.os.users.application.ports.in.participante.ListTraineesUseCase.ResumenTraineeAdmin;
@@ -61,9 +62,20 @@ public interface ConsultarResumenParticipacionPort {
      *                    pide solo aprendices para su sección y que el total cuadre con lo que muestra).
      */
     List<ResumenTraineeAdmin> listarAprendices(int offset, int limit, String busqueda, boolean soloSinGrupo,
-                                               UserRole rol);
+                                               UserRole rol, AlcanceDeFormacion alcance);
 
-    long contarAprendices(String busqueda, boolean soloSinGrupo, UserRole rol);
+    long contarAprendices(String busqueda, boolean soloSinGrupo, UserRole rol, AlcanceDeFormacion alcance);
+
+    /** Sin filtro de formación (spec 022): el alcance de Administración, todas. */
+    default List<ResumenTraineeAdmin> listarAprendices(int offset, int limit, String busqueda, boolean soloSinGrupo,
+                                                       UserRole rol) {
+        return listarAprendices(offset, limit, busqueda, soloSinGrupo, rol, AlcanceDeFormacion.todas());
+    }
+
+    /** Sin filtro de formación (spec 022): el alcance de Administración, todas. */
+    default long contarAprendices(String busqueda, boolean soloSinGrupo, UserRole rol) {
+        return contarAprendices(busqueda, soloSinGrupo, rol, AlcanceDeFormacion.todas());
+    }
 
     /** Sin filtro de rol: todas las cuentas (D-138). */
     default List<ResumenTraineeAdmin> listarAprendices(int offset, int limit, String busqueda, boolean soloSinGrupo) {

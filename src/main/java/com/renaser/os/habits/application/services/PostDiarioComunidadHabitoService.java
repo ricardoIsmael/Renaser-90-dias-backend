@@ -109,15 +109,17 @@ public class PostDiarioComunidadHabitoService implements CerrarPostDiarioComunid
 
     @Override
     public void alPublicarEnElMuro(UserId autorId, Instant publicadoEn) {
-        Optional<Habito> habito = loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA);
-        if (habito.isEmpty()) {
-            // El habito puede no estar en el catalogo de este entorno (fixtures, QA). No es motivo
-            // para hacer ruido: publicar ya ocurrió y es lo que la persona vino a hacer.
-            return;
-        }
         Optional<ProgresoParticipanteHabits> progreso = progresoPort.deParticipante(autorId);
         if (progreso.isEmpty() || progreso.get().suspendido()) {
             // Publican tambien mentores y admins, que no tienen habitos: no es un error.
+            return;
+        }
+        // Spec 023: el habito de la formacion de quien publica. Una formacion que no lo ofrece no tiene este flujo (FR-005).
+        Optional<Habito> habito = loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA,
+                progreso.get().formacion());
+        if (habito.isEmpty()) {
+            // El habito puede no estar en el catalogo de este entorno (fixtures, QA) ni en esta formacion. No es motivo
+            // para hacer ruido: publicar ya ocurrió y es lo que la persona vino a hacer.
             return;
         }
 

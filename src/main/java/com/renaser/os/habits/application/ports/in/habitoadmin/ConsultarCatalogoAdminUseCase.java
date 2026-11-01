@@ -1,6 +1,7 @@
 package com.renaser.os.habits.application.ports.in.habitoadmin;
 
 import com.renaser.os.habits.domain.model.audiencia.CodigoDeRol;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 
 import java.util.List;
@@ -16,4 +17,10 @@ public interface ConsultarCatalogoAdminUseCase {
      * {@code rol} nulo = todo el catálogo.
      */
     List<HabitoDelCatalogo> listar(UserId actorId, CodigoDeRol rol);
+
+    /**
+     * Spec 023: el catalogo de UNA formacion ({@code formacion} nula = las tres, cada habito con la suya: el filtro «Todas», que solo lee).
+     * {@code rol} nulo = sin filtrar por audiencia.
+     */
+    List<HabitoDelCatalogo> listar(UserId actorId, CodigoDeRol rol, Formacion formacion);
 }

@@ -188,7 +188,7 @@ class AcompanamientoFinderService implements AcompanamientoFinder, MentorVigente
                     .findFirst()
                     .ifPresent(mentor -> acompanados.add(new GrupoAcompanado(celula.id().value(), celula.nombre(),
                             mentor.usuarioId(), celula.cohorteId().value(), politica.zonaHoraria(),
-                            politica.diasSinActividadAlerta())));
+                            politica.diasSinActividadAlerta(), celula.formacion())));
         }
         return acompanados;
     }
@@ -237,7 +237,7 @@ class AcompanamientoFinderService implements AcompanamientoFinder, MentorVigente
         PoliticaMentoria politica = loadPoliticaMentoriaPort.porCohorte(celula.cohorteId())
                 .orElseGet(() -> PoliticaMentoria.porDefecto(celula.cohorteId()));
         return new GrupoAcompanado(celula.id().value(), celula.nombre(), mentorId, celula.cohorteId().value(),
-                politica.zonaHoraria(), politica.diasSinActividadAlerta());
+                politica.zonaHoraria(), politica.diasSinActividadAlerta(), celula.formacion());
     }
 
     @Override
@@ -262,7 +262,7 @@ class AcompanamientoFinderService implements AcompanamientoFinder, MentorVigente
                     .distinct()
                     .toList();
             operativos.add(new GrupoConAprendices(celula.id().value(), celula.nombre(), celula.esRecepcion(),
-                    mentor, aprendices));
+                    mentor, aprendices, celula.formacion()));
         }
         return operativos;
     }

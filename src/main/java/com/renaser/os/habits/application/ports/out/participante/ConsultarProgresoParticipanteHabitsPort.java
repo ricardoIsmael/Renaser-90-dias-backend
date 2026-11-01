@@ -1,5 +1,7 @@
 package com.renaser.os.habits.application.ports.out.participante;
 
+import com.renaser.os.shared.domain.DuracionDelPrograma;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.LocalDate;
@@ -42,12 +44,34 @@ public interface ConsultarProgresoParticipanteHabitsPort {
      * no la conoce: la racha cae entonces a la ventana de 90 dias de la racha general.
      */
     record ProgresoParticipanteHabits(int diaPrograma, String timezone, RolParticipante rol, boolean suspendido,
-                                       boolean programaActivado, LocalDate fechaInicio) {
+                                       boolean programaActivado, LocalDate fechaInicio, Formacion formacion,
+                                       int duracionDias) {
+
+        /**
+         * Spec 023: {@code formacion} es aquella en la que la persona HACE su programa (la de su participacion: el aprendiz, la suya; el
+         * personal, la formacion donde eligio su Dia 1) y de ella sale que habitos le tocan. {@code duracionDias} es SU duracion (90 o 365).
+         */
+        public ProgresoParticipanteHabits {
+            formacion = formacion == null ? Formacion.POR_DEFECTO : formacion;
+            duracionDias = duracionDias <= 0 ? DuracionDelPrograma.POR_DEFECTO : duracionDias;
+        }
+
+        /** Firma de antes de las formaciones (D-254): una persona sin dato es de la Escuela y su programa dura 90 dias. */
+        public ProgresoParticipanteHabits(int diaPrograma, String timezone, RolParticipante rol, boolean suspendido,
+                                          boolean programaActivado, LocalDate fechaInicio) {
+            this(diaPrograma, timezone, rol, suspendido, programaActivado, fechaInicio, Formacion.POR_DEFECTO,
+                    DuracionDelPrograma.POR_DEFECTO);
+        }
 
         /** Firma anterior a D-254, sin fecha de inicio: la conservan los llamadores que no la usan. */
         public ProgresoParticipanteHabits(int diaPrograma, String timezone, RolParticipante rol, boolean suspendido,
                                           boolean programaActivado) {
             this(diaPrograma, timezone, rol, suspendido, programaActivado, null);
+        }
+
+        /** El dia de la persona llevado a la escala de 90 dias del catalogo (spec 022, contrato para la 023). */
+        public int diaEnEscalaBase() {
+            return DuracionDelPrograma.enEscalaBase(diaPrograma, duracionDias);
         }
     }
 

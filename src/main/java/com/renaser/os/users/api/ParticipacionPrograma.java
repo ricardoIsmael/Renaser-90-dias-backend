@@ -1,5 +1,7 @@
 package com.renaser.os.users.api;
 
+import com.renaser.os.shared.domain.DuracionDelPrograma;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.LocalDate;
@@ -41,6 +43,8 @@ import java.util.UUID;
  * @param mentorId       `participantes_programa.mentor_id`, null si no inscrito o sin mentor asignado
  * @param rol            `usuarios.rol` — existe para CUALQUIER usuario, inscrito o no
  * @param suspendido     `usuarios.estado = 'SUSPENDIDO'` — idem
+ * @param formacion      `participantes_programa.formacion` (spec 022): la formación en la que hace su programa; la Escuela si no está inscrito
+ * @param duracionDias   `participantes_programa.duracion_dias`: SU duración en días (90 o 365); 90 si no está inscrito
  * @param activado       `participantes_programa.programa_activado_en IS NOT NULL`. Es distinto
  *                       de {@code inscrito}: una cuenta aprobada tiene fila pero el reloj no
  *                       arranca hasta que firma los Terminos, y el cron nocturno la saltea.
@@ -58,7 +62,20 @@ public record ParticipacionPrograma(
         UserId mentorId,
         UserRole rol,
         boolean suspendido,
-        boolean activado) {
+        boolean activado,
+        Formacion formacion,
+        int duracionDias) {
+
+    /**
+     * Firma de antes de las formaciones (11 campos): una persona sin dato es de la Escuela y su programa dura 90 días (spec 022, FR-018). Se
+     * conserva para no obligar a cada módulo y a cada prueba que arma una proyección a decir una formación que no le interesa.
+     */
+    public ParticipacionPrograma(UserId participanteId, boolean inscrito, int diaPrograma, LocalDate fechaInicio, ZoneId zona,
+                                 FasePrograma fase, UUID celulaId, UserId mentorId, UserRole rol, boolean suspendido,
+                                 boolean activado) {
+        this(participanteId, inscrito, diaPrograma, fechaInicio, zona, fase, celulaId, mentorId, rol, suspendido, activado,
+                Formacion.POR_DEFECTO, DuracionDelPrograma.POR_DEFECTO);
+    }
 
     /**
      * El Dia 1 que la persona eligio, o {@code null} si todavia no lo eligio (D-201, E-336).

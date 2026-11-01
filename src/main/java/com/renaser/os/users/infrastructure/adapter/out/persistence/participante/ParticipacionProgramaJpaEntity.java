@@ -78,4 +78,10 @@ public class ParticipacionProgramaJpaEntity {
     /** `dias_ajuste_programa` (V20) — dias de calendario que no cuentan para el programa.
      * Con signo: positivo retrocede al participante, negativo lo adelanta. */
     private short diasAjustePrograma;
+
+    /** `formacion` (V125, spec 022): el `codigo` de la formación. */
+    private String formacion;
+
+    /** `duracion_dias` (V125, spec 022): SU duración en días. */
+    private short duracionDias;
 }

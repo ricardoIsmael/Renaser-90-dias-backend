@@ -93,6 +93,8 @@ public class ComposicionDeCelulaService implements AsignarMentorCelulaUseCase, Q
     private final Clock clock;
     private final IdGenerator idGenerator;
 
+    private final FormacionDelGrupo formacionDelGrupo;
+
     public ComposicionDeCelulaService(LoadCelulaPort loadCelulaPort, SaveCelulaPort saveCelulaPort,
                                        LoadAsignacionesPort loadAsignacionesPort,
                                        SaveAsignacionPort saveAsignacionPort,
@@ -102,7 +104,9 @@ public class ComposicionDeCelulaService implements AsignarMentorCelulaUseCase, Q
                                        UserSummaryFinder userSummaryFinder,
                                        AsignacionCelulaPort asignacionCelulaPort,
                                        ConsultarCelulasUseCase consultarCelulas,
-                                       ApplicationEventPublisher eventos, Clock clock, IdGenerator idGenerator) {
+                                       ApplicationEventPublisher eventos, Clock clock, IdGenerator idGenerator,
+                                       FormacionDelGrupo formacionDelGrupo) {
+        this.formacionDelGrupo = formacionDelGrupo;
         this.loadCelulaPort = loadCelulaPort;
         this.saveCelulaPort = saveCelulaPort;
         this.loadAsignacionesPort = loadAsignacionesPort;
@@ -126,6 +130,7 @@ public class ComposicionDeCelulaService implements AsignarMentorCelulaUseCase, Q
         requireAdmin(command.actorId());
         Celula destino = requireCelula(command.celulaId());
         requireAprendizElegible(command.traineeId());
+        formacionDelGrupo.exigirQueElAprendizSea(command.traineeId(), destino);
 
         Instant ahora = clock.now();
         String clave = claveDeAlta(command.traineeId(), destino.id());
@@ -235,7 +240,7 @@ public class ComposicionDeCelulaService implements AsignarMentorCelulaUseCase, Q
     public CelulaDetalle asignar(AsignarMentorCelulaCommand command) {
         requireAdmin(command.actorId());
         Celula celula = requireCelula(command.celulaId());
-        requireMentorElegible(command.mentorId());
+        requireMentorElegible(command.mentorId(), celula);
 
         Instant ahora = clock.now();
         if (yaLoLidera(celula, command.mentorId(), ahora)) {
@@ -441,7 +446,7 @@ public class ComposicionDeCelulaService implements AsignarMentorCelulaUseCase, Q
         }
     }
 
-    private void requireMentorElegible(UserId mentorId) {
+    private void requireMentorElegible(UserId mentorId, Celula grupo) {
         UserSummary lider = userSummaryFinder.findById(mentorId)
                 .orElseThrow(() -> new NoSuchElementException("Usuario no encontrado: " + mentorId));
         if (lider.status() != UserStatus.ACTIVE) {
@@ -455,6 +460,7 @@ public class ComposicionDeCelulaService implements AsignarMentorCelulaUseCase, Q
                     "El usuario todavia no tiene un perfil de mentor (perfiles_mentor) — debe crearse desde "
                             + "el modulo de usuarios antes de poder liderar una celula");
         }
+        formacionDelGrupo.exigirQueElMentorSea(mentorId, lider.role(), grupo);
     }
 
     private CelulaDetalle detalle(UserId actorId, CelulaId celulaId) {

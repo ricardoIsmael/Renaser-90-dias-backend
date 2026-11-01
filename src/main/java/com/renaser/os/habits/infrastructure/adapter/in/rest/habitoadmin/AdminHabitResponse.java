@@ -2,6 +2,7 @@ package com.renaser.os.habits.infrastructure.adapter.in.rest.habitoadmin;
 
 import com.renaser.os.habits.application.ports.in.habitoadmin.HabitoDelCatalogo;
 import com.renaser.os.habits.domain.model.audiencia.CodigoDeRol;
+import com.renaser.os.habits.domain.model.categoria.CodigoDeCategoria;
 import com.renaser.os.habits.domain.model.audiencia.VersionDeAudiencia;
 import com.renaser.os.habits.domain.model.habito.Habito;
 
@@ -19,11 +20,12 @@ import java.util.List;
  * avisan que el habito tiene reglas propias en la app.
  */
 public record AdminHabitResponse(String id, String title, String description, HabitTypeDto habitType,
-                                  HabitCategoryDto category, HabitEvidenceRequirementDto evidenceRequirement,
+                                  String category, HabitEvidenceRequirementDto evidenceRequirement,
                                   boolean isOptional, boolean mandatoryOnIntoxication, boolean isActive,
                                   String systemKey, boolean isDeactivatable, List<String> targetRoles,
                                   Instant targetRolesEffectiveFrom, Instant audienceChangedAt,
-                                  AudienceChangedBy audienceChangedBy, boolean targetRolesStartTomorrow) {
+                                  AudienceChangedBy audienceChangedBy, boolean targetRolesStartTomorrow,
+                                  String categoryKey, String formation) {
 
     public record AudienceChangedBy(String id, String name) {
     }
@@ -32,13 +34,14 @@ public record AdminHabitResponse(String id, String title, String description, Ha
         Habito habito = delCatalogo.habito();
         VersionDeAudiencia version = delCatalogo.audiencia().orElse(null);
         return new AdminHabitResponse(habito.id().value().toString(), habito.titulo(), habito.descripcion(),
-                HabitTypeDto.from(habito.tipo()), HabitCategoryDto.fromClave(habito.categoriaClave()),
+                HabitTypeDto.from(habito.tipo()), CodigoDeCategoria.deClave(habito.categoriaClave()),
                 HabitEvidenceRequirementDto.from(habito.exigenciaEvidencia()), habito.esOpcional(),
                 habito.obligatorioEnIntoxicacion(), habito.activo(), habito.claveSistema(), habito.desactivable(),
                 delCatalogo.audienciaGuardada().roles().stream().map(CodigoDeRol::valor).sorted().toList(),
                 version == null ? null : version.rigeDesde(), version == null ? null : version.cambiadoEn(),
                 version == null ? null : new AudienceChangedBy(version.cambiadoPor().value().toString(),
                         delCatalogo.nombreDeQuienCambio()),
-                delCatalogo.rigeDesdeManana());
+                delCatalogo.rigeDesdeManana(), habito.categoriaClave(),
+                habito.formacion() == null ? null : habito.formacion().codigo());
     }
 }

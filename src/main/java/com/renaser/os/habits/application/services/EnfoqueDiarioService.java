@@ -115,7 +115,7 @@ public class EnfoqueDiarioService implements EnfoqueDiarioPort {
     public DiaSinCelularDeHoy diaSinCelularDeHoy(UserId participanteId) {
         ZoneId zona = lecturas.zonaNoSuspendida(participanteId);
         Optional<RachaSinCelular> enCurso = lecturas.rachaActiva(participanteId);
-        Optional<TrackDelDiaConCatalogo> track = lecturas.habitoPorClave(RachaService.CLAVE_SISTEMA_SIN_CELULAR)
+        Optional<TrackDelDiaConCatalogo> track = lecturas.habitoPorClave(participanteId, RachaService.CLAVE_SISTEMA_SIN_CELULAR)
                 .flatMap(habito -> deHoyDelHabito(participanteId, habito));
         boolean iniciable = track.isPresent() && track.get().registro().estado().puedeIniciar() && enCurso.isEmpty();
         return new DiaSinCelularDeHoy(zona, track.map(t -> t.registro().id().value()).orElse(null),
@@ -140,7 +140,7 @@ public class EnfoqueDiarioService implements EnfoqueDiarioPort {
     }
 
     private Integer puntosDePastillaRenacer(UserId participanteId) {
-        return lecturas.habitoPorClave(CompletarPastillaRenacerUseCase.CLAVE_SISTEMA_PASTILLA_RENACER)
+        return lecturas.habitoPorClave(participanteId, CompletarPastillaRenacerUseCase.CLAVE_SISTEMA_PASTILLA_RENACER)
                 .flatMap(habito -> deHoyDelHabito(participanteId, habito))
                 .map(TrackDelDiaConCatalogo::puntosEnJuego)
                 .map(enJuego -> enJuego.siCompletaAhora())

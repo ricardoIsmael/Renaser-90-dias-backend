@@ -23,6 +23,7 @@ import com.renaser.os.users.application.ports.in.user.GetMyProfileUseCase;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequestId;
 import com.renaser.os.users.domain.model.user.User;
 import com.renaser.os.users.infrastructure.adapter.in.rest.accountrequest.AccountRequestIdResponse;
+import com.renaser.os.users.infrastructure.adapter.in.rest.formacion.ArmadorDeLaSesion;
 import com.renaser.os.users.infrastructure.adapter.in.rest.user.UserResponse;
 import com.renaser.os.users.infrastructure.adapter.in.web.security.SesionWebAdapter;
 import jakarta.servlet.http.HttpServletRequest;
@@ -61,6 +62,7 @@ public class AutenticacionController {
     private final IniciarSesionConProveedorUseCase iniciarSesionConProveedorUseCase;
     private final VincularIdentidadSocialUseCase vincularIdentidadSocialUseCase;
     private final CompletarRegistroSocialUseCase completarRegistroSocialUseCase;
+    private final ArmadorDeLaSesion armadorDeLaSesion;
 
     public AutenticacionController(IniciarSesionUseCase iniciarSesionUseCase, GetMyProfileUseCase getMyProfileUseCase,
                                     SesionWebAdapter sesionWeb,
@@ -68,7 +70,8 @@ public class AutenticacionController {
                                     ConfirmarResetContrasenaUseCase confirmarResetContrasenaUseCase,
                                     IniciarSesionConProveedorUseCase iniciarSesionConProveedorUseCase,
                                     VincularIdentidadSocialUseCase vincularIdentidadSocialUseCase,
-                                    CompletarRegistroSocialUseCase completarRegistroSocialUseCase) {
+                                    CompletarRegistroSocialUseCase completarRegistroSocialUseCase,
+                                    ArmadorDeLaSesion armadorDeLaSesion) {
         this.iniciarSesionUseCase = iniciarSesionUseCase;
         this.getMyProfileUseCase = getMyProfileUseCase;
         this.sesionWeb = sesionWeb;
@@ -77,6 +80,7 @@ public class AutenticacionController {
         this.iniciarSesionConProveedorUseCase = iniciarSesionConProveedorUseCase;
         this.vincularIdentidadSocialUseCase = vincularIdentidadSocialUseCase;
         this.completarRegistroSocialUseCase = completarRegistroSocialUseCase;
+        this.armadorDeLaSesion = armadorDeLaSesion;
     }
 
     @PublicEndpoint("Es el login: pedir una sesion para poder iniciar sesion no cierra.")
@@ -86,7 +90,7 @@ public class AutenticacionController {
         User actor = iniciarSesionUseCase.iniciarSesion(new IniciarSesionCommand(request.email(),
                 request.contrasena(), DireccionIpDelCliente.de(servletRequest)));
         sesionWeb.establecer(actor.id(), servletRequest, servletResponse);
-        return UserResponse.from(actor);
+        return armadorDeLaSesion.conFormacion(UserResponse.from(actor), actor.id());
     }
 
     @PublicEndpoint("Cerrar una sesion que no existe es idempotente; exigir cuenta solo agregaria un 403 sin efecto.")
@@ -99,7 +103,8 @@ public class AutenticacionController {
     @RequiresPermission(value = Permission.USE_APP, scope = "exige sesion real: no acepta el respaldo de X-Actor-Id (el otro que tampoco lo acepta es POST /social/link)")
     @GetMapping("/me")
     public UserResponse me() {
-        return UserResponse.from(getMyProfileUseCase.getMyProfile(sesionWeb.actorActual()));
+        User yo = getMyProfileUseCase.getMyProfile(sesionWeb.actorActual());
+        return armadorDeLaSesion.conFormacion(UserResponse.from(yo), yo.id());
     }
 
     /**
@@ -160,7 +165,7 @@ public class AutenticacionController {
         return switch (resultado) {
             case ResultadoLoginSocial.SesionIniciada sesion -> {
                 sesionWeb.establecer(sesion.usuario().id(), servletRequest, servletResponse);
-                yield ResponseEntity.ok(UserResponse.from(sesion.usuario()));
+                yield ResponseEntity.ok(armadorDeLaSesion.conFormacion(UserResponse.from(sesion.usuario()), sesion.usuario().id()));
             }
             case ResultadoLoginSocial.RegistroPendiente pendiente -> ResponseEntity.status(HttpStatus.ACCEPTED)
                     .body(RegistroPendienteSocialResponse.from(pendiente));

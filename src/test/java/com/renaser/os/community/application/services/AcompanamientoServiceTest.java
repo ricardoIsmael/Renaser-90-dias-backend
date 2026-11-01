@@ -206,7 +206,8 @@ class AcompanamientoServiceTest {
         return new AcompanamientoService(cargaAsignaciones, cargaCelulas, cargaPolitica,
                 new AcompanamientoFinderService(cargaAsignaciones, cargaCelulas, cargaPolitica),
                 buscaParticipacion, buscaUsuarios, reloj,
-                ids -> ids.stream().filter(cerradas::contains).collect(java.util.stream.Collectors.toSet()));
+                ids -> ids.stream().filter(cerradas::contains).collect(java.util.stream.Collectors.toSet()),
+                new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
     }
 
     // ── armado ──────────────────────────────────────────────────────────────

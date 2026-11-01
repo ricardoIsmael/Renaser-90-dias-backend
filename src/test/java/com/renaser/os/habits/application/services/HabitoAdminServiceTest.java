@@ -5,12 +5,14 @@ import com.renaser.os.habits.application.ports.in.habitoadmin.CambiarActivoHabit
 import com.renaser.os.habits.application.ports.in.habitoadmin.CrearHabitoUseCase.CrearHabitoCommand;
 import com.renaser.os.habits.application.ports.in.habitoadmin.EliminarHabitoUseCase.EliminarHabitoCommand;
 import com.renaser.os.habits.application.ports.out.audiencia.ContarRegistrosDeHabitoPort;
+import com.renaser.os.habits.application.ports.out.categoria.LoadCategoriaHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.SaveHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.SaveHorarioHabitoPort;
 import com.renaser.os.habits.application.ports.in.habitoadmin.ConsultarRolesElegiblesUseCase.RolElegible;
 import com.renaser.os.habits.domain.model.audiencia.Audiencia;
 import com.renaser.os.habits.domain.model.audiencia.CodigoDeRol;
+import com.renaser.os.habits.domain.model.categoria.CategoriaHabito;
 import com.renaser.os.habits.domain.model.habito.DetallesHabito;
 import com.renaser.os.habits.domain.model.habito.ExigenciaEvidencia;
 import com.renaser.os.habits.domain.model.habito.Habito;
@@ -19,6 +21,7 @@ import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -69,6 +72,8 @@ class HabitoAdminServiceTest {
     private IdGenerator idGenerator;
     @Mock
     private ContarRegistrosDeHabitoPort registrosPort;
+    @Mock
+    private LoadCategoriaHabitoPort categoriasPort;
     private final AudienciasEnMemoria audiencias = new AudienciasEnMemoria();
 
     private HabitoAdminService service;
@@ -81,7 +86,10 @@ class HabitoAdminServiceTest {
     @BeforeEach
     void setUp() {
         service = new HabitoAdminService(loadPort, savePort, saveHorarioPort,
-                new HabitoAdminGuard(userSummaryFinder), CLOCK, idGenerator, new AudienciasDelCatalogo(audiencias, audiencias, userSummaryFinder, CLOCK), registrosPort);
+                new HabitoAdminGuard(userSummaryFinder), CLOCK, idGenerator, new AudienciasDelCatalogo(audiencias, audiencias, userSummaryFinder, CLOCK), registrosPort,
+                categoriasPort);
+        lenient().when(categoriasPort.byClave(any())).thenAnswer(inv -> Optional.of(CategoriaHabito.rehydrate(
+                inv.getArgument(0), Formacion.ESCUELA, "Categoría", 1, null, true, CLOCK.now(), CLOCK.now())));
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(userSummaryFinder.findById(admin))
                 .thenReturn(Optional.of(new UserSummary(admin, "Admin", null, UserRole.ADMIN, UserStatus.ACTIVE)));
@@ -406,5 +414,96 @@ class HabitoAdminServiceTest {
 
         assertThatThrownBy(() -> service.cambiarActivo(new CambiarActivoHabitoCommand(admin, personal.id(), false)))
                 .isInstanceOf(NoSuchElementException.class);
+    }
+
+    // ── Spec 023: el catálogo de cada formación ─────────────────────────────
+
+    private static CategoriaHabito categoria(String clave, Formacion formacion, boolean activa) {
+        return CategoriaHabito.rehydrate(clave, formacion, "Categoría", 1, null, activa, CLOCK.now(), CLOCK.now());
+    }
+
+    private static DetallesHabito detallesEn(String categoria) {
+        return new DetallesHabito("desc", categoria, ExigenciaEvidencia.OPCIONAL, false, false);
+    }
+
+    @Test
+    @DisplayName("spec 023: crear en el Diplomado guarda el hábito en esa formación, en una categoría de ella")
+    void crearEnUnaFormacion() {
+        when(categoriasPort.byClave("DIPLOMADO_ESTUDIO")).thenReturn(Optional.of(categoria("DIPLOMADO_ESTUDIO", Formacion.DIPLOMADO, true)));
+
+        Habito creado = service.crear(new CrearHabitoCommand(admin, "Estudio del día", TipoHabito.CHECKBOX,
+                detallesEn("DIPLOMADO_ESTUDIO"), Audiencia.PARA_TODOS, null, Formacion.DIPLOMADO)).habito();
+
+        assertThat(creado.formacion()).isEqualTo(Formacion.DIPLOMADO);
+        assertThat(creado.categoriaClave()).isEqualTo("DIPLOMADO_ESTUDIO");
+    }
+
+    @Test
+    @DisplayName("spec 023: sin decir formación (el cliente anterior) el hábito es de la Escuela")
+    void sinFormacionEsEscuela() {
+        assertThat(service.crear(new CrearHabitoCommand(admin, "Titulo", TipoHabito.CHECKBOX, detalles())).habito().formacion())
+                .isEqualTo(Formacion.ESCUELA);
+    }
+
+    @Test
+    @DisplayName("spec 023: una categoría de otra formación no sirve para el hábito (nada se guarda)")
+    void categoriaDeOtraFormacion() {
+        when(categoriasPort.byClave("CUERPO")).thenReturn(Optional.of(categoria("CUERPO", Formacion.ESCUELA, true)));
+
+        assertThatThrownBy(() -> service.crear(new CrearHabitoCommand(admin, "Titulo", TipoHabito.CHECKBOX, detalles(),
+                Audiencia.PARA_TODOS, null, Formacion.DIPLOMADO)))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("no es de la formación");
+        verify(savePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("spec 023: una categoría desactivada o inexistente no recibe hábitos nuevos")
+    void categoriaDesactivadaOInexistente() {
+        when(categoriasPort.byClave("ESCUELA_VIEJA")).thenReturn(Optional.of(categoria("ESCUELA_VIEJA", Formacion.ESCUELA, false)));
+        when(categoriasPort.byClave("NO_EXISTE")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.crear(new CrearHabitoCommand(admin, "Titulo", TipoHabito.CHECKBOX,
+                detallesEn("ESCUELA_VIEJA")))).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("desactivada");
+        assertThatThrownBy(() -> service.crear(new CrearHabitoCommand(admin, "Titulo", TipoHabito.CHECKBOX,
+                detallesEn("NO_EXISTE")))).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("no existe");
+        verify(savePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("spec 023: mover un hábito a una categoría de otra formación se rechaza; dentro de la suya, no")
+    void moverSoloDentroDeLaFormacion() {
+        Habito delDiplomado = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), Formacion.DIPLOMADO, "Estudio", TipoHabito.CHECKBOX,
+                detallesEn("DIPLOMADO_ESTUDIO"), CLOCK.now());
+        when(loadPort.byId(delDiplomado.id())).thenReturn(Optional.of(delDiplomado));
+        when(categoriasPort.byClave("CUERPO")).thenReturn(Optional.of(categoria("CUERPO", Formacion.ESCUELA, true)));
+        when(categoriasPort.byClave("DIPLOMADO_LECTURA")).thenReturn(Optional.of(categoria("DIPLOMADO_LECTURA", Formacion.DIPLOMADO, true)));
+
+        assertThatThrownBy(() -> service.actualizar(new ActualizarHabitoCommand(admin, delDiplomado.id(), detallesEn("CUERPO"), true, null)))
+                .isInstanceOf(IllegalArgumentException.class);
+        service.actualizar(new ActualizarHabitoCommand(admin, delDiplomado.id(), detallesEn("DIPLOMADO_LECTURA"), true, null));
+
+        assertThat(delDiplomado.categoriaClave()).isEqualTo("DIPLOMADO_LECTURA");
+        assertThat(delDiplomado.formacion()).isEqualTo(Formacion.DIPLOMADO);
+    }
+
+    @Test
+    @DisplayName("spec 023: la lista es la de UNA formación; «todas» (nula) trae las tres; sin decir, la Escuela")
+    void listarPorFormacion() {
+        Habito escuela = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "A", TipoHabito.CHECKBOX, detalles(), CLOCK.now());
+        Habito diplomado = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), Formacion.DIPLOMADO, "A", TipoHabito.CHECKBOX,
+                detalles(), CLOCK.now());
+        when(loadPort.catalogoCompleto()).thenReturn(List.of(escuela, diplomado));
+
+        assertThat(service.listar(admin, null, Formacion.DIPLOMADO)).extracting(h -> h.habito().id()).containsExactly(diplomado.id());
+        assertThat(service.listar(admin, null, Formacion.CERTIFICACION)).isEmpty();
+        assertThat(service.listar(admin, null, null)).hasSize(2);
+        assertThat(service.listar(admin)).extracting(h -> h.habito().id()).containsExactly(escuela.id());
+    }
+
+    @Test
+    @DisplayName("spec 023: listar por formación sigue exigiendo ADMIN/ALQUIMISTA")
+    void listarPorFormacionSinPermiso() {
+        assertThatThrownBy(() -> service.listar(mentor, null, Formacion.DIPLOMADO)).isInstanceOf(NotAuthorizedException.class);
+        assertThatThrownBy(() -> service.listar(suspendedAdmin, null, null)).isInstanceOf(NotAuthorizedException.class);
     }
 }

@@ -69,11 +69,11 @@ public class AudioterapiaService implements ConsultarAudioterapiaSemanalUseCase 
     @Transactional(readOnly = true)
     public EstadoAudioterapia consultar(UserId actorId) {
         ProgresoParticipanteHabits progreso = requireParticipanteHabilitado(actorId);
-        Habito habito = requireHabitoAudioterapia();
+        Habito habito = requireHabitoAudioterapia(progreso);
         HorariosDelHabito horarios = HorariosDelHabito.de(loadHorarioPort.porHabito(habito.id()));
         int diaInicio = horarios.primerDia().orElseThrow(
                 () -> new NoSuchElementException("AUDIOTERAPIA SEMANAL no tiene horario configurado"));
-        int dia = diaDelContenido(actorId, habito.id(), horarios, progreso.diaPrograma());
+        int dia = diaDelContenido(actorId, habito.id(), horarios, progreso.diaEnEscalaBase());
 
         if (dia < diaInicio) {
             return new EsperandoContenido();
@@ -96,8 +96,9 @@ public class AudioterapiaService implements ConsultarAudioterapiaSemanalUseCase 
         return new EsperandoContenido();
     }
 
-    private Habito requireHabitoAudioterapia() {
-        return loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_AUDIOTERAPIA)
+    /** Spec 023: el habito de la formacion de la persona; el dia se lee en la escala de 90 del contenido (spec 022). */
+    private Habito requireHabitoAudioterapia(ProgresoParticipanteHabits progreso) {
+        return loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_AUDIOTERAPIA, progreso.formacion())
                 .orElseThrow(() -> new NoSuchElementException(
                         "No existe en el catalogo un habito con claveSistema=" + CLAVE_SISTEMA_AUDIOTERAPIA));
     }
