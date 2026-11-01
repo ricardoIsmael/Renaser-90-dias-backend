@@ -27,7 +27,10 @@ import com.renaser.os.calendar.domain.model.evento.RolUsuario;
 import com.renaser.os.calendar.domain.model.evento.TipoAudiencia;
 import com.renaser.os.calendar.domain.model.recordatorio.RecordatorioEvento;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.Formacion;
+import com.renaser.os.shared.domain.FormacionDelContenido;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -92,12 +95,14 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
     }
 
     @Override
-    public List<OcurrenciaVista> listar(UserId actorId, Instant desde, Instant hasta) {
+    public List<OcurrenciaVista> listar(UserId actorId, Instant desde, Instant hasta, Formacion formacion) {
         ProgresoParticipanteCalendar progreso = accesoEventoService.requireProgreso(actorId);
         var visor = accesoEventoService.buildVisor(progreso);
+        AlcanceDeFormacion alcance = accesoEventoService.alcanceDe(actorId, formacion);
 
         List<Evento> candidatos = loadEventoPort.candidatosParaVisor(desde, hasta);
         List<Evento> visibles = candidatos.stream()
+                .filter(e -> alcance.incluye(e.formacion()))
                 .filter(e -> accesoEventoService.puedeAcceder(actorId, progreso, visor, e))
                 .toList();
         Set<EventoId> visibleIds = visibles.stream().map(Evento::id).collect(java.util.stream.Collectors.toSet());
@@ -126,6 +131,7 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
     public EventoVista obtener(UserId actorId, EventoId eventoId) {
         ProgresoParticipanteCalendar progreso = accesoEventoService.requireProgreso(actorId);
         Evento evento = requireEvento(eventoId);
+        accesoEventoService.requireEnSuFormacion(actorId, evento);
         var visor = accesoEventoService.buildVisor(progreso);
         if (!accesoEventoService.puedeAcceder(actorId, progreso, visor, evento)) {
             throw new NotAuthorizedException("No tienes acceso a este evento");
@@ -138,13 +144,15 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
     public EventoVista crear(CrearEventoCommand cmd) {
         requireRolCreador(cmd.actorId());
         requireNivelExiste(cmd.tipoAudiencia(), cmd.nivelMinimoId());
+        // Spec 024 (FR-017): Administración no pertenece a una formación; elige siempre en cuál nace el evento.
+        Formacion donde = FormacionDelContenido.paraCrear(accesoEventoService.alcanceDe(cmd.actorId(), null), cmd.formacion());
 
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD 5.4.7).
         Evento evento = Evento.crear(EventoId.of(idGenerator.newId()), cmd.titulo(), cmd.descripcion(),
                 cmd.iniciaEn(), cmd.duracionMinutos(), cmd.timezone(), cmd.tipoUbicacion(), cmd.valorUbicacion(),
                 cmd.tipoAudiencia(), cmd.nivelMinimoId(), cmd.cursoId(), cmd.celulaDestinoId(), cmd.tipoEvento(),
                 cmd.notificarAlCrear(), cmd.recordarPorEmail(), cmd.recordatoriosPersonalizados(), cmd.recurrencia(),
-                cmd.rolesDestino(), cmd.reglasRecordatorio(), cmd.actorId(), clock);
+                cmd.rolesDestino(), cmd.reglasRecordatorio(), cmd.actorId(), clock, donde);
         Evento guardado = saveEventoPort.guardar(evento);
         return new EventoVista(guardado, coverUrlDe(guardado));
     }

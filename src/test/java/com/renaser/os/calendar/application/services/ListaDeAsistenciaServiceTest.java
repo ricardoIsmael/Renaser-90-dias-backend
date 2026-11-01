@@ -227,9 +227,9 @@ class ListaDeAsistenciaServiceTest {
                 throw new AssertionError("pasar lista no puede depender de la fecha del servidor");
             }
         };
-        var accesoEvento = new AccesoEventoService(progresoPort, nivelPort, cursoPort, (u, t) -> false, (c, u) -> false);
+        var accesoEvento = new AccesoEventoService(progresoPort, nivelPort, cursoPort, (u, t) -> false, (c, u) -> false, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
         var audiencia = new AudienciaDelEventoService(nivelPort, progresoPort, audienciaMasivaPort, celulaPort, cursoPort,
-                (u, t) -> false);
+                (u, t) -> false, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
         var acceso = new AccesoALaListaService(accesoEvento, loadEventoPort, loadExcepcionPort);
         var personas = new PersonasConvocadasService(audiencia, confirmacionPort, historialPort, loadLista, personasPort);
         return new ListaDeAsistenciaService(acceso, personas, audiencia, loadLista, saveLista, personasPort, reloj);

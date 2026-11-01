@@ -81,9 +81,9 @@ class MentoriaConSemaforoVerdePorRolTest {
 
     @BeforeEach
     void setUp() {
-        acceso = new AccesoEventoService(progresoPort, nivelPort, cursoPort, elegibilidadPort, pertenenciaAGrupoPort);
+        acceso = new AccesoEventoService(progresoPort, nivelPort, cursoPort, elegibilidadPort, pertenenciaAGrupoPort, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
         audiencia = new AudienciaDelEventoService(nivelPort, progresoPort, audienciaMasivaPort, celulaPort, cursoPort,
-                elegibilidadPort);
+                elegibilidadPort, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
     }
 
     // ── El acceso a un evento ───────────────────────────────────────────────

@@ -12,7 +12,9 @@ import com.renaser.os.calendar.domain.model.evento.RolUsuario;
 import com.renaser.os.calendar.domain.model.evento.TipoEvento;
 import com.renaser.os.calendar.domain.model.nivelmembresia.NivelMembresia;
 import com.renaser.os.calendar.domain.model.nivelmembresia.ProgresoNivel;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -44,10 +46,14 @@ class AudienciaDelEventoService {
     private final ConsultarMiembrosCelulaPort celulaPort;
     private final ResolverAudienciaCursoPort cursoPort;
     private final ConsultarElegibilidadEventoPort elegibilidadPort;
+    /** Spec 024: la audiencia de un evento se resuelve DENTRO de su formación («todos» = todos los de la formación). */
+    private final AlcanceDeFormacionFinder formaciones;
 
     AudienciaDelEventoService(LoadNivelMembresiaPort nivelPort, ConsultarProgresoParticipanteCalendarPort progresoPort,
                               ResolverAudienciaMasivaPort audienciaMasivaPort, ConsultarMiembrosCelulaPort celulaPort,
-                              ResolverAudienciaCursoPort cursoPort, ConsultarElegibilidadEventoPort elegibilidadPort) {
+                              ResolverAudienciaCursoPort cursoPort, ConsultarElegibilidadEventoPort elegibilidadPort,
+                              AlcanceDeFormacionFinder formaciones) {
+        this.formaciones = formaciones;
         this.nivelPort = nivelPort;
         this.progresoPort = progresoPort;
         this.audienciaMasivaPort = audienciaMasivaPort;
@@ -106,12 +112,45 @@ class AudienciaDelEventoService {
 
     private List<UserId> audiencia(Evento evento) {
         return switch (evento.tipoAudiencia()) {
-            case TODOS -> audienciaMasivaPort.traineesActivos();
-            case ROLES -> audienciaMasivaPort.activosConRoles(evento.rolesDestino());
-            case CELULA -> evento.celulaDestinoId() == null ? List.of() : celulaPort.miembrosActivos(evento.celulaDestinoId());
-            case NIVEL_MINIMO -> audienciaNivelMinimo(evento);
-            case CURSO -> audienciaCurso(evento);
+            case TODOS -> dentroDeLaFormacion(audienciaMasivaPort.traineesActivos(), evento);
+            case ROLES -> audienciaPorRoles(evento);
+            case CELULA -> dentroDeLaFormacion(evento.celulaDestinoId() == null ? List.<UserId>of()
+                    : celulaPort.miembrosActivos(evento.celulaDestinoId()), evento);
+            case NIVEL_MINIMO -> dentroDeLaFormacion(audienciaNivelMinimo(evento), evento);
+            case CURSO -> dentroDeLaFormacion(audienciaCurso(evento), evento);
         };
+    }
+
+    /**
+     * Spec 024 (FR-016, FR-018): una persona recibe los avisos de un evento solo si PERTENECE a su formación. Es el filtro de todas las audiencias en un
+     * solo lugar, una consulta para todos (sin N+1): «todos» son los aprendices de la formación, el grupo y el curso se resuelven dentro de ella, y
+     * un aprendiz que cambió de formación deja de recibir lo de la anterior.
+     *
+     * <p>Lo único que no pertenece a una formación es Administración y Alquimista (ven las tres): si el evento los nombra por rol, se conservan.
+     */
+    private List<UserId> dentroDeLaFormacion(List<UserId> candidatos, Evento evento) {
+        if (candidatos.isEmpty()) {
+            return candidatos;
+        }
+        Set<UserId> pertenecen = formaciones.dentroDelAlcance(candidatos, AlcanceDeFormacion.de(evento.formacion()));
+        return candidatos.stream().filter(pertenecen::contains).toList();
+    }
+
+    private List<UserId> audienciaPorRoles(Evento evento) {
+        Set<RolUsuario> queVenTodas = evento.rolesDestino().stream()
+                .filter(rol -> rol == RolUsuario.ADMIN || rol == RolUsuario.ALCHEMIST)
+                .collect(Collectors.toSet());
+        Set<RolUsuario> deUnaFormacion = evento.rolesDestino().stream()
+                .filter(rol -> !queVenTodas.contains(rol))
+                .collect(Collectors.toSet());
+        List<UserId> resultado = new ArrayList<>();
+        if (!deUnaFormacion.isEmpty()) {
+            resultado.addAll(dentroDeLaFormacion(audienciaMasivaPort.activosConRoles(deUnaFormacion), evento));
+        }
+        if (!queVenTodas.isEmpty()) {
+            resultado.addAll(audienciaMasivaPort.activosConRoles(queVenTodas));
+        }
+        return resultado;
     }
 
     private List<UserId> audienciaNivelMinimo(Evento evento) {

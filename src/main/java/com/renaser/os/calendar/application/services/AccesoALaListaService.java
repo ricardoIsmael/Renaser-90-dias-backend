@@ -46,6 +46,7 @@ class AccesoALaListaService {
         var progreso = accesoEventoService.requireProgreso(actor);
         Evento evento = loadEventoPort.byId(eventoId)
                 .orElseThrow(() -> new NoSuchElementException("Evento no encontrado: " + eventoId));
+        accesoEventoService.requireEnSuFormacion(actor, evento);
         if (!QuienLlevaLaLista.puede(progreso.rol(), actor, evento.creadoPor())) {
             throw new NotAuthorizedException(SIN_PERMISO);
         }
