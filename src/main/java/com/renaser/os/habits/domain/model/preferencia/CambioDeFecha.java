@@ -71,12 +71,12 @@ public record CambioDeFecha(LocalDate fecha, boolean volverAlPlanDeSiempre, Bool
         }
         if (!activo) {
             if (!desactivable) {
-                throw new IllegalStateException("Este habito es obligatorio y no se puede apagar");
+                throw new IllegalStateException("Este hábito es obligatorio y no se puede apagar");
             }
             return false;
         }
         if (!base.activo()) {
-            throw new IllegalArgumentException("Ese dia esta apagado en tu plan de siempre");
+            throw new IllegalArgumentException("Ese día está apagado en tu plan de siempre");
         }
         return true;
     }

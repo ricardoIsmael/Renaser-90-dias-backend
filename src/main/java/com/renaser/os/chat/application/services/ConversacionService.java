@@ -134,7 +134,7 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
 
         Formacion donde = formacionDelDirecto(command);
         if (!visibilidad.tipoPrendido(donde, TipoDeComunidad.DIRECTO)) {
-            throw new NotAuthorizedException("Los chats directos no estan disponibles en esta formacion");
+            throw new NotAuthorizedException("Los chats directos no están disponibles en esta formación");
         }
         String clave = Conversacion.claveDirectaDe(command.actorId(), command.otroUsuarioId(), donde);
         return loadConversacionPort.porClaveDirecta(clave)

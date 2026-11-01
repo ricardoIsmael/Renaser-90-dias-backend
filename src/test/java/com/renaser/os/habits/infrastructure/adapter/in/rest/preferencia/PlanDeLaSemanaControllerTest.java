@@ -176,7 +176,7 @@ class PlanDeLaSemanaControllerTest {
     @Test
     void apagarUnObligatorioEs409() throws Exception {
         actor(UserStatus.ACTIVE);
-        doThrow(new IllegalStateException("Este habito es obligatorio y no se puede apagar")).when(useCase).guardar(any(), any(), any(), any());
+        doThrow(new IllegalStateException("Este hábito es obligatorio y no se puede apagar")).when(useCase).guardar(any(), any(), any(), any());
 
         mvc.perform(put(ruta()).header("X-Actor-Id", actor.toString()).contentType("application/json")
                 .content("{\"weekStart\":\"2026-11-02\",\"days\":[{\"date\":\"2026-11-07\",\"active\":false}]}"))

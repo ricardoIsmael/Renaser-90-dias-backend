@@ -108,7 +108,7 @@ public final class Habito {
         Objects.requireNonNull(idNuevo, "idNuevo es obligatorio");
         Objects.requireNonNull(destino, "destino es obligatorio");
         if (!esDeSistema()) {
-            throw new IllegalStateException("Solo se copia un habito del catalogo");
+            throw new IllegalStateException("Solo se copia un hábito del catálogo");
         }
         return new Habito(idNuevo, AmbitoHabito.SISTEMA, null, destino, titulo, descripcion, tipo,
                 requireCategoria(categoriaDestino), iconoClave, claveSistema, exigenciaEvidencia, esOpcional,

@@ -110,7 +110,7 @@ public class PlanDeLaSemanaService implements PlanDeLaSemanaUseCase {
     /** Cada fecha tiene que estar en la semana, ser posterior a hoy y no repetirse. */
     private static void requireCambiosValidos(SemanaCalendaria semana, List<CambioDeFecha> cambios, LocalDate hoy) {
         if (cambios == null || cambios.isEmpty()) {
-            throw new IllegalArgumentException("No hay ningun cambio que guardar");
+            throw new IllegalArgumentException("No hay ningún cambio que guardar");
         }
         Set<LocalDate> vistas = new HashSet<>();
         for (CambioDeFecha cambio : cambios) {

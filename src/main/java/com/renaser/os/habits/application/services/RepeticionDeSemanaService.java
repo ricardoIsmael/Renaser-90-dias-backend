@@ -87,11 +87,11 @@ public class RepeticionDeSemanaService implements RepetirSemanaUseCase {
             throw new IllegalArgumentException("La semana que se repite y la que queda igual no pueden ser la misma");
         }
         if (!destino.tieneDiasPorCambiar(hoy)) {
-            throw new IllegalArgumentException("Esa semana ya paso: no queda ningun dia que se pueda cambiar");
+            throw new IllegalArgumentException("Esa semana ya pasó: no queda ningún día que se pueda cambiar");
         }
         Contexto contexto = cargar(actorId, progreso, modelo, destino, hoy);
         if (contexto.plan.reemplazaLoPropio() && !reemplazar) {
-            throw new IllegalStateException("Esa semana ya tiene cambios tuyos que se reemplazarian. Confirma para reemplazarlos.");
+            throw new IllegalStateException("Esa semana ya tiene cambios tuyos que se reemplazarían. Confirma para reemplazarlos.");
         }
         savePreferenciaPort.guardarFechasPropias(actorId, contexto.plan.escrituras());
         contexto.plan.borrados().forEach(b -> savePreferenciaPort.borrarParaFecha(actorId, b.habitoId(), b.fecha()));

@@ -28,7 +28,7 @@ public record WeekChangesRequest(@NotNull LocalDate weekStart, @NotEmpty List<@V
             if (Boolean.TRUE.equals(reset)) {
                 if (active != null || triggerTime != null || limitTime != null || reminderEnabled != null
                         || reminderMinutesList != null || alarm != null) {
-                    throw new IllegalArgumentException("Un dia que vuelve al plan de siempre no lleva otros cambios: " + date);
+                    throw new IllegalArgumentException("Un día que vuelve al plan de siempre no lleva otros cambios: " + date);
                 }
                 return CambioDeFecha.restablecer(date);
             }

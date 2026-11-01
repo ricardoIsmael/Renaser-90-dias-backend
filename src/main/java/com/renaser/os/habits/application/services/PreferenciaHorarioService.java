@@ -371,7 +371,7 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
             // Misma regla y mismo motivo que `DesbloqueoHabito.pausar`: la invariante cruza dos
             // tablas, asi que no puede vivir en un CHECK. Si los obligatorios se pudieran apagar un
             // dia, "obligatorio" no querria decir nada.
-            throw new IllegalStateException("Este habito es obligatorio y no se puede apagar");
+            throw new IllegalStateException("Este hábito es obligatorio y no se puede apagar");
         }
         Instant ahora = clock.now();
         // Sin hora: apagar un dia NO toca el horario, que se sigue heredando de lo general. Es lo
@@ -411,7 +411,7 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
         Habito habito = requireHabito(habitoId);
         requireEditable(actorId, habito);
         if (!habito.desactivable()) {
-            throw new IllegalStateException("Este habito es obligatorio y no se puede apagar");
+            throw new IllegalStateException("Este hábito es obligatorio y no se puede apagar");
         }
         Instant ahora = clock.now();
         // Sin hora: apagar un día NO toca el horario, que se sigue heredando del general. Es lo
