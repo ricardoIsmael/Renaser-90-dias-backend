@@ -218,4 +218,7 @@ class BorradorDelDiagnosticoJdbcAdapter implements BorradorDelDiagnosticoPort {
                         """)
                 .param("ids", lista).param("f", Diagnostico.FLUJO).query(Integer.class).list());
     }
+
+    private record FilaDeSeccion(int id, String clave, String titulo, String descripcion, int orden) {
+    }
 }
