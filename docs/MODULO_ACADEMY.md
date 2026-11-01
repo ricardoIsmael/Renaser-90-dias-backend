@@ -633,3 +633,7 @@ archivos `.java`, 4243 líneas. Contraste contra las reglas de `CLAUDE.md` §5.1
 proyecto (dominio puro, controllers tontos, puertos por intención, sin nombres prohibidos). Los dos
 puntos que ameritan decisión del equipo, no corrección automática, son el tamaño de
 `CatalogoAcademyService` (hallazgo 1) y el agrupamiento de dos agregados bajo `asignacion/` (hallazgo 2).
+
+## Cursos por formación (spec 024, D-301, 2026-10-31)
+
+Spec 024 (D-301, 2026-10-31): contrato completo en `specs/024-comunidad-por-formacion/contracts/comunidad-api.md`. `cursos.formacion` (V137); secciones, lecciones, recursos y progreso la heredan. El catálogo, los bloqueados, el curso, la sección, la lección, la Clase diaria, la recomendación y el contexto de SER solo ven los cursos de la formación (ni como «bloqueado»). El desbloqueo por día usa el día de la persona en su formación y `dia_desbloqueo` llega a 365. No existe un alta de cursos en la app: el `DEFAULT 'ESCUELA'` rige hasta que se cree.

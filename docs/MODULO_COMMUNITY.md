@@ -586,3 +586,6 @@ el grupo queda sin mentor y la app lo dice para que se reintente. Sin cambios en
 |---|---|
 | `MentorEnVariosGruposIT` (+2) | A un mentor con dos grupos, `/admin/cells?cohortId=` le lista los dos; `/admin/cohorts` le muestra su cohorte una vez, `/admin/cohorts/{id}` le responde la suya y 403 una ajena. Fallan contra el código anterior con `IncorrectResultSizeDataAccessException` |
 
+## Comunidad por formación (spec 024, D-301, 2026-10-31)
+
+Spec 024 (D-301, 2026-10-31): contrato completo en `specs/024-comunidad-por-formacion/contracts/comunidad-api.md`. `publicaciones_muro` y `testimonios` llevan `formacion` (V137); los comentarios, reacciones y fotos la heredan de su publicación. Toda carga por id filtra por el alcance de quien pregunta (`AlcanceDeFormacionFinder`), de modo que la publicación de otra formación es inexistente. `FormacionDelContenido.paraLeer/paraCrear` resuelve el parámetro `formation` y la formación de lo que se crea (Administración la elige; el promovido a testimonio hereda la de su publicación). `categorias_muro` no cambia. La moderación sigue siendo de ADMIN y ALCHEMIST.
