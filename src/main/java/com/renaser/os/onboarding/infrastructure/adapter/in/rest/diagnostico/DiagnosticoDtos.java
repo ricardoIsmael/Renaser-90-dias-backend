@@ -217,7 +217,12 @@ final class DiagnosticoDtos {
     record MoverRequest(@NotNull Integer seccionId, @NotNull Integer posicion) {
     }
 
-    record QuitarRequest(@NotEmpty List<Integer> ids, boolean quitarDependientes) {
+    /** {@code quitarDependientes} es opcional (sin él, no se quitan las que dependen: el servidor avisa cuáles son); un primitivo ausente haría fallar el cuerpo. */
+    record QuitarRequest(@NotEmpty List<Integer> ids, Boolean quitarDependientes) {
+
+        boolean conDependientes() {
+            return Boolean.TRUE.equals(quitarDependientes);
+        }
     }
 
     record QuitarResponse(int eliminadas, int retiradas, int conRespuestas) {

@@ -146,7 +146,7 @@ public class DiagnosticoAdminController {
     @RequiresPermission(value = Permission.MANAGE_TRAINEES, scope = SOLO_ADMIN)
     @PostMapping("/preguntas/quitar")
     public QuitarResponse quitar(@ActorAutenticado UserId actor, @Valid @RequestBody QuitarRequest request) {
-        return aRespuesta(editar.quitar(actor, request.ids(), request.quitarDependientes()));
+        return aRespuesta(editar.quitar(actor, request.ids(), request.conDependientes()));
     }
 
     @RequiresPermission(value = Permission.MANAGE_TRAINEES, scope = SOLO_ADMIN)
