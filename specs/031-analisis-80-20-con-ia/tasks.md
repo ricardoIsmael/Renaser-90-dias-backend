@@ -1,6 +1,6 @@
 # Tasks: Análisis 80/20 con IA
 
-**Input**: `plan.md`, `spec.md`, `research.md`, `data-model.md`, `contracts/api.md`. Estado: **[x]** hecho · **[~]** hecho y escrito, pendiente de correr en la máquina compartida · **[ ]** pendiente.
+**Input**: `plan.md`, `spec.md`, `research.md`, `data-model.md`, `contracts/api.md`. Estado: **[x]** hecho y probado · **[ ]** pendiente.
 Reglas: números V153 y V154 (V155 no se usa) y D-306; commits por paso, en castellano y sin coautoría; comandos pesados solo con `pesado.sh`; sin emulador.
 
 ## Phase 1: Setup
