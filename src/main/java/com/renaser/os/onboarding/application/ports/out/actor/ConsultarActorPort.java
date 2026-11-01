@@ -15,6 +15,11 @@ public interface ConsultarActorPort {
 
     Optional<ActorOnboarding> deActor(UserId actorId);
 
-    record ActorOnboarding(UserId id, boolean suspendido) {
+    /** {@code nombre} es el nombre completo, para precargarlo en el diagnóstico y nombrar a la persona en su ficha; {@code administra} es Administración o Alquimista. */
+    record ActorOnboarding(UserId id, boolean suspendido, String nombre, boolean administra) {
+
+        public ActorOnboarding(UserId id, boolean suspendido) {
+            this(id, suspendido, null, false);
+        }
     }
 }

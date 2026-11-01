@@ -5,6 +5,7 @@ import com.renaser.os.onboarding.api.FichaDeLaPersonaUseCase;
 import com.renaser.os.onboarding.application.ports.out.actor.ConsultarActorPort;
 import com.renaser.os.onboarding.application.ports.out.estado.LoadEstadoOnboardingPort;
 import com.renaser.os.onboarding.application.ports.out.estado.SaveEstadoOnboardingPort;
+import com.renaser.os.onboarding.application.ports.out.diagnostico.VersionesDeFichaPort;
 import com.renaser.os.onboarding.application.ports.out.ficha.RespuestasDelDiagnosticoPort;
 import com.renaser.os.onboarding.application.ports.out.mapa.EtapaOnboardingPort;
 import com.renaser.os.onboarding.domain.model.diagnostico.Diagnostico;
@@ -29,16 +30,18 @@ public class FichaDeLaPersonaService implements FichaDeLaPersonaUseCase, FichaDe
     private final ConsultarActorPort actorPort;
     private final RespuestasDelDiagnosticoPort respuestasPort;
     private final EtapaOnboardingPort etapaPort;
+    private final VersionesDeFichaPort versiones;
     private final Clock clock;
 
     public FichaDeLaPersonaService(LoadEstadoOnboardingPort loadEstadoPort, SaveEstadoOnboardingPort saveEstadoPort,
                                    ConsultarActorPort actorPort, RespuestasDelDiagnosticoPort respuestasPort,
-                                   EtapaOnboardingPort etapaPort, Clock clock) {
+                                   EtapaOnboardingPort etapaPort, VersionesDeFichaPort versiones, Clock clock) {
         this.loadEstadoPort = loadEstadoPort;
         this.saveEstadoPort = saveEstadoPort;
         this.actorPort = actorPort;
         this.respuestasPort = respuestasPort;
         this.etapaPort = etapaPort;
+        this.versiones = versiones;
         this.clock = clock;
     }
 
@@ -47,6 +50,12 @@ public class FichaDeLaPersonaService implements FichaDeLaPersonaUseCase, FichaDe
     public TipoDeFicha tipoDe(UserId persona) {
         return loadEstadoPort.deUsuario(persona).filter(EstadoOnboarding::conDiagnostico)
                 .map(estado -> TipoDeFicha.CON_DIAGNOSTICO).orElse(TipoDeFicha.ESTANDAR);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hayDiagnosticoPublicado() {
+        return versiones.ultima().isPresent();
     }
 
     @Override

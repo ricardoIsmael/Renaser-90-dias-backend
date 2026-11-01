@@ -12,6 +12,9 @@ public interface FichaDeLaPersonaFinder {
     /** {@link TipoDeFicha#ESTANDAR} también para quien nunca abrió su onboarding (sin fila). Nunca falla por eso. */
     TipoDeFicha tipoDe(UserId persona);
 
+    /** Si hay una versión publicada del diagnóstico que asignar: sin ella, «Con diagnóstico» no se ofrece al aceptar a nadie (spec 026, FR-004). */
+    boolean hayDiagnosticoPublicado();
+
     enum TipoDeFicha {
         ESTANDAR,
         CON_DIAGNOSTICO

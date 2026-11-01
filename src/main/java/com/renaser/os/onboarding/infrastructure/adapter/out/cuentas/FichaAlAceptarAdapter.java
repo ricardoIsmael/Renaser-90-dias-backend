@@ -1,5 +1,6 @@
 package com.renaser.os.onboarding.infrastructure.adapter.out.cuentas;
 
+import com.renaser.os.onboarding.api.FichaDeLaPersonaFinder;
 import com.renaser.os.onboarding.api.FichaDeLaPersonaUseCase;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FichaAlAceptar;
@@ -10,9 +11,16 @@ import org.springframework.stereotype.Component;
 class FichaAlAceptarAdapter implements FichaAlAceptar {
 
     private final FichaDeLaPersonaUseCase ficha;
+    private final FichaDeLaPersonaFinder lectura;
 
-    FichaAlAceptarAdapter(FichaDeLaPersonaUseCase ficha) {
+    FichaAlAceptarAdapter(FichaDeLaPersonaUseCase ficha, FichaDeLaPersonaFinder lectura) {
         this.ficha = ficha;
+        this.lectura = lectura;
+    }
+
+    @Override
+    public boolean hayDiagnosticoPublicado() {
+        return lectura.hayDiagnosticoPublicado();
     }
 
     @Override

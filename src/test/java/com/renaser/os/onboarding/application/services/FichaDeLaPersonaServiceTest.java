@@ -5,6 +5,7 @@ import com.renaser.os.onboarding.application.ports.out.actor.ConsultarActorPort;
 import com.renaser.os.onboarding.application.ports.out.actor.ConsultarActorPort.ActorOnboarding;
 import com.renaser.os.onboarding.application.ports.out.estado.LoadEstadoOnboardingPort;
 import com.renaser.os.onboarding.application.ports.out.estado.SaveEstadoOnboardingPort;
+import com.renaser.os.onboarding.application.ports.out.diagnostico.VersionesDeFichaPort;
 import com.renaser.os.onboarding.application.ports.out.ficha.RespuestasDelDiagnosticoPort;
 import com.renaser.os.onboarding.application.ports.out.mapa.EtapaOnboardingPort;
 import com.renaser.os.onboarding.domain.model.diagnostico.Diagnostico;
@@ -48,6 +49,8 @@ class FichaDeLaPersonaServiceTest {
     private RespuestasDelDiagnosticoPort respuestasPort;
     @Mock
     private EtapaOnboardingPort etapaPort;
+    @Mock
+    private VersionesDeFichaPort versiones;
 
     private FichaDeLaPersonaService service;
     private UserId persona;
@@ -56,7 +59,7 @@ class FichaDeLaPersonaServiceTest {
     @BeforeEach
     void setUp() {
         service = new FichaDeLaPersonaService(loadEstadoPort, saveEstadoPort, actorPort, respuestasPort, etapaPort,
-                CLOCK);
+                versiones, CLOCK);
         persona = UserId.of(UUID.randomUUID());
         admin = UserId.of(UUID.randomUUID());
     }
@@ -71,6 +74,17 @@ class FichaDeLaPersonaServiceTest {
         when(loadEstadoPort.deUsuario(persona)).thenReturn(Optional.empty());
 
         assertThat(service.tipoDe(persona)).isEqualTo(TipoDeFicha.ESTANDAR);
+    }
+
+    @Test
+    @DisplayName("hayDiagnosticoPublicado(): solo si existe una versión publicada")
+    void hayDiagnosticoPublicadoMiraLasVersiones() {
+        when(versiones.ultima()).thenReturn(Optional.empty());
+        assertThat(service.hayDiagnosticoPublicado()).isFalse();
+
+        when(versiones.ultima()).thenReturn(Optional.of(new VersionesDeFichaPort.VersionPublicada(1,
+                new com.renaser.os.onboarding.domain.model.diagnostico.FichaDelDiagnostico(java.util.List.of()), admin, "Ana", CLOCK.now())));
+        assertThat(service.hayDiagnosticoPublicado()).isTrue();
     }
 
     @Test
