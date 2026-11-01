@@ -354,6 +354,34 @@ class RadarMiRadarIT {
         assertThat(historial.get("miRadar").isNull()).isTrue();
     }
 
+    // ── spec 030: el registro dice si se dicto ──────────────────────────────
+
+    @Test
+    @DisplayName("spec 030: un registro dictado queda dictado en la base y lo dice el historial; el escrito y el segundo intento de la hora, no")
+    void elDictadoViajaDeLaPersonaALaBase() throws Exception {
+        UUID persona = participante(5, "APRENDIZ", true);
+        String sesion = sesionDe(sesiones, persona);
+        String dictado = REGISTRO.replace("\"energyLevel\":7", "\"energyLevel\":7,\"dictado\":true");
+
+        reloj.fijar(A_LAS_11_00_EN_LIMA);
+        HttpResponse<String> escrito = post("", sesion, REGISTRO);
+        reloj.fijar(A_LAS_14_06_EN_LIMA);
+        HttpResponse<String> hablado = post("", sesion, dictado);
+        // El segundo intento de la MISMA hora devuelve el primero con SU valor: el del segundo intento no lo pisa.
+        HttpResponse<String> repetido = post("", sesion, REGISTRO);
+
+        assertThat(json.readTree(escrito.body()).get("dictado").asBoolean()).isFalse();
+        assertThat(json.readTree(hablado.body()).get("dictado").asBoolean()).isTrue();
+        assertThat(json.readTree(repetido.body()).get("id").asText()).isEqualTo(json.readTree(hablado.body()).get("id").asText());
+        assertThat(json.readTree(repetido.body()).get("dictado").asBoolean()).isTrue();
+        assertThat(jdbc.queryForList("SELECT dictado FROM renaser.registros_radar WHERE participante_id = ? ORDER BY creado_en",
+                Boolean.class, persona)).containsExactly(false, true);
+        JsonNode entradas = json.readTree(get("/history", sesion).body()).get("entries");
+        assertThat(entradas).hasSize(2);
+        assertThat(entradas.get(0).get("dictado").asBoolean()).isTrue();
+        assertThat(entradas.get(1).get("dictado").asBoolean()).isFalse();
+    }
+
     // ── autorizacion negativa ───────────────────────────────────────────────
 
     @Test
