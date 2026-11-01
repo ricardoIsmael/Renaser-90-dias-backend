@@ -6,6 +6,7 @@ import com.renaser.os.rocks.application.ports.in.rocamensual.DefinirRocaMensualU
 import com.renaser.os.rocks.application.ports.in.rocamensual.DefinirRocaMensualUseCase.DefinirRocaMensualCommand;
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
 import com.renaser.os.shared.domain.Permission;
+import com.renaser.os.rocks.domain.model.rocamensual.RocaMensual;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
 import com.renaser.os.shared.web.security.Funcionalidad;
@@ -40,8 +41,9 @@ public class RocaMensualController {
     @RequiresPermission(Permission.FOLLOW_OWN_PROGRAM)
     @GetMapping
     public List<RocaMensualResponse> listar(@ActorAutenticado UserId actor) {
+        int duracionDias = consultarUseCase.duracionDelPrograma(actor);
         return consultarUseCase.misRocasMensuales(actor).stream()
-                .map(RocaMensualResponse::from)
+                .map(r -> RocaMensualResponse.from(r, duracionDias))
                 .toList();
     }
 
@@ -75,7 +77,8 @@ public class RocaMensualController {
     public RocaMensualResponse definir(@ActorAutenticado UserId actor, @PathVariable EjeObjetivo eje,
                                         @PathVariable int numeroMes,
                                         @Valid @RequestBody DefinirRocaMensualRequest request) {
-        return RocaMensualResponse.from(definirUseCase.definir(new DefinirRocaMensualCommand(
-                actor, eje, numeroMes, request.titulo(), request.meta(), request.avance(), request.unidad())));
+        RocaMensual definida = definirUseCase.definir(new DefinirRocaMensualCommand(
+                actor, eje, numeroMes, request.titulo(), request.meta(), request.avance(), request.unidad()));
+        return RocaMensualResponse.from(definida, consultarUseCase.duracionDelPrograma(actor));
     }
 }

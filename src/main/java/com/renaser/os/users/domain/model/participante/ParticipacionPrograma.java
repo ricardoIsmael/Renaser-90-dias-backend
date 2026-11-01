@@ -69,9 +69,8 @@ public final class ParticipacionPrograma {
     /** Maximo de dias tras firmar Terminos que el aprendiz puede esperar para elegir
      * su Dia 1 (D-66): hoy, +1, +2 o +3 — 4 opciones, nunca "sin elegir". */
     private static final int MAX_DIAS_ESPERA_ACTIVACION = 3;
-    /** Extremos de {@link #fijarDia} (D-194): ni 0 ni el último día se fijan a mano. {@code ULTIMO_DIA_AJUSTABLE} es el de la Escuela (89); el real de cada persona es su duración − 1. */
+    /** Primer extremo de {@link #fijarDia} (D-194): ni 0 ni el último día se fijan a mano. El último de cada persona es su duración − 1 (89 en 90 días, 364 en 365). */
     public static final int PRIMER_DIA_AJUSTABLE = 1;
-    public static final int ULTIMO_DIA_AJUSTABLE = 89;
     /** Mensaje del 409 de {@link #fijarDia} antes del Dia 1 (D-195); lo lee tal cual el panel. */
     public static final String TODAVIA_NO_EMPEZO =
             "Esta persona todavía no empezó su Día 1: el día se puede ajustar desde que empieza";

@@ -41,9 +41,6 @@ import java.util.stream.Collectors;
 @Service
 public class RepeticionDeSemanaService implements RepetirSemanaUseCase {
 
-    /** Hasta donde llega el programa hoy ({@code RegistroHabito} no acepta mas de 90). La oferta no sale si la semana siguiente empieza despues. */
-    static final int ULTIMO_DIA_DEL_PROGRAMA = 90;
-
     private final ConsultarProgresoParticipanteHabitsPort progresoPort;
     private final LoadHabitoPort loadHabitoPort;
     private final LoadPreferenciaHorarioPort loadPreferenciaPort;
@@ -158,13 +155,16 @@ public class RepeticionDeSemanaService implements RepetirSemanaUseCase {
                 .toList();
     }
 
-    /** La semana siguiente tiene que empezar dentro del programa: no se ofrece repetir una semana que ya no existe. */
+    /**
+     * La semana siguiente tiene que empezar dentro del programa de ESTA persona (90 o 365 dias, spec 022): no se ofrece repetir una semana que ya no
+     * existe. Con un tope fijo de 90, el Diplomado de 1 ano perdia la oferta a partir del dia 84.
+     */
     private static boolean estaDentroDelPrograma(ProgresoParticipanteHabits progreso, LocalDate hoy, SemanaCalendaria destino) {
         if (progreso.diaPrograma() < 1) {
             return false;
         }
         long diasHastaElDestino = ChronoUnit.DAYS.between(hoy, destino.lunes());
-        return progreso.diaPrograma() + diasHastaElDestino <= ULTIMO_DIA_DEL_PROGRAMA;
+        return progreso.diaPrograma() + diasHastaElDestino <= progreso.duracionDias();
     }
 
     private LocalDate hoyDe(ProgresoParticipanteHabits progreso) {

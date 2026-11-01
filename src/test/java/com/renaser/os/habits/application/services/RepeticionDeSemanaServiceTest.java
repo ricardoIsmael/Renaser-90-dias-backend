@@ -175,6 +175,16 @@ class RepeticionDeSemanaServiceTest {
     }
 
     @Test
+    void conUnProgramaDe365DiasLaOfertaSigueDespuesDelDia90() {
+        // Diplomado de 1 año (spec 022): el mismo día 87 está lejos del final; el tope no es 90 para todos.
+        when(progresoPort.deParticipante(ACTOR)).thenReturn(Optional.of(new ProgresoParticipanteHabits(87, "America/Lima",
+                RolParticipante.TRAINEE, false, true, null, com.renaser.os.shared.domain.Formacion.DIPLOMADO, 365)));
+        filas(List.of(sabadoModelo(despertar, 9)), List.of());
+
+        assertThat(service.ofrecer(ACTOR)).isPresent();
+    }
+
+    @Test
     void unHabitoQueYaNoLeCorrespondeSeDejaAfueraConSuNombre() {
         var viejo = habito("Hábito viejo");
         filas(List.of(sabadoModelo(despertar, 9), sabadoModelo(viejo, 8)), List.of());

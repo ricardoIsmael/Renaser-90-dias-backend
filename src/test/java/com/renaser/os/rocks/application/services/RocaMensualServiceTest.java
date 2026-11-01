@@ -144,6 +144,13 @@ class RocaMensualServiceTest {
         assertThat(service.misRocasMensuales(id)).containsExactly(mensual);
     }
 
+    @Test
+    void laDuracionDelProgramaSaleDelProgresoDeLaPersona() {
+        UserId id = traineeActivo();
+
+        assertThat(service.duracionDelPrograma(id)).isEqualTo(90);
+    }
+
     // ---------------------------------------------------------------------------------------
     // definir(): crear o corregir el tramo del mes
     // ---------------------------------------------------------------------------------------
@@ -181,7 +188,7 @@ class RocaMensualServiceTest {
 
         assertThatThrownBy(() -> service.definir(comando(id)))
                 .isInstanceOf(NoSuchElementException.class)
-                .hasMessageContaining("objetivo de 90 dias");
+                .hasMessageContaining("objetivo de 90 días");
         verify(guardarRocaMensualPort, never()).guardar(any());
     }
 
