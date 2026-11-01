@@ -3,6 +3,8 @@ package com.renaser.os.users.application.ports.in.accountrequest;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequestId;
+import com.renaser.os.users.domain.model.accountrequest.PedidoDeIngreso;
+import com.renaser.os.users.domain.model.accountrequest.PedidoDeIngreso;
 
 import java.util.UUID;
 
@@ -22,9 +24,10 @@ public interface ApproveAccountRequestUseCase {
     /**
      * @param rolPersonalizadoId opcional (spec 002, fase 2; D-272): con él entra con ese rol personalizado —el rol base
      *                           sale de él y {@code rol} se ignora—, por el mismo caso de uso que «Equipo y roles»
+     * @param pedido             a qué formaciones entra, con qué duración y si su ficha es con diagnóstico (spec 025); sin nada es lo de siempre
      */
     record ApproveAccountRequestCommand(AccountRequestId accountRequestId, UserId actorId, UserRole rol,
-                                        UUID rolPersonalizadoId) {
+                                        UUID rolPersonalizadoId, PedidoDeIngreso pedido) {
 
         /**
          * Validación a mano y no con {@code SelfValidating}: con varios constructores, ese ayudante valida el primero
@@ -34,6 +37,13 @@ public interface ApproveAccountRequestUseCase {
             if (accountRequestId == null || actorId == null || rol == null) {
                 throw new IllegalArgumentException("Faltan la solicitud, quien aprueba o el rol");
             }
+            pedido = pedido == null ? PedidoDeIngreso.deSiempre() : pedido;
+        }
+
+        /** Con rol personalizado y sin formación elegida (D-272): lo que manda una app anterior a las formaciones. */
+        public ApproveAccountRequestCommand(AccountRequestId accountRequestId, UserId actorId, UserRole rol,
+                                            UUID rolPersonalizadoId) {
+            this(accountRequestId, actorId, rol, rolPersonalizadoId, null);
         }
 
         /** Sin rol personalizado (D-265). */

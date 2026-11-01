@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-31
 
-**Status**: Draft — con 2 preguntas abiertas que cambian el alcance (ver «Dudas para el dueño»)
+**Status**: Implementada (2026-10-31) con las decisiones del dueño; ver «Decisiones del dueño del 31/10» y `plan.md`
 
 **Input**: Pedido del dueño del 2026-10-31, textual: «El sistema, como se viene manejando, debe poder aceptar una solicitud. Al aceptar a la persona,
 primero se elige a qué formación entra; si es el Diplomado, si es de 3 meses o de 1 año, y debe modificarse correctamente. Luego, qué rol ocupará dentro
@@ -36,6 +36,24 @@ Con las formaciones (spec 022), aceptar a alguien exige **tres decisiones, en es
 - Q: ¿Qué duraciones hay? → A: Diplomado 3 meses o 1 año; Escuela y Certificación 90 días (spec 022). La duración se configura en Administración.
 - Q: ¿Qué es «con diagnóstico»? → A: La persona completa el **formulario de diagnóstico** (el de Google que el dueño compartió, adaptado). «Sin diagnóstico»: completa el **formulario que se viene desarrollando** (la Ficha inicial de hoy).
 - Q: ¿Para qué se elige el rol? → A: «Para que le salgan sus vistas o interfaces.»
+
+### Decisiones del dueño del 31/10/2026 (mandan sobre lo que dice el resto de este documento)
+
+Fuente: `~/.config/renaser-e2e/formaciones/decisiones-del-dueno-2026-10-31.md`.
+
+| # | Decisión | Qué cambia en esta spec |
+|---|---|---|
+| 025-1 **B** | «Con diagnóstico» vale para **cualquier rol**. | FR-005 sin restricción de rol; el personal también puede recibir el diagnóstico. |
+| 025-2 **A** | Se puede **cambiar la duración de quien ya empezó**, con motivo escrito: conserva su día y se mueve el último; queda en el historial. | FR-016 se implementa: `POST /admin/trainees/{id}/duracion` y V141 (la bitácora de ajustes del reloj). |
+| 025-3 **B y C** | Se acepta **una por una** y también con **selección múltiple** (varias solicitudes con una misma elección). | Historia nueva; ver «Aceptar varias». «La misma que la última» (US5) se conserva como comodidad. |
+| 025-4 **B** | **Viene marcado** Escuela, Aprendiz y sin diagnóstico. Flujo: llega la solicitud como hoy → formación → si es Diplomado, 3 meses o 1 año → rol → con o sin diagnóstico. **Sin diagnóstico = la ficha inicial normal; con diagnóstico = la ficha nueva EN LUGAR de la ficha inicial.** | Reemplaza el supuesto «Nada preseleccionado» de Assumptions. Aceptar a un aprendiz de la Escuela son dos toques. |
+| 025-5 | Se define al aceptar la solicitud (se corrige hasta la primera respuesta). | FR-014 y FR-015: formación, duración y rol se corrigen con los endpoints de la 022 y «Equipo y roles»; el tipo de ficha lo corrige la 026 (la marca es suya). |
+| 025-6 A | Del personal con varias formaciones (mentor/guía/líder); Administración y Alquimista ven todo. | Sin «principal»: la primera por orden es en la que hace su programa propio. |
+| 025-7 A, 025-8 A | Sin aviso a la persona; una formación sin recepción se acepta igual. | Sin cambios. |
+
+**Diseño acordado con el coordinador (31/10):** la marca «con o sin diagnóstico» de la persona **no es de esta spec**: la guarda `onboarding` (spec 026, `estado_onboarding`). La 025 solo le
+pide a `onboarding` que la ponga, por la interfaz `users.api.FichaAlAceptar` (que implementa `onboarding`; `users` no puede importar a `onboarding` sin un ciclo de módulos) y dentro de
+la misma transacción. Lo que la 025 guarda es **la foto de lo elegido** en la propia solicitud (V140), solo para el historial.
 
 ## User Scenarios & Testing *(mandatory)*
 

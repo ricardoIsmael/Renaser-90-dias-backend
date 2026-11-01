@@ -7,7 +7,8 @@ import java.util.List;
 public record AccountRequestPageResponse(List<AccountRequestResponse> content, long total, int page, int size) {
 
     public static AccountRequestPageResponse from(PaginaAccountRequests pagina) {
-        List<AccountRequestResponse> content = pagina.contenido().stream().map(AccountRequestResponse::from).toList();
+        List<AccountRequestResponse> content = pagina.contenido().stream()
+                .map(solicitud -> AccountRequestResponse.from(solicitud, pagina.nombresDeQuienDecidio())).toList();
         return new AccountRequestPageResponse(content, pagina.total(), pagina.page(), pagina.size());
     }
 }

@@ -214,7 +214,7 @@ class TraineeAdminControllerTest {
         UserId traineeId = UserId.of(UUID.randomUUID());
         UserId admin = UserId.of(UUID.randomUUID());
         var ajuste = AjusteDiaPrograma.rehydrate(UUID.randomUUID(), traineeId, 40, 34, 0, 6, "Viaje",
-                admin, Instant.parse("2026-09-03T15:00:00Z"));
+                admin, Instant.parse("2026-09-03T15:00:00Z"), null, null);
         when(getTraineeDetailUseCase.obtener(any())).thenReturn(detalle(traineeId, ajuste));
 
         mockMvc.perform(get("/api/v1/admin/trainees/{id}", traineeId.value())

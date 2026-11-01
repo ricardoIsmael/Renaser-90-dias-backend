@@ -7,6 +7,8 @@ import com.renaser.os.shared.web.security.ActorAutenticado;
 import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import com.renaser.os.users.application.ports.in.formacion.AsignarFormacionesDelPersonalUseCase;
+import com.renaser.os.users.application.ports.in.formacion.CambiarDuracionDelProgramaUseCase;
+import com.renaser.os.users.application.ports.in.formacion.CambiarDuracionDelProgramaUseCase.CambiarDuracionCommand;
 import com.renaser.os.users.application.ports.in.formacion.AsignarFormacionesDelPersonalUseCase.AsignarFormacionesCommand;
 import com.renaser.os.users.application.ports.in.formacion.ConfigurarFormacionUseCase;
 import com.renaser.os.users.application.ports.in.formacion.ConsultarFormacionDeUnaPersonaUseCase;
@@ -43,14 +45,16 @@ public class FormacionesAdminController {
     private final ConfigurarFormacionUseCase configurar;
     private final AsignarFormacionesDelPersonalUseCase asignar;
     private final TrasladarAprendizDeFormacionUseCase trasladar;
+    private final CambiarDuracionDelProgramaUseCase cambiarDuracion;
     private final ConsultarFormacionDeUnaPersonaUseCase consultarPersona;
 
     public FormacionesAdminController(ConfigurarFormacionUseCase configurar, AsignarFormacionesDelPersonalUseCase asignar,
-                                      TrasladarAprendizDeFormacionUseCase trasladar,
+                                      TrasladarAprendizDeFormacionUseCase trasladar, CambiarDuracionDelProgramaUseCase cambiarDuracion,
                                       ConsultarFormacionDeUnaPersonaUseCase consultarPersona) {
         this.configurar = configurar;
         this.asignar = asignar;
         this.trasladar = trasladar;
+        this.cambiarDuracion = cambiarDuracion;
         this.consultarPersona = consultarPersona;
     }
 
@@ -87,11 +91,23 @@ public class FormacionesAdminController {
         return ResponseEntity.noContent().build();
     }
 
+    /** Spec 025 (025-2 A): cambia la duración del programa de quien ya empezó, con motivo. Conserva su día. */
+    @RequiresPermission(value = Permission.MANAGE_TRAINEES, scope = "el guard real es RequireAdminGuard: ADMIN/ALCHEMIST activos")
+    @PostMapping("/trainees/{id}/duracion")
+    public ResponseEntity<Void> cambiarLaDuracion(@PathVariable UUID id, @ActorAutenticado UserId actor,
+                                                  @RequestBody @Valid CambiarDuracionRequest request) {
+        cambiarDuracion.cambiar(new CambiarDuracionCommand(actor, UserId.of(id), request.duracionDias(), request.motivo()));
+        return ResponseEntity.noContent().build();
+    }
+
     public record ConfigurarRequest(@NotBlank String nombre, String descripcion, boolean activa,
                                     @NotEmpty List<Integer> duracionesDias, int version) {
     }
 
     public record AsignarRequest(@NotEmpty List<String> formaciones, String activa) {
+    }
+
+    public record CambiarDuracionRequest(@NotNull Integer duracionDias, @NotBlank String motivo) {
     }
 
     public record TrasladarRequest(@NotBlank String formacion, @NotNull Integer duracionDias, boolean darPorTerminada, String motivo) {

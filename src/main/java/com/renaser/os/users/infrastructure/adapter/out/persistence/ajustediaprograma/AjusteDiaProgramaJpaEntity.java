@@ -36,4 +36,9 @@ public class AjusteDiaProgramaJpaEntity {
     private UUID ajustadoPor;
 
     private Instant ajustadoEn;
+
+    /** V141 (spec 025): solo un cambio de duración las llena. {@code smallint}, de ahí el {@code Short}. */
+    private Short duracionAnterior;
+
+    private Short duracionNueva;
 }

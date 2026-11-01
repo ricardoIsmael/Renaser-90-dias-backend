@@ -19,7 +19,9 @@ class AjusteDiaProgramaPersistenceMapper {
                 e.getDiasAjusteNuevo(),
                 e.getMotivo(),
                 e.getAjustadoPor() == null ? null : UserId.of(e.getAjustadoPor()),  // NULL desde V90: el autor fue borrado
-                e.getAjustadoEn());
+                e.getAjustadoEn(),
+                e.getDuracionAnterior() == null ? null : e.getDuracionAnterior().intValue(),
+                e.getDuracionNueva() == null ? null : e.getDuracionNueva().intValue());
     }
 
     AjusteDiaProgramaJpaEntity toEntity(AjusteDiaPrograma a) {
@@ -32,6 +34,8 @@ class AjusteDiaProgramaPersistenceMapper {
                 (short) a.diasAjusteNuevo(),
                 a.motivo(),
                 a.ajustadoPor().value(),
-                a.ajustadoEn());
+                a.ajustadoEn(),
+                a.duracionAnterior() == null ? null : a.duracionAnterior().shortValue(),
+                a.duracionNueva() == null ? null : a.duracionNueva().shortValue());
     }
 }

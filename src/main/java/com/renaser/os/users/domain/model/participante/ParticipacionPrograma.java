@@ -458,6 +458,31 @@ public final class ParticipacionPrograma {
     }
 
     /**
+     * Cambia cuánto dura el programa de alguien (spec 025, 025-2 A). <b>Conserva su día</b>: lo derivado de las fechas no se toca y solo se mueve el
+     * último; la fase se recalcula porque sus cortes se estiran con la duración. No se puede si ya terminó (la graduación ya ocurrió) ni bajar la
+     * duración hasta o por debajo del día en que va (se graduaría en el acto o el CHECK de la base lo rechazaría).
+     *
+     * @throws IllegalStateException (409) si ya tiene esa duración, ya terminó, o su día actual no cabe en la nueva
+     */
+    public void cambiarDuracion(int nueva, Clock clock) {
+        DuracionDelPrograma.validar(nueva);
+        if (nueva == duracionDias) {
+            throw new IllegalStateException("Esta persona ya tiene un programa de " + DuracionDelPrograma.etiqueta(nueva) + ".");
+        }
+        if (programaCompletado) {
+            throw new IllegalStateException("Esta persona ya terminó su programa: su duración no se puede cambiar.");
+        }
+        int dia = diaVigente(clock);
+        if (nueva <= dia) {
+            throw new IllegalStateException("Esta persona va en el día " + dia + ": un programa de " + DuracionDelPrograma.etiqueta(nueva)
+                    + " termina antes. Elige una duración mayor al día en que va.");
+        }
+        this.duracionDias = nueva;
+        this.fase = FasePrograma.paraDiaPrograma(dia, nueva);
+        this.actualizadoEn = clock.now();
+    }
+
+    /**
      * Elige el Dia 1 del programa (D-66). <b>Corregido tras revision del dueño del
      * proyecto:</b> la version original de esta regla ofrecia HOY como opcion; se
      * descarto a favor de lo que el backend/frontend viejo ya hacia (`inicioPrograma.ts`,
