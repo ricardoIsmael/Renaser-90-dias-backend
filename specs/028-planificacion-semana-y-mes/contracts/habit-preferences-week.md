@@ -65,12 +65,13 @@ Vuelve al plan de siempre: borra las filas propias de ese hábito en esa semana,
 
 ## `GET /habit-preferences` (ampliado, aditivo)
 
-Cada ítem de `habits` suma `dateOverrides`: las fechas con fila propia desde la fecha consultada (hoy si no se pasa `date`) hasta 20 días después, ordenadas, con la misma forma de un día de `/week` (sin `limitTime`):
+Cada ítem de `habits` suma `dateOverrides`: las fechas con fila propia desde la fecha consultada (hoy si no se pasa `date`) hasta 20 días después, ordenadas, con la misma forma de un día de `/week` (incluye `limitTime`, `customDate` y `editable`; la app solo necesita hora, aviso y alarma):
 
 ```json
 { "date": "2026-11-07", "weekday": "SATURDAY", "triggerTime": "09:00:00", "active": true,
   "reminderEnabled": true, "reminderMinutesList": [30, 0], "customTime": true, "customReminder": false,
-  "alarm": { "sound": true, "vibration": true, "voice": false, "repeat": false }, "customAlarm": false }
+  "alarm": { "sound": true, "vibration": true, "voice": false, "repeat": false }, "customAlarm": false,
+  "limitTime": null, "customDate": true, "editable": true }
 ```
 
 **Siempre presente en el servidor nuevo** (lista vacía si no hay ninguna fecha propia). Ausente ⇒ servidor anterior: la app no ofrece «Solo esta semana» y se comporta como siempre.
@@ -78,3 +79,9 @@ Cada ítem de `habits` suma `dateOverrides`: las fechas con fila propia desde la
 ## Errores
 
 400 (valor inválido, fecha fuera de la semana o no posterior a hoy), 403 (permiso o cuenta suspendida), 404 (hábito que no existe o no le corresponde), 409 (apagar un obligatorio).
+
+## Decisiones de lectura (lo que NO cambia en `GET /habit-preferences`)
+
+- `triggerTime`/`limitTime` del ítem siguen siendo lo que rige en la fecha consultada (hoy por defecto): si esa fecha tiene hora propia, la trae, como ya hacía una fila por fecha de antes.
+  El **aviso** del ítem (`reminder…`) sigue siendo el **general** del hábito: el de la fecha va en `dateOverrides`. Los `weekdays[]` son siempre el plan de siempre.
+- Cuando hay `dateOverrides`, la app arma sus alarmas con ellos (spec 028, research R5), no con el nivel superior.

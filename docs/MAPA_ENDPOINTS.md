@@ -104,6 +104,9 @@ Mandá también `Authorization: Bearer <token>` en paralelo — hoy el backend l
 | GET · PUT | `/api/v1/radar/mi-radar` (D-286) |
 | GET | `/api/v1/habit-preferences` |
 | PATCH | `/api/v1/habit-preferences/{habitId}` |
+| GET · PUT · DELETE | `/api/v1/habit-preferences/{habitId}/week` («Solo esta semana», D-296) |
+| GET · POST | `/api/v1/habit-preferences/week-repeat` (repetir la semana, D-296) |
+| DELETE | `/api/v1/habit-preferences/weeks/{weekStart}` («Deshacer», D-296) |
 | GET | `/api/v1/mentor/groups/{groupId}/learners/{userId}/habits` |
 | GET | `/api/v1/mentor/groups/{groupId}/learners/{userId}/radar` |
 | GET | `/api/v1/leadership/groups/{groupId}/people/{personId}/radar` (D-286) |

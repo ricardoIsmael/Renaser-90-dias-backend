@@ -563,6 +563,14 @@ Tests: `DesbloqueoHabitoServiceTest` — suspendido rechazado, sin desbloqueos �
 > la fila entra en Postgres con un `habito_id` de ámbito PERSONAL, el hábito pausado no genera track,
 > y vuelve solo al día siguiente del último día de la pausa).
 
+### 12.5 «Solo esta semana» y repetir la semana (spec 028, D-296) — 2026-10-31
+
+`PlanDeLaSemanaUseCase` y `RepetirSemanaUseCase` (controladores `PlanDeLaSemanaController` y `RepetirSemanaController`, bajo `/api/v1/habit-preferences`). Un cambio «solo esta semana» es una fila
+de `horarios_habito_por_fecha` (V37/V38) ampliada con varios avisos y «Cómo suena» (V130/V131); repetir una semana en la siguiente es escribir, en la semana destino, las mismas filas por
+fecha que tiene la modelo (función pura `RepeticionDeSemana`, idempotente, todo o nada). Reglas: solo fechas posteriores a hoy, solo hábitos que le corresponden a la persona, sin cupo, un obligatorio no se
+apaga, las pausas no se repiten. Contratos y decisiones: `specs/028-planificacion-semana-y-mes/` y D-296. Tests: `CambioDeFechaTest`, `PlanDeLaSemanaTest`, `RepeticionDeSemanaTest` (dominio), `PlanDeLaSemanaServiceTest`,
+`RepeticionDeSemanaServiceTest`, `FechaPropiaPersistenceAdapterTest`, `PlanificacionDeLaSemanaIT` (Testcontainers) y los dos controladores con su 403 para la cuenta suspendida.
+
 ---
 
 ## 13. Hueco #13 — evidencia al cerrar la racha "Día sin celular" — completado 2026-08-26
