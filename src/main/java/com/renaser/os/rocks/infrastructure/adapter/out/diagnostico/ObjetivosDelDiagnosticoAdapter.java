@@ -21,6 +21,8 @@ class ObjetivosDelDiagnosticoAdapter implements ConsultarObjetivosDelDiagnostico
     @Override
     public List<ObjetivoDelDiagnostico> de(UserId participanteId) {
         return diagnostico.objetivosDe(participanteId).objetivos().stream()
-                .map(o -> new ObjetivoDelDiagnostico(EjeObjetivo.valueOf(o.eje()), o.texto())).toList();
+                .map(o -> new ObjetivoDelDiagnostico(EjeObjetivo.valueOf(o.eje()), o.texto(),
+                        o.meta() == null ? null : new MetaDelDiagnostico(o.meta().meta(), o.meta().partida(), o.meta().unidad())))
+                .toList();
     }
 }

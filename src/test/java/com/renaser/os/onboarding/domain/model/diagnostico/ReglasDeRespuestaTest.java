@@ -88,4 +88,44 @@ class ReglasDeRespuestaTest {
         assertThatThrownBy(() -> ReglasDeRespuesta.validar(p, new RespuestaEntrante(1, null, new BigDecimal("3"), null, null, null)))
                 .hasMessageContaining("no corresponde al tipo");
     }
+
+    // ------------------------------------------------------------------------------------------------ la meta medible
+
+    private static RespuestaEntrante numero(int id, String n) {
+        return new RespuestaEntrante(id, null, new BigDecimal(n), null, null, null);
+    }
+
+    @Test
+    @DisplayName("la meta y el punto de partida de Cuerpo y Negocio: cero o más, con decimales, sin pasarse de la columna")
+    void metaDeCuerpoYNegocio() {
+        PreguntaDelDiagnostico meta = Fichas.alimenta(1, DestinoDeRespuesta.META_CUERPO, TipoPreguntaOnboarding.NUMERO, List.of());
+        PreguntaDelDiagnostico partida = Fichas.alimenta(2, DestinoDeRespuesta.PARTIDA_NEGOCIO, TipoPreguntaOnboarding.NUMERO, List.of());
+
+        assertThat(ReglasDeRespuesta.validar(meta, numero(1, "85.5")).valorNumero()).isEqualByComparingTo("85.5");
+        assertThat(ReglasDeRespuesta.validar(partida, numero(2, "0")).valorNumero()).isEqualByComparingTo("0");
+        assertThatThrownBy(() -> ReglasDeRespuesta.validar(meta, numero(1, "-3"))).hasMessageContaining("negativo");
+        assertThatThrownBy(() -> ReglasDeRespuesta.validar(partida, numero(2, "1000000000000"))).hasMessageContaining("demasiado grande");
+    }
+
+    @Test
+    @DisplayName("la meta y el punto de partida de Relaciones son enteros del 1 al 10")
+    void metaDeRelaciones() {
+        PreguntaDelDiagnostico meta = Fichas.alimenta(1, DestinoDeRespuesta.META_RELACIONES, TipoPreguntaOnboarding.NUMERO, List.of());
+        PreguntaDelDiagnostico partida = Fichas.alimenta(2, DestinoDeRespuesta.PARTIDA_RELACIONES, TipoPreguntaOnboarding.NUMERO, List.of());
+
+        assertThat(ReglasDeRespuesta.validar(meta, numero(1, "10")).valorNumero()).isEqualByComparingTo("10");
+        assertThat(ReglasDeRespuesta.validar(partida, numero(2, "1")).valorNumero()).isEqualByComparingTo("1");
+        assertThatThrownBy(() -> ReglasDeRespuesta.validar(meta, numero(1, "11"))).hasMessageContaining("entero del 1 al 10");
+        assertThatThrownBy(() -> ReglasDeRespuesta.validar(partida, numero(2, "0"))).hasMessageContaining("entero del 1 al 10");
+        assertThatThrownBy(() -> ReglasDeRespuesta.validar(partida, numero(2, "6.5"))).hasMessageContaining("entero del 1 al 10");
+    }
+
+    @Test
+    @DisplayName("la unidad de la meta es un texto corto: 20 caracteres")
+    void unidadDeLaMeta() {
+        PreguntaDelDiagnostico unidad = Fichas.alimenta(1, DestinoDeRespuesta.UNIDAD_CUERPO, TipoPreguntaOnboarding.TEXTO, List.of());
+
+        assertThat(ReglasDeRespuesta.validar(unidad, texto(1, "a".repeat(20))).valorTexto()).hasSize(20);
+        assertThatThrownBy(() -> ReglasDeRespuesta.validar(unidad, texto(1, "a".repeat(21)))).hasMessageContaining("20");
+    }
 }

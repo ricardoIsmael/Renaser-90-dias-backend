@@ -85,6 +85,15 @@ public enum Magnitud {
         return Optional.of(PERIODO_ACUMULADO.equals(normalizar(periodo)) ? ACUMULADO : NIVEL);
     }
 
+    /**
+     * Que clase de magnitud es lo que se midio en esta unidad, cuando el tipo de resultado no se eligio aparte (la meta que declaro el diagnostico trae
+     * solo la unidad): una escala si parece una escala ("/10", "puntos"), y un nivel en cualquier otro caso. El periodo acumulado del negocio no se
+     * adivina por la unidad: sin esa pregunta, el negocio es un nivel (donde hay que estar al cierre del mes).
+     */
+    public static Magnitud deLaUnidad(String unidad) {
+        return pareceEscala(unidad) ? ESCALA : NIVEL;
+    }
+
     /** {@code true} cuando el numero del mes se muestra con decimales; una escala va entera. */
     public boolean admiteDecimales() {
         return this == NIVEL || this == ACUMULADO;

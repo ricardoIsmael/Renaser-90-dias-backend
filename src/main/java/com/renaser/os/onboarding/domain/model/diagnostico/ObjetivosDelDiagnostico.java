@@ -2,8 +2,10 @@ package com.renaser.os.onboarding.domain.model.diagnostico;
 
 import com.renaser.os.onboarding.domain.model.respuesta.Respuesta;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
@@ -21,8 +23,26 @@ public record ObjetivosDelDiagnostico(List<ObjetivoPorEje> objetivos, EjeDelDiag
         objetivos = List.copyOf(objetivos);
     }
 
-    public record ObjetivoPorEje(EjeDelDiagnostico eje, String texto) {
+    /**
+     * El objetivo de un eje: lo que escribió y, si respondió la parte medible, su meta. {@code meta} es {@code null} cuando falta alguna parte
+     * (el objetivo vale en palabras, sin cifra del mes).
+     */
+    public record ObjetivoPorEje(EjeDelDiagnostico eje, String texto, MetaDeclarada meta) {
+
+        public ObjetivoPorEje(EjeDelDiagnostico eje, String texto) {
+            this(eje, texto, null);
+        }
     }
+
+    /**
+     * La meta medible que declaró: a dónde quiere llegar, desde dónde parte y en qué unidad. Relaciones es una escala del 1 al 10: su unidad es
+     * {@link #UNIDAD_DE_LA_ESCALA}, la regla que ya tenía el Mapa.
+     */
+    public record MetaDeclarada(BigDecimal meta, BigDecimal partida, String unidad) {
+    }
+
+    /** La unidad de la escala subjetiva de Relaciones. */
+    public static final String UNIDAD_DE_LA_ESCALA = "/10";
 
     public static ObjetivosDelDiagnostico vacios() {
         return new ObjetivosDelDiagnostico(List.of(), null, null, null);
@@ -32,6 +52,7 @@ public record ObjetivosDelDiagnostico(List<ObjetivoPorEje> objetivos, EjeDelDiag
     public static ObjetivosDelDiagnostico de(FichaDelDiagnostico ficha, Map<Integer, Respuesta> respuestas) {
         var visibles = ficha.visibles(respuestas);
         List<ObjetivoPorEje> porEje = new ArrayList<>();
+        Map<EjeDelDiagnostico, PartesDeLaMeta> metas = new EnumMap<>(EjeDelDiagnostico.class);
         EjeDelDiagnostico prioridad = null;
         String primeraAccion = null;
         String trato = null;
@@ -49,9 +70,36 @@ public record ObjetivosDelDiagnostico(List<ObjetivoPorEje> objetivos, EjeDelDiag
                 case PRIORIDAD_PRINCIPAL -> prioridad = EjeDelDiagnostico.valueOf(r.valorTexto());
                 case PRIMERA_ACCION -> primeraAccion = r.valorTexto().trim();
                 case TRATO_DE_LA_PERSONA -> trato = r.valorTexto();
+                default -> p.alimenta().ejeDeLaMeta().ifPresent(eje -> metas.computeIfAbsent(eje, e -> new PartesDeLaMeta()).poner(p.alimenta(), r));
             }
         }
-        return new ObjetivosDelDiagnostico(ordenados(porEje, prioridad), prioridad, primeraAccion, trato);
+        List<ObjetivoPorEje> conMeta = porEje.stream()
+                .map(o -> new ObjetivoPorEje(o.eje(), o.texto(), metas.containsKey(o.eje()) ? metas.get(o.eje()).completa(o.eje()) : null)).toList();
+        return new ObjetivosDelDiagnostico(ordenados(conMeta, prioridad), prioridad, primeraAccion, trato);
+    }
+
+    /** Las tres respuestas de la meta de un eje, a medida que se leen. La meta solo existe si están todas las que ese eje pide. */
+    private static final class PartesDeLaMeta {
+
+        private BigDecimal meta;
+        private BigDecimal partida;
+        private String unidad;
+
+        void poner(DestinoDeRespuesta destino, Respuesta r) {
+            switch (destino.parteDeLaMeta().orElseThrow()) {
+                case META -> meta = r.valorNumero();
+                case PARTIDA -> partida = r.valorNumero();
+                case UNIDAD -> unidad = r.valorTexto() == null ? null : r.valorTexto().trim();
+            }
+        }
+
+        MetaDeclarada completa(EjeDelDiagnostico eje) {
+            String unidadDelEje = eje == EjeDelDiagnostico.RELACIONES ? UNIDAD_DE_LA_ESCALA : unidad;
+            if (meta == null || partida == null || unidadDelEje == null || unidadDelEje.isBlank()) {
+                return null;
+            }
+            return new MetaDeclarada(meta, partida, unidadDelEje);
+        }
     }
 
     private static List<ObjetivoPorEje> ordenados(List<ObjetivoPorEje> porEje, EjeDelDiagnostico prioridad) {

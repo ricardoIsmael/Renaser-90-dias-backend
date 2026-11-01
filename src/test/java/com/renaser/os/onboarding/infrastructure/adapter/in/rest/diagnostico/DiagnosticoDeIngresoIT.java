@@ -64,10 +64,10 @@ class DiagnosticoDeIngresoIT {
         String aprendiz = sesion(aprendizId, "APRENDIZ", true);
         String mentor = sesion(UUID.randomUUID(), "MENTOR", false);
 
-        // 1. El borrador sembrado: portada y seis secciones, 31 preguntas; no se puede publicar con la declaración de relleno
+        // 1. El borrador sembrado: portada y seis secciones, 39 preguntas (las 31 del formulario del dueño y las 8 de la meta medible); no se puede publicar con la declaración de relleno
         JsonNode borrador = ok(pedir("GET", ADMIN, admin, null));
         assertThat(borrador.get("secciones")).hasSize(7);
-        assertThat(borrador.get("totales").get("preguntas").asInt()).isEqualTo(31);
+        assertThat(borrador.get("totales").get("preguntas").asInt()).isEqualTo(39);
         assertThat(borrador.get("puedePublicar").get("ok").asBoolean()).isFalse();
         assertThat(borrador.get("publicada").isNull()).isTrue();
         assertThat(pedir("POST", ADMIN + "/publicar", admin, Map.of("versionBase", 0)).statusCode()).isEqualTo(400);
@@ -128,8 +128,25 @@ class DiagnosticoDeIngresoIT {
             assertThat(roca.get("origin").asText()).isEqualTo("DIAGNOSTICO");
             assertThat(roca.get("confirmed").asBoolean()).isFalse();
         });
+        // ...con la meta medible que declaró en el diagnóstico: Cuerpo de 92 a 85 kg, Negocio de 10 000 a 15 000 soles al mes, Relaciones de 5 a 8 sobre 10
+        Map<String, JsonNode> porEje = new java.util.HashMap<>();
+        rocas.forEach(roca -> porEje.put(roca.get("eje").asText(), roca));
+        assertThat(porEje.get("CUERPO").get("meta").decimalValue()).isEqualByComparingTo("85");
+        assertThat(porEje.get("CUERPO").get("lineaBase").decimalValue()).isEqualByComparingTo("92");
+        assertThat(porEje.get("CUERPO").get("unidad").asText()).isEqualTo("kg");
+        assertThat(porEje.get("TRABAJO").get("meta").decimalValue()).isEqualByComparingTo("15000");
+        assertThat(porEje.get("TRABAJO").get("unidad").asText()).isEqualTo("S/ al mes");
+        assertThat(porEje.get("RELACIONES").get("meta").decimalValue()).isEqualByComparingTo("8");
+        assertThat(porEje.get("RELACIONES").get("unidad").asText()).isEqualTo("/10");
+
+        // ...y con ella el plan mensual saca la cifra del mes
+        for (JsonNode plan : ok(pedir("GET", "/api/v1/rocks/monthly/plan", aprendiz, null))) {
+            assertThat(plan.get("meses").get(0).get("estado").asText()).as(plan.get("eje").asText()).isEqualTo("CON_CIFRA");
+        }
+
         JsonNode confirmada = ok(pedir("PUT", "/api/v1/rocks/master/CUERPO", aprendiz, Map.of("objetivo", "Entrenar cuatro días por semana")));
         assertThat(confirmada.get("confirmed").asBoolean()).isTrue();
+        assertThat(confirmada.get("meta").decimalValue()).as("confirmar solo con el texto no borra la meta").isEqualByComparingTo("85");
         assertThat(confirmada.get("objetivo").asText()).isEqualTo("Entrenar cuatro días por semana");
         HttpResponse<String> fijo = pedir("PUT", "/api/v1/rocks/master/CUERPO", aprendiz, Map.of("objetivo", "Otra cosa"));
         assertThat(fijo.statusCode()).isEqualTo(409);
@@ -139,6 +156,21 @@ class DiagnosticoDeIngresoIT {
         JsonNode lectura = ok(pedir("GET", ADMIN + "/personas/" + aprendizId, admin, null));
         assertThat(lectura.get("estado").asText()).isEqualTo("COMPLETADO");
         assertThat(lectura.get("secciones")).isNotEmpty();
+
+        // ...y queda constancia de quién lo abrió: Administración y el líder sí; la propia persona (que lo leyó varias veces) y el mentor sin grupo, no
+        String lider = sesion(UUID.randomUUID(), "LIDER_MENTORES", false);
+        ok(pedir("GET", "/api/v1/leadership/people/" + aprendizId + "/diagnostico", lider, null));
+        assertThat(pedir("GET", "/api/v1/mentor/groups/" + UUID.randomUUID() + "/learners/" + aprendizId + "/diagnostico", mentor, null).statusCode()).isEqualTo(403);
+        esperarQueElOutboxTermine();
+        List<Map<String, Object>> constancias = jdbc.queryForList("""
+                SELECT rol_consultor, tipo, semana_desde, grupo_id FROM renaser.consultas_de_ficha WHERE persona_id = ? ORDER BY consultada_en
+                """, aprendizId);
+        assertThat(constancias).extracting(c -> c.get("rol_consultor")).containsExactlyInAnyOrder("ADMIN", "MENTOR_LEAD");
+        assertThat(constancias).allSatisfy(c -> {
+            assertThat(c.get("tipo")).isEqualTo("DIAGNOSTICO");
+            assertThat(c.get("semana_desde")).isNull();
+        });
+
         assertThat(ok(pedir("GET", "/api/v1/mapa-renacimiento", aprendiz, null)).get("stageCompleted").asBoolean()).isTrue();
         HttpResponse<String> mapa = pedir("POST", "/api/v1/mapa-renacimiento/completar", aprendiz, null);
         assertThat(mapa.statusCode()).isEqualTo(409);
@@ -162,8 +194,8 @@ class DiagnosticoDeIngresoIT {
                 Map<String, Object> r = new java.util.LinkedHashMap<>();
                 r.put("preguntaId", p.get("id").asInt());
                 switch (p.get("tipo").asText()) {
-                    case "TEXTO", "AREA_TEXTO" -> r.put("valorTexto", "Respuesta de prueba");
-                    case "NUMERO" -> r.put("valorNumero", 34);
+                    case "TEXTO", "AREA_TEXTO" -> r.put("valorTexto", textoDeLaMeta(p));
+                    case "NUMERO" -> r.put("valorNumero", numeroDeLaMeta(p));
                     case "SELECCION_UNICA" -> r.put("valorTexto", valorDeLaOpcion(p));
                     case "CUADRICULA" -> r.put("valorJson", filasConPuntaje(p));
                     case "CASILLA" -> r.put("valorBooleano", true);
@@ -175,6 +207,32 @@ class DiagnosticoDeIngresoIT {
             }
         }
         return respuestas;
+    }
+
+    /** La unidad de la meta lleva una unidad de verdad (kg, soles); el resto, un texto cualquiera. */
+    private static String textoDeLaMeta(JsonNode p) {
+        return switch (destinoDe(p)) {
+            case "UNIDAD_CUERPO" -> "kg";
+            case "UNIDAD_NEGOCIO" -> "S/ al mes";
+            default -> "Respuesta de prueba";
+        };
+    }
+
+    /** Cuerpo: de 92 a 85 kg; Negocio: de 10 000 a 15 000 soles al mes; Relaciones: de 5 a 8 sobre 10. Cualquier otro número: la edad. */
+    private static int numeroDeLaMeta(JsonNode p) {
+        return switch (destinoDe(p)) {
+            case "PARTIDA_CUERPO" -> 92;
+            case "META_CUERPO" -> 85;
+            case "PARTIDA_NEGOCIO" -> 10000;
+            case "META_NEGOCIO" -> 15000;
+            case "PARTIDA_RELACIONES" -> 5;
+            case "META_RELACIONES" -> 8;
+            default -> 34;
+        };
+    }
+
+    private static String destinoDe(JsonNode p) {
+        return p.get("alimenta").isNull() ? "" : p.get("alimenta").asText();
     }
 
     private static String valorDeLaOpcion(JsonNode p) {
@@ -226,6 +284,7 @@ class DiagnosticoDeIngresoIT {
                 VALUES (?, ?, 'Persona IT', CAST(? AS renaser.rol_usuario), 'ACTIVO', ?)
                 """, id, id + "@renaser.test", rol, encoder.encode(CLAVE));
         usuarios.add(id);
+        com.renaser.os.FormacionesDePrueba.alPersonalLeAsignaLaEscuela(jdbc, id, rol);
         if (conPrograma) {
             jdbc.update("INSERT INTO renaser.participantes_programa (usuario_id, dia_programa, programa_activado_en) VALUES (?, 10, now())", id);
         }
@@ -234,6 +293,19 @@ class DiagnosticoDeIngresoIT {
         String token = login.headers().firstValue("X-Auth-Token").orElseThrow();
         tokens.add(token);
         return token;
+    }
+
+    /** Los oyentes de Modulith corren después del commit y en otro hilo: se espera a que el outbox quede sin pendientes. */
+    private void esperarQueElOutboxTermine() throws InterruptedException {
+        long limite = System.currentTimeMillis() + 20_000;
+        while (pendientesEnElOutbox() > 0 && System.currentTimeMillis() < limite) {
+            Thread.sleep(200);
+        }
+        assertThat(pendientesEnElOutbox()).as("publicaciones sin completar en el outbox").isZero();
+    }
+
+    private int pendientesEnElOutbox() {
+        return jdbc.queryForObject("SELECT count(*) FROM event_publication WHERE completion_date IS NULL", Integer.class);
     }
 
     private JsonNode ok(HttpResponse<String> respuesta) throws Exception {

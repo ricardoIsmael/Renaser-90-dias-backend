@@ -1,5 +1,6 @@
 package com.renaser.os.onboarding.application.services;
 
+import com.renaser.os.onboarding.api.DiagnosticoDeLaPersonaFinder.LectorDelDiagnostico;
 import com.renaser.os.onboarding.api.DiagnosticoDeLaPersonaFinder.LecturaDelDiagnostico;
 import com.renaser.os.onboarding.application.ports.in.diagnostico.DiagnosticoDeLaPersonaUseCase.DiagnosticoAbierto;
 import com.renaser.os.onboarding.application.ports.in.diagnostico.DiagnosticoDeLaPersonaUseCase.ResultadoDeTerminar;
@@ -70,6 +71,7 @@ class DiagnosticoDeLaPersonaServiceTest {
     @Mock private RespuestasDelDiagnosticoPort hayRespuestas;
     @Mock private EtapaOnboardingPort etapas;
     @Mock private ConsultarFormacionDeLaPersonaPort formaciones;
+    @Mock private ConstanciaDeLecturasDelDiagnostico constancia;
 
     private DiagnosticoDeLaPersonaService servicio;
     private LecturaDelDiagnosticoService lecturas;
@@ -90,7 +92,7 @@ class DiagnosticoDeLaPersonaServiceTest {
     @BeforeEach
     void setUp() {
         FichaVigenteDeLaPersona vigente = new FichaVigenteDeLaPersona(versiones, formaciones, respuestas, hayRespuestas, etapas);
-        lecturas = new LecturaDelDiagnosticoService(estados, actores, borrador, etapas, formaciones, vigente);
+        lecturas = new LecturaDelDiagnosticoService(estados, actores, borrador, etapas, formaciones, vigente, constancia);
         servicio = new DiagnosticoDeLaPersonaService(estados, guardarEstado, actores, versiones, guardarRespuesta, etapas, formaciones, vigente, lecturas,
                 RELOJ);
         persona = UserId.of(UUID.randomUUID());
@@ -339,6 +341,50 @@ class DiagnosticoDeLaPersonaServiceTest {
         assertThat(preguntas.get(1).respuesta().texto()).isEqualTo("Negocios.");
         assertThat(preguntas.get(2).retirada()).isTrue();
         assertThat(preguntas.get(2).respuesta()).isNull();
+    }
+
+    private void conUnDiagnosticoRespondido() {
+        when(actores.deActor(persona)).thenReturn(Optional.of(new ActorOnboarding(persona, false, "María Pérez", false)));
+        conDiagnostico(1);
+        versionPublicada(1);
+        formacion(Formacion.ESCUELA, "Escuela Renaser", 90);
+        when(etapas.completadaEn(persona, Diagnostico.FLUJO)).thenReturn(Optional.empty());
+        respuestasGuardadas(respuesta(1, "María"));
+        when(borrador.retiradas()).thenReturn(List.of());
+    }
+
+    @Test
+    @DisplayName("lecturaDe(persona, lector): la lectura es la misma y deja constancia de quién la abrió")
+    void lecturaDeOtroDejaConstancia() {
+        conUnDiagnosticoRespondido();
+        LectorDelDiagnostico lector = new LectorDelDiagnostico(ADMIN, null, null);
+
+        LecturaDelDiagnostico lectura = lecturas.lecturaDe(persona, lector);
+
+        assertThat(lectura.secciones()).isNotEmpty();
+        verify(constancia).dejar(persona, lector);
+    }
+
+    @Test
+    @DisplayName("lecturaDe(persona): la propia persona y SER leen sin dejar constancia")
+    void lecturaPropiaNoDejaConstancia() {
+        conUnDiagnosticoRespondido();
+
+        assertThat(lecturas.lecturaDe(persona).secciones()).isNotEmpty();
+
+        verify(constancia, never()).dejar(any(), any());
+    }
+
+    @Test
+    @DisplayName("lecturaDe(persona, lector): una ficha estándar no enseña nada y tampoco deja constancia")
+    void sinDiagnosticoNoDejaConstancia() {
+        when(actores.deActor(persona)).thenReturn(Optional.of(new ActorOnboarding(persona, false, "María Pérez", false)));
+        when(formaciones.de(persona)).thenReturn(Optional.empty());
+        when(estados.deUsuario(persona)).thenReturn(Optional.empty());
+
+        assertThat(lecturas.lecturaDe(persona, new LectorDelDiagnostico(ADMIN, null, null)).secciones()).isEmpty();
+
+        verify(constancia, never()).dejar(any(), any());
     }
 
     @Test

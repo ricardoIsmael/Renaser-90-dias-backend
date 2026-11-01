@@ -42,4 +42,13 @@ Estado al 2026-10-31. `[x]` = hecho y con prueba; `[ ]` = pendiente. Los número
 - [x] T060 Pruebas unitarias de dominio, servicios, SER, mentor y líder; autorización negativa (403) y aislamiento.
 - [ ] T061 `TZ=UTC ./mvnw -B clean verify` completo (migraciones V143–V147 contra Postgres, `DiagnosticoDeIngresoIT`, `ArchitectureTest`, `EndpointAuthorizationDeclarationTest`, `FuncionalidadDeclaradaTest`).
 - [ ] T062 Declaración de responsabilidad y consentimiento: la escribe el dueño; Administración la pega en el editor y publica.
-- [ ] T063 Decidir con el dueño la meta numérica de los objetivos (hitos 30/60/90 y cifra del mes) y si la lectura del líder deja registro de consulta.
+- [x] T063 Decidido por el dueño (2026-11-01): el diagnóstico pregunta la meta medible (T070–T073) y la lectura del diagnóstico deja registro de consulta (T074–T076).
+
+## Fase 8 — Dos decisiones del dueño (2026-11-01, V157)
+- [x] T070 Ocho destinos nuevos de «alimenta» (`META_`/`UNIDAD_`/`PARTIDA_` de Cuerpo y Negocio, `META_`/`PARTIDA_RELACIONES`) con sus reglas de tipo y de número (Relaciones: entero del 1 al 10).
+- [x] T071 V157: el CHECK de `alimenta` y ocho preguntas opcionales en el borrador sembrado, debajo del objetivo de cada eje.
+- [x] T072 `ObjetivosDelDiagnostico.MetaDeclarada` → `RocaMaestra.delDiagnostico(…, meta, …)` (la meta no se borra al confirmar solo con el texto) → `ObjetivoDelMesService` (`DatosDelEje.delObjetivo`, `Magnitud.deLaUnidad`).
+- [x] T073 App: los destinos en los esquemas y el editor, y la validación de la persona (Relaciones 1 a 10, Cuerpo/Negocio de cero o más).
+- [x] T074 V157: `consultas_de_ficha.tipo` (`SEMANA` | `DIAGNOSTICO`), `semana_desde` NULL solo en el diagnóstico y los roles mentor, guía y Soporte TI solo ahí; `ConsultaDeFicha` con `TipoDeConsulta`.
+- [x] T075 `DiagnosticoDeLaPersonaFinder.lecturaDe(persona, lector)` → `DiagnosticoConsultadoEvent` → `RegistroDeLecturasDelDiagnosticoService` (idempotente por id); los tres lectores (mentor, líder, Administración) lo usan; la propia persona y SER, no.
+- [x] T076 El resumen de las 20:00 al mentor sigue leyendo solo `tipo = SEMANA`.

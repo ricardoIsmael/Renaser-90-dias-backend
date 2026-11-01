@@ -63,6 +63,10 @@ final class Fichas {
         return Respuesta.crear(TipoPreguntaOnboarding.TEXTO, PERSONA, preguntaId, valor, null, null, null, null, null, RELOJ);
     }
 
+    static Respuesta numero(int preguntaId, double valor) {
+        return Respuesta.crear(TipoPreguntaOnboarding.NUMERO, PERSONA, preguntaId, null, BigDecimal.valueOf(valor), null, null, null, null, RELOJ);
+    }
+
     static Respuesta unica(int preguntaId, String valor) {
         return Respuesta.crear(TipoPreguntaOnboarding.SELECCION_UNICA, PERSONA, preguntaId, valor, null, null, null, null, null, RELOJ);
     }

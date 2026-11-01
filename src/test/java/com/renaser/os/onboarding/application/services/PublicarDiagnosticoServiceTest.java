@@ -32,6 +32,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /** Publicar el diagnóstico (spec 026, US5): la declaración pendiente lo bloquea, las versiones no se pisan y la vista previa se escribe como la ve la persona. */
@@ -44,6 +45,7 @@ class PublicarDiagnosticoServiceTest {
     private BorradorEnMemoria borrador;
     private VersionesEnMemoria versiones;
     private PublicarDiagnosticoService service;
+    private final DiagnosticoDeLaPersonaFinder lecturas = mock(DiagnosticoDeLaPersonaFinder.class);
 
     @BeforeEach
     void preparar() {
@@ -56,7 +58,7 @@ class PublicarDiagnosticoServiceTest {
         ConsultarFormacionDeLaPersonaPort formaciones = mock(ConsultarFormacionDeLaPersonaPort.class);
         when(formaciones.nombreDe(Formacion.ESCUELA)).thenReturn("Escuela Renaser");
         service = new PublicarDiagnosticoService(new GuardiaDelDiagnostico(actores), borrador, versiones, formaciones,
-                mock(DiagnosticoDeLaPersonaFinder.class), FixedClock.at(AHORA));
+                lecturas, FixedClock.at(AHORA));
     }
 
     private void conPreguntaYConsentimiento(String declaracion) {
@@ -138,7 +140,20 @@ class PublicarDiagnosticoServiceTest {
         assertThatThrownBy(() -> service.plantilla(MENTOR)).isInstanceOf(NotAuthorizedException.class);
         assertThatThrownBy(() -> service.exportar(MENTOR)).isInstanceOf(NotAuthorizedException.class);
         assertThatThrownBy(() -> service.vistaPrevia(MENTOR, null, null)).isInstanceOf(NotAuthorizedException.class);
+        assertThatThrownBy(() -> service.lecturaDe(MENTOR, ADMIN)).isInstanceOf(NotAuthorizedException.class);
         assertThat(service.plantilla(ADMIN)).contains("Sección");
+        verifyNoInteractions(lecturas);
+    }
+
+    @Test
+    @DisplayName("spec 026: Administración lee el diagnóstico de una persona y se dice quién lo abre, sin grupo ni mentor (llega por su ficha)")
+    void lecturaDeUnaPersonaDejaConstancia() {
+        UserId persona = UserId.of(UUID.randomUUID());
+        var lectura = DiagnosticoDeLaPersonaFinder.LecturaDelDiagnostico.sinDiagnostico(
+                new DiagnosticoDeLaPersonaFinder.PersonaLeida(persona.value().toString(), "Ana"), "CON_DIAGNOSTICO", "COMPLETADO", 1, null);
+        when(lecturas.lecturaDe(persona, new DiagnosticoDeLaPersonaFinder.LectorDelDiagnostico(ADMIN, null, null))).thenReturn(lectura);
+
+        assertThat(service.lecturaDe(ADMIN, persona)).isSameAs(lectura);
     }
 
     /** Las versiones publicadas, en memoria: append-only como la tabla. */

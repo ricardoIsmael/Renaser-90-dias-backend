@@ -3,6 +3,7 @@ package com.renaser.os.mentoring.application.services;
 import com.renaser.os.community.api.AcompanamientoFinder;
 import com.renaser.os.mentoring.application.ports.in.ConsultarDiagnosticoDelAlumnoUseCase.ConsultaDiagnostico;
 import com.renaser.os.onboarding.api.DiagnosticoDeLaPersonaFinder;
+import com.renaser.os.onboarding.api.DiagnosticoDeLaPersonaFinder.LectorDelDiagnostico;
 import com.renaser.os.onboarding.api.DiagnosticoDeLaPersonaFinder.LecturaDelDiagnostico;
 import com.renaser.os.onboarding.api.DiagnosticoDeLaPersonaFinder.PersonaLeida;
 import com.renaser.os.shared.domain.FixedClock;
@@ -23,6 +24,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -50,14 +53,14 @@ class DiagnosticoDelAlumnoServiceTest {
         when(acompanamiento.acompanaVigente(mentor, grupo, RELOJ.now())).thenReturn(true);
         when(acompanamiento.aprendicesVigentes(grupo, RELOJ.now())).thenReturn(List.of(alumno));
         when(usuarios.findById(mentor)).thenReturn(Optional.of(new UserSummary(mentor, "Luisa", null, UserRole.MENTOR, UserStatus.ACTIVE)));
-        when(diagnostico.lecturaDe(alumno)).thenReturn(lectura);
+        when(diagnostico.lecturaDe(eq(alumno), any())).thenReturn(lectura);
     }
 
     @Test
-    @DisplayName("el acompañante vigente lee el diagnóstico de un alumno de su grupo")
+    @DisplayName("el acompañante vigente lee el diagnóstico de un alumno de su grupo, y se dice quién lo abre y desde qué grupo")
     void acompananteVigente() {
         assertThat(servicio.diagnosticoDe(new ConsultaDiagnostico(mentor, grupo, alumno))).isSameAs(lectura);
-        verify(diagnostico).lecturaDe(alumno);
+        verify(diagnostico).lecturaDe(alumno, new LectorDelDiagnostico(mentor, grupo, mentor));
     }
 
     @Test

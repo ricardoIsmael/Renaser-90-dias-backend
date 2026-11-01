@@ -57,6 +57,17 @@ class PreguntaDelDiagnosticoTest {
     }
 
     @Test
+    @DisplayName("la meta y el punto de partida son números; la unidad, un texto")
+    void destinosDeLaMeta() {
+        assertThatThrownBy(() -> nueva(TipoPreguntaOnboarding.TEXTO, null, List.of(), DestinoDeRespuesta.META_CUERPO)).hasMessageContaining("número");
+        assertThatThrownBy(() -> nueva(TipoPreguntaOnboarding.TEXTO, null, List.of(), DestinoDeRespuesta.PARTIDA_RELACIONES)).hasMessageContaining("número");
+        assertThatThrownBy(() -> nueva(TipoPreguntaOnboarding.NUMERO, null, List.of(), DestinoDeRespuesta.UNIDAD_NEGOCIO)).hasMessageContaining("texto");
+        assertThat(nueva(TipoPreguntaOnboarding.NUMERO, null, List.of(), DestinoDeRespuesta.META_NEGOCIO).alimenta()).isEqualTo(DestinoDeRespuesta.META_NEGOCIO);
+        assertThat(nueva(TipoPreguntaOnboarding.TEXTO, null, List.of(), DestinoDeRespuesta.UNIDAD_CUERPO).largoMaximo()).isEqualTo(20);
+        assertThat(nueva(TipoPreguntaOnboarding.NUMERO, null, List.of(), DestinoDeRespuesta.META_CUERPO).esProtegida()).isFalse();
+    }
+
+    @Test
     @DisplayName("la que alimenta un objetivo tiene tope de 500 caracteres; las demás, no")
     void largoMaximo() {
         assertThat(nueva(TipoPreguntaOnboarding.AREA_TEXTO, null, List.of(), DestinoDeRespuesta.OBJETIVO_NEGOCIO).largoMaximo()).isEqualTo(500);

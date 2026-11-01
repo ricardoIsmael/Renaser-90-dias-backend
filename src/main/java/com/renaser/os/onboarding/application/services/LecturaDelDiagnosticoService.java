@@ -37,15 +37,18 @@ public class LecturaDelDiagnosticoService implements DiagnosticoDeLaPersonaFinde
     private final EtapaOnboardingPort etapas;
     private final ConsultarFormacionDeLaPersonaPort formaciones;
     private final FichaVigenteDeLaPersona vigente;
+    private final ConstanciaDeLecturasDelDiagnostico constancia;
 
     public LecturaDelDiagnosticoService(LoadEstadoOnboardingPort estados, ConsultarActorPort actores, BorradorDelDiagnosticoPort borrador,
-                                        EtapaOnboardingPort etapas, ConsultarFormacionDeLaPersonaPort formaciones, FichaVigenteDeLaPersona vigente) {
+                                        EtapaOnboardingPort etapas, ConsultarFormacionDeLaPersonaPort formaciones, FichaVigenteDeLaPersona vigente,
+                                        ConstanciaDeLecturasDelDiagnostico constancia) {
         this.estados = estados;
         this.actores = actores;
         this.borrador = borrador;
         this.etapas = etapas;
         this.formaciones = formaciones;
         this.vigente = vigente;
+        this.constancia = constancia;
     }
 
     @Override
@@ -75,6 +78,16 @@ public class LecturaDelDiagnosticoService implements DiagnosticoDeLaPersonaFinde
     }
 
     @Override
+    @Transactional
+    public LecturaDelDiagnostico lecturaDe(UserId persona, LectorDelDiagnostico lector) {
+        LecturaDelDiagnostico lectura = lecturaDe(persona);
+        if (!lectura.secciones().isEmpty()) {
+            constancia.dejar(persona, lector);
+        }
+        return lectura;
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public ObjetivosPreparados objetivosDe(UserId persona) {
         Optional<EstadoOnboarding> estado = estados.deUsuario(persona).filter(EstadoOnboarding::conDiagnostico);
@@ -83,8 +96,13 @@ public class LecturaDelDiagnosticoService implements DiagnosticoDeLaPersonaFinde
         }
         ObjetivosDelDiagnostico nacidos = ObjetivosDelDiagnostico.de(vigente.fichaDe(persona, estado.get().fichaVersion()),
                 vigente.respuestasPorPregunta(persona));
-        return new ObjetivosPreparados(nacidos.objetivos().stream().map(o -> new ObjetivoPreparado(o.eje().name(), o.texto())).toList(),
+        return new ObjetivosPreparados(nacidos.objetivos().stream().map(o -> new ObjetivoPreparado(o.eje().name(), o.texto(), metaDe(o))).toList(),
                 nacidos.prioridad() == null ? null : nacidos.prioridad().name(), nacidos.primeraAccion());
+    }
+
+    private static MetaPreparada metaDe(ObjetivosDelDiagnostico.ObjetivoPorEje objetivo) {
+        var meta = objetivo.meta();
+        return meta == null ? null : new MetaPreparada(meta.meta(), meta.partida(), meta.unidad());
     }
 
     @Override

@@ -3,6 +3,7 @@ package com.renaser.os.mentoring.application.services;
 import com.renaser.os.community.api.AcompanamientoFinder;
 import com.renaser.os.mentoring.application.ports.in.ConsultarDiagnosticoDelAlumnoUseCase;
 import com.renaser.os.onboarding.api.DiagnosticoDeLaPersonaFinder;
+import com.renaser.os.onboarding.api.DiagnosticoDeLaPersonaFinder.LectorDelDiagnostico;
 import com.renaser.os.onboarding.api.DiagnosticoDeLaPersonaFinder.LecturaDelDiagnostico;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -35,6 +36,7 @@ public class DiagnosticoDelAlumnoService implements ConsultarDiagnosticoDelAlumn
         this.clock = clock;
     }
 
+    /** Después de autorizar, lee y deja constancia de quién lo abrió (spec 026): el camino que termina en 403 no publica nada. */
     @Override
     public LecturaDelDiagnostico diagnosticoDe(ConsultaDiagnostico consulta) {
         Instant ahora = clock.now();
@@ -45,7 +47,7 @@ public class DiagnosticoDelAlumnoService implements ConsultarDiagnosticoDelAlumn
         if (!acompanamiento.aprendicesVigentes(consulta.grupoId(), ahora).contains(consulta.alumnoId())) {
             throw new NotAuthorizedException("Ese alumno no pertenece al grupo que acompanas");
         }
-        return diagnostico.lecturaDe(consulta.alumnoId());
+        return diagnostico.lecturaDe(consulta.alumnoId(), new LectorDelDiagnostico(consulta.actorId(), consulta.grupoId(), consulta.actorId()));
     }
 
     private void requireCuentaActiva(UserId actorId) {

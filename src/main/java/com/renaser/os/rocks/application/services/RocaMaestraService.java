@@ -98,15 +98,32 @@ public class RocaMaestraService implements ConsultarRocasMaestrasUseCase, Defini
         boolean creo = false;
         for (var objetivo : diagnosticoPort.de(actorId)) {
             if (actuales.stream().noneMatch(roca -> roca.eje() == objetivo.eje())) {
-                creo |= crearDelDiagnostico(actorId, objetivo.eje(), objetivo.texto());
+                creo |= crearDelDiagnostico(actorId, objetivo.eje(), objetivo.texto(), metaDe(objetivo.meta()));
             }
         }
         return creo ? loadRocaMaestraPort.deParticipante(actorId) : actuales;
     }
 
-    private boolean crearDelDiagnostico(UserId actorId, EjeObjetivo eje, String texto) {
+    /**
+     * La meta medible que declaró en el diagnóstico, si es una meta de verdad: con los numeros que acepta {@link MetaCuantitativa} (cero o más, la meta
+     * distinta del punto de partida, una unidad corta). Si no lo es, el objetivo nace cualitativo y el plan mensual dice «sin cifra»: un dato de más
+     * nunca impide que la persona tenga su objetivo.
+     */
+    private static MetaCuantitativa metaDe(ConsultarObjetivosDelDiagnosticoPort.MetaDelDiagnostico declarada) {
+        if (declarada == null) {
+            return null;
+        }
         try {
-            guardarRocaMaestraPort.guardar(RocaMaestra.delDiagnostico(RocaMaestraId.of(idGenerator.newId()), actorId, eje, texto, clock.now()));
+            return MetaCuantitativa.desde(declarada.partida(), declarada.meta(), declarada.unidad());
+        } catch (IllegalArgumentException | NullPointerException noEsUnaMeta) {
+            LOG.info("[rocks] La meta del diagnostico no es una meta valida ({}): el objetivo queda en palabras", noEsUnaMeta.getMessage());
+            return null;
+        }
+    }
+
+    private boolean crearDelDiagnostico(UserId actorId, EjeObjetivo eje, String texto, MetaCuantitativa meta) {
+        try {
+            guardarRocaMaestraPort.guardar(RocaMaestra.delDiagnostico(RocaMaestraId.of(idGenerator.newId()), actorId, eje, texto, meta, clock.now()));
             return true;
         } catch (RuntimeException e) {
             LOG.info("[rocks] El objetivo del eje {} de {} ya lo habia creado otro pedido: {}", eje, actorId, e.getClass().getSimpleName());
