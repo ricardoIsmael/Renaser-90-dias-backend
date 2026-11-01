@@ -35,6 +35,7 @@ class CuestionarioPersistenceMapper {
             case AUDIO -> TipoPreguntaOnboarding.AUDIO;
             case FIRMA -> TipoPreguntaOnboarding.FIRMA;
             case CASILLA -> TipoPreguntaOnboarding.CASILLA;
+            case CUADRICULA -> TipoPreguntaOnboarding.CUADRICULA;
             case FECHA -> TipoPreguntaOnboarding.FECHA;
             case ARCHIVO -> TipoPreguntaOnboarding.ARCHIVO;
         };

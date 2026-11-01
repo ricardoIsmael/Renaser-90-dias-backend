@@ -90,6 +90,12 @@ class MapaPersistenceAdapter implements LoadMapaPort, ReemplazarListaMapaPort, E
                 .collect(Collectors.toSet());
     }
 
+    @Override
+    public java.util.Optional<java.time.Instant> completadaEn(UserId participanteId, String flujo) {
+        return etapasRepository.findById(new EtapaOnboardingCompletadaJpaEntity.Clave(participanteId.value(), flujo))
+                .map(EtapaOnboardingCompletadaJpaEntity::getCompletadoEn);
+    }
+
     /** Idempotente: si la etapa ya estaba marcada, se conserva la fecha original. */
     @Override
     public void marcarCompletada(UserId participanteId, String flujo) {

@@ -11,6 +11,8 @@ public enum TipoPreguntaOnboarding {
     AUDIO,
     FIRMA,
     CASILLA,
+    /** Varias filas con la misma escala (spec 026): las filas son opciones y la respuesta es un JSON {fila: puntaje}. */
+    CUADRICULA,
     FECHA,
     ARCHIVO
 }
