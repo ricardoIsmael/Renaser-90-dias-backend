@@ -36,7 +36,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -98,7 +98,7 @@ class ReglaDeRolPersonalizadoTest {
     }
 
     @Test
-    @DisplayName("/mias: eventos y sus hijas en noDisponibles, nada en apagadas, y sin leer la cuenta")
+    @DisplayName("/mias: eventos y sus hijas en noDisponibles, nada en apagadas, y la cuenta se lee una vez por llamada (por radar.fichas)")
     void noDisponiblesEnMias() {
         MisFuncionalidades suyas = mias.mias(mentorJunior);
 
@@ -106,7 +106,9 @@ class ReglaDeRolPersonalizadoTest {
                 "eventos.asistencia");
         assertThat(suyas.apagadas()).isEmpty();
         assertThat(mias.mias(mentor).noDisponibles()).isEmpty();
-        verify(usuarios, never()).findById(any());
+        // Desde la spec 034 `radar.fichas` apaga por defecto a ciertos roles, y evaluarla obliga a leer el rol: una lectura por llamada
+        // (dos llamadas arriba), no una por funcionalidad. Antes de la 034 aquí no se leía la cuenta.
+        verify(usuarios, times(2)).findById(any());
     }
 
     @Test
