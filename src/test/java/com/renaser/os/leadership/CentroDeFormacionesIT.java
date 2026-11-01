@@ -72,6 +72,7 @@ class CentroDeFormacionesIT {
 
     @AfterEach
     void limpiar() {
+        com.renaser.os.EventosPendientes.esperarQueTerminen(jdbc);
         usuarios.forEach(id -> jdbc.update("DELETE FROM renaser.usuarios WHERE id = ?", id));
         grupos.forEach(id -> jdbc.update("DELETE FROM renaser.celulas WHERE id = ?", id));
         jdbc.update("DELETE FROM renaser.cohortes WHERE id = ?", cohorte);

@@ -71,6 +71,8 @@ class FormacionesIT {
     @BeforeEach
     void sembrar() {
         reloj.fijar(AHORA);
+        // Un traslado de la prueba anterior sigue moviendo al aprendiz de comunidad y de soporte (spec 024): no se le borra la cuenta a la mitad.
+        com.renaser.os.EventosPendientes.esperarQueTerminen(jdbc);
         jdbc.update("DELETE FROM renaser.usuarios WHERE email LIKE '%@formaciones.test'");
         admin = usuario("ADMIN", "Admin Uno");
     }

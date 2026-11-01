@@ -1,5 +1,6 @@
 package com.renaser.os.community;
 
+import com.renaser.os.EventosPendientes;
 import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.calendar.application.ports.in.confirmacion.ConfirmarAsistenciaUseCase;
@@ -181,6 +182,8 @@ class ComunidadPorFormacionIT {
 
     @AfterEach
     void limpiar() {
+        // Un traslado o un aviso en curso sigue escribiendo sobre las cuentas de la prueba: se espera antes de borrarlas.
+        EventosPendientes.esperarQueTerminen(jdbc);
         eventos.forEach(id -> jdbc.update("DELETE FROM renaser.eventos WHERE id = ?", id));
         cursos.forEach(id -> jdbc.update("DELETE FROM renaser.cursos WHERE id = ?", id));
         usuarios.forEach(id -> jdbc.update("DELETE FROM renaser.notificaciones WHERE usuario_id = ?", id));
