@@ -1,6 +1,7 @@
 package com.renaser.os.academy.application.ports.in.curso;
 
 import com.renaser.os.academy.domain.model.curso.Curso;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 
 import java.util.List;
@@ -23,7 +24,12 @@ import java.util.List;
  */
 public interface ConsultarCursosBloqueadosUseCase {
 
-    List<CursoBloqueado> cursosBloqueados(UserId actorId);
+    default List<CursoBloqueado> cursosBloqueados(UserId actorId) {
+        return cursosBloqueados(actorId, null);
+    }
+
+    /** Spec 024: solo los cursos de la formación de quien pide (nunca los de otra, ni como «bloqueados»). */
+    List<CursoBloqueado> cursosBloqueados(UserId actorId, Formacion formacion);
 
     /**
      * {@code portadaFirmada} es una URL de lectura ya firmada, igual que la de los cursos

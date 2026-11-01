@@ -73,7 +73,7 @@ class ClaseDiariaServiceTest {
 
     private ClaseDiariaService service() {
         return new ClaseDiariaService(loadCursoPort, loadSeccionCursoPort, loadLeccionPort, progresoPort,
-                loadProgresoLeccionPort, completarHabitoUseCase, completarLeccionUseCase);
+                loadProgresoLeccionPort, completarHabitoUseCase, completarLeccionUseCase, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
     }
 
     private static Curso curso(String id, Integer diaDesbloqueo) {

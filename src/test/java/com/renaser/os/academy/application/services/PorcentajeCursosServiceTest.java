@@ -57,7 +57,7 @@ class PorcentajeCursosServiceTest {
     @BeforeEach
     void setUp() {
         service = new PorcentajeCursosService(participacionFinder, loadCursoPort, loadLeccionPort,
-                loadProgresoLeccionPort);
+                loadProgresoLeccionPort, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
     }
 
     private static Curso curso(String id, Integer diaDesbloqueo) {

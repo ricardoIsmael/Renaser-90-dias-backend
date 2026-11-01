@@ -82,7 +82,7 @@ class CatalogoAcademyServiceTest {
     void setUp() {
         service = new CatalogoAcademyService(loadCursoPort, loadSeccionCursoPort, loadLeccionPort,
                 loadRecursoLeccionPort, loadProgresoLeccionPort, saveProgresoLeccionPort, progresoPort,
-                almacenamientoPort, ajustarPuntosPort, CLOCK);
+                almacenamientoPort, ajustarPuntosPort, CLOCK, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
     }
 
     private static Curso curso(String id, boolean publicado, AccesoCurso acceso, Integer diaDesbloqueo) {
