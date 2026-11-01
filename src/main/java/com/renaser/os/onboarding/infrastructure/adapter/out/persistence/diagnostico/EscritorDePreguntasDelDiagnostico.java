@@ -45,7 +45,7 @@ final class EscritorDePreguntasDelDiagnostico {
                             INSERT INTO renaser.preguntas_onboarding
                                 (seccion_id, clave_pregunta, texto, tipo, config_escala, requerida, orden, pregunta_padre_id, ayuda, maximo_opciones,
                                  se_muestra_si_valor, alimenta, formaciones, precarga)
-                            VALUES (:seccion, :clave, :texto, CAST(:tipo AS tipo_pregunta_onboarding), CAST(:escala AS jsonb), :requerida, :orden,
+                            VALUES (:seccion, :clave, :texto, CAST(:tipo AS renaser.tipo_pregunta_onboarding), CAST(:escala AS jsonb), :requerida, :orden,
                                     :padre, :ayuda, :maximo, :valor, :alimenta, string_to_array(:formaciones, ','), :precarga)
                             RETURNING id
                             """)
@@ -59,7 +59,7 @@ final class EscritorDePreguntasDelDiagnostico {
         try {
             jdbc.sql("""
                             UPDATE renaser.preguntas_onboarding SET
-                                texto = :texto, tipo = CAST(:tipo AS tipo_pregunta_onboarding), config_escala = CAST(:escala AS jsonb),
+                                texto = :texto, tipo = CAST(:tipo AS renaser.tipo_pregunta_onboarding), config_escala = CAST(:escala AS jsonb),
                                 requerida = :requerida, pregunta_padre_id = :padre, ayuda = :ayuda, maximo_opciones = :maximo,
                                 se_muestra_si_valor = :valor, alimenta = :alimenta, formaciones = string_to_array(:formaciones, ','), precarga = :precarga
                              WHERE id = :id
