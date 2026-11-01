@@ -58,7 +58,13 @@ public enum TipoNotificacion {
      * V109 (D-274, spec 005): el líder de mentores revisó a personas de tu grupo. Le llega al mentor (o a la guía) una vez
      * al día, a las 20:00 de su zona. Tipo propio y no {@code RESUMEN_SEMANAL} para que se pueda silenciar por separado.
      */
-    REVISION_DEL_LIDER;
+    REVISION_DEL_LIDER,
+
+    /**
+     * V154 (D-306, spec 031): tu análisis 80/20 de la semana o del mes está listo. Tipo propio y no {@code RESUMEN_SEMANAL} (el del
+     * semáforo) para que se pueda silenciar por separado desde Yo → Notificaciones. El texto es fijo: nunca lleva el análisis.
+     */
+    ANALISIS_80_20;
 
     /**
      * Si este aviso sale aunque Soporte TI haya apagado la funcionalidad {@code notificaciones} (spec 002). Solo el de

@@ -282,6 +282,7 @@ se migraron: funcionan y están probadas.
 | `consultar_horarios` | horario resuelto por día, apagado/pausado/obligatorio, **cuota de cambios** restante | nuevo `habits.api.HorarioDelDiaFinder` → `ConsultarPreferenciasHorarioUseCase` (el de `GET /habit-preferences?date=`) |
 | `consultar_rocas` | rocas de hoy/mañana/semana/mes, si el plan de mañana existe, ventana de las 18:00 (D-177 sumó `progreso` y `noventa`) | nuevo `rocks.api.RocasDelAprendizFinder` → dashboard, rocas de mañana, objetivo del mes, `VentanaPlanificacionDiaria` |
 | `consultar_eventos` | eventos de hoy o de los próximos 7 días, con el RSVP | nuevo `calendar.api.EventosDelParticipanteFinder` → `ListarEventosParaVisorUseCase` (audiencia y RSVP intactos) |
+| `consultar_analisis_80_20` | «¿qué mueve más mi avance?», «¿cómo me fue la semana / el mes?»: el último análisis 80/20 LISTO de la persona, semana y mes, con sus cuatro partes y su fecha (spec 031, D-306) | `rag.api.Analisis8020Finder.ultimoListo` (la misma lectura que la hoja «Tu 80/20»; **solo lee**: nunca genera ni llama a la IA, y SER lo explica sin cambiar el plan). Sin análisis todavía lo dice; sin parámetros |
 
 **Horas y fechas, siempre en código** (regla 02): "hoy", "mañana", "faltan 32 min" y la hora local
 salen de `Clock` en la zona del participante; el modelo solo los repite. Cada herramienta tiene

@@ -87,6 +87,8 @@ final class EntradasDelCatalogo {
                 normal("ia.chat", "SER (IA)", "Chat de SER", "El chat de SER y el del curso.", TODOS, NO_APLICA),
                 normal("ia.voz", "SER (IA)", "Voz de SER", "La voz del orbe y la voz en vivo.", TODOS, NO_APLICA),
                 normal("ia.propuestas", "SER (IA)", "Propuestas de SER", "Las propuestas y acciones de SER.", TODOS, NO_APLICA),
+                // Spec 031 (D-306): el analisis 80/20 con IA se apaga solo, sin tocar el chat ni la voz. Las cifras de «Tu 80/20» no dependen de esto.
+                normal("ia.analisis", "SER (IA)", "Análisis 80/20 con IA", "El análisis con IA de la semana y del mes («Tu 80/20»); las cifras se siguen viendo.", TODOS, SALTA),
                 normal("evidencias", "Evidencias", "Mis evidencias", "Ver las evidencias y su revisión.", TODOS, POSPONE),
                 // MENTOR y TRAINEE_GUIDE: ven el chip de la caja en la ficha de su aprendiz (CajaDelMentorController, D-219).
                 // Faltaban (E-620): sin ellos la consola no mostraba su interruptor y un rol personalizado de esa base no

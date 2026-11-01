@@ -19,4 +19,10 @@ public interface LoadRegistroRadarPort {
      * — asi una entrada nueva entre paginas nunca desplaza filas ya cargadas.
      */
     List<RegistroRadar> historialDeParticipante(UserId participanteId, Instant cursor, int tamanoPagina);
+
+    /**
+     * Los registros de la persona entre dos instantes ({@code desde} inclusive, {@code hasta} exclusivo), del más viejo al más nuevo.
+     * Los lee el análisis con IA (spec 031): el periodo de la persona, en su zona, ya convertido a instantes por quien llama.
+     */
+    List<RegistroRadar> entre(UserId participanteId, Instant desde, Instant hasta);
 }

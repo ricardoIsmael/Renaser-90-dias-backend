@@ -67,10 +67,10 @@ class CumplimientoDelLiderIT {
     private static final LocalDate DESDE = LocalDate.of(2026, 10, 10);
     private static final LocalDate VIERNES = LocalDate.of(2026, 10, 16);
     private static final LocalDate MIERCOLES = LocalDate.of(2026, 10, 14);
-    private static final UUID FENIX = UUID.randomUUID();
+    static final UUID FENIX = UUID.randomUUID();
     private static final UUID LIDER = UUID.randomUUID();
-    private static final UUID MENTORA = UUID.randomUUID();
-    private static final UUID ANA = UUID.randomUUID();
+    static final UUID MENTORA = UUID.randomUUID();
+    static final UUID ANA = UUID.randomUUID();
 
     @Autowired
     private ConsultarGrupoDelLiderUseCase grupo;

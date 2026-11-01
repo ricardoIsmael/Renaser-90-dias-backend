@@ -27,6 +27,8 @@ public class InterruptoresDeSer {
     public static final String IA_CHAT = "ia.chat";
     public static final String IA_VOZ = "ia.voz";
     public static final String IA_PROPUESTAS = "ia.propuestas";
+    /** Spec 031: el análisis 80/20 con IA, independiente del chat y de la voz. */
+    public static final String IA_ANALISIS = "ia.analisis";
 
     private final Interruptores interruptores;
     private final CircuitoDeLaIa circuito;
@@ -45,6 +47,14 @@ public class InterruptoresDeSer {
     /** La voz del orbe y la voz en vivo. Medio abierto, {@code true} solo para el pedido que toma la prueba. */
     public boolean vozPara(UserId actor) {
         return interruptores.prendidaPara(IA_VOZ, actor) && circuito.dejaPasar(ParteDeLaIa.VOZ);
+    }
+
+    /**
+     * El análisis 80/20 con IA (spec 031, FR-019): se genera solo con {@code ia.analisis} prendida (y con {@code ia}, su madre). Apagado,
+     * las cifras se siguen viendo y los periodos pendientes se generan al volver, sin duplicar. Estado global: lo consultan procesos sin rol.
+     */
+    public boolean analisisPrendido() {
+        return interruptores.prendida(IA_ANALISIS);
     }
 
     public boolean propuestasPara(UserId actor) {

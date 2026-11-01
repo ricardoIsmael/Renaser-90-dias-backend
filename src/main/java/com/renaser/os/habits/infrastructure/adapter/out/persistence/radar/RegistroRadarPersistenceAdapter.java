@@ -43,6 +43,12 @@ class RegistroRadarPersistenceAdapter implements LoadRegistroRadarPort, SaveRegi
     }
 
     @Override
+    public List<RegistroRadar> entre(UserId participanteId, Instant desde, Instant hasta) {
+        return repository.findByParticipanteIdAndCreadoEnGreaterThanEqualAndCreadoEnLessThanOrderByCreadoEnAsc(
+                participanteId.value(), desde, hasta).stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
     public RegistroRadar save(RegistroRadar registro) {
         return mapper.toDomain(repository.saveAndFlush(mapper.toEntity(registro)));
     }
