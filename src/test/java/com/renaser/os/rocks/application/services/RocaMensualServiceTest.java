@@ -247,11 +247,11 @@ class RocaMensualServiceTest {
     }
 
     @Test
-    @DisplayName("el comando no acepta un mes fuera de los tres del programa")
+    @DisplayName("el comando no acepta un mes fuera de los doce del programa mas largo; que sea de los meses de la persona lo exige el servicio")
     void elComandoRechazaUnMesFueraDeRango() {
         UserId id = actor();
 
-        assertThatThrownBy(() -> new DefinirRocaMensualCommand(id, EjeObjetivo.TRABAJO, 4, "Facturar",
+        assertThatThrownBy(() -> new DefinirRocaMensualCommand(id, EjeObjetivo.TRABAJO, 13, "Facturar",
                 null, null, null))
                 .isInstanceOf(ConstraintViolationException.class);
     }

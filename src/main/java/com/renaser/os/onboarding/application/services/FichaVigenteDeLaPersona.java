@@ -3,7 +3,7 @@ package com.renaser.os.onboarding.application.services;
 import com.renaser.os.onboarding.application.ports.out.diagnostico.ConsultarFormacionDeLaPersonaPort;
 import com.renaser.os.onboarding.application.ports.out.diagnostico.ConsultarFormacionDeLaPersonaPort.FormacionDeLaPersona;
 import com.renaser.os.onboarding.application.ports.out.diagnostico.VersionesDeFichaPort;
-import com.renaser.os.onboarding.application.ports.out.diagnostico.VersionesDeFichaPort.VersionPublicada;
+import com.renaser.os.onboarding.domain.model.diagnostico.VersionPublicada;
 import com.renaser.os.onboarding.application.ports.out.ficha.RespuestasDelDiagnosticoPort;
 import com.renaser.os.onboarding.application.ports.out.mapa.EtapaOnboardingPort;
 import com.renaser.os.onboarding.application.ports.out.respuesta.LoadRespuestaPort;

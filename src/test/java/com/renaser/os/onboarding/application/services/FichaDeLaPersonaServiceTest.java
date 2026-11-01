@@ -82,7 +82,7 @@ class FichaDeLaPersonaServiceTest {
         when(versiones.ultima()).thenReturn(Optional.empty());
         assertThat(service.hayDiagnosticoPublicado()).isFalse();
 
-        when(versiones.ultima()).thenReturn(Optional.of(new VersionesDeFichaPort.VersionPublicada(1,
+        when(versiones.ultima()).thenReturn(Optional.of(new com.renaser.os.onboarding.domain.model.diagnostico.VersionPublicada(1,
                 new com.renaser.os.onboarding.domain.model.diagnostico.FichaDelDiagnostico(java.util.List.of()), admin, "Ana", CLOCK.now())));
         assertThat(service.hayDiagnosticoPublicado()).isTrue();
     }

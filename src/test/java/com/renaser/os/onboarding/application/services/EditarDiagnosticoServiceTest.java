@@ -124,8 +124,15 @@ class EditarDiagnosticoServiceTest {
                 new CondicionDeVisibilidad(padre, "Quizá"), null, Set.of(), null);
         assertThatThrownBy(() -> service.crearPregunta(ADMIN, aOpcionQueNoEsta)).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("opción");
 
+    }
+
+    /** Aparte: el servicio real deshace lo que deja el borrador roto con la transaccion; el borrador en memoria de la prueba no, y la anterior quedaria puesta. */
+    @Test
+    @DisplayName("una condicion que apunta a una pregunta que no existe se rechaza")
+    void condicionAUnaQueNoExiste() {
         PreguntaPedida aUnaQueNoExiste = new PreguntaPedida(SECCION, "¿Dónde?", null, TipoPreguntaOnboarding.TEXTO, true, null, List.of(), null,
                 new CondicionDeVisibilidad(9999, "Sí."), null, Set.of(), null);
+
         assertThatThrownBy(() -> service.crearPregunta(ADMIN, aUnaQueNoExiste)).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("no existe");
     }
 

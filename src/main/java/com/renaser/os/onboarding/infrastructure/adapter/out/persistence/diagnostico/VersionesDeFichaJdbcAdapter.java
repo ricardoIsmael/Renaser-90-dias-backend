@@ -1,5 +1,6 @@
 package com.renaser.os.onboarding.infrastructure.adapter.out.persistence.diagnostico;
 
+import com.renaser.os.onboarding.domain.model.diagnostico.VersionPublicada;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;

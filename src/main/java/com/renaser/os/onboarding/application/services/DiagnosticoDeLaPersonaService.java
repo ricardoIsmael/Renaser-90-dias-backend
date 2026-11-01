@@ -6,7 +6,7 @@ import com.renaser.os.onboarding.application.ports.out.actor.ConsultarActorPort;
 import com.renaser.os.onboarding.application.ports.out.diagnostico.ConsultarFormacionDeLaPersonaPort;
 import com.renaser.os.onboarding.application.ports.out.diagnostico.ConsultarFormacionDeLaPersonaPort.FormacionDeLaPersona;
 import com.renaser.os.onboarding.application.ports.out.diagnostico.VersionesDeFichaPort;
-import com.renaser.os.onboarding.application.ports.out.diagnostico.VersionesDeFichaPort.VersionPublicada;
+import com.renaser.os.onboarding.domain.model.diagnostico.VersionPublicada;
 import com.renaser.os.onboarding.application.ports.out.estado.LoadEstadoOnboardingPort;
 import com.renaser.os.onboarding.application.ports.out.estado.SaveEstadoOnboardingPort;
 import com.renaser.os.onboarding.application.ports.out.mapa.EtapaOnboardingPort;

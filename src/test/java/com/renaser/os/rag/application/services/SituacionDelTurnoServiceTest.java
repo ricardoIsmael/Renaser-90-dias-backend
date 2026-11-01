@@ -197,7 +197,11 @@ class SituacionDelTurnoServiceTest {
         when(situacionPort.de(APRENDIZ)).thenReturn(Optional.of(DIA_12));
         when(agendaPort.deHoyDe(APRENDIZ)).thenThrow(new IllegalStateException("base caida"));
 
-        assertThat(service.de(APRENDIZ)).contains(DIA_12);
+        SituacionDelAprendiz situacion = service.de(APRENDIZ).orElseThrow();
+        assertThat(situacion.diaPrograma()).isEqualTo(DIA_12.diaPrograma());
+        assertThat(situacion.fase()).isEqualTo(DIA_12.fase());
+        assertThat(situacion.hoy()).isEqualTo(DIA_12.hoy());
+        assertThat(situacion.habitos()).isNull();
     }
 
     @Test

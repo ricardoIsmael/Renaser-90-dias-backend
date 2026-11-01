@@ -1,6 +1,7 @@
 package com.renaser.os.onboarding.application.ports.out.diagnostico;
 
 import com.renaser.os.onboarding.domain.model.diagnostico.FichaDelDiagnostico;
+import com.renaser.os.onboarding.domain.model.diagnostico.VersionPublicada;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.Instant;
@@ -22,7 +23,4 @@ public interface VersionesDeFichaPort {
 
     /** De la más nueva a la más vieja. */
     List<VersionPublicada> listar();
-
-    record VersionPublicada(int version, FichaDelDiagnostico ficha, UserId publicadaPor, String publicadaPorNombre, Instant publicadaEn) {
-    }
 }

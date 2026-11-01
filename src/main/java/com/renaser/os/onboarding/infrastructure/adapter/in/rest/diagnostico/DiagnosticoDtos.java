@@ -7,7 +7,7 @@ import com.renaser.os.onboarding.application.ports.in.diagnostico.EditarDiagnost
 import com.renaser.os.onboarding.application.ports.in.diagnostico.EditarDiagnosticoUseCase.PreguntaPedida;
 import com.renaser.os.onboarding.application.ports.in.diagnostico.PublicarDiagnosticoUseCase.BorradorAdministrado;
 import com.renaser.os.onboarding.application.ports.in.diagnostico.PublicarDiagnosticoUseCase.SeccionAdministrada;
-import com.renaser.os.onboarding.application.ports.out.diagnostico.VersionesDeFichaPort.VersionPublicada;
+import com.renaser.os.onboarding.domain.model.diagnostico.VersionPublicada;
 import com.renaser.os.onboarding.domain.model.cuestionario.TipoPreguntaOnboarding;
 import com.renaser.os.onboarding.domain.model.diagnostico.CondicionDeVisibilidad;
 import com.renaser.os.onboarding.domain.model.diagnostico.DestinoDeRespuesta;

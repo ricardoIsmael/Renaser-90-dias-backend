@@ -8,7 +8,7 @@ import com.renaser.os.onboarding.application.ports.in.diagnostico.PublicarDiagno
 import com.renaser.os.onboarding.application.ports.out.diagnostico.BorradorDelDiagnosticoPort;
 import com.renaser.os.onboarding.application.ports.out.diagnostico.ConsultarFormacionDeLaPersonaPort;
 import com.renaser.os.onboarding.application.ports.out.diagnostico.VersionesDeFichaPort;
-import com.renaser.os.onboarding.application.ports.out.diagnostico.VersionesDeFichaPort.VersionPublicada;
+import com.renaser.os.onboarding.domain.model.diagnostico.VersionPublicada;
 import com.renaser.os.onboarding.domain.model.diagnostico.FichaDelDiagnostico;
 import com.renaser.os.onboarding.domain.model.diagnostico.NoSePuedePublicarException;
 import com.renaser.os.onboarding.domain.model.diagnostico.OtraPersonaPublicoException;

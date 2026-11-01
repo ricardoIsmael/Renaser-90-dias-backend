@@ -6,7 +6,7 @@ import com.renaser.os.onboarding.application.ports.out.actor.ConsultarActorPort;
 import com.renaser.os.onboarding.application.ports.out.actor.ConsultarActorPort.ActorOnboarding;
 import com.renaser.os.onboarding.application.ports.out.diagnostico.ConsultarFormacionDeLaPersonaPort;
 import com.renaser.os.onboarding.application.ports.out.diagnostico.VersionesDeFichaPort;
-import com.renaser.os.onboarding.application.ports.out.diagnostico.VersionesDeFichaPort.VersionPublicada;
+import com.renaser.os.onboarding.domain.model.diagnostico.VersionPublicada;
 import com.renaser.os.onboarding.domain.model.cuestionario.TipoPreguntaOnboarding;
 import com.renaser.os.onboarding.domain.model.diagnostico.FichaDelDiagnostico;
 import com.renaser.os.onboarding.domain.model.diagnostico.NoSePuedePublicarException;

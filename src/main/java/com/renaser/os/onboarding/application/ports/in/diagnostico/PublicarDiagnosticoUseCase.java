@@ -2,7 +2,7 @@ package com.renaser.os.onboarding.application.ports.in.diagnostico;
 
 import com.renaser.os.onboarding.application.ports.in.diagnostico.EditarDiagnosticoUseCase.PreguntaAdministrada;
 import com.renaser.os.onboarding.application.ports.in.diagnostico.DiagnosticoDeLaPersonaUseCase.DiagnosticoAbierto;
-import com.renaser.os.onboarding.application.ports.out.diagnostico.VersionesDeFichaPort.VersionPublicada;
+import com.renaser.os.onboarding.domain.model.diagnostico.VersionPublicada;
 import com.renaser.os.onboarding.api.DiagnosticoDeLaPersonaFinder.LecturaDelDiagnostico;
 import com.renaser.os.onboarding.domain.model.diagnostico.SeccionDelDiagnostico;
 import com.renaser.os.shared.domain.Formacion;

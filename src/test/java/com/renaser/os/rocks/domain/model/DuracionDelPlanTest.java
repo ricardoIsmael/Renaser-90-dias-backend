@@ -199,8 +199,10 @@ class DuracionDelPlanTest {
 
         ObjetivoDeLaSemana igual = ObjetivoDeLaSemana.desde(mes, base, 1, Magnitud.NIVEL);
         ObjetivoDeLaSemana conDuracion = ObjetivoDeLaSemana.desde(mes, base, 1, Magnitud.NIVEL, 90);
+        /* En el ultimo mes ya casi llego: a 78,5 le queda medio kilo, dentro del ritmo planeado (si no, la cifra no se muestra y no hay semana). */
+        BigDecimal casiLlegando = new BigDecimal("78.5");
         ObjetivoDeLaSemana ultimoMes = ObjetivoDeLaSemana.desde(
-                CalculadoraObjetivoMensual.calcular(12, 12, base, base, meta, Magnitud.NIVEL, null, 12), base, 331, Magnitud.NIVEL, 365);
+                CalculadoraObjetivoMensual.calcular(12, 12, base, casiLlegando, meta, Magnitud.NIVEL, null, 12), casiLlegando, 331, Magnitud.NIVEL, 365);
 
         assertThat(conDuracion).isEqualTo(igual);
         assertThat(ultimoMes.semanasQueQuedan()).isEqualTo(5);

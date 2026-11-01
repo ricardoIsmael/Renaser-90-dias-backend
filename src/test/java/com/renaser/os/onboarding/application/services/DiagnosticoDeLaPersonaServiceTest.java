@@ -9,7 +9,7 @@ import com.renaser.os.onboarding.application.ports.out.diagnostico.BorradorDelDi
 import com.renaser.os.onboarding.application.ports.out.diagnostico.ConsultarFormacionDeLaPersonaPort;
 import com.renaser.os.onboarding.application.ports.out.diagnostico.ConsultarFormacionDeLaPersonaPort.FormacionDeLaPersona;
 import com.renaser.os.onboarding.application.ports.out.diagnostico.VersionesDeFichaPort;
-import com.renaser.os.onboarding.application.ports.out.diagnostico.VersionesDeFichaPort.VersionPublicada;
+import com.renaser.os.onboarding.domain.model.diagnostico.VersionPublicada;
 import com.renaser.os.onboarding.application.ports.out.estado.LoadEstadoOnboardingPort;
 import com.renaser.os.onboarding.application.ports.out.estado.SaveEstadoOnboardingPort;
 import com.renaser.os.onboarding.application.ports.out.ficha.RespuestasDelDiagnosticoPort;
@@ -328,7 +328,6 @@ class DiagnosticoDeLaPersonaServiceTest {
         formacion(Formacion.ESCUELA, "Escuela Renaser", 90);
         when(etapas.flujosCompletados(persona)).thenReturn(Set.of(Diagnostico.FLUJO));
         when(etapas.completadaEn(persona, Diagnostico.FLUJO)).thenReturn(Optional.of(RELOJ.now()));
-        when(hayRespuestas.hayRespuestas(persona)).thenReturn(true);
         respuestasGuardadas(respuesta(1, "María"), respuesta(2, "TRABAJO"));
         when(borrador.retiradas()).thenReturn(List.of(objetivo.retirada(RELOJ.now())));
 
