@@ -28,6 +28,18 @@ public final class DuracionDelPrograma {
     }
 
     /**
+     * El día de una persona llevado a la escala de 90 días: {@code ceil(90 · dia / duracion)}. Con la duración de 90 devuelve el mismo día. Sirve a lo que
+     * está escrito en días de un programa de 90 (el pacto de cada fase se desbloquea el día 17, 35 y 65): {@code enEscalaBase(dia, d) >= corte} equivale
+     * exactamente a que el día ya llegó al corte estirado ({@link CortesDeFase#inicioDeFase}).
+     */
+    public static int enEscalaBase(int dia, int duracion) {
+        if (dia <= 0 || duracion == POR_DEFECTO) {
+            return dia;
+        }
+        return (POR_DEFECTO * dia + duracion - 1) / duracion;
+    }
+
+    /**
      * Cómo se dice la duración: «1 año», «2 años», «3 meses» o «90 días». Los meses y los años son los del dueño (3 meses = 90 días,
      * 1 año = 365); otro valor se dice en días.
      */
