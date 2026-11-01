@@ -181,6 +181,9 @@ class RevocacionDeSoportePorBajaDeRolTest {
         when(conversaciones.porClaveDirecta(anyString())).thenAnswer(inv ->
                 Conversacion.claveSoporteDe(ANA).equals(inv.getArgument(0))
                         ? Optional.of(SOPORTE_DE_ANA) : Optional.empty());
+        // Spec 024: abrir la bandeja une a la persona a la comunidad general de su formacion si le falta (idempotente).
+        org.mockito.Mockito.lenient().when(guardarConversacion.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        org.mockito.Mockito.lenient().when(idGenerator.newId()).thenAnswer(inv -> java.util.UUID.randomUUID());
         when(conversaciones.misConversaciones(any())).thenAnswer(inv -> List.of(SOPORTE_DE_ANA, DM_ANA_BRUNO)
                 .stream().filter(c -> participantesDe(c.id()).contains((UserId) inv.getArgument(0))).toList());
 
