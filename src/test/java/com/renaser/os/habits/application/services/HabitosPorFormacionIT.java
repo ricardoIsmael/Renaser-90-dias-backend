@@ -99,9 +99,9 @@ class HabitosPorFormacionIT {
     void preparar() {
         reloj.fijar(AHORA);
         admin = usuario("ADMIN", null);
-        mentor = usuario("MENTOR_LEAD", null);
-        deLaEscuela = usuario("TRAINEE", "ESCUELA");
-        delDiplomado = usuario("TRAINEE", "DIPLOMADO");
+        mentor = usuario("LIDER_MENTORES", null);
+        deLaEscuela = usuario("APRENDIZ", "ESCUELA");
+        delDiplomado = usuario("APRENDIZ", "DIPLOMADO");
         habitoDeLaEscuela = habitoSql("Hábito solo de la Escuela", "CUERPO", "ESCUELA", null);
     }
 
@@ -110,6 +110,7 @@ class HabitosPorFormacionIT {
         usuarios.forEach(id -> {
             jdbc.update("DELETE FROM renaser.registros_habito WHERE participante_id = ?", id);
             jdbc.update("DELETE FROM renaser.desbloqueos_habito WHERE participante_id = ?", id);
+            jdbc.update("DELETE FROM renaser.formaciones_personal WHERE usuario_id = ?", id);
             try {
                 jdbc.update("DELETE FROM renaser.usuarios WHERE id = ?", id);
             } catch (DataAccessException quedaReferenciado) {
@@ -216,7 +217,7 @@ class HabitosPorFormacionIT {
     @Test
     @DisplayName("una formación sin hábitos no es un error: la persona no recibe ninguno")
     void formacionSinHabitos() {
-        UserId deLaCertificacion = usuario("TRAINEE", "CERTIFICACION");
+        UserId deLaCertificacion = usuario("APRENDIZ", "CERTIFICACION");
 
         generar.generar(deLaCertificacion, HOY);
 
@@ -378,6 +379,7 @@ class HabitosPorFormacionIT {
                 INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado)
                 VALUES (?, ?, ?, CAST(? AS renaser.rol_usuario), 'ACTIVO')
                 """, id, id + "@renaser.test", "Fixture " + rol, rol);
+        com.renaser.os.FormacionesDePrueba.alPersonalLeAsignaLaEscuela(jdbc, id, rol);
         if (formacion != null) {
             jdbc.update("""
                     INSERT INTO renaser.participantes_programa (usuario_id, dia_programa, fecha_inicio, programa_activado_en, timezone, formacion)

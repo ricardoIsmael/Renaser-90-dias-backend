@@ -106,6 +106,31 @@ class ClaseDiariaServiceTest {
     }
 
     @Test
+    @DisplayName("spec 023: pasado el ultimo dia de su programa (90) ya no hay clase, ni se busca contenido")
+    void pasadoElUltimoDiaDeSuProgramaNoSeBuscaClase() {
+        when(progresoPort.deParticipante(ACTOR_ID)).thenReturn(Optional.of(new ProgresoParticipanteAcademy(
+                120, ZoneId.of("America/Lima"), RolParticipante.TRAINEE, false, true, 90)));
+
+        ClaseDiariaResolution resolucion = service().claseDeHoy(ACTOR_ID);
+
+        assertThat(resolucion).isInstanceOf(Proximamente.class);
+        verify(loadCursoPort, never()).listarTodos();
+    }
+
+    @Test
+    @DisplayName("spec 023: en un programa de 365 dias el dia 120 todavia tiene su clase (el tope es la duracion de la formacion)")
+    void enUnProgramaDe365DiasElDia120SiBuscaClase() {
+        when(progresoPort.deParticipante(ACTOR_ID)).thenReturn(Optional.of(new ProgresoParticipanteAcademy(
+                120, ZoneId.of("America/Lima"), RolParticipante.TRAINEE, false, true, 365)));
+        when(loadCursoPort.listarTodos()).thenReturn(List.of());
+
+        ClaseDiariaResolution resolucion = service().claseDeHoy(ACTOR_ID);
+
+        assertThat(resolucion).isInstanceOf(Proximamente.class);
+        verify(loadCursoPort).listarTodos();
+    }
+
+    @Test
     @DisplayName("elige la seccion con dia_desbloqueo mas reciente que ya alcanzo, y dentro de ella la leccion \"clase\"")
     void eligeSeccionMasRecienteYLeccionClase() {
         when(progresoPort.deParticipante(ACTOR_ID)).thenReturn(

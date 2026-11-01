@@ -40,8 +40,6 @@ import java.util.regex.Pattern;
 @Service
 public class ClaseDiariaService implements ConsultarClaseDiariaUseCase, CompletarClaseDiariaUseCase {
 
-    /** Espejo de `ULTIMO_DIA_CON_CLASE` (clase-diaria/repository.ts:118). */
-    private static final int ULTIMO_DIA_CON_CLASE = 90;
     /** Espejo de `esLeccionClase` (clase-diaria/repository.ts:150-152). */
     private static final Pattern PATRON_LECCION_CLASE = Pattern.compile("\\bclase\\b", Pattern.CASE_INSENSITIVE);
 
@@ -75,7 +73,7 @@ public class ClaseDiariaService implements ConsultarClaseDiariaUseCase, Completa
             return new NoIniciado();
         }
 
-        Optional<ClaseEncontrada> clase = buscarClaseDiaria(diaActual);
+        Optional<ClaseEncontrada> clase = buscarClaseDiaria(diaActual, progreso.duracionDias());
         if (clase.isEmpty()) {
             return new Proximamente(diaActual);
         }
@@ -134,8 +132,10 @@ public class ClaseDiariaService implements ConsultarClaseDiariaUseCase, Completa
      * secciones representan RANGOS ("CICLO 2 (DIA 17-25)"), por eso el
      * match es por umbral y no por dia exacto.
      */
-    private Optional<ClaseEncontrada> buscarClaseDiaria(int programDay) {
-        if (programDay < 1 || programDay > ULTIMO_DIA_CON_CLASE) {
+    private Optional<ClaseEncontrada> buscarClaseDiaria(int programDay, int duracionDias) {
+        // El repo viejo cortaba en el día 90 (`ULTIMO_DIA_CON_CLASE`); desde las formaciones (spec 022/023) hay Clase diaria hasta el
+        // último día del programa de la persona: 90 en la Escuela y la Certificación, 90 o 365 en el Diplomado.
+        if (programDay < 1 || programDay > duracionDias) {
             return Optional.empty();
         }
 
