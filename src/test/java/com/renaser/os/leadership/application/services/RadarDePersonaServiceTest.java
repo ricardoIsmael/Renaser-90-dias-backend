@@ -61,7 +61,7 @@ class RadarDePersonaServiceTest {
                 List.of(new DiaDeLaPersona(3, LocalDate.of(2026, 10, 14), "AUTOMATICO", 17, 17, false, false,
                         LocalTime.of(5, 30), LocalTime.of(22, 30), List.of(6, 7, 8), null))), List.of(
                 new RegistroDelRadar(UUID.randomUUID(), "Trabajando", "En la reunión", "Tranquila", 7, "El correo",
-                        Instant.parse("2026-10-14T19:06:00Z"), 14)), ANTES));
+                        Instant.parse("2026-10-14T19:06:00Z"), 14, false)), ANTES));
     }
 
     private CodigoRenaserDePersona de(UserId actor, UUID grupo, UserId persona, Instant cursor) {

@@ -251,9 +251,9 @@ class CumplimientoDelLiderControllerTest {
                         LocalTime.of(5, 30), LocalTime.of(22, 30), IntStream.rangeClosed(6, 22).boxed().toList(),
                         null))), List.of(
                 new RegistroDelRadar(UUID.fromString("00000000-0000-0000-0000-0000000000f1"), "Trabajando",
-                        "En la reunión", "Tranquila", 7, "El correo", Instant.parse("2026-10-14T19:06:00Z"), 14),
+                        "En la reunión", "Tranquila", 7, "El correo", Instant.parse("2026-10-14T19:06:00Z"), 14, true),
                 new RegistroDelRadar(UUID.fromString("00000000-0000-0000-0000-0000000000f2"), "Caminando",
-                        "En mi día", "Cansada", 4, "Nada", Instant.parse("2026-10-14T15:30:00Z"), null)),
+                        "En mi día", "Cansada", 4, "Nada", Instant.parse("2026-10-14T15:30:00Z"), null, false)),
                 Instant.parse("2026-10-14T15:30:00Z")));
     }
 
@@ -283,6 +283,9 @@ class CumplimientoDelLiderControllerTest {
                 .andExpect(jsonPath("$.entries[0].createdAt").value("2026-10-14T19:06:00Z"))
                 .andExpect(jsonPath("$.entries[0].horaPrevista").value(14))
                 .andExpect(jsonPath("$.entries[1].horaPrevista").doesNotExist())
+                // Spec 030: «dictado» viaja en las mismas filas, siempre como booleano.
+                .andExpect(jsonPath("$.entries[0].dictado").value(true))
+                .andExpect(jsonPath("$.entries[1].dictado").value(false))
                 .andExpect(jsonPath("$.nextCursor").value("2026-10-14T15:30:00Z"));
         assertThat(banco.lecturasDelRadar).singleElement()
                 .isEqualTo(new BancoDeCumplimiento.LecturaDelRadarPedida(ANA, null, 84));
@@ -293,7 +296,7 @@ class CumplimientoDelLiderControllerTest {
     void radarEnLaSemana1() throws Exception {
         banco.radar(ANA, new CodigoRenaserDePersona(null, List.of(
                 new RegistroDelRadar(UUID.fromString("00000000-0000-0000-0000-0000000000f1"), "Trabajando",
-                        "En la reunión", "Tranquila", 7, "El correo", Instant.parse("2026-10-14T19:06:00Z"), 14)),
+                        "En la reunión", "Tranquila", 7, "El correo", Instant.parse("2026-10-14T19:06:00Z"), 14, false)),
                 null));
 
         pedir(radar(ANA), LIDER)

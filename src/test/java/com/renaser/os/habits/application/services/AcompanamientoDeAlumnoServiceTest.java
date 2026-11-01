@@ -236,6 +236,6 @@ class AcompanamientoDeAlumnoServiceTest {
     private RegistroRadar registro() {
         return RegistroRadar.rehydrate(RegistroRadarId.of(UUID.fromString("00000000-0000-0000-0000-00000000000a")),
                 alumno, "Escribiendo", "Que llego tarde", "Ansiedad", 6, "La llamada de ventas",
-                Instant.parse("2026-09-14T13:00:00Z"), null);
+                Instant.parse("2026-09-14T13:00:00Z"), null, false);
     }
 }

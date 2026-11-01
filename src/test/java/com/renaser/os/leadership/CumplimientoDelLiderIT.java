@@ -256,6 +256,21 @@ class CumplimientoDelLiderIT {
     }
 
     @Test
+    @DisplayName("spec 030: el líder lee «dictado» de la base de verdad: true en el dictado y false en el escrito y en los anteriores a V132")
+    void elRadarDiceCuandoSeDicto() {
+        registroDelRadar(ANA, Instant.parse("2026-10-14T19:06:00Z"), 14);
+        jdbc.update("INSERT INTO renaser.registros_radar (id, participante_id, que_hago, que_pienso, que_siento, "
+                + "nivel_energia, que_evito, creado_en, hora_prevista, dictado) VALUES (?, ?, 'Hablando', 'En voz alta', "
+                + "'Bien', 6, 'Nada', CAST(? AS timestamptz), 15, true)", UUID.randomUUID(), ANA,
+                Instant.parse("2026-10-14T20:06:00Z").toString());
+
+        CodigoRenaserDePersona resultado = radarDeAna(LIDER, null);
+
+        assertThat(resultado.registros()).extracting(RegistroDelRadar::dictado).containsExactly(true, false);
+        assertThat(resultado.registros()).extracting(RegistroDelRadar::queHago).containsExactly("Hablando", "Trabajando");
+    }
+
+    @Test
     @DisplayName("spec 019: sin Mi Radar encendido sale apagado, y los registros de la primera semana igual estan")
     void elRadarSinMiRadar() {
         registroDelRadar(ANA, Instant.parse("2026-10-09T15:00:00Z"), 10);

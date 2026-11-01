@@ -69,8 +69,11 @@ public interface CodigoRenaserDePersonaFinder {
         }
     }
 
-    /** @param horaPrevista la hora local (0-23) a la que respondia, o nulo si fue un registro libre */
+    /**
+     * @param horaPrevista la hora local (0-23) a la que respondia, o nulo si fue un registro libre
+     * @param dictado      spec 030: al menos una respuesta se dicto con el reconocimiento de voz del telefono
+     */
     record RegistroDelRadar(UUID id, String queHago, String quePienso, String queSiento, int nivelEnergia,
-                            String queEvito, Instant creadoEn, Integer horaPrevista) {
+                            String queEvito, Instant creadoEn, Integer horaPrevista, boolean dictado) {
     }
 }
