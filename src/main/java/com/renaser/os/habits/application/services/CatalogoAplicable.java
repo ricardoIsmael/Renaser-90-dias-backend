@@ -50,6 +50,16 @@ public class CatalogoAplicable {
     }
 
     /**
+     * Todos los hábitos que le corresponden a la persona el día local {@code dia} (spec 028): los globales que le tocan por su rol y sus
+     * hábitos personales activos. Es el conjunto sobre el que se planifica una semana o se repite: lo que queda fuera no se escribe.
+     */
+    public List<Habito> aplicablesPara(UserId persona, ProgresoParticipanteHabits progreso, LocalDate dia) {
+        List<Habito> habitos = new java.util.ArrayList<>(globalesPara(persona, progreso, dia));
+        habitos.addAll(loadHabitoPort.personalesActivosDe(persona));
+        return habitos;
+    }
+
+    /**
      * Los globales activos que NO le tocan ese día. Lo usa la vista de quien acompaña, que parte de su propia consulta
      * del catálogo y solo tiene que sacar estos (FR-013).
      */
