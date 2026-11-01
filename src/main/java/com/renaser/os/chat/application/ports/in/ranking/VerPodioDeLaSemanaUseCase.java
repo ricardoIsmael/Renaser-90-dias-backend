@@ -1,6 +1,7 @@
 package com.renaser.os.chat.application.ports.in.ranking;
 
 import com.renaser.os.chat.domain.model.ranking.PodioDeLaSemana.Puesto;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.LocalDate;
@@ -10,7 +11,12 @@ import java.util.List;
 public interface VerPodioDeLaSemanaUseCase {
 
     /** @throws com.renaser.os.shared.domain.NotAuthorizedException si no es ADMIN/ALCHEMIST con la cuenta activa */
-    VistaPreviaDelPodio vistaPrevia(UserId actorId);
+    default VistaPreviaDelPodio vistaPrevia(UserId actorId) {
+        return vistaPrevia(actorId, Formacion.POR_DEFECTO);
+    }
+
+    /** Spec 024: el podio de una formación. */
+    VistaPreviaDelPodio vistaPrevia(UserId actorId, Formacion formacion);
 
     /**
      * @param texto      {@code null} si nadie tiene puntaje (no se publicaría)

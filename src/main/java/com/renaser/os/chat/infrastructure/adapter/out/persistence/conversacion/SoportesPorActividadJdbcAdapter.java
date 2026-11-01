@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -43,7 +44,7 @@ public class SoportesPorActividadJdbcAdapter implements SoportesPorActividadPort
                 ORDER BY m.creado_en DESC
                 LIMIT 1
             ) ultimo ON true
-            WHERE p.usuario_id = :quien AND c.tipo = 'SOPORTE' %s
+            WHERE p.usuario_id = :quien AND c.tipo = 'SOPORTE' AND c.formacion IN (:formaciones) %s
             """;
 
     static final String PAGINA = """
@@ -61,10 +62,11 @@ public class SoportesPorActividadJdbcAdapter implements SoportesPorActividadPort
                          AND (p.ultimo_leido_en IS NULL OR m.creado_en > p.ultimo_leido_en))) AS con_no_leidos
             FROM renaser.participantes_conversacion p
             JOIN renaser.conversaciones c ON c.id = p.conversacion_id
-            WHERE p.usuario_id = :quien AND c.tipo = 'SOPORTE' %s
+            WHERE p.usuario_id = :quien AND c.tipo = 'SOPORTE' AND c.formacion IN (:formaciones) %s
             """;
 
-    private static final String SOLO_CLAVES = "AND c.clave_directa IN (:claves)";
+    /** La clave es {@code soporte:<aprendiz>[:FORMACION]}: el aprendiz es el segundo tramo (V138). */
+    private static final String SOLO_CLAVES = "AND split_part(c.clave_directa, ':', 2) IN (:claves)";
     private static final String DESPUES_DEL_CURSOR = "WHERE (s.actividad, s.id) < (:actividad, :id)";
 
     private final JdbcClient jdbcClient;
@@ -81,6 +83,7 @@ public class SoportesPorActividadJdbcAdapter implements SoportesPorActividadPort
         String consulta = consultaDePagina(pedido.soloClaves() != null, pedido.desde() != null);
         JdbcClient.StatementSpec sentencia = jdbcClient.sql(consulta)
                 .param("quien", pedido.quienAtiende().value())
+                .param("formaciones", pedido.formaciones())
                 .param("limite", pedido.cuantos());
         if (pedido.soloClaves() != null) {
             sentencia = sentencia.param("claves", pedido.soloClaves());
@@ -95,12 +98,13 @@ public class SoportesPorActividadJdbcAdapter implements SoportesPorActividadPort
     }
 
     @Override
-    public ConteoDeSoportes contar(UserId quienAtiende, Set<String> soloClaves) {
+    public ConteoDeSoportes contar(UserId quienAtiende, Set<String> soloClaves, Collection<String> formaciones) {
         if (soloClaves != null && soloClaves.isEmpty()) {
             return new ConteoDeSoportes(0, 0);
         }
         JdbcClient.StatementSpec sentencia = jdbcClient.sql(CONTEO.formatted(soloClaves != null ? SOLO_CLAVES : ""))
-                .param("quien", quienAtiende.value());
+                .param("quien", quienAtiende.value())
+                .param("formaciones", formaciones);
         if (soloClaves != null) {
             sentencia = sentencia.param("claves", soloClaves);
         }

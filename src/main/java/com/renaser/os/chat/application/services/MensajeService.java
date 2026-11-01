@@ -73,6 +73,9 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
     /** Spec 002: la funcionalidad de cada tipo de conversación y la de la media (notas de voz, fotos). */
     private final InterruptoresDelChat interruptoresDelChat;
 
+    /** Spec 024: la regla única de quién ve cada conversación por formación. */
+    private final VisibilidadPorFormacion visibilidad;
+
     public MensajeService(LoadConversacionPort loadConversacionPort, EsParticipantePort esParticipantePort,
                            AccesoAChatsDeGrupo accesoAChatsDeGrupo,
                            MarcarLeidoPort marcarLeidoPort, SaveMensajePort saveMensajePort,
@@ -80,7 +83,8 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
                            UserSummaryFinder userSummaryFinder, AlmacenamientoPort almacenamientoPort,
                            ConsultarLecturaUseCase consultarLectura, Clock clock, IdGenerator idGenerator,
                            ApplicationEventPublisher eventos, RegistrarMetricaDelChatPort metricas,
-                           InterruptoresDelChat interruptoresDelChat) {
+                           InterruptoresDelChat interruptoresDelChat, VisibilidadPorFormacion visibilidad) {
+        this.visibilidad = visibilidad;
         this.metricas = metricas;
         this.interruptoresDelChat = interruptoresDelChat;
         this.loadConversacionPort = loadConversacionPort;
@@ -289,6 +293,8 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
      * {@code AutorizacionDeConversacionService}; si se toca una, se tocan las cuatro.</b>
      */
     private void requireParticipante(Conversacion conversacion, UserId usuarioId) {
+        // Spec 024: una conversacion de otra formacion (o de un tipo apagado) es como si no existiera.
+        visibilidad.exigirQueLaVea(conversacion, usuarioId);
         if (conversacion.tipo() == TipoConversacion.CELULA) {
             if (!accesoAChatsDeGrupo.puedeVer(conversacion.celulaId(), usuarioId)) {
                 throw new NotAuthorizedException("Tu asignacion cambio: ya no perteneces a ese grupo");

@@ -2,6 +2,7 @@ package com.renaser.os.chat.application.services;
 
 import com.renaser.os.chat.application.ports.in.mensaje.CompartirPublicacionUseCase;
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase;
+import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort;
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase.EnviarMensajeCommand;
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeUseCase.OrigenMedia;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
@@ -65,10 +66,13 @@ public class CompartirPublicacionService implements CompartirPublicacionUseCase 
     private final EnviarMensajeUseCase enviarMensajeUseCase;
     private final PublicacionMuroFinder publicacionMuroFinder;
     private final UserSummaryFinder userSummaryFinder;
+    /** Spec 024 (FR-010): una publicación solo se comparte en conversaciones de su misma formación. */
+    private final LoadConversacionPort loadConversacionPort;
 
     public CompartirPublicacionService(EnviarMensajeUseCase enviarMensajeUseCase,
                                         PublicacionMuroFinder publicacionMuroFinder,
-                                        UserSummaryFinder userSummaryFinder) {
+                                        UserSummaryFinder userSummaryFinder, LoadConversacionPort loadConversacionPort) {
+        this.loadConversacionPort = loadConversacionPort;
         this.enviarMensajeUseCase = enviarMensajeUseCase;
         this.publicacionMuroFinder = publicacionMuroFinder;
         this.userSummaryFinder = userSummaryFinder;
@@ -79,6 +83,7 @@ public class CompartirPublicacionService implements CompartirPublicacionUseCase 
         PublicacionParaCompartir publicacion = publicacionMuroFinder.paraCompartir(command.publicacionId())
                 .orElseThrow(() -> new NoSuchElementException(
                         "Publicacion no encontrada: " + command.publicacionId()));
+        exigirMismaFormacion(publicacion, command);
         return enviarMensajeUseCase.enviar(new EnviarMensajeCommand(command.actorId(), command.conversacionId(),
                 publicacion.tieneImagen() ? TipoMensaje.IMAGEN : TipoMensaje.TEXTO,
                 textoDelMensaje(publicacion),
@@ -94,6 +99,19 @@ public class CompartirPublicacionService implements CompartirPublicacionUseCase 
                 // `.filter(!oculta())` de `paraCompartir`, cinco lineas mas arriba: sin esa puerta
                 // esto volveria a ser el permiso incondicional de namespace que era antes.
                 OrigenMedia.MURO_COMPARTIDO)).mensaje();
+    }
+
+    /**
+     * FR-010: el destino tiene que ser de la formación de la publicación. Si no, la publicación «no existe» para esa conversación (404, el mismo
+     * texto que una publicación inexistente): ni el Muro ni el chat de otra formación se enteran de lo que se comparte.
+     */
+    private void exigirMismaFormacion(PublicacionParaCompartir publicacion, CompartirPublicacionCommand command) {
+        boolean mismaFormacion = loadConversacionPort.porId(command.conversacionId())
+                .map(conversacion -> conversacion.formacion() == publicacion.formacion())
+                .orElse(true); // si la conversacion no existe, lo dice enviar() con su propio 404
+        if (!mismaFormacion) {
+            throw new NoSuchElementException("Publicacion no encontrada: " + command.publicacionId());
+        }
     }
 
     /**

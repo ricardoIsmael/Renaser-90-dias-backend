@@ -84,7 +84,7 @@ class AvisosDeMensajesServiceTest {
         when(noLeidos.noLeidosPorParticipante(any(), anyCollection())).thenReturn(Map.of());
         MentorDeLosGruposPort mentores = ids -> grupos;
         service = new AvisosDeMensajesService(mensajes, conversaciones, participantes, pertenencia, noLeidos, abiertas,
-                usuarios, new NombresDeLosChatsService(mentores, usuarios));
+                usuarios, new NombresDeLosChatsService(mentores, usuarios, org.mockito.Mockito.mock(com.renaser.os.users.api.FormacionesFinder.class)));
         persona(ana, "Ana Pérez", UserRole.TRAINEE);
         persona(beto, "Beto Ruiz", UserRole.TRAINEE);
         persona(luisa, "Luisa Fernanda Quispe", UserRole.MENTOR);

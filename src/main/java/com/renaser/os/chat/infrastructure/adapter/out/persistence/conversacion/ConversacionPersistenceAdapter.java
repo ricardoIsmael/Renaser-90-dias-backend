@@ -4,10 +4,14 @@ import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPo
 import com.renaser.os.chat.application.ports.out.conversacion.SaveConversacionPort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
+import com.renaser.os.chat.domain.model.conversacion.TipoConversacion;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
 
 import java.util.Collection;
+import java.util.EnumMap;
+import java.util.Map;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -56,8 +60,15 @@ class ConversacionPersistenceAdapter implements LoadConversacionPort, SaveConver
     }
 
     @Override
-    public Optional<Conversacion> global() {
-        return repository.findFirstByTipo(TipoConversacionJpa.GLOBAL).map(mapper::toDomain);
+    public Optional<Conversacion> global(Formacion formacion) {
+        return repository.findFirstByTipoAndFormacion(TipoConversacionJpa.GLOBAL, formacion.codigo()).map(mapper::toDomain);
+    }
+
+    @Override
+    public List<Conversacion> globales(Collection<Formacion> formaciones) {
+        return formaciones.isEmpty() ? List.of()
+                : repository.findByTipoAndFormacionIn(TipoConversacionJpa.GLOBAL, formaciones.stream().map(Formacion::codigo).toList())
+                        .stream().map(mapper::toDomain).toList();
     }
 
     @Override
@@ -72,6 +83,15 @@ class ConversacionPersistenceAdapter implements LoadConversacionPort, SaveConver
         }
         return repository.findByIdIn(ids.stream().map(ConversacionId::value).distinct().toList()).stream()
                 .map(mapper::toDomain).toList();
+    }
+
+    @Override
+    public Map<TipoConversacion, Long> contarPorTipo(Formacion formacion) {
+        Map<TipoConversacion, Long> conteo = new EnumMap<>(TipoConversacion.class);
+        for (Object[] fila : repository.contarPorTipo(formacion.codigo())) {
+            conteo.put(TipoConversacion.valueOf(((TipoConversacionJpa) fila[0]).name()), ((Number) fila[1]).longValue());
+        }
+        return conteo;
     }
 
     @Override

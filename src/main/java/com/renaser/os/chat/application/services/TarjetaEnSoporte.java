@@ -4,7 +4,6 @@ import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeDelPrograma
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeDelProgramaUseCase.AvisoDeLaPieza;
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeDelProgramaUseCase.EntregaDelPrograma;
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeDelProgramaUseCase.PiezaDelPrograma;
-import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort;
 import com.renaser.os.chat.application.ports.out.mensaje.LoadMensajePort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.mensaje.ContenidoDelPrograma;
@@ -41,16 +40,16 @@ class TarjetaEnSoporte {
 
     private static final Logger log = LoggerFactory.getLogger(TarjetaEnSoporte.class);
 
-    private final LoadConversacionPort conversaciones;
+    private final SoporteVigenteDelAprendiz soportes;
     private final LoadMensajePort mensajes;
     private final TarjetasDelSemaforoPublicadas tarjetas;
     private final EnviarMensajeDelProgramaUseCase delPrograma;
     private final MensajeDelChatFinder mensajesPersonalizados;
 
-    TarjetaEnSoporte(LoadConversacionPort conversaciones, LoadMensajePort mensajes,
+    TarjetaEnSoporte(SoporteVigenteDelAprendiz soportes, LoadMensajePort mensajes,
                      TarjetasDelSemaforoPublicadas tarjetas, EnviarMensajeDelProgramaUseCase delPrograma,
                      MensajeDelChatFinder mensajesPersonalizados) {
-        this.conversaciones = conversaciones;
+        this.soportes = soportes;
         this.mensajes = mensajes;
         this.tarjetas = tarjetas;
         this.delPrograma = delPrograma;
@@ -59,7 +58,7 @@ class TarjetaEnSoporte {
 
     /** @return si salió algo ahora ({@code false}: ya estaba, o el aprendiz no tiene soporte) */
     boolean entregar(TarjetaDelSemaforo tarjeta) {
-        Optional<Conversacion> soporte = conversaciones.porClaveDirecta(Conversacion.claveSoporteDe(tarjeta.aprendiz()));
+        Optional<Conversacion> soporte = soportes.de(tarjeta.aprendiz());
         if (soporte.isEmpty()) {
             log.debug("[chat.semaforo] {} no tiene chat de soporte: sin tarjeta", tarjeta.aprendiz());
             return false;

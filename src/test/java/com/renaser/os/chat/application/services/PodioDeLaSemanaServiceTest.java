@@ -17,6 +17,7 @@ import com.renaser.os.points.api.RankingGeneralFinder;
 import com.renaser.os.points.api.RankingGeneralFinder.PuestoEnElRankingGeneral;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -84,12 +85,12 @@ class PodioDeLaSemanaServiceTest {
 
     @BeforeEach
     void grupoGeneral() {
-        when(conversaciones.global()).thenReturn(Optional.of(Conversacion.crearGlobal(GLOBAL, AHORA)));
+        when(conversaciones.global(Formacion.ESCUELA)).thenReturn(Optional.of(Conversacion.crearGlobal(GLOBAL, AHORA)));
         when(mensajes.porId(any())).thenReturn(Optional.empty());
         when(almacenamiento.guardaObjetos()).thenReturn(true);
         when(dibujo.dibujar(any(), any())).thenReturn(PNG);
         when(delPrograma.enviarUnaVez(any())).thenReturn(2);
-        when(ranking.alCorte(DOMINGO)).thenReturn(List.of(puesto("Liz Mendoza", "96.4"), puesto("Jorge Pérez", "92.1")));
+        when(ranking.alCorte(DOMINGO, Formacion.ESCUELA)).thenReturn(List.of(puesto("Liz Mendoza", "96.4"), puesto("Jorge Pérez", "92.1")));
     }
 
     @Test
@@ -98,7 +99,7 @@ class PodioDeLaSemanaServiceTest {
         ResultadoDelPodio resultado = servicio(true).publicarLaSemanaCerrada();
 
         assertThat(resultado).isEqualTo(new ResultadoDelPodio(SEMANA.lunes(), DOMINGO, Estado.PUBLICADO, 2));
-        verify(ranking).alCorte(DOMINGO);
+        verify(ranking).alCorte(DOMINGO, Formacion.ESCUELA);
         verify(almacenamiento).subir("ranking-semanal/2026-09-28-v1.jpg", PNG, "image/jpeg");
         EntregaDelPrograma entrega = entregada();
         assertThat(entrega.conversacionId()).isEqualTo(GLOBAL);
@@ -110,6 +111,28 @@ class PodioDeLaSemanaServiceTest {
         assertThat(entrega.piezas().get(1).id()).isEqualTo(SEMANA.idDelTexto());
         assertThat(entrega.piezas().get(1).aviso()).isEqualTo(AvisoDeLaPieza.A_TODOS);
         assertThat(entrega.piezas().get(1).contenido().texto()).contains("Liz M.").contains("Jorge P.");
+    }
+
+    @Test
+    @DisplayName("spec 024: cada formación publica SU podio en SU comunidad general, con SUS aprendices, y los ids de la Escuela no cambian")
+    void unPodioPorFormacion() {
+        ConversacionId deLaFormacion = ConversacionId.of(UUID.randomUUID());
+        when(conversaciones.global(Formacion.DIPLOMADO)).thenReturn(Optional.of(Conversacion.crearGlobal(deLaFormacion, "Diplomado Renaser Global", AHORA, Formacion.DIPLOMADO)));
+        when(ranking.alCorte(DOMINGO, Formacion.DIPLOMADO)).thenReturn(List.of(puesto("Rosa Quispe", "88.0")));
+
+        ResultadoDelPodio resultado = servicio(true).publicarLaSemanaCerrada();
+
+        assertThat(resultado.estado()).isEqualTo(Estado.PUBLICADO);
+        ArgumentCaptor<EntregaDelPrograma> entregas = ArgumentCaptor.forClass(EntregaDelPrograma.class);
+        verify(delPrograma, org.mockito.Mockito.times(2)).enviarUnaVez(entregas.capture());
+        EntregaDelPrograma escuela = entregas.getAllValues().stream().filter(e -> e.conversacionId().equals(GLOBAL)).findFirst().orElseThrow();
+        EntregaDelPrograma diplomado = entregas.getAllValues().stream().filter(e -> e.conversacionId().equals(deLaFormacion)).findFirst().orElseThrow();
+        assertThat(escuela.piezas().get(1).id()).as("la semana ya publicada de la Escuela no se repite al desplegar").isEqualTo(SEMANA.idDelTexto());
+        assertThat(escuela.piezas().get(1).contenido().texto()).contains("Liz M.").doesNotContain("Rosa");
+        assertThat(diplomado.piezas().get(1).id()).isEqualTo(SEMANA.idDelTexto(Formacion.DIPLOMADO)).isNotEqualTo(SEMANA.idDelTexto());
+        assertThat(diplomado.piezas().get(1).contenido().texto()).contains("Rosa Q.").doesNotContain("Liz");
+        verify(almacenamiento).subir("ranking-semanal/2026-09-28-v1.jpg", PNG, "image/jpeg");
+        verify(almacenamiento).subir(SEMANA.rutaDeLaImagen(Formacion.DIPLOMADO), PNG, "image/jpeg");
     }
 
     @Test
@@ -134,7 +157,7 @@ class PodioDeLaSemanaServiceTest {
     @Test
     @DisplayName("si nadie tiene puntaje, no se publica")
     void sinPuntajes() {
-        when(ranking.alCorte(DOMINGO)).thenReturn(List.of(puesto("Liz Mendoza", "0"), puesto("Jorge Pérez", "0.0")));
+        when(ranking.alCorte(DOMINGO, Formacion.ESCUELA)).thenReturn(List.of(puesto("Liz Mendoza", "0"), puesto("Jorge Pérez", "0.0")));
 
         assertThat(servicio(true).publicarLaSemanaCerrada().estado()).isEqualTo(Estado.SIN_PUNTAJES);
         verifyNoInteractions(dibujo, delPrograma);
@@ -173,7 +196,7 @@ class PodioDeLaSemanaServiceTest {
     void vistaPrevia() {
         UserId admin = cuenta(UserRole.ADMIN, UserStatus.ACTIVE);
 
-        VistaPreviaDelPodio vista = servicio(false).vistaPrevia(admin);
+        VistaPreviaDelPodio vista = servicio(false).vistaPrevia(admin, Formacion.ESCUELA);
 
         assertThat(vista.lunes()).isEqualTo(SEMANA.lunes());
         assertThat(vista.puestos()).hasSize(2);
@@ -190,7 +213,7 @@ class PodioDeLaSemanaServiceTest {
         for (UserId actor : List.of(cuenta(UserRole.MENTOR, UserStatus.ACTIVE), cuenta(UserRole.TRAINEE, UserStatus.ACTIVE),
                 cuenta(UserRole.ADMIN, UserStatus.SUSPENDED))) {
             assertThatThrownBy(() -> servicio(true).publicarAhora(actor)).isInstanceOf(NotAuthorizedException.class);
-            assertThatThrownBy(() -> servicio(true).vistaPrevia(actor)).isInstanceOf(NotAuthorizedException.class);
+            assertThatThrownBy(() -> servicio(true).vistaPrevia(actor, Formacion.ESCUELA)).isInstanceOf(NotAuthorizedException.class);
         }
         verifyNoInteractions(ranking, delPrograma);
     }

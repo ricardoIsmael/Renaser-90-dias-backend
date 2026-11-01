@@ -115,7 +115,7 @@ class ConversacionServiceTest {
         service = new ConversacionService(loadConversacionPort, saveConversacionPort, agregarParticipantePort,
                 esParticipantePort, new AccesoAChatsDeGrupo(pertenenciaVigentePort, gruposEnCursoPort, userSummaryFinder), marcarLeidoPort, anunciarLectura, contarNoLeidosPort,
                 loadMensajePort, listarUsuariosPort, userSummaryFinder, fotosDeGrupos,
-                new NombresDeLosChatsService(grupos -> java.util.Map.of(), userSummaryFinder), CLOCK, idGenerator, transactionManager, cuentasCerradas);
+                new NombresDeLosChatsService(grupos -> java.util.Map.of(), userSummaryFinder, org.mockito.Mockito.mock(com.renaser.os.users.api.FormacionesFinder.class)), CLOCK, idGenerator, transactionManager, cuentasCerradas, new com.renaser.os.users.api.AlcanceDeFormacionSoloEscuela(), org.mockito.Mockito.mock(com.renaser.os.users.api.FormacionesFinder.class), new com.renaser.os.chat.application.services.VisibilidadPermisiva());
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(userSummaryFinder.findById(activo)).thenReturn(
                 Optional.of(new UserSummary(activo, "Activo", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
@@ -455,7 +455,7 @@ class ConversacionServiceTest {
 
     @Test
     void unirseCreaLaGlobalSiTodaviaNoExisteYAgregaAlUsuario() {
-        when(loadConversacionPort.global()).thenReturn(Optional.empty());
+        when(loadConversacionPort.global(any())).thenReturn(Optional.empty());
         when(esParticipantePort.esParticipante(any(), eq(activo))).thenReturn(false);
 
         service.unirse(activo);
@@ -467,7 +467,7 @@ class ConversacionServiceTest {
     @Test
     void unirseEsIdempotenteSiYaEsParticipante() {
         Conversacion global = Conversacion.crearGlobal(ConversacionId.of(UUID.randomUUID()), CLOCK.now());
-        when(loadConversacionPort.global()).thenReturn(Optional.of(global));
+        when(loadConversacionPort.global(any())).thenReturn(Optional.of(global));
         when(esParticipantePort.esParticipante(global.id(), activo)).thenReturn(true);
 
         service.unirse(activo);
@@ -500,7 +500,7 @@ class ConversacionServiceTest {
     @Test
     void renombrarFuncionaParaUnAdmin() {
         Conversacion global = Conversacion.crearGlobal(ConversacionId.of(UUID.randomUUID()), CLOCK.now());
-        when(loadConversacionPort.global()).thenReturn(Optional.of(global));
+        when(loadConversacionPort.global(any())).thenReturn(Optional.of(global));
 
         Conversacion renombrada = service.renombrar(new RenombrarConversacionGlobalCommand(admin, "Comunidad Renaser"));
 
@@ -511,7 +511,7 @@ class ConversacionServiceTest {
     @Test
     void renombrarRechazaAQuienNoEsAdminNiAlquimista() {
         Conversacion global = Conversacion.crearGlobal(ConversacionId.of(UUID.randomUUID()), CLOCK.now());
-        lenient().when(loadConversacionPort.global()).thenReturn(Optional.of(global));
+        lenient().when(loadConversacionPort.global(any())).thenReturn(Optional.of(global));
 
         assertThatThrownBy(() -> service.renombrar(new RenombrarConversacionGlobalCommand(activo, "Otro nombre")))
                 .isInstanceOf(NotAuthorizedException.class);

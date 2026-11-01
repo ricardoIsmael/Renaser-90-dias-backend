@@ -217,22 +217,22 @@ class RevocacionDeSoportePorBajaDeRolTest {
 
         soporte = new ConversacionSoporteService(conversaciones, guardarConversacion, agregarParticipante,
                 quitarParticipante, esParticipante, usuarios, participaciones, CLOCK, idGenerator, transacciones,
-                evento -> { });
+                evento -> { }, new com.renaser.os.chat.application.services.VisibilidadPermisiva(), new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
         listener = new RolDeUsuarioCambiadoSoporteListener(soporte, soporte);
         var accesoAGrupos = new com.renaser.os.chat.application.services.AccesoAChatsDeGrupo(pertenenciaVigente,
                 org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.participante.GruposEnCursoPort.class),
                 usuarios);
         autorizacion = new AutorizacionDeConversacionService(conversaciones, esParticipante,
-                accesoAGrupos, usuarios);
+                accesoAGrupos, usuarios, new com.renaser.os.chat.application.services.VisibilidadPermisiva());
         mensajes = new MensajeService(conversaciones, esParticipante, accesoAGrupos, marcarLeidoPort,
                 guardarMensaje, cargarMensajes, fanoutMensajes, usuarios, almacenamiento,
-                conversacion -> ConfirmacionDeLectura.sinDobleMarca(), CLOCK, idGenerator, evento -> { }, new com.renaser.os.chat.application.services.MetricasDelChatEnMemoria(), new com.renaser.os.chat.application.services.InterruptoresDelChat(new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido(), org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort.class)));
+                conversacion -> ConfirmacionDeLectura.sinDobleMarca(), CLOCK, idGenerator, evento -> { }, new com.renaser.os.chat.application.services.MetricasDelChatEnMemoria(), new com.renaser.os.chat.application.services.InterruptoresDelChat(new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido(), org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort.class)), new com.renaser.os.chat.application.services.VisibilidadPermisiva());
         bandeja = new ConversacionService(conversaciones, guardarConversacion, agregarParticipante,
                 esParticipante, accesoAGrupos, marcarLeidoPort, conversacion -> { }, contarNoLeidos, cargarMensajes, roster,
                 usuarios, sinFotosPropias(),
-                new com.renaser.os.chat.application.services.NombresDeLosChatsService(grupos -> java.util.Map.of(), usuarios), CLOCK, idGenerator, transacciones, ids -> java.util.Set.of());
+                new com.renaser.os.chat.application.services.NombresDeLosChatsService(grupos -> java.util.Map.of(), usuarios), CLOCK, idGenerator, transacciones, ids -> java.util.Set.of(), new com.renaser.os.users.api.AlcanceDeFormacionPermisivo(), org.mockito.Mockito.mock(com.renaser.os.users.api.FormacionesFinder.class), new com.renaser.os.chat.application.services.VisibilidadPermisiva());
         presencia = new PresenciaService(presenciaPort, fanoutPresencia, conversacionesDeUsuario, roster,
-                conversaciones, esParticipante, accesoAGrupos, usuarios);
+                conversaciones, esParticipante, accesoAGrupos, usuarios, new com.renaser.os.chat.application.services.VisibilidadPermisiva());
     }
 
     /**

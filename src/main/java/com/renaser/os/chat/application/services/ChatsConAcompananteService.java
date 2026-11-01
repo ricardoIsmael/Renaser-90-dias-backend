@@ -8,7 +8,10 @@ import com.renaser.os.chat.application.ports.out.participante.AgregarParticipant
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.conversacion.Participante;
+import com.renaser.os.chat.application.ports.out.conversacion.MentorDeLosGruposPort;
+import com.renaser.os.chat.application.ports.out.conversacion.MentorDeLosGruposPort.GrupoConSuMentor;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserSummaryFinder;
@@ -64,13 +67,16 @@ public class ChatsConAcompananteService implements AbrirChatsConAcompananteUseCa
     private final IdGenerator idGenerator;
     private final UserSummaryFinder userSummaryFinder;
     private final TransactionTemplate transaccionPropia;
+    /** Spec 024: los directos del grupo son de la formación del grupo. */
+    private final MentorDeLosGruposPort grupos;
 
     public ChatsConAcompananteService(AcompanamientoDelGrupoPort acompanamientoPort,
                                        LoadConversacionPort loadConversacionPort,
                                        SaveConversacionPort saveConversacionPort,
                                        AgregarParticipantePort agregarParticipantePort,
                                        Clock clock, IdGenerator idGenerator, UserSummaryFinder userSummaryFinder,
-                                       PlatformTransactionManager transactionManager) {
+                                       PlatformTransactionManager transactionManager, MentorDeLosGruposPort grupos) {
+        this.grupos = grupos;
         this.userSummaryFinder = userSummaryFinder;
         this.acompanamientoPort = acompanamientoPort;
         this.loadConversacionPort = loadConversacionPort;
@@ -84,7 +90,9 @@ public class ChatsConAcompananteService implements AbrirChatsConAcompananteUseCa
 
     @Override
     public int abrirParaGrupo(UUID celulaId) {
-        Map<String, Pareja> parejas = parejasDelGrupo(celulaId);
+        GrupoConSuMentor grupo = grupos.deLosGrupos(List.of(celulaId)).get(celulaId);
+        Formacion formacion = grupo == null ? Formacion.POR_DEFECTO : grupo.formacion();
+        Map<String, Pareja> parejas = parejasDelGrupo(celulaId, formacion);
         if (parejas.isEmpty()) {
             return 0;
         }
@@ -97,7 +105,7 @@ public class ChatsConAcompananteService implements AbrirChatsConAcompananteUseCa
                 continue;
             }
             try {
-                if (abrir(entrada.getKey(), entrada.getValue())) {
+                if (abrir(entrada.getKey(), entrada.getValue(), formacion)) {
                     abiertas++;
                 }
             } catch (RuntimeException e) {
@@ -118,7 +126,7 @@ public class ChatsConAcompananteService implements AbrirChatsConAcompananteUseCa
      * Cada aprendiz con cada acompañante, por clave, solo entre cuentas activas (G-4). Si alguien
      * fuera las dos cosas, no se habla solo.
      */
-    private Map<String, Pareja> parejasDelGrupo(UUID celulaId) {
+    private Map<String, Pareja> parejasDelGrupo(UUID celulaId, Formacion formacion) {
         List<UserId> acompanantes = acompanamientoPort.acompanantesVigentes(celulaId);
         Map<String, Pareja> parejas = new LinkedHashMap<>();
         if (acompanantes.isEmpty()) {
@@ -129,7 +137,7 @@ public class ChatsConAcompananteService implements AbrirChatsConAcompananteUseCa
         for (UserId aprendiz : aprendices) {
             for (UserId acompanante : acompanantes) {
                 if (!aprendiz.equals(acompanante) && activos.contains(aprendiz) && activos.contains(acompanante)) {
-                    parejas.put(Conversacion.claveDirectaDe(aprendiz, acompanante), new Pareja(aprendiz, acompanante));
+                    parejas.put(Conversacion.claveDirectaDe(aprendiz, acompanante, formacion), new Pareja(aprendiz, acompanante));
                 }
             }
         }
@@ -153,11 +161,11 @@ public class ChatsConAcompananteService implements AbrirChatsConAcompananteUseCa
      * @return {@code true} si la abrió; {@code false} si ya la había abierto otro (la carrera con el
      *         UNIQUE de {@code clave_directa}, lo único que se traga). Cualquier otro fallo se lanza.
      */
-    private boolean abrir(String clave, Pareja pareja) {
+    private boolean abrir(String clave, Pareja pareja, Formacion formacion) {
         try {
             transaccionPropia.executeWithoutResult(status -> {
                 Conversacion guardada = saveConversacionPort.save(
-                        Conversacion.crearDirecta(ConversacionId.of(idGenerator.newId()), clave, clock.now()));
+                        Conversacion.crearDirecta(ConversacionId.of(idGenerator.newId()), clave, clock.now(), formacion));
                 agregarParticipantePort.agregar(Participante.unirse(guardada.id(), pareja.aprendiz(), clock.now()));
                 agregarParticipantePort.agregar(Participante.unirse(guardada.id(), pareja.acompanante(), clock.now()));
             });

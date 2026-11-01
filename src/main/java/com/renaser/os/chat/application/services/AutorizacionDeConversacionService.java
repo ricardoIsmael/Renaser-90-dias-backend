@@ -32,10 +32,14 @@ public class AutorizacionDeConversacionService implements AutorizarAccesoAConver
     private final AccesoAChatsDeGrupo accesoAChatsDeGrupo;
     private final UserSummaryFinder userSummaryFinder;
 
+    /** Spec 024: la regla única de quién ve cada conversación por formación. */
+    private final VisibilidadPorFormacion visibilidad;
+
     public AutorizacionDeConversacionService(LoadConversacionPort loadConversacionPort,
                                       EsParticipantePort esParticipantePort,
                                       AccesoAChatsDeGrupo accesoAChatsDeGrupo,
-                                      UserSummaryFinder userSummaryFinder) {
+                                      UserSummaryFinder userSummaryFinder, VisibilidadPorFormacion visibilidad) {
+        this.visibilidad = visibilidad;
         this.loadConversacionPort = loadConversacionPort;
         this.esParticipantePort = esParticipantePort;
         this.accesoAChatsDeGrupo = accesoAChatsDeGrupo;
@@ -51,6 +55,10 @@ public class AutorizacionDeConversacionService implements AutorizarAccesoAConver
     }
 
     private boolean autorizado(Conversacion conversacion, UserId usuarioId) {
+        // Spec 024: lo de otra formacion (o de un tipo apagado) no se ve, tampoco en vivo.
+        if (!visibilidad.puedeVer(conversacion, usuarioId)) {
+            return false;
+        }
         if (conversacion.tipo() == TipoConversacion.CELULA) {
             /* Para un grupo, la proyeccion `participantes_conversacion` no sirve como fuente: es
                eventual, y una proyeccion vieja no se limita a mostrar de menos — CONCEDE DE MAS.

@@ -340,7 +340,7 @@ class FotosDelChatServiceTest {
 
     private FotosDelChatService conModo(String modo) {
         return new FotosDelChatService(loadConversacionPort, autorizarAcceso, userSummaryFinder, tarjetaPort,
-                fotosDeGrupos, modo);
+                fotosDeGrupos, modo, new com.renaser.os.chat.application.services.VisibilidadPermisiva());
     }
 
     private void grupoConChat() {

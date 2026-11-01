@@ -17,6 +17,7 @@ import com.renaser.os.chat.domain.model.ranking.TextoDelPodio;
 import com.renaser.os.points.api.RankingGeneralFinder;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserStatus;
@@ -28,6 +29,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
 
@@ -82,68 +84,97 @@ public class PodioDeLaSemanaService implements PublicarPodioDeLaSemanaUseCase, V
     @Override
     public ResultadoDelPodio publicarLaSemanaCerrada() {
         SemanaDelRanking semana = SemanaDelRanking.ultimaCerradaAl(clock.now());
-        return activo ? publicar(semana) : resultado(semana, Estado.APAGADO, 0);
+        return activo ? publicarEnCadaFormacion(semana) : resultado(semana, Estado.APAGADO, 0);
     }
 
     @Override
     public ResultadoDelPodio publicarAhora(UserId actorId) {
         exigirAdministracion(actorId);
-        return publicar(SemanaDelRanking.ultimaCerradaAl(clock.now()));
+        return publicarEnCadaFormacion(SemanaDelRanking.ultimaCerradaAl(clock.now()));
+    }
+
+    /**
+     * Spec 024 (FR-040): UN podio por formación, cada uno con SUS aprendices y en SU comunidad general. Una formación que falla no detiene a las
+     * otras (el barrido reintenta cada hora del lunes y los ids hacen que repetir no duplique), pero el primer fallo se vuelve a lanzar al final para que
+     * quien llama —el barrido— lo vea y lo registre como siempre. El resultado junta los tres.
+     */
+    private ResultadoDelPodio publicarEnCadaFormacion(SemanaDelRanking semana) {
+        Estado mejor = Estado.APAGADO;
+        int piezas = 0;
+        RuntimeException primerFallo = null;
+        for (Formacion formacion : Formacion.values()) {
+            try {
+                ResultadoDelPodio una = publicar(semana, formacion);
+                piezas += una.piezas();
+                mejor = mejor.ordinal() <= una.estado().ordinal() ? mejor : una.estado();
+            } catch (RuntimeException e) {
+                log.error("[chat.podio] el podio de {} del {} no se pudo publicar: {}", formacion, semana.lunes(), e.getMessage(), e);
+                if (primerFallo == null) {
+                    primerFallo = e;
+                }
+            }
+        }
+        if (primerFallo != null) {
+            throw primerFallo;
+        }
+        return resultado(semana, mejor, piezas);
     }
 
     @Override
-    public VistaPreviaDelPodio vistaPrevia(UserId actorId) {
+    public VistaPreviaDelPodio vistaPrevia(UserId actorId, Formacion formacion) {
         exigirAdministracion(actorId);
         SemanaDelRanking semana = SemanaDelRanking.ultimaCerradaAl(clock.now());
-        PodioDeLaSemana podio = podioDe(semana);
+        PodioDeLaSemana podio = podioDe(semana, formacion);
         boolean vacio = podio.estaVacio();
         return new VistaPreviaDelPodio(semana.lunes(), semana.domingo(), podio.todos(),
                 vacio ? null : TextoDelPodio.para(podio, semana), vacio ? null : dibujo.dibujar(podio, semana),
                 DibujarPodioPort.TIPO_CONTENIDO, TextoDelPodio.plantillaDe(semana).name(),
-                mensajes.porId(semana.idDelTexto()).isPresent());
+                mensajes.porId(semana.idDelTexto(formacion)).isPresent());
     }
 
-    private ResultadoDelPodio publicar(SemanaDelRanking semana) {
-        Optional<Conversacion> grupoGeneral = conversaciones.global();
+    private ResultadoDelPodio publicar(SemanaDelRanking semana, Formacion formacion) {
+        Optional<Conversacion> grupoGeneral = conversaciones.global(formacion);
         if (grupoGeneral.isEmpty()) {
-            log.warn("[chat.podio] no existe el grupo general: el podio del {} no se publica", semana.lunes());
+            log.warn("[chat.podio] no existe la comunidad general de {}: su podio del {} no se publica", formacion, semana.lunes());
             return resultado(semana, Estado.SIN_GRUPO_GENERAL, 0);
         }
-        if (mensajes.porId(semana.idDelTexto()).isPresent()) {
+        if (mensajes.porId(semana.idDelTexto(formacion)).isPresent()) {
             return resultado(semana, Estado.YA_ESTABA, 0);
         }
-        PodioDeLaSemana podio = podioDe(semana);
+        PodioDeLaSemana podio = podioDe(semana, formacion);
         if (podio.estaVacio()) {
-            log.info("[chat.podio] nadie cerró la semana del {} con puntaje: no se publica", semana.lunes());
+            log.info("[chat.podio] nadie de {} cerró la semana del {} con puntaje: no se publica", formacion, semana.lunes());
             return resultado(semana, Estado.SIN_PUNTAJES, 0);
         }
-        int piezas = delPrograma.enviarUnaVez(EntregaDelPrograma.sinPersona(grupoGeneral.get().id(), piezas(podio, semana)));
-        log.info("[chat.podio] podio del {} al {} publicado ({} piezas, {} en el podio)", semana.lunes(),
+        int piezas = delPrograma.enviarUnaVez(EntregaDelPrograma.sinPersona(grupoGeneral.get().id(),
+                piezas(podio, semana, formacion)));
+        log.info("[chat.podio] podio de {} del {} al {} publicado ({} piezas, {} en el podio)", formacion, semana.lunes(),
                 semana.domingo(), piezas, podio.todos().size());
         return resultado(semana, piezas > 0 ? Estado.PUBLICADO : Estado.YA_ESTABA, piezas);
     }
 
-    /** El ranking cerrado el domingo: sus 7 días de hábitos son justo esa semana. */
-    private PodioDeLaSemana podioDe(SemanaDelRanking semana) {
-        return PodioDeLaSemana.de(ranking.alCorte(semana.domingo()).stream()
+    /** El ranking cerrado el domingo de los aprendices de {@code formacion}: sus 7 días de hábitos son justo esa semana. */
+    private PodioDeLaSemana podioDe(SemanaDelRanking semana, Formacion formacion) {
+        return PodioDeLaSemana.de(ranking.alCorte(semana.domingo(), formacion).stream()
                 .map(p -> new PodioDeLaSemana.Aprendiz(p.nombreCompleto(), p.puntaje()))
                 .toList());
     }
 
-    private List<PiezaDelPrograma> piezas(PodioDeLaSemana podio, SemanaDelRanking semana) {
+    private List<PiezaDelPrograma> piezas(PodioDeLaSemana podio, SemanaDelRanking semana, Formacion formacion) {
         List<PiezaDelPrograma> piezas = new ArrayList<>(2);
         if (almacenamiento.guardaObjetos()) {
-            piezas.add(new PiezaDelPrograma(semana.idDeLaImagen(), imagenSubida(podio, semana), AvisoDeLaPieza.SIN_AVISO));
+            piezas.add(new PiezaDelPrograma(semana.idDeLaImagen(formacion), imagenSubida(podio, semana, formacion),
+                    AvisoDeLaPieza.SIN_AVISO));
         }
-        piezas.add(new PiezaDelPrograma(semana.idDelTexto(), ContenidoDelPrograma.texto(TextoDelPodio.para(podio, semana)),
+        piezas.add(new PiezaDelPrograma(semana.idDelTexto(formacion), ContenidoDelPrograma.texto(TextoDelPodio.para(podio, semana)),
                 AvisoDeLaPieza.A_TODOS));
         return piezas;
     }
 
-    private ContenidoDelPrograma imagenSubida(PodioDeLaSemana podio, SemanaDelRanking semana) {
+    private ContenidoDelPrograma imagenSubida(PodioDeLaSemana podio, SemanaDelRanking semana, Formacion formacion) {
         byte[] imagen = dibujo.dibujar(podio, semana);
-        almacenamiento.subir(semana.rutaDeLaImagen(), imagen, DibujarPodioPort.TIPO_CONTENIDO);
-        return ContenidoDelPrograma.imagen(semana.rutaDeLaImagen(), DibujarPodioPort.TIPO_CONTENIDO, imagen.length);
+        almacenamiento.subir(semana.rutaDeLaImagen(formacion), imagen, DibujarPodioPort.TIPO_CONTENIDO);
+        return ContenidoDelPrograma.imagen(semana.rutaDeLaImagen(formacion), DibujarPodioPort.TIPO_CONTENIDO, imagen.length);
     }
 
     /** ADMIN y ALCHEMIST con la cuenta activa (el criterio de D-210): primero la cuenta, después el rol. */

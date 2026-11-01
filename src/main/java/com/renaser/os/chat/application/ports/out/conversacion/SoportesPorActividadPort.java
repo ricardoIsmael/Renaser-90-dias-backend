@@ -5,6 +5,7 @@ import com.renaser.os.chat.domain.model.conversacion.CursorDeSoportes;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 
@@ -18,14 +19,17 @@ public interface SoportesPorActividadPort {
     List<SoporteConActividad> pagina(PedidoDeSoportes pedido);
 
     /** Cuántos hay en total con el mismo filtro y en cuántos le quedan mensajes sin leer. */
-    ConteoDeSoportes contar(UserId quienAtiende, Set<String> soloClaves);
+    ConteoDeSoportes contar(UserId quienAtiende, Set<String> soloClaves, Collection<String> formaciones);
 
     /**
-     * @param soloClaves si no es {@code null}, solo los soportes con esas claves ({@code soporte:<uuid>}):
-     *                   así llega el resultado de una búsqueda por nombre. Vacío = ninguno.
+     * @param soloClaves si no es {@code null}, solo los soportes de esos aprendices (el uuid de cada uno, que es el segundo tramo de su clave
+     *                   {@code soporte:<uuid>[:FORMACION]}): así llega el resultado de una búsqueda por nombre. Vacío = ninguno.
      * @param desde      {@code null} para la primera página
+     * @param formaciones los códigos de las formaciones cuyo soporte se lista (spec 024): el alcance de quien atiende, sin las que tienen el soporte
+     *                   apagado. Nunca vacío (con ninguna se liga el código que no es de ninguna).
      */
-    record PedidoDeSoportes(UserId quienAtiende, Set<String> soloClaves, CursorDeSoportes desde, int cuantos) {
+    record PedidoDeSoportes(UserId quienAtiende, Set<String> soloClaves, CursorDeSoportes desde, int cuantos,
+                            Collection<String> formaciones) {
     }
 
     record SoporteConActividad(ConversacionId id, Instant actividad) {

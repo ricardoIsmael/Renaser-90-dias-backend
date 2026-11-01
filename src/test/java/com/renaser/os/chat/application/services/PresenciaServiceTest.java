@@ -206,7 +206,7 @@ class PresenciaServiceTest {
         };
 
         servicio = new PresenciaService(presencia, fanout, conversacionesDe, roster, conversaciones,
-                esParticipante, new AccesoAChatsDeGrupo(pertenencia, org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.participante.GruposEnCursoPort.class), usuarios), usuarios);
+                esParticipante, new AccesoAChatsDeGrupo(pertenencia, org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.participante.GruposEnCursoPort.class), usuarios), usuarios, new com.renaser.os.chat.application.services.VisibilidadPermisiva());
     }
 
     private void siRedisCaidoFallar() {
