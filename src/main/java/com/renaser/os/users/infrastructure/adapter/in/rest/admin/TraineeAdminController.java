@@ -7,6 +7,7 @@ import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
 import com.renaser.os.shared.web.security.RequiresPermission;
+import com.renaser.os.users.application.ports.in.accountrequest.ConsultarAceptacionDeLaPersonaUseCase;
 import com.renaser.os.users.application.ports.in.participante.GetTraineeDetailUseCase;
 import com.renaser.os.users.application.ports.in.participante.GetTraineeDetailUseCase.GetTraineeDetailCommand;
 import com.renaser.os.users.application.ports.in.participante.ListTraineesUseCase;
@@ -44,13 +45,16 @@ public class TraineeAdminController {
     private final ListTraineesUseCase listTraineesUseCase;
     private final GetTraineeDetailUseCase getTraineeDetailUseCase;
     private final SetTraineeProgramDayUseCase setTraineeProgramDayUseCase;
+    private final ConsultarAceptacionDeLaPersonaUseCase aceptacionDeLaPersona;
 
     public TraineeAdminController(ListTraineesUseCase listTraineesUseCase,
                                    GetTraineeDetailUseCase getTraineeDetailUseCase,
-                                   SetTraineeProgramDayUseCase setTraineeProgramDayUseCase) {
+                                   SetTraineeProgramDayUseCase setTraineeProgramDayUseCase,
+                                   ConsultarAceptacionDeLaPersonaUseCase aceptacionDeLaPersona) {
         this.listTraineesUseCase = listTraineesUseCase;
         this.getTraineeDetailUseCase = getTraineeDetailUseCase;
         this.setTraineeProgramDayUseCase = setTraineeProgramDayUseCase;
+        this.aceptacionDeLaPersona = aceptacionDeLaPersona;
     }
 
     @RequiresPermission(Permission.MANAGE_TRAINEES)
@@ -77,7 +81,7 @@ public class TraineeAdminController {
     @GetMapping("/{id}")
     public TraineeDetailResponse detalle(@PathVariable UUID id, @ActorAutenticado UserId actor) {
         var detalle = getTraineeDetailUseCase.obtener(new GetTraineeDetailCommand(actor, UserId.of(id)));
-        return TraineeDetailResponse.from(detalle);
+        return TraineeDetailResponse.from(detalle, aceptacionDeLaPersona.de(actor, UserId.of(id)));
     }
 
     @RequiresPermission(Permission.MANAGE_TRAINEES)

@@ -193,6 +193,12 @@ class AprobarConRolIT {
                     .containsEntry("estado", "ACTIVO");
             assertThat(jdbc.queryForObject("SELECT rol_personalizado_id FROM renaser.usuarios WHERE id = ?",
                     UUID.class, solicitud.usuario())).isEqualTo(guiaInicial);
+            // La foto de lo aceptado recuerda el rol personalizado con el nombre de ese día (V142, spec 025): un rename posterior no lo cambia.
+            assertThat(jdbc.queryForMap("SELECT rol_personalizado_id, rol_personalizado_nombre FROM renaser.solicitudes_cuenta WHERE id = ?",
+                    solicitud.id())).containsEntry("rol_personalizado_id", guiaInicial).containsEntry("rol_personalizado_nombre", "Guía inicial");
+            jdbc.update("UPDATE renaser.roles_personalizados SET nombre = 'Guía renombrada' WHERE id = ?", guiaInicial);
+            assertThat(jdbc.queryForObject("SELECT rol_personalizado_nombre FROM renaser.solicitudes_cuenta WHERE id = ?", String.class, solicitud.id()))
+                    .isEqualTo("Guía inicial");
 
             Solicitud otra = solicitud("Admin Personalizado");
             assertThat(aprobar(otra.id(), sesionDe(usuario("ALQUIMISTA")),

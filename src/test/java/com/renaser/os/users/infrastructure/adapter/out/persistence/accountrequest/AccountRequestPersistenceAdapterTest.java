@@ -4,6 +4,7 @@ import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequest;
+import com.renaser.os.users.domain.model.accountrequest.EleccionDeIngreso;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequestId;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequestStatus;
 import com.renaser.os.users.domain.model.accountrequest.OrigenSocial;
@@ -78,7 +79,7 @@ class AccountRequestPersistenceAdapterTest {
 
         AccountRequest approved = AccountRequest.submit(nuevoId(), UserId.of(UUID.randomUUID()),
                 new Email("a@renaser.com"), "A", "+51900000001", null, null, null, CLOCK);
-        approved.approve(admin, UserId.of(UUID.randomUUID()), CLOCK);
+        approved.approve(admin, UserId.of(UUID.randomUUID()), EleccionDeIngreso.anteriorALasFormaciones(), CLOCK);
         adapter.save(approved);
         assertThat(adapter.byId(approved.id()).orElseThrow().status()).isEqualTo(AccountRequestStatus.APPROVED);
 
