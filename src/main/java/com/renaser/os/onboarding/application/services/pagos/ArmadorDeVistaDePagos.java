@@ -47,7 +47,9 @@ class ArmadorDeVistaDePagos {
         }
         CronogramaDePagos cronograma = cronogramaDe(persona, pago);
         Map<UserId, String> nombres = conNombres ? nombresDeQuienMarco(cronograma.cuotas()) : Map.of();
-        List<CuotaVista> vistas = cronograma.cuotas().stream().map(cuota -> new CuotaVista(cuota, nombres.get(cuota.estadoCambiadoPor()))).toList();
+        // Map.of() no admite pedir una llave nula (lanza NullPointerException): una cuota que nadie marcó no tiene a quién nombrar.
+        List<CuotaVista> vistas = cronograma.cuotas().stream()
+                .map(cuota -> new CuotaVista(cuota, cuota.estadoCambiadoPor() == null ? null : nombres.get(cuota.estadoCambiadoPor()))).toList();
         return new PagoAnotado(ModalidadDePago.CON_CRONOGRAMA, pago.moneda(), vistas, pago.confirmacion(cronograma.huella()), pago.confirmadoEn(),
                 pago.confirmadoNombre());
     }
