@@ -35,6 +35,7 @@ import com.renaser.os.users.domain.model.participante.ParticipacionPrograma;
 import com.renaser.os.users.domain.model.user.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -92,6 +93,8 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
     /** Para decirle al panel cuando se borra una cuenta cerrada (D-243). */
     private final PlazoDeGracia plazoDeGracia;
 
+    private final ProgramaPropioDelPersonal programaPropio;
+
     public ParticipacionProgramaService(RequireActiveUserGuard requireActiveUserGuard,
                                          LoadParticipacionProgramaPort loadParticipacionProgramaPort,
                                          SaveParticipacionProgramaPort saveParticipacionProgramaPort,
@@ -103,6 +106,26 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
                                          LoadUltimoAjusteDiaProgramaPort loadUltimoAjusteDiaProgramaPort,
                                          IdGenerator idGenerator, Clock clock, PlazoDeGracia plazoDeGracia,
                                          ResolverEmergenciaAlCambiarDiaUseCase resolverEmergencia) {
+        this(requireActiveUserGuard, loadParticipacionProgramaPort, saveParticipacionProgramaPort,
+                deleteParticipacionProgramaPort, consultarResumenParticipacionPort, loadMentorProfilePort, loadUserPort,
+                requireAdminGuard, saveAjusteDiaProgramaPort, loadUltimoAjusteDiaProgramaPort, idGenerator, clock,
+                plazoDeGracia, resolverEmergencia, ProgramaPropioDelPersonal.escuela());
+    }
+
+    @Autowired
+    ParticipacionProgramaService(RequireActiveUserGuard requireActiveUserGuard,
+                                         LoadParticipacionProgramaPort loadParticipacionProgramaPort,
+                                         SaveParticipacionProgramaPort saveParticipacionProgramaPort,
+                                         DeleteParticipacionProgramaPort deleteParticipacionProgramaPort,
+                                         ConsultarResumenParticipacionPort consultarResumenParticipacionPort,
+                                         LoadMentorProfilePort loadMentorProfilePort, LoadUserPort loadUserPort,
+                                         RequireAdminGuard requireAdminGuard,
+                                         SaveAjusteDiaProgramaPort saveAjusteDiaProgramaPort,
+                                         LoadUltimoAjusteDiaProgramaPort loadUltimoAjusteDiaProgramaPort,
+                                         IdGenerator idGenerator, Clock clock, PlazoDeGracia plazoDeGracia,
+                                         ResolverEmergenciaAlCambiarDiaUseCase resolverEmergencia,
+                                         ProgramaPropioDelPersonal programaPropio) {
+        this.programaPropio = programaPropio;
         this.plazoDeGracia = plazoDeGracia;
         this.requireActiveUserGuard = requireActiveUserGuard;
         this.loadParticipacionProgramaPort = loadParticipacionProgramaPort;
@@ -129,7 +152,9 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
             throw new IllegalStateException("Ya activaste tu seguimiento personal de habitos y objetivos");
         }
 
-        ParticipacionPrograma nueva = ParticipacionPrograma.activarSeguimientoPersonal(actor.id(), clock);
+        var programa = programaPropio.para(actor.id());
+        ParticipacionPrograma nueva = ParticipacionPrograma.activarSeguimientoPersonal(actor.id(), clock,
+                programa.formacion(), programa.duracionDias());
         return saveParticipacionProgramaPort.save(nueva);
     }
 

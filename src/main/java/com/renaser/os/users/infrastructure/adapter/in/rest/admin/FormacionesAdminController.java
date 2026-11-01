@@ -9,6 +9,7 @@ import com.renaser.os.shared.web.security.RequiresPermission;
 import com.renaser.os.users.application.ports.in.formacion.AsignarFormacionesDelPersonalUseCase;
 import com.renaser.os.users.application.ports.in.formacion.AsignarFormacionesDelPersonalUseCase.AsignarFormacionesCommand;
 import com.renaser.os.users.application.ports.in.formacion.ConfigurarFormacionUseCase;
+import com.renaser.os.users.application.ports.in.formacion.ConsultarFormacionDeUnaPersonaUseCase;
 import com.renaser.os.users.application.ports.in.formacion.ConfigurarFormacionUseCase.ConfigurarFormacionCommand;
 import com.renaser.os.users.application.ports.in.formacion.TrasladarAprendizDeFormacionUseCase;
 import com.renaser.os.users.application.ports.in.formacion.TrasladarAprendizDeFormacionUseCase.TrasladarCommand;
@@ -17,6 +18,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -41,12 +43,21 @@ public class FormacionesAdminController {
     private final ConfigurarFormacionUseCase configurar;
     private final AsignarFormacionesDelPersonalUseCase asignar;
     private final TrasladarAprendizDeFormacionUseCase trasladar;
+    private final ConsultarFormacionDeUnaPersonaUseCase consultarPersona;
 
     public FormacionesAdminController(ConfigurarFormacionUseCase configurar, AsignarFormacionesDelPersonalUseCase asignar,
-                                      TrasladarAprendizDeFormacionUseCase trasladar) {
+                                      TrasladarAprendizDeFormacionUseCase trasladar,
+                                      ConsultarFormacionDeUnaPersonaUseCase consultarPersona) {
         this.configurar = configurar;
         this.asignar = asignar;
         this.trasladar = trasladar;
+        this.consultarPersona = consultarPersona;
+    }
+
+    @RequiresPermission(value = Permission.MANAGE_TRAINEES, scope = "el guard real es RequireAdminGuard: ADMIN/ALCHEMIST activos")
+    @GetMapping("/users/{id}/formaciones")
+    public FormacionDeUnaPersonaResponse deUnaPersona(@PathVariable UUID id, @ActorAutenticado UserId actor) {
+        return FormacionDeUnaPersonaResponse.from(consultarPersona.consultar(actor, UserId.of(id)));
     }
 
     @RequiresPermission(value = Permission.MANAGE_ROLES, scope = "el guard real es RequireAdminGuard: ADMIN/ALCHEMIST activos")

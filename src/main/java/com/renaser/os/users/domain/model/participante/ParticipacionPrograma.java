@@ -129,12 +129,18 @@ public final class ParticipacionPrograma {
      * 'America/Lima' por defecto.
      */
     public static ParticipacionPrograma activarSeguimientoPersonal(UserId participanteId, Clock clock) {
+        return activarSeguimientoPersonal(participanteId, clock, Formacion.POR_DEFECTO, DURACION_PROGRAMA_DIAS);
+    }
+
+    /** El seguimiento personal en la formación en la que trabaja la persona (spec 022, Q9-A). */
+    public static ParticipacionPrograma activarSeguimientoPersonal(UserId participanteId, Clock clock, Formacion formacion,
+                                                                  int duracionDias) {
         Objects.requireNonNull(participanteId, "participanteId es obligatorio");
         Instant now = clock.now();
         return new ParticipacionPrograma(participanteId, null, null, 1, FasePrograma.initial(),
                 hoyDelParticipante(clock),
                 now, ZONA_POR_DEFECTO, false, 0, now, now, null, null, null, null, 0,
-                Formacion.POR_DEFECTO, DURACION_PROGRAMA_DIAS);
+                Objects.requireNonNull(formacion, "formacion es obligatoria"), DuracionDelPrograma.validar(duracionDias));
     }
 
     /**
