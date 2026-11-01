@@ -29,6 +29,9 @@ public interface ConsultarRocasDelAprendizPort {
 
     RocasDeLaSemana deLaSemana(UserId aprendizId);
 
+    /** La última semana del programa de esta persona (13 en uno de 90 días, 53 en el de 365): tope de «la semana siguiente». */
+    int ultimaSemanaDelPrograma(UserId aprendizId);
+
     List<ObjetivoDelMes> delMes(UserId aprendizId);
 
     /** D-177: el avance de la semana de programa en curso, como lo ve la app, y el balance por eje. */

@@ -1,7 +1,6 @@
 package com.renaser.os.rocks.infrastructure.adapter.out.persistence.participante;
 
 import com.renaser.os.rocks.application.ports.out.participante.ConsultarProgresoParticipanteRocksPort;
-import com.renaser.os.rocks.domain.model.rocasemanal.SemanaPrograma;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.ParticipacionPrograma;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
@@ -55,11 +54,11 @@ class ConsultarProgresoParticipanteRocksPersistenceAdapter implements ConsultarP
     private ProgresoParticipanteRocks aProgreso(ParticipacionPrograma participacion) {
         return new ProgresoParticipanteRocks(participacion.diaPrograma(), participacion.diaUnoElegido(),
                 participacion.zona(), mapearRol(participacion.rol()), participacion.suspendido(),
-                participacion.activado(), ultimaFechaSiElDiaVieneAcotado(participacion));
+                participacion.activado(), ultimaFechaSiElDiaVieneAcotado(participacion), participacion.duracionDias());
     }
 
     private LocalDate ultimaFechaSiElDiaVieneAcotado(ParticipacionPrograma participacion) {
-        if (!participacion.activado() || participacion.diaPrograma() < SemanaPrograma.ULTIMO_DIA) {
+        if (!participacion.activado() || participacion.diaPrograma() < participacion.duracionDias()) {
             return null;
         }
         return programasActivadosFinder.de(participacion.participanteId())

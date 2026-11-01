@@ -33,6 +33,11 @@ class ConsultarRocasDelAprendizAdapter implements ConsultarRocasDelAprendizPort 
     }
 
     @Override
+    public int ultimaSemanaDelPrograma(UserId aprendizId) {
+        return finder.ultimaSemanaDelPrograma(aprendizId);
+    }
+
+    @Override
     public RocasDeLaSemana deLaSemana(UserId aprendizId) {
         RocasDelAprendizFinder.RocasDeLaSemana semana = finder.deLaSemana(aprendizId);
         List<RocaDeLaSemana> rocas = semana.rocas().stream()

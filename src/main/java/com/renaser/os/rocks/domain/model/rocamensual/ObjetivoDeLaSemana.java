@@ -51,10 +51,16 @@ public record ObjetivoDeLaSemana(BigDecimal valor, BigDecimal paso, int semanasQ
      */
     public static ObjetivoDeLaSemana desde(ObjetivoDelMes delMes, BigDecimal valorHoy, int diaPrograma,
                                             Magnitud magnitud) {
+        return desde(delMes, valorHoy, diaPrograma, magnitud, MesPrograma.ULTIMO_DIA);
+    }
+
+    /** Igual, para un programa de {@code duracionDias}: el ultimo mes puede ser mas largo y tener mas semanas por delante. */
+    public static ObjetivoDeLaSemana desde(ObjetivoDelMes delMes, BigDecimal valorHoy, int diaPrograma,
+                                            Magnitud magnitud, int duracionDias) {
         if (!(delMes instanceof ObjetivoDelMes.ConCifra mes) || valorHoy == null || magnitud == null) {
             return null;
         }
-        int semanas = MesPrograma.semanasQueQuedanDelMes(diaPrograma);
+        int semanas = MesPrograma.semanasQueQuedanDelMes(diaPrograma, duracionDias);
         BigDecimal faltaDelMes = mes.valor().subtract(valorHoy);
         BigDecimal paso = faltaDelMes.abs().divide(BigDecimal.valueOf(semanas), PRECISION);
         BigDecimal valor = valorHoy.add(faltaDelMes.divide(BigDecimal.valueOf(semanas), PRECISION));

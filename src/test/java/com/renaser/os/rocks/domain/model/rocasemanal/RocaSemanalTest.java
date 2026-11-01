@@ -46,7 +46,9 @@ class RocaSemanalTest {
 
     @Test
     void numeroSemanaFueraDeRangoEsInvalido() {
-        assertThatThrownBy(() -> RocaSemanal.planificar(unId(), maestra(), 14, "T", null, null, null, CLOCK))
+        /* Spec 026: el tope del dominio es la semana 53 (el programa de 365 dias); que una persona de 90 dias no llegue a la 14 lo exige el servicio. */
+        assertThat(RocaSemanal.planificar(unId(), maestra(), 53, "T", null, null, null, CLOCK).numeroSemana()).isEqualTo(53);
+        assertThatThrownBy(() -> RocaSemanal.planificar(unId(), maestra(), 54, "T", null, null, null, CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> RocaSemanal.planificar(unId(), maestra(), 0, "T", null, null, null, CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);

@@ -122,13 +122,23 @@ public class ProponerEditarObjetivoSemanalHerramienta implements HerramientaAgen
             return ResultadoHerramienta.fallo("No pude consultar su semana en este momento.");
         }
         if (pedida.siguiente()) {
-            return semana.numeroSemana() >= EditarObjetivoSemanalPort.ULTIMA_SEMANA
+            return semana.numeroSemana() >= ultimaSemanaDe(actorId)
                     ? ResultadoHerramienta.fallo(TextoDeAjustesDeRocas.SIN_SEMANA_SIGUIENTE)
                     : proponer(actorId, semana.numeroSemana() + 1, pedida);
         }
         return impedimentoEnLaSemanaEnCurso(semana, pedida.eje())
                 .map(ResultadoHerramienta::fallo)
                 .orElseGet(() -> proponer(actorId, semana.numeroSemana(), pedida));
+    }
+
+    /** La última de SU programa (13 o 53); si no se puede leer, la de siempre (90 días). */
+    private int ultimaSemanaDe(UserId actorId) {
+        try {
+            return rocasPort.ultimaSemanaDelPrograma(actorId);
+        } catch (RuntimeException falla) {
+            log.warn("[rag] la herramienta {} no pudo leer la ultima semana del programa", NOMBRE, falla);
+            return EditarObjetivoSemanalPort.ULTIMA_SEMANA;
+        }
     }
 
     private Optional<String> impedimentoEnLaSemanaEnCurso(RocasDeLaSemana semana, String eje) {

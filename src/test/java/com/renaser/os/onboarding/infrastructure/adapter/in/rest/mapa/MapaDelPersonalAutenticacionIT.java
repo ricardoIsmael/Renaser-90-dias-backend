@@ -204,6 +204,7 @@ class MapaDelPersonalAutenticacionIT {
                 VALUES (?, ?, ?, CAST(? AS renaser.rol_usuario), CAST(? AS renaser.estado_usuario), ?)
                 """, id, id + "@renaser.test", "Mapa IT " + rol, rol, estado, encoder.encode(CLAVE));
         usuarios.add(id);
+        com.renaser.os.FormacionesDePrueba.alPersonalLeAsignaLaEscuela(jdbc, id, rol);
         return id;
     }
 

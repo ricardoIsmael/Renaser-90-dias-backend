@@ -35,7 +35,7 @@ public record RocaMensual(RocaMensualId id, RocaMaestraId rocaMaestraId, int num
         Objects.requireNonNull(creadoEn, "creadoEn es obligatorio");
         Objects.requireNonNull(actualizadoEn, "actualizadoEn es obligatorio");
         if (!MesPrograma.esValido(numeroMes)) {
-            throw new IllegalArgumentException("El mes tiene que estar entre 1 y " + MesPrograma.MESES);
+            throw new IllegalArgumentException("El mes tiene que estar entre 1 y " + MesPrograma.MAXIMO_DE_MESES);
         }
         if (titulo == null || titulo.isBlank()) {
             throw new IllegalArgumentException("El titulo del objetivo mensual es obligatorio");
@@ -65,9 +65,14 @@ public record RocaMensual(RocaMensualId id, RocaMaestraId rocaMaestraId, int num
         return meta != null;
     }
 
-    /** Dia de programa en que cierra este mes: 30, 60 o 90. */
+    /** Dia de programa en que cierra este mes en un programa de 90 dias: 30, 60 o 90. */
     public int diaDeCierre() {
         return MesPrograma.ultimoDiaDe(numeroMes);
+    }
+
+    /** Dia en que cierra este mes en un programa de {@code duracionDias}: el del ultimo mes es el ultimo dia del programa. */
+    public int diaDeCierre(int duracionDias) {
+        return MesPrograma.ultimoDiaDe(numeroMes, duracionDias);
     }
 
     /** Solo para el adaptador de persistencia: reconstruye una roca mensual ya existente. */

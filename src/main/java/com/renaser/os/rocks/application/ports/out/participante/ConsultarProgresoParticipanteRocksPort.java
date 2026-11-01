@@ -1,5 +1,6 @@
 package com.renaser.os.rocks.application.ports.out.participante;
 
+import com.renaser.os.rocks.domain.model.rocamensual.MesPrograma;
 import com.renaser.os.rocks.domain.model.rocasemanal.SemanaPrograma;
 import com.renaser.os.shared.domain.UserId;
 
@@ -47,18 +48,32 @@ public interface ConsultarProgresoParticipanteRocksPort {
      *                               .diaUnoElegido()}), o {@code null} si todavía no activó su programa: antes
      *                               de la activación {@code fecha_inicio} es una fecha PROVISIONAL del alta y
      *                               no es un Día 1 (D-201, E-336)
-     * @param ultimaFechaDelPrograma la fecha del día 90 con el ajuste, tal como la calcula {@code users}
+     * @param ultimaFechaDelPrograma la fecha del último día del programa (el 90 o el 365 de esta persona) con el ajuste, tal como la calcula {@code users}
      *                               ({@code ProgramasActivadosFinder}); {@code null} cuando no se pidió,
      *                               porque con el día sin acotar no hace falta (ver
      *                               {@link #primerDiaEfectivo})
+     * @param duracionDias           la duración del programa de ESTA persona ({@code participantes_programa.duracion_dias}: 90 o 365, spec 022); de ella
+     *                               salen las semanas, los meses y la curva del plan de objetivos
      */
     record ProgresoParticipanteRocks(int diaPrograma, LocalDate diaUnoElegido, ZoneId zona, RolParticipante rol,
-                                      boolean suspendido, boolean programaActivado, LocalDate ultimaFechaDelPrograma) {
+                                      boolean suspendido, boolean programaActivado, LocalDate ultimaFechaDelPrograma,
+                                      int duracionDias) {
 
-        /** Sin la fecha del día 90: la usan los dobles de prueba y todo participante con el día sin acotar. */
+        /** Un programa de 90 días: la firma de antes de las formaciones, que usan los dobles de prueba. */
+        public ProgresoParticipanteRocks(int diaPrograma, LocalDate diaUnoElegido, ZoneId zona, RolParticipante rol,
+                                         boolean suspendido, boolean programaActivado, LocalDate ultimaFechaDelPrograma) {
+            this(diaPrograma, diaUnoElegido, zona, rol, suspendido, programaActivado, ultimaFechaDelPrograma, SemanaPrograma.ULTIMO_DIA);
+        }
+
+        /** Sin la fecha del último día: la usan los dobles de prueba y todo participante con el día sin acotar. */
         public ProgresoParticipanteRocks(int diaPrograma, LocalDate diaUnoElegido, ZoneId zona, RolParticipante rol,
                                          boolean suspendido, boolean programaActivado) {
             this(diaPrograma, diaUnoElegido, zona, rol, suspendido, programaActivado, null);
+        }
+
+        /** Los meses del plan de esta persona: 3 en un programa de 90 días, 12 en el de 365. */
+        public int meses() {
+            return MesPrograma.mesesDe(duracionDias);
         }
 
         /**
@@ -68,7 +83,7 @@ public interface ConsultarProgresoParticipanteRocksPort {
          * 1, sin rango).
          */
         public Optional<SemanaPrograma> semanas(LocalDate hoy) {
-            return primerDiaEfectivo(hoy).map(SemanaPrograma::desde);
+            return primerDiaEfectivo(hoy).map(primerDia -> SemanaPrograma.desde(primerDia, duracionDias));
         }
 
         /**
@@ -80,7 +95,7 @@ public interface ConsultarProgresoParticipanteRocksPort {
          *       daría una semana 1 con fechas que no existen.</li>
          *   <li><b>El reloj no arrancó</b> (el Día 1 todavía no llegó): el Día 1. No puede haber ajuste
          *       antes del día 1 (D-195) y el día que viene es el guardado, que no sirve de ancla.</li>
-         *   <li><b>Día 90 o después</b>: la fecha exacta del día 90 menos 89, si el adaptador la trajo.
+         *   <li><b>Último día del programa o después</b> (90, o 365 en el Diplomado de 1 año): la fecha exacta del último día menos (duración - 1), si el adaptador la trajo.
          *       Desde el 90 el día llega acotado y la cuenta de abajo daría un ancla que se corre un día
          *       por cada día que pasa (el límite conocido de D-192 para los graduados, E-339).</li>
          *   <li><b>En curso</b>: {@code hoy − (día − 1)}, exacto mientras el día no esté acotado.</li>
@@ -94,7 +109,7 @@ public interface ConsultarProgresoParticipanteRocksPort {
                 return Optional.of(diaUnoElegido);
             }
             if (ultimaFechaDelPrograma != null) {
-                return Optional.of(ultimaFechaDelPrograma.minusDays(SemanaPrograma.ULTIMO_DIA - 1L));
+                return Optional.of(ultimaFechaDelPrograma.minusDays(duracionDias - 1L));
             }
             return Optional.of(hoy.minusDays(diaPrograma - 1L));
         }
