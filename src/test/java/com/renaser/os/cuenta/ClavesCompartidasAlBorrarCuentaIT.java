@@ -3,6 +3,7 @@ package com.renaser.os.cuenta;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.BorradoDeDatosDeCuenta;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -11,6 +12,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -25,6 +27,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Import(TestcontainersConfiguration.class)
 class ClavesCompartidasAlBorrarCuentaIT {
 
+    /** El nombre de la comunidad general de la Escuela (`NombreDelChat.DE_LA_COMUNIDAD`, V83): el mismo que le daría la aplicación al crearla. */
+    private static final String NOMBRE_DE_LA_COMUNIDAD = "Formación Renaser Global";
+
     @Autowired
     private List<BorradoDeDatosDeCuenta> borrados;
     @Autowired
@@ -32,12 +37,22 @@ class ClavesCompartidasAlBorrarCuentaIT {
 
     private UUID persona;
     private UUID otra;
+    /** Las conversaciones que sembró ESTA prueba (no la comunidad que ya existía): se borran al terminar, para no dejarle nada a las que corren después (#58). */
+    private final List<UUID> conversacionesSembradas = new ArrayList<>();
 
     @BeforeEach
     void sembrar() {
         SemillaDeCuenta semilla = new SemillaDeCuenta(jdbc);
         otra = semilla.nuevaPersona();
         persona = semilla.nuevaPersona();
+    }
+
+    @AfterEach
+    void limpiar() {
+        // Antes la comunidad general de la Escuela se sembraba SIN nombre y se quedaba para siempre: en el CI (base nueva) esta clase corre antes que
+        // ComunidadPorFormacionIT y la comunidad de la Escuela le salía con `nombre` null en vez de «Formación Renaser Global» (#58).
+        conversacionesSembradas.forEach(id -> jdbc.update("DELETE FROM renaser.conversaciones WHERE id = ?", id));
+        conversacionesSembradas.clear();
     }
 
     @Test
@@ -155,8 +170,11 @@ class ClavesCompartidasAlBorrarCuentaIT {
             }
         }
         UUID id = UUID.randomUUID();
-        jdbc.update("INSERT INTO renaser.conversaciones (id, tipo, celula_id, clave_directa) "
-                + "VALUES (?, CAST(? AS renaser.tipo_conversacion), ?, ?)", id, tipo, celula, clave);
+        // La comunidad lleva el nombre que le da la aplicación; las demás no tienen uno que importe aquí.
+        String nombre = "GLOBAL".equals(tipo) ? NOMBRE_DE_LA_COMUNIDAD : null;
+        jdbc.update("INSERT INTO renaser.conversaciones (id, tipo, celula_id, clave_directa, nombre) "
+                + "VALUES (?, CAST(? AS renaser.tipo_conversacion), ?, ?, ?)", id, tipo, celula, clave, nombre);
+        conversacionesSembradas.add(id);
         return id;
     }
 
