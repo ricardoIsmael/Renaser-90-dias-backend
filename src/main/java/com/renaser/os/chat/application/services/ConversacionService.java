@@ -351,9 +351,24 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
     }
 
     private void unirseA(Formacion formacion, UserId usuarioId) {
-        Conversacion global = loadConversacionPort.global(formacion).orElseGet(() -> crearComunidad(formacion));
+        Conversacion global = loadConversacionPort.global(formacion).orElseGet(() -> crearComunidadSinCarrera(formacion));
         if (!esParticipantePort.esParticipante(global.id(), usuarioId)) {
             agregarParticipantePort.agregar(Participante.unirse(global.id(), usuarioId, clock.now()));
+        }
+    }
+
+    /**
+     * Crea la comunidad general de la formación SIN romperse si otro pedido la crea al mismo tiempo (issue #55). «Si no existe, créala» es un
+     * check-then-act: el oyente asíncrono de un traslado y otro camino (abrir la Tribu, un alta) pueden ver los dos que falta e intentar el INSERT, y el
+     * segundo choca con el índice único parcial {@code conversacion_global_unica_uk} (una por formación, V138). Igual que {@link #crearDirectaConAmbosParticipantes}
+     * (C-10): la creación va en su propia transacción —si pierde, solo se deshace ESA— y quien pierde relee la que ganó, ya comprometida (Postgres
+     * hace esperar al segundo INSERT hasta que el primero termina).
+     */
+    private Conversacion crearComunidadSinCarrera(Formacion formacion) {
+        try {
+            return transaccionPropia.execute(status -> crearComunidad(formacion));
+        } catch (DataIntegrityViolationException carreraDeCreacionConcurrente) {
+            return loadConversacionPort.global(formacion).orElseThrow(() -> carreraDeCreacionConcurrente);
         }
     }
 

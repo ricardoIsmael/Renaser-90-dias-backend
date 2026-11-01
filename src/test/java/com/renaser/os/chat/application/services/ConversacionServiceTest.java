@@ -29,6 +29,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -491,6 +492,33 @@ class ConversacionServiceTest {
 
         verify(saveConversacionPort).save(any());
         verify(agregarParticipantePort).agregar(any());
+    }
+
+    @Test
+    @DisplayName("Issue #55: si otro pedido crea la comunidad general al mismo tiempo, quien pierde la carrera relee la que ganó y se une a ella")
+    void unirseNoSeRompeSiOtroPedidoCreaLaComunidadAlMismoTiempo() {
+        Conversacion ganadora = Conversacion.crearGlobal(ConversacionId.of(UUID.randomUUID()), CLOCK.now());
+        // La primera lectura no ve nada (todavía no ganó nadie); la segunda, tras perder la carrera, ya ve la que comprometió el otro pedido.
+        when(loadConversacionPort.global(any())).thenReturn(Optional.empty(), Optional.of(ganadora));
+        when(saveConversacionPort.save(any())).thenThrow(new DataIntegrityViolationException("conversacion_global_unica_uk simulado"));
+        when(esParticipantePort.esParticipante(ganadora.id(), activo)).thenReturn(false);
+
+        service.unirse(activo);
+
+        ArgumentCaptor<com.renaser.os.chat.domain.model.conversacion.Participante> agregado =
+                ArgumentCaptor.forClass(com.renaser.os.chat.domain.model.conversacion.Participante.class);
+        verify(agregarParticipantePort).agregar(agregado.capture());
+        assertThat(agregado.getValue().conversacionId()).isEqualTo(ganadora.id());
+    }
+
+    @Test
+    @DisplayName("Issue #55: si la carrera se pierde y la comunidad tampoco aparece al releer, el error de verdad sale (no se traga)")
+    void unirseDejaSalirElErrorSiNiSiquieraSeEncuentraLaGanadora() {
+        when(loadConversacionPort.global(any())).thenReturn(Optional.empty());
+        when(saveConversacionPort.save(any())).thenThrow(new DataIntegrityViolationException("otra violación"));
+
+        assertThatThrownBy(() -> service.unirse(activo)).isInstanceOf(DataIntegrityViolationException.class);
+        verify(agregarParticipantePort, never()).agregar(any());
     }
 
     @Test
