@@ -20,18 +20,12 @@ import java.math.BigDecimal;
  * > <b>Corregido 2026-09-30 (D-234).</b> Decia: "Define el objetivo [...] o corrige el que ya
  * > tenia". Ya no se corrige: lo decidio el dueno.
  *
- * <p><b>Fija desde que el Mapa esta activo, no desde que se definio (D-284, 2026-10-27).</b> El Mapa de
- * Renacimiento es opcional y Plan deja definir el objetivo antes, pero esa roca provisional no puede dejar
- * sin activar al Mapa (issue #20). Segun el estado del Mapa de la persona:
- * <ul>
- *   <li><b>Mapa activo:</b> rige D-234 de arriba, venga de donde venga el pedido.
- *   <li><b>Mapa sin activar y {@code desdeElMapa}:</b> es la activacion escribiendo lo que la persona puso en
- *       su Mapa; reemplaza a la roca que hubiera (objetivo, meta, unidad, punto de partida y avance).
- *   <li><b>Mapa sin activar y no viene del Mapa:</b> con {@code renaser.rocks.exigir-mapa-activo} apagado
- *       (el default, para que el APK que todavia no manda {@code desdeElMapa} pueda activar su Mapa)
- *       se comporta como el caso anterior; encendido, solo acepta repetir la misma definicion y cualquier
- *       otra cosa lanza {@code MapaPendienteException} (409 {@code MAPA_PENDIENTE}).
- * </ul>
+ * <p><b>Sin Mapa (spec 026, D-303).</b> El Mapa de Renacimiento se retiro y ya no decide nada ({@code desdeElMapa} se acepta y se ignora; lo manda la app
+ * anterior). El objetivo queda fijo desde que se define, salvo el que nacio del diagnostico: llega «por confirmar» y el primer pedido lo reescribe (o lo deja
+ * igual) y lo confirma. Antes de decidir se materializan los objetivos que nacieron del diagnostico de la persona, si los hay.
+ *
+ * > <b>Corregido 2026-10-31 (D-303).</b> Decia que la fijeza dependia del Mapa activo y que, con {@code renaser.rocks.exigir-mapa-activo} encendido, un pedido
+ * > que no venia del Mapa lanzaba {@code MapaPendienteException} (409 {@code MAPA_PENDIENTE}). Ese interruptor y esa excepcion ya no existen.
  *
  * <p><b>Es una sola operacion y no un "crear" mas un "editar"</b> porque la tabla ya impone
  * {@code UNIQUE (participante_id, eje)}: por eje hay exactamente una Roca Maestra o ninguna.

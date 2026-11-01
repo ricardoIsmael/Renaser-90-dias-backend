@@ -8,9 +8,8 @@ package com.renaser.os.rocks.domain.model.rocamaestra;
  * <b>no se cambia</b>: lo que se ajusta son los objetivos semanales y las acciones diarias. El
  * mensaje es apto para mostrarse a la persona tal cual.
  *
- * <p><b>Solo con el Mapa ACTIVO (D-284, 2026-10-27).</b> Antes salia en cuanto la roca existia, aunque la
- * persona no hubiera llenado el Mapa (issue #20): el mensaje decia "en tu Mapa" y era mentira. Ahora el
- * servicio solo la lanza cuando el Mapa esta activo, asi que el texto es cierto en todos los casos.
+ * <p><b>Corregido 2026-10-31 (spec 026).</b> El Mapa se retiro: el objetivo queda fijo desde que se define (o se confirma, si nacio del diagnostico) y el mensaje ya
+ * no nombra al Mapa.
  *
  * <p>Extiende {@link IllegalStateException} para que, si alguna vez sale por otro camino que no
  * sea {@code RocaMaestraController}, caiga igual en el 409 de {@code GlobalExceptionHandler}: el
@@ -21,8 +20,8 @@ public class RocaMaestraFijaException extends IllegalStateException {
     /** Codigo estable para que un cliente distinga este 409 de cualquier otro sin leer el texto. */
     public static final String CODIGO = "ROCA_MAESTRA_FIJA";
 
-    private static final String MENSAJE = "Tu objetivo de 90 días quedó fijo en tu Mapa de Renacimiento y no se "
-            + "cambia. Lo que sí puedes ajustar son tus objetivos semanales y tus acciones diarias.";
+    private static final String MENSAJE = "Tu objetivo de 90 días ya quedó fijo y no se cambia. "
+            + "Lo que sí puedes ajustar son tus objetivos semanales y tus acciones diarias.";
 
     public RocaMaestraFijaException() {
         super(MENSAJE);

@@ -16,10 +16,13 @@ import java.util.UUID;
  * <p>{@code porcentaje} viaja ya calculado y no se deja al cliente: es una regla de negocio
  * (incluido el tope de 100, ver {@link MetaCuantitativa#porcentaje()}) y si cada cliente la
  * recalcula, tarde o temprano dos pantallas muestran numeros distintos para el mismo dato.
+ *
+ * <p>{@code origin} (PLAN, MAPA o DIAGNOSTICO) y {@code confirmed} (spec 026): un objetivo de DIAGNOSTICO sin confirmar es «por confirmar»; la persona lo
+ * puede reescribir una vez.
  */
 public record RocaMaestraResponse(UUID id, String eje, String objetivo, BigDecimal meta, BigDecimal avance,
                                    String unidad, BigDecimal lineaBase, Integer porcentaje, Instant creadoEn,
-                                   Instant actualizadoEn) {
+                                   Instant actualizadoEn, String origin, boolean confirmed) {
 
     public static RocaMaestraResponse from(RocaMaestra r) {
         MetaCuantitativa meta = r.meta();
@@ -29,6 +32,6 @@ public record RocaMaestraResponse(UUID id, String eje, String objetivo, BigDecim
                 meta == null ? null : meta.unidad(),
                 meta == null ? null : meta.lineaBase(),
                 meta == null ? null : meta.porcentaje(),
-                r.creadoEn(), r.actualizadoEn());
+                r.creadoEn(), r.actualizadoEn(), r.origen().name(), !r.estaPorConfirmar());
     }
 }
