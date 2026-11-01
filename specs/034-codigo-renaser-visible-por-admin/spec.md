@@ -2,7 +2,7 @@
 
 **Feature Branch**: `034-codigo-renaser-visible-por-admin` (backend y app)
 **Created**: 2026-10-31
-**Status**: En implementación. El dueño respondió el 2026-10-31 (ver «Decisiones del dueño (31/10)»): las tres preguntas son la opción A, y quien lo decide incluye también a Soporte TI.
+**Status**: Implementada (2026-10-31): backend en esta rama y app en `033-034-cierre-en-plan-e-interruptor` del frontend. Falta el E2E en el emulador. El dueño respondió el 2026-10-31 (ver «Decisiones del dueño (31/10)»): las tres preguntas son la opción A, y quien lo decide incluye también a Soporte TI.
 **Input**: Pedido del dueño (2026-10-31), textual: «El líder de mentores y el mentor no pueden ver el Código Renaser: un interruptor para activar y desactivar.»
 Decisión del dueño sobre quién lo decide: **Administración** (con un interruptor). No lo decide el aprendiz ni el mentor.
 *(Ampliado el 2026-10-31, 034-4 B: lo deciden Administración, Alquimista **y también Soporte TI**.)*
