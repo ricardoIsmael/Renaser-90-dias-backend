@@ -1,5 +1,7 @@
 # Estado de las formaciones (specs 022–034) — 01/11/2026, 04:10
 
+> **Reemplazado por `INFORME_FORMACIONES_Y_PAGOS_2026-11-01.md`** (cierre del 01/11, con pagos, Hoy/Plan y la segunda jornada de E2E). Este documento queda como historia de la prueba nocturna.
+
 Rama `integracion-formaciones` en los dos repos, **local y sin publicar**: nada se subió, nada se fusionó a `master`, nada tocó producción. Los worktrees están en
 `.claude/worktrees/integracion` de cada repo (HEAD del backend y de la app, al final de este documento).
 
