@@ -1,5 +1,6 @@
 package com.renaser.os.calendar.application.services;
 
+import com.renaser.os.FormacionesDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.calendar.application.ports.in.evento.CrearEventoUseCase;
 import com.renaser.os.calendar.application.ports.in.evento.CrearEventoUseCase.CrearEventoCommand;
@@ -170,13 +171,14 @@ class EventosDeGrupoYMentoriaIT {
         Instant inicio = Instant.now().plus(Duration.ofDays(1)).truncatedTo(ChronoUnit.MINUTES);
         return new CrearEventoCommand(admin, "Evento " + tipo.name().substring(0, 8), null, inicio, 60, LIMA,
                 TipoUbicacion.MEET, link, audiencia, null, null, grupo, tipo, false, false, false, null, Set.of(),
-                List.of());
+                List.of(), com.renaser.os.shared.domain.Formacion.ESCUELA);
     }
 
     private UserId usuario(String rol) {
         UUID id = UUID.randomUUID();
         jdbc.update("INSERT INTO renaser.usuarios (id, email, nombre_completo, rol) VALUES (?, ?, ?, CAST(? AS renaser.rol_usuario))",
                 id, "eventos-" + id + "@renaser.test", "Persona " + rol, rol);
+        FormacionesDePrueba.alPersonalLeAsignaLaEscuela(jdbc, id, rol);
         usuarios.add(id);
         return UserId.of(id);
     }

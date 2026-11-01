@@ -7,7 +7,10 @@ import com.renaser.os.academy.application.ports.out.progreso.LoadProgresoLeccion
 import com.renaser.os.academy.domain.model.curso.Curso;
 import com.renaser.os.academy.domain.model.curso.CursoId;
 import com.renaser.os.academy.domain.model.progreso.PorcentajeCursos;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.ParticipacionProgramaFinder.UsuarioConDiaPrograma;
 import com.renaser.os.users.api.UserRole;
@@ -54,10 +57,14 @@ public class PorcentajeCursosService implements PorcentajeCursosFinder {
     private final LoadCursoPort loadCursoPort;
     private final LoadLeccionPort loadLeccionPort;
     private final LoadProgresoLeccionPort loadProgresoLeccionPort;
+    /** Spec 024 (FR-022): cada aprendiz se mide solo contra los cursos de SU formación. */
+    private final AlcanceDeFormacionFinder formaciones;
 
     public PorcentajeCursosService(ParticipacionProgramaFinder participacionFinder, LoadCursoPort loadCursoPort,
                                     LoadLeccionPort loadLeccionPort,
-                                    LoadProgresoLeccionPort loadProgresoLeccionPort) {
+                                    LoadProgresoLeccionPort loadProgresoLeccionPort,
+                                    AlcanceDeFormacionFinder formaciones) {
+        this.formaciones = formaciones;
         this.participacionFinder = participacionFinder;
         this.loadCursoPort = loadCursoPort;
         this.loadLeccionPort = loadLeccionPort;
@@ -74,6 +81,7 @@ public class PorcentajeCursosService implements PorcentajeCursosFinder {
         if (diaProgramaPorTrainee.isEmpty()) {
             return Map.of();
         }
+        Map<UserId, Formacion> formacionPorTrainee = formacionesDe(diaProgramaPorTrainee.keySet());
 
         List<Curso> catalogo = loadCursoPort.listarTodos();
         Map<CursoId, Integer> totalLeccionesPorCurso = loadLeccionPort.contarTotalPorCurso();
@@ -83,7 +91,8 @@ public class PorcentajeCursosService implements PorcentajeCursosFinder {
         Map<UserId, BigDecimal> resultado = new LinkedHashMap<>();
         for (Map.Entry<UserId, Integer> entry : diaProgramaPorTrainee.entrySet()) {
             UserId usuarioId = entry.getKey();
-            Set<CursoId> accesibles = cursosAccesiblesPara(catalogo, entry.getValue());
+            Formacion formacion = formacionPorTrainee.getOrDefault(usuarioId, Formacion.POR_DEFECTO);
+            Set<CursoId> accesibles = cursosAccesiblesPara(catalogo, entry.getValue(), formacion);
             int total = sumarPorCursosAccesibles(accesibles, totalLeccionesPorCurso);
             int completadas = sumarPorCursosAccesibles(accesibles,
                     completadasPorUsuario.getOrDefault(usuarioId, Map.of()));
@@ -104,9 +113,23 @@ public class PorcentajeCursosService implements PorcentajeCursosFinder {
         return resultado;
     }
 
-    /** Mismo gate que el catalogo del aprendiz (AC-01) — rol TRAINEE fijo, espejo de {@code sumarProgresoCursos}. */
-    private static Set<CursoId> cursosAccesiblesPara(List<Curso> catalogo, Integer diaPrograma) {
+    /**
+     * La formación de cada aprendiz, en UNA consulta por formación (tres en total, nunca una por persona): quién pertenece a cuál lo responde
+     * el punto único de la 022. Quien no figura en ninguna (no debería pasar) cuenta como de la Escuela.
+     */
+    private Map<UserId, Formacion> formacionesDe(Set<UserId> aprendices) {
+        Map<UserId, Formacion> resultado = new LinkedHashMap<>();
+        for (Formacion formacion : Formacion.values()) {
+            formaciones.dentroDelAlcance(aprendices, AlcanceDeFormacion.de(formacion))
+                    .forEach(id -> resultado.putIfAbsent(id, formacion));
+        }
+        return resultado;
+    }
+
+    /** Mismo gate que el catalogo del aprendiz (AC-01) — rol TRAINEE fijo, espejo de {@code sumarProgresoCursos} —, solo con los cursos de su formación. */
+    private static Set<CursoId> cursosAccesiblesPara(List<Curso> catalogo, Integer diaPrograma, Formacion formacion) {
         return catalogo.stream()
+                .filter(curso -> curso.formacion() == formacion)
                 .filter(curso -> curso.visibleEnCatalogoPara(UserRole.TRAINEE, diaPrograma))
                 .map(Curso::id)
                 .collect(Collectors.toUnmodifiableSet());

@@ -288,7 +288,7 @@ class AcompanamientoFinderService implements AcompanamientoFinder, MentorVigente
         List<GrupoConSuMentor> resultado = new ArrayList<>();
         for (UUID grupoId : new LinkedHashSet<>(grupoIds)) {
             loadCelulaPort.porId(CelulaId.of(grupoId)).ifPresent(celula -> resultado.add(
-                    new GrupoConSuMentor(grupoId, celula.nombre(), mentorVigenteDe(grupoId, instante))));
+                    new GrupoConSuMentor(grupoId, celula.nombre(), mentorVigenteDe(grupoId, instante), celula.formacion())));
         }
         return resultado;
     }

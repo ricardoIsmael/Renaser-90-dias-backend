@@ -72,12 +72,16 @@ public class FotosDelChatService implements VerFotosDelChatUseCase {
     private final TarjetaConNombrePort tarjetaPort;
     private final FotoPropiaDelGrupoFinder fotosDeGrupos;
     private final FotoDeIntegrantes modo;
+    /** Spec 024: la conversación de otra formación es como si no existiera (404). */
+    private final VisibilidadPorFormacion visibilidad;
 
     public FotosDelChatService(LoadConversacionPort loadConversacionPort,
                                AutorizarAccesoAConversacionUseCase autorizarAcceso,
                                UserSummaryFinder userSummaryFinder, TarjetaConNombrePort tarjetaPort,
                                FotoPropiaDelGrupoFinder fotosDeGrupos,
-                               @Value("${renaser.chat.foto-de-integrantes:TARJETA}") String modo) {
+                               @Value("${renaser.chat.foto-de-integrantes:TARJETA}") String modo,
+                               VisibilidadPorFormacion visibilidad) {
+        this.visibilidad = visibilidad;
         this.loadConversacionPort = loadConversacionPort;
         this.autorizarAcceso = autorizarAcceso;
         this.userSummaryFinder = userSummaryFinder;
@@ -150,6 +154,7 @@ public class FotosDelChatService implements VerFotosDelChatUseCase {
         requireActivo(actorId);
         Conversacion conversacion = loadConversacionPort.porId(conversacionId)
                 .orElseThrow(() -> new NoSuchElementException("Conversacion no encontrada: " + conversacionId));
+        visibilidad.exigirQueLaVea(conversacion, actorId);
         if (!autorizarAcceso.puedeVer(conversacionId, actorId)) {
             throw new NotAuthorizedException("No eres participante de esta conversación");
         }

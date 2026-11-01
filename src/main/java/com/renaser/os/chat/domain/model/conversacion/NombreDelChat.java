@@ -22,6 +22,8 @@ public final class NombreDelChat {
     /** El nombre de la comunidad. Lo guarda la conversación (el Admin puede renombrarla, #28). */
     public static final String DE_LA_COMUNIDAD = "Formación Renaser Global";
 
+    private static final String GLOBAL = " Global";
+
     /** Cierra el nombre de cada soporte y firma los mensajes del programa. */
     public static final String FORMACION_RENASER = "Formación Renaser";
 
@@ -46,7 +48,20 @@ public final class NombreDelChat {
 
     /** Sin nombre legible del aprendiz queda «Formación Renaser» a secas, nunca vacío. */
     public static String deSoporte(String nombreCompletoDelAprendiz) {
+        return deSoporte(nombreCompletoDelAprendiz, FORMACION_RENASER);
+    }
+
+    /**
+     * El soporte de un aprendiz con el nombre de SU formación (spec 024, FR-030): «Pedro – Diplomado Renaser». La Escuela conserva
+     * «Pedro – Formación Renaser» (decisión del dueño: los chats de hoy no cambian de nombre).
+     */
+    public static String deSoporte(String nombreCompletoDelAprendiz, String nombreDeLaFormacion) {
         String primerNombre = PrimerNombre.de(nombreCompletoDelAprendiz);
-        return primerNombre.isEmpty() ? FORMACION_RENASER : primerNombre + SEPARADOR_SOPORTE + FORMACION_RENASER;
+        return primerNombre.isEmpty() ? nombreDeLaFormacion : primerNombre + SEPARADOR_SOPORTE + nombreDeLaFormacion;
+    }
+
+    /** La comunidad general de una formación que no es la Escuela: «Diplomado Renaser Global». La de la Escuela es {@link #DE_LA_COMUNIDAD}. */
+    public static String deLaComunidad(String nombreDeLaFormacion) {
+        return nombreDeLaFormacion.strip() + GLOBAL;
     }
 }

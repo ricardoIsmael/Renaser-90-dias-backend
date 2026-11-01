@@ -99,7 +99,7 @@ class ConversacionSoporteServiceTest {
     void preparar() {
         service = new ConversacionSoporteService(loadConversacionPort, saveConversacionPort,
                 agregarParticipantePort, quitarParticipantePort, esParticipantePort, userSummaryFinder,
-                participacionProgramaFinder, CLOCK, idGenerator, transactionManager, eventos);
+                participacionProgramaFinder, CLOCK, idGenerator, transactionManager, eventos, new com.renaser.os.chat.application.services.VisibilidadPermisiva(), new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(saveConversacionPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }

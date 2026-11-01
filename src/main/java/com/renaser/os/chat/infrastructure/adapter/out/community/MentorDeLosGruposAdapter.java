@@ -29,7 +29,7 @@ class MentorDeLosGruposAdapter implements MentorDeLosGruposPort {
         }
         Map<UUID, GrupoConSuMentor> porGrupo = new LinkedHashMap<>();
         for (var grupo : mentorVigenteFinder.deLosGrupos(celulaIds, clock.now())) {
-            porGrupo.put(grupo.grupoId(), new GrupoConSuMentor(grupo.nombre(), grupo.mentorId()));
+            porGrupo.put(grupo.grupoId(), new GrupoConSuMentor(grupo.nombre(), grupo.mentorId(), grupo.formacion()));
         }
         return porGrupo;
     }

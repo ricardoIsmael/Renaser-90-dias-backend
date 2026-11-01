@@ -2,6 +2,8 @@ package com.renaser.os.chat.infrastructure.adapter.in.rest.ranking;
 
 import com.renaser.os.chat.application.ports.in.ranking.PublicarPodioDeLaSemanaUseCase;
 import com.renaser.os.chat.application.ports.in.ranking.VerPodioDeLaSemanaUseCase;
+import com.renaser.os.shared.domain.Formacion;
+import com.renaser.os.shared.domain.FormacionDelContenido;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
@@ -10,6 +12,7 @@ import com.renaser.os.shared.web.security.RequiresPermission;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -40,8 +43,10 @@ public class PodioDeLaSemanaAdminController {
 
     @RequiresPermission(value = Permission.ADJUST_POINTS, scope = SOLO_ADMIN)
     @GetMapping("/vista-previa")
-    public VistaPreviaDelPodioResponse vistaPrevia(@ActorAutenticado UserId actorId) {
-        return VistaPreviaDelPodioResponse.from(verUseCase.vistaPrevia(actorId));
+    public VistaPreviaDelPodioResponse vistaPrevia(@ActorAutenticado UserId actorId,
+                                                   @RequestParam(required = false) String formation) {
+        Formacion formacion = FormacionDelContenido.pedida(formation);
+        return VistaPreviaDelPodioResponse.from(verUseCase.vistaPrevia(actorId, formacion == null ? Formacion.POR_DEFECTO : formacion));
     }
 
     @RequiresPermission(value = Permission.ADJUST_POINTS, scope = SOLO_ADMIN)

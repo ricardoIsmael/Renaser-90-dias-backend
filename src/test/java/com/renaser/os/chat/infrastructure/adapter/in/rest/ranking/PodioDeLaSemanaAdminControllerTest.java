@@ -6,6 +6,7 @@ import com.renaser.os.chat.application.ports.in.ranking.PublicarPodioDeLaSemanaU
 import com.renaser.os.chat.application.ports.in.ranking.VerPodioDeLaSemanaUseCase;
 import com.renaser.os.chat.application.ports.in.ranking.VerPodioDeLaSemanaUseCase.VistaPreviaDelPodio;
 import com.renaser.os.chat.domain.model.ranking.PodioDeLaSemana.Puesto;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -63,7 +64,7 @@ class PodioDeLaSemanaAdminControllerTest {
     @DisplayName("vista previa: la semana, los puestos, el texto y la imagen como data URL, sin publicar")
     void vistaPrevia() throws Exception {
         UUID actor = cuenta(UserRole.ADMIN, UserStatus.ACTIVE);
-        when(verUseCase.vistaPrevia(UserId.of(actor))).thenReturn(new VistaPreviaDelPodio(LUNES, DOMINGO,
+        when(verUseCase.vistaPrevia(UserId.of(actor), Formacion.POR_DEFECTO)).thenReturn(new VistaPreviaDelPodio(LUNES, DOMINGO,
                 List.of(new Puesto(1, "Liz M.", new BigDecimal("96.4"))), "🏆 ¡Cerramos la semana!",
                 new byte[]{1, 2, 3}, "image/jpeg", "A", false));
 
@@ -133,7 +134,7 @@ class PodioDeLaSemanaAdminControllerTest {
     void rechazoDelServicio() throws Exception {
         UUID actor = cuenta(UserRole.MENTOR, UserStatus.ACTIVE);
         NotAuthorizedException rechazo = new NotAuthorizedException("Solo Administración y Alquimista pueden publicar el podio de la semana");
-        when(verUseCase.vistaPrevia(any())).thenThrow(rechazo);
+        when(verUseCase.vistaPrevia(any(), any())).thenThrow(rechazo);
         when(publicarUseCase.publicarAhora(any())).thenThrow(rechazo);
 
         for (RequestBuilder pedido : los2(actor)) {

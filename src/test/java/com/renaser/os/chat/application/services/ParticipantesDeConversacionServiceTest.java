@@ -82,7 +82,7 @@ class ParticipantesDeConversacionServiceTest {
     @BeforeEach
     void preparar() {
         servicio = new ParticipantesDeConversacionService(loadConversacionPort, autorizarAcceso, listarUsuariosPort,
-                pertenenciaVigentePort, mentorDeLosGrupos, userSummaryFinder, fotos);
+                pertenenciaVigentePort, mentorDeLosGrupos, userSummaryFinder, fotos, new com.renaser.os.chat.application.services.VisibilidadPermisiva());
         ana = cuenta("Ana Pérez", UserRole.TRAINEE, UserStatus.ACTIVE);
         beto = cuenta("Beto Díaz", UserRole.TRAINEE, UserStatus.ACTIVE);
         ricardo = cuenta("Ricardo Palomino", UserRole.MENTOR, UserStatus.ACTIVE);

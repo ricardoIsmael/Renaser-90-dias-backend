@@ -6,7 +6,9 @@ import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.conversacion.NombreDelChat;
 import com.renaser.os.chat.domain.model.conversacion.TipoConversacion;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.FormacionesFinder;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.springframework.stereotype.Service;
@@ -40,8 +42,12 @@ public class NombresDeLosChatsService {
 
     private final MentorDeLosGruposPort mentorDeLosGrupos;
     private final UserSummaryFinder userSummaryFinder;
+    /** Spec 024: el soporte lleva el nombre de SU formación («Pedro – Diplomado Renaser»); la Escuela conserva «Formación Renaser». */
+    private final FormacionesFinder catalogo;
 
-    public NombresDeLosChatsService(MentorDeLosGruposPort mentorDeLosGrupos, UserSummaryFinder userSummaryFinder) {
+    public NombresDeLosChatsService(MentorDeLosGruposPort mentorDeLosGrupos, UserSummaryFinder userSummaryFinder,
+                                    FormacionesFinder catalogo) {
+        this.catalogo = catalogo;
         this.mentorDeLosGrupos = mentorDeLosGrupos;
         this.userSummaryFinder = userSummaryFinder;
     }
@@ -60,21 +66,31 @@ public class NombresDeLosChatsService {
         return nombres;
     }
 
+    /** La formación de un grupo (spec 024): su chat nace en ella. La Escuela si el grupo no se encuentra. */
+    public Formacion formacionDelGrupo(UUID celulaId) {
+        GrupoConSuMentor grupo = mentorDeLosGrupos.deLosGrupos(List.of(celulaId)).get(celulaId);
+        return grupo == null ? Formacion.POR_DEFECTO : grupo.formacion();
+    }
+
     /** El de una sola conversación; {@code null} en una DIRECTA. */
     public String nombreDe(Conversacion conversacion) {
         return nombresDe(List.of(conversacion)).get(conversacion.id());
     }
 
-    private static String nombreDe(Conversacion c, Map<UUID, GrupoConSuMentor> grupos,
-                                   Map<UserId, UserSummary> personas) {
+    private String nombreDe(Conversacion c, Map<UUID, GrupoConSuMentor> grupos, Map<UserId, UserSummary> personas) {
         return switch (c.tipo()) {
             case GLOBAL -> c.nombre();
             case DIRECTA -> null;
             case CELULA -> nombreDelGrupo(grupos.get(c.celulaId()), personas);
             case SOPORTE -> c.aprendizDelSoporte().map(personas::get)
-                    .map(aprendiz -> NombreDelChat.deSoporte(aprendiz.fullName()))
+                    .map(aprendiz -> NombreDelChat.deSoporte(aprendiz.fullName(), nombreDeSoporteDe(c.formacion())))
                     .orElse(c.nombre());
         };
+    }
+
+    /** «Formación Renaser» en la Escuela (el de hoy) y el nombre de la formación en las demás. */
+    private String nombreDeSoporteDe(Formacion formacion) {
+        return formacion == Formacion.POR_DEFECTO ? NombreDelChat.FORMACION_RENASER : catalogo.de(formacion).nombre();
     }
 
     private static String nombreDelGrupo(GrupoConSuMentor grupo, Map<UserId, UserSummary> personas) {

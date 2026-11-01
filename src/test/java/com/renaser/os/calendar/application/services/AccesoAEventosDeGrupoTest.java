@@ -94,7 +94,7 @@ class AccesoAEventosDeGrupoTest {
 
     @BeforeEach
     void setUp() {
-        var acceso = new AccesoEventoService(progresoPort, nivelPort, cursoPort, (usuario, tipo) -> true, pertenencia);
+        var acceso = new AccesoEventoService(progresoPort, nivelPort, cursoPort, (usuario, tipo) -> true, pertenencia, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
         service = new EventoService(loadEventoPort, saveEventoPort, loadExcepcionPort, saveExcepcionPort,
                 loadConfirmacionPort, saveRecordatorioPort, nivelPort, almacenamientoPort, acceso, CLOCK,
                 idGenerator);

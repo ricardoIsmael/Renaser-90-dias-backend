@@ -75,7 +75,7 @@ class ConfirmacionServiceTest {
                     public Set<UserId> filtrarConAcceso(String cursoId, Set<UserId> candidatos) {
                         return Set.of();
                     }
-                }, (u, t) -> false, (celula, usuario) -> false);
+                }, (u, t) -> false, (celula, usuario) -> false, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
         service = servicioConReloj(CLOCK);
     }
 
@@ -91,7 +91,7 @@ class ConfirmacionServiceTest {
                     public Set<UserId> filtrarConAcceso(String cursoId, Set<UserId> candidatos) {
                         return Set.of();
                     }
-                }, (u, t) -> false, (celula, usuario) -> false);
+                }, (u, t) -> false, (celula, usuario) -> false, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
         return new ConfirmacionService(loadEventoPort, saveConfirmacionPort, loadConfirmacionPort, historialPort,
                 accesoEventoService, reloj);
     }

@@ -110,7 +110,7 @@ class ChatsConAcompananteServiceTest {
     @BeforeEach
     void preparar() {
         service = new ChatsConAcompananteService(acompanamientoPort, loadConversacionPort, saveConversacionPort,
-                agregarParticipantePort, CLOCK, idGenerator, cuentas, transactionManager);
+                agregarParticipantePort, CLOCK, idGenerator, cuentas, transactionManager, org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.conversacion.MentorDeLosGruposPort.class));
         lenient().when(idGenerator.newId()).thenAnswer(inv -> UUID.randomUUID());
         lenient().when(saveConversacionPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(loadConversacionPort.clavesDirectasExistentes(anyCollection())).thenReturn(Set.of());

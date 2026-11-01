@@ -58,10 +58,10 @@ class RankingAgregadoServiceTest {
         List<EntradaRanking> coherencia = List.of(entrada("Coherencia"));
         List<EntradaRanking> general = List.of(entrada("General"));
         List<EntradaRanking> kilometros = List.of(entrada("Kilometros"));
-        when(consultarRankingUseCase.consultar(actor, TipoRanking.KILOMETROS, FECHA)).thenReturn(kilometros);
-        when(consultarRankingUseCase.consultar(actor, TipoRanking.LEAGUE, FECHA)).thenReturn(liga);
-        when(consultarRankingUseCase.consultar(actor, TipoRanking.CELL, FECHA)).thenReturn(coherencia);
-        when(consultarRankingUseCase.consultar(actor, TipoRanking.GENERAL, FECHA)).thenReturn(general);
+        when(consultarRankingUseCase.consultar(actor, TipoRanking.KILOMETROS, FECHA, null)).thenReturn(kilometros);
+        when(consultarRankingUseCase.consultar(actor, TipoRanking.LEAGUE, FECHA, null)).thenReturn(liga);
+        when(consultarRankingUseCase.consultar(actor, TipoRanking.CELL, FECHA, null)).thenReturn(coherencia);
+        when(consultarRankingUseCase.consultar(actor, TipoRanking.GENERAL, FECHA, null)).thenReturn(general);
         when(celulaFinder.celulaDeParticipante(actor)).thenReturn(Optional.empty());
 
         RankingAgregado resultado = service.agregado(actor, FECHA);
@@ -71,15 +71,15 @@ class RankingAgregadoServiceTest {
         assertThat(resultado.coherenciaIndividual()).isEqualTo(coherencia);
         assertThat(resultado.general()).isEqualTo(general);
         assertThat(resultado.kilometros()).isEqualTo(kilometros);
-        verify(consultarRankingUseCase).consultar(actor, TipoRanking.LEAGUE, FECHA);
-        verify(consultarRankingUseCase).consultar(actor, TipoRanking.CELL, FECHA);
-        verify(consultarRankingUseCase).consultar(actor, TipoRanking.GENERAL, FECHA);
+        verify(consultarRankingUseCase).consultar(actor, TipoRanking.LEAGUE, FECHA, null);
+        verify(consultarRankingUseCase).consultar(actor, TipoRanking.CELL, FECHA, null);
+        verify(consultarRankingUseCase).consultar(actor, TipoRanking.GENERAL, FECHA, null);
     }
 
     @Test
     @DisplayName("sin celula asignada, el resumen de celula es null, no un error")
     void sinCelulaAsignadaElResumenEsNull() {
-        when(consultarRankingUseCase.consultar(any(), any(), any())).thenReturn(List.of());
+        when(consultarRankingUseCase.consultar(any(), any(), any(), any())).thenReturn(List.of());
         when(celulaFinder.celulaDeParticipante(actor)).thenReturn(Optional.empty());
 
         RankingAgregado resultado = service.agregado(actor, FECHA);
@@ -91,7 +91,7 @@ class RankingAgregadoServiceTest {
     @DisplayName("con celula asignada, proyecta 1:1 lo que expone community.api.CelulaFinder")
     void conCelulaAsignadaProyectaElResumen() {
         UUID celulaId = UUID.randomUUID();
-        when(consultarRankingUseCase.consultar(any(), any(), any())).thenReturn(List.of());
+        when(consultarRankingUseCase.consultar(any(), any(), any(), any())).thenReturn(List.of());
         when(celulaFinder.celulaDeParticipante(actor)).thenReturn(Optional.of(
                 new CelulaParticipanteResumen(celulaId, "Celula 1", "Cohorte Agosto", "Mentor Uno", 8, 3)));
 
@@ -109,13 +109,13 @@ class RankingAgregadoServiceTest {
     @Test
     @DisplayName("un actor sin cuenta activa no ve el agregado (misma guarda que cada pestaña plana)")
     void actorSuspendidoEsRechazado() {
-        when(consultarRankingUseCase.consultar(actor, TipoRanking.LEAGUE, FECHA))
+        when(consultarRankingUseCase.consultar(actor, TipoRanking.LEAGUE, FECHA, null))
                 .thenThrow(new NotAuthorizedException("Cuenta suspendida"));
 
         assertThatThrownBy(() -> service.agregado(actor, FECHA)).isInstanceOf(NotAuthorizedException.class);
 
         // Corta apenas falla la primera pestaña: no sigue pidiendo CELL/GENERAL ni la celula.
-        verify(consultarRankingUseCase, never()).consultar(actor, TipoRanking.GENERAL, FECHA);
+        verify(consultarRankingUseCase, never()).consultar(actor, TipoRanking.GENERAL, FECHA, null);
         verify(celulaFinder, never()).celulaDeParticipante(any());
     }
 }

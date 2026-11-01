@@ -172,7 +172,7 @@ class ApagarUnaFuncionalidadIT {
 
     private void participarDeLaGlobal(UUID usuario) {
         if (global == null) {
-            List<UUID> existente = jdbc.queryForList("SELECT id FROM renaser.conversaciones WHERE tipo = 'GLOBAL'",
+            List<UUID> existente = jdbc.queryForList("SELECT id FROM renaser.conversaciones WHERE tipo = 'GLOBAL' AND formacion = 'ESCUELA'",
                     UUID.class);
             globalCreadaAca = existente.isEmpty();
             global = globalCreadaAca ? UUID.randomUUID() : existente.getFirst();

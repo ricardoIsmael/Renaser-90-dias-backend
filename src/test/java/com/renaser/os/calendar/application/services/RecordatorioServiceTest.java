@@ -78,7 +78,7 @@ class RecordatorioServiceTest {
     @BeforeEach
     void setUp() {
         var audiencia = new AudienciaDelEventoService(nivelPort, progresoPort, audienciaMasivaPort, celulaPort,
-                cursoPort, elegibilidadPort);
+                cursoPort, elegibilidadPort, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
         service = new RecordatorioService(loadEventoPort, loadExcepcionPort, saveRecordatorioPort, audiencia, CLOCK);
     }
 

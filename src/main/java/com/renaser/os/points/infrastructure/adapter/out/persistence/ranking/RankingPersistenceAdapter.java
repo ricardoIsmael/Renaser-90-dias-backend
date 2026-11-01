@@ -5,7 +5,11 @@ import com.renaser.os.points.application.ports.out.ranking.LoadRankingPort;
 import com.renaser.os.points.application.ports.out.ranking.SaveRankingSnapshotPort;
 import com.renaser.os.points.domain.model.ranking.PosicionRanking;
 import com.renaser.os.points.domain.model.ranking.TipoRanking;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.infrastructure.persistence.FiltroDeFormacionSql;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
@@ -17,6 +21,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -52,10 +57,14 @@ class RankingPersistenceAdapter implements LoadRankingCandidatosPort, SaveRankin
     private final UserSummaryFinder userSummaryFinder;
     /** E-450: el padron del ranking se cruza con quienes tienen fila en el programa. */
     private final ParticipacionProgramaFinder participacionProgramaFinder;
+    /** Spec 024: en qué formación está cada aprendiz, para que cada ranking compare solo a los suyos. */
+    private final AlcanceDeFormacionFinder formaciones;
 
     RankingPersistenceAdapter(SpringDataRankingAprendizRepository repository, RankingPersistenceMapper mapper,
                                JdbcTemplate jdbcTemplate, UserSummaryFinder userSummaryFinder,
-                               ParticipacionProgramaFinder participacionProgramaFinder) {
+                               ParticipacionProgramaFinder participacionProgramaFinder,
+                               AlcanceDeFormacionFinder formaciones) {
+        this.formaciones = formaciones;
         this.repository = repository;
         this.mapper = mapper;
         this.jdbcTemplate = jdbcTemplate;
@@ -101,9 +110,21 @@ class RankingPersistenceAdapter implements LoadRankingCandidatosPort, SaveRankin
                         rs.getBigDecimal("coherencia")))
                 .stream()
                 .collect(Collectors.toMap(PuntajeCrudo::participanteId, p -> p));
+        Map<UserId, Formacion> formacionPorAprendiz = formacionesDe(padron);
         return padron.stream()
-                .map(aprendiz -> aCandidato(puntajes.get(aprendiz.id()), aprendiz))
+                .map(aprendiz -> aCandidato(puntajes.get(aprendiz.id()), aprendiz,
+                        formacionPorAprendiz.getOrDefault(aprendiz.id(), Formacion.POR_DEFECTO)))
                 .toList();
+    }
+
+    /** La formación de cada aprendiz del padrón: tres consultas en lote (una por formación), nunca una por persona. */
+    private Map<UserId, Formacion> formacionesDe(List<UserSummary> padron) {
+        List<UserId> ids = padron.stream().map(UserSummary::id).toList();
+        Map<UserId, Formacion> resultado = new HashMap<>();
+        for (Formacion formacion : Formacion.values()) {
+            formaciones.dentroDelAlcance(ids, AlcanceDeFormacion.de(formacion)).forEach(id -> resultado.putIfAbsent(id, formacion));
+        }
+        return resultado;
     }
 
     /**
@@ -125,11 +146,12 @@ class RankingPersistenceAdapter implements LoadRankingCandidatosPort, SaveRankin
     }
 
     /** {@code puntaje} nulo = todavia no sumo nada: entra con cero, no se lo deja afuera (D-130). */
-    private static CandidatoRanking aCandidato(PuntajeCrudo puntaje, UserSummary resumen) {
+    private static CandidatoRanking aCandidato(PuntajeCrudo puntaje, UserSummary resumen, Formacion formacion) {
         if (puntaje == null) {
-            return new CandidatoRanking(resumen.id(), resumen.fullName(), 0, java.math.BigDecimal.ZERO);
+            return new CandidatoRanking(resumen.id(), resumen.fullName(), 0, java.math.BigDecimal.ZERO, formacion);
         }
-        return new CandidatoRanking(resumen.id(), resumen.fullName(), puntaje.puntosLiga(), puntaje.coherencia());
+        return new CandidatoRanking(resumen.id(), resumen.fullName(), puntaje.puntosLiga(), puntaje.coherencia(),
+                formacion);
     }
 
     private record PuntajeCrudo(UserId participanteId, int puntosLiga, java.math.BigDecimal coherencia) {
@@ -142,7 +164,7 @@ class RankingPersistenceAdapter implements LoadRankingCandidatosPort, SaveRankin
      * seguridad, no el mecanismo principal).
      */
     @Override
-    @CacheEvict(cacheNames = CACHE_RANKING, key = "#tipo + '|' + #fecha")
+    @CacheEvict(cacheNames = CACHE_RANKING, allEntries = true)
     public void reemplazar(TipoRanking tipo, LocalDate fecha, List<PosicionRanking> posiciones) {
         TipoRankingJpa tipoJpa = mapper.toJpaTipo(tipo);
         repository.deleteByTipoAndFecha(tipoJpa, fecha);
@@ -158,10 +180,11 @@ class RankingPersistenceAdapter implements LoadRankingCandidatosPort, SaveRankin
      * clave a proposito.
      */
     @Override
-    @Cacheable(cacheNames = CACHE_RANKING, key = "#tipo + '|' + #fecha")
-    public List<EntradaRankingConNombre> porTipoYFecha(TipoRanking tipo, LocalDate fecha) {
-        List<RankingAprendizJpaEntity> filas = repository.findByTipoAndFechaOrderByPosicion(
-                mapper.toJpaTipo(tipo), fecha);
+    @Cacheable(cacheNames = CACHE_RANKING,
+            key = "#tipo + '|' + #fecha + '|' + T(com.renaser.os.shared.infrastructure.persistence.FiltroDeFormacionSql).codigos(#alcance)")
+    public List<EntradaRankingConNombre> porTipoYFecha(TipoRanking tipo, LocalDate fecha, AlcanceDeFormacion alcance) {
+        List<RankingAprendizJpaEntity> filas = repository.findByTipoAndFechaAndFormacionInOrderByFormacionAscPosicionAsc(
+                mapper.toJpaTipo(tipo), fecha, FiltroDeFormacionSql.codigos(alcance));
 
         // Una sola consulta de nombres para todo el listado: antes habia una por fila (N+1).
         Map<UserId, UserSummary> resumenes = userSummaryFinder.findByIds(
@@ -171,7 +194,7 @@ class RankingPersistenceAdapter implements LoadRankingCandidatosPort, SaveRankin
                     UserId participanteId = mapper.participanteIdDe(fila);
                     UserSummary resumen = resumenes.get(participanteId);
                     return new EntradaRankingConNombre(participanteId, resumen == null ? null : resumen.fullName(),
-                            fila.getPosicion(), fila.getPuntaje());
+                            fila.getPosicion(), fila.getPuntaje(), Formacion.desde(fila.getFormacion()));
                 })
                 .toList();
     }

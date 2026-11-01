@@ -17,6 +17,7 @@ import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import com.renaser.os.users.api.CuentasCerradasFinder;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
@@ -46,12 +47,15 @@ public class ComentarioMuroService implements EscribirComentarioUseCase, EditarC
     private final IdGenerator idGenerator;
     /** D-243: los comentarios de cuentas cerradas esperando su borrado no se muestran ni cuentan. */
     private final SinCuentasCerradas sinCerradas;
+    /** Spec 024: el comentario es de la formación de su publicación; quien no la ve no la lee, ni comenta, ni reacciona. */
+    private final AlcanceDeFormacionFinder formaciones;
 
     public ComentarioMuroService(LoadPublicacionPort loadPublicacionPort, LoadComentarioPort loadComentarioPort,
                                   SaveComentarioPort saveComentarioPort,
                                   ConsultarPerfilUsuarioPort consultarPerfilUsuarioPort,
                                   UserSummaryFinder userSummaryFinder, Clock clock, IdGenerator idGenerator,
-                                  CuentasCerradasFinder cuentasCerradas) {
+                                  CuentasCerradasFinder cuentasCerradas, AlcanceDeFormacionFinder formaciones) {
+        this.formaciones = formaciones;
         this.sinCerradas = new SinCuentasCerradas(cuentasCerradas);
         this.loadPublicacionPort = loadPublicacionPort;
         this.loadComentarioPort = loadComentarioPort;
@@ -65,7 +69,7 @@ public class ComentarioMuroService implements EscribirComentarioUseCase, EditarC
     @Override
     @Transactional
     public EscribirComentarioUseCase.Resultado escribir(EscribirComentarioCommand command) {
-        requireVisible(command.publicacionId());
+        requireVisible(command.publicacionId(), command.autorId());
         requireActorHabilitado(command.autorId());
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
         Comentario comentario = Comentario.escribir(ComentarioId.of(idGenerator.newId()), command.publicacionId(),
@@ -78,7 +82,7 @@ public class ComentarioMuroService implements EscribirComentarioUseCase, EditarC
     @Override
     @Transactional
     public ComentarioVista editar(EditarComentarioCommand command) {
-        Comentario comentario = requireComentarioVisible(command.comentarioId());
+        Comentario comentario = requireComentarioVisible(command.comentarioId(), command.actorId());
         requireActorHabilitado(command.actorId());
         if (!comentario.autorId().equals(command.actorId())) {
             throw new NotAuthorizedException("No autorizado");
@@ -90,7 +94,7 @@ public class ComentarioMuroService implements EscribirComentarioUseCase, EditarC
     @Override
     @Transactional
     public OcultarComentarioUseCase.Resultado ocultar(OcultarComentarioCommand command) {
-        Comentario comentario = requireComentarioVisible(command.comentarioId());
+        Comentario comentario = requireComentarioVisible(command.comentarioId(), command.actorId());
         requireActorHabilitado(command.actorId());
         boolean puedeModerar = esModerador(command.actorId());
         if (!comentario.autorId().equals(command.actorId()) && !puedeModerar) {
@@ -102,8 +106,8 @@ public class ComentarioMuroService implements EscribirComentarioUseCase, EditarC
     }
 
     @Override
-    public PaginaComentarios pagina(PublicacionId publicacionId, Instant cursor) {
-        requireVisible(publicacionId);
+    public PaginaComentarios pagina(UserId actorId, PublicacionId publicacionId, Instant cursor) {
+        requireVisible(publicacionId, actorId);
         List<Comentario> filas = loadComentarioPort.pagina(publicacionId, cursor, TAMANO_PAGINA);
         boolean hayMas = filas.size() > TAMANO_PAGINA;
         List<Comentario> cruda = hayMas ? filas.subList(0, TAMANO_PAGINA) : filas;
@@ -139,8 +143,9 @@ public class ComentarioMuroService implements EscribirComentarioUseCase, EditarC
                 autor != null ? autor.avatarUrl() : null);
     }
 
-    private Publicacion requireVisible(PublicacionId publicacionId) {
+    private Publicacion requireVisible(PublicacionId publicacionId, UserId actorId) {
         Publicacion publicacion = loadPublicacionPort.porId(publicacionId)
+                .filter(p -> formaciones.de(actorId).incluye(p.formacion()))
                 .orElseThrow(() -> new NoSuchElementException("Publicacion no encontrada: " + publicacionId));
         if (publicacion.oculta()) {
             throw new NoSuchElementException("Publicacion no encontrada: " + publicacionId);
@@ -148,13 +153,20 @@ public class ComentarioMuroService implements EscribirComentarioUseCase, EditarC
         return publicacion;
     }
 
-    private Comentario requireComentarioVisible(ComentarioId id) {
+    /** El comentario cuenta como inexistente si está oculto o si su publicación es de una formación que {@code actorId} no ve (spec 024). */
+    private Comentario requireComentarioVisible(ComentarioId id, UserId actorId) {
         Comentario comentario = loadComentarioPort.porId(id)
                 .orElseThrow(() -> new NoSuchElementException("Comentario no encontrado: " + id));
-        if (comentario.oculto()) {
+        if (comentario.oculto() || !deSuFormacion(comentario, actorId)) {
             throw new NoSuchElementException("Comentario no encontrado: " + id);
         }
         return comentario;
+    }
+
+    private boolean deSuFormacion(Comentario comentario, UserId actorId) {
+        return loadPublicacionPort.porId(comentario.publicacionId())
+                .map(p -> formaciones.de(actorId).incluye(p.formacion()))
+                .orElse(false);
     }
 
     /** Predicado puro — un actor que no existe (X-Actor-Id manipulado, sin JWT real

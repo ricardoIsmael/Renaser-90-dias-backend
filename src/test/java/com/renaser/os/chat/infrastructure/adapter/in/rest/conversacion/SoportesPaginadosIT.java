@@ -218,6 +218,7 @@ class SoportesPaginadosIT {
     void elPlanUsaLosIndices() {
         String consulta = SoportesPorActividadJdbcAdapter.consultaDePagina(false, true)
                 .replace(":quien", "'" + admin + "'")
+                .replace(":formaciones", "'ESCUELA'")
                 .replace(":actividad", "now()")
                 .replace(":id", "'" + UUID.randomUUID() + "'")
                 .replace(":limite", "26");

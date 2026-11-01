@@ -2,10 +2,13 @@ package com.renaser.os.chat.application.ports.out.conversacion;
 
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
+import com.renaser.os.chat.domain.model.conversacion.TipoConversacion;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -31,7 +34,11 @@ public interface LoadConversacionPort {
      */
     List<Conversacion> porCelulaIds(Collection<UUID> celulaIds);
 
-    Optional<Conversacion> global();
+    /** La comunidad general de {@code formacion} (spec 024, FR-026): una por formación. */
+    Optional<Conversacion> global(Formacion formacion);
+
+    /** Las comunidades generales de estas formaciones, EN UNA consulta (la que no existe todavía no figura). */
+    List<Conversacion> globales(Collection<Formacion> formaciones);
 
     /**
      * Todas las conversaciones de soporte, EN UNA consulta (D-136).
@@ -45,6 +52,9 @@ public interface LoadConversacionPort {
      * creciera a miles, este es el metodo que hay que paginar.
      */
     List<Conversacion> deSoporte();
+
+    /** Cuántas conversaciones tiene {@code formacion} de cada tipo, EN UNA consulta (el aviso de cuántas esconde apagar un tipo, spec 024). */
+    Map<TipoConversacion, Long> contarPorTipo(Formacion formacion);
 
     /** Todas las conversaciones donde {@code usuarioId} es participante. */
     List<Conversacion> misConversaciones(UserId usuarioId);

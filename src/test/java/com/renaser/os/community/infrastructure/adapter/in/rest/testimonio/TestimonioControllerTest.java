@@ -141,7 +141,7 @@ class TestimonioControllerTest {
     void traineeActivoListaLosTestimonios() throws Exception {
         UserId actor = UserId.of(UUID.randomUUID());
         sesionDe(actor, UserStatus.ACTIVE);
-        when(consultarUseCase.listarDestacados())
+        when(consultarUseCase.listarDestacados(actor, null))
                 .thenReturn(List.of(new ConsultarTestimoniosUseCase.TestimonioVista(testimonio(null), null, null)));
 
         mockMvc.perform(get("/api/v1/testimonios"))

@@ -1,6 +1,7 @@
 package com.renaser.os.calendar.domain.model.evento;
 
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -65,6 +66,11 @@ public final class Evento {
     private final UserId creadoPor;
     private final Instant creadoEn;
     private Instant actualizadoEn;
+    /**
+     * La formación del evento (V137, spec 024): su audiencia —todos, nivel, curso, roles, grupo— se resuelve DENTRO de ella. {@code final}: un evento no
+     * cambia de formación (para repetirlo en otra se copia).
+     */
+    private final Formacion formacion;
 
     /**
      * El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
@@ -80,11 +86,27 @@ public final class Evento {
                                 boolean recordatoriosPersonalizados, Recurrencia recurrencia,
                                 Set<RolUsuario> rolesDestino, List<ReglaRecordatorio> reglasRecordatorio,
                                 UserId creadoPor, Clock clock) {
+        return crear(id, titulo, descripcion, iniciaEn, duracionMinutos, timezone, tipoUbicacion, valorUbicacion,
+                tipoAudiencia, nivelMinimoId, cursoId, celulaDestinoId, tipoEvento, notificarAlCrear, recordarPorEmail,
+                recordatoriosPersonalizados, recurrencia, rolesDestino, reglasRecordatorio, creadoPor, clock,
+                Formacion.POR_DEFECTO);
+    }
+
+    /** Igual que la anterior, en la formación dada (spec 024): Administración la elige siempre al crear. */
+    public static Evento crear(EventoId id, String titulo, String descripcion, Instant iniciaEn,
+                                Integer duracionMinutos, ZoneId timezone, TipoUbicacion tipoUbicacion,
+                                String valorUbicacion, TipoAudiencia tipoAudiencia, Integer nivelMinimoId,
+                                String cursoId, UUID celulaDestinoId, TipoEvento tipoEvento,
+                                boolean notificarAlCrear, boolean recordarPorEmail,
+                                boolean recordatoriosPersonalizados, Recurrencia recurrencia,
+                                Set<RolUsuario> rolesDestino, List<ReglaRecordatorio> reglasRecordatorio,
+                                UserId creadoPor, Clock clock, Formacion formacion) {
         Objects.requireNonNull(id, "id es obligatorio");
+        Objects.requireNonNull(formacion, "formacion es obligatoria");
         Instant ahora = clock.now();
         Evento evento = new Evento(id, null, null, null, null, null, null, null, null, null,
                 null, null, null, EstadoEvento.PUBLICADO, requireNonNullEvento(tipoEvento), false, false,
-                false, null, Set.<RolUsuario>of(), List.<ReglaRecordatorio>of(), creadoPor, ahora, ahora);
+                false, null, Set.<RolUsuario>of(), List.<ReglaRecordatorio>of(), creadoPor, ahora, ahora, formacion);
         evento.aplicarCambios(titulo, descripcion, iniciaEn, duracionMinutos, timezone, tipoUbicacion, valorUbicacion,
                 tipoAudiencia, nivelMinimoId, cursoId, celulaDestinoId, notificarAlCrear, recordarPorEmail,
                 recordatoriosPersonalizados, recurrencia, rolesDestino, reglasRecordatorio);
@@ -114,12 +136,27 @@ public final class Evento {
                                     boolean recordatoriosPersonalizados, Recurrencia recurrencia,
                                     Set<RolUsuario> rolesDestino, List<ReglaRecordatorio> reglasRecordatorio,
                                     UserId creadoPor, Instant creadoEn, Instant actualizadoEn) {
+        return rehydrate(id, titulo, descripcion, portadaRuta, iniciaEn, duracionMinutos, timezone, tipoUbicacion,
+                valorUbicacion, tipoAudiencia, nivelMinimoId, cursoId, celulaDestinoId, estado, tipoEvento,
+                notificarAlCrear, recordarPorEmail, recordatoriosPersonalizados, recurrencia, rolesDestino,
+                reglasRecordatorio, creadoPor, creadoEn, actualizadoEn, Formacion.POR_DEFECTO);
+    }
+
+    /** Solo para el adaptador de persistencia, con la formación guardada en la fila. */
+    public static Evento rehydrate(EventoId id, String titulo, String descripcion, String portadaRuta,
+                                    Instant iniciaEn, Integer duracionMinutos, ZoneId timezone,
+                                    TipoUbicacion tipoUbicacion, String valorUbicacion, TipoAudiencia tipoAudiencia,
+                                    Integer nivelMinimoId, String cursoId, UUID celulaDestinoId, EstadoEvento estado,
+                                    TipoEvento tipoEvento, boolean notificarAlCrear, boolean recordarPorEmail,
+                                    boolean recordatoriosPersonalizados, Recurrencia recurrencia,
+                                    Set<RolUsuario> rolesDestino, List<ReglaRecordatorio> reglasRecordatorio,
+                                    UserId creadoPor, Instant creadoEn, Instant actualizadoEn, Formacion formacion) {
         return new Evento(id, titulo, descripcion, portadaRuta, iniciaEn, duracionMinutos, timezone, tipoUbicacion,
                 valorUbicacion, tipoAudiencia, nivelMinimoId, cursoId, celulaDestinoId, estado, tipoEvento,
                 notificarAlCrear, recordarPorEmail, recordatoriosPersonalizados, recurrencia,
                 rolesDestino == null || rolesDestino.isEmpty() ? Set.of() : EnumSet.copyOf(rolesDestino),
                 reglasRecordatorio == null ? List.of() : List.copyOf(reglasRecordatorio), creadoPor, creadoEn,
-                actualizadoEn);
+                actualizadoEn, formacion);
     }
 
     public void fijarPortada(String ruta) {

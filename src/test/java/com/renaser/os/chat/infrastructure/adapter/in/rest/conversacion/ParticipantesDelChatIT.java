@@ -1,5 +1,6 @@
 package com.renaser.os.chat.infrastructure.adapter.in.rest.conversacion;
 
+import com.renaser.os.FormacionesDePrueba;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.renaser.os.TestcontainersConfiguration;
@@ -181,6 +182,8 @@ class ParticipantesDelChatIT {
     @DisplayName("soporte: quien ya no es ADMIN/ALCHEMIST no figura aunque conserve su fila, y ya no lo ve")
     void unSoporteConUnStaffDegradado() throws Exception {
         jdbcTemplate.update("UPDATE renaser.usuarios SET rol = CAST('MENTOR' AS renaser.rol_usuario) WHERE id = ?", kelin);
+        // Como el cambio de rol real: quien pasa a mentor queda con la Escuela asignada (spec 022).
+        FormacionesDePrueba.alPersonalLeAsignaLaEscuela(jdbcTemplate, kelin, "MENTOR");
 
         assertThat(nombres(obtener(ruta(soporte, ""), sesionDe(ana)))).containsExactly("Ana Pérez", "Zoe Alquimia");
         assertThat(pedir(ruta(soporte, ""), sesionDe(kelin)).statusCode()).isEqualTo(403);
@@ -278,6 +281,7 @@ class ParticipantesDelChatIT {
                 INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado)
                 VALUES (?, ?, ?, CAST(? AS renaser.rol_usuario), 'ACTIVO')
                 """, id, id + "@renaser.test", nombre, rol);
+        FormacionesDePrueba.alPersonalLeAsignaLaEscuela(jdbcTemplate, id, rol);
         usuarios.add(id);
         return id;
     }
@@ -294,7 +298,7 @@ class ParticipantesDelChatIT {
 
     /** La GLOBAL es única por índice parcial: si el arranque ya creó una, se reusa (y no se borra). Sus participantes reales, no se tocan: se buscan por nombre. */
     private UUID conversacionGlobal() {
-        List<UUID> existente = jdbcTemplate.queryForList("SELECT id FROM renaser.conversaciones WHERE tipo = 'GLOBAL'", UUID.class);
+        List<UUID> existente = jdbcTemplate.queryForList("SELECT id FROM renaser.conversaciones WHERE tipo = 'GLOBAL' AND formacion = 'ESCUELA'", UUID.class);
         return existente.isEmpty() ? conversacion("GLOBAL", null, null, "Comunidad") : existente.get(0);
     }
 

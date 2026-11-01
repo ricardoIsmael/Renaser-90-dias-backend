@@ -53,13 +53,17 @@ public class ParticipantesDeConversacionService implements VerParticipantesDeCon
     private final MentorDeLosGruposPort mentorDeLosGrupos;
     private final UserSummaryFinder userSummaryFinder;
     private final VerFotosDelChatUseCase fotos;
+    /** Spec 024: la conversación de otra formación es como si no existiera (404). */
+    private final VisibilidadPorFormacion visibilidad;
 
     public ParticipantesDeConversacionService(LoadConversacionPort loadConversacionPort,
                                               AutorizarAccesoAConversacionUseCase autorizarAcceso,
                                               ListarUsuariosDeConversacionPort listarUsuariosPort,
                                               PertenenciaVigentePort pertenenciaVigentePort,
                                               MentorDeLosGruposPort mentorDeLosGrupos,
-                                              UserSummaryFinder userSummaryFinder, VerFotosDelChatUseCase fotos) {
+                                              UserSummaryFinder userSummaryFinder, VerFotosDelChatUseCase fotos,
+                                              VisibilidadPorFormacion visibilidad) {
+        this.visibilidad = visibilidad;
         this.loadConversacionPort = loadConversacionPort;
         this.autorizarAcceso = autorizarAcceso;
         this.listarUsuariosPort = listarUsuariosPort;
@@ -75,6 +79,7 @@ public class ParticipantesDeConversacionService implements VerParticipantesDeCon
         requireActivo(actorId);
         Conversacion conversacion = loadConversacionPort.porId(conversacionId)
                 .orElseThrow(() -> new NoSuchElementException("Conversacion no encontrada: " + conversacionId));
+        visibilidad.exigirQueLaVea(conversacion, actorId);
         if (!autorizarAcceso.puedeVer(conversacionId, actorId)) {
             throw new NotAuthorizedException("No eres participante de esta conversación");
         }

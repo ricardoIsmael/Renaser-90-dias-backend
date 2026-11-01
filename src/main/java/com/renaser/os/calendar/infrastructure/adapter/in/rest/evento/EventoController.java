@@ -17,6 +17,7 @@ import com.renaser.os.calendar.domain.model.evento.Recurrencia;
 import com.renaser.os.calendar.domain.model.evento.ReglaRecordatorio;
 import com.renaser.os.calendar.domain.model.evento.RolUsuario;
 import com.renaser.os.calendar.domain.model.evento.TipoEvento;
+import com.renaser.os.shared.domain.FormacionDelContenido;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
@@ -88,8 +89,10 @@ class EventoController {
     @GetMapping
     public List<OcurrenciaResponse> listar(@ActorAutenticado UserId actor,
                                             @RequestParam("from") String from, @RequestParam("to") String to,
-                                            @RequestParam(value = "scope", required = false) String scope) {
-        var ocurrencias = listarUseCase.listar(actor, Instant.parse(from), Instant.parse(to));
+                                            @RequestParam(value = "scope", required = false) String scope,
+                                            @RequestParam(value = "formation", required = false) String formation) {
+        var ocurrencias = listarUseCase.listar(actor, Instant.parse(from), Instant.parse(to),
+                FormacionDelContenido.pedida(formation));
         return ocurrencias.stream().map(OcurrenciaResponse::from).toList();
     }
 
@@ -170,7 +173,7 @@ class EventoController {
                 EventoWireMapper.fromWireAudiencia(r.audienceType()), r.minLevelId(), r.courseId(),
                 r.targetCellId() == null ? null : UUID.fromString(r.targetCellId()), TipoEvento.valueOf(r.eventType()),
                 r.notifyOnCreate(), r.remindByEmail(), r.reminderRules() != null, recurrenciaDe(r), rolesDestinoDe(r),
-                reglasDe(r));
+                reglasDe(r), FormacionDelContenido.pedida(r.formation()));
     }
 
     private ActualizarEventoCommand aComandoActualizar(UserId actorId, UUID id, EventoRequest r) {

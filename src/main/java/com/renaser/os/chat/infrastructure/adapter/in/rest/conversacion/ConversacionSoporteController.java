@@ -7,6 +7,7 @@ import com.renaser.os.chat.application.ports.in.conversacion.SalirDeConversacion
 import com.renaser.os.chat.application.ports.in.conversacion.SalirDeConversacionSoporteUseCase.SalirDeConversacionSoporteCommand;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.conversacion.CursorDeSoportes;
+import com.renaser.os.shared.domain.FormacionDelContenido;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
@@ -57,9 +58,11 @@ public class ConversacionSoporteController {
     public SoportesPageResponse listarSoportes(@ActorAutenticado UserId actorId,
                                                @RequestParam(required = false) String q,
                                                @RequestParam(required = false) String cursor,
-                                               @RequestParam(required = false, defaultValue = "25") int size) {
+                                               @RequestParam(required = false, defaultValue = "25") int size,
+                                               @RequestParam(required = false) String formation) {
         CursorDeSoportes desde = cursor == null || cursor.isBlank() ? null : CursorDeSoportes.leer(cursor);
-        return SoportesPageResponse.from(listarSoportesUseCase.listar(new PedidoDeSoportes(actorId, q, desde, size)));
+        return SoportesPageResponse.from(listarSoportesUseCase.listar(new PedidoDeSoportes(actorId, q, desde, size,
+                FormacionDelContenido.pedida(formation))));
     }
 
     /** El staff se va de un chat de soporte. El aprendiz dueño recibe 403 — el caso de uso lo

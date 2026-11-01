@@ -2,6 +2,7 @@ package com.renaser.os.chat.domain.model.ranking;
 
 import com.renaser.os.chat.domain.model.mensaje.MensajeId;
 
+import com.renaser.os.shared.domain.Formacion;
 import java.nio.charset.StandardCharsets;
 import java.time.DayOfWeek;
 import java.time.Instant;
@@ -66,20 +67,39 @@ public record SemanaDelRanking(LocalDate lunes) {
     }
 
     public MensajeId idDeLaImagen() {
-        return idDe("imagen");
+        return idDeLaImagen(Formacion.POR_DEFECTO);
     }
 
     public MensajeId idDelTexto() {
-        return idDe("texto");
+        return idDelTexto(Formacion.POR_DEFECTO);
+    }
+
+    /** Spec 024 (FR-040): cada formación tiene SU podio —su propio texto y su propia imagen— en su comunidad general. */
+    public MensajeId idDeLaImagen(Formacion formacion) {
+        return idDe("imagen", formacion);
+    }
+
+    public MensajeId idDelTexto(Formacion formacion) {
+        return idDe("texto", formacion);
     }
 
     /** Fuera de {@code chat/<conversación>/}, como las tarjetas del semáforo: la imagen no es de ningún chat. */
     public String rutaDeLaImagen() {
-        return "ranking-semanal/" + lunes + "-" + VERSION_DE_LA_IMAGEN + ".jpg";
+        return rutaDeLaImagen(Formacion.POR_DEFECTO);
     }
 
-    private MensajeId idDe(String pieza) {
-        String clave = "ranking-semanal|" + lunes + "|" + pieza;
+    public String rutaDeLaImagen(Formacion formacion) {
+        String carpeta = formacion == Formacion.POR_DEFECTO ? "" : formacion.codigo().toLowerCase(Locale.ROOT) + "/";
+        return "ranking-semanal/" + carpeta + lunes + "-" + VERSION_DE_LA_IMAGEN + ".jpg";
+    }
+
+    /**
+     * Los ids de la Escuela son los de siempre —el podio de la semana que ya salió antes de las formaciones cuenta como publicado y no se repite al
+     * desplegar—; los de las otras llevan la formación, así no chocan con los de ninguna otra.
+     */
+    private MensajeId idDe(String pieza, Formacion formacion) {
+        String clave = "ranking-semanal|" + lunes + "|" + pieza
+                + (formacion == Formacion.POR_DEFECTO ? "" : "|" + formacion.codigo());
         return MensajeId.of(UUID.nameUUIDFromBytes(clave.getBytes(StandardCharsets.UTF_8)));
     }
 }

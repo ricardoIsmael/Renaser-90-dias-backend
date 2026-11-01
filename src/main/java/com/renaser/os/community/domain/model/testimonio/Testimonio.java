@@ -1,6 +1,7 @@
 package com.renaser.os.community.domain.model.testimonio;
 
 import com.renaser.os.community.domain.model.publicacion.PublicacionId;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -42,6 +43,11 @@ public final class Testimonio {
     private final int estrellas;
     private boolean destacado;
     private final Instant creadoEn;
+    /**
+     * La formación a la que pertenece el testimonio (V137, spec 024): se ve solo ahí. Un testimonio promovido desde el Muro queda en la formación de su
+     * publicación; uno escrito a mano, en la que elige Administración. {@code final}: no se mueve, aunque su autor cambie de formación (FR-046).
+     */
+    private final Formacion formacion;
 
     /**
      * El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
@@ -52,21 +58,39 @@ public final class Testimonio {
     public static Testimonio crear(TestimonioId id, UserId usuarioId, PublicacionId publicacionMuroId,
                                     String nombre, String rolTexto, String avatarUrl, String fotoEventoRuta,
                                     String texto, int estrellas, Instant ahora) {
+        return crear(id, usuarioId, publicacionMuroId, nombre, rolTexto, avatarUrl, fotoEventoRuta, texto, estrellas, ahora,
+                Formacion.POR_DEFECTO);
+    }
+
+    /** Igual que la anterior, en la formación dada (spec 024). */
+    public static Testimonio crear(TestimonioId id, UserId usuarioId, PublicacionId publicacionMuroId,
+                                    String nombre, String rolTexto, String avatarUrl, String fotoEventoRuta,
+                                    String texto, int estrellas, Instant ahora, Formacion formacion) {
         Objects.requireNonNull(id, "id es obligatorio");
+        Objects.requireNonNull(formacion, "formacion es obligatoria");
         requireNombreValido(nombre);
         requireTextoValido(texto);
         requireEstrellasValidas(estrellas);
         String rolEfectivo = (rolTexto == null || rolTexto.isBlank()) ? "Miembro de la comunidad" : rolTexto;
         return new Testimonio(id, usuarioId, publicacionMuroId, nombre, rolEfectivo, avatarUrl,
-                fotoEventoRuta, texto, estrellas, true, ahora);
+                fotoEventoRuta, texto, estrellas, true, ahora, formacion);
     }
 
     /** Solo para el adaptador de persistencia. */
     public static Testimonio rehydrate(TestimonioId id, UserId usuarioId, PublicacionId publicacionMuroId,
                                         String nombre, String rolTexto, String avatarUrl, String fotoEventoRuta,
                                         String texto, int estrellas, boolean destacado, Instant creadoEn) {
+        return rehydrate(id, usuarioId, publicacionMuroId, nombre, rolTexto, avatarUrl, fotoEventoRuta, texto, estrellas,
+                destacado, creadoEn, Formacion.POR_DEFECTO);
+    }
+
+    /** Solo para el adaptador de persistencia, con la formación guardada en la fila. */
+    public static Testimonio rehydrate(TestimonioId id, UserId usuarioId, PublicacionId publicacionMuroId,
+                                        String nombre, String rolTexto, String avatarUrl, String fotoEventoRuta,
+                                        String texto, int estrellas, boolean destacado, Instant creadoEn,
+                                        Formacion formacion) {
         return new Testimonio(id, usuarioId, publicacionMuroId, nombre, rolTexto, avatarUrl, fotoEventoRuta, texto,
-                estrellas, destacado, creadoEn);
+                estrellas, destacado, creadoEn, formacion);
     }
 
     /**

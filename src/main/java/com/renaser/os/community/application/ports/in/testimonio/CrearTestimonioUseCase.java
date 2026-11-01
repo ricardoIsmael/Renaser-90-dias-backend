@@ -2,6 +2,7 @@ package com.renaser.os.community.application.ports.in.testimonio;
 
 import com.renaser.os.community.application.ports.in.testimonio.ConsultarTestimoniosUseCase.TestimonioVista;
 import com.renaser.os.shared.application.SelfValidating;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -14,11 +15,16 @@ public interface CrearTestimonioUseCase {
     TestimonioVista crear(CrearTestimonioCommand command);
 
     record CrearTestimonioCommand(UserId actorId, @NotBlank String nombre, String rolTexto, @NotBlank String texto,
-                                   @Min(1) @Max(5) int estrellas) {
+                                   @Min(1) @Max(5) int estrellas, Formacion formacion) {
 
         public CrearTestimonioCommand {
             SelfValidating.validateConstructorArgs(CrearTestimonioCommand.class, actorId, nombre, rolTexto, texto,
-                    estrellas);
+                    estrellas, formacion);
+        }
+
+        /** Sin elegir formación: Administración no pertenece a una, así que el servicio la pide (spec 024). */
+        public CrearTestimonioCommand(UserId actorId, String nombre, String rolTexto, String texto, int estrellas) {
+            this(actorId, nombre, rolTexto, texto, estrellas, null);
         }
     }
 }

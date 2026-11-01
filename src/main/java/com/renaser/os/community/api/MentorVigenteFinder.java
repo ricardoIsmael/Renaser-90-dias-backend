@@ -1,5 +1,6 @@
 package com.renaser.os.community.api;
 
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.Instant;
@@ -28,7 +29,15 @@ public interface MentorVigenteFinder {
      */
     List<GrupoConSuMentor> deLosGrupos(Collection<UUID> grupoIds, Instant instante);
 
-    /** @param mentorId su mentor vigente; {@code null} si no tiene */
-    record GrupoConSuMentor(UUID grupoId, String nombre, UserId mentorId) {
+    /**
+     * @param mentorId  su mentor vigente; {@code null} si no tiene
+     * @param formacion la formación del grupo (spec 024): el chat del grupo es de ella
+     */
+    record GrupoConSuMentor(UUID grupoId, String nombre, UserId mentorId, Formacion formacion) {
+
+        /** Sin formación: la Escuela. */
+        public GrupoConSuMentor(UUID grupoId, String nombre, UserId mentorId) {
+            this(grupoId, nombre, mentorId, Formacion.POR_DEFECTO);
+        }
     }
 }

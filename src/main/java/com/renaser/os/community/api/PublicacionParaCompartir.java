@@ -1,5 +1,6 @@
 package com.renaser.os.community.api;
 
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 
 import java.util.UUID;
@@ -30,9 +31,16 @@ import java.util.UUID;
  * @param mediaBucket   {@code null} si la publicacion no tiene imagen
  * @param mediaRuta     {@code null} si la publicacion no tiene imagen; va siempre junto al bucket
  * @param mediaMime     {@code null} si la publicacion no tiene imagen
+ * @param formacion     la formación de la publicación (spec 024): solo se comparte en conversaciones de la misma
  */
 public record PublicacionParaCompartir(UUID publicacionId, UserId autorId, String texto,
-                                        String mediaBucket, String mediaRuta, String mediaMime) {
+                                        String mediaBucket, String mediaRuta, String mediaMime, Formacion formacion) {
+
+    /** Sin formación: la de siempre, la Escuela. */
+    public PublicacionParaCompartir(UUID publicacionId, UserId autorId, String texto, String mediaBucket,
+                                    String mediaRuta, String mediaMime) {
+        this(publicacionId, autorId, texto, mediaBucket, mediaRuta, mediaMime, Formacion.POR_DEFECTO);
+    }
 
     /** Hay imagen que adjuntar al mensaje. Bucket y ruta van siempre juntos (CHECK `media_completa`). */
     public boolean tieneImagen() {

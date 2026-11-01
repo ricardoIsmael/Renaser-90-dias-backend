@@ -29,13 +29,13 @@ import java.util.List;
  */
 public record CursoResponse(String id, String slug, String titulo, String descripcion, String portadaUrl, int orden,
                              boolean publicado, String acceso, String origen, Integer diaDesbloqueo,
-                             List<String> rolesPermitidos, Instant creadoEn, Instant actualizadoEn) {
+                             List<String> rolesPermitidos, Instant creadoEn, Instant actualizadoEn, String formation) {
 
     public static CursoResponse from(Curso curso) {
         return new CursoResponse(curso.id().value(), curso.slug(), curso.titulo(), curso.descripcion(),
                 curso.portadaRuta(), curso.orden(), curso.publicado(), aWireAcceso(curso.acceso()), curso.origen(),
                 curso.diaDesbloqueo(), curso.rolesPermitidos().stream().map(UserRole::name).sorted().toList(),
-                curso.creadoEn(), curso.actualizadoEn());
+                curso.creadoEn(), curso.actualizadoEn(), curso.formacion().codigo());
     }
 
     static String aWireAcceso(AccesoCurso acceso) {

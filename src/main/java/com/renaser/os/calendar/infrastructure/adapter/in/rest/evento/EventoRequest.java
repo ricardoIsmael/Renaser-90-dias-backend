@@ -29,7 +29,8 @@ record EventoRequest(@NotBlank String title, @NotBlank String eventType, String 
                       String courseId, List<String> targetRoles, String targetCellId,
                       List<EventoWireMapper.ReglaRecordatorioWire> reminderRules, Boolean notifyOnCreate,
                       Boolean remindByEmail, String recurrenceFrequency, Integer recurrenceInterval,
-                      List<Integer> recurrenceByWeekday, String recurrenceUntil, Integer recurrenceCount) {
+                      List<Integer> recurrenceByWeekday, String recurrenceUntil, Integer recurrenceCount,
+                      String formation) {
 
     EventoRequest {
         if (audienceType == null || audienceType.isBlank()) {
