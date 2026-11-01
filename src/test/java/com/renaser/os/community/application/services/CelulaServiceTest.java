@@ -94,7 +94,8 @@ class CelulaServiceTest {
         service = new CelulaService(loadCelulaPort, saveCelulaPort, eliminarCelulaPort, loadCohortePort,
                 consultarMiembrosCelulaPort, consultarCelulaDeParticipantePort, consultarPerfilUsuarioPort,
                 userSummaryFinder, participacionProgramaFinder, perfilMentorFinder, loadAsignacionesPort,
-                loadPoliticaMentoriaPort, events, CLOCK, idGenerator, cuentasCerradas);
+                loadPoliticaMentoriaPort, events, CLOCK, idGenerator, cuentasCerradas,
+                FormacionDelGrupoDePrueba.permisivo());
         lenient().when(loadAsignacionesPort.porCelula(any())).thenReturn(java.util.List.of());
         lenient().when(loadPoliticaMentoriaPort.porCohorte(any())).thenReturn(Optional.empty());
         lenient().when(perfilMentorFinder.porUsuarios(any())).thenReturn(java.util.Map.of());
@@ -671,7 +672,8 @@ class CelulaServiceTest {
         return new CelulaService(loadCelulaPort, saveCelulaPort, eliminarCelulaPort, loadCohortePort,
                 consultarMiembrosCelulaPort, consultarCelulaDeParticipantePort, consultarPerfilUsuarioPort,
                 userSummaryFinder, participacionProgramaFinder, perfilMentorFinder, loadAsignacionesPort,
-                loadPoliticaMentoriaPort, events, FixedClock.at(ahora), idGenerator, cuentasCerradas);
+                loadPoliticaMentoriaPort, events, FixedClock.at(ahora), idGenerator, cuentasCerradas,
+                FormacionDelGrupoDePrueba.permisivo());
     }
 
     private static Celula grupoConPeriodo(String nombre, UserId mentorDeLaColumna, LocalDate inicio, LocalDate fin) {

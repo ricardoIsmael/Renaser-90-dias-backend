@@ -4,6 +4,7 @@ import com.renaser.os.community.domain.model.celula.Celula;
 import com.renaser.os.community.domain.model.celula.CelulaId;
 import com.renaser.os.community.domain.model.celula.PeriodoGrupo;
 import com.renaser.os.community.domain.model.cohorte.CohorteId;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
 
@@ -14,7 +15,8 @@ class CelulaPersistenceMapper {
         return Celula.rehydrate(CelulaId.of(e.getId()), e.getNombre(),
                 e.getMentorId() != null ? UserId.of(e.getMentorId()) : null, CohorteId.of(e.getCohorteId()),
                 e.getUrlVideollamada(), e.getProximaSesionEn(), e.getCreadoEn(), e.getActualizadoEn(),
-                e.getTipo(), e.getCapacidadMaxima(), Celula.periodoDe(e.getPeriodoInicio(), e.getPeriodoFin()));
+                e.getTipo(), e.getCapacidadMaxima(), Celula.periodoDe(e.getPeriodoInicio(), e.getPeriodoFin()),
+                Formacion.desde(e.getFormacion()));
     }
 
     /**
@@ -28,6 +30,6 @@ class CelulaPersistenceMapper {
         return new CelulaJpaEntity(c.id().value(), c.nombre(), c.mentorId() != null ? c.mentorId().value() : null,
                 c.cohorteId().value(), c.urlVideollamada(), c.proximaSesionEn(), c.creadoEn(), c.actualizadoEn(),
                 c.tipo(), c.capacidadMaxima(), periodo != null ? periodo.inicio() : null,
-                periodo != null ? periodo.fin() : null);
+                periodo != null ? periodo.fin() : null, c.formacion().codigo());
     }
 }

@@ -10,6 +10,8 @@ import com.renaser.os.chat.application.ports.out.participante.ListarUsuariosDeCo
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
+import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
@@ -20,6 +22,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
 /**
  * Directorio de usuarios (#27) y roster del grupo GLOBAL (#28). Ambos casos de uso se
@@ -49,10 +52,13 @@ public class MiembroService implements ListarDirectorioMiembrosUseCase, ListarMi
     private final ListarUsuariosDeConversacionPort listarUsuariosDeConversacionPort;
     private final EsParticipantePort esParticipantePort;
     private final UserSummaryFinder userSummaryFinder;
+    private final AlcanceDeFormacionFinder formaciones;
 
     public MiembroService(LoadConversacionPort loadConversacionPort,
                            ListarUsuariosDeConversacionPort listarUsuariosDeConversacionPort,
-                           EsParticipantePort esParticipantePort, UserSummaryFinder userSummaryFinder) {
+                           EsParticipantePort esParticipantePort, UserSummaryFinder userSummaryFinder,
+                           AlcanceDeFormacionFinder formaciones) {
+        this.formaciones = formaciones;
         this.loadConversacionPort = loadConversacionPort;
         this.listarUsuariosDeConversacionPort = listarUsuariosDeConversacionPort;
         this.esParticipantePort = esParticipantePort;
@@ -79,7 +85,7 @@ public class MiembroService implements ListarDirectorioMiembrosUseCase, ListarMi
 
         // Roster informativo ("quien es miembro"), no un directorio para escribir:
         // a proposito NO filtra por UserStatus (a diferencia de la sobrecarga de arriba).
-        List<MiembroResumen> miembros = resolverParticipantesDe(global).stream()
+        List<MiembroResumen> miembros = resolverParticipantesDe(global, actorId).stream()
                 .map(MiembroService::aResumen)
                 .sorted(POR_NOMBRE)
                 .toList();
@@ -91,7 +97,7 @@ public class MiembroService implements ListarDirectorioMiembrosUseCase, ListarMi
      * Es la regla de "a quien se le puede escribir" y nada mas — la busqueda por nombre, el
      * orden y la paginacion son del caso de uso, no de esta regla. */
     private List<MiembroResumen> destinatariosPosiblesDeUnDmNuevo(Conversacion global, UserId actorId) {
-        return resolverParticipantesDe(global).stream()
+        return resolverParticipantesDe(global, actorId).stream()
                 .filter(u -> u.status() == UserStatus.ACTIVE)  // SUSPENDED no sirve como destino de un DM nuevo
                 .filter(u -> !u.id().equals(actorId))           // nunca mandarse un DM a uno mismo
                 .map(MiembroService::aResumen)
@@ -102,12 +108,24 @@ public class MiembroService implements ListarDirectorioMiembrosUseCase, ListarMi
      * LOTE (participantes + `users.api`) — nunca una por miembro. Devuelve
      * {@code UserSummary} crudo (no {@link MiembroResumen}) para que cada caller decida
      * si filtra por {@code UserStatus} antes de proyectar. */
-    private Collection<UserSummary> resolverParticipantesDe(Conversacion global) {
+    /**
+     * Las personas que {@code actorId} puede ver en el directorio (spec 022, FR-019): solo las de SU formación — para el personal con varias, la
+     * activa —. Administración, Alquimista y Soporte TI se ven desde todas las formaciones (no pertenecen a una): se les puede escribir siempre.
+     */
+    private Collection<UserSummary> resolverParticipantesDe(Conversacion global, UserId actorId) {
         List<UserId> ids = listarUsuariosDeConversacionPort.usuariosDe(global.id());
         if (ids.isEmpty()) {
             return List.of();
         }
-        return userSummaryFinder.findByIds(ids).values();
+        var alcance = formaciones.de(actorId);
+        Set<UserId> deMiFormacion = formaciones.dentroDelAlcance(ids, alcance);
+        return userSummaryFinder.findByIds(ids).values().stream()
+                .filter(u -> alcance.esTodas() || deMiFormacion.contains(u.id()) || veTodasLasFormaciones(u))
+                .toList();
+    }
+
+    private static boolean veTodasLasFormaciones(UserSummary u) {
+        return u.role() == UserRole.ADMIN || u.role() == UserRole.ALCHEMIST || u.role() == UserRole.IT_SUPPORT;
     }
 
     private static MiembroResumen aResumen(UserSummary u) {

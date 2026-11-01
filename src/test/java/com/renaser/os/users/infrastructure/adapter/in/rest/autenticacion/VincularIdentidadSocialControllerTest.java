@@ -1,5 +1,7 @@
 package com.renaser.os.users.infrastructure.adapter.in.rest.autenticacion;
 
+import com.renaser.os.users.infrastructure.adapter.in.rest.formacion.SesionConFormacionDePrueba;
+import org.springframework.context.annotation.Import;
 import com.renaser.os.shared.domain.IdentidadProveedorInvalidaException;
 import com.renaser.os.shared.domain.IdentidadYaVinculadaException;
 import com.renaser.os.shared.domain.SesionNoIniciadaException;
@@ -43,6 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @WebMvcTest(AutenticacionController.class)
 @AutoConfigureMockMvc(addFilters = false)
+@Import(SesionConFormacionDePrueba.class)
 class VincularIdentidadSocialControllerTest {
 
     @Autowired

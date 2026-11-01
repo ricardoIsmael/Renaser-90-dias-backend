@@ -1,5 +1,8 @@
 package com.renaser.os.users.application.services;
 
+import com.renaser.os.shared.domain.Formacion;
+import com.renaser.os.users.application.ports.out.formacion.FormacionesDelPersonalPort;
+import com.renaser.os.users.domain.model.formacion.ReglaDeAlcance;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -57,6 +60,7 @@ class CuentasDePruebaService implements CuentasDePruebaUseCase {
     private final IdGenerator idGenerator;
     private final Clock clock;
     private final ApplicationEventPublisher eventos;
+    private final FormacionesDelPersonalPort formacionesDelPersonal;
 
     @SuppressWarnings("java:S107") // colaboradores, no parámetros de negocio
     CuentasDePruebaService(LoadUserPort loadUserPort, SaveUserPort saveUserPort,
@@ -64,7 +68,8 @@ class CuentasDePruebaService implements CuentasDePruebaUseCase {
                            LoadParticipacionProgramaPort loadParticipacion,
                            SaveParticipacionProgramaPort saveParticipacion, LoadMentorProfilePort loadMentorProfile,
                            SaveMentorProfilePort saveMentorProfile, BloquearCuentasDePruebaPort candado,
-                           IdGenerator idGenerator, Clock clock, ApplicationEventPublisher eventos) {
+                           IdGenerator idGenerator, Clock clock, ApplicationEventPublisher eventos,
+                           FormacionesDelPersonalPort formacionesDelPersonal) {
         this.loadUserPort = loadUserPort;
         this.saveUserPort = saveUserPort;
         this.rolesPersonalizados = rolesPersonalizados;
@@ -76,6 +81,7 @@ class CuentasDePruebaService implements CuentasDePruebaUseCase {
         this.idGenerator = idGenerator;
         this.clock = clock;
         this.eventos = eventos;
+        this.formacionesDelPersonal = formacionesDelPersonal;
     }
 
     @Override
@@ -139,6 +145,7 @@ class CuentasDePruebaService implements CuentasDePruebaUseCase {
             }
         }
         asegurarPerfilDeMentor(cuenta);
+        asegurarFormacionSiEsPersonal(cuenta);
         asegurarProgramaSiEsAprendiz(cuenta);
         return cuenta;
     }
@@ -151,6 +158,16 @@ class CuentasDePruebaService implements CuentasDePruebaUseCase {
     }
 
     /** El aprendiz de prueba vive a mitad del programa; si el reloj lo sacó del tramo 30–60, vuelve al día 45. */
+    /**
+     * Spec 022: el personal de prueba (mentor, guía, líder) trabaja en la Escuela, como el que se da de alta de verdad. Se asigna aquí y no por el aviso de
+     * alta (que llega después del commit): quien entra con «ver como» pide su alcance de inmediato y sin formación no vería ningún grupo.
+     */
+    private void asegurarFormacionSiEsPersonal(User cuenta) {
+        if (ReglaDeAlcance.esPersonalConFormaciones(cuenta.role())) {
+            formacionesDelPersonal.asignarSiNoTieneNinguna(cuenta.id(), Formacion.POR_DEFECTO);
+        }
+    }
+
     private void asegurarProgramaSiEsAprendiz(User cuenta) {
         if (cuenta.role() != UserRole.TRAINEE) {
             return;
