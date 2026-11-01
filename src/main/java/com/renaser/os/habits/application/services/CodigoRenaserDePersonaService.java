@@ -45,6 +45,6 @@ class CodigoRenaserDePersonaService implements CodigoRenaserDePersonaFinder {
 
     private static RegistroDelRadar registroDe(RegistroRadar r) {
         return new RegistroDelRadar(r.id().value(), r.queHago(), r.quePienso(), r.queSiento(), r.nivelEnergia(),
-                r.queEvito(), r.creadoEn(), r.horaPrevista());
+                r.queEvito(), r.creadoEn(), r.horaPrevista(), r.dictado());
     }
 }

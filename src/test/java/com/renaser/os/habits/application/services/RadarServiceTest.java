@@ -84,8 +84,12 @@ class RadarServiceTest {
     }
 
     private static RegistrarCheckInRadarCommand comando(UserId actorId, UserId participanteId) {
+        return comando(actorId, participanteId, false);
+    }
+
+    private static RegistrarCheckInRadarCommand comando(UserId actorId, UserId participanteId, boolean dictado) {
         return new RegistrarCheckInRadarCommand(actorId, participanteId, "haciendo", "pensando", "sintiendo", 6,
-                "evitando");
+                "evitando", dictado);
     }
 
     @Test
@@ -149,6 +153,42 @@ class RadarServiceTest {
         // Dia 5, 11:00 en Buenos Aires: la franja de la primera semana es la hora prevista, como siempre.
         assertThat(guardado.horaPrevista()).isEqualTo(11);
         verify(savePort).save(any());
+    }
+
+    @Test
+    @DisplayName("spec 030: un registro dictado se guarda como dictado, con la hora prevista de siempre")
+    void registrarGuardaElDictado() {
+        UserId dueno = UserId.of(UUID.randomUUID());
+        when(progresoPort.deParticipante(dueno)).thenReturn(Optional.of(trainee()));
+
+        RegistroRadar guardado = service.registrar(comando(dueno, dueno, true));
+
+        assertThat(guardado.dictado()).isTrue();
+        assertThat(guardado.horaPrevista()).isEqualTo(11);
+        assertThat(guardado.queHago()).isEqualTo("haciendo");
+    }
+
+    @Test
+    @DisplayName("spec 030: lo escrito a mano no es dictado")
+    void registrarEscritoNoEsDictado() {
+        UserId dueno = UserId.of(UUID.randomUUID());
+        when(progresoPort.deParticipante(dueno)).thenReturn(Optional.of(trainee()));
+
+        assertThat(service.registrar(comando(dueno, dueno, false)).dictado()).isFalse();
+    }
+
+    @Test
+    @DisplayName("spec 030: el segundo intento de la hora devuelve el primero con SU dictado; el del segundo no lo pisa")
+    void elSegundoIntentoNoPisaElDictado() {
+        UserId dueno = UserId.of(UUID.randomUUID());
+        when(progresoPort.deParticipante(dueno)).thenReturn(Optional.of(trainee()));
+        RegistroRadar primero = service.registrar(comando(dueno, dueno, false));
+        when(loadPort.ultimoDeParticipante(dueno)).thenReturn(Optional.of(primero));
+
+        RegistroRadar segundo = service.registrar(comando(dueno, dueno, true));
+
+        assertThat(segundo).isSameAs(primero);
+        assertThat(segundo.dictado()).isFalse();
     }
 
     @Test

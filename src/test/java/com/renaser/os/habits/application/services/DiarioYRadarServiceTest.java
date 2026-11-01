@@ -64,7 +64,7 @@ class DiarioYRadarServiceTest {
 
     private static RegistroRadar radar(UUID id, Instant creadoEn) {
         return RegistroRadar.rehydrate(RegistroRadarId.of(id), APRENDIZ, "hago", "pienso", "siento", 7, "evito",
-                creadoEn, null);
+                creadoEn, null, false);
     }
 
     private static EntradaDiario entrada(String texto, String audioRuta) {
@@ -134,7 +134,7 @@ class DiarioYRadarServiceTest {
                 new RespuestasRadar("hago", "pienso", "siento", 7, "evito"));
 
         verify(registrarRadar).registrar(new RegistrarCheckInRadarCommand(APRENDIZ, APRENDIZ, "hago", "pienso",
-                "siento", 7, "evito"));
+                "siento", 7, "evito", false));
         assertThat(registrado).isEqualTo(new CheckInRadarRegistrado(LocalDateTime.of(2026, 9, 23, 22, 30), false));
     }
 

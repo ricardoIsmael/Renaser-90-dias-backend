@@ -127,7 +127,8 @@ public class RadarService implements RegistrarCheckInRadarUseCase, ConsultarUlti
         RegistroRadar registro = RegistroRadar.registrar(RegistroRadarId.of(idGenerator.newId()),
                 command.participanteId(), command.queHago(), command.quePienso(), command.queSiento(),
                 command.nivelEnergia(), command.queEvito(), ahora);
-        return prevista.isPresent() ? registro.conHoraPrevista(prevista.getAsInt()) : registro;
+        RegistroRadar conHora = prevista.isPresent() ? registro.conHoraPrevista(prevista.getAsInt()) : registro;
+        return command.dictado() ? conHora.comoDictado() : conHora;
     }
 
     /**

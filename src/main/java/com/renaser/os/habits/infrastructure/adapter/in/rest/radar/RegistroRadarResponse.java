@@ -9,13 +9,15 @@ import java.time.Instant;
  *
  * <p>{@code horaPrevista} (spec 012): la hora local (0-23) a la que respondia, o {@code null} si fue un registro libre
  * o anterior a V119. Es campo nuevo y aditivo: el APK publicado lo ignora.
+ *
+ * <p>{@code dictado} (spec 030, D-297): {@code true} si al menos una respuesta se dicto con la voz. Siempre un booleano.
  */
 public record RegistroRadarResponse(String id, String whatAmIDoing, String whatAmIThinking, String whatAmIFeeling,
                                      int energyLevel, String whatAmIAvoiding, Instant createdAt,
-                                     Integer horaPrevista) {
+                                     Integer horaPrevista, boolean dictado) {
 
     public static RegistroRadarResponse from(RegistroRadar r) {
         return new RegistroRadarResponse(r.id().toString(), r.queHago(), r.quePienso(), r.queSiento(),
-                r.nivelEnergia(), r.queEvito(), r.creadoEn(), r.horaPrevista());
+                r.nivelEnergia(), r.queEvito(), r.creadoEn(), r.horaPrevista(), r.dictado());
     }
 }
