@@ -1,6 +1,7 @@
 package com.renaser.os.users.infrastructure.adapter.in.rest.user;
 
 import com.renaser.os.users.application.ports.in.user.GetMyFullProfileUseCase.MyProfile;
+import com.renaser.os.users.infrastructure.adapter.in.rest.formacion.FormacionDeLaSesionResponse;
 import com.renaser.os.users.application.ports.in.user.GetMyFullProfileUseCase.TraineeProfileSummary;
 import com.renaser.os.users.domain.model.user.User;
 import com.renaser.os.users.api.UserRole;
@@ -11,10 +12,26 @@ import com.renaser.os.users.api.UserStatus;
  *
  * <p>{@code rolPersonalizado} (spec 002, fase 2; D-272): {@code { id, nombre }} si la cuenta tiene un rol personalizado
  * vigente, o {@code null}. Va al final y es aditivo; {@code role} sigue siendo el rol base.
+ *
+ * <p>{@code formacion} (spec 022, D-295): la formación de la sesión (a cuál pertenece, entre cuáles elige el personal, las fases según su duración).
+ * Aditivo y al final; un cliente anterior lo ignora y uno nuevo lo trata como Escuela si falta.
  */
 public record UserResponse(String id, String email, UserRole role, UserStatus status, String fullName,
                             String avatarUrl, String bio, String department,
-                            TraineeProfileResponse traineeProfile, RolPersonalizadoResponse rolPersonalizado) {
+                            TraineeProfileResponse traineeProfile, RolPersonalizadoResponse rolPersonalizado,
+                            FormacionDeLaSesionResponse formacion) {
+
+    /** Firma de antes de las formaciones: sin el campo. */
+    public UserResponse(String id, String email, UserRole role, UserStatus status, String fullName, String avatarUrl, String bio,
+                        String department, TraineeProfileResponse traineeProfile, RolPersonalizadoResponse rolPersonalizado) {
+        this(id, email, role, status, fullName, avatarUrl, bio, department, traineeProfile, rolPersonalizado, null);
+    }
+
+    /** La misma respuesta con la formación de la sesión (spec 022, FR-012). La arma {@code ArmadorDeLaSesion}. */
+    public UserResponse conFormacion(FormacionDeLaSesionResponse formacionDeLaSesion) {
+        return new UserResponse(id, email, role, status, fullName, avatarUrl, bio, department, traineeProfile, rolPersonalizado,
+                formacionDeLaSesion);
+    }
 
     /** Usado por el flujo de login (AutenticacionController) — sin enriquecer con
      * `traineeProfile`, que es exclusivo de {@code POST /api/v1/users/me}. */

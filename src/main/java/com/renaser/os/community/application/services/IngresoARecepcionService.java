@@ -13,6 +13,7 @@ import com.renaser.os.community.domain.model.acompanamiento.MotivoAsignacion;
 import com.renaser.os.community.domain.model.acompanamiento.PoliticaMentoria;
 import com.renaser.os.community.domain.model.celula.CelulaId;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.AsignacionCelulaPort;
@@ -97,13 +98,30 @@ public class IngresoARecepcionService implements IngresarAlGrupoDeRecepcionUseCa
         /* Solo aprendices. Un mentor o un administrador que se da de alta no entra a recibir la
            bienvenida: acompana, no la cursa. El evento de registro no dice el rol, asi que se
            consulta -- deducirlo del contexto es justo lo que fallaba en E-169. */
-        UserRole rol = participacionFinder.deParticipante(usuarioId)
-                .map(com.renaser.os.users.api.ParticipacionPrograma::rol)
-                .orElse(UserRole.TRAINEE);
+        var participacion = participacionFinder.deParticipante(usuarioId);
+        UserRole rol = participacion.map(com.renaser.os.users.api.ParticipacionPrograma::rol).orElse(UserRole.TRAINEE);
         if (rol != UserRole.TRAINEE) {
             return;
         }
+        Formacion formacion = participacion.map(com.renaser.os.users.api.ParticipacionPrograma::formacion)
+                .orElse(Formacion.POR_DEFECTO);
+        entrar(usuarioId, formacion, "recepcion-alta|" + usuarioId.value());
+    }
 
+    @Override
+    @Transactional
+    public void ingresarPorTraslado(UserId usuarioId, Formacion formacion, Instant trasladadoEn) {
+        entrar(usuarioId, formacion, "recepcion-traslado|" + usuarioId.value() + "|" + formacion.codigo() + "|" + trasladadoEn.toEpochMilli());
+    }
+
+    /**
+     * Mete a la persona en el grupo de bienvenida VIGENTE DE SU FORMACION (spec 022): cada formacion tiene el suyo y nadie entra al de otra.
+     *
+     * <p>La clave se deriva del USUARIO (y del traslado), no del instante de la entrega: el outbox de Modulith es at-least-once y puede
+     * reentregar el mismo registro. Con una clave por instante, la reentrega abriria un segundo intervalo; con esta, choca contra
+     * {@code asignaciones_celula_operacion_uk} y no pasa nada.
+     */
+    private void entrar(UserId usuarioId, Formacion formacion, String claveOperacion) {
         /* Ya tiene un grupo vivo: no se toca. Puede pasar si el administrador lo coloco a mano
            antes de que llegara el evento, y en ese caso su decision manda sobre la automatica.
            Ademas, insertar aqui chocaria contra `asignaciones_un_grupo_por_aprendiz`. */
@@ -114,22 +132,17 @@ public class IngresoARecepcionService implements IngresarAlGrupoDeRecepcionUseCa
         }
 
         LocalDate hoy = clock.now().atZone(ZoneId.of(PoliticaMentoria.ZONA_POR_DEFECTO)).toLocalDate();
-        Optional<CelulaId> recepcion = recepcionVigentePort.recepcionVigenteEn(hoy);
+        Optional<CelulaId> recepcion = recepcionVigentePort.recepcionVigenteEn(hoy, formacion);
         if (recepcion.isEmpty()) {
             /* Que no haya recepcion abierta NO es un fallo del sistema: es una tarea pendiente del
                administrador. Pero tampoco puede pasar en silencio -- significa que quien acaba de
                registrarse se queda sin grupo de bienvenida y nadie se entera. */
-            log.warn("[community.IngresoARecepcionService] {} se registro y no hay grupo de recepcion "
-                    + "vigente el {}: entra sin bienvenida", usuarioId, hoy);
+            log.warn("[community.IngresoARecepcionService] {} entra a {} y no hay grupo de recepcion "
+                    + "vigente el {}: entra sin bienvenida", usuarioId, formacion, hoy);
             return;
         }
 
         Instant ahora = clock.now();
-        /* La clave se deriva del USUARIO, no del instante: el outbox de Modulith es at-least-once
-           y puede reentregar el mismo registro. Con una clave por instante, la reentrega abriria
-           un segundo intervalo; con esta, choca contra `asignaciones_celula_operacion_uk` y no
-           pasa nada. */
-        String claveOperacion = "recepcion-alta|" + usuarioId.value();
         if (loadAsignacionesPort.porClaveOperacion(claveOperacion).isPresent()) {
             return;
         }

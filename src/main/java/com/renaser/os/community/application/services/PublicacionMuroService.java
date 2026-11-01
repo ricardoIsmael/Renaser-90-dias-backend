@@ -34,6 +34,7 @@ import com.renaser.os.community.domain.model.publicacion.ReaccionMuro.Reaccionar
 import com.renaser.os.community.domain.model.publicacion.TipoReaccion;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.DuracionDelPrograma;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.users.api.ParticipacionPrograma;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
@@ -575,7 +576,7 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
                     .filter(ParticipacionPrograma::inscrito)
                     .filter(ParticipacionPrograma::activado)
                     .map(ParticipacionPrograma::diaPrograma)
-                    .filter(dia -> dia >= 1 && dia <= 90)
+                    .filter(dia -> dia >= 1 && dia <= DuracionDelPrograma.MAXIMA)
                     .orElse(null);
         } catch (RuntimeException e) {
             return null;

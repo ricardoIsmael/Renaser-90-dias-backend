@@ -21,6 +21,7 @@ import com.renaser.os.community.application.ports.in.celula.QuitarMentorCelulaUs
 import com.renaser.os.community.application.ports.in.celula.QuitarMentorCelulaUseCase.QuitarMentorCelulaCommand;
 import com.renaser.os.community.domain.model.celula.CelulaId;
 import com.renaser.os.community.domain.model.cohorte.CohorteId;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
@@ -87,23 +88,28 @@ public class CelulaAdminController {
      * exige {@code cohortId}. */
     @RequiresPermission(Permission.MANAGE_CELLS)
     @GetMapping("/dashboard")
-    public List<CelulaDashboardResponse> dashboard(@ActorAutenticado UserId actorId) {
-        return dashboardUseCase.dashboard(actorId).stream().map(CelulaDashboardResponse::from).toList();
+    public List<CelulaDashboardResponse> dashboard(@ActorAutenticado UserId actorId,
+                                                    @RequestParam(required = false) String formation) {
+        // `formation` (spec 022): el filtro «Formación» de Administración; sin él, todas.
+        return dashboardUseCase.dashboard(actorId, formacionPedida(formation)).stream().map(CelulaDashboardResponse::from).toList();
     }
 
     /** #25: mentores ACTIVOS sin celula — candidatos del selector "Asignar mentor". */
     @RequiresPermission(Permission.MANAGE_CELLS)
     @GetMapping("/mentores-disponibles")
-    public List<MentorCandidatoResponse> mentoresDisponibles(@ActorAutenticado UserId actorId) {
-        return candidatosUseCase.mentoresDisponibles(actorId).stream().map(MentorCandidatoResponse::from)
-                .toList();
+    public List<MentorCandidatoResponse> mentoresDisponibles(@ActorAutenticado UserId actorId,
+                                                              @RequestParam(required = false) String formation) {
+        return candidatosUseCase.mentoresDisponibles(actorId, formacionPedida(formation)).stream()
+                .map(MentorCandidatoResponse::from).toList();
     }
 
     /** #25: TODOS los mentores ACTIVOS, marcando con {@code cellId} a quien ya lidera una. */
     @RequiresPermission(Permission.MANAGE_CELLS)
     @GetMapping("/mentores")
-    public List<MentorCandidatoResponse> mentores(@ActorAutenticado UserId actorId) {
-        return candidatosUseCase.mentores(actorId).stream().map(MentorCandidatoResponse::from).toList();
+    public List<MentorCandidatoResponse> mentores(@ActorAutenticado UserId actorId,
+                                                   @RequestParam(required = false) String formation) {
+        return candidatosUseCase.mentores(actorId, formacionPedida(formation)).stream()
+                .map(MentorCandidatoResponse::from).toList();
     }
 
     /** #25: aprendices ACTIVOS e inscritos, con grupo o sin el — {@code cellId} marca cual, para
@@ -111,8 +117,9 @@ public class CelulaAdminController {
      * javadoc del caso de uso). */
     @RequiresPermission(Permission.MANAGE_CELLS)
     @GetMapping("/aprendices-disponibles")
-    public List<AprendizCandidatoResponse> aprendicesDisponibles(@ActorAutenticado UserId actorId) {
-        return candidatosUseCase.aprendicesDisponibles(actorId).stream()
+    public List<AprendizCandidatoResponse> aprendicesDisponibles(@ActorAutenticado UserId actorId,
+                                                                  @RequestParam(required = false) String formation) {
+        return candidatosUseCase.aprendicesDisponibles(actorId, formacionPedida(formation)).stream()
                 .map(AprendizCandidatoResponse::from).toList();
     }
 
@@ -130,13 +137,18 @@ public class CelulaAdminController {
         return CelulaDetalleResponse.from(consultarUseCase.obtener(actorId, CelulaId.of(id)));
     }
 
+    /** El parámetro {@code formation} de las listas de Administración (spec 022): vacío = «Todas». */
+    private static Formacion formacionPedida(String formation) {
+        return formation == null || formation.isBlank() ? null : Formacion.desde(formation);
+    }
+
     @RequiresPermission(Permission.MANAGE_CELLS)
     @PostMapping
     public ResponseEntity<CelulaDetalleResponse> crear(@ActorAutenticado UserId actorId,
                                                          @RequestBody @Valid CrearCelulaRequest request) {
         var detalle = crearUseCase.crear(new CrearCelulaCommand(actorId, request.name(),
                 CohorteId.of(request.cohortId()), request.videoCallUrl(), request.periodStart(),
-                request.periodEnd(), request.tipo(), request.capacity()));
+                request.periodEnd(), request.tipo(), request.capacity(), request.formacion()));
         return ResponseEntity.status(HttpStatus.CREATED).body(CelulaDetalleResponse.from(detalle));
     }
 

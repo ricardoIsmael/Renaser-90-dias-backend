@@ -15,9 +15,11 @@ import com.renaser.os.community.domain.model.acompanamiento.FuncionAcompanamient
 import com.renaser.os.community.domain.model.celula.Celula;
 import com.renaser.os.community.domain.model.celula.CelulaId;
 import com.renaser.os.community.domain.model.cohorte.Cohorte;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import com.renaser.os.users.api.CuentasCerradasFinder;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
@@ -64,6 +66,7 @@ public class MisCelulasService implements ConsultarMisCelulasUseCase {
     private final VigenciaDeGrupos vigencia;
     /** D-243: los integrantes y su conteo no incluyen cuentas cerradas esperando su borrado. */
     private final SinCuentasCerradas sinCerradas;
+    private final AlcanceDeFormacionFinder formaciones;
 
     public MisCelulasService(LoadCelulaPort loadCelulaPort, LoadCohortePort loadCohortePort,
                               LoadAsignacionesPort loadAsignacionesPort,
@@ -71,7 +74,8 @@ public class MisCelulasService implements ConsultarMisCelulasUseCase {
                               ConsultarPerfilUsuarioPort consultarPerfilUsuarioPort,
                               UserSummaryFinder userSummaryFinder, Clock clock, FotosDeIntegrantesDelGrupo fotos,
                               LoadPoliticaMentoriaPort loadPoliticaMentoriaPort,
-                              CuentasCerradasFinder cuentasCerradas) {
+                              CuentasCerradasFinder cuentasCerradas, AlcanceDeFormacionFinder formaciones) {
+        this.formaciones = formaciones;
         this.loadCelulaPort = loadCelulaPort;
         this.loadCohortePort = loadCohortePort;
         this.loadAsignacionesPort = loadAsignacionesPort;
@@ -90,10 +94,13 @@ public class MisCelulasService implements ConsultarMisCelulasUseCase {
         requireActorActivo(actorId);
         Instant ahora = clock.now();
         CelulaId principal = consultarCelulaDeParticipantePort.celulaDeUsuario(actorId).orElse(null);
+        // Spec 022: el personal con varias formaciones ve los grupos de la que tiene activa, nunca los de dos a la vez.
+        AlcanceDeFormacion alcance = formaciones.de(actorId);
 
         return gruposVigentesDe(actorId, ahora).stream()
                 .map(loadCelulaPort::porId)
                 .flatMap(Optional::stream)
+                .filter(celula -> alcance.incluye(celula.formacion()))
                 // En curso, no "no vencido": un grupo programado tampoco se lista (D-240, E-477).
                 .filter(celula -> vigencia.enCurso(celula, ahora))
                 .sorted(ordenConElPrincipalPrimero(principal))

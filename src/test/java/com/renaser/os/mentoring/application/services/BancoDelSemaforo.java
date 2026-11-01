@@ -297,7 +297,8 @@ public class BancoDelSemaforo {
 
     public SemaforoPorGruposService servicioPorGrupos() {
         MedicionDeGrupos medicion = medicion();
-        return new SemaforoPorGruposService(acceso(medicion), medicion, acompanamiento, usuarios, reloj, interruptores);
+        return new SemaforoPorGruposService(acceso(medicion), medicion, acompanamiento, usuarios, reloj, interruptores,
+                new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
     }
 
     private MedicionDeGrupos medicion() {

@@ -1,5 +1,7 @@
 package com.renaser.os.users.api;
 
+import com.renaser.os.shared.domain.CortesDeFase;
+
 /**
  * Fase del programa de 90 dias en la que esta un participante. Vocabulario en INGLES
  * a proposito (D-36): son los literales que la app movil ya consume tal cual
@@ -17,16 +19,9 @@ public enum FasePrograma {
     PHASE_3_ALCHEMIST_WARRIOR,
     PHASE_4_ASCENSION;
 
-    /** Dia de programa (1-indexado) desde el cual arranca cada fase. Espejo EXACTO de
-     * los mismos cortes que {@code phasecontracts.domain.model.contrato.FasePrograma}
-     * (verificados contra docs/MODULO_PHASECONTRACTS.md §1 y el `phase.ts` del repo
-     * viejo): 1-7 Fase I, 8-34 Fase II, 35-64 Fase III, 65-90 Fase IV. Duplicado a
-     * proposito en las dos copias del enum (D-21: `phasecontracts` no puede importar
-     * este tipo de `users`, ni al reves) — si un dia de corte cambia, hay que tocar
-     * los dos lugares. */
-    private static final int DIA_INICIO_FASE_2 = 8;
-    private static final int DIA_INICIO_FASE_3 = 35;
-    private static final int DIA_INICIO_FASE_4 = 65;
+    // Los cortes (1-7 Fase I, 8-34 Fase II, 35-64 Fase III, 65-90 Fase IV sobre 90 dias) viven en
+    // shared.domain.CortesDeFase: la MISMA regla que usa la copia del enum de `phasecontracts` (D-21: no pueden
+    // importarse entre si) y que estira las fases cuando el programa dura mas (spec 022).
 
     /**
      * El nombre de la fase tal como lo muestra la app ({@code FASES_EN_ORDEN} de {@code useResumenHome}): lo usa el
@@ -57,15 +52,19 @@ public enum FasePrograma {
      * metodo (dos filas en dia 17 con fases distintas, D-66).
      */
     public static FasePrograma paraDiaPrograma(int diaPrograma) {
-        if (diaPrograma >= DIA_INICIO_FASE_4) {
-            return PHASE_4_ASCENSION;
-        }
-        if (diaPrograma >= DIA_INICIO_FASE_3) {
-            return PHASE_3_ALCHEMIST_WARRIOR;
-        }
-        if (diaPrograma >= DIA_INICIO_FASE_2) {
-            return PHASE_2_DEVELOPMENT;
-        }
-        return PHASE_1_REBIRTH;
+        return paraDiaPrograma(diaPrograma, CortesDeFase.DURACION_BASE);
+    }
+
+    /**
+     * La fase del día en un programa de {@code duracion} días (spec 022, Q2-A): las MISMAS cuatro fases, estiradas en proporción
+     * ({@link CortesDeFase}). Con 90 días da exactamente los cortes de siempre (1, 8, 35 y 65).
+     */
+    public static FasePrograma paraDiaPrograma(int diaPrograma, int duracion) {
+        return values()[CortesDeFase.numeroDeFase(diaPrograma, duracion) - 1];
+    }
+
+    /** 1 a 4: el número de la fase (la app lo muestra como «Fase 2»). */
+    public int numero() {
+        return ordinal() + 1;
     }
 }
