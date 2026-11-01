@@ -2,7 +2,7 @@
 
 **Feature Branch**: `033-cierre-del-dia-en-plan` (app; el servidor no cambia)
 **Created**: 2026-10-31
-**Status**: En implementación (solo la app; el servidor no cambia). El dueño respondió el 2026-10-31: «todo A» (ver «Decisiones del dueño (31/10)»).
+**Status**: Implementada en la app (2026-10-31, rama `033-034-cierre-en-plan-e-interruptor` del frontend; el servidor no cambia). Falta el E2E en el emulador. El dueño respondió el 2026-10-31: «todo A» (ver «Decisiones del dueño (31/10)»).
 **Input**: Pedido del dueño (2026-10-31), textual: «Cerrar el día se mueve a Plan, todo de acuerdo a Plan.»
 
 ## Clarifications
