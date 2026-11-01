@@ -5,6 +5,9 @@ import com.renaser.os.habits.application.ports.in.medicion.RegistrarMedicionDiar
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase.CompletarRegistroCommand;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
+import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
+import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
+import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.RolParticipante;
 import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort;
 import com.renaser.os.habits.domain.model.habito.ExigenciaEvidencia;
 import com.renaser.os.habits.domain.model.habito.Habito;
@@ -15,6 +18,7 @@ import com.renaser.os.habits.domain.model.medicion.MedicionDiaria;
 import com.renaser.os.habits.domain.model.politica.GestoCompletar;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.DisplayName;
@@ -34,6 +38,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -51,6 +56,8 @@ class MedicionDiariaServiceTest {
     private LoadRegistroHabitoPort loadRegistroPort;
     @Mock
     private CompletarRegistroUseCase completarRegistroUseCase;
+    @Mock
+    private ConsultarProgresoParticipanteHabitsPort progresoPort;
     @InjectMocks
     private MedicionDiariaService service;
 
@@ -63,7 +70,8 @@ class MedicionDiariaServiceTest {
     void delegaEnCompletarConElNumero() {
         RegistroHabito registro = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), ana, km.id(), DIA,
                 11, TipoDia.TODOS, true, Instant.EPOCH);
-        when(loadHabitoPort.porClaveSistema(PoliticaKilometros.CLAVE_SISTEMA)).thenReturn(Optional.of(km));
+        when(progresoPort.deParticipante(ana)).thenReturn(Optional.of(progreso(Formacion.ESCUELA)));
+        when(loadHabitoPort.porClaveSistema(PoliticaKilometros.CLAVE_SISTEMA, Formacion.ESCUELA)).thenReturn(Optional.of(km));
         when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(ana, km.id(), DIA))
                 .thenReturn(Optional.of(registro));
 
@@ -74,6 +82,23 @@ class MedicionDiariaServiceTest {
         assertThat(comando.getValue().registroId()).isEqualTo(registro.id());
         assertThat(comando.getValue().gesto()).isEqualTo(GestoCompletar.GENERICO);
         assertThat(comando.getValue().medicion()).isEqualTo(KM);
+    }
+
+    private static ProgresoParticipanteHabits progreso(Formacion formacion) {
+        return new ProgresoParticipanteHabits(11, "America/Lima", RolParticipante.TRAINEE, false, true, null, formacion, 90);
+    }
+
+    @Test
+    @DisplayName("spec 023: la clave se busca en la formacion de la persona; una formacion que no ofrece el habito no tiene ese flujo")
+    void soloEnSuFormacion() {
+        when(progresoPort.deParticipante(ana)).thenReturn(Optional.of(progreso(Formacion.DIPLOMADO)));
+        when(loadHabitoPort.porClaveSistema(PoliticaKilometros.CLAVE_SISTEMA, Formacion.DIPLOMADO)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.registrar(
+                new RegistrarMedicionCommand(ana, ana, PoliticaKilometros.CLAVE_SISTEMA, DIA, KM)))
+                .isInstanceOf(NoSuchElementException.class);
+        verify(loadHabitoPort, never()).porClaveSistema(PoliticaKilometros.CLAVE_SISTEMA, Formacion.ESCUELA);
+        verifyNoInteractions(completarRegistroUseCase);
     }
 
     @Test
@@ -90,7 +115,8 @@ class MedicionDiariaServiceTest {
     @Test
     @DisplayName("sin registro ese día (pausado, o no generado) es un 404, no se inventa uno")
     void sinRegistroEsNoEncontrado() {
-        when(loadHabitoPort.porClaveSistema(PoliticaKilometros.CLAVE_SISTEMA)).thenReturn(Optional.of(km));
+        when(progresoPort.deParticipante(ana)).thenReturn(Optional.of(progreso(Formacion.ESCUELA)));
+        when(loadHabitoPort.porClaveSistema(PoliticaKilometros.CLAVE_SISTEMA, Formacion.ESCUELA)).thenReturn(Optional.of(km));
         when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(ana, km.id(), DIA)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.registrar(

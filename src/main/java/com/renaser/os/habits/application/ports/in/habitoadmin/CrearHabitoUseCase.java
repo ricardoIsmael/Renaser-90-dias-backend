@@ -4,6 +4,7 @@ import com.renaser.os.habits.domain.model.habito.DetallesHabito;
 import com.renaser.os.habits.domain.model.audiencia.Audiencia;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.shared.application.SelfValidating;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -23,12 +24,22 @@ public interface CrearHabitoUseCase {
 
     record CrearHabitoCommand(@NotNull UserId actorId, @NotBlank @Size(max = 120) String titulo,
                                @NotNull TipoHabito tipo, @NotNull DetallesHabito detalles, Audiencia audiencia,
-                               LocalTime horaDisparo) {
-        /** Spec 001: sin audiencia = para todos, como todo hábito anterior a la función. */
+                               LocalTime horaDisparo, Formacion formacion) {
+        /**
+         * Spec 001: sin audiencia = para todos, como todo hábito anterior a la función. Spec 023: sin formación = la Escuela, para el
+         * cliente anterior que no la manda.
+         */
         public CrearHabitoCommand {
             SelfValidating.validateConstructorArgs(CrearHabitoCommand.class, actorId, titulo, tipo, detalles,
-                    audiencia, horaDisparo);
+                    audiencia, horaDisparo, formacion);
             audiencia = audiencia == null ? Audiencia.PARA_TODOS : audiencia;
+            formacion = formacion == null ? Formacion.POR_DEFECTO : formacion;
+        }
+
+        /** Firma de antes de las formaciones (spec 023): el hábito es de la Escuela. */
+        public CrearHabitoCommand(UserId actorId, String titulo, TipoHabito tipo, DetallesHabito detalles,
+                                  Audiencia audiencia, LocalTime horaDisparo) {
+            this(actorId, titulo, tipo, detalles, audiencia, horaDisparo, null);
         }
 
         /** Sin hora: el habito vale todo el dia (E-659). */

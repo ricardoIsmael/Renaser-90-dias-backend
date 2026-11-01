@@ -17,6 +17,8 @@ import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.PlantillaHabitoPersonal;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.Formacion;
+import com.renaser.os.shared.domain.ObjetoDeOtraFormacionException;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import jakarta.validation.ConstraintViolationException;
@@ -133,6 +135,61 @@ class DesbloqueoHabitoServiceTest {
         service.elegir(new ElegirHabitoCommand(actor, habito.id(), null));
 
         verify(savePort).elegirSiFalta(actor, habito.id(), 1, CLOCK.now(), CLOCK.now());
+    }
+
+    // ---- Spec 023: la duración y la formación de la persona ----
+
+    @Test
+    @DisplayName("spec 023: un programa de 1 año admite elegir el día 200; uno de 90 días ya no pasa del 90")
+    void elegirHastaElUltimoDiaDeSuPrograma() {
+        UserId deUnAnio = UserId.of(UUID.randomUUID());
+        UserId de90 = UserId.of(UUID.randomUUID());
+        Habito habito = habitoDeSistemaActivo();
+        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
+        when(progresoPort.deParticipante(deUnAnio)).thenReturn(Optional.of(new ProgresoParticipanteHabits(120, "UTC",
+                RolParticipante.TRAINEE, false, true, null, Formacion.ESCUELA, 365)));
+        when(progresoPort.deParticipante(de90)).thenReturn(Optional.of(new ProgresoParticipanteHabits(80, "UTC",
+                RolParticipante.TRAINEE, false, true, null, Formacion.ESCUELA, 90)));
+        when(loadPort.deParticipanteYHabito(deUnAnio, habito.id())).thenReturn(Optional.of(
+                DesbloqueoHabito.rehydrate(deUnAnio, habito.id(), 200, CLOCK.now(), CLOCK.now(), CLOCK.now())));
+
+        service.elegir(new ElegirHabitoCommand(deUnAnio, habito.id(), 200));
+        verify(savePort).elegirSiFalta(deUnAnio, habito.id(), 200, CLOCK.now(), CLOCK.now());
+
+        assertThatThrownBy(() -> service.elegir(new ElegirHabitoCommand(de90, habito.id(), 91)))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("90");
+    }
+
+    @Test
+    @DisplayName("spec 023: una persona que ya pasó el último día de SU programa no elige (el tope es el suyo, no un 90 fijo)")
+    void fueraDelProgramaPropio() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = habitoDeSistemaActivo();
+        when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(new ProgresoParticipanteHabits(95, "UTC",
+                RolParticipante.TRAINEE, false, true, null, Formacion.ESCUELA, 90)));
+
+        assertThatThrownBy(() -> service.elegir(new ElegirHabitoCommand(actor, habito.id(), null)))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("1-90");
+    }
+
+    @Test
+    @DisplayName("spec 023: elegir, pausar o quitar un hábito del catálogo de OTRA formación responde como si no existiera")
+    void habitoDeOtraFormacionEs404() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito delDiplomado = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), Formacion.DIPLOMADO, "Estudio",
+                TipoHabito.CHECKBOX, new com.renaser.os.habits.domain.model.habito.DetallesHabito("d", "DIPLOMADO_ESTUDIO",
+                        ExigenciaEvidencia.OPCIONAL, false, false), CLOCK.now());
+        when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(new ProgresoParticipanteHabits(10, "UTC",
+                RolParticipante.TRAINEE, false, true, null, Formacion.ESCUELA, 90)));
+        when(loadHabitoPort.byId(delDiplomado.id())).thenReturn(Optional.of(delDiplomado));
+
+        assertThatThrownBy(() -> service.elegir(new ElegirHabitoCommand(actor, delDiplomado.id(), null)))
+                .isInstanceOf(ObjetoDeOtraFormacionException.class);
+        assertThatThrownBy(() -> service.quitar(new com.renaser.os.habits.application.ports.in.desbloqueo.QuitarHabitoDelPlanUseCase
+                .QuitarHabitoCommand(actor, delDiplomado.id()))).isInstanceOf(ObjetoDeOtraFormacionException.class);
+        assertThatThrownBy(() -> service.cambiarEstado(new CambiarEstadoHabitoCommand(actor, delDiplomado.id(), true, null)))
+                .isInstanceOf(ObjetoDeOtraFormacionException.class);
+        verifyNoInteractions(savePort);
     }
 
     // ---- habitos PERSONAL en el plan (E-138) ----
@@ -369,7 +426,7 @@ class DesbloqueoHabitoServiceTest {
         UserId actor = UserId.of(UUID.randomUUID());
         HabitoId habitoId = HabitoId.of(UUID.randomUUID());
 
-        assertThatThrownBy(() -> new ElegirHabitoCommand(actor, habitoId, 91))
+        assertThatThrownBy(() -> new ElegirHabitoCommand(actor, habitoId, 366))
                 .isInstanceOf(ConstraintViolationException.class);
         assertThatThrownBy(() -> new ElegirHabitoCommand(actor, habitoId, 0))
                 .isInstanceOf(ConstraintViolationException.class);

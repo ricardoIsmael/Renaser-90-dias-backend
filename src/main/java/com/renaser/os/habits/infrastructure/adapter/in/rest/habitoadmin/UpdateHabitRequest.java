@@ -1,7 +1,9 @@
 package com.renaser.os.habits.infrastructure.adapter.in.rest.habitoadmin;
 
 import com.renaser.os.habits.domain.model.audiencia.Audiencia;
+import com.renaser.os.habits.domain.model.categoria.CodigoDeCategoria;
 import com.renaser.os.habits.domain.model.habito.DetallesHabito;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.util.List;
@@ -30,7 +32,7 @@ import java.util.List;
  *       Ausente o {@code null} = "no la toco"; {@code true}/{@code false} explicito = se aplica.</li>
  * </ol>
  */
-public record UpdateHabitRequest(String description, HabitTypeDto habitType, @NotNull HabitCategoryDto category,
+public record UpdateHabitRequest(String description, HabitTypeDto habitType, @NotBlank String category,
                                   @NotNull HabitEvidenceRequirementDto evidenceRequirement, boolean isOptional,
                                   Boolean mandatoryOnIntoxication, List<String> targetRoles) {
 
@@ -41,7 +43,7 @@ public record UpdateHabitRequest(String description, HabitTypeDto habitType, @No
 
     /** Con la bandera ausente, el valor de acá no se usa: el servicio conserva la del hábito. */
     public DetallesHabito toDetalles() {
-        return new DetallesHabito(description, category.toClave(), evidenceRequirement.toDomain(), isOptional,
+        return new DetallesHabito(description, CodigoDeCategoria.aClave(category), evidenceRequirement.toDomain(), isOptional,
                 Boolean.TRUE.equals(mandatoryOnIntoxication));
     }
 

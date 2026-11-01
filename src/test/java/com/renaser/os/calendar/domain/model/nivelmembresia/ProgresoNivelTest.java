@@ -11,10 +11,20 @@ class ProgresoNivelTest {
 
     @Test
     void porcentajeSeRedondeaYTopaEnCien() {
-        assertThat(ProgresoNivel.porcentajeDeProgreso(45)).isEqualTo(50); // 45/90 = 50%
-        assertThat(ProgresoNivel.porcentajeDeProgreso(90)).isEqualTo(100);
-        assertThat(ProgresoNivel.porcentajeDeProgreso(120)).isEqualTo(100); // post-programa, topa en 100
-        assertThat(ProgresoNivel.porcentajeDeProgreso(0)).isEqualTo(0);
+        assertThat(ProgresoNivel.porcentajeDeProgreso(45, 90)).isEqualTo(50); // 45/90 = 50%
+        assertThat(ProgresoNivel.porcentajeDeProgreso(90, 90)).isEqualTo(100);
+        assertThat(ProgresoNivel.porcentajeDeProgreso(120, 90)).isEqualTo(100); // post-programa, topa en 100
+        assertThat(ProgresoNivel.porcentajeDeProgreso(0, 90)).isEqualTo(0);
+    }
+
+    @Test
+    void elPorcentajeSeCuentaSobreLaDuracionDeLaFormacion() {
+        // Diplomado de 1 año: el día 45 es el 12 %, no el 50 % que daría dividir por 90.
+        assertThat(ProgresoNivel.porcentajeDeProgreso(45, 365)).isEqualTo(12);
+        assertThat(ProgresoNivel.porcentajeDeProgreso(365, 365)).isEqualTo(100);
+        assertThat(ProgresoNivel.porcentajeDeProgreso(400, 365)).isEqualTo(100);
+        // Una duración rota no divide por cero: cuenta como la de siempre.
+        assertThat(ProgresoNivel.porcentajeDeProgreso(45, 0)).isEqualTo(50);
     }
 
     @Test

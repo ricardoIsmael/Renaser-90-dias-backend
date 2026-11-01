@@ -41,7 +41,7 @@ class ConsultarProgresoParticipanteHabitsPersistenceAdapter implements Consultar
     private static ProgresoParticipanteHabits aProgreso(ParticipacionPrograma participacion) {
         return new ProgresoParticipanteHabits(participacion.diaPrograma(), participacion.zona().getId(),
                 mapearRol(participacion.rol()), participacion.suspendido(), participacion.activado(),
-                participacion.fechaInicio());
+                participacion.fechaInicio(), participacion.formacion(), participacion.duracionDias());
     }
 
     private static RolParticipante mapearRol(UserRole rol) {

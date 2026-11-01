@@ -28,5 +28,5 @@ interface SpringDataHabitoRepository extends JpaRepository<HabitoJpaEntity, UUID
 
     List<HabitoJpaEntity> findByIdIn(java.util.Collection<UUID> ids);
 
-    java.util.Optional<HabitoJpaEntity> findByClaveSistema(String claveSistema);
+    java.util.Optional<HabitoJpaEntity> findByClaveSistemaAndFormacion(String claveSistema, String formacion);
 }

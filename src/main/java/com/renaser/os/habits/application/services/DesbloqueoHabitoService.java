@@ -86,14 +86,16 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
         // eligio empezar manana tiene que poder armar su plan hoy — y el interruptor ACTIVO/PAUSADO
         // pasa por aca primero (D-99), asi que el 403 de antes lo dejaba sin interruptor el dia
         // previo a empezar. Lo que se elige en dia 0 arranca el dia 1: `resolverDiaDesbloqueo`.
-        if (progreso.diaPrograma() > 90) {
-            throw new IllegalArgumentException("El dia de programa esta fuera del rango de desbloqueo (1-90)");
+        // Spec 023: el rango de desbloqueo es el de SU programa (90 o 365 dias), no un 90 escrito de antemano.
+        if (progreso.diaPrograma() > progreso.duracionDias()) {
+            throw new IllegalArgumentException("El dia de programa esta fuera del rango de desbloqueo (1-" + progreso.duracionDias() + ")");
         }
         Habito habito = requireHabito(command.habitoId());
+        habito.exigirQueSeaVisibleEn(progreso.formacion());
         requirePuedeEntrarEnElPlan(habito, command.actorId());
 
         Instant ahora = clock.now();
-        int diaDesbloqueo = resolverDiaDesbloqueo(command.diaDesbloqueo(), progreso.diaPrograma());
+        int diaDesbloqueo = resolverDiaDesbloqueo(command.diaDesbloqueo(), progreso.diaPrograma(), progreso.duracionDias());
         savePort.elegirSiFalta(command.actorId(), command.habitoId(), diaDesbloqueo, ahora, ahora);
         return loadPort.deParticipanteYHabito(command.actorId(), command.habitoId())
                 .orElseThrow(() -> new IllegalStateException(
@@ -110,6 +112,7 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
     public DesbloqueoHabito cambiarEstado(CambiarEstadoHabitoCommand command) {
         ProgresoParticipanteHabits progreso = requireProgreso(command.actorId());
         Habito habito = requireHabito(command.habitoId());
+        habito.exigirQueSeaVisibleEn(progreso.formacion());
         DesbloqueoHabito desbloqueo = loadPort.deParticipanteYHabito(command.actorId(), command.habitoId())
                 .orElseThrow(() -> new NoSuchElementException(
                         "Este habito no esta en tu plan: " + command.habitoId()));
@@ -146,8 +149,9 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
     @Override
     @Transactional
     public void quitar(QuitarHabitoCommand command) {
-        requireProgreso(command.actorId());
+        ProgresoParticipanteHabits progreso = requireProgreso(command.actorId());
         Habito habito = requireHabito(command.habitoId());
+        habito.exigirQueSeaVisibleEn(progreso.formacion());
         if (!habito.desactivable()) {
             throw new IllegalStateException("Este habito es obligatorio y no se puede sacar de tu plan");
         }
@@ -160,11 +164,14 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
      * dias ya vividos ya generaron (o no) sus registros, y desbloquear hacia atras le mentiria
      * a la coherencia de esos dias.
      *
-     * <p>El tope de 90 lo valida tambien el comando (`@Max`), pero se repite aca porque el
-     * dia ACTUAL puede ser mayor que el pedido y ese caso no lo cubre ninguna anotacion.
+     * <p>El tope es la duracion del programa de la persona (90 o 365; spec 023). El comando solo acota al maximo posible (`@Max(365)`):
+     * aca se compara con la suya, y se repite porque el dia ACTUAL puede ser mayor que el pedido y ese caso no lo cubre ninguna anotacion.
      */
-    private static int resolverDiaDesbloqueo(Integer pedido, int diaActual) {
-        // Dia 0 = todavia no empezo: lo mas temprano que existe es el dia 1 (la columna exige 1-90).
+    private static int resolverDiaDesbloqueo(Integer pedido, int diaActual, int duracionDias) {
+        // Dia 0 = todavia no empezo: lo mas temprano que existe es el dia 1.
+        if (pedido != null && pedido > duracionDias) {
+            throw new IllegalArgumentException("El dia de desbloqueo no puede pasar del ultimo dia de tu programa (" + duracionDias + ")");
+        }
         int primerDiaPosible = Math.max(1, diaActual);
         if (pedido == null) {
             return primerDiaPosible;

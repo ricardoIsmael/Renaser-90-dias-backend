@@ -52,6 +52,7 @@ public class EleccionDiaSemanalService implements ElegirDiaSemanalUseCase {
                     "El Dia 0 es una vista previa — podras elegir tu dia a partir del Dia 1");
         }
         Habito habito = requireHabito(command.habitoId());
+        habito.exigirQueSeaVisibleEn(progreso.formacion());
         if (!habito.eleccionDiaSemanal()) {
             throw new IllegalArgumentException("Este habito no se elige por dia de la semana");
         }

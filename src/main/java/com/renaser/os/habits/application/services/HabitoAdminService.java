@@ -8,17 +8,20 @@ import com.renaser.os.habits.application.ports.in.habitoadmin.CrearHabitoUseCase
 import com.renaser.os.habits.application.ports.in.habitoadmin.EliminarHabitoUseCase;
 import com.renaser.os.habits.application.ports.in.habitoadmin.HabitoDelCatalogo;
 import com.renaser.os.habits.application.ports.out.audiencia.ContarRegistrosDeHabitoPort;
+import com.renaser.os.habits.application.ports.out.categoria.LoadCategoriaHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.SaveHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.SaveHorarioHabitoPort;
 import com.renaser.os.habits.domain.model.audiencia.Audiencia;
 import com.renaser.os.habits.domain.model.audiencia.CodigoDeRol;
+import com.renaser.os.habits.domain.model.categoria.CategoriaHabito;
 import com.renaser.os.habits.domain.model.habito.DetallesHabito;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.horario.HorarioHabito;
 import com.renaser.os.habits.domain.model.horario.HorarioHabitoId;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
@@ -53,10 +56,13 @@ public class HabitoAdminService implements ConsultarCatalogoAdminUseCase, CrearH
     private final IdGenerator idGenerator;
     private final AudienciasDelCatalogo audiencias;
     private final ContarRegistrosDeHabitoPort registrosPort;
+    private final LoadCategoriaHabitoPort categoriasPort;
 
     public HabitoAdminService(LoadHabitoPort loadPort, SaveHabitoPort savePort, SaveHorarioHabitoPort saveHorarioPort,
                                HabitoAdminGuard guard, Clock clock, IdGenerator idGenerator,
-                               AudienciasDelCatalogo audiencias, ContarRegistrosDeHabitoPort registrosPort) {
+                               AudienciasDelCatalogo audiencias, ContarRegistrosDeHabitoPort registrosPort,
+                               LoadCategoriaHabitoPort categoriasPort) {
+        this.categoriasPort = categoriasPort;
         this.loadPort = loadPort;
         this.savePort = savePort;
         this.saveHorarioPort = saveHorarioPort;
@@ -74,11 +80,18 @@ public class HabitoAdminService implements ConsultarCatalogoAdminUseCase, CrearH
 
     @Override
     public List<HabitoDelCatalogo> listar(UserId actorId, CodigoDeRol rol) {
+        return listar(actorId, rol, Formacion.POR_DEFECTO);
+    }
+
+    @Override
+    public List<HabitoDelCatalogo> listar(UserId actorId, CodigoDeRol rol, Formacion formacion) {
         guard.requireAdmin(actorId);
         if (rol != null) {
             audiencias.validar(Audiencia.de(Set.of(rol)));
         }
-        List<HabitoDelCatalogo> catalogo = audiencias.presentar(loadPort.catalogoCompleto());
+        List<Habito> delCatalogo = loadPort.catalogoCompleto().stream()
+                .filter(h -> formacion == null || h.esDeFormacion(formacion)).toList();
+        List<HabitoDelCatalogo> catalogo = audiencias.presentar(delCatalogo);
         return rol == null ? catalogo : catalogo.stream().filter(h -> h.audienciaGuardada().aplicaA(rol)).toList();
     }
 
@@ -93,13 +106,14 @@ public class HabitoAdminService implements ConsultarCatalogoAdminUseCase, CrearH
     public HabitoDelCatalogo crear(CrearHabitoCommand command) {
         guard.requireAdmin(command.actorId());
         audiencias.validar(command.audiencia());
+        exigirCategoriaActivaDe(command.formacion(), command.detalles().categoriaClave());
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD 5.4.7).
         HabitoId id = HabitoId.of(idGenerator.newId());
         // Se arma ANTES de guardar nada: una hora fuera del dia (despues de las 23:40) se rechaza sin escribir.
         HorarioHabito horario = HorarioHabito.todoElPrograma(HorarioHabitoId.of(idGenerator.newId()), id,
                 command.horaDisparo(), clock.now());
-        Habito habito = savePort.save(Habito.crearDeSistema(id, command.titulo(), command.tipo(), command.detalles(),
-                clock.now()));
+        Habito habito = savePort.save(Habito.crearDeSistema(id, command.formacion(), command.titulo(), command.tipo(),
+                command.detalles(), clock.now()));
         saveHorarioPort.save(horario);
         audiencias.guardarAlCrear(habito.id(), command.audiencia(), command.actorId());
         return audiencias.presentar(habito);
@@ -114,7 +128,12 @@ public class HabitoAdminService implements ConsultarCatalogoAdminUseCase, CrearH
         if (audiencia != null) {
             audiencias.validar(audiencia);
         }
-        habito.actualizarDetalles(detallesPara(command, habito), clock.now());
+        DetallesHabito detalles = detallesPara(command, habito);
+        if (!detalles.categoriaClave().equals(habito.categoriaClave())) {
+            // Spec 023: mover un hábito a otra categoría solo se puede dentro de SU formación (nunca a otra: para eso se copia).
+            exigirCategoriaActivaDe(habito.formacion(), detalles.categoriaClave());
+        }
+        habito.actualizarDetalles(detalles, clock.now());
         Habito guardado = savePort.save(habito);
         if (audiencia != null) {
             audiencias.guardarSiCambio(guardado.id(), audiencia, command.actorId());
@@ -155,6 +174,21 @@ public class HabitoAdminService implements ConsultarCatalogoAdminUseCase, CrearH
             throw new IllegalStateException(CON_HISTORIA);
         }
         savePort.eliminar(command.habitoId());
+    }
+
+    /**
+     * Spec 023, FR-002: un hábito se crea y se mueve solo a una categoría ACTIVA de SU misma formación. La llave compuesta de la base
+     * también lo impone; esto lo dice con un motivo que la pantalla puede mostrar.
+     */
+    private void exigirCategoriaActivaDe(Formacion formacion, String clave) {
+        CategoriaHabito categoria = categoriasPort.byClave(clave)
+                .orElseThrow(() -> new IllegalArgumentException("Esa categoría no existe."));
+        if (categoria.formacion() != formacion) {
+            throw new IllegalArgumentException("Esa categoría no es de la formación de este hábito.");
+        }
+        if (!categoria.activa()) {
+            throw new IllegalArgumentException("Esa categoría está desactivada. Actívala o elige otra.");
+        }
     }
 
     /** Un habito PERSONAL no es del catalogo: para este panel no existe (contrato admin-habits, 404). */

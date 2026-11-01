@@ -4,10 +4,12 @@ import com.renaser.os.habits.application.ports.in.medicion.RegistrarMedicionDiar
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase.CompletarRegistroCommand;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
+import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.politica.GestoCompletar;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,9 +32,12 @@ public class MedicionDiariaService implements RegistrarMedicionDiariaUseCase {
     private final LoadHabitoPort loadHabitoPort;
     private final LoadRegistroHabitoPort loadRegistroPort;
     private final CompletarRegistroUseCase completarRegistroUseCase;
+    private final ConsultarProgresoParticipanteHabitsPort progresoPort;
 
     public MedicionDiariaService(LoadHabitoPort loadHabitoPort, LoadRegistroHabitoPort loadRegistroPort,
-                                 CompletarRegistroUseCase completarRegistroUseCase) {
+                                 CompletarRegistroUseCase completarRegistroUseCase,
+                                 ConsultarProgresoParticipanteHabitsPort progresoPort) {
+        this.progresoPort = progresoPort;
         this.loadHabitoPort = loadHabitoPort;
         this.loadRegistroPort = loadRegistroPort;
         this.completarRegistroUseCase = completarRegistroUseCase;
@@ -44,7 +49,11 @@ public class MedicionDiariaService implements RegistrarMedicionDiariaUseCase {
         if (!command.actorId().equals(command.participanteId())) {
             throw new NotAuthorizedException("Solo el propio participante registra su medición");
         }
-        Habito habito = loadHabitoPort.porClaveSistema(command.claveSistema())
+        // Spec 023: el habito de la formacion de la persona (la clave es unica por formacion). Si esa formacion no lo ofrece, no existe.
+        Formacion formacion = progresoPort.deParticipante(command.participanteId())
+                .orElseThrow(() -> new NoSuchElementException("Participante no encontrado: " + command.participanteId()))
+                .formacion();
+        Habito habito = loadHabitoPort.porClaveSistema(command.claveSistema(), formacion)
                 .orElseThrow(() -> new NoSuchElementException("Hábito no encontrado: " + command.claveSistema()));
         RegistroHabito registro = loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(command.participanteId(),
                         habito.id(), command.fecha())

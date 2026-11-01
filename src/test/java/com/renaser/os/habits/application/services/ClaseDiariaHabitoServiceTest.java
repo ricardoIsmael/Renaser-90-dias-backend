@@ -16,6 +16,7 @@ import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.habits.domain.model.politica.GestoCompletar;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -89,7 +90,7 @@ class ClaseDiariaHabitoServiceTest {
         completado.completar(10, "Buen resumen de la clase de hoy", null, null, CLOCK.now());
 
         mockProgresoActivo(participanteId);
-        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_DAILY_CLASS)).thenReturn(Optional.of(habito));
+        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_DAILY_CLASS, Formacion.ESCUELA)).thenReturn(Optional.of(habito));
         when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(participanteId, habito.id(), HOY))
                 .thenReturn(Optional.of(pendiente));
         when(completarRegistroUseCase.completar(any())).thenReturn(completado);
@@ -119,7 +120,7 @@ class ClaseDiariaHabitoServiceTest {
         cerradoSinResumen.completar(10, null, null, null, CLOCK.now());
 
         mockProgresoActivo(participanteId);
-        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_DAILY_CLASS)).thenReturn(Optional.of(habito));
+        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_DAILY_CLASS, Formacion.ESCUELA)).thenReturn(Optional.of(habito));
         when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(participanteId, habito.id(), HOY))
                 .thenReturn(Optional.of(cerradoSinResumen));
 
@@ -139,7 +140,7 @@ class ClaseDiariaHabitoServiceTest {
         yaCompletado.completar(10, "resumen original de mas de veinte caracteres", null, null, CLOCK.now());
 
         mockProgresoActivo(participanteId);
-        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_DAILY_CLASS)).thenReturn(Optional.of(habito));
+        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_DAILY_CLASS, Formacion.ESCUELA)).thenReturn(Optional.of(habito));
         when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(participanteId, habito.id(), HOY))
                 .thenReturn(Optional.of(yaCompletado));
 
@@ -157,7 +158,6 @@ class ClaseDiariaHabitoServiceTest {
         UserId participanteId = participante();
         when(progresoPort.deParticipante(participanteId)).thenReturn(
                 Optional.of(new ProgresoParticipanteHabits(5, "UTC", RolParticipante.TRAINEE, true, false)));
-        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_DAILY_CLASS)).thenReturn(Optional.of(habitoDailyClass()));
 
         assertThatThrownBy(() -> service().completarDeHoy(
                 new CompletarClaseDiariaHabitoCommand(participanteId, "resumen valido de mas de veinte caracteres")))
@@ -169,7 +169,8 @@ class ClaseDiariaHabitoServiceTest {
     @DisplayName("completarDeHoy(): sin habito DAILY_CLASS en el catalogo -> NoSuchElementException")
     void completarDeHoySinHabitoEnCatalogo() {
         UserId participanteId = participante();
-        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_DAILY_CLASS)).thenReturn(Optional.empty());
+        mockProgresoActivo(participanteId);
+        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_DAILY_CLASS, Formacion.ESCUELA)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service().completarDeHoy(
                 new CompletarClaseDiariaHabitoCommand(participanteId, "resumen valido de mas de veinte caracteres")))
@@ -182,7 +183,7 @@ class ClaseDiariaHabitoServiceTest {
         UserId participanteId = participante();
         Habito habito = habitoDailyClass();
         mockProgresoActivo(participanteId);
-        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_DAILY_CLASS)).thenReturn(Optional.of(habito));
+        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_DAILY_CLASS, Formacion.ESCUELA)).thenReturn(Optional.of(habito));
         when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(participanteId, habito.id(), HOY))
                 .thenReturn(Optional.empty());
 
@@ -211,7 +212,7 @@ class ClaseDiariaHabitoServiceTest {
         RegistroHabito pendiente = registroPendiente(participanteId, habito.id());
 
         mockProgresoActivo(participanteId);
-        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_DAILY_CLASS)).thenReturn(Optional.of(habito));
+        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_DAILY_CLASS, Formacion.ESCUELA)).thenReturn(Optional.of(habito));
         when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(participanteId, habito.id(), HOY))
                 .thenReturn(Optional.of(pendiente));
         when(completarRegistroUseCase.completar(any())).thenReturn(pendiente);

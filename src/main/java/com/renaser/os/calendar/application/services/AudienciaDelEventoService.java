@@ -126,7 +126,7 @@ class AudienciaDelEventoService {
         }
         return audienciaMasivaPort.traineesActivosConDiaPrograma().stream()
                 .filter(c -> c.diaPrograma() != null
-                        && ProgresoNivel.resolverRango(ProgresoNivel.porcentajeDeProgreso(c.diaPrograma()), niveles) >= minRango)
+                        && ProgresoNivel.resolverRango(ProgresoNivel.porcentajeDeProgreso(c.diaPrograma(), c.duracionDias()), niveles) >= minRango)
                 .map(ResolverAudienciaMasivaPort.ParticipanteConDia::id)
                 .toList();
     }

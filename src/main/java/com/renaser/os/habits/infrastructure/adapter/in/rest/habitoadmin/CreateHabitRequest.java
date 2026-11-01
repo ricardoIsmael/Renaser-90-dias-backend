@@ -1,6 +1,7 @@
 package com.renaser.os.habits.infrastructure.adapter.in.rest.habitoadmin;
 
 import com.renaser.os.habits.domain.model.audiencia.Audiencia;
+import com.renaser.os.habits.domain.model.categoria.CodigoDeCategoria;
 import com.renaser.os.habits.domain.model.habito.DetallesHabito;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -17,10 +18,10 @@ import java.util.List;
  * el habito vale todo el dia, como DESPERTAR. Se llama igual que en {@code CreateScheduleRequest} y
  * {@code HabitScheduleResponse}, que es donde la app ya lo lee. */
 public record CreateHabitRequest(@NotBlank @Size(max = 120) String title, String description,
-                                  @NotNull HabitTypeDto habitType, @NotNull HabitCategoryDto category,
+                                  @NotNull HabitTypeDto habitType, @NotBlank String category,
                                   @NotNull HabitEvidenceRequirementDto evidenceRequirement, boolean isOptional,
                                   boolean mandatoryOnIntoxication, List<String> targetRoles,
-                                  LocalTime defaultTriggerTime) {
+                                  LocalTime defaultTriggerTime, String formation) {
 
     /** Spec 001: {@code targetRoles} ausente o nulo = para todos, como todo habito anterior a la funcion. */
     public Audiencia toAudiencia() {
@@ -29,7 +30,7 @@ public record CreateHabitRequest(@NotBlank @Size(max = 120) String title, String
     }
 
     public DetallesHabito toDetalles() {
-        return new DetallesHabito(description, category.toClave(), evidenceRequirement.toDomain(), isOptional,
+        return new DetallesHabito(description, CodigoDeCategoria.aClave(category), evidenceRequirement.toDomain(), isOptional,
                 mandatoryOnIntoxication);
     }
 }
