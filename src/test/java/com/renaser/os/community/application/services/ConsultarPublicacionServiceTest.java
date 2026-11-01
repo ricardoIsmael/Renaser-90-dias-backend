@@ -80,7 +80,7 @@ class ConsultarPublicacionServiceTest {
     @BeforeEach
     void preparar() {
         servicio = new ConsultarPublicacionService(publicaciones, perfiles, new NoOpAlmacenamientoAdapter(), usuarios,
-                asignaciones, acompanamiento, cuentasCerradas, CLOCK);
+                asignaciones, acompanamiento, cuentasCerradas, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo(), CLOCK);
         deAna = Publicacion.publicar(PublicacionId.of(UUID.randomUUID()), ANA, "Hoy completé mi ritual",
                 List.of(new MediaPublicacion(MediaPublicacion.BUCKET_DEFAULT, "muro/fotos/" + ANA + "/a.jpg",
                         "image/jpeg", 1), new MediaPublicacion(MediaPublicacion.BUCKET_DEFAULT,
