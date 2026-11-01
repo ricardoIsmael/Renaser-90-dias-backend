@@ -65,7 +65,7 @@ class BienvenidaDeGrupoServiceTest {
         asignar(MENTOR, FuncionAcompanamiento.MENTOR);
         AsignacionCelula ana = asignar(ANA, FuncionAcompanamiento.APRENDIZ);
         AsignacionCelula luis = asignar(LUIS, FuncionAcompanamiento.APRENDIZ);
-        when(acompanamientoFinder.acompanaVigente(MENTOR, GRUPO.value(), AHORA)).thenReturn(true);
+        when(acompanamientoFinder.grupoOperativo(GRUPO.value(), AHORA)).thenReturn(true);
         when(marcaPort.sinBienvenida(any())).thenReturn(Set.of(ana.id().value()));
 
         Optional<Pendientes> pendientes = servicio.pendientes(GRUPO.value(), AHORA);
@@ -101,7 +101,7 @@ class BienvenidaDeGrupoServiceTest {
         grupo(TipoCelula.REGULAR);
         asignar(MENTOR, FuncionAcompanamiento.MENTOR);
         asignar(ANA, FuncionAcompanamiento.APRENDIZ);
-        when(acompanamientoFinder.acompanaVigente(MENTOR, GRUPO.value(), AHORA)).thenReturn(false);
+        when(acompanamientoFinder.grupoOperativo(GRUPO.value(), AHORA)).thenReturn(false);
 
         assertThat(servicio.pendientes(GRUPO.value(), AHORA)).isEmpty();
     }

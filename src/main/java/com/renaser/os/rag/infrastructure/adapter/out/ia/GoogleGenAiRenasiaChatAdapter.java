@@ -267,7 +267,7 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
                     + "No hables de su dia ni se lo preguntes.)";
         }
         String fecha = situacion.hoy() == null ? "" : situacion.hoy().format(FECHA_DE_HOY) + ", ";
-        return "Hoy es " + fecha + "su dia " + situacion.diaPrograma() + " de 90, en la fase " + situacion.fase()
+        return "Hoy es " + fecha + "su dia " + situacion.diaPrograma() + " de " + situacion.duracionDias() + ", en la fase " + situacion.fase()
                 + " de 4.\n" + tratoDe(situacion.trato()) + "\n"
                 + MapaEnElPrompt.linea(situacion.mapa(), situacion.diaPrograma())
                 + HabitosDeHoyEnElPrompt.texto(situacion.habitos());

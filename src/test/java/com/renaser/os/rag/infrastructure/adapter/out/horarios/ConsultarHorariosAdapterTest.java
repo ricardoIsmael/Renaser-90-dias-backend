@@ -6,11 +6,18 @@ import com.renaser.os.habits.api.HorarioDelDiaFinder.CuotaCambiosHorario;
 import com.renaser.os.habits.api.HorarioDelDiaFinder.HorarioResuelto;
 import com.renaser.os.rag.application.ports.out.horarios.ConsultarHorariosPort.HorarioDeHabito;
 import com.renaser.os.rag.application.ports.out.horarios.ConsultarHorariosPort.HorariosDelDia;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.FasePrograma;
+import com.renaser.os.users.api.ParticipacionPrograma;
+import com.renaser.os.users.api.ParticipacionProgramaFinder;
+import com.renaser.os.users.api.UserRole;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneId;
+import java.util.Optional;
 import java.util.List;
 import java.util.UUID;
 
@@ -32,7 +39,10 @@ class ConsultarHorariosAdapterTest {
                         true, true, new CambioHorarioProgramado(LocalTime.of(7, 0), null, fecha.plusDays(2)))),
                 new CuotaCambiosHorario(1, 2, 3, false)));
 
-        HorariosDelDia dia = new ConsultarHorariosAdapter(finder).deFecha(aprendiz, null);
+        ParticipacionProgramaFinder participaciones = mock(ParticipacionProgramaFinder.class);
+        when(participaciones.deParticipante(aprendiz)).thenReturn(Optional.empty());
+
+        HorariosDelDia dia = new ConsultarHorariosAdapter(finder, participaciones).deFecha(aprendiz, null);
 
         assertThat(dia.fecha()).isEqualTo(fecha);
         assertThat(dia.diaPrograma()).isEqualTo(26);
@@ -50,5 +60,22 @@ class ConsultarHorariosAdapterTest {
         assertThat(dia.cuota().restantes()).isEqualTo(2);
         assertThat(dia.cuota().limite()).isEqualTo(3);
         assertThat(dia.cuota().semanaDeAcomodoLibre()).isFalse();
+        // Sin fila de programa no se sabe cuánto dura: los 90 de siempre.
+        assertThat(dia.duracionDias()).isEqualTo(90);
+    }
+
+    @Test
+    void lleva_los_dias_de_su_programa() {
+        HorarioDelDiaFinder finder = mock(HorarioDelDiaFinder.class);
+        ParticipacionProgramaFinder participaciones = mock(ParticipacionProgramaFinder.class);
+        UserId aprendiz = UserId.of(UUID.randomUUID());
+        LocalDate fecha = LocalDate.of(2027, 3, 1);
+        when(finder.deFecha(aprendiz, null)).thenReturn(new HorarioDelDiaFinder.HorariosDelDia(fecha, 200, List.of(),
+                new CuotaCambiosHorario(0, 3, 3, true)));
+        when(participaciones.deParticipante(aprendiz)).thenReturn(Optional.of(new ParticipacionPrograma(aprendiz, true, 200,
+                fecha.minusDays(199), ZoneId.of("America/Lima"), FasePrograma.PHASE_3_ALCHEMIST_WARRIOR, null, null, UserRole.TRAINEE,
+                false, true, Formacion.DIPLOMADO, 365)));
+
+        assertThat(new ConsultarHorariosAdapter(finder, participaciones).deFecha(aprendiz, null).duracionDias()).isEqualTo(365);
     }
 }

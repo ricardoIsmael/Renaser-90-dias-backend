@@ -58,6 +58,20 @@ class SolicitudDeEmergenciaTest {
                 .hasMessage("Elige un día entre 1 y 89.");
     }
 
+    /** Spec 022: el tope es el penúltimo día de SU programa, no un 89 fijo. */
+    @Test
+    @DisplayName("en el Diplomado de un año el tope es 364, y el día 90 ya no es el último")
+    void conUnaDuracionPropiaElTopeEsElPenultimoDia() {
+        assertThat(SolicitudDeEmergencia.diaMaximoPedible(90, 365)).isEqualTo(90);
+        assertThat(SolicitudDeEmergencia.diaMaximoPedible(200, 365)).isEqualTo(200);
+        assertThat(SolicitudDeEmergencia.diaMaximoPedible(365, 365)).isEqualTo(364);
+        assertThat(SolicitudDeEmergencia.diaMaximoPedible(90, 90)).isEqualTo(89);
+        assertThat(SolicitudDeEmergencia.diaMaximoPedible(0, 365)).isZero();
+        assertThat(SolicitudDeEmergencia.pedir(UUID.randomUUID(), aprendiz, "Accidente", 150, 200, 365, CLOCK).diaPedido()).isEqualTo(150);
+        assertThatThrownBy(() -> SolicitudDeEmergencia.pedir(UUID.randomUUID(), aprendiz, "Accidente", 365, 365, 365, CLOCK))
+                .isInstanceOf(IllegalArgumentException.class).hasMessage("Elige un día entre 1 y 364.");
+    }
+
     /** Respuesta del dueño (02/10): disponible desde el Día 0. Contra la versión anterior era un 409. */
     @Test
     @DisplayName("en el Día 0 se pide ayuda sin día; con un día es 400")

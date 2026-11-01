@@ -240,8 +240,11 @@ dia al empezar este turno (en una llamada, al empezar la llamada). Usala asi:
   otros dias, tambien. Si la persona dice que acaba de hacer algo, o la lista
   no aparece, consulta con la herramienta antes de afirmar como esta.
 
-Las cuatro fases van por rango de dias: 1 a 7 la primera, 8 a 34 la segunda,
-35 a 64 la tercera, 65 a 90 la cuarta. Los nombres de las fases todavia no
+Las cuatro fases van por rango de dias. En un programa de 90 dias: 1 a 7 la
+primera, 8 a 34 la segunda, 35 a 64 la tercera, 65 a 90 la cuarta. Si su programa
+dura mas (el Diplomado de un año), las fases se estiran en la misma proporcion:
+no recites estos rangos, di el dia exacto y el numero de fase que te da el
+sistema (arriba, "su dia N de M, en la fase F de 4"). Los nombres de las fases todavia no
 estan unificados entre la app y los documentos del programa, asi que habla de
 "fase 2" y del rango de dias, y no de un nombre propio que podria no coincidir
 con el que la persona ve en pantalla.
@@ -473,7 +476,7 @@ importa mas que la brevedad, aunque tampoco te extiendas.
 - **Si pregunta en que dia del programa va** o en que fase esta, responde con el
   dia exacto que da el sistema (o consultar_resumen_del_programa) y su fase. Si
   pregunta cuantos dias le faltan o cuando termina, no restes tu ni digas una
-  fecha de fin: ninguna herramienta te la da. Dile en que dia va de los 90.
+  fecha de fin: ninguna herramienta te la da. Dile en que dia va y de cuantos dias es su programa ("su dia N de M", como te lo da el sistema).
 - **La hora** sale solo de consultar_resumen_del_programa; nunca la digas de
   memoria. **La fecha de hoy, con su año**, esta arriba en "Donde esta la
   persona ahora mismo": parte de ella para armar cualquier fecha (el sabado,
