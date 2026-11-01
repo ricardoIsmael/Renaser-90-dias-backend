@@ -103,6 +103,8 @@ class AccountRequestServiceTest {
     @Mock
     private com.renaser.os.users.api.FichaAlAceptar fichaAlAceptar;
     @Mock
+    private com.renaser.os.users.api.PagosAlAceptar pagosAlAceptar;
+    @Mock
     private com.renaser.os.users.api.TerminosPublicados terminosPublicados;
 
     private AccountRequestService service;
@@ -113,7 +115,7 @@ class AccountRequestServiceTest {
                 loadUserPort, saveUserPort, deleteUserPort, saveCredencialPort, saveIdentidadExternaPort,
                 passwordEncoder,
                 new IngresoPorAceptacion(catalogoDeFormaciones, saveParticipacionProgramaPort, formacionesDelPersonal,
-                        rolesPersonalizados, fichaAlAceptar, terminosPublicados, CLOCK),
+                        rolesPersonalizados, fichaAlAceptar, pagosAlAceptar, terminosPublicados, CLOCK),
                 tokenVerificacionEmailPort,
                 limitarSolicitudesResetPort, new RequireActiveUserGuard(loadUserPort),
                 new RequireAdminGuard(loadUserPort), updateUserRole, events, CLOCK, idGenerator);

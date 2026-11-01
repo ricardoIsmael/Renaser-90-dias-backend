@@ -416,6 +416,102 @@ class AceptarConFormacionIT {
         assertThat(aprobar(solicitud.id(), sesion, Map.of("formations", List.of("DIPLOMADO"), "durationDays", 90)).statusCode()).isEqualTo(204);
     }
 
+    // ── Spec 032: el pago al aceptar ───────────────────────────────────────
+
+    private static Map<String, Object> cuotaDePago(String fecha, int monto) {
+        return Map.of("dueDate", fecha, "amount", monto);
+    }
+
+    @Test
+    @DisplayName("spec 032: aceptar «con cronograma» deja el cronograma en la misma transacción que la cuenta; la persona lo ve en «Mi ingreso» y Administración en su ficha")
+    void aceptarConCronograma() throws Exception {
+        UUID admin = usuario("ADMIN");
+        String sesion = sesionDe(admin);
+        Solicitud solicitud = solicitud("Ana Con Pagos");
+
+        HttpResponse<String> respuesta = aprobar(solicitud.id(), sesion, Map.of("formations", List.of("DIPLOMADO"), "durationDays", 365,
+                "payment", Map.of("mode", "SCHEDULE", "currency", "USD",
+                        "installments", List.of(cuotaDePago("2026-12-15", 1000), cuotaDePago("2026-11-15", 1000), cuotaDePago("2027-01-15", 1000)))));
+
+        assertThat(respuesta.statusCode()).isEqualTo(204);
+        assertThat(jdbc.queryForMap("SELECT pago_modalidad, pago_moneda, cronograma_confirmado_en FROM renaser.estado_onboarding WHERE usuario_id = ?", solicitud.usuario()))
+                .containsEntry("pago_modalidad", "CON_CRONOGRAMA").containsEntry("pago_moneda", "USD").containsEntry("cronograma_confirmado_en", null);
+        assertThat(contar("cuotas_de_pago", solicitud.usuario())).isEqualTo(3);
+        assertThat(jdbc.queryForObject("SELECT iniciado_en FROM renaser.estado_onboarding WHERE usuario_id = ?", java.sql.Timestamp.class, solicitud.usuario()))
+                .as("la persona todavía no empezó su ingreso").isNull();
+
+        JsonNode suyo = json.readTree(enviar("GET", "/api/v1/me/ingreso", sesionDe(solicitud.usuario()), null).body());
+        assertThat(suyo.get("payments").get("mode").asText()).isEqualTo("SCHEDULE");
+        assertThat(suyo.get("payments").get("installments")).extracting(c -> c.get("dueDate").asText()).containsExactly("2026-11-15", "2026-12-15", "2027-01-15");
+        JsonNode ficha = json.readTree(enviar("GET", "/api/v1/admin/pagos/personas/" + solicitud.usuario(), sesion, null).body());
+        assertThat(ficha.get("personName").asText()).isEqualTo("Ana Con Pagos");
+        assertThat(ficha.get("payments").get("currency").asText()).isEqualTo("USD");
+    }
+
+    @Test
+    @DisplayName("spec 032: aceptar «sin cronograma (pagó completo)» anota la modalidad sin cuotas; vale para cualquier rol, también para un mentor con cronograma")
+    void aceptarSinCronogramaYConRolDePersonal() throws Exception {
+        String sesion = sesionDe(usuario("ADMIN"));
+        Solicitud pagoCompleto = solicitud("Beto Pago Completo");
+        Solicitud mentor = solicitud("Mentor Con Cuotas");
+
+        assertThat(aprobar(pagoCompleto.id(), sesion, Map.of("payment", Map.of("mode", "NONE"))).statusCode()).isEqualTo(204);
+        assertThat(aprobar(mentor.id(), sesion, Map.of("role", "MENTOR", "formations", List.of("ESCUELA"),
+                "payment", Map.of("mode", "SCHEDULE", "currency", "PEN", "installments", List.of(cuotaDePago("2026-11-15", 500))))).statusCode()).isEqualTo(204);
+
+        assertThat(jdbc.queryForMap("SELECT pago_modalidad, pago_moneda FROM renaser.estado_onboarding WHERE usuario_id = ?", pagoCompleto.usuario()))
+                .containsEntry("pago_modalidad", "SIN_CRONOGRAMA").containsEntry("pago_moneda", null);
+        assertThat(contar("cuotas_de_pago", pagoCompleto.usuario())).isZero();
+        JsonNode suyo = json.readTree(enviar("GET", "/api/v1/me/ingreso", sesionDe(pagoCompleto.usuario()), null).body());
+        assertThat(suyo.get("payments").get("mode").asText()).isEqualTo("NONE");
+        assertThat(jdbc.queryForObject("SELECT pago_moneda FROM renaser.estado_onboarding WHERE usuario_id = ?", String.class, mentor.usuario())).isEqualTo("PEN");
+    }
+
+    @Test
+    @DisplayName("spec 032, FR-003: sin «payment» (la app anterior) la persona queda sin anotar y no figura ninguna fila de pagos")
+    void sinPagoDecididoNoSeAnotaNada() throws Exception {
+        String sesion = sesionDe(usuario("ADMIN"));
+        Solicitud solicitud = solicitud("Aprendiz De Siempre Sin Pago");
+
+        assertThat(aprobar(solicitud.id(), sesion, Map.of("formations", List.of("ESCUELA"))).statusCode()).isEqualTo(204);
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM renaser.estado_onboarding WHERE usuario_id = ? AND pago_modalidad IS NOT NULL", Integer.class, solicitud.usuario())).isZero();
+        assertThat(contar("cuotas_de_pago", solicitud.usuario())).isZero();
+        JsonNode suyo = json.readTree(enviar("GET", "/api/v1/me/ingreso", sesionDe(solicitud.usuario()), null).body());
+        assertThat(suyo.get("payments").isNull()).isTrue();
+    }
+
+    @Test
+    @DisplayName("spec 032, FR-003: un pago inválido es 400 y deshace la aceptación entera: la cuenta sigue inactiva, sin inscripción, sin fila de ingreso ni cuotas")
+    void unPagoInvalidoNoDejaNadaAMedias() throws Exception {
+        String sesion = sesionDe(usuario("ADMIN"));
+        Solicitud solicitud = solicitud("Pago Raro");
+        List<Map<String, Object>> invalidos = List.of(
+                Map.of("mode", "SCHEDULE", "installments", List.of(cuotaDePago("2026-11-15", 10))),
+                Map.of("mode", "SCHEDULE", "currency", "PEN", "installments", List.of()),
+                Map.of("mode", "SCHEDULE", "currency", "PEN", "installments", List.of(cuotaDePago("2026-11-15", 0))),
+                Map.of("mode", "ALGO"));
+        for (Map<String, Object> pago : invalidos) {
+            assertThat(aprobar(solicitud.id(), sesion, Map.of("formations", List.of("ESCUELA"), "payment", pago)).statusCode()).as("pago %s", pago).isEqualTo(400);
+        }
+
+        assertThat(rolYEstado(solicitud.usuario())).containsEntry("estado", "INACTIVO");
+        assertThat(jdbc.queryForObject("SELECT estado::text FROM renaser.solicitudes_cuenta WHERE id = ?", String.class, solicitud.id())).isEqualTo("PENDIENTE");
+        assertThat(contar("participantes_programa", solicitud.usuario())).isZero();
+        assertThat(contar("estado_onboarding", solicitud.usuario())).isZero();
+        assertThat(contar("cuotas_de_pago", solicitud.usuario())).isZero();
+    }
+
+    @Test
+    @DisplayName("spec 032: la hoja «Aceptar» sabe que este servidor anota el pago (paymentScheduleAvailable)")
+    void lasOpcionesDicenQueSeAnotaElPago() throws Exception {
+        String sesion = sesionDe(usuario("ADMIN"));
+
+        JsonNode opciones = json.readTree(enviar("GET", "/api/v1/account-requests/acceptance-options", sesion, null).body());
+
+        assertThat(opciones.get("paymentScheduleAvailable").asBoolean()).isTrue();
+    }
+
     // ── Semilla y pedidos ──────────────────────────────────────────────────
 
     private record Solicitud(UUID id, UUID usuario) {

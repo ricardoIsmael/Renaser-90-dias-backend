@@ -1,6 +1,7 @@
 package com.renaser.os.users.domain.model.accountrequest;
 
 import com.renaser.os.shared.domain.Formacion;
+import com.renaser.os.users.api.PlanDePagoPedido;
 
 import java.util.Set;
 
@@ -11,16 +12,22 @@ import java.util.Set;
  *
  * @param formaciones  las formaciones elegidas; {@code null} o vacío = no se eligió (se asume la Escuela, la de siempre)
  * @param duracionDias la duración elegida para un aprendiz; {@code null} = no se eligió
+ * @param pago         spec 032: «sin cronograma» o «con cronograma» con sus cuotas; {@code null} = no se decidió y la persona queda «sin anotar» (lo que manda una app anterior)
  */
-public record PedidoDeIngreso(Set<Formacion> formaciones, Integer duracionDias, boolean conDiagnostico) {
+public record PedidoDeIngreso(Set<Formacion> formaciones, Integer duracionDias, boolean conDiagnostico, PlanDePagoPedido pago) {
 
     public PedidoDeIngreso {
         formaciones = formaciones == null ? Set.of() : Set.copyOf(formaciones);
     }
 
+    /** El pedido de la spec 025, sin decisión de pago. */
+    public PedidoDeIngreso(Set<Formacion> formaciones, Integer duracionDias, boolean conDiagnostico) {
+        this(formaciones, duracionDias, conDiagnostico, null);
+    }
+
     /** Lo que manda una app anterior: solo el rol. */
     public static PedidoDeIngreso deSiempre() {
-        return new PedidoDeIngreso(Set.of(), null, false);
+        return new PedidoDeIngreso(Set.of(), null, false, null);
     }
 
     /** Si no eligió formación: es el camino de siempre y se acepta en la Escuela. */
