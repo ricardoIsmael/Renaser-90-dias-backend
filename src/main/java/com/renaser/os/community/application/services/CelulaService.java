@@ -256,7 +256,8 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         // D-243: el conteo es el de la lista de `misCompaneros`, sin cuentas cerradas: no puede decir
         // «5 integrantes» y listar 4. Antes salía de `contarMiembros`, que cuenta el mismo puntero.
         int cantidadMiembros = companerosVisibles(celulaId).size();
-        int totalCelulas = loadCelulaPort.porCohorte(celula.cohorteId()).size();
+        /* Spec 022: «cuántos grupos tiene la cohorte» cuenta los de SU formación; sumar los de las otras dos mezclaba formaciones en una cifra. */
+        int totalCelulas = (int) loadCelulaPort.porCohorte(celula.cohorteId()).stream().filter(otra -> otra.formacion() == celula.formacion()).count();
         // Sin la foto del mentor (D-206): este es el `/me/cell` viejo y no se le cambia lo que calcula.
         return Optional.of(new MiCelula(celula, cohorte, mentor, cantidadMiembros, totalCelulas, null));
     }
@@ -595,7 +596,8 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
                 ? consultarPerfilUsuarioPort.porId(celula.mentorId()).map(PerfilUsuario::nombreCompleto).orElse(null)
                 : null;
         int cantidadMiembros = consultarMiembrosCelulaPort.contarMiembros(celula.id());
-        int totalCelulas = loadCelulaPort.porCohorte(celula.cohorteId()).size();
+        /* Spec 022: «cuántos grupos tiene la cohorte» cuenta los de SU formación; sumar los de las otras dos mezclaba formaciones en una cifra. */
+        int totalCelulas = (int) loadCelulaPort.porCohorte(celula.cohorteId()).stream().filter(otra -> otra.formacion() == celula.formacion()).count();
         return new CelulaParticipanteResumen(celula.id().value(), celula.nombre(), cohortName, mentorName,
                 cantidadMiembros, totalCelulas);
     }

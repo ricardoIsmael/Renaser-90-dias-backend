@@ -186,7 +186,8 @@ public class MisCelulasService implements ConsultarMisCelulasUseCase {
         PerfilBasico mentor = delGrupo.mentorVigenteEn(celula.id(), ahora).map(this::perfilBasico).orElse(null);
         // Sin cuentas cerradas (D-243), igual que la lista de `integrantesDe`.
         int cantidadMiembros = sinCerradas.de(delGrupo.aprendicesVigentesEn(celula.id(), ahora), id -> id).size();
-        int totalCelulas = loadCelulaPort.porCohorte(celula.cohorteId()).size();
+        /* Spec 022: «cuántos grupos tiene la cohorte» cuenta los de SU formación; sumar los de las otras dos mezclaba formaciones en una cifra. */
+        int totalCelulas = (int) loadCelulaPort.porCohorte(celula.cohorteId()).stream().filter(otra -> otra.formacion() == celula.formacion()).count();
         return new MiCelula(celula, cohorte, mentor, cantidadMiembros, totalCelulas, rutaDeLaFoto(celula, mentor));
     }
 
