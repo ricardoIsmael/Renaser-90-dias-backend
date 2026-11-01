@@ -1,5 +1,6 @@
 package com.renaser.os.users.application.services;
 
+import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.GruposDelPersonalFinder;
@@ -9,6 +10,9 @@ import com.renaser.os.users.application.ports.out.formacion.CargarPertenenciaPor
 import com.renaser.os.users.application.ports.out.formacion.CargarPertenenciaPort.Pertenencia;
 import com.renaser.os.users.application.ports.out.formacion.CatalogoDeFormacionesPort;
 import com.renaser.os.users.application.ports.out.formacion.FormacionesDelPersonalPort;
+import com.renaser.os.users.application.ports.out.participante.LoadParticipacionProgramaPort;
+import com.renaser.os.users.application.ports.out.participante.SaveParticipacionProgramaPort;
+import com.renaser.os.users.domain.model.participante.ParticipacionPrograma;
 import com.renaser.os.users.domain.model.formacion.ReglaDeAlcance;
 import com.renaser.os.users.domain.model.formacion.ReglaDeAlcance.Asignacion;
 import org.springframework.stereotype.Service;
@@ -30,15 +34,22 @@ class AsignacionDeFormacionesDelPersonalService implements AsignarFormacionesDel
     private final FormacionesDelPersonalPort personal;
     private final GruposDelPersonalFinder grupos;
     private final CatalogoDeFormacionesPort catalogo;
+    private final LoadParticipacionProgramaPort participaciones;
+    private final SaveParticipacionProgramaPort guardarParticipacion;
+    private final Clock clock;
 
     AsignacionDeFormacionesDelPersonalService(RequireAdminGuard requireAdminGuard, CargarPertenenciaPort pertenencias,
                                               FormacionesDelPersonalPort personal, GruposDelPersonalFinder grupos,
-                                              CatalogoDeFormacionesPort catalogo) {
+                                              CatalogoDeFormacionesPort catalogo, LoadParticipacionProgramaPort participaciones,
+                                              SaveParticipacionProgramaPort guardarParticipacion, Clock clock) {
         this.requireAdminGuard = requireAdminGuard;
         this.pertenencias = pertenencias;
         this.personal = personal;
         this.grupos = grupos;
         this.catalogo = catalogo;
+        this.participaciones = participaciones;
+        this.guardarParticipacion = guardarParticipacion;
+        this.clock = clock;
     }
 
     @Override
@@ -53,6 +64,23 @@ class AsignacionDeFormacionesDelPersonalService implements AsignarFormacionesDel
         Set<Formacion> nuevas = elegidas(command);
         exigirQueNoDejeUnGrupo(command.persona(), actual, nuevas);
         personal.reemplazar(command.persona(), nuevas, laActiva(command, actual, nuevas), command.actor());
+        moverSuProgramaSinEmpezar(command.persona(), nuevas);
+    }
+
+    /**
+     * Spec 025-6 A (E2E P3-L): el programa propio del personal vive en la primera de sus formaciones por orden. Si su programa todavía no empezó (no
+     * eligió su Día 1) y estaba en una formación que ya no tiene, pasa a esa primera: de lo contrario seguía viendo el catálogo de hábitos de una
+     * formación que Administración le quitó. Uno que ya empezó se deja como está (no se le reinicia un programa en marcha), y el que tiene grupo
+     * también: mover eso es del traslado de un aprendiz, que limpia el grupo y los puntos, y el personal no es un aprendiz.
+     */
+    private void moverSuProgramaSinEmpezar(UserId persona, Set<Formacion> nuevas) {
+        ParticipacionPrograma programa = participaciones.byParticipanteId(persona).orElse(null);
+        if (programa == null || programa.estaActivado() || programa.celulaId() != null || nuevas.contains(programa.formacion())) {
+            return;
+        }
+        Formacion primera = nuevas.stream().sorted().findFirst().orElseThrow();
+        programa.trasladarA(primera, catalogo.de(primera).duracionPorDefecto(), clock);
+        guardarParticipacion.save(programa);
     }
 
     private static Set<Formacion> elegidas(AsignarFormacionesCommand command) {
