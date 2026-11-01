@@ -5,6 +5,8 @@ import com.renaser.os.shared.domain.UserId;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
 
 /**
  * El diagnóstico de una persona, leído desde otro módulo (spec 026). <b>No autoriza a nadie</b>: quien lo llama (la ficha del mentor, la del líder, la de
@@ -14,8 +16,28 @@ import java.util.List;
  */
 public interface DiagnosticoDeLaPersonaFinder {
 
-    /** Su diagnóstico en palabras, con cada pregunta tal como se le hizo (el texto de SU versión). */
+    /** Su diagnóstico en palabras, con cada pregunta tal como se le hizo (el texto de SU versión). No deja constancia: es la lectura de la propia persona y de SER. */
     LecturaDelDiagnostico lecturaDe(UserId persona);
+
+    /**
+     * Lo mismo cuando OTRA persona lo abre (el mentor o la guía, el líder, Administración o Alquimista): además deja constancia de quién lo vio y cuándo
+     * ({@link DiagnosticoConsultadoEvent}). Hay que llamarlo dentro de una transacción de escritura, porque el evento se publica en ella; solo deja
+     * constancia si la lectura trae un diagnóstico con preguntas (un «no tiene» no enseña nada).
+     */
+    LecturaDelDiagnostico lecturaDe(UserId persona, LectorDelDiagnostico lector);
+
+    /**
+     * Quién lo abre y desde dónde.
+     *
+     * @param grupoId  el grupo desde el que se la miró; {@code null} si no pasó por un grupo
+     * @param mentorId el mentor vigente de ese grupo; {@code null} si no tenía
+     */
+    record LectorDelDiagnostico(UserId consultorId, UUID grupoId, UserId mentorId) {
+
+        public LectorDelDiagnostico {
+            Objects.requireNonNull(consultorId, "consultorId es obligatorio");
+        }
+    }
 
     /** Lo que nace de sus respuestas: los objetivos de 90 días, la prioridad y la primera acción. Vacío si no terminó el diagnóstico. */
     ObjetivosPreparados objetivosDe(UserId persona);

@@ -1,6 +1,7 @@
 package com.renaser.os.onboarding.application.services;
 
 import com.renaser.os.onboarding.api.DiagnosticoDeLaPersonaFinder;
+import com.renaser.os.onboarding.api.DiagnosticoDeLaPersonaFinder.LectorDelDiagnostico;
 import com.renaser.os.onboarding.api.DiagnosticoDeLaPersonaFinder.LecturaDelDiagnostico;
 import com.renaser.os.onboarding.application.ports.in.diagnostico.DiagnosticoDeLaPersonaUseCase.DiagnosticoAbierto;
 import com.renaser.os.onboarding.application.ports.in.diagnostico.EditarDiagnosticoUseCase.PreguntaAdministrada;
@@ -119,11 +120,12 @@ public class PublicarDiagnosticoService implements PublicarDiagnosticoUseCase {
         return PlantillaDeImportacion.exportar(borrador.cargar());
     }
 
+    /** Deja constancia de quién lo abrió (spec 026): por eso no es de solo lectura. Administración llega a la persona sin pasar por un grupo. */
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public LecturaDelDiagnostico lecturaDe(UserId actor, UserId persona) {
         guardia.exigirQuePuedaAdministrar(actor);
-        return lecturas.lecturaDe(persona);
+        return lecturas.lecturaDe(persona, new LectorDelDiagnostico(actor, null, null));
     }
 
     private static PreguntaAdministrada administrada(PreguntaDelDiagnostico p, Map<Integer, Integer> conteos) {

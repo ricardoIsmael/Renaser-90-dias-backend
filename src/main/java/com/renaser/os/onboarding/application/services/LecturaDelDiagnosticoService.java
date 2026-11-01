@@ -37,15 +37,18 @@ public class LecturaDelDiagnosticoService implements DiagnosticoDeLaPersonaFinde
     private final EtapaOnboardingPort etapas;
     private final ConsultarFormacionDeLaPersonaPort formaciones;
     private final FichaVigenteDeLaPersona vigente;
+    private final ConstanciaDeLecturasDelDiagnostico constancia;
 
     public LecturaDelDiagnosticoService(LoadEstadoOnboardingPort estados, ConsultarActorPort actores, BorradorDelDiagnosticoPort borrador,
-                                        EtapaOnboardingPort etapas, ConsultarFormacionDeLaPersonaPort formaciones, FichaVigenteDeLaPersona vigente) {
+                                        EtapaOnboardingPort etapas, ConsultarFormacionDeLaPersonaPort formaciones, FichaVigenteDeLaPersona vigente,
+                                        ConstanciaDeLecturasDelDiagnostico constancia) {
         this.estados = estados;
         this.actores = actores;
         this.borrador = borrador;
         this.etapas = etapas;
         this.formaciones = formaciones;
         this.vigente = vigente;
+        this.constancia = constancia;
     }
 
     @Override
@@ -72,6 +75,16 @@ public class LecturaDelDiagnosticoService implements DiagnosticoDeLaPersonaFinde
                 .filter(s -> !s.preguntas().isEmpty()).toList();
         return new LecturaDelDiagnostico(quien, "CON_DIAGNOSTICO", vigente.estadoDe(persona), version,
                 etapas.completadaEn(persona, Diagnostico.FLUJO).orElse(null), formacionLeida, secciones);
+    }
+
+    @Override
+    @Transactional
+    public LecturaDelDiagnostico lecturaDe(UserId persona, LectorDelDiagnostico lector) {
+        LecturaDelDiagnostico lectura = lecturaDe(persona);
+        if (!lectura.secciones().isEmpty()) {
+            constancia.dejar(persona, lector);
+        }
+        return lectura;
     }
 
     @Override

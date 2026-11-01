@@ -15,8 +15,8 @@ import java.util.UUID;
 
 /**
  * Lee {@code consultas_de_ficha} (V109) con {@link JdbcClient}. Solo el líder de mentores: el resumen al mentor no
- * cuenta lo que miran Administración y Alquimista (FR-017). El índice {@code (mentor_id, consultada_en)} cubre el
- * filtro.
+ * cuenta lo que miran Administración y Alquimista (FR-017), ni las lecturas del diagnóstico (spec 026): el resumen es de la
+ * ficha de una semana. El índice {@code (mentor_id, consultada_en)} cubre el filtro.
  */
 @Component
 class LecturaDeConsultasDeFichaJdbcAdapter implements LeerConsultasDeFichaPort {
@@ -26,6 +26,7 @@ class LecturaDeConsultasDeFichaJdbcAdapter implements LeerConsultasDeFichaPort {
               FROM renaser.consultas_de_ficha
              WHERE mentor_id IN (:mentores)
                AND rol_consultor = 'MENTOR_LEAD'
+               AND tipo = 'SEMANA'
                AND consultada_en >= :desde AND consultada_en < :hasta
              ORDER BY consultada_en, id
             """;

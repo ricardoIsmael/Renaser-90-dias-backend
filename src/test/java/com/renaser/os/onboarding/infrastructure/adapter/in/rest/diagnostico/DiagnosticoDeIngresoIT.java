@@ -156,6 +156,21 @@ class DiagnosticoDeIngresoIT {
         JsonNode lectura = ok(pedir("GET", ADMIN + "/personas/" + aprendizId, admin, null));
         assertThat(lectura.get("estado").asText()).isEqualTo("COMPLETADO");
         assertThat(lectura.get("secciones")).isNotEmpty();
+
+        // ...y queda constancia de quién lo abrió: Administración y el líder sí; la propia persona (que lo leyó varias veces) y el mentor sin grupo, no
+        String lider = sesion(UUID.randomUUID(), "LIDER_MENTORES", false);
+        ok(pedir("GET", "/api/v1/leadership/people/" + aprendizId + "/diagnostico", lider, null));
+        assertThat(pedir("GET", "/api/v1/mentor/groups/" + UUID.randomUUID() + "/learners/" + aprendizId + "/diagnostico", mentor, null).statusCode()).isEqualTo(403);
+        esperarQueElOutboxTermine();
+        List<Map<String, Object>> constancias = jdbc.queryForList("""
+                SELECT rol_consultor, tipo, semana_desde, grupo_id FROM renaser.consultas_de_ficha WHERE persona_id = ? ORDER BY consultada_en
+                """, aprendizId);
+        assertThat(constancias).extracting(c -> c.get("rol_consultor")).containsExactlyInAnyOrder("ADMIN", "MENTOR_LEAD");
+        assertThat(constancias).allSatisfy(c -> {
+            assertThat(c.get("tipo")).isEqualTo("DIAGNOSTICO");
+            assertThat(c.get("semana_desde")).isNull();
+        });
+
         assertThat(ok(pedir("GET", "/api/v1/mapa-renacimiento", aprendiz, null)).get("stageCompleted").asBoolean()).isTrue();
         HttpResponse<String> mapa = pedir("POST", "/api/v1/mapa-renacimiento/completar", aprendiz, null);
         assertThat(mapa.statusCode()).isEqualTo(409);
@@ -269,6 +284,7 @@ class DiagnosticoDeIngresoIT {
                 VALUES (?, ?, 'Persona IT', CAST(? AS renaser.rol_usuario), 'ACTIVO', ?)
                 """, id, id + "@renaser.test", rol, encoder.encode(CLAVE));
         usuarios.add(id);
+        com.renaser.os.FormacionesDePrueba.alPersonalLeAsignaLaEscuela(jdbc, id, rol);
         if (conPrograma) {
             jdbc.update("INSERT INTO renaser.participantes_programa (usuario_id, dia_programa, programa_activado_en) VALUES (?, 10, now())", id);
         }
@@ -277,6 +293,19 @@ class DiagnosticoDeIngresoIT {
         String token = login.headers().firstValue("X-Auth-Token").orElseThrow();
         tokens.add(token);
         return token;
+    }
+
+    /** Los oyentes de Modulith corren después del commit y en otro hilo: se espera a que el outbox quede sin pendientes. */
+    private void esperarQueElOutboxTermine() throws InterruptedException {
+        long limite = System.currentTimeMillis() + 20_000;
+        while (pendientesEnElOutbox() > 0 && System.currentTimeMillis() < limite) {
+            Thread.sleep(200);
+        }
+        assertThat(pendientesEnElOutbox()).as("publicaciones sin completar en el outbox").isZero();
+    }
+
+    private int pendientesEnElOutbox() {
+        return jdbc.queryForObject("SELECT count(*) FROM event_publication WHERE completion_date IS NULL", Integer.class);
     }
 
     private JsonNode ok(HttpResponse<String> respuesta) throws Exception {

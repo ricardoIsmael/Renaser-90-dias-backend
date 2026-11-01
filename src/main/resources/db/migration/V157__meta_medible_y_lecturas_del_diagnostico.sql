@@ -1,10 +1,13 @@
--- V157 — La meta medible se pregunta en el diagnóstico (spec 026; D-303)
+-- V157 — La meta medible se pregunta en el diagnóstico y las lecturas del diagnóstico dejan constancia (spec 026; D-303)
 --
 -- Por qué se toca la base
 -- -----------------------
+-- Dos decisiones del dueño sobre la ficha con diagnóstico, en una sola migración porque ambas son de la misma spec y salen juntas.
+--
+-- A. La meta medible se pregunta en el diagnóstico.
 -- El Mapa de Renacimiento sabía QUÉ se medía en cada eje (kilos, soles, una escala del 1 al 10) y desde dónde partía la persona; con eso el plan mensual sacaba la cifra del mes y los hitos.
 -- El diagnóstico lo reemplazó, pero su objetivo por eje es solo un texto («En 90 días quiero facturar S/ 15,000 mensuales»): sin número, el plan mensual dice «sin cifra». El dueño decidió que el
--- diagnóstico pregunte esa meta. Esta migración hace dos cosas:
+-- diagnóstico pregunte esa meta. Para eso:
 --   1. Amplía la lista de lo que una pregunta puede «alimentar» (`alimenta`, V144) con ocho destinos nuevos: la meta, la unidad y el punto de partida de Cuerpo y de Negocio, y la meta y el punto
 --      de partida de Relaciones (que siempre es la escala del 1 al 10; no tiene unidad que preguntar).
 --   2. Siembra esas preguntas en el borrador del dueño (flujo `diagnostico`, V147), justo debajo del objetivo de cada eje. Todas son OPCIONALES y sin condición: quien no las responde conserva
@@ -14,6 +17,17 @@
 -- ------------------------
 -- Son filas de `preguntas_onboarding` (V1, ampliada en V144) y una lista de valores permitidos. El índice único de V144 (una sola pregunta activa por destino) vale también para los nuevos.
 -- La siembra es idempotente: solo corre si el borrador ya trae las preguntas de los objetivos y todavía no trae las nuevas, y recorre las `orden` de las que vienen después en la sección.
+--
+-- B. Quién abrió el diagnóstico de una persona queda anotado.
+-- Cuando el mentor o la guía, el líder de mentores, Administración o Alquimista abren el diagnóstico de una persona, queda constancia de quién lo vio y cuándo. Se reutiliza
+-- `consultas_de_ficha` (V109, V124), que ya guarda «quién abrió la ficha de quién»: no hay tabla nueva. Lo que cambia es que esa tabla hablaba solo de la ficha de una SEMANA:
+--   · `tipo` dice qué se abrió: `SEMANA` (todas las filas de antes, por el valor por defecto) o `DIAGNOSTICO`.
+--   · `semana_desde` acepta NULL, pero solo en un `DIAGNOSTICO` (el diagnóstico no es de una semana): una restricción amarra las dos columnas, para que ninguna fila de semana pierda
+--     su fecha por error.
+--   · `rol_consultor` acepta también al mentor, a la guía y a Soporte TI, pero solo en un `DIAGNOSTICO`: el resumen de las 20:00 al mentor y las otras lecturas de la ficha siguen
+--     siendo de MENTOR_LEAD, ADMIN y ALCHEMIST como hasta hoy. La propia persona no deja fila: no hay ruta que la escriba.
+--   · Índice parcial por persona, para el día en que haya que contestar «¿quién vio su diagnóstico?».
+-- La tabla sigue siendo append-only: `ADD COLUMN` con un valor por defecto constante no reescribe filas (no dispara el trigger por fila) y `DROP NOT NULL` tampoco.
 
 SET search_path TO renaser, public;
 
@@ -66,3 +80,25 @@ BEGIN
          'Escribe un número entero del 1 al 10.', NULL, NULL, 'META_RELACIONES', NULL);
 END
 $semilla$;
+
+-- B. consultas_de_ficha también guarda la lectura del diagnóstico de una persona.
+ALTER TABLE consultas_de_ficha
+    ADD COLUMN tipo varchar(16) NOT NULL DEFAULT 'SEMANA' CHECK (tipo IN ('SEMANA', 'DIAGNOSTICO'));
+
+ALTER TABLE consultas_de_ficha ALTER COLUMN semana_desde DROP NOT NULL;
+
+ALTER TABLE consultas_de_ficha
+    ADD CONSTRAINT consultas_de_ficha_semana_segun_tipo CHECK ((tipo = 'SEMANA') = (semana_desde IS NOT NULL));
+
+ALTER TABLE consultas_de_ficha DROP CONSTRAINT consultas_de_ficha_rol_consultor_check;
+ALTER TABLE consultas_de_ficha
+    ADD CONSTRAINT consultas_de_ficha_rol_consultor_check CHECK (
+        rol_consultor IN ('MENTOR_LEAD', 'ADMIN', 'ALCHEMIST')
+        OR (tipo = 'DIAGNOSTICO' AND rol_consultor IN ('MENTOR', 'TRAINEE_GUIDE', 'IT_SUPPORT')));
+
+CREATE INDEX consultas_de_ficha_diagnostico_persona_idx ON consultas_de_ficha (persona_id, consultada_en) WHERE tipo = 'DIAGNOSTICO';
+
+COMMENT ON COLUMN consultas_de_ficha.tipo IS
+    'Qué se abrió: SEMANA (la ficha de cumplimiento de una semana, V109) o DIAGNOSTICO (el diagnóstico de la persona, V157).';
+COMMENT ON COLUMN consultas_de_ficha.semana_desde IS
+    'Primer día de la ventana consultada; NULL solo en un DIAGNOSTICO, que no es de una semana (V157).';

@@ -1,7 +1,9 @@
 package com.renaser.os.leadership.application.services;
 
 import com.renaser.os.leadership.application.ports.in.ConsultarDiagnosticoDePersonaUseCase.ConsultaDiagnosticoDePersona;
+import com.renaser.os.leadership.application.ports.in.ConsultarDiagnosticoDePersonaUseCase.ConsultaDiagnosticoDeUnaPersona;
 import com.renaser.os.onboarding.api.DiagnosticoDeLaPersonaFinder;
+import com.renaser.os.onboarding.api.DiagnosticoDeLaPersonaFinder.LectorDelDiagnostico;
 import com.renaser.os.onboarding.api.DiagnosticoDeLaPersonaFinder.LecturaDelDiagnostico;
 import com.renaser.os.onboarding.api.DiagnosticoDeLaPersonaFinder.PersonaLeida;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -20,6 +22,8 @@ import static com.renaser.os.leadership.application.services.BancoDeCumplimiento
 import static com.renaser.os.leadership.application.services.BancoDeCumplimiento.SIN_MENTOR;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -27,7 +31,8 @@ import static org.mockito.Mockito.when;
 
 /**
  * El diagnóstico de una persona para el líder, Administración y Alquimista (spec 026, 026-11): a quién deja ver y que lo que lee es lo que arma {@code onboarding}.
- * No deja constancia en {@code consultas_de_ficha}: el diagnóstico no es de una semana.
+ * No escribe él mismo en {@code consultas_de_ficha}: la constancia de quién lo abrió la deja {@code onboarding} con un evento, y a quién y desde qué grupo se lo
+ * dice acá.
  */
 class DiagnosticoDePersonaServiceTest {
 
@@ -58,7 +63,7 @@ class DiagnosticoDePersonaServiceTest {
         banco.usuario(SOPORTE, "Soporte TI", UserRole.IT_SUPPORT, UserStatus.ACTIVE);
         banco.grupoConMentor(FENIX, "Grupo Fénix", MENTORA, "Luisa Rojas");
         banco.aprendiz(FENIX, ANA, "Ana Pérez");
-        when(lectura.lecturaDe(ANA)).thenReturn(deAna);
+        when(lectura.lecturaDe(eq(ANA), any())).thenReturn(deAna);
     }
 
     private LecturaDelDiagnostico leer(UserId actor, UserId persona) {
@@ -66,14 +71,25 @@ class DiagnosticoDePersonaServiceTest {
     }
 
     @Test
-    @DisplayName("el líder, Administración y Alquimista leen el diagnóstico de una persona de un grupo con mentor; no se deja constancia")
+    @DisplayName("el líder, Administración y Alquimista leen el diagnóstico de una persona de un grupo con mentor, y se dice quién y desde qué grupo")
     void losTresRolesLeen() {
         for (UserId actor : List.of(LIDER, ADMIN, ALQUIMISTA)) {
             assertThat(leer(actor, ANA)).isSameAs(deAna);
+            verify(lectura).lecturaDe(ANA, new LectorDelDiagnostico(actor, FENIX, MENTORA));
         }
 
-        verify(lectura, org.mockito.Mockito.times(3)).lecturaDe(ANA);
-        assertThat(banco.consultas).isEmpty();
+        assertThat(banco.consultas).as("la constancia la deja onboarding con un evento").isEmpty();
+    }
+
+    @Test
+    @DisplayName("spec 021: sin pasar por un grupo, el lector va sin grupo y sin mentor si la persona no tiene")
+    void sinGrupo() {
+        banco.aprendizSinGrupo(AJENA, "Persona sin grupo");
+        when(lectura.lecturaDe(eq(AJENA), any())).thenReturn(deAna);
+
+        servicio.diagnosticoDeUnaPersona(new ConsultaDiagnosticoDeUnaPersona(LIDER, AJENA.value()));
+
+        verify(lectura).lecturaDe(AJENA, new LectorDelDiagnostico(LIDER, null, null));
     }
 
     @Test

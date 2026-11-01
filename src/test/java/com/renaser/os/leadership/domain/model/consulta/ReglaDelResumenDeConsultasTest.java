@@ -199,6 +199,17 @@ class ReglaDelResumenDeConsultasTest {
     // ---- clave y texto
 
     @Test
+    @DisplayName("spec 026: abrir el diagnóstico de una persona no entra al resumen del mentor, que es de la ficha de una semana")
+    void elDiagnosticoNoEntraAlResumen() {
+        ConsultaDeFicha delDiagnostico = ConsultaDeFicha.registrarDiagnostico(UUID.randomUUID(),
+                new ConsultaDeFicha.ContenidoDelDiagnostico(LIDER, UserRole.MENTOR_LEAD, ANA, FENIX, MENTOR), enLima(15, 0));
+
+        assertThat(ReglaDelResumenDeConsultas.resumir(EL_DOMINGO_DE_LUISA, List.of(delDiagnostico))).isEmpty();
+        assertThat(ReglaDelResumenDeConsultas.resumir(EL_DOMINGO_DE_LUISA, List.of(delDiagnostico, delLider(LUIS, FENIX, 16))).orElseThrow().personas())
+                .containsExactly(LUIS);
+    }
+
+    @Test
     @DisplayName("la clave de deduplicacion es una por mentor y dia local: la misma corrida repetida no avisa dos veces")
     void clave() {
         UUID domingo = ReglaDelResumenDeConsultas.clave(MENTOR, DOMINGO);
