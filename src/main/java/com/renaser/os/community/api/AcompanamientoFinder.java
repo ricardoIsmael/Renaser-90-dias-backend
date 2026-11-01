@@ -67,7 +67,9 @@ public interface AcompanamientoFinder {
 
     /**
      * Si {@code actorId} acompaña VIGENTEMENTE ese grupo. Vigente, no "alguna vez": un exmentor
-     * con el token todavía válido no pasa.
+     * con el token todavía válido no pasa. Y en su formación: quien trabaja en varias acompaña solo los grupos de la
+     * que tiene activa (spec 022), así que el grupo de la otra se responde como un grupo ajeno. Es la pregunta de los
+     * caminos con sesión; para saber si el grupo corre, sin preguntar por nadie, está {@link #grupoOperativo}.
      */
     boolean acompanaVigente(UserId actorId, UUID grupoId, Instant instante);
 

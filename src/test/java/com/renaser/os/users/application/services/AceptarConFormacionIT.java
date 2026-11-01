@@ -118,7 +118,7 @@ class AceptarConFormacionIT {
         assertThat(rolYEstado(solicitud.usuario())).containsEntry("rol", "APRENDIZ").containsEntry("estado", "ACTIVO");
         assertThat(jdbc.queryForMap("SELECT formacion, duracion_dias, dia_programa, programa_activado_en FROM renaser.participantes_programa "
                 + "WHERE usuario_id = ?", solicitud.usuario()))
-                .containsEntry("formacion", "DIPLOMADO").containsEntry("duracion_dias", (short) 365)
+                .containsEntry("formacion", "DIPLOMADO").containsEntry("duracion_dias", 365)
                 .containsEntry("dia_programa", 0).containsEntry("programa_activado_en", null);
         verify(ficha).conDiagnostico(UserId.of(solicitud.usuario()), UserId.of(admin));
 
@@ -188,7 +188,7 @@ class AceptarConFormacionIT {
         assertThat(aprobar(solicitud.id(), sesion, null).statusCode()).isEqualTo(204);
 
         assertThat(jdbc.queryForMap("SELECT formacion, duracion_dias FROM renaser.participantes_programa WHERE usuario_id = ?", solicitud.usuario()))
-                .containsEntry("formacion", "ESCUELA").containsEntry("duracion_dias", (short) 90);
+                .containsEntry("formacion", "ESCUELA").containsEntry("duracion_dias", 90);
         JsonNode aceptacion = filaDelListado(solicitud.id(), sesion, "?status=APPROVED&size=200").get("acceptance");
         assertThat(aceptacion.get("formations").get(0).asText()).isEqualTo("ESCUELA");
         assertThat(aceptacion.get("withDiagnosis").asBoolean()).isFalse();
@@ -337,10 +337,12 @@ class AceptarConFormacionIT {
         assertThat(respuesta.statusCode()).isEqualTo(204);
         assertThat(jdbc.queryForObject("SELECT duracion_dias FROM renaser.participantes_programa WHERE usuario_id = ?", Integer.class, solicitud.usuario()))
                 .isEqualTo(365);
-        assertThat(jdbc.queryForMap("SELECT dia_anterior, dia_nuevo, duracion_anterior, duracion_nueva, motivo FROM renaser.ajustes_dia_programa "
-                + "WHERE participante_id = ?", solicitud.usuario()))
-                .containsEntry("duracion_anterior", (short) 90).containsEntry("duracion_nueva", (short) 365)
-                .containsEntry("motivo", "Pidió más tiempo").containsEntry("dia_anterior", (short) 40).containsEntry("dia_nuevo", (short) 40);
+        var ajuste = jdbc.queryForMap("SELECT dia_anterior, dia_nuevo, duracion_anterior, duracion_nueva, motivo FROM renaser.ajustes_dia_programa "
+                + "WHERE participante_id = ?", solicitud.usuario());
+        assertThat(ajuste).containsEntry("duracion_anterior", 90).containsEntry("duracion_nueva", 365).containsEntry("motivo", "Pidió más tiempo");
+        // El día es el de su zona (Lima), que a ciertas horas va un día detrás de CURRENT_DATE de la base: lo que importa es que lo conserva.
+        assertThat(ajuste.get("dia_anterior")).isEqualTo(ajuste.get("dia_nuevo"));
+        assertThat((Integer) ajuste.get("dia_nuevo")).isBetween(39, 40);
         assertThat(enviar("POST", "/api/v1/admin/trainees/" + solicitud.usuario() + "/duracion", sesion,
                 Map.of("duracionDias", 365, "motivo", "Otra vez")).statusCode()).as("ya tiene esa duración").isEqualTo(409);
         assertThat(enviar("POST", "/api/v1/admin/trainees/" + solicitud.usuario() + "/duracion", sesionDe(usuario("MENTOR")),

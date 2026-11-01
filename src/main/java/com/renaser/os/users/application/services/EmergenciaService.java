@@ -1,6 +1,7 @@
 package com.renaser.os.users.application.services;
 
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.DuracionDelPrograma;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -76,7 +77,7 @@ public class EmergenciaService implements PedirAyudaPorEmergenciaUseCase, Atende
     @Override
     public MiEmergencia consultar(UserId actorId) {
         int diaActual = diaActualDe(requireAprendiz(actorId));
-        return new MiEmergencia(diaActual, SolicitudDeEmergencia.diaMaximoPedible(diaActual),
+        return new MiEmergencia(diaActual, SolicitudDeEmergencia.diaMaximoPedible(diaActual, duracionDe(actorId)),
                 loadSolicitudPort.abiertaDe(actorId).orElse(null));
     }
 
@@ -89,7 +90,7 @@ public class EmergenciaService implements PedirAyudaPorEmergenciaUseCase, Atende
             throw new IllegalStateException(YA_TIENE_UNA_ABIERTA);
         }
         SolicitudDeEmergencia solicitud = saveSolicitudPort.save(SolicitudDeEmergencia.pedir(idGenerator.newId(),
-                command.actorId(), command.queOcurrio(), command.diaPedido(), diaActual, clock));
+                command.actorId(), command.queOcurrio(), command.diaPedido(), diaActual, duracionDe(command.actorId()), clock));
         eventos.publishEvent(new EmergenciaPedidaEvent(solicitud.id(), solicitud.aprendizId(), solicitud.queOcurrio(),
                 solicitud.diaPedido(), solicitud.diaAlPedir()));
         log.info("[users.emergencia] {} pidió ayuda (día pedido {}) desde el día {}", command.actorId(),
@@ -145,6 +146,11 @@ public class EmergenciaService implements PedirAyudaPorEmergenciaUseCase, Atende
             throw new NotAuthorizedException("El pedido de emergencia es para aprendices");
         }
         return actor;
+    }
+
+    /** Los días de SU programa (spec 022): el tope de lo que puede pedir sale de la duración de su formación, no de un 90 fijo. */
+    private int duracionDe(UserId aprendizId) {
+        return loadParticipacionPort.byParticipanteId(aprendizId).map(p -> p.duracionDias()).orElse(DuracionDelPrograma.POR_DEFECTO);
     }
 
     private int diaActualDe(User aprendiz) {

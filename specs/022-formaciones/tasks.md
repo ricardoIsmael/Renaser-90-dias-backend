@@ -29,7 +29,7 @@ Regla de las rutas: `[P]` = se puede hacer en paralelo (archivos distintos).
 
 - [x] T013 [US1] `B:users/api/FormacionDeLaSesion` + `ConsultarFormacionDeLaSesionUseCase` y servicio (activa, disponibles, `puedeElegir`, `veTodas`, `sinFormacion`, `duracionDias`, `fases`).
 - [x] T014 [US1] `B:users/infrastructure/.../UserResponse` + `AutenticacionController` (`login`, `me`, `social`) y `UserController` (`POST /users/me`): campo aditivo `formacion` (un solo caso de uso `ArmarPerfilDeSesion`).
-- [x] T015 [US1] `B:users/infrastructure/.../FormacionDeLaSesionController`: `GET /api/v1/me/formacion` (`USE_APP`, `@SinInterruptor`). Pruebas de controller (200, sesión, 403 `SUSPENDED`). _(Parcial: sin pruebas de controller propias: lo cubren `FormacionesIT`, `EndpointAuthorizationDeclarationTest` y `FuncionalidadDeclaradaTest`.)_
+- [x] T015 [US1] `B:users/infrastructure/.../FormacionDeLaSesionController`: `GET /api/v1/me/formacion` (`USE_APP`, `@SinInterruptor`). Pruebas de controller (200, sesión, 403 `SUSPENDED`). _(Cerrado después: `FormacionDeLaSesionControllerTest` y `FormacionesAdminControllerTest`.)_
 - [x] T016 [US1] Reconstruir cuando falten datos: la cuenta sin fila de programa se trata como Escuela (aprendiz) — prueba.
 
 ## Phase 4: US2 — Nada se cruza entre formaciones (P1)
@@ -40,7 +40,7 @@ Regla de las rutas: `[P]` = se puede hacer en paralelo (archivos distintos).
 - [x] T018 [US2] `celulas.formacion`: `Celula` (dominio) + entidad JPA + mapper + `CrearCelulaRequest`/`CelulaResponse`; `?formacion=` en `GET /admin/cells` y `/admin/cells/dashboard`.
 - [x] T019 [US2] FR-010: crear/editar grupo y sumar mentor o aprendiz (principal o adicional) valida la formación (`ComposicionDeCelulaService`, `SumarAprendizAGrupoService`, `SumarMentorAGrupoService`, candidatos); error `409` claro con las dos formaciones.
 - [x] T020 [US2] Recepción por formación (`ConsultarRecepcionVigentePort`, `IngresoARecepcionService`): el aprendiz entra al grupo de bienvenida de **su** formación.
-- [x] T021 [US2] Mentor y líder por alcance: `/mentor/context`, `/me/cells`, `/me/cell`, `/leadership/mentors`, `/leadership/people`, semáforo por grupos y bandeja de consultas filtran por el alcance de quien pide; pedir por id algo de otra formación → 404. _(Parcial: hecho en liderazgo, acompañamiento, «Mis grupos», padrón y reporte de mentores, semáforo por grupos y directorio de chat; `/mentor/context` (capacidades) y los endpoints por id de grupo del mentor con dos formaciones quedan para 024.)_
+- [x] T021 [US2] Mentor y líder por alcance: `/mentor/context`, `/me/cells`, `/me/cell`, `/leadership/mentors`, `/leadership/people`, semáforo por grupos y bandeja de consultas filtran por el alcance de quien pide; pedir por id algo de otra formación → 404. _(Cerrado después: `acompanaVigente` exige la formación activa, lo que cubre `/mentor/context` y todo acceso por id de grupo; probado en `GruposPorFormacionIT`.)_
 - [x] T022 [US2] Directorio de chat 1 a 1 y búsqueda de personas (`BusquedaDeUsuariosFinder`): solo personas del alcance.
 - [x] T023 [P] [US2] `BT:users/AislamientoDeFormacionesIT` (las 6 combinaciones) y `BT:community/GrupoPorFormacionIT`. _(Parcial: `FormacionesIT` (6 pares de aislamiento) y `GruposPorFormacionIT`; no se llaman `AislamientoDeFormacionesIT`/`GrupoPorFormacionIT`.)_
 
@@ -53,7 +53,7 @@ Regla de las rutas: `[P]` = se puede hacer en paralelo (archivos distintos).
 
 - [x] T026 [US4] `B:leadership/…/FormacionesAdminController`: `GET /admin/formaciones`, `GET /admin/formaciones/{codigo}` (cifras desde `users.api`, `community.api`), `PUT /admin/formaciones/{codigo}` (nombre, descripción, `activa`, duraciones, `version`); permiso `MANAGE_TRAINEES`; funcionalidad `admin.personas`.
 - [x] T027 [US4] `ConfigurarFormacionUseCase` en `users` (valida nombre 3–80, descripción ≤ 600, 1–4 duraciones únicas 1–365; `version` optimista).
-- [x] T028 [P] [US4] Pruebas de controller y servicio (403 sin permiso, 403 `SUSPENDED`, 409 de versión). _(Parcial: servicio y reglas por IT (`CentroDeFormacionesIT`: 403 sin permiso y suspendida, 409 de versión); sin WebMvcTest propio.)_
+- [x] T028 [P] [US4] Pruebas de controller y servicio (403 sin permiso, 403 `SUSPENDED`, 409 de versión). _(Cerrado después: además `CentroDeFormacionesControllerTest` y `FormacionesAdminControllerTest`.)_
 
 ## Phase 7: US5 — Duración y días según la formación (P2)
 
@@ -64,7 +64,7 @@ Regla de las rutas: `[P]` = se puede hacer en paralelo (archivos distintos).
 ## Phase 8: US6 — El personal con varias formaciones (P2)
 
 - [x] T032 [US6] `PUT /me/formacion/activa` (`ElegirFormacionActivaUseCase`); `PUT /admin/users/{id}/formaciones` (`AsignarFormacionesDelPersonalUseCase`, FR-011: no quitar una formación donde lidera un grupo o tiene aprendices); listener de `RolDeUsuarioCambiadoEvent` (personal nuevo → ESCUELA; deja de ser personal → sin filas).
-- [x] T033 [P] [US6] Pruebas de servicio y controller. _(Parcial: por IT (`FormacionesIT`, `GruposPorFormacionIT`); sin WebMvcTest propio.)_
+- [x] T033 [P] [US6] Pruebas de servicio y controller. _(Cerrado después: además los `WebMvcTest` de los tres controllers.)_
 
 ## Phase 9: US7 — Pasar a un aprendiz de formación (P3)
 

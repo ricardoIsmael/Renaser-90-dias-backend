@@ -2,6 +2,16 @@ package com.renaser.os.community.application.services;
 
 import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
+import com.renaser.os.community.api.AcompanamientoFinder;
+import com.renaser.os.community.application.ports.in.acompanamiento.ConsultarContextoAcompanamientoUseCase;
+import com.renaser.os.community.application.ports.in.celula.AsignarMentorCelulaUseCase;
+import com.renaser.os.community.application.ports.in.celula.AsignarMentorCelulaUseCase.AsignarMentorCelulaCommand;
+import com.renaser.os.community.application.ports.in.celula.SumarMentorAGrupoUseCase;
+import com.renaser.os.community.application.ports.in.celula.SumarMentorAGrupoUseCase.SumarMentorAGrupoCommand;
+import com.renaser.os.users.application.ports.in.formacion.AsignarFormacionesDelPersonalUseCase;
+import com.renaser.os.users.application.ports.in.formacion.AsignarFormacionesDelPersonalUseCase.AsignarFormacionesCommand;
+import com.renaser.os.users.application.ports.in.formacion.ElegirFormacionActivaUseCase;
+import java.util.Set;
 import com.renaser.os.community.application.ports.in.celula.AsignarAprendizCelulaUseCase;
 import com.renaser.os.community.application.ports.in.celula.AsignarAprendizCelulaUseCase.AsignarAprendizCelulaCommand;
 import com.renaser.os.community.application.ports.in.celula.SumarAprendizAGrupoUseCase;
@@ -47,6 +57,18 @@ class GruposPorFormacionIT {
     private AsignarAprendizCelulaUseCase asignar;
     @Autowired
     private TrasladarAprendizDeFormacionUseCase trasladar;
+    @Autowired
+    private AsignarMentorCelulaUseCase asignarMentor;
+    @Autowired
+    private SumarMentorAGrupoUseCase sumarMentor;
+    @Autowired
+    private AsignarFormacionesDelPersonalUseCase asignarFormaciones;
+    @Autowired
+    private ElegirFormacionActivaUseCase elegirActiva;
+    @Autowired
+    private ConsultarContextoAcompanamientoUseCase contexto;
+    @Autowired
+    private AcompanamientoFinder acompanamiento;
     @Autowired
     private RelojDePrueba reloj;
     @Autowired
@@ -122,6 +144,36 @@ class GruposPorFormacionIT {
                 "SELECT puntos_liga FROM renaser.puntajes_participante WHERE participante_id = ?", Integer.class, ana.value()) == 100);
         assertThat(jdbc.queryForObject("SELECT coherencia || ':' || racha_actual FROM renaser.puntajes_participante WHERE participante_id = ?",
                 String.class, ana.value())).isEqualTo("100.00:0");
+    }
+
+    @Test
+    @DisplayName("Un mentor con dos formaciones acompaña solo los grupos de la que tiene activa: el contexto, el acceso por id y el cambio")
+    void elMentorConDosFormacionesSoloAcompanaLaActiva() {
+        UUID deLaEscuela = grupo("Fénix de la Escuela", "ESCUELA", "REGULAR");
+        UUID delDiplomado = grupo("Fénix del Diplomado", "DIPLOMADO", "REGULAR");
+        UserId mentor = usuario("MENTOR", "Marta Luna");
+        jdbc.update("INSERT INTO renaser.perfiles_mentor (usuario_id) VALUES (?)", mentor.value());
+        asignarFormaciones.asignar(new AsignarFormacionesCommand(admin, mentor, Set.of(Formacion.ESCUELA, Formacion.DIPLOMADO), Formacion.ESCUELA));
+        asignarMentor.asignar(new AsignarMentorCelulaCommand(admin, CelulaId.of(deLaEscuela), mentor));
+        sumarMentor.sumar(new SumarMentorAGrupoCommand(admin, CelulaId.of(delDiplomado), mentor));
+
+        // Trabajando en la Escuela: solo ve y acompaña esa; el grupo del Diplomado es «ajeno» aunque sea suyo.
+        assertThat(contexto.contexto(mentor).asignaciones()).extracting(a -> a.grupoNombre()).containsExactly("Fénix de la Escuela");
+        assertThat(contexto.contexto(mentor).capacidades().acompanar()).isTrue();
+        assertThat(acompanamiento.acompanaVigente(mentor, deLaEscuela, AHORA)).isTrue();
+        assertThat(acompanamiento.acompanaVigente(mentor, delDiplomado, AHORA)).isFalse();
+
+        // Al cambiar la activa, se invierte: nada de la Escuela mientras trabaja en el Diplomado.
+        elegirActiva.elegir(mentor, Formacion.DIPLOMADO);
+        assertThat(contexto.contexto(mentor).asignaciones()).extracting(a -> a.grupoNombre()).containsExactly("Fénix del Diplomado");
+        assertThat(acompanamiento.acompanaVigente(mentor, deLaEscuela, AHORA)).isFalse();
+        assertThat(acompanamiento.acompanaVigente(mentor, delDiplomado, AHORA)).isTrue();
+
+        // Y si solo tiene grupos en la otra formación, no acompaña a nadie por ahora (la capacidad se apaga).
+        reloj.avanzar(java.time.Duration.ofHours(2));
+        jdbc.update("UPDATE renaser.asignaciones_celula SET fin = TIMESTAMPTZ '2026-10-31 16:00:00+00' WHERE usuario_id = ? AND celula_id = ? AND fin IS NULL",
+                mentor.value(), delDiplomado);
+        assertThat(contexto.contexto(mentor).capacidades().acompanar()).isFalse();
     }
 
     // ---------------------------------------------------------------------------------------------------------- apoyo

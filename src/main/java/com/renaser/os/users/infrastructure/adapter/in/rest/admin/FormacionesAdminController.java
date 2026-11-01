@@ -87,7 +87,7 @@ public class FormacionesAdminController {
     public ResponseEntity<Void> trasladar(@PathVariable UUID id, @ActorAutenticado UserId actor,
                                           @RequestBody @Valid TrasladarRequest request) {
         trasladar.trasladar(new TrasladarCommand(actor, UserId.of(id), Formacion.desde(request.formacion()), request.duracionDias(),
-                request.darPorTerminada(), request.motivo()));
+                Boolean.TRUE.equals(request.darPorTerminada()), request.motivo()));
         return ResponseEntity.noContent().build();
     }
 
@@ -110,6 +110,7 @@ public class FormacionesAdminController {
     public record CambiarDuracionRequest(@NotNull Integer duracionDias, @NotBlank String motivo) {
     }
 
-    public record TrasladarRequest(@NotBlank String formacion, @NotNull Integer duracionDias, boolean darPorTerminada, String motivo) {
+    /** {@code darPorTerminada} es opcional: sin él es «no» (Jackson 3 no deja pasar un booleano primitivo ausente: sería un 400 «mal formado»). */
+    public record TrasladarRequest(@NotBlank String formacion, @NotNull Integer duracionDias, Boolean darPorTerminada, String motivo) {
     }
 }
