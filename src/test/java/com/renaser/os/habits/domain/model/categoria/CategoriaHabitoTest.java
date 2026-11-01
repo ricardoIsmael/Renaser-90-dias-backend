@@ -42,7 +42,7 @@ class CategoriaHabitoTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"", " ", "A", "x".repeat(41)})
+    @ValueSource(strings = {"", " ", "A", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"})
     @DisplayName("el nombre va de 2 a 40 caracteres")
     void nombreFueraDeRango(String nombre) {
         assertThatThrownBy(() -> CategoriaHabito.crear("ESCUELA_X", Formacion.ESCUELA, nombre, 1, null, AHORA))

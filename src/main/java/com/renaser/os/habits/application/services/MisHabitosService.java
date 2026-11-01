@@ -2,6 +2,7 @@ package com.renaser.os.habits.application.services;
 
 import com.renaser.os.habits.application.ports.in.habito.ConsultarMisHabitosUseCase;
 import com.renaser.os.habits.application.ports.in.habito.CrearHabitoPersonalUseCase;
+import com.renaser.os.habits.application.ports.out.categoria.LoadCategoriaHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.SaveHabitoPort;
 import com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort;
@@ -61,13 +62,16 @@ public class MisHabitosService implements ConsultarMisHabitosUseCase, CrearHabit
     private final RachasDeHabitos rachasDeHabitos;
     /** Spec 001 (D-264): el mismo filtro por rol que la generacion. */
     private final CatalogoAplicable catalogoAplicable;
+    /** Spec 023: un habito propio solo puede quedar en una categoria que exista (la llave de la base lo exige; asi se dice con un motivo). */
+    private final LoadCategoriaHabitoPort categoriasPort;
 
     public MisHabitosService(LoadHabitoPort loadPort, SaveHabitoPort savePort,
                               SaveHorarioHabitoPort saveHorarioPort, LoadHorarioHabitoPort loadHorarioPort,
                               ConsultarProgresoParticipanteHabitsPort progresoPort,
                               SavePreferenciaHorarioPort savePreferenciaPort, LoadRegistroHabitoPort loadRegistroPort,
                               Clock clock, IdGenerator idGenerator, RachasDeHabitos rachasDeHabitos,
-                              CatalogoAplicable catalogoAplicable) {
+                              CatalogoAplicable catalogoAplicable, LoadCategoriaHabitoPort categoriasPort) {
+        this.categoriasPort = categoriasPort;
         this.loadPort = loadPort;
         this.savePort = savePort;
         this.saveHorarioPort = saveHorarioPort;
@@ -225,6 +229,9 @@ public class MisHabitosService implements ConsultarMisHabitosUseCase, CrearHabit
     @Transactional
     public Habito crear(CrearHabitoPersonalCommand command) {
         ProgresoParticipanteHabits progreso = requireProgreso(command.actorId());
+        if (categoriasPort.byClave(command.categoriaClave()).isEmpty()) {
+            throw new IllegalArgumentException("Esa categoría no existe.");
+        }
         HabitoId id = HabitoId.of(idGenerator.newId());
         Habito habito = Habito.crearPersonal(id, command.actorId(), command.titulo(), command.tipo(),
                 command.categoriaClave(), command.plantilla(), command.etiquetaMeta(), command.iconoClave(),

@@ -104,7 +104,7 @@ class EnfoqueDiarioServiceTest {
         conAudios(audio(4, "SUBMITTED", mediodiaMartes, mediodiaMartes.minusSeconds(3600)),
                 audio(5, "CURRENT", MEDIODIA_MIERCOLES, null));
         HabitoId pastilla = HabitoId.of(UUID.randomUUID());
-        when(lecturas.habitoPorClave(CompletarPastillaRenacerUseCase.CLAVE_SISTEMA_PASTILLA_RENACER))
+        when(lecturas.habitoPorClave(APRENDIZ, CompletarPastillaRenacerUseCase.CLAVE_SISTEMA_PASTILLA_RENACER))
                 .thenReturn(Optional.of(habito(pastilla, "Pastilla Renacer")));
         when(tracks.consultarHoyDe(APRENDIZ)).thenReturn(List.of(track(registro(pastilla), "Pastilla Renacer",
                 TipoHabito.JOURNALING, null, null, new PuntosEnJuego(6, 10, MEDIODIA_JUEVES))));
@@ -178,7 +178,7 @@ class EnfoqueDiarioServiceTest {
     void diaSinCelularConRachaEnCurso() {
         HabitoId sinCelular = HabitoId.of(UUID.randomUUID());
         RegistroHabito deHoy = registro(sinCelular);
-        when(lecturas.habitoPorClave(RachaService.CLAVE_SISTEMA_SIN_CELULAR))
+        when(lecturas.habitoPorClave(APRENDIZ, RachaService.CLAVE_SISTEMA_SIN_CELULAR))
                 .thenReturn(Optional.of(habito(sinCelular, "Dia sin celular")));
         when(tracks.consultarHoyDe(APRENDIZ)).thenReturn(List.of(
                 track(deHoy, "Dia sin celular", TipoHabito.CHECKBOX, null, null, null)));
@@ -199,7 +199,7 @@ class EnfoqueDiarioServiceTest {
     @DisplayName("sin racha en curso y con el registro pendiente, el Dia sin celular se puede iniciar")
     void diaSinCelularIniciable() {
         HabitoId sinCelular = HabitoId.of(UUID.randomUUID());
-        when(lecturas.habitoPorClave(RachaService.CLAVE_SISTEMA_SIN_CELULAR))
+        when(lecturas.habitoPorClave(APRENDIZ, RachaService.CLAVE_SISTEMA_SIN_CELULAR))
                 .thenReturn(Optional.of(habito(sinCelular, "Dia sin celular")));
         when(tracks.consultarHoyDe(APRENDIZ)).thenReturn(List.of(
                 track(registro(sinCelular), "Dia sin celular", TipoHabito.CHECKBOX, null, null, null)));
