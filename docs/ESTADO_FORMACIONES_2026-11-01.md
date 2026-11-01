@@ -22,7 +22,12 @@ Migraciones: V125 a V157 seguidas, sin números repetidos. **Se publican todas j
 Después de las correcciones del E2E se corrió: backend, las pruebas dirigidas de todo lo tocado (330 más las de los controladores corregidos), más las de arquitectura y permisos
 (`ArchitectureTest`, `EndpointAuthorizationDeclarationTest`, `FuncionalidadDeclaradaTest`, `RutasCubiertasPorElFiltroTest`, `NingunaPruebaDeclaraSuPropioRelojTest`): en verde. App: `tsc` 0
 errores y Jest completo 664 de 665 suites en la primera corrida (la que falló era una prueba que no simulaba la formación de la sesión; se arregló y se repitió en verde).
-**Lo que NO se repitió después de las correcciones:** el `clean verify` completo (52 minutos) ni las pruebas de integración con base real (Docker); ver el punto 6.
+Pruebas de integración con base real (Docker) corridas después de las correcciones, solo las que tocan lo cambiado: grupos y mentoría (`GruposPorFormacionIT`, `ComunidadPorFormacionIT`,
+`MisCelulasIT`, `MentorEnVariosGruposIT`, `ComposicionDeCelulaIT`, `GruposEnCursoIT`), `FormacionesIT`, `CentroDeFormacionesIT`, `CumplimientoDelLiderIT`, `AceptarConFormacionIT`,
+`HabitosPorFormacionIT`, `HabitosDeTodosIT`, `HomeMensajeDelSemaforoIT`, `MapaDelPersonalAutenticacionIT`, `SoportesPaginadosIT`, `DiagnosticoDeIngresoIT` y `AnalisisDelLiderIT`: **157 pruebas
+en verde**. Una sola falla intermedia, `AnalisisDelLiderIT.elLiderLoLee`: pasa sola y en la corrida completa de las 02:50; falla cuando otras pruebas ya escribieron constancias de la misma
+persona en `consultas_de_ficha` (la tabla solo se agrega y el desempate de la última constancia, por `id`, es al azar). Es un desorden de la prueba, no del código.
+**Lo que NO se repitió después de las correcciones:** el `clean verify` completo (52 minutos) y el resto de las 758 pruebas de integración.
 
 ## 3. E2E final (01/11, 02:52 a 04:08)
 
@@ -101,7 +106,7 @@ App: `lecturasGuardadasPorFormacion.test.ts` y `ultimaPublicacionMuro.test.ts`.
 - **Aviso «a todos» al crear un evento**: el servidor local no escribe notificaciones (push y correo apagados), así que no hay forma de ver a quién llegó. Falta probarlo con push real.
 - **Publicar en el Muro eligiendo formación** (la publicación exige foto y no se subió una por API); eventos y testimonios sí dieron el 400 del contrato.
 - **«Ver como» de Soporte TI** respetando el aislamiento de la formación: falta la segunda contraseña de la consola en esa base.
-- **Pruebas de integración con base real (Docker) después de las correcciones del E2E** y el `clean verify` completo: ver el punto 2.
+- **El `clean verify` completo y el resto de las pruebas de integración después de las correcciones del E2E**: ver el punto 2. Correrlo entero antes de publicar (52 minutos).
 
 ## 5. Lo que necesita el dueño
 
