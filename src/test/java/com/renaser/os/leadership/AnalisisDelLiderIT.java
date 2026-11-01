@@ -81,6 +81,8 @@ class AnalisisDelLiderIT {
         }
         analisisListo(ANA, "ESCUELA");
         constanciasInicial = constanciasEnLaBase();
+        idsIniciales = new java.util.HashSet<>(jdbc.queryForList(
+                "SELECT id FROM renaser.consultas_de_ficha WHERE persona_id IN (?, ?)", Object.class, ANA, AJENA));
     }
 
     @AfterEach
@@ -119,6 +121,7 @@ class AnalisisDelLiderIT {
 
     /** `consultas_de_ficha` es append-only y otras pruebas usan los mismos ids: se cuenta lo que SUMÓ esta prueba, no lo que hay. */
     private int constanciasInicial;
+    private java.util.Set<Object> idsIniciales;
 
     private int constanciasEnLaBase() {
         return jdbc.queryForObject("SELECT count(*) FROM renaser.consultas_de_ficha WHERE persona_id IN (?, ?)", Integer.class, ANA, AJENA);
@@ -128,9 +131,16 @@ class AnalisisDelLiderIT {
         return constanciasEnLaBase() - constanciasInicial;
     }
 
+    /**
+     * La constancia que sumó ESTA prueba. Otras pruebas dejan filas de la misma persona con el mismo reloj fijo, y desempatar por
+     * id (al azar) a veces devolvía una ajena.
+     */
     private java.util.Map<String, Object> ultimaConstanciaDe(UUID persona) {
-        return jdbc.queryForMap("SELECT consultor_id, rol_consultor, persona_id, grupo_id, semana_desde FROM renaser.consultas_de_ficha "
-                + "WHERE persona_id = ? ORDER BY consultada_en DESC, id LIMIT 1", persona);
+        return jdbc.queryForList("SELECT id, consultor_id, rol_consultor, persona_id, grupo_id, semana_desde FROM renaser.consultas_de_ficha "
+                        + "WHERE persona_id = ? ORDER BY consultada_en DESC", persona).stream()
+                .filter(fila -> !idsIniciales.contains(fila.get("id")))
+                .findFirst()
+                .orElseThrow();
     }
 
     @Test
