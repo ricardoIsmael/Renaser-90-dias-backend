@@ -63,4 +63,7 @@ public class CelulaJpaEntity {
     private LocalDate periodoInicio;
 
     private LocalDate periodoFin;
+
+    /** V125 (spec 022): el `codigo` de la formación del grupo. */
+    private String formacion;
 }

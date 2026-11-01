@@ -80,9 +80,10 @@ interface SpringDataCelulaRepository extends JpaRepository<CelulaJpaEntity, UUID
     @Query(nativeQuery = true, value = """
             SELECT * FROM renaser.celulas c
             WHERE c.tipo = CAST('RECEPCION' AS renaser.tipo_celula)
+              AND c.formacion = :formacion
               AND (c.periodo_inicio IS NULL
                    OR CAST(:dia AS date) BETWEEN c.periodo_inicio AND c.periodo_fin)
             ORDER BY c.periodo_inicio DESC NULLS LAST
             """)
-    List<CelulaJpaEntity> recepcionesVigentesEn(@Param("dia") LocalDate dia);
+    List<CelulaJpaEntity> recepcionesVigentesEn(@Param("dia") LocalDate dia, @Param("formacion") String formacion);
 }

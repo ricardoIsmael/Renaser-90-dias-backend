@@ -3,6 +3,8 @@ package com.renaser.os.points.application.ports.in.home;
 import com.renaser.os.points.api.ColorSemaforo;
 import com.renaser.os.points.api.DiaDelSemaforo;
 import com.renaser.os.points.application.ports.in.semaforo.ConsultarMensajeDelSemaforoUseCase.MensajeDelDia;
+import com.renaser.os.shared.domain.DuracionDelPrograma;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FasePrograma;
 
@@ -62,7 +64,17 @@ public interface ConsultarResumenHomeUseCase {
                         int diaPrograma, boolean inscrito, FasePrograma fase,
                         HabitosHoyResumen habitosHoy, RocasHoyResumen rocasHoy,
                         ProximoEventoResumen proximoEvento, Long notificacionesNoLeidas,
-                        List<String> bloqueos, SemaforoHoyResumen semaforo) {
+                        List<String> bloqueos, SemaforoHoyResumen semaforo, int duracionDias, String formacion) {
+
+        /** Firma de antes de las formaciones (spec 022): programa de 90 días de la Escuela. */
+        public ResumenHome(int puntosLiga, BigDecimal coherencia, int rachaActual, int rachaMaxima, int diaPrograma,
+                           boolean inscrito, FasePrograma fase, HabitosHoyResumen habitosHoy, RocasHoyResumen rocasHoy,
+                           ProximoEventoResumen proximoEvento, Long notificacionesNoLeidas, List<String> bloqueos,
+                           SemaforoHoyResumen semaforo) {
+            this(puntosLiga, coherencia, rachaActual, rachaMaxima, diaPrograma, inscrito, fase, habitosHoy, rocasHoy,
+                    proximoEvento, notificacionesNoLeidas, bloqueos, semaforo, DuracionDelPrograma.POR_DEFECTO,
+                    Formacion.POR_DEFECTO.codigo());
+        }
 
         /** Espejo de {@code TodayCounts} del contrato movil ({completed,total}). */
         public record HabitosHoyResumen(int completados, int total) {

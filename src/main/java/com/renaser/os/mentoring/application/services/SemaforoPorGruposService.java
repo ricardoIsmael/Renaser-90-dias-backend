@@ -13,6 +13,7 @@ import com.renaser.os.shared.application.Interruptores;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserSummary;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,10 +53,12 @@ public class SemaforoPorGruposService implements ConsultarSemaforoPorGruposUseCa
     private final UserSummaryFinder userSummaryFinder;
     private final Clock clock;
     private final Interruptores interruptores;
+    private final AlcanceDeFormacionFinder formaciones;
 
     SemaforoPorGruposService(AccesoAVistasDelSemaforo acceso, MedicionDeGrupos medicion,
                              AcompanamientoFinder acompanamientoFinder, UserSummaryFinder userSummaryFinder,
-                             Clock clock, Interruptores interruptores) {
+                             Clock clock, Interruptores interruptores, AlcanceDeFormacionFinder formaciones) {
+        this.formaciones = formaciones;
         this.acceso = acceso;
         this.medicion = medicion;
         this.acompanamientoFinder = acompanamientoFinder;
@@ -69,7 +72,10 @@ public class SemaforoPorGruposService implements ConsultarSemaforoPorGruposUseCa
     public ResumenPorGrupos resumenDe(ConsultaResumenPorGrupos consulta) {
         acceso.requireLiderazgoActivo(consulta.actorId());
         Instant ahora = clock.now();
-        List<GrupoAcompanado> grupos = gruposDe(consulta.semanaHasta(), ahora);
+        // Spec 022: el líder con varias formaciones ve los grupos de la activa; Administración, los de todas (nunca mezclados para quien tiene una activa).
+        var alcance = formaciones.de(consulta.actorId());
+        List<GrupoAcompanado> grupos = gruposDe(consulta.semanaHasta(), ahora).stream()
+                .filter(grupo -> alcance.incluye(grupo.formacion())).toList();
         Map<UUID, List<UserId>> aprendicesPorGrupo =
                 medicion.aprendicesPorGrupo(grupos,
                         instanteDelPadron(consulta.semanaHasta(), ahora, zonaDeReferencia(grupos)));

@@ -132,7 +132,8 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
                 racha.maxima(), participacion.diaPrograma(), participacion.inscrito(),
                 participacion.fase(), habitosHoyDe(habitos), rocasHoyDe(rocas),
                 proximoEventoDe(actorId), notificacionesNoLeidasDe(actorId), BLOQUEOS,
-                semaforoDe(actorId, participacion, CumplimientoDeHoy.de(hoy, habitos, rocas)));
+                semaforoDe(actorId, participacion, CumplimientoDeHoy.de(hoy, habitos, rocas)),
+                participacion.duracionDias(), participacion.formacion().codigo());
     }
 
     /**

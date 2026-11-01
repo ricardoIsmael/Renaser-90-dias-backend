@@ -186,6 +186,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/me/semaforo", "/api/v1/me/semaforo/**",
                                 "/api/v1/semaforo/**")
                         .authenticated()
+                        // La formacion de la sesion y la activa del personal (spec 022): el id sale de la sesion.
+                        .requestMatchers("/api/v1/me/formacion", "/api/v1/me/formacion/**").authenticated()
                         // «Tu Caja Renaser» (D-219): la caja propia; el id sale de la sesion.
                         .requestMatchers("/api/v1/me/caja", "/api/v1/me/caja/**").authenticated()
                         // D-244: el pedido de emergencia del aprendiz. Sin esta linea quedaba bajo

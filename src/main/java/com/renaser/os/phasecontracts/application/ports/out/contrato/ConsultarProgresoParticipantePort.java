@@ -1,5 +1,6 @@
 package com.renaser.os.phasecontracts.application.ports.out.contrato;
 
+import com.renaser.os.shared.domain.DuracionDelPrograma;
 import com.renaser.os.shared.domain.UserId;
 
 import java.util.Optional;
@@ -18,7 +19,20 @@ public interface ConsultarProgresoParticipantePort {
      * cursa opcionalmente (SDD 003, ARF-16 / V04).
      */
     record ProgresoParticipante(int diaPrograma, RolParticipante rol, boolean suspendido,
-                                 boolean programaActivado) {
+                                 boolean programaActivado, int duracionDias) {
+
+        /** Firma de antes de las formaciones (spec 022): programa de 90 días. */
+        public ProgresoParticipante(int diaPrograma, RolParticipante rol, boolean suspendido, boolean programaActivado) {
+            this(diaPrograma, rol, suspendido, programaActivado, DuracionDelPrograma.POR_DEFECTO);
+        }
+
+        /**
+         * El día llevado a la escala de 90, que es en la que están escritos los días de desbloqueo de cada pacto (17, 35 y 65): con otra duración las
+         * fases se estiran y el pacto se desbloquea en el día estirado equivalente (spec 022, Q2-A).
+         */
+        public int diaEnEscalaBase() {
+            return DuracionDelPrograma.enEscalaBase(diaPrograma, duracionDias);
+        }
     }
 
     /**

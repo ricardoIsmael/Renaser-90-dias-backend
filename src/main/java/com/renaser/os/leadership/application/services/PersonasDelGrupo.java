@@ -3,6 +3,7 @@ package com.renaser.os.leadership.application.services;
 import com.renaser.os.community.api.AcompanamientoFinder;
 import com.renaser.os.community.api.AcompanamientoFinder.GrupoAcompanado;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import com.renaser.os.users.api.CuentasDePruebaFinder;
 import com.renaser.os.users.api.ParticipacionPrograma;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
@@ -32,9 +33,11 @@ class PersonasDelGrupo {
     private final ParticipacionProgramaFinder participaciones;
     private final UserSummaryFinder usuarios;
     private final CuentasDePruebaFinder pruebas;
+    private final AlcanceDeFormacionFinder formaciones;
 
     PersonasDelGrupo(AcompanamientoFinder acompanamiento, ParticipacionProgramaFinder participaciones,
-                     UserSummaryFinder usuarios, CuentasDePruebaFinder pruebas) {
+                     UserSummaryFinder usuarios, CuentasDePruebaFinder pruebas, AlcanceDeFormacionFinder formaciones) {
+        this.formaciones = formaciones;
         this.acompanamiento = acompanamiento;
         this.participaciones = participaciones;
         this.usuarios = usuarios;
@@ -42,11 +45,14 @@ class PersonasDelGrupo {
     }
 
     /** El grupo regular con mentor vigente. Cualquier otro —recepción, sin mentor, inexistente— es 404. */
-    GrupoAcompanado requireGrupoConMentor(UUID grupoId, Instant ahora) {
-        return acompanamiento.gruposConMentorVigente(ahora).stream()
-                .filter(grupo -> grupo.grupoId().equals(grupoId))
+    GrupoAcompanado requireGrupoConMentor(UserId actor, UUID grupoId, Instant ahora) {
+        GrupoAcompanado grupo = acompanamiento.gruposConMentorVigente(ahora).stream()
+                .filter(g -> g.grupoId().equals(grupoId))
                 .findFirst()
                 .orElseThrow(() -> new NoSuchElementException("Grupo no encontrado"));
+        // Spec 022: un grupo de otra formación se responde como si no existiera (404).
+        formaciones.exigirQueLaVea(actor, grupo.formacion());
+        return grupo;
     }
 
     /** Quien acompaña el grupo y lleva su propio programa activado: entra a la lista sin color. */

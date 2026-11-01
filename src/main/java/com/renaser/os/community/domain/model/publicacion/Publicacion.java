@@ -1,5 +1,6 @@
 package com.renaser.os.community.domain.model.publicacion;
 
+import com.renaser.os.shared.domain.DuracionDelPrograma;
 import com.renaser.os.shared.domain.UserId;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -146,8 +147,8 @@ public final class Publicacion {
         if (dia == null) {
             return null;
         }
-        if (dia < 1 || dia > 90) {
-            throw new IllegalArgumentException("diaPrograma va de 1 a 90, llego " + dia);
+        if (dia < 1 || dia > DuracionDelPrograma.MAXIMA) {
+            throw new IllegalArgumentException("diaPrograma va de 1 a " + DuracionDelPrograma.MAXIMA + ", llego " + dia);
         }
         return dia;
     }

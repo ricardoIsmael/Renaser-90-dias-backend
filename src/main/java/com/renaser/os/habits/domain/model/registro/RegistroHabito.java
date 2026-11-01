@@ -3,6 +3,7 @@ package com.renaser.os.habits.domain.model.registro;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.medicion.MedicionDiaria;
+import com.renaser.os.shared.domain.DuracionDelPrograma;
 import com.renaser.os.shared.domain.UserId;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -69,8 +70,9 @@ public final class RegistroHabito {
         Objects.requireNonNull(habitoId, "habitoId es obligatorio");
         Objects.requireNonNull(fechaEjecucion, "fechaEjecucion es obligatoria");
         Objects.requireNonNull(tipoDia, "tipoDia es obligatorio");
-        if (diaPrograma < 0 || diaPrograma > 90) {
-            throw new IllegalArgumentException("diaPrograma fuera de rango 0..90: " + diaPrograma);
+        // El tope es el máximo que admite un programa (365, Diplomado de 1 año; spec 022), no el 90 de la Escuela: cada persona acota su día con SU duración.
+        if (diaPrograma < 0 || diaPrograma > DuracionDelPrograma.MAXIMA) {
+            throw new IllegalArgumentException("diaPrograma fuera de rango 0.." + DuracionDelPrograma.MAXIMA + ": " + diaPrograma);
         }
         return new RegistroHabito(id, participanteId, habitoId, fechaEjecucion, diaPrograma,
                 tipoDia, esOpcional, EstadoRegistro.PENDIENTE, 0, null, null, null, null, ahora, ahora, null);

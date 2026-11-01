@@ -34,7 +34,7 @@ public class PadronDeMentoresService implements ConsultarPadronDeMentoresUseCase
     public PadronDeMentores padron(UserId actorId) {
         acceso.requireLiderazgoActivo(actorId);
         MesDelReporte mes = MesDelReporte.enCurso(MesDelReporte.ZONA_DEL_PROGRAMA, clock.now());
-        IndicadoresDeMentores.Lectura lectura = indicadores.leer(fichaDeMentorFinder.mentoresActivos(), mes);
+        IndicadoresDeMentores.Lectura lectura = indicadores.leer(acceso.mentoresDelAlcance(actorId), mes);
         MedicionVigente medicion = lectura.medicion();
         return new PadronDeMentores(mes.mes().toString(), mes.zona().getId(), mes.corte(),
                 medicion == null ? null : medicion.desde(), medicion == null ? null : medicion.hasta(),

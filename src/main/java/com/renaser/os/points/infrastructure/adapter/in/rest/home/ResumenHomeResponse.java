@@ -23,14 +23,15 @@ public record ResumenHomeResponse(int puntosLiga, BigDecimal coherencia, int rac
                                    int diaPrograma, boolean inscrito, FasePrograma fase,
                                    HabitosHoyResponse habitosHoy, RocasHoyResponse rocasHoy,
                                    ProximoEventoResponse proximoEvento, Long notificacionesNoLeidas,
-                                   List<String> bloqueos, SemaforoResponse semaforo) {
+                                   List<String> bloqueos, SemaforoResponse semaforo, int duracionDias,
+                                   String formacion) {
 
     public static ResumenHomeResponse from(ResumenHome resumen) {
         return new ResumenHomeResponse(resumen.puntosLiga(), resumen.coherencia(), resumen.rachaActual(),
                 resumen.rachaMaxima(), resumen.diaPrograma(), resumen.inscrito(), resumen.fase(),
                 HabitosHoyResponse.from(resumen.habitosHoy()), RocasHoyResponse.from(resumen.rocasHoy()),
                 ProximoEventoResponse.from(resumen.proximoEvento()), resumen.notificacionesNoLeidas(),
-                resumen.bloqueos(), SemaforoResponse.from(resumen.semaforo()));
+                resumen.bloqueos(), SemaforoResponse.from(resumen.semaforo()), resumen.duracionDias(), resumen.formacion());
     }
 
     /**

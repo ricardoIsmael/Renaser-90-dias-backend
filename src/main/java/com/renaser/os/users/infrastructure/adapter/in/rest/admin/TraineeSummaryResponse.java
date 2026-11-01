@@ -32,13 +32,16 @@ import java.util.UUID;
 public record TraineeSummaryResponse(String id, String fullName, String email, UserStatus status, int programDay,
                                       FasePrograma phase, UUID cellId, String mentorId, String role,
                                       java.time.Instant deletionScheduledFor,
-                                      RolPersonalizadoResponse rolPersonalizado) {
+                                      RolPersonalizadoResponse rolPersonalizado, String formation, int programDuration,
+                                      java.util.List<String> staffFormations) {
 
     public static TraineeSummaryResponse from(ResumenTraineeAdmin resumen) {
         return new TraineeSummaryResponse(resumen.id().toString(), resumen.fullName(), resumen.email(),
                 resumen.status(), resumen.diaPrograma(), resumen.fase(), resumen.celulaId(),
                 resumen.mentorId() == null ? null : resumen.mentorId().toString(), etiquetaDe(resumen.rol()),
-                resumen.seBorraEl(), RolPersonalizadoResponse.de(resumen.rolPersonalizado()));
+                resumen.seBorraEl(), RolPersonalizadoResponse.de(resumen.rolPersonalizado()),
+                resumen.formacion() == null ? null : resumen.formacion().codigo(), resumen.duracionDias(),
+                resumen.formacionesDelPersonal().stream().map(com.renaser.os.shared.domain.Formacion::codigo).toList());
     }
 
     /**

@@ -14,7 +14,7 @@ import com.renaser.os.community.domain.model.cohorte.EstadoCohorte;
  */
 public record CelulaDashboardResponse(String id, String name, String cohortId, String cohortName,
                                        String cohortStatus, String videoCallUrl, String nextSessionAt,
-                                       int memberCount, PerfilBasicoResponse mentor) {
+                                       int memberCount, PerfilBasicoResponse mentor, String formation) {
 
     public static CelulaDashboardResponse from(CelulaConCohorte item) {
         var c = item.celula();
@@ -22,7 +22,7 @@ public record CelulaDashboardResponse(String id, String name, String cohortId, S
         return new CelulaDashboardResponse(c.id().toString(), c.nombre(), c.cohorteId().toString(), cohorte.nombre(),
                 toWireEstado(cohorte.estado()), c.urlVideollamada(),
                 c.proximaSesionEn() != null ? c.proximaSesionEn().toString() : null, item.cantidadMiembros(),
-                PerfilBasicoResponse.from(item.mentor()));
+                PerfilBasicoResponse.from(item.mentor()), c.formacion().codigo());
     }
 
     private static String toWireEstado(EstadoCohorte estado) {

@@ -31,6 +31,7 @@ import com.renaser.os.community.domain.model.cohorte.Cohorte;
 import com.renaser.os.community.domain.model.cohorte.CohorteId;
 import com.renaser.os.community.domain.model.cohorte.EstadoCohorte;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -85,6 +86,7 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
     private final ApplicationEventPublisher events;
     private final Clock clock;
     private final IdGenerator idGenerator;
+    private final FormacionDelGrupo formacionDelGrupo;
     private final VigenciaDeGrupos vigencia;
     /** D-243: los compañeros que ve un aprendiz no incluyen cuentas cerradas esperando su borrado. */
     private final SinCuentasCerradas sinCerradas;
@@ -97,7 +99,9 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
                           ParticipacionProgramaFinder participacionProgramaFinder,
                           PerfilMentorFinder perfilMentorFinder, LoadAsignacionesPort loadAsignacionesPort,
                           LoadPoliticaMentoriaPort loadPoliticaMentoriaPort, ApplicationEventPublisher events,
-                          Clock clock, IdGenerator idGenerator, CuentasCerradasFinder cuentasCerradas) {
+                          Clock clock, IdGenerator idGenerator, CuentasCerradasFinder cuentasCerradas,
+                          FormacionDelGrupo formacionDelGrupo) {
+        this.formacionDelGrupo = formacionDelGrupo;
         this.loadCelulaPort = loadCelulaPort;
         this.saveCelulaPort = saveCelulaPort;
         this.eliminarCelulaPort = eliminarCelulaPort;
@@ -124,7 +128,7 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         requireCohorte(command.cohorteId());
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
         Celula celula = Celula.crear(CelulaId.of(idGenerator.newId()), command.nombre(), command.cohorteId(),
-                command.urlVideollamada(), command.periodo(), clock.now());
+                command.urlVideollamada(), command.periodo(), command.formacionEfectiva(), clock.now());
         celula.marcarComo(command.tipoEfectivo(), clock.now());
         if (command.capacidad() != null) {
             celula.cambiarCapacidad(command.capacidad(), clock.now());
@@ -273,9 +277,16 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
      * diferencia de {@link #listarPorCohorte}, no exige elegir una cohorte primero.
      * Solo ADMIN/ALCHEMIST: un MENTOR sigue viendo la propia por {@code GET /me/cell}. */
     @Override
-    public List<CelulaConCohorte> dashboard(UserId actorId) {
+    public List<CelulaConCohorte> dashboard(UserId actorId, Formacion formacion) {
         requireAdmin(actorId);
-        return loadCelulaPort.todas().stream().map(this::aCelulaConCohorte).toList();
+        return loadCelulaPort.todas().stream()
+                .filter(celula -> formacion == null || celula.formacion() == formacion)
+                .map(this::aCelulaConCohorte).toList();
+    }
+
+    /** Spec 022: el selector de un grupo ofrece solo a las personas de SU formación; {@code null} = todas. */
+    private List<UserId> deLaFormacion(List<UserId> candidatos, Formacion formacion) {
+        return formacion == null ? candidatos : formacionDelGrupo.soloDe(formacion, candidatos);
     }
 
     private CelulaConCohorte aCelulaConCohorte(Celula celula) {
@@ -289,10 +300,11 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
      * "Asignar mentor". {@link LoadCelulaPort#todas()} resuelve quien ya lidera sin
      * tocar `perfiles_mentor` (tabla ajena, mismo criterio que {@link #asignar}). */
     @Override
-    public List<MentorCandidato> mentoresDisponibles(UserId actorId) {
+    public List<MentorCandidato> mentoresDisponibles(UserId actorId, Formacion formacion) {
         requireAdmin(actorId);
         Set<UserId> yaLideran = mentoresQueYaLideran();
-        List<UserId> disponibles = mentoresActivos().stream().filter(id -> !yaLideran.contains(id)).toList();
+        List<UserId> disponibles = deLaFormacion(
+                mentoresActivos().stream().filter(id -> !yaLideran.contains(id)).toList(), formacion);
         Map<UserId, EspecialidadMentor> especialidades = especialidadesDe(disponibles);
         return disponibles.stream().map(id -> aMentorCandidato(id, List.of(), especialidades.get(id))).toList();
     }
@@ -301,10 +313,10 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
      * lideran — el picker los muestra a todos en vez de ocultar a los ocupados
      * (mismo criterio que el frontend ya documenta para este picker). */
     @Override
-    public List<MentorCandidato> mentores(UserId actorId) {
+    public List<MentorCandidato> mentores(UserId actorId, Formacion formacion) {
         requireAdmin(actorId);
         Map<UserId, List<CelulaId>> celulasPorMentor = celulasPorMentor();
-        List<UserId> todos = mentoresActivos();
+        List<UserId> todos = deLaFormacion(mentoresActivos(), formacion);
         Map<UserId, EspecialidadMentor> especialidades = especialidadesDe(todos);
         return todos.stream()
                 .map(id -> aMentorCandidato(id, celulasPorMentor.getOrDefault(id, List.of()),
@@ -340,10 +352,10 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
      * ofrecer lo decide {@link #aprendicesQueSePuedenAgregarAUnGrupo()}; de que grupo sale cada
      * uno, {@link #celulaPorAprendiz()}. */
     @Override
-    public List<AprendizCandidato> aprendicesDisponibles(UserId actorId) {
+    public List<AprendizCandidato> aprendicesDisponibles(UserId actorId, Formacion formacion) {
         requireAdmin(actorId);
         Map<UserId, CelulaId> grupoDeCadaUno = celulaPorAprendiz();
-        List<UserId> disponibles = aprendicesQueSePuedenAgregarAUnGrupo();
+        List<UserId> disponibles = deLaFormacion(aprendicesQueSePuedenAgregarAUnGrupo(), formacion);
         Map<UserId, UserSummary> resumenes = userSummaryFinder.findByIds(disponibles);
         return disponibles.stream()
                 .map(id -> {
