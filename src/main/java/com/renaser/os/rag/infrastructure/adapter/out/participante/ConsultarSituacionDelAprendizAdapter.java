@@ -33,8 +33,8 @@ class ConsultarSituacionDelAprendizAdapter implements ConsultarSituacionDelApren
     public Optional<SituacionDelAprendiz> de(UserId participanteId) {
         return participacionFinder.deParticipante(participanteId)
                 .filter(ParticipacionPrograma::inscrito)
-                .map(p -> new SituacionDelAprendiz(p.diaPrograma(), numeroDeFase(p.diaPrograma()),
-                        clock.now().atZone(p.zona()).toLocalDate()));
+                .map(p -> new SituacionDelAprendiz(p.diaPrograma(), numeroDeFase(p.diaPrograma(), p.duracionDias()),
+                        clock.now().atZone(p.zona()).toLocalDate()).conDuracion(p.duracionDias()));
     }
 
     /**
@@ -45,8 +45,8 @@ class ConsultarSituacionDelAprendizAdapter implements ConsultarSituacionDelApren
      * <p>El {@code switch} es exhaustivo y explicito en vez de {@code ordinal() + 1}: reordenar
      * las constantes del enum no puede cambiar en silencio el numero que ve la persona.
      */
-    private static int numeroDeFase(int diaPrograma) {
-        return switch (FasePrograma.paraDiaPrograma(diaPrograma)) {
+    private static int numeroDeFase(int diaPrograma, int duracionDias) {
+        return switch (FasePrograma.paraDiaPrograma(diaPrograma, duracionDias)) {
             case PHASE_1_REBIRTH -> 1;
             case PHASE_2_DEVELOPMENT -> 2;
             case PHASE_3_ALCHEMIST_WARRIOR -> 3;

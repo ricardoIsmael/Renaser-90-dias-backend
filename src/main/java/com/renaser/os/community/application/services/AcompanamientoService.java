@@ -11,10 +11,12 @@ import com.renaser.os.community.domain.model.acompanamiento.ConjuntoAsignaciones
 import com.renaser.os.community.domain.model.acompanamiento.PoliticaMentoria;
 import com.renaser.os.community.domain.model.celula.Celula;
 import com.renaser.os.community.domain.model.celula.CelulaId;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import com.renaser.os.users.api.CuentasCerradasFinder;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
@@ -61,13 +63,16 @@ public class AcompanamientoService
     private final VigenciaDeGrupos vigencia;
     /** D-243: la lista del mentor no muestra ni cuenta cuentas cerradas esperando su borrado. */
     private final SinCuentasCerradas sinCerradas;
+    /** Spec 022: el personal con varias formaciones acompaña los grupos de la que tiene activa, no los de dos a la vez. */
+    private final AlcanceDeFormacionFinder formaciones;
 
     public AcompanamientoService(LoadAsignacionesPort loadAsignacionesPort, LoadCelulaPort loadCelulaPort,
                                   LoadPoliticaMentoriaPort loadPoliticaMentoriaPort,
                                   AcompanamientoFinder acompanamientoFinder,
                                   ParticipacionProgramaFinder participacionProgramaFinder,
                                   UserSummaryFinder userSummaryFinder, Clock clock,
-                                  CuentasCerradasFinder cuentasCerradas) {
+                                  CuentasCerradasFinder cuentasCerradas, AlcanceDeFormacionFinder formaciones) {
+        this.formaciones = formaciones;
         this.loadAsignacionesPort = loadAsignacionesPort;
         this.loadCelulaPort = loadCelulaPort;
         this.loadPoliticaMentoriaPort = loadPoliticaMentoriaPort;
@@ -92,13 +97,14 @@ public class AcompanamientoService
 
         List<AsignacionResumen> asignaciones = new ArrayList<>();
         Map<CelulaId, ConjuntoAsignaciones> composicionPorGrupo = new HashMap<>();
+        AlcanceDeFormacion alcance = formaciones.de(actorId);
 
         for (AsignacionCelula mia : loadAsignacionesPort.porUsuario(actorId)) {
             if (!mia.vigenteEn(ahora) || !esDeAcompanamiento(mia)) {
                 continue;
             }
             Optional<Celula> grupo = loadCelulaPort.porId(mia.celulaId());
-            if (grupo.isEmpty()) {
+            if (grupo.isEmpty() || !alcance.incluye(grupo.get().formacion())) {
                 continue;
             }
             /* Solo grupos EN CURSO, la misma regla que el acceso (D-240). La fila de asignacion
@@ -194,6 +200,12 @@ public class AcompanamientoService
             // le confirmaria a quien prueba ids que ese grupo existe.
             throw new NotAuthorizedException("No acompanas ese grupo");
         }
+        // Spec 022: el grupo de la formación que no tiene activa se responde con el mismo 403 que un grupo ajeno.
+        loadCelulaPort.porId(grupoId).ifPresent(grupo -> {
+            if (!formaciones.de(actorId).incluye(grupo.formacion())) {
+                throw new NotAuthorizedException("No acompanas ese grupo");
+            }
+        });
         // El interceptor no mira a MENTOR (A-1): sin esto, un mentor SUSPENDIDO con la asignacion
         // todavia abierta seguia leyendo el padron de su grupo (E-258).
         boolean activo = userSummaryFinder.findById(actorId)

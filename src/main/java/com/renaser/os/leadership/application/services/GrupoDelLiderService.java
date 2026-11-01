@@ -63,7 +63,7 @@ public class GrupoDelLiderService implements ConsultarGrupoDelLiderUseCase {
     public GrupoDelLider grupoDe(ConsultaGrupoDelLider consulta) {
         acceso.requireLiderazgoActivo(consulta.actorId());
         Instant ahora = clock.now();
-        GrupoAcompanado grupo = personas.requireGrupoConMentor(consulta.grupoId(), ahora);
+        GrupoAcompanado grupo = personas.requireGrupoConMentor(consulta.actorId(), consulta.grupoId(), ahora);
         // Hoy en la zona del GRUPO (regla 02): rechaza un dia que no es viernes y una semana que todavia no llego. La
         // tabla recibe lo que se pidio (null = la vigente), igual que el resumen: la misma lectura del semaforo.
         VentanaDeLaFicha ventana = VentanaDeLaFicha.de(consulta.semanaHasta(), hoyDelGrupo(grupo, ahora));

@@ -1,6 +1,7 @@
 package com.renaser.os.community.application.ports.in.celula;
 
 import com.renaser.os.community.domain.model.celula.CelulaId;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.EspecialidadMentor;
 import com.renaser.os.users.api.RolPersonalizadoAsignado;
@@ -21,12 +22,22 @@ import java.util.List;
 public interface ConsultarCandidatosCelulaUseCase {
 
     /** Usuarios ACTIVOS con rol MENTOR que hoy NO lideran ninguna celula. */
-    List<MentorCandidato> mentoresDisponibles(UserId actorId);
+    default List<MentorCandidato> mentoresDisponibles(UserId actorId) {
+        return mentoresDisponibles(actorId, null);
+    }
+
+    /** @param formacion {@code null} = de todas; si viene, solo los mentores que trabajan en esa formación (spec 022, FR-010). */
+    List<MentorCandidato> mentoresDisponibles(UserId actorId, Formacion formacion);
 
     /** TODOS los usuarios ACTIVOS con rol MENTOR — {@code celulaActual} no nulo si ya
      * lidera una (el picker los muestra a todos y marca quien ya esta ocupado, en vez de
      * ocultarlos). */
-    List<MentorCandidato> mentores(UserId actorId);
+    default List<MentorCandidato> mentores(UserId actorId) {
+        return mentores(actorId, null);
+    }
+
+    /** @param formacion {@code null} = de todas; si viene, solo los mentores que trabajan en esa formación (spec 022, FR-010). */
+    List<MentorCandidato> mentores(UserId actorId, Formacion formacion);
 
     /** TODOS los usuarios ACTIVOS con rol TRAINEE <b>inscritos en el programa</b>, tengan grupo
      * o no — {@code celulaActual} no nulo marca al que hoy ya pertenece a uno, igual que en
@@ -47,7 +58,12 @@ public interface ConsultarCandidatosCelulaUseCase {
      * que hoy no son miembro de ninguna celula", sin la inscripcion. El selector ofrecia
      * gente a la que {@code POST /admin/cells/&#123;id&#125;/trainees} responde 404 por no
      * tener fila en `participantes_programa`, y el admin veia "No se pudo agregar". */
-    List<AprendizCandidato> aprendicesDisponibles(UserId actorId);
+    default List<AprendizCandidato> aprendicesDisponibles(UserId actorId) {
+        return aprendicesDisponibles(actorId, null);
+    }
+
+    /** @param formacion {@code null} = de todas; si viene, solo los aprendices de esa formación (spec 022, FR-010). */
+    List<AprendizCandidato> aprendicesDisponibles(UserId actorId, Formacion formacion);
 
     /**
      * @param especialidad     NEGOCIO / MENTE / RELACIONES, o {@code null} si el mentor no la declaro.

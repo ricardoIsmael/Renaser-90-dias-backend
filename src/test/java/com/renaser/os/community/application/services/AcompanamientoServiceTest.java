@@ -204,9 +204,10 @@ class AcompanamientoServiceTest {
      */
     private AcompanamientoService servicio(Clock reloj) {
         return new AcompanamientoService(cargaAsignaciones, cargaCelulas, cargaPolitica,
-                new AcompanamientoFinderService(cargaAsignaciones, cargaCelulas, cargaPolitica),
+                new AcompanamientoFinderService(cargaAsignaciones, cargaCelulas, cargaPolitica, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo()),
                 buscaParticipacion, buscaUsuarios, reloj,
-                ids -> ids.stream().filter(cerradas::contains).collect(java.util.stream.Collectors.toSet()));
+                ids -> ids.stream().filter(cerradas::contains).collect(java.util.stream.Collectors.toSet()),
+                new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
     }
 
     // ── armado ──────────────────────────────────────────────────────────────
@@ -572,7 +573,7 @@ class AcompanamientoServiceTest {
 
     // ── D-173: quienes acompañan de persona a persona ────────────────────────
     private AcompanamientoFinderService finder() {
-        return new AcompanamientoFinderService(cargaAsignaciones, cargaCelulas, cargaPolitica);
+        return new AcompanamientoFinderService(cargaAsignaciones, cargaCelulas, cargaPolitica, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
     }
 
     @Test

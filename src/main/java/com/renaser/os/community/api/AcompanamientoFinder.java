@@ -1,5 +1,6 @@
 package com.renaser.os.community.api;
 
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.Instant;
@@ -66,7 +67,9 @@ public interface AcompanamientoFinder {
 
     /**
      * Si {@code actorId} acompaña VIGENTEMENTE ese grupo. Vigente, no "alguna vez": un exmentor
-     * con el token todavía válido no pasa.
+     * con el token todavía válido no pasa. Y en su formación: quien trabaja en varias acompaña solo los grupos de la
+     * que tiene activa (spec 022), así que el grupo de la otra se responde como un grupo ajeno. Es la pregunta de los
+     * caminos con sesión; para saber si el grupo corre, sin preguntar por nadie, está {@link #grupoOperativo}.
      */
     boolean acompanaVigente(UserId actorId, UUID grupoId, Instant instante);
 
@@ -128,7 +131,12 @@ public interface AcompanamientoFinder {
      * @param aprendices los aprendices vigentes del grupo, sin repetir
      */
     record GrupoConAprendices(UUID grupoId, String nombre, boolean recepcion, UserId mentorId,
-                              List<UserId> aprendices) {
+                              List<UserId> aprendices, Formacion formacion) {
+
+        /** Firma de antes de las formaciones (spec 022): un grupo sin dato es de la Escuela. */
+        public GrupoConAprendices(UUID grupoId, String nombre, boolean recepcion, UserId mentorId, List<UserId> aprendices) {
+            this(grupoId, nombre, recepcion, mentorId, aprendices, Formacion.POR_DEFECTO);
+        }
     }
 
     /**
@@ -139,6 +147,12 @@ public interface AcompanamientoFinder {
      *                               que quien barre no tenga que volver a preguntar por cohorte.
      */
     record GrupoAcompanado(UUID grupoId, String nombre, UserId mentorId, UUID cohorteId, String zonaHoraria,
-                            int diasSinActividadAlerta) {
+                            int diasSinActividadAlerta, Formacion formacion) {
+
+        /** Firma de antes de las formaciones (spec 022): un grupo sin dato es de la Escuela. */
+        public GrupoAcompanado(UUID grupoId, String nombre, UserId mentorId, UUID cohorteId, String zonaHoraria,
+                               int diasSinActividadAlerta) {
+            this(grupoId, nombre, mentorId, cohorteId, zonaHoraria, diasSinActividadAlerta, Formacion.POR_DEFECTO);
+        }
     }
 }

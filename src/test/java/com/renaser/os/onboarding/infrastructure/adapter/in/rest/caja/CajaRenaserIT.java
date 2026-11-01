@@ -545,6 +545,7 @@ class CajaRenaserIT {
                 INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado)
                 VALUES (?, ?, ?, CAST(? AS renaser.rol_usuario), CAST(? AS renaser.estado_usuario))
                 """, id, id + "@renaser.test", nombre, rol, estado);
+        com.renaser.os.FormacionesDePrueba.alPersonalLeAsignaLaEscuela(jdbc, id, rol);
         usuarios.add(id);
         return id;
     }

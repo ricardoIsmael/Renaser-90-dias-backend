@@ -20,7 +20,8 @@ import com.renaser.os.community.domain.model.celula.PeriodoGrupo;
  */
 public record CelulaResponse(String id, String name, String cohortId, String videoCallUrl, String nextSessionAt,
                               int memberCount, PerfilBasicoResponse mentor, String periodStart, String periodEnd,
-                              String status, String type, int learnerCount, Integer capacity) {
+                              String status, String type, int learnerCount, Integer capacity,
+                              String formation) {
 
     public static CelulaResponse from(CelulaResumen resumen) {
         Celula c = resumen.celula();
@@ -30,6 +31,7 @@ public record CelulaResponse(String id, String name, String cohortId, String vid
                 PerfilBasicoResponse.from(resumen.mentor()),
                 periodo != null ? periodo.inicio().toString() : null,
                 periodo != null ? periodo.fin().toString() : null,
-                resumen.estado().name(), c.tipo().name(), resumen.aprendicesVigentes(), resumen.cupoMaximo());
+                resumen.estado().name(), c.tipo().name(), resumen.aprendicesVigentes(), resumen.cupoMaximo(),
+                c.formacion().codigo());
     }
 }
