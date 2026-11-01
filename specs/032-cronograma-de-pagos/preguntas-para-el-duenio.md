@@ -1,5 +1,7 @@
 # Cronograma de pagos: preguntas para el dueño
 
+> **Respondidas el 2026-11-01** (con la maqueta «Mi ingreso»). Las respuestas están en la sección «Clarifications» de [`spec.md`](./spec.md) y en `decisiones-del-dueno-2026-10-31.md`. Este archivo queda como registro de lo que se preguntó.
+
 **Para mostrarlas junto con tu maqueta.** Son 10, en simple. Cada una trae 2 o 3 opciones y **la recomendada va primero** (con una línea que explica por qué). Si no marcas nada, se toma la A.
 Lo que ya dijiste: «El sistema debe de tener cronograma de pagos junto con el diagnóstico como así», «Prioritario: Pagos» y «el de pagos te mandaré imágenes de cómo será».
 La spec en borrador está en [`spec.md`](./spec.md); todo lo que no dijiste tú está ahí marcado como **[NEEDS CLARIFICATION]**.
