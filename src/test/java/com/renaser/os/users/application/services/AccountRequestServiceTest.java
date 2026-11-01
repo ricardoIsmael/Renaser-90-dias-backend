@@ -103,7 +103,7 @@ class AccountRequestServiceTest {
     @Mock
     private com.renaser.os.users.api.FichaAlAceptar fichaAlAceptar;
     @Mock
-    private org.springframework.beans.factory.ObjectProvider<com.renaser.os.users.api.TerminosPublicados> terminosPublicados;
+    private com.renaser.os.users.api.TerminosPublicados terminosPublicados;
 
     private AccountRequestService service;
 
@@ -117,6 +117,8 @@ class AccountRequestServiceTest {
                 tokenVerificacionEmailPort,
                 limitarSolicitudesResetPort, new RequireActiveUserGuard(loadUserPort),
                 new RequireAdminGuard(loadUserPort), updateUserRole, events, CLOCK, idGenerator);
+        // Spec 027: por defecto las tres formaciones tienen términos publicados; la prueba de «sin términos» lo cambia.
+        lenient().when(terminosPublicados.estanPublicados(any())).thenReturn(true);
         lenient().when(catalogoDeFormaciones.todas()).thenReturn(java.util.List.of(
                 new com.renaser.os.users.api.FormacionConfigurada(com.renaser.os.shared.domain.Formacion.ESCUELA, "Escuela Renaser", "", true,
                         java.util.List.of(90), 1),
@@ -793,6 +795,18 @@ class AccountRequestServiceTest {
 
         AccountRequest conDiagnostico = aceptarCon(actorId, UserRole.MENTOR, pedido(null, true, com.renaser.os.shared.domain.Formacion.ESCUELA));
         verify(ficha).conDiagnostico(conDiagnostico.usuarioId(), actorId);
+    }
+
+    @Test
+    @DisplayName("027: aceptar en una formación sin términos publicados FALLA con un aviso (409) y no acepta a nadie")
+    void sinTerminosPublicadosNoSeAcepta() {
+        UserId actorId = id();
+        when(terminosPublicados.estanPublicados(com.renaser.os.shared.domain.Formacion.ESCUELA)).thenReturn(false);
+
+        assertThatThrownBy(() -> aceptarCon(actorId, UserRole.TRAINEE, pedido(null, false, com.renaser.os.shared.domain.Formacion.ESCUELA)))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("términos y condiciones");
+
+        verify(saveAccountRequestPort, never()).save(any());
     }
 
     @Test

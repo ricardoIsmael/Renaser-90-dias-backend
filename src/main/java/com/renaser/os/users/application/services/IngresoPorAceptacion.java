@@ -18,7 +18,6 @@ import com.renaser.os.users.domain.model.accountrequest.ReglasDeIngreso.Resultad
 import com.renaser.os.users.domain.model.formacion.ReglaDeAlcance;
 import com.renaser.os.users.domain.model.participante.ParticipacionPrograma;
 import com.renaser.os.users.domain.model.rolpersonalizado.RolPersonalizado;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 import java.util.EnumMap;
@@ -39,13 +38,13 @@ class IngresoPorAceptacion {
     private final CargarRolesPersonalizadosPort rolesPersonalizados;
     /** La ficha con diagnóstico (spec 026): la implementa {@code onboarding}. Sin un diagnóstico publicado, «con diagnóstico» se rechaza con un aviso claro. */
     private final FichaAlAceptar ficha;
-    /** Spec 027: sin la implementación (otra rama sin términos editables) no se exige nada, como hasta hoy. */
-    private final ObjectProvider<TerminosPublicados> terminos;
+    /** Spec 027: los términos editables los implementa {@code onboarding}; una formación sin términos publicados no recibe personas nuevas. */
+    private final TerminosPublicados terminos;
     private final Clock clock;
 
     IngresoPorAceptacion(CatalogoDeFormacionesPort catalogo, SaveParticipacionProgramaPort participaciones,
                          FormacionesDelPersonalPort personal, CargarRolesPersonalizadosPort rolesPersonalizados,
-                         FichaAlAceptar ficha, ObjectProvider<TerminosPublicados> terminos, Clock clock) {
+                         FichaAlAceptar ficha, TerminosPublicados terminos, Clock clock) {
         this.catalogo = catalogo;
         this.participaciones = participaciones;
         this.personal = personal;
@@ -87,22 +86,17 @@ class IngresoPorAceptacion {
 
     /** Spec 027, FR-021: una formación sin términos publicados no recibe personas nuevas (nadie podría aceptarlos). */
     private void exigirTerminosPublicados(Iterable<Formacion> formaciones) {
-        TerminosPublicados publicados = terminos.getIfAvailable();
-        if (publicados == null) {
-            return;
-        }
         for (Formacion formacion : formaciones) {
-            if (!publicados.estanPublicados(formacion)) {
+            if (!terminos.estanPublicados(formacion)) {
                 throw new IllegalStateException("«" + catalogoPorFormacion().get(formacion).nombre()
                         + "» todavía no tiene términos y condiciones publicados. Publícalos antes de aceptar a alguien ahí.");
             }
         }
     }
 
-    /** ¿Tiene ya términos publicados esa formación? Sin la implementación (rama sin términos editables) se asume que sí: es lo de hoy. */
+    /** ¿Tiene ya términos publicados esa formación? */
     boolean tieneTerminos(Formacion formacion) {
-        TerminosPublicados publicados = terminos.getIfAvailable();
-        return publicados == null || publicados.estanPublicados(formacion);
+        return terminos.estanPublicados(formacion);
     }
 
     /** ¿Se puede ofrecer «Con diagnóstico»? Solo si hay un diagnóstico publicado. */
