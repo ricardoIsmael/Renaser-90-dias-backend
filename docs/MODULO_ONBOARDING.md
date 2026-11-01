@@ -492,3 +492,25 @@ de su caja).
 ser de quien responde (`LoadMediaPort.porIdYUsuario`, el mismo criterio que `/v90-recordings`). Ajeno o
 inexistente: 404 «Ese archivo no existe o no es tuyo», igual en los dos casos, y no se guarda nada. Antes se
 aceptaba el archivo de otra persona.
+
+## Ficha con diagnóstico (D-303, spec 026, 2026-10-31)
+
+El Mapa de Renacimiento (flujo `mapa_dia7`, `/api/v1/mapa-renacimiento/**`) **se retiró**: se lee lo que cada persona alcanzó a guardar, no se escribe
+(409 `MAPA_RETIRADO`), y `stageCompleted` sale `true` para todos (compatibilidad con la app ya publicada). Lo reemplaza el diagnóstico, otro flujo del
+mismo motor de onboarding (`flujo = 'diagnostico'`).
+
+* **Qué ficha completa cada persona:** columnas `ficha`, `ficha_asignada_por`, `ficha_asignada_en` y `ficha_version` de `estado_onboarding` (V143), con
+  `TipoDeFicha` (`CON_DIAGNOSTICO` | `ESTANDAR`). La fija la aceptación de la solicitud (`users.api.FichaAlAceptar`, implementada por
+  `FichaAlAceptarAdapter`) o Administración (`AsignarFichaService`); se puede corregir mientras la persona no haya respondido nada.
+* **Borrador y versiones:** el borrador son las filas vivas de `secciones_onboarding` / `preguntas_onboarding` / `opciones_pregunta` del flujo (V144 les
+  suma `ayuda`, `maximo_opciones`, `se_muestra_si_valor`, `alimenta`, `formaciones`, `precarga`, `retirada_en` y el tipo `CUADRICULA`). Lo publicado es la
+  tabla `fichas_publicadas` (V145, append-only, foto jsonb). La persona fija su versión al abrir el diagnóstico y la conserva hasta terminarlo.
+* **Protegidas:** la pregunta del trato (`alimenta = TRATO_DE_LA_PERSONA`) y el consentimiento (`CASILLA`) no se quitan ni cambian de tipo. Quitar una
+  pregunta la ELIMINA si nunca se publicó ni tiene respuestas; si no, la RETIRA (`retirada_en`) y conserva sus respuestas.
+* **Objetivos:** `ObjetivosDelDiagnostico` (dominio puro) saca de las respuestas los tres objetivos de 90 días, la prioridad, la primera acción y el trato.
+  `rocks` los materializa «por confirmar» (V146) la primera vez que los pide; la persona los reescribe una vez y quedan fijos.
+* **Lectura:** `onboarding.api.DiagnosticoDeLaPersonaFinder` (`lecturaDe`, `objetivosDe`, `tratoDe`) es lo único que otros módulos usan (rocks, rag,
+  mentoring, leadership). Contrato HTTP en `specs/026-ficha-con-diagnostico/contracts/diagnostico-api.md`.
+* **Preguntas abiertas para el dueño:** el texto de la «Declaración de responsabilidad y consentimiento» (el diagnóstico no se publica sin él); si el
+  diagnóstico debe preguntar una meta numérica (hoy los objetivos que nacen de él son cualitativos y no hay cifra del mes); si la lectura del líder debe
+  dejar registro en `consultas_de_ficha`.

@@ -1,3 +1,5 @@
+> **Retirado 2026-10-31 (D-303, spec 026).** El Mapa de Renacimiento ya no va: estos endpoints se leen pero no se escriben (409 `MAPA_RETIRADO`) y `stageCompleted` es `true` para todos. Lo reemplaza el diagnóstico (`/api/v1/diagnostico/**`); ver `docs/MODULO_ONBOARDING.md`.
+
 # Mapa de endpoints — referencia de trabajo para conectar la app
 
 **Fecha:** 2026-08-26
