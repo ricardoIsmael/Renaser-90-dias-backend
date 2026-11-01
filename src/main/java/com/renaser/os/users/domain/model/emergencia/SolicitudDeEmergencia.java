@@ -1,6 +1,7 @@
 package com.renaser.os.users.domain.model.emergencia;
 
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.DuracionDelPrograma;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.domain.model.participante.ParticipacionPrograma;
 import lombok.AccessLevel;
@@ -22,8 +23,8 @@ import java.util.UUID;
  * <ul>
  *   <li>Qué pasó: obligatorio, hasta {@value #LARGO_MAXIMO} caracteres (el tope del motivo de un ajuste de
  *       día, para que quien atiende pueda pasarlo entero).</li>
- *   <li>A qué día: entre 1 y el día que vive hoy, incluido hoy. El tope es
- *       {@value ParticipacionPrograma#ULTIMO_DIA_AJUSTABLE} aunque esté en el 90, porque el 90 no se fija a mano
+ *   <li>A qué día: entre 1 y el día que vive hoy, incluido hoy. El tope es el penúltimo día de SU programa (89 en la
+ *       Escuela, 364 en el Diplomado de un año; spec 022) aunque esté en el último, porque ese día no se fija a mano
  *       (D-194).</li>
  *   <li><b>En el Día 0 también se puede pedir</b> (decisión del dueño del 2026-10-02): es solo «necesito
  *       ayuda», sin día ({@code diaPedido} vacío), porque no hay un día anterior al que volver.</li>
@@ -62,17 +63,23 @@ public final class SolicitudDeEmergencia {
      */
     public static SolicitudDeEmergencia pedir(UUID id, UserId aprendizId, String queOcurrio, Integer diaPedido,
                                               int diaActual, Clock clock) {
+        return pedir(id, aprendizId, queOcurrio, diaPedido, diaActual, DuracionDelPrograma.POR_DEFECTO, clock);
+    }
+
+    /** @param duracionDias los días de SU programa: el tope de lo que puede pedir sale de ahí (spec 022) */
+    public static SolicitudDeEmergencia pedir(UUID id, UserId aprendizId, String queOcurrio, Integer diaPedido,
+                                              int diaActual, int duracionDias, Clock clock) {
         Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(aprendizId, "aprendizId es obligatorio");
         String texto = requireTexto(queOcurrio);
         int dia = Math.max(0, diaActual);
-        requireDiaQueCorresponde(diaPedido, dia);
+        requireDiaQueCorresponde(diaPedido, dia, duracionDias);
         return new SolicitudDeEmergencia(id, aprendizId, texto, diaPedido, dia, EstadoDeEmergencia.ABIERTA,
                 clock.now(), null, null, null);
     }
 
-    private static void requireDiaQueCorresponde(Integer diaPedido, int diaActual) {
-        int maximo = diaMaximoPedible(diaActual);
+    private static void requireDiaQueCorresponde(Integer diaPedido, int diaActual, int duracionDias) {
+        int maximo = diaMaximoPedible(diaActual, duracionDias);
         if (maximo == 0) {
             if (diaPedido != null) {
                 throw new IllegalArgumentException(SIN_DIA_EN_EL_DIA_CERO);
@@ -92,12 +99,17 @@ public final class SolicitudDeEmergencia {
                 resueltaEn, resueltaPor, diaAplicado);
     }
 
-    /** Hasta qué día puede pedir quien vive hoy {@code diaActual}; 0 en el Día 0 (pide ayuda sin día). */
+    /** Lo de la Escuela (90 días). Las pantallas con la duración de la persona usan la otra. */
     public static int diaMaximoPedible(int diaActual) {
+        return diaMaximoPedible(diaActual, DuracionDelPrograma.POR_DEFECTO);
+    }
+
+    /** Hasta qué día puede pedir quien vive hoy {@code diaActual} en un programa de {@code duracionDias}; 0 en el Día 0 (pide ayuda sin día). */
+    public static int diaMaximoPedible(int diaActual, int duracionDias) {
         if (diaActual < PRIMER_DIA) {
             return 0;
         }
-        return Math.min(diaActual, ParticipacionPrograma.ULTIMO_DIA_AJUSTABLE);
+        return Math.min(diaActual, DuracionDelPrograma.validar(duracionDias) - 1);
     }
 
     /** Si pidió volver a un día (no es un pedido del Día 0). */

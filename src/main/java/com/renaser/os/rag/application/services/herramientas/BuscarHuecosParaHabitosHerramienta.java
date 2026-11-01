@@ -48,7 +48,6 @@ public class BuscarHuecosParaHabitosHerramienta implements HerramientaAgente {
     public static final String ARGUMENTO_OCUPADO = "ocupado";
     public static final String ARGUMENTO_FECHA = "fecha";
 
-    private static final int FIN_DEL_PROGRAMA = 90;
     private static final Logger log = LoggerFactory.getLogger(BuscarHuecosParaHabitosHerramienta.class);
 
     private static final DefinicionHerramienta DEFINICION = new DefinicionHerramienta(NOMBRE,
@@ -121,8 +120,8 @@ public class BuscarHuecosParaHabitosHerramienta implements HerramientaAgente {
     private record InformeDeHuecos(HorariosDelDia dia, AgendaOcupada agenda) {
 
         String texto() {
-            if (dia.diaPrograma() < 0 || dia.diaPrograma() > FIN_DEL_PROGRAMA) {
-                return "El " + dia.fecha() + " queda fuera de sus 90 dias de programa: no hay habitos que encajar.";
+            if (dia.diaPrograma() < 0 || dia.diaPrograma() > dia.duracionDias()) {
+                return "El " + dia.fecha() + " queda fuera de sus " + dia.duracionDias() + " dias de programa: no hay habitos que encajar.";
             }
             StringBuilder texto = new StringBuilder("Huecos del ").append(dia.fecha())
                     .append(" (dia ").append(dia.diaPrograma()).append(" del programa). Ocupada: ")
