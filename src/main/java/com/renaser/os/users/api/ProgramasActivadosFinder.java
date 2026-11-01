@@ -44,8 +44,15 @@ public interface ProgramasActivadosFinder {
     /**
      * @param zona         zona horaria del participante: sus días son los de esta zona
      * @param primeraFecha primera fecha local con día de programa ≥ 1
-     * @param ultimaFecha  fecha local del día 90 (la graduación esperada menos un día)
+     * @param ultimaFecha  fecha local del último día de su programa (la graduación esperada menos un día)
+     * @param duracionDias los días de SU programa (90 en la Escuela, 365 en el Diplomado de un año; spec 022)
      */
-    record ProgramaActivado(UserId participanteId, ZoneId zona, LocalDate primeraFecha, LocalDate ultimaFecha) {
+    record ProgramaActivado(UserId participanteId, ZoneId zona, LocalDate primeraFecha, LocalDate ultimaFecha,
+                            int duracionDias) {
+
+        /** Firma de antes de las formaciones: el programa de 90 días. */
+        public ProgramaActivado(UserId participanteId, ZoneId zona, LocalDate primeraFecha, LocalDate ultimaFecha) {
+            this(participanteId, zona, primeraFecha, ultimaFecha, 90);
+        }
     }
 }
