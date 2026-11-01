@@ -62,9 +62,20 @@ public interface ConsultarResumenParticipacionPort {
      *                    pide solo aprendices para su sección y que el total cuadre con lo que muestra).
      */
     List<ResumenTraineeAdmin> listarAprendices(int offset, int limit, String busqueda, boolean soloSinGrupo,
-                                               UserRole rol, AlcanceDeFormacion alcance);
+                                               UserRole rol, AlcanceDeFormacion alcance, boolean soloActivas);
 
-    long contarAprendices(String busqueda, boolean soloSinGrupo, UserRole rol, AlcanceDeFormacion alcance);
+    long contarAprendices(String busqueda, boolean soloSinGrupo, UserRole rol, AlcanceDeFormacion alcance, boolean soloActivas);
+
+    /** Sin filtro de estado: todas las cuentas, las que esperan aprobación incluidas (D-138). */
+    default List<ResumenTraineeAdmin> listarAprendices(int offset, int limit, String busqueda, boolean soloSinGrupo,
+                                                       UserRole rol, AlcanceDeFormacion alcance) {
+        return listarAprendices(offset, limit, busqueda, soloSinGrupo, rol, alcance, false);
+    }
+
+    /** Sin filtro de estado: todas las cuentas, las que esperan aprobación incluidas (D-138). */
+    default long contarAprendices(String busqueda, boolean soloSinGrupo, UserRole rol, AlcanceDeFormacion alcance) {
+        return contarAprendices(busqueda, soloSinGrupo, rol, alcance, false);
+    }
 
     /** Sin filtro de formación (spec 022): el alcance de Administración, todas. */
     default List<ResumenTraineeAdmin> listarAprendices(int offset, int limit, String busqueda, boolean soloSinGrupo,

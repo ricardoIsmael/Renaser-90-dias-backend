@@ -382,6 +382,24 @@ class TraineeAdminControllerTest {
     }
 
     @Test
+    @DisplayName("E2E J2-1: activeOnly=true llega al caso de uso; sin él, ninguno (todas las cuentas, las solicitudes pendientes incluidas)")
+    void elFiltroDeSoloActivasLlegaAlCasoDeUso() throws Exception {
+        when(listTraineesUseCase.listar(any())).thenReturn(
+                new ListTraineesUseCase.PaginaTrainees(java.util.List.of(), 0, 0, 20));
+        String actor = UserId.of(UUID.randomUUID()).toString();
+
+        mockMvc.perform(get("/api/v1/admin/trainees").param("activeOnly", "true").header("X-Actor-Id", actor))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/admin/trainees").header("X-Actor-Id", actor)).andExpect(status().isOk());
+
+        ArgumentCaptor<ListTraineesUseCase.ListTraineesCommand> captor =
+                ArgumentCaptor.forClass(ListTraineesUseCase.ListTraineesCommand.class);
+        verify(listTraineesUseCase, org.mockito.Mockito.times(2)).listar(captor.capture());
+        assertThat(captor.getAllValues()).extracting(ListTraineesUseCase.ListTraineesCommand::soloActivas)
+                .containsExactly(true, false);
+    }
+
+    @Test
     @DisplayName("D-265: un guía de aprendiz viaja con la etiqueta de la base, GUIA_APRENDIZ")
     void elGuiaViajaConSuEtiqueta() throws Exception {
         when(listTraineesUseCase.listar(any())).thenReturn(new ListTraineesUseCase.PaginaTrainees(

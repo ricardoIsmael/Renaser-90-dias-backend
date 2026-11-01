@@ -34,9 +34,17 @@ public interface ListTraineesUseCase {
      * @param rol          {@code null} = todas las cuentas; si viene, solo las de ese rol (E-605).
      * @param formacion    {@code null} = «Todas» (el valor por defecto del filtro «Formación» de Administración, spec 022); si viene, solo las
      *                     personas de esa formación: los aprendices que la cursan y el personal que la tiene asignada.
+     * @param soloActivas  {@code true} = solo las cuentas ACTIVAS: sin las solicitudes que esperan aprobación (creadas como INACTIVAS) ni las
+     *                     suspendidas. Es lo que pide «Asignar a varias personas» (Fichas, spec 026: quien ya está dentro). {@code false} = todas (D-138).
      */
     record ListTraineesCommand(UserId actorId, int page, int size, String busqueda, boolean soloSinGrupo,
-                               UserRole rol, Formacion formacion) {
+                               UserRole rol, Formacion formacion, boolean soloActivas) {
+
+        /** Sin filtro de estado: todas las cuentas, que es lo que ve «Personas» (D-138). */
+        public ListTraineesCommand(UserId actorId, int page, int size, String busqueda, boolean soloSinGrupo,
+                                   UserRole rol, Formacion formacion) {
+            this(actorId, page, size, busqueda, soloSinGrupo, rol, formacion, false);
+        }
 
         /** Sin filtro de formación (firma anterior a la spec 022): todas las formaciones, que es lo que ve Administración. */
         public ListTraineesCommand(UserId actorId, int page, int size, String busqueda, boolean soloSinGrupo, UserRole rol) {

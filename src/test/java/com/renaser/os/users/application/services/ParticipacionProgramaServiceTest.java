@@ -264,9 +264,9 @@ class ParticipacionProgramaServiceTest {
         UserId actorId = UserId.of(UUID.randomUUID());
         when(loadUserPort.byId(actorId)).thenReturn(Optional.of(usuario(actorId, UserRole.ADMIN, UserStatus.ACTIVE)));
         when(consultarResumenParticipacionPort.listarAprendices(0, 20, null, false, null,
-                com.renaser.os.shared.domain.AlcanceDeFormacion.todas())).thenReturn(java.util.List.of());
+                com.renaser.os.shared.domain.AlcanceDeFormacion.todas(), false)).thenReturn(java.util.List.of());
         when(consultarResumenParticipacionPort.contarAprendices(null, false, null,
-                com.renaser.os.shared.domain.AlcanceDeFormacion.todas())).thenReturn(0L);
+                com.renaser.os.shared.domain.AlcanceDeFormacion.todas(), false)).thenReturn(0L);
 
         var pagina = service.listar(new ListTraineesCommand(actorId, 0, 20));
 

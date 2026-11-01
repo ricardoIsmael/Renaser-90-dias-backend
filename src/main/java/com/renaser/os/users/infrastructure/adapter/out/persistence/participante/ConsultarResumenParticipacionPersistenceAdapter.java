@@ -148,6 +148,7 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
                    OR pp.formacion IN (?5)
                    OR EXISTS (SELECT 1 FROM renaser.formaciones_personal fp
                               WHERE fp.usuario_id = u.id AND fp.formacion IN (?5)))
+              AND (?6 = FALSE OR u.estado = 'ACTIVO')
             """;
 
     /**
@@ -211,7 +212,7 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
                       FROM renaser.formaciones_personal fp WHERE fp.usuario_id = u.id) AS formaciones_del_personal
             """ + FILTRO_PADRON + """
             ORDER BY u.creado_en DESC, u.id
-            LIMIT ?6 OFFSET ?7
+            LIMIT ?7 OFFSET ?8
             """;
 
     private static final String QUERY_CONTAR_APRENDICES = "SELECT COUNT(*) " + FILTRO_PADRON;
@@ -335,27 +336,30 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
     @Override
     @SuppressWarnings("unchecked")
     public List<ResumenTraineeAdmin> listarAprendices(int offset, int limit, String busqueda,
-                                                       boolean soloSinGrupo, UserRole rol, AlcanceDeFormacion alcance) {
+                                                       boolean soloSinGrupo, UserRole rol, AlcanceDeFormacion alcance,
+                                                       boolean soloActivas) {
         List<Object[]> filas = entityManager.createNativeQuery(QUERY_LISTAR_APRENDICES)
                 .setParameter(1, normalizar(busqueda))
                 .setParameter(2, soloSinGrupo)
                 .setParameter(3, rol == null ? null : aClave(rol))
                 .setParameter(4, alcance.esTodas())
                 .setParameter(5, FiltroDeFormacionSql.codigos(alcance))
-                .setParameter(6, limit)
-                .setParameter(7, offset)
+                .setParameter(6, soloActivas)
+                .setParameter(7, limit)
+                .setParameter(8, offset)
                 .getResultList();
         return filas.stream().map(this::aResumenTraineeAdmin).collect(Collectors.toList());
     }
 
     @Override
-    public long contarAprendices(String busqueda, boolean soloSinGrupo, UserRole rol, AlcanceDeFormacion alcance) {
+    public long contarAprendices(String busqueda, boolean soloSinGrupo, UserRole rol, AlcanceDeFormacion alcance, boolean soloActivas) {
         Number total = (Number) entityManager.createNativeQuery(QUERY_CONTAR_APRENDICES)
                 .setParameter(1, normalizar(busqueda))
                 .setParameter(2, soloSinGrupo)
                 .setParameter(3, rol == null ? null : aClave(rol))
                 .setParameter(4, alcance.esTodas())
                 .setParameter(5, FiltroDeFormacionSql.codigos(alcance))
+                .setParameter(6, soloActivas)
                 .getSingleResult();
         return total.longValue();
     }

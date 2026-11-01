@@ -65,15 +65,17 @@ public class TraineeAdminController {
                                        @RequestParam(required = false) String q,
                                        @RequestParam(defaultValue = "false") boolean withoutGroup,
                                        @RequestParam(required = false) UserRole role,
-                                       @RequestParam(required = false) String formation) {
+                                       @RequestParam(required = false) String formation,
+                                       @RequestParam(defaultValue = "false") boolean activeOnly) {
         // q y withoutGroup se resuelven en la BASE, no sobre la pagina: buscar sobre los veinte
         // ya descargados esconde al que esta mas atras (SDD 003, ARF-02 / V28).
         // withoutGroup=true sigue devolviendo SOLO aprendices sin celula (D-138): es la cola de
         // "a quien hay que ubicar", y el staff no se ubica en ningun grupo.
         // role (E-605): opcional; «Equipo y roles» pide role=TRAINEE para su sección de aprendices. Sin él, todos.
         // formation (spec 022): el filtro «Formación» de Administración; vacío = «Todas».
+        // activeOnly: solo las cuentas ACTIVAS, sin las solicitudes que esperan aprobación (E2E de las formaciones, J2-1: «Asignar a varias personas»).
         Formacion formacion = formation == null || formation.isBlank() ? null : Formacion.desde(formation);
-        var pagina = listTraineesUseCase.listar(new ListTraineesCommand(actor, page, size, q, withoutGroup, role, formacion));
+        var pagina = listTraineesUseCase.listar(new ListTraineesCommand(actor, page, size, q, withoutGroup, role, formacion, activeOnly));
         return TraineePageResponse.from(pagina);
     }
 

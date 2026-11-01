@@ -275,13 +275,13 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
         // Administración y Alquimista ven las tres formaciones; el filtro «Formación» solo acota (spec 022, FR-024).
         AlcanceDeFormacion alcance = AlcanceDeFormacion.todas().acotadoA(command.formacion());
         var contenido = consultarResumenParticipacionPort.listarAprendices(command.page() * command.size(),
-                        command.size(), command.busqueda(), command.soloSinGrupo(), command.rol(), alcance).stream()
+                        command.size(), command.busqueda(), command.soloSinGrupo(), command.rol(), alcance, command.soloActivas()).stream()
                 .map(resumen -> resumen.conBorradoProgramado(plazoDeGracia))
                 .toList();
         // El total se cuenta CON los mismos filtros: si contara el padron entero, la pantalla
         // diria "1 de 340" y el paginador ofreceria paginas que no existen.
         long total = consultarResumenParticipacionPort.contarAprendices(command.busqueda(), command.soloSinGrupo(),
-                command.rol(), alcance);
+                command.rol(), alcance, command.soloActivas());
         return new PaginaTrainees(contenido, total, command.page(), command.size());
     }
 
