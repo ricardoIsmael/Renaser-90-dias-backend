@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.NoSuchElementException;
+import java.util.Optional;
 
 @Service
 public class EstadoOnboardingService implements ObtenerEstadoOnboardingUseCase, AvanzarEstadoUseCase,
@@ -39,8 +40,18 @@ public class EstadoOnboardingService implements ObtenerEstadoOnboardingUseCase, 
     @Transactional
     public EstadoOnboarding obtener(UserId usuarioId) {
         requireActorActivo(usuarioId);
-        return loadEstadoPort.deUsuario(usuarioId)
-                .orElseGet(() -> saveEstadoPort.guardar(EstadoOnboarding.iniciar(usuarioId, clock)));
+        Optional<EstadoOnboarding> existente = loadEstadoPort.deUsuario(usuarioId);
+        if (existente.isEmpty()) {
+            return saveEstadoPort.guardar(EstadoOnboarding.iniciar(usuarioId, clock));
+        }
+        return existente.filter(estado -> estado.iniciadoEn() == null).map(this::conElInicioRegistrado)
+                .orElseGet(existente::get);
+    }
+
+    /** La fila nació porque Administración le asignó la ficha (spec 026): con esta primera lectura la persona ya empezó. */
+    private EstadoOnboarding conElInicioRegistrado(EstadoOnboarding estado) {
+        estado.registrarInicio(clock);
+        return saveEstadoPort.guardar(estado);
     }
 
     @Override
