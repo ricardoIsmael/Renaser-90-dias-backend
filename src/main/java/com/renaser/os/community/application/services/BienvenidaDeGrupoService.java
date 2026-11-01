@@ -61,13 +61,13 @@ class BienvenidaDeGrupoService implements BienvenidaDeGrupo {
         return marcaPort.marcar(asignacionId, instante);
     }
 
-    /** El mentor vigente, si el grupo además está dentro de su periodo (lo decide {@code acompanaVigente}). */
+    /** El mentor vigente, si el grupo además está dentro de su periodo (lo decide {@code grupoOperativo}). */
     private Optional<UserId> mentorQueFirma(List<AsignacionCelula> vigentes, UUID grupoId, Instant instante) {
         return vigentes.stream()
                 .filter(a -> a.funcion() == FuncionAcompanamiento.MENTOR)
                 .map(AsignacionCelula::usuarioId)
                 .findFirst()
-                .filter(mentor -> acompanamientoFinder.acompanaVigente(mentor, grupoId, instante));
+                .filter(mentor -> acompanamientoFinder.grupoOperativo(grupoId, instante));
     }
 
     private List<Pendiente> aprendicesSinBienvenida(List<AsignacionCelula> vigentes) {
