@@ -20,7 +20,7 @@ public class RocaMaestraFijaException extends IllegalStateException {
     /** Codigo estable para que un cliente distinga este 409 de cualquier otro sin leer el texto. */
     public static final String CODIGO = "ROCA_MAESTRA_FIJA";
 
-    private static final String MENSAJE = "Tu objetivo de 90 días ya quedó fijo y no se cambia. "
+    private static final String MENSAJE = "Tu objetivo ya quedó fijo y no se cambia. "
             + "Lo que sí puedes ajustar son tus objetivos semanales y tus acciones diarias.";
 
     public RocaMaestraFijaException() {

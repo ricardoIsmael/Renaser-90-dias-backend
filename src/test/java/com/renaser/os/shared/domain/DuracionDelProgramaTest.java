@@ -19,6 +19,15 @@ class DuracionDelProgramaTest {
     }
 
     @Test
+    @DisplayName("El objetivo grande se nombra con el plazo del programa de la persona: 90 días o 1 año")
+    void plazoDelObjetivo() {
+        assertThat(DuracionDelPrograma.plazoDelObjetivo(90)).isEqualTo("90 días");
+        assertThat(DuracionDelPrograma.plazoDelObjetivo(365)).isEqualTo("1 año");
+        assertThat(DuracionDelPrograma.plazoDelObjetivo(120)).isEqualTo("120 días");
+        assertThat(DuracionDelPrograma.plazoDelObjetivo(0)).as("sin dato, el de siempre").isEqualTo("90 días");
+    }
+
+    @Test
     @DisplayName("Con 90 días el día no cambia; con 365 se lleva a la escala de 90 sin pasarse de 90")
     void enEscalaBase() {
         assertThat(DuracionDelPrograma.enEscalaBase(37, 90)).isEqualTo(37);

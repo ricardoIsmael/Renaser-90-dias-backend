@@ -40,7 +40,20 @@ public final class DuracionDelPrograma {
     }
 
     /**
-     * Cómo se dice la duración: «1 año», «2 años», «3 meses» o «90 días». Los meses y los años son los del dueño (3 meses = 90 días,
+     * Con qué plazo se nombra el objetivo grande de la persona (decisión del dueño, 2026-10-31): «objetivo de 90 días», «objetivo de 1 año» según la duración
+     * de SU programa. 365 días (o un múltiplo) se dicen en años; todo lo demás, en días. «3 meses» (el Diplomado de 90 días) no se puede saber solo por la
+     * duración —la Escuela dura lo mismo—: quien conoce la formación lo dice aparte.
+     */
+    public static String plazoDelObjetivo(int dias) {
+        if (dias > 0 && dias % MAXIMA == 0) {
+            int anios = dias / MAXIMA;
+            return anios == 1 ? "1 año" : anios + " años";
+        }
+        return (dias > 0 ? dias : POR_DEFECTO) + " días";
+    }
+
+    /**
+     * Cómo se dice la duración: «1 año", «2 años», «3 meses» o «90 días». Los meses y los años son los del dueño (3 meses = 90 días,
      * 1 año = 365); otro valor se dice en días.
      */
     public static String etiqueta(int dias) {
