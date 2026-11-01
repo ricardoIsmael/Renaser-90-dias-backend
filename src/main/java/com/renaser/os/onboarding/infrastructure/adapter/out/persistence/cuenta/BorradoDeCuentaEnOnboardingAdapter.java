@@ -14,7 +14,8 @@ import java.util.Set;
 /**
  * Lo que {@code onboarding} borra o anonimiza de una persona cuando su cuenta se borra para siempre
  * (D-243): sus respuestas a todos los flujos (Ficha Inicial, Caja Renaser y los demás), sus grabaciones
- * de la V90 y sus medias, su estado y sus etapas completadas, y su mapa de acciones y protocolos.
+ * de la V90 y sus medias, su estado y sus etapas completadas, su cronograma de pagos (spec 032) y su mapa de acciones y protocolos.
+ * Donde la persona es quien marcó una cuota de OTRO ({@code estado_cambiado_por}), la cuota es del otro y pierde el autor.
  *
  * <p><b>La Caja Renaser (V82) no tiene tablas propias</b>: sus datos de envío son respuestas del flujo
  * {@code caja_renaser}, cada paso es una fila de {@code etapas_onboarding_completadas} con
@@ -36,6 +37,8 @@ class BorradoDeCuentaEnOnboardingAdapter implements BorradoDeDatosDeCuenta {
             "DELETE FROM renaser.medias_onboarding WHERE usuario_id = :id",
             "DELETE FROM renaser.etapas_onboarding_completadas WHERE usuario_id = :id",
             "UPDATE renaser.etapas_onboarding_completadas SET marcada_por = NULL WHERE marcada_por = :id",
+            "DELETE FROM renaser.cuotas_de_pago WHERE usuario_id = :id",
+            "UPDATE renaser.cuotas_de_pago SET estado_cambiado_por = NULL WHERE estado_cambiado_por = :id",
             "DELETE FROM renaser.estado_onboarding WHERE usuario_id = :id",
             "DELETE FROM renaser.dias_accion_mapa WHERE accion_mapa_id IN "
                     + "(SELECT id FROM renaser.acciones_mapa WHERE usuario_id = :id)",

@@ -1,5 +1,7 @@
 package com.renaser.os.onboarding.domain.model.estado;
 
+import com.renaser.os.onboarding.domain.model.pagos.Moneda;
+import com.renaser.os.onboarding.domain.model.pagos.PagoDeLaPersona;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import lombok.AccessLevel;
@@ -45,13 +47,26 @@ public final class EstadoOnboarding {
     private UserId fichaAsignadaPor;
     private Instant fichaAsignadaEn;
     private Integer fichaVersion;
+    /** Lo que tiene anotado de su pago (spec 032): modalidad, moneda y confirmación del cronograma. Las cuotas son filas aparte. */
+    private PagoDeLaPersona pago;
 
     /** Primera vez que el aprendiz abre el onboarding: fila nueva, todo vacio salvo timestamps. */
     public static EstadoOnboarding iniciar(UserId usuarioId, Clock clock) {
         Instant ahora = clock.now();
         return new EstadoOnboarding(requireUsuarioId(usuarioId), null, null, null, null,
                 null, null, null, null, ahora, ahora, false, null, ahora, ahora,
-                TipoDeFicha.ESTANDAR, null, null, null);
+                TipoDeFicha.ESTANDAR, null, null, null, PagoDeLaPersona.sinAnotar());
+    }
+
+    /**
+     * Fila que nace porque Administración le anotó su pago a alguien que todavía no abrió su onboarding (spec 032): la persona aún no empezó, así que
+     * {@code iniciadoEn} queda vacío hasta que lo abra ({@link #registrarInicio}). Con la ficha estándar, que es la de siempre.
+     */
+    public static EstadoOnboarding sinEmpezar(UserId usuarioId, Clock clock) {
+        Instant ahora = clock.now();
+        return new EstadoOnboarding(requireUsuarioId(usuarioId), null, null, null, null,
+                null, null, null, null, null, null, false, null, ahora, ahora,
+                TipoDeFicha.ESTANDAR, null, null, null, PagoDeLaPersona.sinAnotar());
     }
 
     /**
@@ -62,7 +77,7 @@ public final class EstadoOnboarding {
         Instant ahora = clock.now();
         return new EstadoOnboarding(requireUsuarioId(usuarioId), null, null, null, null,
                 null, null, null, null, null, null, false, null, ahora, ahora,
-                TipoDeFicha.CON_DIAGNOSTICO, quien, ahora, null);
+                TipoDeFicha.CON_DIAGNOSTICO, quien, ahora, null, PagoDeLaPersona.sinAnotar());
     }
 
     /** Solo para el adaptador de persistencia: reconstruye una fila ya existente. */
@@ -73,11 +88,11 @@ public final class EstadoOnboarding {
                                               Instant ultimaActividadEn, boolean completado, Instant completadoEn,
                                               Instant creadoEn, Instant actualizadoEn, TipoDeFicha ficha,
                                               UserId fichaAsignadaPor, Instant fichaAsignadaEn,
-                                              Integer fichaVersion) {
+                                              Integer fichaVersion, PagoDeLaPersona pago) {
         return new EstadoOnboarding(usuarioId, flujoActual, seccionActual, pasoActual, progresoFlujo,
                 terminosAceptadosEn, pactoAceptadoEn, pactoFirmadoEn, rocasSyncAceptadoEn, iniciadoEn,
                 ultimaActividadEn, completado, completadoEn, creadoEn, actualizadoEn, ficha, fichaAsignadaPor,
-                fichaAsignadaEn, fichaVersion);
+                fichaAsignadaEn, fichaVersion, pago);
     }
 
     /** La persona abre su onboarding por primera vez: si la fila nació por una asignación, ahora sí empezó. */
@@ -138,6 +153,27 @@ public final class EstadoOnboarding {
         }
         this.fichaVersion = version;
         this.actualizadoEn = clock.now();
+    }
+
+    /**
+     * Anota que la persona pagó completo (spec 032). Quita lo que hubiera de un cronograma: las cuotas las borra el servicio, que es quien sabe si hay alguna pagada.
+     */
+    public void anotarSinCronograma(Clock clock) {
+        this.pago = PagoDeLaPersona.sinCronograma();
+        this.actualizadoEn = clock.now();
+    }
+
+    /** Anota que la persona paga en cuotas, en esa moneda. Parte sin confirmar: la confirmación anterior, si la hubo, era de otro cronograma. */
+    public void anotarConCronograma(Moneda moneda, Clock clock) {
+        this.pago = PagoDeLaPersona.conCronograma(moneda);
+        this.actualizadoEn = clock.now();
+    }
+
+    /** La persona confirma su cronograma: queda con su nombre, la hora y la huella de lo que confirmó (ver {@link PagoDeLaPersona#confirmado}). */
+    public void confirmarCronograma(String nombre, String huella, Clock clock) {
+        Instant ahora = clock.now();
+        this.pago = pago.confirmado(nombre, huella, ahora);
+        this.actualizadoEn = ahora;
     }
 
     /**

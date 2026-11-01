@@ -37,11 +37,11 @@ class EstadoOnboardingPersistenceAdapter implements LoadEstadoOnboardingPort, Sa
     public ResumenEstadosOnboarding contarResumen(Set<UserId> sinContar) {
         if (sinContar.isEmpty()) {
             // Un NOT IN vacío no es portable entre versiones de Hibernate: sin nada que restar, las de siempre.
-            return new ResumenEstadosOnboarding(repository.count(), repository.countByCompletadoTrue(),
+            return new ResumenEstadosOnboarding(repository.countByIniciadoEnIsNotNull(), repository.countByCompletadoTrue(),
                     repository.countByPactoFirmadoEnIsNotNull());
         }
         List<UUID> ids = sinContar.stream().map(UserId::value).toList();
-        return new ResumenEstadosOnboarding(repository.countByUsuarioIdNotIn(ids),
+        return new ResumenEstadosOnboarding(repository.countByIniciadoEnIsNotNullAndUsuarioIdNotIn(ids),
                 repository.countByCompletadoTrueAndUsuarioIdNotIn(ids),
                 repository.countByPactoFirmadoEnIsNotNullAndUsuarioIdNotIn(ids));
     }

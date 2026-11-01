@@ -94,6 +94,8 @@ final class EntradasDelCatalogo {
                 // Faltaban (E-620): sin ellos la consola no mostraba su interruptor y un rol personalizado de esa base no
                 // la podía marcar.
                 normal("caja", "Caja Renaser", "Caja Renaser", "La Caja Renaser del aprendiz y su gestión.", EnumSet.of(TRAINEE, MENTOR, TRAINEE_GUIDE, ADMIN, IT_SUPPORT), SALTA),
+                // Spec 032 (D-307): «Mi ingreso» de la persona y los pagos de su ficha. Soporte TI no la ve (no opera pagos).
+                normal("pagos", "Pagos", "Cronograma de pagos", "«Mi ingreso» de la persona (su cronograma y sus recordatorios) y los pagos de su ficha en Administración.", EnumSet.of(TRAINEE, MENTOR, TRAINEE_GUIDE, MENTOR_LEAD, ADMIN, ALCHEMIST), NO_APLICA),
                 normal("emergencia", "Cuenta", "Botón de emergencia", "Pedir ayuda por una emergencia y atenderla.", EnumSet.of(TRAINEE, ADMIN, ALCHEMIST, IT_SUPPORT), NO_APLICA),
                 raiz("cuenta.eliminar", "Cuenta", "Eliminar mi cuenta", "Eliminar la cuenta propia.", TODOS, NO_APLICA),
                 normal("perfil", "Cuenta", "Perfil", "Editar el perfil y la foto.", TODOS, NO_APLICA),
