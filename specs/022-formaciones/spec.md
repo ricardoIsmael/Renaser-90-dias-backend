@@ -394,12 +394,12 @@ configurable por Administración.
 
 1. **Las tres formaciones son filas fijas de un catálogo** (`formaciones`), con clave natural `codigo` (`ESCUELA`, `DIPLOMADO`, `CERTIFICACION`). Sus opciones de duración son una
    columna (`duraciones_dias`), no otra tabla. El resto del modelo se resuelve con columnas en tablas que ya existen: `participantes_programa.formacion` y `.duracion_dias`,
-   `celulas.formacion` y `usuarios.formacion_activa`. Lo único nuevo además del catálogo es la relación N:M `formaciones_personal` y el historial `participaciones_anteriores`
+   `celulas.formacion` (la formación activa del personal es la columna `activa` de `formaciones_personal`, con un índice único parcial: una activa por persona, sin columna nueva en `usuarios`). Lo único nuevo además del catálogo es la relación N:M `formaciones_personal` y el historial `participaciones_anteriores`
    (Participación anterior de la spec): ninguna columna existente puede guardar «varias» ni «lo que fue».
 2. **Un único punto para saber la formación de una persona y para filtrar**: `users.api.AlcanceDeFormacionFinder` (qué formaciones puede ver quien actúa y cuál es la de una
    persona) + `shared.domain.AlcanceDeFormacion` (valor) + `shared.infrastructure.persistence.FiltroDeFormacionSql` (el predicado SQL). Las specs 023 y 024 solo lo aplican a
    sus consultas.
-3. **La formación activa del personal la guarda el servidor** (`usuarios.formacion_activa`); la app no manda la formación en cada pedido. Es una preferencia de uso, no un
+3. **La formación activa del personal la guarda el servidor** (`formaciones_personal.activa`); la app no manda la formación en cada pedido. Es una preferencia de uso, no un
    permiso: el servidor la valida contra las asignaciones y, si ya no vale, cae a otra asignada. Administración, Alquimista y Soporte TI no tienen formación activa: su alcance
    es «todas» y filtran con el parámetro `formacion` de cada lista.
 4. **Pedir algo de otra formación responde 404** (`ObjetoDeOtraFormacionException`), igual que algo inexistente.
