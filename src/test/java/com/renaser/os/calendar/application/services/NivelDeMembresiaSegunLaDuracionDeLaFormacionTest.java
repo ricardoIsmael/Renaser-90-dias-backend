@@ -42,7 +42,8 @@ class NivelDeMembresiaSegunLaDuracionDeLaFormacionTest {
     private ConsultarPertenenciaAGrupoPort pertenencia;
 
     private AccesoEventoService acceso() {
-        return new AccesoEventoService(progresoPort, nivelPort, cursoPort, (usuario, tipo) -> true, pertenencia);
+        return new AccesoEventoService(progresoPort, nivelPort, cursoPort, (usuario, tipo) -> true, pertenencia,
+                new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
     }
 
     private static ProgresoParticipanteCalendar aprendiz(int dia, int duracionDias) {
