@@ -420,7 +420,12 @@ el nombre nuevo en el chat y en Equipo y roles.
 
 ## Catálogo inicial de funcionalidades
 
-Claves propuestas (el nombre técnico definitivo sale del plan). **Roles**: T aprendiz, G guía, M mentor, L líder, A
+Claves propuestas (el nombre técnico definitivo sale del plan).
+
+> **Sumado 2026-10-31 (spec 034, D-299).** El catálogo suma `radar.fichas` («Código Renaser en las fichas», hija de `radar`, área «Programa»): el interruptor que
+> decide si el mentor, la guía y el líder ven el Código Renaser en las fichas. Es la primera clave que **nace apagada para ciertos roles** (`apagadaPorDefectoPara`
+> = M, G y L; sin fila rige eso) y que **se esconde** (`seEsconde`: apagada es «no disponible», 404, y no el aviso de mantenimiento). Administración y Alquimista lo
+> cambian con `GET/PUT /api/v1/admin/codigo-renaser-en-fichas`; Soporte TI, desde su consola o por ese endpoint. **Roles**: T aprendiz, G guía, M mentor, L líder, A
 admin, X alquimista. «Proceso» = qué hacen sus crons/oyentes al apagarse.
 
 | Clave | Qué apaga | Roles | App (principal) | Servidor (principal) | Proceso |
