@@ -21,7 +21,7 @@ class CatalogoDeFuncionalidadesTest {
             "habitos.ajustes", "clase_diaria", "muro", "muro.publicar", "muro.comentarios", "muro.reacciones", "chat",
             "chat.grupos", "chat.global", "chat.soporte", "chat.directos", "chat.audio", "chat.fotos", "eventos",
             "eventos.gestion", "eventos.asistencia", "cursos", "ranking", "ranking.podio_semanal", "semaforo", "ia",
-            "ia.chat", "ia.voz", "ia.propuestas", "ia.analisis", "evidencias", "radar.fichas", "caja", "emergencia", "cuenta.eliminar",
+            "ia.chat", "ia.voz", "ia.propuestas", "ia.analisis", "evidencias", "radar.fichas", "caja", "pagos", "emergencia", "cuenta.eliminar",
             "notificaciones", "mentor.mi_grupo", "lider", "lider.cumplimiento", "tickets", "admin", "admin.solicitudes", "admin.equipo",
             "admin.grupos", "admin.personas", "admin.habitos", "admin.bienvenida", "admin.fases", "perfil");
 
