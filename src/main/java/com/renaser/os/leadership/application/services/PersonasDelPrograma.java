@@ -8,6 +8,7 @@ import com.renaser.os.leadership.application.ports.in.ConsultarPersonasDelProgra
 import com.renaser.os.leadership.application.services.PersonasDelGrupo.Miembro;
 import com.renaser.os.leadership.domain.model.cumplimiento.BusquedaPorNombre;
 import com.renaser.os.leadership.domain.model.cumplimiento.GrupoDeLaPersona;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import com.renaser.os.users.api.CuentasDePruebaFinder;
@@ -86,11 +87,28 @@ class PersonasDelPrograma {
         return new PaginaDePersonas(armar(deLaPagina, ahora), pagina, tamano, total);
     }
 
+    /**
+     * Todos los alumnos que se muestran dentro del alcance, cada uno con el grupo con que se lo mira (spec 029). Todo en lote: el padrón, las cuentas de
+     * prueba y los grupos se leen una vez, nunca persona por persona. El grupo principal de cada una no se consulta (sería una lectura por persona): si está en
+     * dos grupos, cae en el mismo que la lista de {@link #listar} salvo cuando el principal es el otro.
+     */
+    List<Alumno> alumnos(AlcanceDeFormacion alcance, Instant ahora) {
+        List<UserSummary> padron = padron(alcance);
+        Set<UserId> ids = new HashSet<>();
+        padron.forEach(perfil -> ids.add(perfil.id()));
+        Map<UserId, List<GrupoDeLaPersona>> grupos = gruposDe(ids, ahora);
+        return padron.stream().map(perfil -> new Alumno(perfil,
+                GrupoDeLaPersona.elegir(grupos.getOrDefault(perfil.id(), List.of()), null).orElse(null))).toList();
+    }
+
     /** Aprendices activos, que estén en el programa y no sean de prueba. */
     private List<UserSummary> padron(UserId actor) {
         // Spec 022: el padrón es el de la formación de quien mira (el líder con varias, la activa); Administración ve todas.
-        Set<UserId> enElPrograma = new HashSet<>(formaciones.dentroDelAlcance(participaciones.participantesInscritosActivos(),
-                formaciones.de(actor)));
+        return padron(formaciones.de(actor));
+    }
+
+    private List<UserSummary> padron(AlcanceDeFormacion alcance) {
+        Set<UserId> enElPrograma = new HashSet<>(formaciones.dentroDelAlcance(participaciones.participantesInscritosActivos(), alcance));
         List<UserSummary> candidatos = usuarios.aprendicesActivos().stream()
                 .filter(perfil -> perfil.role() == UserRole.TRAINEE && enElPrograma.contains(perfil.id()))
                 .toList();
@@ -148,6 +166,10 @@ class PersonasDelPrograma {
 
     private boolean seMuestra(UserSummary perfil) {
         return perfil.role() == UserRole.TRAINEE && perfil.status().allowsAccess() && !pruebas.esDePrueba(perfil.id());
+    }
+
+    /** Un alumno que se muestra y el grupo con que se lo mira; {@code grupo} es null si no está en ninguno (spec 029). */
+    record Alumno(UserSummary perfil, GrupoDeLaPersona grupo) {
     }
 
     private static NoSuchElementException noEncontrada() {
