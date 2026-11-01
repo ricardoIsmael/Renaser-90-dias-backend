@@ -80,8 +80,7 @@ class AnalisisDelLiderIT {
                     + "VALUES (?, 56, DATE '2026-08-17', TIMESTAMPTZ '2026-08-16 12:00:00+00', 'America/Lima')", id);
         }
         analisisListo(ANA, "ESCUELA");
-        constanciasInicial = 0;
-        constanciasInicial = constancias();
+        constanciasInicial = constanciasEnLaBase();
     }
 
     @AfterEach
@@ -121,9 +120,12 @@ class AnalisisDelLiderIT {
     /** `consultas_de_ficha` es append-only y otras pruebas usan los mismos ids: se cuenta lo que SUMÓ esta prueba, no lo que hay. */
     private int constanciasInicial;
 
+    private int constanciasEnLaBase() {
+        return jdbc.queryForObject("SELECT count(*) FROM renaser.consultas_de_ficha WHERE persona_id IN (?, ?)", Integer.class, ANA, AJENA);
+    }
+
     private int constancias() {
-        return jdbc.queryForObject("SELECT count(*) FROM renaser.consultas_de_ficha WHERE persona_id IN (?, ?)", Integer.class, ANA, AJENA)
-                - constanciasInicial;
+        return constanciasEnLaBase() - constanciasInicial;
     }
 
     private java.util.Map<String, Object> ultimaConstanciaDe(UUID persona) {
