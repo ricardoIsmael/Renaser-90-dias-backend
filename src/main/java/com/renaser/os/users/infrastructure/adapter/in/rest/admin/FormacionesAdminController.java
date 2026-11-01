@@ -68,7 +68,7 @@ public class FormacionesAdminController {
     @PutMapping("/formaciones/{codigo}")
     public FormacionResponse configurar(@PathVariable String codigo, @ActorAutenticado UserId actor,
                                         @RequestBody @Valid ConfigurarRequest request) {
-        return FormacionResponse.from(configurar.configurar(new ConfigurarFormacionCommand(actor, Formacion.deLaRuta(codigo),
+        return FormacionResponse.from(configurar.configurar(new ConfigurarFormacionCommand(actor, Formacion.desde(codigo),
                 request.nombre(), request.descripcion(), request.activa(), request.duracionesDias(), request.version())));
     }
 

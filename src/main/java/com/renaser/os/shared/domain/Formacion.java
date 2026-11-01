@@ -27,8 +27,8 @@ public enum Formacion {
     }
 
     /**
-     * Para el código que viaja en la RUTA de un recurso (`/admin/formaciones/{codigo}`): una formación que no existe es un recurso que no existe (404),
-     * no una entrada mal formada. En un parámetro de consulta o en un cuerpo se sigue usando {@link #desde(String)} (400).
+     * Para el detalle de UNA formación (`GET /admin/formaciones/{codigo}`, contrato 022): una formación que no existe es un recurso que no existe (404),
+     * no una entrada mal formada. Los demás códigos (consulta, cuerpo y las escrituras sobre la ruta) siguen usando {@link #desde(String)} (400).
      *
      * @throws java.util.NoSuchElementException si el código no es de una formación (404)
      */

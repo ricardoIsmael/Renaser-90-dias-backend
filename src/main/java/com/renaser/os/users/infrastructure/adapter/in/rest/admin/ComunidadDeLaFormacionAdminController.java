@@ -39,7 +39,7 @@ public class ComunidadDeLaFormacionAdminController {
     @PutMapping("/{codigo}/comunidad/{tipo}")
     public TiposPrendidosResponse fijar(@PathVariable String codigo, @PathVariable String tipo, @ActorAutenticado UserId actor,
                                         @RequestBody @Valid FijarRequest request) {
-        var prendidos = configurar.fijar(new FijarTipoCommand(actor, Formacion.deLaRuta(codigo), TipoDeComunidad.desde(tipo),
+        var prendidos = configurar.fijar(new FijarTipoCommand(actor, Formacion.desde(codigo), TipoDeComunidad.desde(tipo),
                 request.prendido()));
         return new TiposPrendidosResponse(prendidos.stream().map(TipoDeComunidad::codigo).sorted().toList());
     }

@@ -73,9 +73,9 @@ class CentroDeFormacionesControllerTest {
     }
 
     @Test
-    @DisplayName("una formación que no existe es 400 y no llega al caso de uso")
+    @DisplayName("una formación que no existe es 404 (contrato 022: el recurso del detalle no existe) y no llega al caso de uso")
     void unaFormacionQueNoExiste() throws Exception {
-        mockMvc.perform(get("/api/v1/admin/formaciones/MAESTRIA").header("X-Actor-Id", actor)).andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/admin/formaciones/MAESTRIA").header("X-Actor-Id", actor)).andExpect(status().isNotFound());
 
         verifyNoInteractions(centro);
     }
