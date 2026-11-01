@@ -116,4 +116,22 @@ class RocaMensualPersistenceAdapterTest {
         assertThat(adapter.deMaestraYMes(maestraTrabajo, 3)).isPresent();
         assertThat(adapter.deMaestraYMes(maestraTrabajo, 1)).isEmpty();
     }
+
+    /** V156 (spec 026): el programa de 365 dias tiene 12 meses; el 13 no existe. */
+    @Test
+    void laBaseGuardaHastaElMesDoceYNoElTrece() {
+        adapter.guardar(tramo(maestraTrabajo, 12, null));
+        entityManager.flush();
+        assertThat(adapter.deMaestraYMes(maestraTrabajo, 12)).isPresent();
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> {
+            entityManager.createNativeQuery("""
+                            INSERT INTO renaser.rocas_mensuales (id, roca_maestra_id, numero_mes, titulo)
+                            VALUES (:id, :maestra, 13, 'de mas')
+                            """)
+                    .setParameter("id", UUID.randomUUID())
+                    .setParameter("maestra", maestraTrabajo.value())
+                    .executeUpdate();
+        }).hasMessageContaining("numero_mes");
+    }
 }

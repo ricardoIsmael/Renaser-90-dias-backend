@@ -53,4 +53,13 @@ public class EstadoOnboardingJpaEntity {
     private Instant creadoEn;
 
     private Instant actualizadoEn;
+
+    /** {@code ESTANDAR} o {@code CON_DIAGNOSTICO} (V143, spec 026). */
+    private String ficha;
+
+    private UUID fichaAsignadaPor;
+
+    private Instant fichaAsignadaEn;
+
+    private Integer fichaVersion;
 }

@@ -208,14 +208,14 @@ class RocaMensualControllerTest {
         verifyNoInteractions(definirUseCase);
     }
 
-    /** El programa tiene tres meses. Un mes 4 en la ruta es un 400, no una fila imposible. */
+    /** El programa mas largo tiene doce meses. Un mes 13 en la ruta es un 400, no una fila imposible (el tope de cada persona lo pone el servicio). */
     @Test
-    @DisplayName("un mes fuera de 1..3 es 400")
+    @DisplayName("un mes fuera de 1..12 es 400")
     void mesFueraDeRangoEsRechazado() throws Exception {
-        mockMvc.perform(put("/api/v1/rocks/monthly/TRABAJO/4")
+        mockMvc.perform(put("/api/v1/rocks/monthly/TRABAJO/13")
                         .session(sesion)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"titulo\":\"Un cuarto mes que no existe\"}"))
+                        .content("{\"titulo\":\"Un mes trece que no existe\"}"))
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(definirUseCase);

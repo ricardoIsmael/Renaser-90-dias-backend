@@ -21,17 +21,17 @@ final class TextoDeAjustesDeRocas {
 
     /**
      * Las fechas que acepta {@code rocks} ({@code FechasPlanificables}): la semana es de lunes a domingo y
-     * la ultima (la 13) termina el dia 90, que puede no ser domingo (D-203). Un solo texto para los dos
+     * la ultima (la 13 en un programa de 90 dias, la 53 en el de un ano) termina el ultimo dia del programa, que puede no ser domingo (D-203). Un solo texto para los dos
      * rechazos que lo dicen, para que no se desincronicen.
      *
      * <p><b>Corregido 2026-09-27 (D-203).</b> D-192 habia cambiado el del dia que ya paso a "desde manana
      * hasta el ultimo dia de esta semana de programa". Y el domingo se puede el lunes que viene (E-340).
      */
     static final String FECHAS_QUE_SE_PUEDEN_AGREGAR = "desde manana hasta el domingo de esta semana (si hoy es "
-            + "domingo, el lunes; en la ultima semana del programa, hasta el dia 90)";
+            + "domingo, el lunes; en la ultima semana del programa, hasta el ultimo dia del programa)";
 
-    /** "siguiente" pedida en la semana 13: no hay semana 14 (D-203, E-320). */
-    static final String SIN_SEMANA_SIGUIENTE = "Esta es la ultima semana del programa (la 13): no hay una semana "
+    /** "siguiente" pedida en la ultima semana del programa: no hay una mas (D-203, E-320). */
+    static final String SIN_SEMANA_SIGUIENTE = "Esta es la ultima semana del programa: no hay una semana "
             + "siguiente para cambiar. Se puede corregir el objetivo de esta semana.";
 
     private TextoDeAjustesDeRocas() {

@@ -2,13 +2,13 @@ package com.renaser.os.rocks.application.services;
 
 import com.renaser.os.rocks.application.ports.in.rocamaestra.ConsultarRocasMaestrasUseCase;
 import com.renaser.os.rocks.application.ports.in.rocamaestra.DefinirRocaMaestraUseCase;
-import com.renaser.os.rocks.application.ports.out.medicion.ConsultarEstadoDelMapaPort;
+import com.renaser.os.rocks.application.ports.out.medicion.ConsultarObjetivosDelDiagnosticoPort;
 import com.renaser.os.rocks.application.ports.out.participante.ConsultarProgresoParticipanteRocksPort;
 import com.renaser.os.rocks.application.ports.out.participante.ConsultarProgresoParticipanteRocksPort.ProgresoParticipanteRocks;
 import com.renaser.os.rocks.application.ports.out.participante.ConsultarProgresoParticipanteRocksPort.RolParticipante;
 import com.renaser.os.rocks.application.ports.out.rocamaestra.GuardarRocaMaestraPort;
 import com.renaser.os.rocks.application.ports.out.rocamaestra.LoadRocaMaestraPort;
-import com.renaser.os.rocks.domain.model.rocamaestra.MapaPendienteException;
+import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
 import com.renaser.os.rocks.domain.model.rocamaestra.MetaCuantitativa;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestra;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestraId;
@@ -18,7 +18,6 @@ import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -33,95 +32,86 @@ public class RocaMaestraService implements ConsultarRocasMaestrasUseCase, Defini
     private final LoadRocaMaestraPort loadRocaMaestraPort;
     private final GuardarRocaMaestraPort guardarRocaMaestraPort;
     private final ConsultarProgresoParticipanteRocksPort progresoPort;
-    private final ConsultarEstadoDelMapaPort estadoDelMapaPort;
+    private final ConsultarObjetivosDelDiagnosticoPort diagnosticoPort;
     private final Clock clock;
     private final IdGenerator idGenerator;
-    private final boolean exigirMapaActivo;
 
     public RocaMaestraService(LoadRocaMaestraPort loadRocaMaestraPort,
                                GuardarRocaMaestraPort guardarRocaMaestraPort,
                                ConsultarProgresoParticipanteRocksPort progresoPort,
-                               ConsultarEstadoDelMapaPort estadoDelMapaPort, Clock clock, IdGenerator idGenerator,
-                               @Value("${renaser.rocks.exigir-mapa-activo:false}") boolean exigirMapaActivo) {
+                               ConsultarObjetivosDelDiagnosticoPort diagnosticoPort, Clock clock, IdGenerator idGenerator) {
         this.loadRocaMaestraPort = loadRocaMaestraPort;
         this.guardarRocaMaestraPort = guardarRocaMaestraPort;
         this.progresoPort = progresoPort;
-        this.estadoDelMapaPort = estadoDelMapaPort;
+        this.diagnosticoPort = diagnosticoPort;
         this.clock = clock;
         this.idGenerator = idGenerator;
-        this.exigirMapaActivo = exigirMapaActivo;
     }
 
     @Override
     public List<RocaMaestra> misRocasMaestras(UserId actorId) {
         requireProgreso(actorId);
-        return loadRocaMaestraPort.deParticipante(actorId);
+        return conLasDelDiagnostico(actorId);
     }
 
     /**
-     * Define el objetivo del eje; que pasa si ya estaba depende del Mapa de la persona (D-284).
+     * Define el objetivo del eje, o lo confirma, o registra su avance. Sin Mapa que decida nada (spec 026, D-303):
      *
      * <ul>
-     *   <li><b>Mapa activo:</b> D-234. Por eje hay una sola Roca Maestra
-     *       ({@code UNIQUE (participante_id, eje)}): si no existe se crea, y si existe decide
-     *       {@link RocaMaestra#recibirDefinicion} — la misma definicion se acepta (idempotente), otro avance
-     *       se registra, y cualquier cambio del objetivo, la meta, la unidad o el punto de partida se
-     *       rechaza con {@code RocaMaestraFijaException} (409).
-     *   <li><b>Mapa sin activar, escribiendolo el Mapa</b> ({@code desdeElMapa}): reemplaza a la roca que
-     *       la persona hubiera definido antes desde Plan (issue #20).
-     *   <li><b>Mapa sin activar, fuera del Mapa:</b> con {@code exigirMapaActivo} apagado se trata como el
-     *       caso anterior (compatibilidad con el APK que no manda {@code desdeElMapa}); encendido, solo se
-     *       acepta repetir la misma definicion y lo demas es {@code MapaPendienteException} (409).
+     *   <li><b>No existe:</b> se crea (queda fijo desde ya, como siempre desde D-234).
+     *   <li><b>Nació del diagnóstico y está por confirmar:</b> la persona lo puede reescribir UNA vez; el pedido lo reemplaza (o lo deja igual) y lo
+     *       confirma ({@link RocaMaestra#recibirDefinicion}).
+     *   <li><b>Existe y está confirmado:</b> la misma definición es idempotente, otro avance se registra y cualquier cambio del objetivo, la meta, la unidad
+     *       o el punto de partida lanza {@code RocaMaestraFijaException} (409).
      * </ul>
      *
-     * > <b>Corregido 2026-09-30 (D-234).</b> Decia: "Define el objetivo del eje o corrige el que
-     * > ya estaba [...] si existe se redefine". El dueno decidio que la Roca Maestra no se cambia.
-     * > <b>Corregido 2026-10-27 (D-284).</b> Decia que quedaba fija "una vez definida": es una vez que el
-     * > Mapa esta activo; antes, el Mapa manda.
+     * Antes de decidir se le materializan los objetivos que nacieron de su diagnóstico, si los hay: así «por confirmar» vale aunque Plan todavía no los haya
+     * leído. {@code desdeElMapa} se acepta y se ignora (la app anterior lo manda).
+     *
+     * > <b>Corregido 2026-09-30 (D-234).</b> Decia: "Define el objetivo del eje o corrige el que ya estaba [...] si existe se redefine". El dueno decidio que
+     * > la Roca Maestra no se cambia.
+     * > <b>Corregido 2026-10-27 (D-284)</b> y <b>2026-10-31 (D-303):</b> la fijeza dependio un tiempo del Mapa activo y de {@code ROCKS_EXIGIR_MAPA_ACTIVO};
+     * > el Mapa se retiro y nadie queda bloqueado por no haberlo hecho.
      */
     @Override
     public RocaMaestra definir(DefinirRocaMaestraCommand command) {
         requireProgreso(command.actorId());
+        conLasDelDiagnostico(command.actorId());
         MetaCuantitativa meta = command.tieneMeta()
                 ? new MetaCuantitativa(command.meta(), command.avance(), command.unidad(), command.lineaBase())
                 : null;
         Optional<RocaMaestra> existente = loadRocaMaestraPort.deParticipanteYEje(command.actorId(), command.eje());
-
-        return guardarRocaMaestraPort.guardar(decidir(command, meta, existente));
-    }
-
-    private RocaMaestra decidir(DefinirRocaMaestraCommand command, MetaCuantitativa meta,
-                                 Optional<RocaMaestra> existente) {
-        if (estadoDelMapaPort.activo(command.actorId())) {
-            return conElObjetivoFijo(command, meta, existente);
-        }
-        if (command.desdeElMapa() || !exigirMapaActivo) {
-            return conLaDelMapa(command, meta, existente);
-        }
-        return existente.filter(roca -> roca.esLaMismaDefinicion(command.objetivo(), meta))
-                .map(roca -> roca.recibirDefinicion(command.objetivo(), meta, clock.now()))
-                .orElseThrow(MapaPendienteException::new);
-    }
-
-    /** D-234: el Mapa esta activo y el objetivo ya no se cambia; solo se crea la primera vez o se anota el avance. */
-    private RocaMaestra conElObjetivoFijo(DefinirRocaMaestraCommand command, MetaCuantitativa meta,
-                                           Optional<RocaMaestra> existente) {
-        return existente.map(roca -> roca.recibirDefinicion(command.objetivo(), meta, clock.now()))
+        RocaMaestra decidida = existente.map(roca -> roca.recibirDefinicion(command.objetivo(), meta, clock.now()))
                 .orElseGet(() -> nueva(command, meta));
+        return guardarRocaMaestraPort.guardar(decidida);
     }
 
-    /** D-284: el Mapa todavia no esta activo, asi que lo que el Mapa escribe reemplaza a lo que hubiera. */
-    private RocaMaestra conLaDelMapa(DefinirRocaMaestraCommand command, MetaCuantitativa meta,
-                                      Optional<RocaMaestra> existente) {
-        return existente.map(roca -> reemplazar(roca, command, meta)).orElseGet(() -> nueva(command, meta));
-    }
-
-    private RocaMaestra reemplazar(RocaMaestra roca, DefinirRocaMaestraCommand command, MetaCuantitativa meta) {
-        if (!roca.esLaMismaDefinicion(command.objetivo(), meta)) {
-            LOG.info("[rocks] El objetivo de 90 dias del eje {} de {} se reemplaza: el Mapa todavia no esta "
-                    + "activo (desdeElMapa={}).", command.eje(), command.actorId(), command.desdeElMapa());
+    /**
+     * Las rocas de la persona, creando las que nacieron de su diagnóstico y todavía no existen (por confirmar). Si dos pedidos lo hacen a la vez gana uno;
+     * al otro lo frena el {@code UNIQUE (participante_id, eje)} y vuelve a leer lo que dejó el primero.
+     */
+    private List<RocaMaestra> conLasDelDiagnostico(UserId actorId) {
+        List<RocaMaestra> actuales = loadRocaMaestraPort.deParticipante(actorId);
+        if (actuales.size() >= EjeObjetivo.values().length) {
+            return actuales;
         }
-        return roca.reemplazarPorLaDelMapa(command.objetivo(), meta, clock.now());
+        boolean creo = false;
+        for (var objetivo : diagnosticoPort.de(actorId)) {
+            if (actuales.stream().noneMatch(roca -> roca.eje() == objetivo.eje())) {
+                creo |= crearDelDiagnostico(actorId, objetivo.eje(), objetivo.texto());
+            }
+        }
+        return creo ? loadRocaMaestraPort.deParticipante(actorId) : actuales;
+    }
+
+    private boolean crearDelDiagnostico(UserId actorId, EjeObjetivo eje, String texto) {
+        try {
+            guardarRocaMaestraPort.guardar(RocaMaestra.delDiagnostico(RocaMaestraId.of(idGenerator.newId()), actorId, eje, texto, clock.now()));
+            return true;
+        } catch (RuntimeException e) {
+            LOG.info("[rocks] El objetivo del eje {} de {} ya lo habia creado otro pedido: {}", eje, actorId, e.getClass().getSimpleName());
+            return true;
+        }
     }
 
     private RocaMaestra nueva(DefinirRocaMaestraCommand command, MetaCuantitativa meta) {

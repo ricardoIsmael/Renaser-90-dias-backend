@@ -28,8 +28,8 @@ public interface EdicionDeObjetivoSemanalPort {
     int MARGEN_TARDIO_HORAS = (int) VentanaPlanificacionSemanal.MARGEN_TARDIO.toHours();
 
     /**
-     * La ultima semana del programa ({@code SemanaPrograma.ULTIMA_SEMANA}): quien propone "la semana
-     * siguiente" no puede pedir una 14 (D-203, E-320).
+     * La ultima semana de un programa de 90 dias ({@code SemanaPrograma.ULTIMA_SEMANA}): quien propone "la semana
+     * siguiente" no puede pedir una 14 (D-203, E-320). La de cada persona es {@code RocasDelAprendizFinder#ultimaSemanaDelPrograma} (13 o 53, spec 026).
      */
     int ULTIMA_SEMANA = SemanaPrograma.ULTIMA_SEMANA;
 

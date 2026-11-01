@@ -4,6 +4,7 @@ import com.renaser.os.onboarding.application.ports.in.cuestionario.ObtenerCuesti
 import com.renaser.os.onboarding.application.ports.out.actor.ConsultarActorPort;
 import com.renaser.os.onboarding.application.ports.out.cuestionario.LoadCuestionarioPort;
 import com.renaser.os.onboarding.domain.model.cuestionario.Pregunta;
+import com.renaser.os.onboarding.domain.model.diagnostico.Diagnostico;
 import com.renaser.os.onboarding.domain.model.cuestionario.Seccion;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -26,6 +27,9 @@ public class CuestionarioService implements ObtenerCuestionarioUseCase {
     @Override
     public Cuestionario obtener(ObtenerCuestionarioQuery query) {
         requireActorActivo(query.actorId());
+        if (Diagnostico.FLUJO.equals(query.flujo())) {
+            return new Cuestionario(query.flujo(), List.of());
+        }
         List<Seccion> secciones = loadCuestionarioPort.seccionesDeFlujo(query.flujo());
         List<SeccionConPreguntas> resultado = secciones.stream().map(this::conPreguntas).toList();
         return new Cuestionario(query.flujo(), resultado);

@@ -16,6 +16,7 @@ public enum TipoPreguntaOnboardingJpa {
     AUDIO,
     FIRMA,
     CASILLA,
+    CUADRICULA,
     FECHA,
     ARCHIVO
 }

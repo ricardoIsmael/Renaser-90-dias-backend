@@ -41,12 +41,28 @@ public final class EstadoOnboarding {
     private Instant completadoEn;
     private final Instant creadoEn;
     private Instant actualizadoEn;
+    private TipoDeFicha ficha;
+    private UserId fichaAsignadaPor;
+    private Instant fichaAsignadaEn;
+    private Integer fichaVersion;
 
     /** Primera vez que el aprendiz abre el onboarding: fila nueva, todo vacio salvo timestamps. */
     public static EstadoOnboarding iniciar(UserId usuarioId, Clock clock) {
         Instant ahora = clock.now();
         return new EstadoOnboarding(requireUsuarioId(usuarioId), null, null, null, null,
-                null, null, null, null, ahora, ahora, false, null, ahora, ahora);
+                null, null, null, null, ahora, ahora, false, null, ahora, ahora,
+                TipoDeFicha.ESTANDAR, null, null, null);
+    }
+
+    /**
+     * Fila que nace porque Administración le asignó el diagnóstico a alguien que todavía no abrió su onboarding (spec
+     * 026): la persona aún no empezó, así que {@code iniciadoEn} queda vacío hasta que lo abra ({@link #registrarInicio}).
+     */
+    public static EstadoOnboarding conDiagnostico(UserId usuarioId, UserId quien, Clock clock) {
+        Instant ahora = clock.now();
+        return new EstadoOnboarding(requireUsuarioId(usuarioId), null, null, null, null,
+                null, null, null, null, null, null, false, null, ahora, ahora,
+                TipoDeFicha.CON_DIAGNOSTICO, quien, ahora, null);
     }
 
     /** Solo para el adaptador de persistencia: reconstruye una fila ya existente. */
@@ -55,10 +71,73 @@ public final class EstadoOnboarding {
                                               Instant pactoAceptadoEn, Instant pactoFirmadoEn,
                                               Instant rocasSyncAceptadoEn, Instant iniciadoEn,
                                               Instant ultimaActividadEn, boolean completado, Instant completadoEn,
-                                              Instant creadoEn, Instant actualizadoEn) {
+                                              Instant creadoEn, Instant actualizadoEn, TipoDeFicha ficha,
+                                              UserId fichaAsignadaPor, Instant fichaAsignadaEn,
+                                              Integer fichaVersion) {
         return new EstadoOnboarding(usuarioId, flujoActual, seccionActual, pasoActual, progresoFlujo,
                 terminosAceptadosEn, pactoAceptadoEn, pactoFirmadoEn, rocasSyncAceptadoEn, iniciadoEn,
-                ultimaActividadEn, completado, completadoEn, creadoEn, actualizadoEn);
+                ultimaActividadEn, completado, completadoEn, creadoEn, actualizadoEn, ficha, fichaAsignadaPor,
+                fichaAsignadaEn, fichaVersion);
+    }
+
+    /** La persona abre su onboarding por primera vez: si la fila nació por una asignación, ahora sí empezó. */
+    public void registrarInicio(Clock clock) {
+        if (this.iniciadoEn != null) {
+            return;
+        }
+        Instant ahora = clock.now();
+        this.iniciadoEn = ahora;
+        this.ultimaActividadEn = ahora;
+        this.actualizadoEn = ahora;
+    }
+
+    /** {@code true} si le toca el diagnóstico en lugar de la ficha estándar. */
+    public boolean conDiagnostico() {
+        return ficha == TipoDeFicha.CON_DIAGNOSTICO;
+    }
+
+    /**
+     * Le asigna el diagnóstico (spec 026). Idempotente: si ya lo tenía no cambia quién ni cuándo se lo asignó. Que la
+     * persona no haya terminado ya su diagnóstico lo decide el servicio, que es quien sabe de las etapas.
+     */
+    public void asignarDiagnostico(UserId quien, Clock clock) {
+        if (conDiagnostico()) {
+            return;
+        }
+        Instant ahora = clock.now();
+        this.ficha = TipoDeFicha.CON_DIAGNOSTICO;
+        this.fichaAsignadaPor = quien;
+        this.fichaAsignadaEn = ahora;
+        this.fichaVersion = null;
+        this.actualizadoEn = ahora;
+    }
+
+    /**
+     * Vuelve a la ficha estándar. Solo se puede si la persona todavía no respondió nada del diagnóstico: con respuestas
+     * se mezclarían las de dos fichas (025-Q5, 026-9). El servicio es quien sabe si respondió.
+     */
+    public void quitarDiagnostico(boolean yaRespondio, Clock clock) {
+        if (!conDiagnostico()) {
+            return;
+        }
+        if (yaRespondio) {
+            throw new IllegalStateException(
+                    "Esta persona ya respondió preguntas del diagnóstico: no se puede volver a la ficha estándar");
+        }
+        this.ficha = TipoDeFicha.ESTANDAR;
+        this.fichaAsignadaPor = null;
+        this.fichaAsignadaEn = null;
+        this.fichaVersion = null;
+        this.actualizadoEn = clock.now();
+    }
+
+    /** Fija la versión publicada con la que empezó el diagnóstico; después ya no cambia (FR-031). */
+    public void fijarVersionDelDiagnostico(int version, Clock clock) {
+        if (fichaVersion != null) {
+            return;
+        }
+        this.fichaVersion = version;
+        this.actualizadoEn = clock.now();
     }
 
     /**

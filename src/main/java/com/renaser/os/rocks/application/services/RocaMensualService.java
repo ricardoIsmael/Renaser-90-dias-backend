@@ -10,6 +10,7 @@ import com.renaser.os.rocks.application.ports.out.rocamensual.GuardarRocaMensual
 import com.renaser.os.rocks.application.ports.out.rocamensual.LoadRocaMensualPort;
 import com.renaser.os.rocks.domain.model.rocamaestra.MetaCuantitativa;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestra;
+import com.renaser.os.rocks.domain.model.rocamensual.MesPrograma;
 import com.renaser.os.rocks.domain.model.rocamensual.RocaMensual;
 import com.renaser.os.rocks.domain.model.rocamensual.RocaMensualId;
 import com.renaser.os.shared.domain.Clock;
@@ -57,7 +58,10 @@ public class RocaMensualService implements ConsultarRocasMensualesUseCase, Defin
      */
     @Override
     public RocaMensual definir(DefinirRocaMensualCommand command) {
-        requireProgreso(command.actorId());
+        ProgresoParticipanteRocks progreso = requireProgreso(command.actorId());
+        if (!MesPrograma.esValido(command.numeroMes(), progreso.duracionDias())) {
+            throw new IllegalArgumentException("El mes tiene que estar entre 1 y " + progreso.meses() + " (los meses de tu programa)");
+        }
         RocaMaestra maestra = requireMaestraDelEje(command);
         MetaCuantitativa meta = command.tieneMeta()
                 ? new MetaCuantitativa(command.meta(), command.avance(), command.unidad(), null)

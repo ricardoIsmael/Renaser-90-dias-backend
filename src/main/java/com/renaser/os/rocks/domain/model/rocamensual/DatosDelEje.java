@@ -53,10 +53,16 @@ public record DatosDelEje(BigDecimal lineaBase, BigDecimal valorHoy, BigDecimal 
         return new DatosDelEje(base, base, meta, Magnitud.ESCALA, null, UNIDAD_ESCALA);
     }
 
-    /** El objetivo de ese mes, visto desde el mes en curso. Ver {@link CalculadoraObjetivoMensual}. */
+    /** El objetivo de ese mes, visto desde el mes en curso, en un programa de 90 dias. Ver {@link CalculadoraObjetivoMensual}. */
     public ObjetivoDelMes calcular(int numeroMes, int mesActual) {
         return CalculadoraObjetivoMensual.calcular(numeroMes, mesActual, lineaBase, valorHoy, meta, magnitud,
                 topePorMes);
+    }
+
+    /** Igual, en un programa de {@code mesesDelPrograma} meses (3 o 12). */
+    public ObjetivoDelMes calcular(int numeroMes, int mesActual, int mesesDelPrograma) {
+        return CalculadoraObjetivoMensual.calcular(numeroMes, mesActual, lineaBase, valorHoy, meta, magnitud,
+                topePorMes, mesesDelPrograma);
     }
 
     /**

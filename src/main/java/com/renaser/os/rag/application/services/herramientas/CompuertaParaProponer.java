@@ -1,6 +1,5 @@
 package com.renaser.os.rag.application.services.herramientas;
 
-import com.renaser.os.rag.application.ports.out.mapa.ConsultarMapaDeRenacimientoPort;
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarCompuertaDeRocasPort;
 import com.renaser.os.shared.domain.UserId;
 import org.slf4j.Logger;
@@ -18,7 +17,7 @@ import java.util.stream.Collectors;
  * {@code rocks} la va a rechazar al confirmar, no se crea la tarjeta y el modelo recibe por que, para que
  * se lo diga a la persona y le ofrezca el camino real.
  *
- * <p>Caso real (2026-10-02): SER le propuso a una persona sin su Mapa de Renacimiento un plan para sus
+ * <p>Caso real (2026-10-02): SER le propuso a una persona sin objetivos de 90 dias un plan para sus
  * objetivos; al tocar "Confirmar" fallo con {@code ROCKS_LOCKED}. La regla no se copia aca: la responde
  * {@code rocks.api.CompuertaDeRocasFinder}.
  *
@@ -32,28 +31,20 @@ public class CompuertaParaProponer {
 
     static final String SIN_PROPUESTA = "No se creó ninguna propuesta: ";
 
-    static final String SIN_MAPA = SIN_PROPUESTA + "todavía no completó su Mapa de Renacimiento (el del día 7), "
-            + "y sin él no se pueden planificar objetivos: de ahí salen sus tres objetivos de 90 días. Invítala a "
-            + "completarlo en la pestaña Plan, botón \"Ir al Mapa de Renacimiento\". No le propongas otro plan ni "
-            + "otra acción de objetivos hasta que lo complete (sus hábitos sí se pueden ajustar).";
-
-    static final String MAPA_SIN_ACTIVAR = SIN_PROPUESTA + "su Mapa de Renacimiento está respondido, pero sus "
-            + "tres objetivos de 90 días (Rocas Maestras) no quedaron creados, y sin ellos no se pueden planificar "
-            + "objetivos. Díselo con claridad y sugiérele escribir a soporte para que lo revisen. No le propongas "
-            + "otro plan ni otra acción de objetivos (sus hábitos sí se pueden ajustar).";
+    static final String SIN_OBJETIVOS = SIN_PROPUESTA + "todavía no tiene escritos sus tres objetivos de 90 días, y sin ellos no se "
+            + "pueden planificar objetivos. Invítala a escribirlos en la pestaña Plan (o a confirmar los que nacieron de su "
+            + "diagnóstico). No le propongas otro plan ni otra acción de objetivos hasta que los tenga (sus hábitos sí se pueden ajustar).";
 
     private final ConsultarCompuertaDeRocasPort compuertaPort;
-    private final ConsultarMapaDeRenacimientoPort mapaPort;
 
-    public CompuertaParaProponer(ConsultarCompuertaDeRocasPort compuertaPort, ConsultarMapaDeRenacimientoPort mapaPort) {
+    public CompuertaParaProponer(ConsultarCompuertaDeRocasPort compuertaPort) {
         this.compuertaPort = compuertaPort;
-        this.mapaPort = mapaPort;
     }
 
     /** Para el plan de la semana y los cambios a sus objetivos: solo hace falta la llave (las Rocas Maestras). */
     public Optional<String> bloqueoDeObjetivos(UserId actorId) {
         try {
-            return compuertaPort.rocasMaestrasCompletas(actorId) ? Optional.empty() : Optional.of(sinMaestras(actorId));
+            return compuertaPort.rocasMaestrasCompletas(actorId) ? Optional.empty() : Optional.of(SIN_OBJETIVOS);
         } catch (RuntimeException falla) {
             log.info("[rag] la propuesta sale sin consultar la compuerta de rocas: {}", falla.toString());
             return Optional.empty();
@@ -73,16 +64,6 @@ public class CompuertaParaProponer {
         } catch (RuntimeException falla) {
             log.info("[rag] la propuesta sale sin consultar los objetivos semanales: {}", falla.toString());
             return Optional.empty();
-        }
-    }
-
-    /** Sin Mapa, o si no se puede leer, el camino es completarlo; con Mapa, la activacion fallo. */
-    private String sinMaestras(UserId actorId) {
-        try {
-            return mapaPort.de(actorId).tieneMapa() ? MAPA_SIN_ACTIVAR : SIN_MAPA;
-        } catch (RuntimeException falla) {
-            log.info("[rag] sin Rocas Maestras y sin poder leer el Mapa: {}", falla.toString());
-            return SIN_MAPA;
         }
     }
 

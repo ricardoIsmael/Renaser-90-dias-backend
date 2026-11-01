@@ -79,6 +79,7 @@ class AjustesDeRocasHerramientasTest {
     void reglas() {
         when(planificar.ejesValidos()).thenReturn(List.of("CUERPO", "TRABAJO", "RELACIONES"));
         when(editar.ventanaDeEdicion()).thenReturn(VENTANA);
+        when(rocas.ultimaSemanaDelPrograma(APRENDIZ)).thenReturn(13);
         when(rocas.deManana(APRENDIZ)).thenReturn(new RocasDelDia(MANANA, List.of(),
                 new PlanDeManana(true, 2, true, LocalTime.of(18, 0), true)));
     }
@@ -161,7 +162,7 @@ class AjustesDeRocasHerramientasTest {
         assertThat(agregarAccion.ejecutar(APRENDIZ, invocacion(ProponerAgregarAccionHerramienta.NOMBRE,
                 "eje", "CUERPO", "titulo", "Estirar", "fecha", "2026-09-20"))).isEqualTo(ResultadoHerramienta.fallo(
                 "Ese dia ya paso. Se puede agregar desde manana hasta el domingo de esta semana (si hoy es domingo, el "
-                        + "lunes; en la ultima semana del programa, hasta el dia 90)."));
+                        + "lunes; en la ultima semana del programa, hasta el ultimo dia del programa)."));
         assertThat(agregarAccion.ejecutar(APRENDIZ, invocacion(ProponerAgregarAccionHerramienta.NOMBRE,
                 "eje", "NEGOCIO", "titulo", "Vender"))).isInstanceOf(ResultadoHerramienta.Fallo.class);
         assertThat(agregarAccion.ejecutar(APRENDIZ, invocacion(ProponerAgregarAccionHerramienta.NOMBRE,
@@ -282,9 +283,32 @@ class AjustesDeRocasHerramientasTest {
                 ProponerEditarObjetivoSemanalHerramienta.NOMBRE, "eje", "TRABAJO", "titulo", "Vender 3", "semana",
                 "siguiente"));
 
-        assertThat(resultado).isEqualTo(ResultadoHerramienta.fallo("Esta es la ultima semana del programa (la 13): "
+        assertThat(resultado).isEqualTo(ResultadoHerramienta.fallo("Esta es la ultima semana del programa: "
                 + "no hay una semana siguiente para cambiar. Se puede corregir el objetivo de esta semana."));
         verifyNoInteractions(proponer);
+    }
+
+    /** Spec 026: con la duracion de cada persona la ultima semana del Diplomado de 1 ano es la 53, no la 13. */
+    @Test
+    @DisplayName("en el programa de un ano la semana 13 todavia tiene siguiente; la 53 no")
+    void enUnProgramaDeUnAnoLaTreceTieneSiguiente() {
+        when(rocas.ultimaSemanaDelPrograma(APRENDIZ)).thenReturn(53);
+        when(rocas.deLaSemana(APRENDIZ)).thenReturn(new RocasDeLaSemana(13, LocalDate.of(2026, 11, 30),
+                LocalDate.of(2026, 12, 7), List.of(new RocaDeLaSemana("TRABAJO", "Vender 2", null, null, true, false,
+                null))));
+
+        ResultadoHerramienta enLaTrece = editarObjetivo.ejecutar(APRENDIZ, invocacion(
+                ProponerEditarObjetivoSemanalHerramienta.NOMBRE, "eje", "TRABAJO", "titulo", "Vender 3", "semana",
+                "siguiente"));
+        assertThat(enLaTrece).isNotEqualTo(ResultadoHerramienta.fallo(TextoDeAjustesDeRocas.SIN_SEMANA_SIGUIENTE));
+
+        when(rocas.deLaSemana(APRENDIZ)).thenReturn(new RocasDeLaSemana(53, LocalDate.of(2027, 10, 25),
+                LocalDate.of(2027, 10, 31), List.of(new RocaDeLaSemana("TRABAJO", "Vender 2", null, null, true, false,
+                null))));
+        ResultadoHerramienta enLaCincuentaYTres = editarObjetivo.ejecutar(APRENDIZ, invocacion(
+                ProponerEditarObjetivoSemanalHerramienta.NOMBRE, "eje", "TRABAJO", "titulo", "Vender 3", "semana",
+                "siguiente"));
+        assertThat(enLaCincuentaYTres).isEqualTo(ResultadoHerramienta.fallo(TextoDeAjustesDeRocas.SIN_SEMANA_SIGUIENTE));
     }
 
     @Test
@@ -292,7 +316,7 @@ class AjustesDeRocasHerramientasTest {
     void rechazoDeFechaNoPlanificable() {
         assertThat(TextoDeAjustesDeRocas.rechazoDeAccion(AgregarAccionAlPlanPort.Motivo.FECHA_NO_PLANIFICABLE))
                 .isEqualTo("Ese dia ya no se puede planificar: se puede agregar desde manana hasta el domingo de esta "
-                        + "semana (si hoy es domingo, el lunes; en la ultima semana del programa, hasta el dia 90).");
+                        + "semana (si hoy es domingo, el lunes; en la ultima semana del programa, hasta el ultimo dia del programa).");
     }
 
     @Test

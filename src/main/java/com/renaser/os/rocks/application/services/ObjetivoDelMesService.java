@@ -56,29 +56,29 @@ public class ObjetivoDelMesService implements ConsultarObjetivoDelMesUseCase {
     @Transactional(readOnly = true)
     public List<PlanMensualDelEje> misObjetivosMensuales(UserId actorId) {
         ProgresoParticipanteRocks progreso = requireProgreso(actorId);
-        int mesActual = MesPrograma.deDia(progreso.diaPrograma());
         MedicionDelParticipante medicion = medicionPort.deParticipante(actorId);
         Map<String, RocaMensual> editadas = editadasPorMaestraYMes(actorId);
 
         List<PlanMensualDelEje> planes = new ArrayList<>();
         for (RocaMaestra maestra : loadRocaMaestraPort.deParticipante(actorId)) {
-            planes.add(planDelEje(maestra, progreso.diaPrograma(), medicion, editadas));
+            planes.add(planDelEje(maestra, progreso.diaPrograma(), progreso.duracionDias(), medicion, editadas));
         }
         return List.copyOf(planes);
     }
 
-    private PlanMensualDelEje planDelEje(RocaMaestra maestra, int diaPrograma, MedicionDelParticipante medicion,
+    private PlanMensualDelEje planDelEje(RocaMaestra maestra, int diaPrograma, int duracionDias, MedicionDelParticipante medicion,
                                           Map<String, RocaMensual> editadas) {
-        int mesActual = MesPrograma.deDia(diaPrograma);
+        int totalMeses = MesPrograma.mesesDe(duracionDias);
+        int mesActual = MesPrograma.deDia(diaPrograma, duracionDias);
         DatosDelEje datos = datosDe(maestra, medicion);
         List<MesDelPlan> meses = new ArrayList<>();
-        for (int mes = 1; mes <= MesPrograma.MESES; mes++) {
-            meses.add(new MesDelPlan(mes, MesPrograma.ultimoDiaDe(mes), mes == mesActual,
-                    datos.calcular(mes, mesActual), editadas.get(claveDe(maestra, mes))));
+        for (int mes = 1; mes <= totalMeses; mes++) {
+            meses.add(new MesDelPlan(mes, MesPrograma.ultimoDiaDe(mes, duracionDias), mes == mesActual,
+                    datos.calcular(mes, mesActual, totalMeses), editadas.get(claveDe(maestra, mes))));
         }
         /* La semana cuelga del mes EN CURSO: es el unico tramo que la persona esta transitando. */
-        ObjetivoDeLaSemana semana = ObjetivoDeLaSemana.desde(objetivoQueMandaEn(mesActual, datos, meses),
-                datos.valorHoy() != null ? datos.valorHoy() : datos.lineaBase(), diaPrograma, datos.magnitud());
+        ObjetivoDeLaSemana semana = ObjetivoDeLaSemana.desde(objetivoQueMandaEn(mesActual, totalMeses, datos, meses),
+                datos.valorHoy() != null ? datos.valorHoy() : datos.lineaBase(), diaPrograma, datos.magnitud(), duracionDias);
         return new PlanMensualDelEje(maestra.eje(), mesActual, datos.unidad(),
                 maestra.eje() == EjeObjetivo.TRABAJO, List.copyOf(meses), semana);
     }
@@ -99,10 +99,10 @@ public class ObjetivoDelMesService implements ConsultarObjetivoDelMesUseCase {
      * > devuelve {@code null}: es preferible no mostrar tramo semanal a mostrar uno que apunta a un
      * > numero que la persona ya reemplazo.
      */
-    private static ObjetivoDelMes objetivoQueMandaEn(int mesActual, DatosDelEje datos, List<MesDelPlan> meses) {
+    private static ObjetivoDelMes objetivoQueMandaEn(int mesActual, int totalMeses, DatosDelEje datos, List<MesDelPlan> meses) {
         MesDelPlan enCurso = meses.stream().filter(MesDelPlan::enCurso).findFirst().orElse(null);
         if (enCurso == null || !enCurso.fueEditado()) {
-            return datos.calcular(mesActual, mesActual);
+            return datos.calcular(mesActual, mesActual, totalMeses);
         }
         RocaMensual editado = enCurso.editado();
         if (!editado.tieneMeta()) {
@@ -111,7 +111,7 @@ public class ObjetivoDelMesService implements ConsultarObjetivoDelMesUseCase {
                o seguir usando la cifra que la persona acaba de reemplazar. */
             return null;
         }
-        ObjetivoDelMes calculado = datos.calcular(mesActual, mesActual);
+        ObjetivoDelMes calculado = datos.calcular(mesActual, mesActual, totalMeses);
         boolean sube = calculado instanceof ObjetivoDelMes.ConCifra c ? c.sube()
                 : editado.meta().objetivo().compareTo(datos.lineaBase()) > 0;
         return new ObjetivoDelMes.ConCifra(mesActual, datos.magnitud(), editado.meta().objetivo(),
