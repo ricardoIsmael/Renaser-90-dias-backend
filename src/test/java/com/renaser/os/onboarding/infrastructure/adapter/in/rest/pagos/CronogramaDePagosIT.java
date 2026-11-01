@@ -195,7 +195,7 @@ class CronogramaDePagosIT {
     }
 
     @Test
-    @DisplayName("mentor, guía, líder, Soporte TI y aprendiz no ven ni tocan los pagos de nadie (403) y no cambian nada; sin sesión, 401")
+    @DisplayName("mentor, guía, líder, Soporte TI y aprendiz no ven ni tocan los pagos de nadie (403) y no cambian nada; sin sesión, también 403 (como el resto de la API)")
     void soloAdministracionYAlquimista() throws Exception {
         Cuenta ana = cuenta("ADMIN", null);
         Cuenta persona = cuenta("APRENDIZ", "ESCUELA");
@@ -211,8 +211,8 @@ class CronogramaDePagosIT {
             assertThat(pedir("DELETE", ADMIN + persona.id + "/cuotas/" + cuota, intruso.token, null).statusCode()).as("%s quita", rol).isEqualTo(403);
             assertThat(pedir("PUT", ADMIN + persona.id + "/cuotas/" + cuota + "/estado", intruso.token, Map.of("status", "PAID")).statusCode()).as("%s marca", rol).isEqualTo(403);
         }
-        assertThat(pedir("GET", ADMIN + persona.id, null, null).statusCode()).isEqualTo(401);
-        assertThat(pedir("GET", MIO, null, null).statusCode()).isEqualTo(401);
+        assertThat(pedir("GET", ADMIN + persona.id, null, null).statusCode()).as("sin sesión").isEqualTo(403);
+        assertThat(pedir("GET", MIO, null, null).statusCode()).as("sin sesión").isEqualTo(403);
 
         JsonNode igual = ok(pedir("GET", ADMIN + persona.id, ana.token, null));
         assertThat(igual.get("payments").get("installments")).hasSize(2);
