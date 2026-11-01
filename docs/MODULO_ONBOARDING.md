@@ -511,6 +511,11 @@ mismo motor de onboarding (`flujo = 'diagnostico'`).
   `rocks` los materializa «por confirmar» (V146) la primera vez que los pide; la persona los reescribe una vez y quedan fijos.
 * **Lectura:** `onboarding.api.DiagnosticoDeLaPersonaFinder` (`lecturaDe`, `objetivosDe`, `tratoDe`) es lo único que otros módulos usan (rocks, rag,
   mentoring, leadership). Contrato HTTP en `specs/026-ficha-con-diagnostico/contracts/diagnostico-api.md`.
-* **Preguntas abiertas para el dueño:** el texto de la «Declaración de responsabilidad y consentimiento» (el diagnóstico no se publica sin él); si el
-  diagnóstico debe preguntar una meta numérica (hoy los objetivos que nacen de él son cualitativos y no hay cifra del mes); si la lectura del líder debe
-  dejar registro en `consultas_de_ficha`.
+* **La meta medible (2026-11-01, V157):** debajo del objetivo de cada eje el borrador trae tres preguntas opcionales (Relaciones, dos): la meta, la unidad y el
+  punto de partida. Alimentan ocho destinos nuevos (`DestinoDeRespuesta.META_*`, `UNIDAD_*`, `PARTIDA_*`); `ObjetivosDelDiagnostico` junta las partes de cada eje
+  en una `MetaDeclarada` solo si están todas, y `rocks` crea el objetivo con su `MetaCuantitativa` (Relaciones es la escala del 1 al 10, unidad `/10`, enteros).
+  Con ella el plan mensual saca la cifra del mes; sin ella, «sin cifra». Se editan, mueven y quitan desde Administración → Fichas como cualquier otra.
+* **Constancia de las lecturas (2026-11-01, V157):** cuando el mentor o la guía, el líder, Administración o Alquimista abren el diagnóstico de una persona,
+  `DiagnosticoDeLaPersonaFinder.lecturaDe(persona, lector)` publica `DiagnosticoConsultadoEvent` y `leadership` lo anota en `consultas_de_ficha` con
+  `tipo = DIAGNOSTICO`. La propia persona (`lecturaDe(persona)`) y SER no dejan fila. Los tres que leen hacen la lectura en una transacción de escritura.
+* **Pregunta abierta para el dueño:** el texto de la «Declaración de responsabilidad y consentimiento» (el diagnóstico no se publica sin él).
