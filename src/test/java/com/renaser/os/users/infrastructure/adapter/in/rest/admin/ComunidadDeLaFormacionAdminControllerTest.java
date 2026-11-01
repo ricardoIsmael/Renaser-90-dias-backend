@@ -78,9 +78,9 @@ class ComunidadDeLaFormacionAdminControllerTest {
     }
 
     @Test
-    @DisplayName("autorización negativa: un aprendiz, un mentor y un líder reciben 403 y no se cambia nada")
+    @DisplayName("autorización negativa: un aprendiz recibe 403 del interceptor (el mentor y el líder pasan el interceptor y los rechaza el caso de uso: lo prueba ComunidadPorFormacionIT)")
     void otrosRolesNoPuedenConfigurar() throws Exception {
-        for (UserRole rol : List.of(UserRole.TRAINEE, UserRole.MENTOR, UserRole.MENTOR_LEAD)) {
+        for (UserRole rol : List.of(UserRole.TRAINEE)) {
             sesionDe(rol, UserStatus.ACTIVE);
             mockMvc.perform(put("/api/v1/admin/formaciones/ESCUELA/comunidad/SOPORTE")
                             .contentType(MediaType.APPLICATION_JSON).content("{\"prendido\": false}"))

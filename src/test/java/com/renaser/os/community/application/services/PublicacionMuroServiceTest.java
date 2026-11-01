@@ -121,7 +121,7 @@ class PublicacionMuroServiceTest {
         service = new PublicacionMuroService(loadPublicacionPort, savePublicacionPort, eliminarPublicacionPort,
                 loadComentarioPort, reaccionMuroPort, categoriasUseCase, consultarPerfilUsuarioPort,
                 almacenamiento, userSummaryFinder, events, CLOCK, idGenerator,
-                participacionFinder, referenciasDeMediaPort, List.of(referenciasEnElChat), cuentasCerradas, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
+                participacionFinder, referenciasDeMediaPort, List.of(referenciasEnElChat), cuentasCerradas, new com.renaser.os.users.api.AlcanceDeFormacionSoloEscuela());
         // Por defecto nadie mas mira los objetos: cada prueba que necesite lo contrario lo dice.
         lenient().when(referenciasDeMediaPort.referenciadasFueraDe(any(), any())).thenReturn(Set.of());
         lenient().when(referenciasEnElChat.referenciadas(any())).thenReturn(Set.of());
