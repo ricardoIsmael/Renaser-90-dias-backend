@@ -4,6 +4,7 @@ import com.renaser.os.habits.application.ports.out.preferencia.LoadPreferenciaHo
 import com.renaser.os.habits.application.ports.out.preferencia.SavePreferenciaHorarioPort;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.preferencia.AjusteDeAlarma;
+import com.renaser.os.habits.domain.model.preferencia.FechaPropia;
 import com.renaser.os.habits.domain.model.preferencia.HorarioPorFecha;
 import com.renaser.os.habits.domain.model.preferencia.HorarioSemanal;
 import com.renaser.os.habits.domain.model.preferencia.AntelacionesDelRecordatorio;
@@ -91,7 +92,7 @@ class PreferenciaHorarioPersistenceAdapter implements LoadPreferenciaHorarioPort
     /**
      * Las capas, de la mas general a la mas especifica: preferencia general, cambio general ya vigente
      * (D-91), dia de la semana y fecha exacta. {@code conAvisoDelDia = false} deja fuera SOLO el aviso
-     * propio de la capa del dia de la semana (spec 008): lo demas, hora incluida, es igual.
+     * propio de la capa del dia de la semana (spec 008) y de la fecha (spec 028): lo demas, hora incluida, es igual.
      */
     private List<PreferenciaHorario> resolverPorCapas(UserId participanteId, Collection<HabitoId> habitoIds,
                                                       LocalDate fecha, boolean conAvisoDelDia) {
@@ -139,18 +140,47 @@ class PreferenciaHorarioPersistenceAdapter implements LoadPreferenciaHorarioPort
         }
         for (var p : fechasRepository.findByParticipanteIdAndHabitoIdInAndFecha(participanteId.value(), ids, fecha)) {
             HabitoId id = HabitoId.of(p.getHabitoId());
-            // V38: una fila que solo APAGA el dia no trae hora, y no tiene que pisar la que ya
-            // regia. Sin este corte, apagar el jueves le borraria el horario al jueves.
-            if (p.getHoraDisparo() == null) {
+            boolean conHora = p.getHoraDisparo() != null;
+            // Spec 028 (V131): el AVISO de la fecha es otro campo y se resuelve por separado de la hora, igual que el del dia de la
+            // semana. Una fila de solo aviso no pisa la hora de abajo; una fila que hereda el aviso (NULL) no pisa el aviso de abajo.
+            // Un dia APAGADO no avisa. La lista de preferencias lo deja fuera: su aviso es el GENERAL del habito.
+            boolean conAviso = conAvisoDelDia && p.isActivo() && p.getRecordatorioActivo() != null;
+            // V38: una fila que solo APAGA el dia (o que solo trae como suena la alarma) no trae hora ni aviso, y no tiene que pisar
+            // la que ya regia. Sin este corte, apagar el jueves le borraria el horario al jueves.
+            if (!conHora && !conAviso) {
                 continue;
             }
-            Integer minutosDelDia = p.getMinutosRecordatorio() == null ? null : p.getMinutosRecordatorio().intValue();
-            efectivos.put(id, PreferenciaHorario.rehydrate(participanteId, id, p.getHoraDisparo(), p.getHoraLimite(),
-                    p.isRecordatorioActivo(), minutosDelDia,
-                    conjuntoTras(efectivos.get(id), p.isRecordatorioActivo(), minutosDelDia),
-                    alarmaDe(efectivos.get(id)), p.getCreadoEn(), p.getActualizadoEn()));
+            efectivos.put(id, conCapaDeLaFecha(participanteId, efectivos.get(id), p, conHora, conAviso));
         }
         return List.copyOf(efectivos.values());
+    }
+
+    /**
+     * La capa de la FECHA exacta sobre lo que ya regia, campo por campo (spec 028). Una fila con hora reemplaza la hora y el cierre, como
+     * siempre (V37): un cierre nulo es «sin cierre propio». El aviso, si lo trae, es el de la fecha: sus antelaciones (V130) o, en una
+     * fila de antes, su numero de minutos con el conjunto que ya regia si coincide (D-217).
+     */
+    private static PreferenciaHorario conCapaDeLaFecha(UserId participanteId, PreferenciaHorario anterior,
+                                                       HorarioPorFechaJpaEntity fila, boolean conHora, boolean conAviso) {
+        HabitoId id = HabitoId.of(fila.getHabitoId());
+        LocalTime disparo = conHora ? fila.getHoraDisparo() : (anterior != null ? anterior.horaDisparo() : null);
+        LocalTime limite = conHora ? fila.getHoraLimite() : (anterior != null ? anterior.horaLimite() : null);
+        boolean activo = anterior != null && anterior.recordatorioActivo();
+        Integer minutos = anterior != null ? anterior.minutosRecordatorio() : null;
+        List<Integer> conjunto = anterior != null ? anterior.antelacionesRecordatorio() : null;
+        if (conAviso) {
+            activo = fila.getRecordatorioActivo();
+            List<Integer> propias = PreferenciaHorarioPersistenceMapper.aLista(fila.getAntelacionesRecordatorio());
+            if (propias != null && !propias.isEmpty() && activo) {
+                minutos = propias.getFirst();
+                conjunto = propias;
+            } else {
+                minutos = fila.getMinutosRecordatorio() == null ? null : fila.getMinutosRecordatorio().intValue();
+                conjunto = conjuntoTras(anterior, activo, minutos);
+            }
+        }
+        return PreferenciaHorario.rehydrate(participanteId, id, disparo, limite, activo, minutos, conjunto, alarmaDe(anterior),
+                fila.getCreadoEn(), fila.getActualizadoEn());
     }
 
     /** La capa del dia de la semana sobre lo que ya regia, campo por campo (hora y aviso por separado). */
@@ -222,10 +252,95 @@ class PreferenciaHorarioPersistenceAdapter implements LoadPreferenciaHorarioPort
     public void saveParaFecha(HorarioPorFecha horario) {
         var p = horario.preferencia();
         var key = new HorarioPorFechaPk(p.participanteId().value(), p.habitoId().value(), horario.fecha());
-        var creadoEn = fechasRepository.findById(key).map(HorarioPorFechaJpaEntity::getCreadoEn).orElse(p.creadoEn());
-        fechasRepository.saveAndFlush(new HorarioPorFechaJpaEntity(p.participanteId().value(), p.habitoId().value(),
-                horario.fecha(), p.horaDisparo(), horario.activo(), p.horaLimite(), p.recordatorioActivo(),
-                p.minutosRecordatorio() == null ? null : p.minutosRecordatorio().shortValue(), creadoEn, p.actualizadoEn()));
+        var existente = fechasRepository.findById(key);
+        var creadoEn = existente.map(HorarioPorFechaJpaEntity::getCreadoEn).orElse(p.creadoEn());
+        // Esta es la ruta de antes (spec 037): hora y aviso propios, enteros. Lo que la fecha pudiera tener de «Como suena» (V130) no es
+        // suyo: se conserva. Las antelaciones solo viajan con el aviso activo (el CHECK de V130).
+        var fila = new HorarioPorFechaJpaEntity(p.participanteId().value(), p.habitoId().value(), horario.fecha(),
+                p.horaDisparo(), horario.activo(), p.horaLimite(), p.recordatorioActivo(),
+                p.minutosRecordatorio() == null ? null : p.minutosRecordatorio().shortValue(), creadoEn, p.actualizadoEn());
+        if (p.recordatorioActivo()) {
+            fila.setAntelacionesRecordatorio(PreferenciaHorarioPersistenceMapper.aArreglo(p.antelacionesRecordatorio()));
+        }
+        existente.ifPresent(anterior -> {
+            fila.setAlarmaSonido(anterior.getAlarmaSonido());
+            fila.setAlarmaVibracion(anterior.getAlarmaVibracion());
+            fila.setAlarmaVoz(anterior.getAlarmaVoz());
+            fila.setAlarmaRepetir(anterior.getAlarmaRepetir());
+        });
+        fechasRepository.saveAndFlush(fila);
+    }
+
+    @Override
+    public List<FechaPropia> fechasPropiasEntre(UserId participanteId, LocalDate desde, LocalDate hasta) {
+        return fechasRepository.findByParticipanteIdAndFechaBetween(participanteId.value(), desde, hasta).stream()
+                .map(PreferenciaHorarioPersistenceAdapter::aFechaPropia).toList();
+    }
+
+    @Override
+    public List<FechaPropia> fechasPropiasDeUnHabitoEntre(UserId participanteId, HabitoId habitoId, LocalDate desde,
+                                                          LocalDate hasta) {
+        return fechasRepository.findByParticipanteIdAndHabitoIdAndFechaBetween(participanteId.value(), habitoId.value(), desde, hasta)
+                .stream().map(PreferenciaHorarioPersistenceAdapter::aFechaPropia).toList();
+    }
+
+    @Override
+    public void guardarFechasPropias(UserId participanteId, Collection<FechaPropia> filas) {
+        for (FechaPropia f : filas) {
+            var key = new HorarioPorFechaPk(participanteId.value(), f.habitoId().value(), f.fecha());
+            var ahora = clock.now();
+            var creadoEn = fechasRepository.findById(key).map(HorarioPorFechaJpaEntity::getCreadoEn).orElse(ahora);
+            RecordatorioDelDia aviso = f.recordatorio();
+            AjusteDeAlarma alarma = f.alarma();
+            var fila = new HorarioPorFechaJpaEntity(participanteId.value(), f.habitoId().value(), f.fecha(), f.horaDisparo(),
+                    f.activo(), f.horaLimite(), activoDe(aviso),
+                    aviso == null || !aviso.activo() ? null : aviso.minutosMasTemprana().shortValue(), creadoEn, ahora,
+                    antelacionesDe(aviso), alarma == null ? null : alarma.sonido(), alarma == null ? null : alarma.vibracion(),
+                    alarma == null ? null : alarma.voz(), alarma == null ? null : alarma.repetir());
+            fechasRepository.saveAndFlush(fila);
+        }
+    }
+
+    @Override
+    public int borrarFechasPropias(UserId participanteId, Collection<HabitoId> habitoIds, LocalDate desde, LocalDate hasta) {
+        if (habitoIds.isEmpty()) {
+            return fechasRepository.borrarEntre(participanteId.value(), desde, hasta);
+        }
+        int borradas = 0;
+        for (HabitoId habito : habitoIds) {
+            borradas += fechasRepository.borrarDeUnHabitoEntre(participanteId.value(), habito.value(), desde, hasta);
+        }
+        return borradas;
+    }
+
+    /** Una fila de la tabla a lo que la persona decidio para esa fecha (spec 028). Las columnas nuevas en NULL son «hereda». */
+    private static FechaPropia aFechaPropia(HorarioPorFechaJpaEntity fila) {
+        return new FechaPropia(HabitoId.of(fila.getHabitoId()), fila.getFecha(), fila.isActivo(), fila.getHoraDisparo(),
+                fila.getHoraLimite(), recordatorioDe(fila), alarmaDe(fila));
+    }
+
+    /**
+     * {@code null} = la fila hereda el aviso. Una fila de antes de V130 trae un solo numero de minutos; un aviso activo sin ninguno nunca eligio
+     * antelacion y se lee como sin aviso, igual que el aviso general ({@link RecordatorioDelDia#delGeneral}).
+     */
+    private static RecordatorioDelDia recordatorioDe(HorarioPorFechaJpaEntity fila) {
+        if (fila.getRecordatorioActivo() == null) {
+            return null;
+        }
+        if (!fila.getRecordatorioActivo()) {
+            return RecordatorioDelDia.sinAviso();
+        }
+        List<Integer> antelaciones = PreferenciaHorarioPersistenceMapper.aLista(fila.getAntelacionesRecordatorio());
+        if (antelaciones != null && !antelaciones.isEmpty()) {
+            return RecordatorioDelDia.con(antelaciones);
+        }
+        return fila.getMinutosRecordatorio() == null ? RecordatorioDelDia.sinAviso()
+                : RecordatorioDelDia.con(List.of(fila.getMinutosRecordatorio().intValue()));
+    }
+
+    private static AjusteDeAlarma alarmaDe(HorarioPorFechaJpaEntity fila) {
+        return PreferenciaHorarioPersistenceMapper.alarmaDe(fila.getAlarmaSonido(), fila.getAlarmaVibracion(), fila.getAlarmaVoz(),
+                fila.getAlarmaRepetir());
     }
 
     @Override

@@ -40,6 +40,10 @@ public record HabitPreferencesResponse(List<HabitPreferenceItemResponse> habits,
      *
      * <p>{@code alarm} (spec 009, D-283, aditivo): como suena la alarma del hábito, la GENERAL ya resuelta; la
      * de cada día va en su entrada de {@code weekdays}.
+     *
+     * <p>{@code dateOverrides} (spec 028, D-296, aditivo): las fechas del hábito con un cambio «solo esta semana», desde la fecha consultada y
+     * hasta 20 días después, ya resueltas. SIEMPRE presente en este servidor (lista vacía si no hay ninguna): su ausencia le dice a la app
+     * que el servidor es anterior y no ofrece «Solo esta semana».
      */
     public record HabitPreferenceItemResponse(UUID habitId, String title, LocalTime triggerTime, LocalTime limitTime,
                                                boolean customized, boolean reminderEnabled,
@@ -47,14 +51,16 @@ public record HabitPreferencesResponse(List<HabitPreferenceItemResponse> habits,
                                                PendingScheduleChangeResponse pendingChange,
                                                List<Integer> reminderMinutesList,
                                                List<HabitWeekdayResponse> weekdays,
-                                               AlarmCombinationResponse alarm) {
+                                               AlarmCombinationResponse alarm,
+                                               List<HabitDateResponse> dateOverrides) {
 
         static HabitPreferenceItemResponse from(HorarioDeHabito h) {
             return new HabitPreferenceItemResponse(h.habitoId().value(), h.titulo(), h.horaDisparo(), h.horaLimite(),
                     h.personalizado(), h.recordatorioActivo(), h.minutosRecordatorio(),
                     PendingScheduleChangeResponse.from(h.cambioProgramado()), h.antelacionesRecordatorio(),
                     h.diasDeLaSemana().stream().map(HabitWeekdayResponse::from).toList(),
-                    AlarmCombinationResponse.from(h.alarma()));
+                    AlarmCombinationResponse.from(h.alarma()),
+                    h.fechasPropias().stream().map(HabitDateResponse::from).toList());
         }
     }
 

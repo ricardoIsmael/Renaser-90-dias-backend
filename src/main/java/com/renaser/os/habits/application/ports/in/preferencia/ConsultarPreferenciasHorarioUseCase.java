@@ -2,6 +2,7 @@ package com.renaser.os.habits.application.ports.in.preferencia;
 
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.preferencia.CombinacionDeAlarma;
+import com.renaser.os.habits.domain.model.preferencia.PlanDeLaSemana;
 import com.renaser.os.habits.domain.model.preferencia.SemanaDelHabito;
 import com.renaser.os.shared.domain.UserId;
 
@@ -59,7 +60,20 @@ public interface ConsultarPreferenciasHorarioUseCase {
     record HorarioDeHabito(HabitoId habitoId, String titulo, LocalTime horaDisparo, LocalTime horaLimite,
                             boolean personalizado, boolean recordatorioActivo, Integer minutosRecordatorio,
                             CambioProgramado cambioProgramado, List<Integer> antelacionesRecordatorio,
-                            List<SemanaDelHabito.Dia> diasDeLaSemana, CombinacionDeAlarma alarma) {
+                            List<SemanaDelHabito.Dia> diasDeLaSemana, CombinacionDeAlarma alarma,
+                            List<PlanDeLaSemana.DiaDeLaFecha> fechasPropias) {
+
+        /**
+         * Sin las fechas propias: la forma de antes de la spec 028. {@code fechasPropias} (spec 028, D-296) son las fechas con cambio
+         * «solo esta semana» desde la fecha consultada y 20 dias mas, ya resueltas; vacio si no hay ninguna.
+         */
+        public HorarioDeHabito(HabitoId habitoId, String titulo, LocalTime horaDisparo, LocalTime horaLimite,
+                               boolean personalizado, boolean recordatorioActivo, Integer minutosRecordatorio,
+                               CambioProgramado cambioProgramado, List<Integer> antelacionesRecordatorio,
+                               List<SemanaDelHabito.Dia> diasDeLaSemana, CombinacionDeAlarma alarma) {
+            this(habitoId, titulo, horaDisparo, horaLimite, personalizado, recordatorioActivo, minutosRecordatorio,
+                    cambioProgramado, antelacionesRecordatorio, diasDeLaSemana, alarma, List.of());
+        }
 
         /** Sin la alarma: la forma de antes de la spec 009; rige la de hoy. */
         public HorarioDeHabito(HabitoId habitoId, String titulo, LocalTime horaDisparo, LocalTime horaLimite,
