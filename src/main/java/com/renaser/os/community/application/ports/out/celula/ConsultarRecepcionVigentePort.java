@@ -1,6 +1,7 @@
 package com.renaser.os.community.application.ports.out.celula;
 
 import com.renaser.os.community.domain.model.celula.CelulaId;
+import com.renaser.os.shared.domain.Formacion;
 
 import java.time.LocalDate;
 import java.util.Optional;
@@ -18,5 +19,13 @@ public interface ConsultarRecepcionVigentePort {
      * <p>Vacio si no hay ninguno vigente. Eso NO es un error del sistema sino una tarea pendiente
      * del administrador, y quien llama lo trata como tal.
      */
-    Optional<CelulaId> recepcionVigenteEn(LocalDate dia);
+    default Optional<CelulaId> recepcionVigenteEn(LocalDate dia) {
+        return recepcionVigenteEn(dia, Formacion.POR_DEFECTO);
+    }
+
+    /**
+     * Igual, pero SOLO entre los grupos de esa formación (spec 022): cada formación tiene su propio grupo de bienvenida y quien se registra entra al
+     * de la suya, nunca al de otra.
+     */
+    Optional<CelulaId> recepcionVigenteEn(LocalDate dia, Formacion formacion);
 }

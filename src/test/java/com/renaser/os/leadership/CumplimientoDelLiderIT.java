@@ -124,6 +124,7 @@ class CumplimientoDelLiderIT {
     private void usuario(UUID id, String rol, String nombre) {
         jdbc.update("INSERT INTO renaser.usuarios (id, email, nombre_completo, rol) "
                 + "VALUES (?, ?, ?, CAST(? AS renaser.rol_usuario))", id, id + "@renaser.test", nombre, rol);
+        com.renaser.os.FormacionesDePrueba.alPersonalLeAsignaLaEscuela(jdbc, id, rol);
     }
 
     private void programa(UUID id) {

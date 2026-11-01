@@ -6,6 +6,7 @@ import com.renaser.os.community.domain.model.acompanamiento.TipoCelula;
 import com.renaser.os.community.domain.model.celula.PeriodoGrupo;
 import com.renaser.os.community.domain.model.cohorte.CohorteId;
 import com.renaser.os.shared.application.SelfValidating;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -30,7 +31,13 @@ public interface CrearCelulaUseCase {
      */
     record CrearCelulaCommand(@NotNull UserId actorId, @NotBlank String nombre, @NotNull CohorteId cohorteId,
                                String urlVideollamada, LocalDate periodoInicio, LocalDate periodoFin,
-                               TipoCelula tipo, Integer capacidad) {
+                               TipoCelula tipo, Integer capacidad, Formacion formacion) {
+
+        /** Firma de antes de las formaciones (spec 022): el grupo nace en la Escuela. */
+        public CrearCelulaCommand(UserId actorId, String nombre, CohorteId cohorteId, String urlVideollamada,
+                                   LocalDate periodoInicio, LocalDate periodoFin, TipoCelula tipo, Integer capacidad) {
+            this(actorId, nombre, cohorteId, urlVideollamada, periodoInicio, periodoFin, tipo, capacidad, null);
+        }
 
         public CrearCelulaCommand {
             // El ORDEN importa: `validateConstructorArgs` empareja estos valores con los
@@ -38,7 +45,7 @@ public interface CrearCelulaUseCase {
             // — meterlos en el medio corre todos los de atras y las anotaciones terminan validando
             // el campo equivocado.
             SelfValidating.validateConstructorArgs(CrearCelulaCommand.class, actorId, nombre, cohorteId,
-                    urlVideollamada, periodoInicio, periodoFin, tipo, capacidad);
+                    urlVideollamada, periodoInicio, periodoFin, tipo, capacidad, formacion);
             // Nivel 2 (CLAUDE.MD sec. 5.4.3): un periodo a medias o al reves no llega a construir
             // el comando. La regla es UNA sola y vive en el agregado, no duplicada aca.
             Celula.periodoDe(periodoInicio, periodoFin);
@@ -54,6 +61,11 @@ public interface CrearCelulaUseCase {
         public CrearCelulaCommand(UserId actorId, String nombre, CohorteId cohorteId, String urlVideollamada,
                                    LocalDate periodoInicio, LocalDate periodoFin) {
             this(actorId, nombre, cohorteId, urlVideollamada, periodoInicio, periodoFin, null, null);
+        }
+
+        /** {@code null} = la Escuela, que es de lo que era todo grupo antes de las formaciones (spec 022). */
+        public Formacion formacionEfectiva() {
+            return formacion != null ? formacion : Formacion.POR_DEFECTO;
         }
 
         /** {@code null} = REGULAR, que es lo que era todo grupo antes de que el tipo fuera elegible. */
