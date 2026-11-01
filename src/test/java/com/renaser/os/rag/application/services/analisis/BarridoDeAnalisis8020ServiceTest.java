@@ -95,6 +95,26 @@ class BarridoDeAnalisis8020ServiceTest {
     }
 
     @Test
+    @DisplayName("031-8 B: la duración del programa no corta el análisis: con el programa ya terminado, y en un Diplomado de un año, la semana que cierra se genera")
+    void laDuracionDelProgramaNoCortaNada() {
+        LocalDate hoy = LocalDate.of(2026, 10, 26);
+        when(interruptores.analisisPrendido()).thenReturn(true);
+        when(participaciones.participantesInscritosActivos()).thenReturn(List.of(ANA, LUIS));
+        // Ana: programa de 90 días que terminó hace un mes. Luis: Diplomado de un año, todavía en curso. Mismo Día 1.
+        when(programas.deVarios(any())).thenReturn(Map.of(
+                ANA, new ProgramaActivado(ANA, LIMA, DIA_UNO, hoy.minusDays(30), 90),
+                LUIS, new ProgramaActivado(LUIS, LIMA, DIA_UNO, DIA_UNO.plusDays(364), 365)));
+        when(decididos.estadosDe(any(), any())).thenReturn(List.of());
+        PeriodoDelPrograma semana = new PeriodoDelPrograma(Tipo.SEMANA, 10, LocalDate.of(2026, 10, 19), LocalDate.of(2026, 10, 25));
+        when(periodos.cerradosHastaHoy(eq(DIA_UNO), eq(hoy), anyInt())).thenReturn(List.of(semana));
+
+        barrido(LUNES_00_30_EN_LIMA).generarLosQueTocan();
+
+        verify(generar).generar(ANA, TipoDePeriodo.SEMANA, semana.inicio());
+        verify(generar).generar(LUIS, TipoDePeriodo.SEMANA, semana.inicio());
+    }
+
+    @Test
     @DisplayName("genera la semana y el mes que cerraron juntos, cada uno una vez")
     void semanaYMes() {
         elPadron(ANA);
