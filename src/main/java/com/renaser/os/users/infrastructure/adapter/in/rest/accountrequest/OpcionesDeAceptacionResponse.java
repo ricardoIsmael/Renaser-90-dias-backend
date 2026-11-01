@@ -8,8 +8,10 @@ import java.util.List;
 /**
  * Lo que ofrece la hoja «Aceptar» (spec 025): las formaciones que reciben personas nuevas, con sus duraciones y cómo se dicen, y si «Con diagnóstico» se
  * puede ofrecer. Los nombres del servidor mandan: la app no los escribe a mano.
+ *
+ * <p>{@code paymentScheduleAvailable} (spec 032): este servidor sabe anotar el pago al aceptar. Una app nueva contra un servidor anterior no recibe el campo y no ofrece el bloque «Pago».
  */
-public record OpcionesDeAceptacionResponse(List<Formation> formations, boolean diagnosisAvailable) {
+public record OpcionesDeAceptacionResponse(List<Formation> formations, boolean diagnosisAvailable, boolean paymentScheduleAvailable) {
 
     /** @param durationsDays las opciones en días; {@code durationLabels}, cómo se dicen («3 meses», «1 año», «90 días») */
     /** @param termsPublished spec 027: {@code false} = la formación todavía no publicó sus términos y no recibe personas nuevas (la hoja la muestra apagada) */
@@ -24,6 +26,6 @@ public record OpcionesDeAceptacionResponse(List<Formation> formations, boolean d
 
     public static OpcionesDeAceptacionResponse from(OpcionesDeAceptacion opciones) {
         return new OpcionesDeAceptacionResponse(opciones.formaciones().stream()
-                .map(f -> Formation.from(f, !opciones.sinTerminos().contains(f.formacion()))).toList(), opciones.diagnosticoDisponible());
+                .map(f -> Formation.from(f, !opciones.sinTerminos().contains(f.formacion()))).toList(), opciones.diagnosticoDisponible(), true);
     }
 }

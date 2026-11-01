@@ -62,4 +62,17 @@ public class EstadoOnboardingJpaEntity {
     private Instant fichaAsignadaEn;
 
     private Integer fichaVersion;
+
+    /** {@code SIN_CRONOGRAMA}, {@code CON_CRONOGRAMA} o nulo = sin anotar (V158, spec 032). */
+    private String pagoModalidad;
+
+    /** {@code PEN} o {@code USD}; solo con cronograma. */
+    private String pagoMoneda;
+
+    private Instant cronogramaConfirmadoEn;
+
+    private String cronogramaConfirmadoNombre;
+
+    /** La huella de las fechas y montos que confirmó (ver {@code CronogramaDePagos.huella}). */
+    private String cronogramaConfirmadoHuella;
 }

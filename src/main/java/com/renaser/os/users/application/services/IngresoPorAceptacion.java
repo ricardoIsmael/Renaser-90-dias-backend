@@ -5,6 +5,7 @@ import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FichaAlAceptar;
 import com.renaser.os.users.api.FormacionConfigurada;
+import com.renaser.os.users.api.PagosAlAceptar;
 import com.renaser.os.users.api.TerminosPublicados;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.application.ports.out.formacion.CatalogoDeFormacionesPort;
@@ -27,7 +28,7 @@ import java.util.UUID;
 /**
  * Deja a la persona que se acepta dentro de su formación (spec 025, FR-008, FR-009): decide con {@link ReglasDeIngreso}, la inscribe en el programa con
  * la formación y la duración elegidas (el reloj queda en pausa hasta que elija su Día 1), asigna sus formaciones si es personal y le pone la ficha con
- * diagnóstico si se pidió. No abre transacción: corre dentro de la de aceptar, así que todo se queda o nada se queda.
+ * diagnóstico si se pidió y anota cómo paga si se decidió (spec 032). No abre transacción: corre dentro de la de aceptar, así que todo se queda o nada se queda.
  */
 @Component
 class IngresoPorAceptacion {
@@ -38,18 +39,21 @@ class IngresoPorAceptacion {
     private final CargarRolesPersonalizadosPort rolesPersonalizados;
     /** La ficha con diagnóstico (spec 026): la implementa {@code onboarding}. Sin un diagnóstico publicado, «con diagnóstico» se rechaza con un aviso claro. */
     private final FichaAlAceptar ficha;
+    /** Spec 032: los pagos los implementa {@code onboarding}; un plan inválido (sin moneda, sin cuotas…) deshace la aceptación con un 400. */
+    private final PagosAlAceptar pagos;
     /** Spec 027: los términos editables los implementa {@code onboarding}; una formación sin términos publicados no recibe personas nuevas. */
     private final TerminosPublicados terminos;
     private final Clock clock;
 
     IngresoPorAceptacion(CatalogoDeFormacionesPort catalogo, SaveParticipacionProgramaPort participaciones,
                          FormacionesDelPersonalPort personal, CargarRolesPersonalizadosPort rolesPersonalizados,
-                         FichaAlAceptar ficha, TerminosPublicados terminos, Clock clock) {
+                         FichaAlAceptar ficha, PagosAlAceptar pagos, TerminosPublicados terminos, Clock clock) {
         this.catalogo = catalogo;
         this.participaciones = participaciones;
         this.personal = personal;
         this.rolesPersonalizados = rolesPersonalizados;
         this.ficha = ficha;
+        this.pagos = pagos;
         this.terminos = terminos;
         this.clock = clock;
     }
@@ -71,6 +75,9 @@ class IngresoPorAceptacion {
         }
         if (pedido.conDiagnostico()) {
             asignarDiagnostico(persona, actor);
+        }
+        if (pedido.pago() != null) {
+            pagos.anotar(persona, actor, pedido.pago());
         }
         return conSuRolPersonalizado(resultado.eleccion(), rolPersonalizadoId);
     }

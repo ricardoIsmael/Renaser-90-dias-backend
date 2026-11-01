@@ -166,6 +166,20 @@ public enum Permission {
     MANAGE_RENASER_BOX,
 
     // ---------------------------------------------------------------------------------
+    // onboarding: cronograma de pagos
+    // ---------------------------------------------------------------------------------
+
+    /**
+     * Llevar los pagos de una persona (spec 032, D-307, 2026-11-01): ver su cronograma, asignarlo o marcarlo «sin cronograma», agregar, editar y quitar cuotas pendientes y marcar cada
+     * cuota pagada o pendiente. Guard: {@code GuardiaDePagos.exigirQuePuedaAdministrar} (onboarding) -> "Solo Administración y Alquimista llevan los pagos" / "Cuenta suspendida".
+     *
+     * <p>Roles que lo satisfacen: <b>solo ADMIN y ALCHEMIST activos</b> (decisión del dueño: «Administración y Alquimista, nadie más»). Ni MENTOR, ni TRAINEE_GUIDE, ni MENTOR_LEAD, ni
+     * Soporte TI. Como MENTOR, TRAINEE_GUIDE, ADMIN, ALCHEMIST e IT_SUPPORT todavía no tienen matriz estricta (A-1, falla-abierto en {@code UserRole}), el 403 de un mentor, una guía o Soporte
+     * TI lo da el servicio; el del aprendiz y el del líder, el interceptor (no está en sus matrices). Lo propio de la persona (su «Mi ingreso») es {@link #USE_APP}.
+     */
+    MANAGE_PAYMENTS,
+
+    // ---------------------------------------------------------------------------------
     // calendar
     // ---------------------------------------------------------------------------------
 
