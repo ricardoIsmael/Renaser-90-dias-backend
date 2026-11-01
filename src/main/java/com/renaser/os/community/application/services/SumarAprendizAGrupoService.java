@@ -70,6 +70,8 @@ public class SumarAprendizAGrupoService implements SumarAprendizAGrupoUseCase {
     private final Clock clock;
     private final IdGenerator idGenerator;
 
+    private final FormacionDelGrupo formacionDelGrupo;
+
     public SumarAprendizAGrupoService(LoadCelulaPort loadCelulaPort, LoadAsignacionesPort loadAsignacionesPort,
                                        SaveAsignacionPort saveAsignacionPort,
                                        LoadPoliticaMentoriaPort loadPoliticaMentoriaPort,
@@ -77,7 +79,9 @@ public class SumarAprendizAGrupoService implements SumarAprendizAGrupoUseCase {
                                        UserSummaryFinder userSummaryFinder,
                                        AsignacionCelulaPort asignacionCelulaPort,
                                        ConsultarCelulasUseCase consultarCelulas,
-                                       ApplicationEventPublisher eventos, Clock clock, IdGenerator idGenerator) {
+                                       ApplicationEventPublisher eventos, Clock clock, IdGenerator idGenerator,
+                                     FormacionDelGrupo formacionDelGrupo) {
+        this.formacionDelGrupo = formacionDelGrupo;
         this.loadCelulaPort = loadCelulaPort;
         this.loadAsignacionesPort = loadAsignacionesPort;
         this.saveAsignacionPort = saveAsignacionPort;
@@ -97,6 +101,7 @@ public class SumarAprendizAGrupoService implements SumarAprendizAGrupoUseCase {
         requireAdmin(command.actorId());
         Celula destino = requireCelula(command.celulaId());
         requireAprendizElegible(command.traineeId());
+        formacionDelGrupo.exigirQueElAprendizSea(command.traineeId(), destino);
 
         Instant ahora = clock.now();
         ConjuntoAsignaciones delAprendiz = ConjuntoAsignaciones.de(loadAsignacionesPort.porUsuario(command.traineeId()));

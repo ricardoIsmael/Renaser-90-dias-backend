@@ -66,12 +66,15 @@ public class SumarMentorAGrupoService implements SumarMentorAGrupoUseCase {
     private final Clock clock;
     private final IdGenerator idGenerator;
 
+    private final FormacionDelGrupo formacionDelGrupo;
+
     public SumarMentorAGrupoService(LoadCelulaPort loadCelulaPort, SaveCelulaPort saveCelulaPort,
                                      LoadAsignacionesPort loadAsignacionesPort, SaveAsignacionPort saveAsignacionPort,
                                      ExistePerfilMentorPort existePerfilMentorPort,
                                      UserSummaryFinder userSummaryFinder, AsignacionCelulaPort asignacionCelulaPort,
                                      ConsultarCelulasUseCase consultarCelulas, ApplicationEventPublisher eventos,
-                                     Clock clock, IdGenerator idGenerator) {
+                                     Clock clock, IdGenerator idGenerator, FormacionDelGrupo formacionDelGrupo) {
+        this.formacionDelGrupo = formacionDelGrupo;
         this.loadCelulaPort = loadCelulaPort;
         this.saveCelulaPort = saveCelulaPort;
         this.loadAsignacionesPort = loadAsignacionesPort;
@@ -90,7 +93,7 @@ public class SumarMentorAGrupoService implements SumarMentorAGrupoUseCase {
     public CelulaDetalle sumar(SumarMentorAGrupoCommand command) {
         requireAdmin(command.actorId());
         Celula destino = requireCelula(command.celulaId());
-        requireMentorElegible(command.mentorId());
+        requireMentorElegible(command.mentorId(), destino);
 
         Instant ahora = clock.now();
         ConjuntoAsignaciones delGrupo = ConjuntoAsignaciones.de(loadAsignacionesPort.porCelula(destino.id()));
@@ -171,7 +174,7 @@ public class SumarMentorAGrupoService implements SumarMentorAGrupoUseCase {
     /** Copia deliberada de {@code ComposicionDeCelulaService} (criterio de D-126: un guard que
      * sirve a dos autorizaciones distintas es como se abren los agujeros que despues nadie
      * encuentra). Hoy piden lo mismo; si manana una cambia, cambia sola. */
-    private void requireMentorElegible(UserId mentorId) {
+    private void requireMentorElegible(UserId mentorId, Celula grupo) {
         UserSummary lider = userSummaryFinder.findById(mentorId)
                 .orElseThrow(() -> new NoSuchElementException("Usuario no encontrado: " + mentorId));
         if (lider.status() != UserStatus.ACTIVE) {
@@ -185,6 +188,7 @@ public class SumarMentorAGrupoService implements SumarMentorAGrupoUseCase {
                     "El usuario todavia no tiene un perfil de mentor (perfiles_mentor) — debe crearse desde "
                             + "el modulo de usuarios antes de poder liderar una celula");
         }
+        formacionDelGrupo.exigirQueElMentorSea(mentorId, lider.role(), grupo);
     }
 
     private CelulaDetalle detalle(UserId actorId, CelulaId celulaId) {

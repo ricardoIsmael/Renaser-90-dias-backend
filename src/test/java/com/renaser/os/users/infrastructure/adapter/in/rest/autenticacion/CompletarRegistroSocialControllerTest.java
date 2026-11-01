@@ -1,5 +1,7 @@
 package com.renaser.os.users.infrastructure.adapter.in.rest.autenticacion;
 
+import com.renaser.os.users.infrastructure.adapter.in.rest.formacion.SesionConFormacionDePrueba;
+import org.springframework.context.annotation.Import;
 import com.renaser.os.shared.domain.RegistroPendienteSocialInvalidoException;
 import com.renaser.os.users.application.ports.in.autenticacion.CompletarRegistroSocialUseCase;
 import com.renaser.os.users.application.ports.in.autenticacion.CompletarRegistroSocialUseCase.CompletarRegistroSocialCommand;
@@ -39,6 +41,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @WebMvcTest(AutenticacionController.class)
 @AutoConfigureMockMvc(addFilters = false)
+@Import(SesionConFormacionDePrueba.class)
 class CompletarRegistroSocialControllerTest {
 
     @Autowired

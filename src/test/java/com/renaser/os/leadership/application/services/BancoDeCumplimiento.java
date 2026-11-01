@@ -527,11 +527,12 @@ public class BancoDeCumplimiento {
     };
 
     public AccesoDeLiderazgo acceso() {
-        return new AccesoDeLiderazgo(usuariosFinder, fichas);
+        return new AccesoDeLiderazgo(usuariosFinder, fichas, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
     }
 
     PersonasDelGrupo personas() {
-        return new PersonasDelGrupo(acompanamiento, participacionFinder, usuariosFinder, pruebas);
+        return new PersonasDelGrupo(acompanamiento, participacionFinder, usuariosFinder, pruebas,
+                new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
     }
 
     SemaforoDeLaPersona semaforoDeLaPersona() {
@@ -539,7 +540,8 @@ public class BancoDeCumplimiento {
     }
 
     PersonasDelPrograma programa() {
-        return new PersonasDelPrograma(acompanamiento, participacionFinder, usuariosFinder, pruebas);
+        return new PersonasDelPrograma(acompanamiento, participacionFinder, usuariosFinder, pruebas,
+                new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
     }
 
     public PersonasDelProgramaService personasDelProgramaService() {

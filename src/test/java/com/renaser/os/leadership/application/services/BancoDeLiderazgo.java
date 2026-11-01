@@ -301,7 +301,7 @@ public class BancoDeLiderazgo {
     // ── Servicios reales ───────────────────────────────────────────────
 
     public AccesoDeLiderazgo acceso() {
-        return new AccesoDeLiderazgo(usuariosFinder, fichas);
+        return new AccesoDeLiderazgo(usuariosFinder, fichas, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
     }
 
     public IndicadoresDeMentores indicadores() {

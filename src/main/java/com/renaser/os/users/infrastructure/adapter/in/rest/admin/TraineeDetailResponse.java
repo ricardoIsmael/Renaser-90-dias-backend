@@ -28,7 +28,7 @@ public record TraineeDetailResponse(String id, String email, String fullName, Us
                                      FasePrograma phase, UUID cellId, String mentorId,
                                      UltimoAjusteDiaResponse lastDayAdjustment,
                                      java.time.Instant deletionScheduledFor,
-                                     RolPersonalizadoResponse rolPersonalizado) {
+                                     RolPersonalizadoResponse rolPersonalizado, String formation, int programDuration) {
 
     public static TraineeDetailResponse from(TraineeDetail detail) {
         var user = detail.user();
@@ -38,6 +38,7 @@ public record TraineeDetailResponse(String id, String email, String fullName, Us
                 participacion.diaUnoElegido(), participacion.fase(), participacion.celulaId(),
                 participacion.mentorId() == null ? null : participacion.mentorId().toString(),
                 UltimoAjusteDiaResponse.from(detail.ultimoAjuste()), detail.seBorraEl(),
-                RolPersonalizadoResponse.de(user.rolPersonalizado().orElse(null)));
+                RolPersonalizadoResponse.de(user.rolPersonalizado().orElse(null)),
+                participacion.inscrito() ? participacion.formacion().codigo() : null, participacion.duracionDias());
     }
 }

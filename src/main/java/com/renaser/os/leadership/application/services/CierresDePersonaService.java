@@ -59,7 +59,7 @@ public class CierresDePersonaService implements ConsultarCierresDePersonaUseCase
     public CierresDeLaSemana cierresDe(ConsultaCierresDePersona consulta) {
         UserRole rol = acceso.requireLiderazgoActivo(consulta.actorId());
         Instant ahora = clock.now();
-        GrupoAcompanado grupo = personas.requireGrupoConMentor(consulta.grupoId(), ahora);
+        GrupoAcompanado grupo = personas.requireGrupoConMentor(consulta.actorId(), consulta.grupoId(), ahora);
         Miembro miembro = personas.requireMiembro(grupo, UserId.of(consulta.personaId()), ahora);
         return leerYRegistrar(consulta.actorId(), rol, Mirada.deUnGrupo(miembro, grupo), consulta.semana());
     }
@@ -69,7 +69,7 @@ public class CierresDePersonaService implements ConsultarCierresDePersonaUseCase
     @Transactional
     public CierresDeLaSemana cierresDeUnaPersona(ConsultaCierresDeUnaPersona consulta) {
         UserRole rol = acceso.requireLiderazgoActivo(consulta.actorId());
-        Mirada mirada = programa.mirar(UserId.of(consulta.personaId()), clock.now());
+        Mirada mirada = programa.mirar(consulta.actorId(), UserId.of(consulta.personaId()), clock.now());
         return leerYRegistrar(consulta.actorId(), rol, mirada, consulta.semana());
     }
 

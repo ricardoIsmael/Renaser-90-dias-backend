@@ -30,6 +30,6 @@ public class PersonasDelProgramaService implements ConsultarPersonasDelProgramaU
     @Transactional(readOnly = true)
     public PaginaDePersonas listar(ConsultaPersonasDelPrograma consulta) {
         acceso.requireLiderazgoActivo(consulta.actorId());
-        return personas.listar(consulta.busqueda(), consulta.pagina(), consulta.tamano(), clock.now());
+        return personas.listar(consulta.actorId(), consulta.busqueda(), consulta.pagina(), consulta.tamano(), clock.now());
     }
 }

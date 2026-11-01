@@ -1,6 +1,7 @@
 package com.renaser.os.leadership.application.services;
 
 import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 
 /**
@@ -12,4 +13,10 @@ import org.springframework.context.annotation.Import;
 @TestConfiguration(proxyBeanMethods = false)
 @Import({AccesoDeLiderazgo.class, PersonasDelGrupo.class, PersonasDelPrograma.class, HuecosDePersonaService.class})
 public class HuecosDePersonaDePrueba {
+
+    /** Spec 022: estas pruebas no hablan de formaciones, así que el alcance es el permisivo (nada se filtra). */
+    @Bean
+    com.renaser.os.users.api.AlcanceDeFormacionFinder alcanceDeFormacion() {
+        return new com.renaser.os.users.api.AlcanceDeFormacionPermisivo();
+    }
 }
