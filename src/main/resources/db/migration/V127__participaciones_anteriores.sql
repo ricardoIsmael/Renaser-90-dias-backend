@@ -12,7 +12,8 @@
 -- del reloj dentro de una misma participación). Los registros de hábito, evidencias, publicaciones y el ledger de puntos NO se tocan en un traslado: siguen
 -- donde estaban, así que no hace falta copiarlos.
 --
--- Es append-only (como `consultas_de_ficha`): una participación anterior no se edita ni se borra.
+-- Es append-only (como `consultas_de_ficha`): una participación anterior no se edita (la única excepción es el `ON DELETE SET NULL` de quien hizo el
+-- traslado cuando se borra su cuenta) y solo se borra junto con la cuenta de la persona a quien pertenece (`ON DELETE CASCADE`).
 
 SET search_path TO renaser, public;
 
@@ -41,6 +42,16 @@ CREATE INDEX participaciones_anteriores_usuario_idx ON participaciones_anteriore
 CREATE FUNCTION participaciones_anteriores_solo_se_agrega() RETURNS trigger
     LANGUAGE plpgsql AS $$
 BEGIN
+    -- Única edición que se deja pasar: el `ON DELETE SET NULL` de `trasladado_por` cuando se borra la cuenta de quien hizo el traslado. Sin esto,
+    -- borrar la cuenta de una persona de Administración fallaría mientras exista algún traslado hecho por ella. Ninguna otra columna cambia.
+    IF TG_OP = 'UPDATE' AND NEW.trasladado_por IS NULL
+       AND ROW(NEW.id, NEW.usuario_id, NEW.formacion, NEW.duracion_dias, NEW.fecha_inicio, NEW.fecha_fin, NEW.dia_final, NEW.resultado,
+               NEW.motivo, NEW.puntos_liga, NEW.coherencia, NEW.racha_maxima, NEW.trasladado_a, NEW.creado_en)
+          IS NOT DISTINCT FROM
+          ROW(OLD.id, OLD.usuario_id, OLD.formacion, OLD.duracion_dias, OLD.fecha_inicio, OLD.fecha_fin, OLD.dia_final, OLD.resultado,
+               OLD.motivo, OLD.puntos_liga, OLD.coherencia, OLD.racha_maxima, OLD.trasladado_a, OLD.creado_en) THEN
+        RETURN NEW;
+    END IF;
     RAISE EXCEPTION 'participaciones_anteriores es append-only: no se edita ni se borra (spec 022)'
         USING ERRCODE = 'integrity_constraint_violation';
 END;

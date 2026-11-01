@@ -78,6 +78,8 @@ class CuentasDePruebaServiceTest {
     private IdGenerator idGenerator;
     @Mock
     private ApplicationEventPublisher eventos;
+    @Mock
+    private com.renaser.os.users.application.ports.out.formacion.FormacionesDelPersonalPort formaciones;
 
     private CuentasDePruebaService servicio;
     private final UserId soporte = UserId.of(UUID.randomUUID());
@@ -85,7 +87,7 @@ class CuentasDePruebaServiceTest {
     @BeforeEach
     void armar() {
         servicio = new CuentasDePruebaService(loadUserPort, saveUserPort, roles, loadParticipacion, saveParticipacion,
-                loadMentorProfile, saveMentorProfile, candado, idGenerator, CLOCK, eventos);
+                loadMentorProfile, saveMentorProfile, candado, idGenerator, CLOCK, eventos, formaciones);
         lenient().when(loadUserPort.byId(soporte)).thenReturn(Optional.of(cuenta(soporte, UserRole.IT_SUPPORT,
                 UserStatus.ACTIVE)));
         lenient().when(idGenerator.newId()).thenAnswer(invocacion -> UUID.randomUUID());
@@ -168,6 +170,21 @@ class CuentasDePruebaServiceTest {
         servicio.deRol(soporte, UserRole.TRAINEE_GUIDE);
 
         verify(saveMentorProfile, org.mockito.Mockito.times(2)).save(any(MentorProfile.class));
+    }
+
+    @Test
+    @DisplayName("el personal de prueba (mentor, guía, líder) trabaja en la Escuela; el aprendiz y Administración no llevan formación asignada (spec 022)")
+    void formacionDelPersonalDePrueba() {
+        when(loadUserPort.byEmail(any())).thenReturn(Optional.empty());
+        when(loadMentorProfile.byUserId(any())).thenReturn(Optional.empty());
+
+        servicio.deRol(soporte, UserRole.MENTOR);
+        servicio.deRol(soporte, UserRole.TRAINEE_GUIDE);
+        servicio.deRol(soporte, UserRole.MENTOR_LEAD);
+        servicio.deRol(soporte, UserRole.TRAINEE);
+        servicio.deRol(soporte, UserRole.ADMIN);
+
+        verify(formaciones, org.mockito.Mockito.times(3)).asignarSiNoTieneNinguna(any(), org.mockito.ArgumentMatchers.eq(com.renaser.os.shared.domain.Formacion.ESCUELA));
     }
 
     @Test
