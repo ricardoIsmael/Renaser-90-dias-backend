@@ -16,8 +16,9 @@ import java.time.ZoneId;
 import java.util.Optional;
 
 /**
- * Quién puede tener análisis y con qué calendario (spec 031). Cualquiera que hace los 90 días —aprendiz, guía, mentor, líder, Administración,
- * Alquimista con programa propio—: no se filtra por rol (FR-030). No lo tienen las cuentas suspendidas ni cerradas (una cuenta cerrada
+ * Quién puede tener análisis y con qué calendario (spec 031). Cualquiera que hace su programa —aprendiz, guía, mentor, líder, Administración,
+ * Alquimista con programa propio—: no se filtra por rol (FR-030) ni por la duración de su formación (90 o 365 días): el análisis sigue después
+ * del último día mientras la persona use la app (031-8 B). No lo tienen las cuentas suspendidas ni cerradas (una cuenta cerrada
  * queda suspendida) ni las de prueba de «ver como»: no hay quien las lea y cada análisis es una llamada a la IA (D-273). Tampoco quien no
  * activó su programa: sin Día 1 no hay semana 1.
  */
