@@ -1,5 +1,6 @@
 package com.renaser.os.chat.infrastructure.adapter.in.websocket;
 
+import com.renaser.os.FormacionesDePrueba;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.renaser.os.TestcontainersConfiguration;
@@ -367,6 +368,7 @@ class LecturaEnVivoIT {
                 INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado)
                 VALUES (?, ?, 'Fixture', CAST(? AS renaser.rol_usuario), CAST(? AS renaser.estado_usuario))
                 """, id, id + "@renaser.test", rol, estado);
+        FormacionesDePrueba.alPersonalLeAsignaLaEscuela(jdbc, id, rol);
         usuarios.add(id);
         return id;
     }

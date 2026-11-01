@@ -1,5 +1,6 @@
 package com.renaser.os.chat.infrastructure.adapter.in.rest.conversacion;
 
+import com.renaser.os.FormacionesDePrueba;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.renaser.os.TestcontainersConfiguration;
@@ -278,6 +279,7 @@ class ParticipantesDelChatIT {
                 INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado)
                 VALUES (?, ?, ?, CAST(? AS renaser.rol_usuario), 'ACTIVO')
                 """, id, id + "@renaser.test", nombre, rol);
+        FormacionesDePrueba.alPersonalLeAsignaLaEscuela(jdbcTemplate, id, rol);
         usuarios.add(id);
         return id;
     }

@@ -371,14 +371,14 @@ class ComunidadPorFormacionIT {
     void compartirSoloEnMiFormacion() {
         PublicacionId deAna = publicacion(ana, "Para compartir", null);
         var directoEscuela = crearDirecto.obtenerOCrear(new CrearConversacionDirectaCommand(ana, ana2));
-        var directoDiplomado = crearDirecto.obtenerOCrear(new CrearConversacionDirectaCommand(mentor, beto));
-        // El mentor tiene la Escuela activa: su directo con Beto nace en la Escuela? No: Beto no es de la Escuela. Se abre con el Diplomado activo.
+        // Administración ve las tres formaciones: su directo con Beto nace en el Diplomado, el único mundo que comparten.
+        var directoDiplomado = crearDirecto.obtenerOCrear(new CrearConversacionDirectaCommand(admin, beto));
         assertThat(directoDiplomado.formacion()).isEqualTo(Formacion.DIPLOMADO);
 
-        assertThat(compartir.compartir(new CompartirPublicacionCommand(ana, directoEscuela.id(), deAna.value())))
-                .isNotNull();
-        assertThatThrownBy(() -> compartir.compartir(new CompartirPublicacionCommand(mentor, directoDiplomado.id(), deAna.value())))
-                .isInstanceOf(NoSuchElementException.class);
+        assertThat(compartir.compartir(new CompartirPublicacionCommand(ana, directoEscuela.id(), deAna.value()))).isNotNull();
+        // La publicación es de la Escuela: no se comparte en una conversación del Diplomado ni la ve Beto (404 igual que un inexistente).
+        assertThatThrownBy(() -> compartir.compartir(new CompartirPublicacionCommand(admin, directoDiplomado.id(), deAna.value())))
+                .isInstanceOf(NoSuchElementException.class).hasMessageStartingWith("Publicacion no encontrada");
     }
 
     @Test

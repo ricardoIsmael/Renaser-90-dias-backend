@@ -1,5 +1,6 @@
 package com.renaser.os.calendar.infrastructure.adapter.in.rest.evento;
 
+import com.renaser.os.FormacionesDePrueba;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.renaser.os.RelojDePrueba;
@@ -339,6 +340,7 @@ class AsistenciaAEventosIT {
                 INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado)
                 VALUES (?, ?, ?, CAST(? AS renaser.rol_usuario), CAST(? AS renaser.estado_usuario))
                 """, id, id + "@renaser.test", nombre, rol, estado);
+        FormacionesDePrueba.alPersonalLeAsignaLaEscuela(jdbc, id, rol);
         usuarios.add(id);
         return id;
     }
