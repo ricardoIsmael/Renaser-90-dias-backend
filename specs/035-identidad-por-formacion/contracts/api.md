@@ -37,8 +37,8 @@ siempre `false` en la Escuela). Todo lo demás igual.
 
 ## Chat (ya existe; ahora con la imagen de la formación)
 
-- `GET /api/v1/chat/conversations` y `GET /api/v1/chat/conversations/{id}`: `photoPath` (ya existe) ahora también viene en la **comunidad general** y en los **grupos sin
+- `GET /api/v1/chat/conversations`: `photoPath` (ya existe) ahora también viene en la **comunidad general** y en los **grupos sin
   foto propia**, solo si la formación tiene imagen: `/api/v1/chat/conversations/{id}/foto?v=<ms>`. Sin imagen, `null` como hoy.
 - `GET /api/v1/chat/conversations/{id}/foto`: comunidad → la imagen de su formación; grupo → su foto propia o, si no tiene, la de su formación; 404 si no hay ninguna.
   Soporte: la tarjeta con nombre sobre la portada de **su** formación. `GET .../miembros/{usuarioId}/foto`: igual, sobre la portada de la conversación.
-- `GET /api/v1/chat/conversations/{id}/messages`: `senderName` de un mensaje del programa = «Formación Renaser» en la Escuela y el nombre de la formación en las otras.
+- `GET /api/v1/chat/conversations/{id}/messages`: `senderName` de un mensaje del programa = «Formación Renaser» en la Escuela, «Diplomado Renaser» y «Certificación Renaser» en las otras (`NombreDelChat.delPrograma`). Lo mismo el autor del aviso de un mensaje del programa.
