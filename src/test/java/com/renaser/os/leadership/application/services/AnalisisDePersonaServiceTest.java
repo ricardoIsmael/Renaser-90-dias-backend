@@ -186,10 +186,10 @@ class AnalisisDePersonaServiceTest {
     }
 
     @Test
-    @DisplayName("un error de lectura (periodo inválido, persona sin Día 1) no deja constancia")
+    @DisplayName("un error de lectura (periodo inválido, persona sin el programa activado) no deja constancia")
     void unErrorDeLecturaNoLaDeja() {
         for (RuntimeException falla : List.of(new IllegalArgumentException("Ese periodo todavía no llega"),
-                new NoSuchElementException("Todavía no eligió su Día 1"))) {
+                new NoSuchElementException("Todavía no activó su programa"))) {
             fallaDeLaLectura = falla;
             assertThatThrownBy(() -> analisisDe(LIDER, ANA, null)).isSameAs(falla);
         }

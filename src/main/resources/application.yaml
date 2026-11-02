@@ -557,7 +557,7 @@ renaser:
       # FALSE por defecto: que se celebra y con que texto esta por decidir con el dueno.
       logros-en-chat: ${IA_ACOMPANANTE_LOGROS_EN_CHAT:false}
       # Cuales logros pasan al chat, separados por coma: RACHA_SIN_CELULAR (ciclo de 24h del Dia
-      # sin celular) y/o ROCA_COMPLETADA (una Roca Diaria con evidencia). Un nombre desconocido se
+      # sin celular) y/o ROCA_COMPLETADA (una acción de los objetivos con evidencia). Un nombre desconocido se
       # ignora. PROVISORIO: ROCA_COMPLETADA queda afuera por defecto porque se completan varias por
       # dia y celebrar cada una en el chat seria ruido; se agrega aca si el dueno lo quiere.
       logros-en-chat-tipos: ${IA_ACOMPANANTE_LOGROS_EN_CHAT_TIPOS:RACHA_SIN_CELULAR}
@@ -566,7 +566,7 @@ renaser:
       # plantilla vacia apaga ese logro. Se sobreescriben por entorno
       # (RENASER_IA_ACOMPANANTE_LOGROSENCHATPLANTILLARACHASINCELULAR, etc.).
       logros-en-chat-plantilla-racha-sin-celular: "¡Lo lograste! Completaste tu día sin celular: 24 horas enteras. Eso es constancia de verdad. ¿Cómo te sentiste?"
-      logros-en-chat-plantilla-roca-completada: "¡Roca completada! Un paso firme más hacia lo que te propusiste. Bien hecho."
+      logros-en-chat-plantilla-roca-completada: "¡Acción cumplida! Un paso firme más hacia lo que te propusiste. Bien hecho."
       # Memoria del acompanante (D-167, V67): lo que aprende de cada persona (contexto de vida, metas
       # y lo que le funciona, como prefiere el trato; nunca lo emocional ni la salud) entra al prompt
       # del chat y de la voz en vivo, y cada ~10 idas y vueltas se resume la conversacion en segundo

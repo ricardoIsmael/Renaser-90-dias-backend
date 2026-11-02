@@ -163,6 +163,7 @@ class ConsultarRocasHerramientaTest {
     }
 
     /** D-203: sin Dia 1 elegido {@code rocks} manda la semana 1 sin fechas; antes se leia "(null al null)". */
+    // issue #62: el texto ya no habla de elegir el Dia 1
     @Test
     @DisplayName("D-203 semana y progreso: sin Dia 1 elegido no se inventan fechas")
     void sinDiaUnoNoHayFechas() {
@@ -172,10 +173,10 @@ class ConsultarRocasHerramientaTest {
                 "OK", 0, List.of(new BalanceDelEje("CUERPO", 0, 0)), PLAN_PENDIENTE, false));
 
         assertThat(texto(herramienta.ejecutar(APRENDIZ, conAlcance("semana"))))
-                .contains("Objetivos de la semana 1 del programa (todavia sin fechas: no eligio su Dia 1):")
+                .contains("Objetivos de la semana 1 del programa (todavia sin fechas: aun no activo su programa, que empieza al dia siguiente de confirmarlo):")
                 .doesNotContain("null");
         assertThat(texto(herramienta.ejecutar(APRENDIZ, conAlcance("progreso"))))
-                .contains("Progreso de la semana 1 del programa (todavia sin fechas: no eligio su Dia 1), hoy es "
+                .contains("Progreso de la semana 1 del programa (todavia sin fechas: aun no activo su programa, que empieza al dia siguiente de confirmarlo), hoy es "
                         + "miercoles 2026-09-23")
                 .doesNotContain("null");
     }

@@ -5,6 +5,7 @@ import com.renaser.os.notifications.application.ports.in.notificacion.EmitirNoti
 import com.renaser.os.notifications.domain.model.notificacion.TipoNotificacion;
 import com.renaser.os.rocks.api.RocaCompletadaEvent;
 import com.renaser.os.shared.domain.UserId;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -38,5 +39,20 @@ class RocaCompletadaNotificationListenerTest {
         assertThat(captor.getValue().tipo()).isEqualTo(TipoNotificacion.HITO_PROGRAMA);
         // C-7: rocaId viaja como origenEventoId -- es la clave que deduplica una redelivery.
         assertThat(captor.getValue().origenEventoId()).isEqualTo(rocaId);
+    }
+
+    // issue #62
+    @Test
+    @DisplayName("el aviso dice «acción», la palabra que usa la app, y no «roca»: SER lo lee con consultar_notificaciones")
+    void elAvisoNoDiceRoca() {
+        var listener = new RocaCompletadaNotificationListener(emitirNotificacionUseCase);
+
+        listener.on(new RocaCompletadaEvent(UUID.randomUUID(), UserId.of(UUID.randomUUID()), Instant.now()));
+
+        ArgumentCaptor<EmitirNotificacionCommand> captor = ArgumentCaptor.forClass(EmitirNotificacionCommand.class);
+        verify(emitirNotificacionUseCase).emitir(captor.capture());
+        assertThat(captor.getValue().titulo()).isEqualTo("Acción cumplida");
+        assertThat(captor.getValue().cuerpo()).isEqualTo("Cumpliste una acción de tus objetivos.");
+        assertThat(captor.getValue().titulo() + " " + captor.getValue().cuerpo()).doesNotContainIgnoringCase("roca");
     }
 }

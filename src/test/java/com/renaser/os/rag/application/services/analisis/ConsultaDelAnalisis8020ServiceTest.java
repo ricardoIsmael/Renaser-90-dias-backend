@@ -199,11 +199,13 @@ class ConsultaDelAnalisis8020ServiceTest {
     }
 
     @Test
-    @DisplayName("quien todavía no eligió su Día 1 no tiene periodos: 404, no un periodo inventado")
+    @DisplayName("quien todavía no activó su programa no tiene periodos: 404, no un periodo inventado")
     void sinDiaUno() {
         when(participaciones.deParticipante(ANA)).thenReturn(Optional.of(participacion(Formacion.ESCUELA, false)));
 
-        assertThatThrownBy(() -> servicio(MIERCOLES_21).de(ANA, Tipo.SEMANA, null)).isInstanceOf(NoSuchElementException.class);
+        // issue #62: ya no se elige el Día 1; el 404 dice lo que pasa de verdad (el programa no está activado).
+        assertThatThrownBy(() -> servicio(MIERCOLES_21).de(ANA, Tipo.SEMANA, null)).isInstanceOf(NoSuchElementException.class)
+                .hasMessage("Todavía no activó su programa").hasMessageNotContaining("Día 1");
     }
 
     @Test

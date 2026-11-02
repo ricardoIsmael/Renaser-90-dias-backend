@@ -120,6 +120,8 @@ Mismo patrón que `users.api.UserSummaryFinder` y `academy.api.AccesoCursoFinder
 
 **Dónde vive el filtro:** `VectorStorePort.buscarSimilares` ganó un tercer parámetro, `FiltroLecciones` (`SinFiltro` | `SoloVisibles(Set<String> leccionIds)`). Va en el WHERE de `PgVectorNativoAdapter` (`leccion_id IS NULL OR leccion_id = ANY(...)`), antes del `ORDER BY ... LIMIT` — filtrar en Java después de traer `topK` filas devolvería menos de `topK` fragmentos cuando hay candidatos bloqueados de por medio. `ConversacionRenasiaService` resuelve el conjunto visible (vía `ConsultarLeccionesVisiblesPort`) y arma el filtro; `PgVectorNativoAdapter` no sabe nada de reglas de `academy`, solo aplica el WHERE. Los chunks con `leccion_id IS NULL` (material general) nunca se filtran. `ConocimientoService` (indexación admin) no llama a `buscarSimilares` hoy — si algún día necesita buscar, usa `FiltroLecciones.sinFiltro()`.
 
+> **Agregado 2026-11-02 (V164, D-314, issue #62).** Un chunk con `leccion_id IS NULL` sigue siendo material general que ve cualquier formación, así que NO puede nacer por accidente: la llave `base_conocimiento.leccion_id` pasó de `ON DELETE SET NULL` a `ON DELETE CASCADE` (borrar una lección o su curso borra su transcripción). Cargar un fragmento sin `leccionId` por `POST /admin/conocimiento` es, desde ahora, decir «esto es para todas las formaciones».
+
 **Consecuencia para el contrato compartido:** es el segundo cambio de firma de `VectorStorePort` (antes "firma congelada" salvo para cerrar bugs reales) — `ConversacionRenasiaServiceTest`/`PgVectorNativoAdapterTest` ya están al día.
 
 ### D-82 — Puerto y adaptador vacío del clasificador de riesgo (solo estructura, sin conectar)

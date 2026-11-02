@@ -36,7 +36,8 @@ import java.util.Optional;
 @Service
 public class ConsultaDelAnalisis8020Service implements Analisis8020Finder, ConsultarAnalisis8020UseCase {
 
-    private static final String SIN_DIA_UNO = "Todavía no eligió su Día 1";
+    /** Issue #62: ya no se elige el Día 1; el programa se activa al firmar y empieza al día siguiente. */
+    private static final String SIN_PROGRAMA_ACTIVADO = "Todavía no activó su programa";
 
     private final ParticipacionProgramaFinder participaciones;
     private final ProgramasActivadosFinder programas;
@@ -66,9 +67,9 @@ public class ConsultaDelAnalisis8020Service implements Analisis8020Finder, Consu
     @Override
     public VistaDelAnalisis de(UserId personaId, Tipo tipo, LocalDate inicio) {
         ParticipacionPrograma participacion = participaciones.deParticipante(personaId)
-                .filter(p -> p.inscrito() && p.activado()).orElseThrow(() -> new NoSuchElementException(SIN_DIA_UNO));
+                .filter(p -> p.inscrito() && p.activado()).orElseThrow(() -> new NoSuchElementException(SIN_PROGRAMA_ACTIVADO));
         ProgramaActivado programa = programas.de(personaId).filter(p -> p.primeraFecha() != null)
-                .orElseThrow(() -> new NoSuchElementException(SIN_DIA_UNO));
+                .orElseThrow(() -> new NoSuchElementException(SIN_PROGRAMA_ACTIVADO));
         LocalDate hoy = clock.now().atZone(programa.zona()).toLocalDate();
         if (hoy.isBefore(programa.primeraFecha())) {
             throw new NoSuchElementException("Su programa todavía no empieza");
