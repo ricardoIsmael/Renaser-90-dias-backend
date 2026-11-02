@@ -1,5 +1,6 @@
 package com.renaser.os.rag.application.services.herramientas;
 
+import com.renaser.os.rag.application.ports.out.habitos.ConsultarCategoriasDeHabitoPort;
 import com.renaser.os.rag.application.ports.out.plan.CrearHabitoPersonalPort;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort.PlanDelAprendiz;
@@ -34,10 +35,13 @@ public class CrearHabitoPersonalConfirmable implements AccionConfirmable {
 
     private final GestionarPlanDeHabitosPort planPort;
     private final CrearHabitoPersonalPort crearPort;
+    private final ConsultarCategoriasDeHabitoPort categoriasPort;
 
-    public CrearHabitoPersonalConfirmable(GestionarPlanDeHabitosPort planPort, CrearHabitoPersonalPort crearPort) {
+    public CrearHabitoPersonalConfirmable(GestionarPlanDeHabitosPort planPort, CrearHabitoPersonalPort crearPort,
+                                          ConsultarCategoriasDeHabitoPort categoriasPort) {
         this.planPort = planPort;
         this.crearPort = crearPort;
+        this.categoriasPort = categoriasPort;
     }
 
     @Override
@@ -49,9 +53,13 @@ public class CrearHabitoPersonalConfirmable implements AccionConfirmable {
     public ResultadoHerramienta aplicar(UserId actorId, InvocacionHerramienta invocacion) {
         HabitoPersonalPedido pedido;
         try {
-            pedido = ArgumentosDeHabitoPersonal.leer(invocacion, crearPort.ultimaHoraDeInicio());
+            // Spec 038: las categorias de SU formacion, igual que al proponer; una que ya no existe (la desactivaron) no se crea.
+            pedido = ArgumentosDeHabitoPersonal.leer(invocacion, crearPort.ultimaHoraDeInicio(), categoriasPort.deLaFormacionDe(actorId));
         } catch (PropuestaImposibleException invalida) {
             return ResultadoHerramienta.fallo("La propuesta no trae un hábito válido: no se creó nada.");
+        } catch (RuntimeException sinCategorias) {
+            log.warn("[rag] {} no pudo leer las categorias de la formacion", PropuestaDeCrearHabitoPersonal.NOMBRE, sinCategorias);
+            return ResultadoHerramienta.fallo("No se pudo crear el hábito en este momento.");
         }
         return LecturaDelPlan.conPlan(planPort, actorId, plan -> crearSiNoLoTiene(actorId, plan, pedido));
     }
@@ -66,7 +74,7 @@ public class CrearHabitoPersonalConfirmable implements AccionConfirmable {
         } catch (RuntimeException rechazo) {
             return traducir(rechazo);
         }
-        return ResultadoHerramienta.exito("Hábito '" + pedido.nombre() + "' creado en " + pedido.dimension().etiqueta()
+        return ResultadoHerramienta.exito("Hábito '" + pedido.nombre() + "' creado en " + pedido.categoria().nombre()
                 + ", a las " + ArgumentosDeHorario.texto(pedido.hora()) + ", " + pedido.diasLegibles()
                 + ". Ya lo ves en Training.");
     }

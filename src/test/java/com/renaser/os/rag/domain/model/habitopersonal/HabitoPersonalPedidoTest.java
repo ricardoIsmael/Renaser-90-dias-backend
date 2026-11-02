@@ -76,7 +76,7 @@ class HabitoPersonalPedidoTest {
     @Test
     @DisplayName("sin dimension no hay pedido: la categoria nunca se adivina")
     void sinDimension() {
-        assertThatThrownBy(() -> HabitoPersonalPedido.de("Leer", null, null, null, null))
+        assertThatThrownBy(() -> HabitoPersonalPedido.de("Leer", (DimensionDelHabito) null, null, null, null))
                 .isInstanceOf(NullPointerException.class);
     }
 }

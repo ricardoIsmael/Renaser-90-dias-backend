@@ -1,6 +1,6 @@
 package com.renaser.os.rag.application.services.herramientas;
 
-import com.renaser.os.rag.domain.model.habitopersonal.DimensionDelHabito;
+import com.renaser.os.rag.domain.model.habitopersonal.CategoriaDelHabito;
 import com.renaser.os.rag.domain.model.habitopersonal.HabitoPersonalPedido;
 import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
 
@@ -10,6 +10,7 @@ import java.time.LocalTime;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -27,20 +28,32 @@ final class ArgumentosDeHabitoPersonal {
     static final String DIAS = "dias";
     static final String META = "meta";
 
-    static final String SIN_CATEGORIA = "Falta la categoria del habito. NO lo propongas todavia: preguntale a la "
-            + "persona, en una frase, en cual de las cuatro dimensiones lo quiere (Cuerpo, Mente, Emociones o "
-            + "Espiritu) y vuelve a llamar con la que elija. No la elijas tu.";
+    static final String SIN_CATEGORIAS_EN_SU_FORMACION = "Su formacion todavia no tiene categorias de habitos, asi que por ahora no "
+            + "se puede crear uno propio. NO lo propongas: dile con calidez que las categorias las arma el equipo del programa y que, cuando "
+            + "existan, podra pedirtelo.";
+
+    /** Spec 038: las categorias son las de SU formacion, no las cuatro fijas de la Escuela. */
+    static String sinCategoria(List<CategoriaDelHabito> disponibles) {
+        return "Falta la categoria del habito. NO lo propongas todavia: preguntale a la persona, en una frase, en cual de las categorias "
+                + "de su formacion lo quiere (" + nombresDe(disponibles) + ") y vuelve a llamar con la que elija. No la elijas tu.";
+    }
 
     private ArgumentosDeHabitoPersonal() {
     }
 
-    /** @param ultimaHora la hora mas tarde a la que puede arrancar un habito (regla de {@code habits}) */
-    static HabitoPersonalPedido leer(InvocacionHerramienta invocacion, LocalTime ultimaHora) {
-        DimensionDelHabito dimension = DimensionDelHabito.leer(invocacion.argumento(CATEGORIA))
-                .orElseThrow(() -> new PropuestaImposibleException(categoriaInvalida(invocacion.argumento(CATEGORIA))));
+    /**
+     * @param ultimaHora  la hora mas tarde a la que puede arrancar un habito (regla de {@code habits})
+     * @param disponibles las categorias activas de la formacion de la persona (spec 038): una que no sea de ellas se rechaza
+     */
+    static HabitoPersonalPedido leer(InvocacionHerramienta invocacion, LocalTime ultimaHora, List<CategoriaDelHabito> disponibles) {
+        if (disponibles.isEmpty()) {
+            throw new PropuestaImposibleException(SIN_CATEGORIAS_EN_SU_FORMACION);
+        }
+        CategoriaDelHabito categoria = CategoriaDelHabito.leer(invocacion.argumento(CATEGORIA), disponibles)
+                .orElseThrow(() -> new PropuestaImposibleException(categoriaInvalida(invocacion.argumento(CATEGORIA), disponibles)));
         LocalTime hora = horaDe(invocacion.argumento(HORA), ultimaHora);
         try {
-            return HabitoPersonalPedido.de(invocacion.argumento(NOMBRE), dimension, hora,
+            return HabitoPersonalPedido.de(invocacion.argumento(NOMBRE), categoria, hora,
                     diasDe(invocacion.argumento(DIAS)), invocacion.argumento(META));
         } catch (IllegalArgumentException invalido) {
             throw new PropuestaImposibleException(invalido.getMessage());
@@ -51,7 +64,7 @@ final class ArgumentosDeHabitoPersonal {
     static InvocacionHerramienta normalizada(String herramienta, HabitoPersonalPedido pedido) {
         Map<String, String> argumentos = new HashMap<>();
         argumentos.put(NOMBRE, pedido.nombre());
-        argumentos.put(CATEGORIA, pedido.dimension().name());
+        argumentos.put(CATEGORIA, pedido.categoria().clave());
         argumentos.put(HORA, ArgumentosDeHorario.texto(pedido.hora()));
         if (!pedido.todosLosDias()) {
             argumentos.put(DIAS, pedido.diasParaGuardar());
@@ -62,11 +75,20 @@ final class ArgumentosDeHabitoPersonal {
         return new InvocacionHerramienta(herramienta, argumentos);
     }
 
-    private static String categoriaInvalida(String texto) {
+    private static String categoriaInvalida(String texto, List<CategoriaDelHabito> disponibles) {
         return ArgumentosDeHorario.presente(texto)
-                ? "'" + texto.trim() + "' no es una de las dimensiones donde se crean habitos. Tienen que ser "
-                        + "Cuerpo, Mente, Emociones o Espiritu: si no esta claro cual, preguntaselo a la persona."
-                : SIN_CATEGORIA;
+                ? "'" + texto.trim() + "' no es una de las categorias de habitos de su formacion. Tienen que ser "
+                        + nombresDe(disponibles) + ": si no esta claro cual, preguntaselo a la persona. No ofrezcas otras."
+                : sinCategoria(disponibles);
+    }
+
+    /** «Cuerpo, Mente, Emociones o Espíritu»: solo las de su formacion, con el nombre que ve en Training. */
+    static String nombresDe(List<CategoriaDelHabito> categorias) {
+        List<String> nombres = categorias.stream().map(CategoriaDelHabito::nombre).toList();
+        if (nombres.size() <= 1) {
+            return String.join("", nombres);
+        }
+        return String.join(", ", nombres.subList(0, nombres.size() - 1)) + " o " + nombres.getLast();
     }
 
     private static LocalTime horaDe(String texto, LocalTime ultimaHora) {
