@@ -477,6 +477,26 @@ class SeguimientoServiceTest {
         assertThat(obligacion.evidencias()).isEmpty();
     }
 
+    @Test
+    @DisplayName("spec 037: los km de un día y de dónde salieron (la fuente, si quedó por revisar) viajan con su obligación")
+    void laMedicionViajaConLaObligacion() {
+        acompanaTodoElMes();
+        alumnoEnGrupo(ANA, Instant.parse("2026-09-01T05:00:00Z"), null);
+        com.renaser.os.habits.api.MedicionDeLaObligacion lectura = new com.renaser.os.habits.api.MedicionDeLaObligacion(
+                new java.math.BigDecimal("12.40"), "HEALTH_CONNECT", 16500, "Galaxy Watch", "RELOJ",
+                Instant.parse("2026-09-08T22:10:00Z"), true);
+        ObligacionHabito km = new ObligacionHabito(UUID.randomUUID(), ANA, LocalDate.of(2026, 9, 8), 24,
+                "Kilometros diarios", EstadoObligacion.COMPLETADO, true, true, "DAILY_KM", null, lectura);
+        ObligacionHabito sinNumero = obligacion(ANA, LocalDate.of(2026, 9, 8), "Lectura", EstadoObligacion.PENDIENTE, false);
+        obligaciones.add(km);
+
+        SemanaDelAlumno semana = servicio.semanaDe(
+                new ConsultaSemana(MENTOR, MI_GRUPO, ANA.value(), LocalDate.of(2026, 9, 9)));
+
+        assertThat(obligacionDe(semana, km).medicion()).isEqualTo(lectura);
+        assertThat(obligacionDe(semana, sinNumero).medicion()).isNull();
+    }
+
     private static ObligacionDelDia obligacionDe(SemanaDelAlumno semana, ObligacionHabito o) {
         return semana.dias().stream().flatMap(d -> d.obligaciones().stream())
                 .filter(x -> x.registroId().equals(o.registroId())).findFirst().orElseThrow();
