@@ -134,6 +134,14 @@ public final class LoQueLeFaltaHoy {
         if (esDiaCerrado(habito)) {
             return linea.append(" | dia_cerrado (ese dia ya termino: no se puede registrar, no le dejes boton)").toString();
         }
+        if (habito.mideKilometros()) {
+            linea.append(medicion(habito));
+        }
+        if (habito.seMideSolo()) {
+            return linea.append(" | registro=automatico (conecto sus pasos: los km se miden solos. No pidas foto ni captura ni uses "
+                    + "proponer_registrar_con_foto; que toque «Registrar» en la fila de Kilometros diarios en Training cuando llegue a su meta)")
+                    .toString();
+        }
         if (habito.exigeEvidencia()) {
             linea.append(" | exige_evidencia=si");
             if (habito.seRegistraEscribiendo()) {
@@ -141,6 +149,28 @@ public final class LoQueLeFaltaHoy {
             }
         }
         return linea.toString();
+    }
+
+    /**
+     * Spec 037 (T021 de la 038): {@code mide=km | meta=5 | lleva=3.2}. {@code lleva} es lo ya REGISTRADO hoy (0 si todavia nada): lo que la persona va
+     * caminando en vivo lo lee su telefono, no el servidor. Con el dia registrado, de donde salio: {@code origen=pasos} o {@code origen=captura}.
+     */
+    private static String medicion(HabitoDelDia habito) {
+        var medicion = habito.medicion();
+        StringBuilder texto = new StringBuilder(" | mide=km");
+        if (medicion.meta() != null) {
+            texto.append(" | meta=").append(numero(medicion.meta()));
+        }
+        texto.append(" | lleva=").append(medicion.valorDelDia() == null ? "0" : numero(medicion.valorDelDia()));
+        if (medicion.origenDelDia() != null) {
+            texto.append(" | origen=").append("HEALTH_CONNECT".equals(medicion.origenDelDia()) ? "pasos" : "captura");
+        }
+        return texto.toString();
+    }
+
+    /** «5» y «5.4», no «5.00» ni «5.40». */
+    private static String numero(java.math.BigDecimal valor) {
+        return valor.stripTrailingZeros().toPlainString();
     }
 
     /** "45 min" o "2 h 10 min": relativo, asi no depende de ninguna zona horaria. */

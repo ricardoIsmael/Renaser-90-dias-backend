@@ -653,4 +653,20 @@ class PromptSistemaRenasiaTest {
                 .doesNotContain("D-236");
         assertThat(render.indexOf("**Si pregunta como se hace un habito")).isLessThan(render.indexOf("## Tus limites"));
     }
+
+    // spec 037 (T021 de la 038): SER sabe que los kilometros se miden solos con los pasos conectados, y entonces no pide foto
+    @Test
+    @DisplayName("spec 037: el prompt explica mide=km, meta y lleva, y que con registro=automatico no se pide foto sino el «Registrar» de Training")
+    void explicaLosKilometrosAutomaticos() {
+        String render = renderizar("(vacio)");
+
+        assertThat(render).contains("**Kilometros diarios se miden solos si conecto sus pasos.**")
+                .contains("`mide=km`").contains("`meta=`").contains("`lleva=`").contains("`registro=automatico`")
+                .contains("no le pidas foto ni").contains("toque \"Registrar\"")
+                .contains("fila de Kilometros diarios")
+                .contains("pide Android 14")
+                .doesNotContain("Health Connect");
+        // Va junto a los habitos que piden evidencia, antes de que expliquen que por el chat no entran archivos.
+        assertThat(render.indexOf("**Kilometros diarios se miden solos")).isGreaterThan(render.indexOf("## Habitos que piden evidencia"));
+    }
 }

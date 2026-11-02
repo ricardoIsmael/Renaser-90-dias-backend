@@ -29,12 +29,20 @@ public record HabitosDeHoy(List<HabitoDeHoy> deHoy, List<HabitoPausado> pausados
      * @param tituloDelPrograma el del catalogo cuando la persona lo renombro, {@code null} si no
      *                          (E-290): para que el modelo una "jugo verde" con "Batido de papaya"
      * @param pideTexto         si se registra ESCRIBIENDO, sin camara: los tres rituales (spec 038). Un habito no pide foto y texto a la vez
+     * @param seMideSolo        si sus kilometros los miden SOLOS los pasos que la persona conecto en su telefono (spec 037, T021 de la 038): no pide foto ni
+     *                          captura, se cierra con «Registrar» en la fila de Training. Tampoco pide foto a la vez
      */
-    public record HabitoDeHoy(String titulo, EstadoDeHoy estado, boolean pideFoto, String tituloDelPrograma, boolean pideTexto) {
+    public record HabitoDeHoy(String titulo, EstadoDeHoy estado, boolean pideFoto, String tituloDelPrograma, boolean pideTexto,
+                              boolean seMideSolo) {
 
         public HabitoDeHoy {
             Objects.requireNonNull(titulo, "titulo es obligatorio");
             Objects.requireNonNull(estado, "estado es obligatorio");
+        }
+
+        /** Sin la marca de medicion automatica (lo que habia antes de la spec 037 en SER). */
+        public HabitoDeHoy(String titulo, EstadoDeHoy estado, boolean pideFoto, String tituloDelPrograma, boolean pideTexto) {
+            this(titulo, estado, pideFoto, tituloDelPrograma, pideTexto, false);
         }
 
         /** Un habito que no se registra escribiendo. */

@@ -1624,6 +1624,17 @@ minutos' creado en Mente, a las 21:00, todos los días. Ya lo ves en Training.»
 > antes y, sin Mapa, responde que es lo normal y manda a `consultar_mi_diagnostico` y a Plan; `MapaParaProponer` es vacío sin Mapa; el prompt tiene la sección «Su diagnóstico y
 > sus objetivos». Lo de abajo (D-233) describe cómo se leía el Mapa y sigue valiendo **solo** para esas personas. Ver `specs/038-ser-al-dia/`.
 
+> **Integrado 2026-11-02 (consolidación, T020 y T021 de la spec 038).** Con la 036 y la 037 ya en la rama: (1) **día 0** — `SituacionDelAprendiz` suma `diaUno` (el Día 1 activado,
+> `ParticipacionPrograma.diaUnoElegido()`) y mientras el día es 0 la situación dice «Su programa de {plazo} empieza manana (martes 3 de noviembre). No hables de su dia ni de su fase: todavia no
+> tiene.» (con el plazo de su formación: «90 días», «3 meses», «1 año»; «empieza el jueves 5 de noviembre» para quien eligió +2 o +3 antes del cambio; «Todavia no activo su programa de …: empieza
+> al dia siguiente de confirmarlo, con el boton «Empezar manana»» si no lo activó); (2) **`proponer_plan_del_dia` y `proponer_agregar_accion`** no dejan tarjeta si no activó su programa
+> (`CompuertaParaProponer.bloqueoPorProgramaSinActivar`: `rocks` rechazaría toda fecha con `INVALID_DATE`); quien ya lo activó (empieza mañana) sí puede planificar, como deja el servidor;
+> (3) **KILÓMETROS DIARIOS** — `habits.api.HabitoEnJuegoResumen.medicion` (`MedicionDelHabito`: meta, lo registrado hoy, origen y si **ya tiene algún día medido por el teléfono**,
+> `ContarMedicionesAutomaticasPort`) llega a `rag`; `consultar_habitos_del_dia` suma `mide=km | meta=5 | lleva=3.2` (lo ya registrado, no lo que camina en vivo) y, con pasos conectados,
+> `registro=automatico` en vez de `exige_evidencia=si`; `proponer_registrar_con_foto` no deja la cámara para esos km y manda al «Registrar» de la fila de Training; el prompt lo explica.
+> **Límite:** el servidor no sabe si los pasos están conectados *ahora* (el permiso vive en el teléfono); usa «ya tuvo un día medido por el teléfono» como pista. Sin la pista, SER sigue con la
+> cámara o la galería, y la fila de Training atiende las dos cosas.
+
 ### D-233 — SER conoce el Mapa de Renacimiento de cada persona (2026-09-30)
 
 Pedido del dueño (30-09): que SER sepa, por persona, cuáles son SUS objetivos del Mapa de

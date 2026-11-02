@@ -84,4 +84,27 @@ class ConsultarAgendaHabitosAdapterTest {
 
         assertThat(adapter.deHoyDe(PERSONA)).extracting(HabitoDelDia::dimension).containsExactly("Emociones");
     }
+
+    // spec 037 (T021 de la 038): la medicion de `habits` llega a SER con su meta, lo registrado hoy y la pista de los pasos conectados
+    @Test
+    @DisplayName("spec 037: la medicion del habito de km pasa a SER tal cual, y los demas habitos no llevan medicion")
+    void llevaLaMedicion() {
+        var km = new HabitoEnJuegoResumen(REGISTRO, "KILOMETROS DIARIOS", "PENDIENTE", 10, 10, null, true, List.of(), "DAILY_KM", null,
+                LocalTime.of(17, 0), "CUERPO", HABITO, DIA, new com.renaser.os.habits.api.MedicionDelHabito("KILOMETROS",
+                new java.math.BigDecimal("5.00"), new java.math.BigDecimal("5.40"), "HEALTH_CONNECT", "Galaxy Watch", true));
+        when(categorias.activasDe(PERSONA)).thenReturn(List.of());
+        when(agenda.deHoyDe(PERSONA)).thenReturn(List.of(km, habito("MENTE")));
+
+        List<HabitoDelDia> habitos = adapter.deHoyDe(PERSONA);
+
+        assertThat(habitos.get(0).mideKilometros()).isTrue();
+        assertThat(habitos.get(0).seMideSolo()).isTrue();
+        assertThat(habitos.get(0).medicion().meta()).isEqualByComparingTo("5");
+        assertThat(habitos.get(0).medicion().valorDelDia()).isEqualByComparingTo("5.4");
+        assertThat(habitos.get(0).medicion().origenDelDia()).isEqualTo("HEALTH_CONNECT");
+        assertThat(habitos.get(0).medicion().fuenteDelDia()).isEqualTo("Galaxy Watch");
+        assertThat(habitos.get(1).medicion()).isNull();
+        assertThat(habitos.get(1).mideKilometros()).isFalse();
+        assertThat(habitos.get(1).seMideSolo()).isFalse();
+    }
 }

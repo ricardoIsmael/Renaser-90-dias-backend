@@ -26,7 +26,11 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -268,10 +272,41 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
                     + "No hables de su dia ni se lo preguntes.)";
         }
         String fecha = situacion.hoy() == null ? "" : situacion.hoy().format(FECHA_DE_HOY) + ", ";
+        if (situacion.programaPorEmpezar()) {
+            return "Hoy es " + fecha + programaPorEmpezar(situacion) + "\n" + nombreDelObjetivoGrande(situacion.plazoDelObjetivo())
+                    + tratoDe(situacion.trato()) + "\n" + MapaEnElPrompt.linea(situacion.mapa(), situacion.diaPrograma(), situacion.plazoDelObjetivo())
+                    + HabitosDeHoyEnElPrompt.texto(situacion.habitos());
+        }
         return "Hoy es " + fecha + "su dia " + situacion.diaPrograma() + " de " + situacion.duracionDias() + ", en la fase " + situacion.fase()
                 + " de 4.\n" + nombreDelObjetivoGrande(situacion.plazoDelObjetivo()) + tratoDe(situacion.trato()) + "\n"
                 + MapaEnElPrompt.linea(situacion.mapa(), situacion.diaPrograma(), situacion.plazoDelObjetivo())
                 + HabitosDeHoyEnElPrompt.texto(situacion.habitos());
+    }
+
+    /** «martes 3 de noviembre»: el dia de la semana y la fecha, sin el año, como la dice la app («Tu programa empieza el martes 3 de noviembre»). */
+    private static final DateTimeFormatter DIA_DE_INICIO =
+            DateTimeFormatter.ofPattern("EEEE d 'de' MMMM", Locale.forLanguageTag("es"));
+
+    /**
+     * Spec 036 (D-309): el programa empieza al dia siguiente de confirmarlo, asi que el primer encuentro con SER cae casi siempre en el dia 0. Sin esto
+     * la situacion decia «su dia 0 de 90, en la fase 1 de 4» y el modelo hablaba de un dia y una fase que todavia no existen. Ahora dice cuando empieza
+     * (con el plazo de SU formacion: «90 dias», «3 meses», «1 año») y le prohibe hablar de dia o de fase. Si todavia no lo activo, lo dice y manda al boton
+     * «Empezar manana»: nunca le asigna una fecha por su cuenta.
+     */
+    static String programaPorEmpezar(SituacionDelAprendiz situacion) {
+        String plazo = situacion.plazoDelObjetivo();
+        String noHables = " No hables de su dia ni de su fase: todavia no tiene.";
+        LocalDate diaUno = situacion.diaUno();
+        if (diaUno == null) {
+            return "Todavia no activo su programa de " + plazo + ": empieza al dia siguiente de confirmarlo, con el boton «Empezar manana» "
+                    + "(en Hoy, Plan o Training)." + noHables;
+        }
+        String fecha = diaUno.format(DIA_DE_INICIO);
+        long dias = situacion.hoy() == null ? Long.MAX_VALUE : ChronoUnit.DAYS.between(situacion.hoy(), diaUno);
+        String cuando = dias == 1 ? "empieza manana (" + fecha + ")"
+                : dias <= 0 && situacion.hoy() != null ? "empieza hoy (" + fecha + ")"
+                : "empieza el " + fecha;
+        return "Su programa de " + plazo + " " + cuando + "." + noHables;
     }
 
     /**

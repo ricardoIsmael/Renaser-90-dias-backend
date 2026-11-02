@@ -90,7 +90,7 @@ final class HabitosDeHoyEnElPrompt {
         return propio + " (" + titulo(habito.tituloDelPrograma()) + " del programa)";
     }
 
-    /** "pide foto" o "pide escribir" solo en lo que falta entregar: en uno hecho, o de un dia ya cerrado, no aporta nada. */
+    /** "pide foto", "pide escribir" o "se mide solo" solo en lo que falta entregar: en uno hecho, o de un dia ya cerrado, no aporta nada. */
     private static String estado(HabitoDeHoy habito) {
         String palabra = palabra(habito.estado());
         boolean faltaEntregar = habito.estado() == EstadoDeHoy.PENDIENTE || habito.estado() == EstadoDeHoy.EN_CURSO
@@ -100,6 +100,9 @@ final class HabitosDeHoyEnElPrompt {
         }
         if (habito.pideTexto()) {
             return palabra + ", pide escribir";
+        }
+        if (habito.seMideSolo()) {
+            return palabra + ", se mide solo con sus pasos (sin foto: lo registra en Training con «Registrar»)";
         }
         return habito.pideFoto() ? palabra + ", pide foto" : palabra;
     }

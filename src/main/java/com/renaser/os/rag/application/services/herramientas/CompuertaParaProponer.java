@@ -1,6 +1,7 @@
 package com.renaser.os.rag.application.services.herramientas;
 
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort;
+import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz;
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarCompuertaDeRocasPort;
 import com.renaser.os.shared.domain.UserId;
 import org.slf4j.Logger;
@@ -42,12 +43,33 @@ public class CompuertaParaProponer {
                 + "diagnóstico). No le propongas otro plan ni otra acción de objetivos hasta que los tenga (sus hábitos sí se pueden ajustar).";
     }
 
+    /**
+     * Spec 036 (D-309): quien todavia no activo su programa no tiene Dia 1, y sin el no hay dias del programa que planificar: {@code rocks} rechaza la
+     * fecha con {@code INVALID_DATE}. Quien ya lo activo (empieza manana) si puede planificar: el servidor lo deja, asi que SER tambien.
+     */
+    static final String PROGRAMA_SIN_ACTIVAR = SIN_PROPUESTA + "todavía no activó su programa (no tiene Día 1), y sin él no hay días del programa "
+            + "que planificar: el servidor rechazaría cualquier día. Dile que lo active con el botón «Empezar mañana» (en Hoy, Plan o Training) y que, "
+            + "cuando empiece, planificas su día. No le propongas ningún plan del día ni acción de objetivos hasta entonces.";
+
     private final ConsultarCompuertaDeRocasPort compuertaPort;
     private final ConsultarSituacionDelAprendizPort situacion;
 
     public CompuertaParaProponer(ConsultarCompuertaDeRocasPort compuertaPort, ConsultarSituacionDelAprendizPort situacion) {
         this.compuertaPort = compuertaPort;
         this.situacion = situacion;
+    }
+
+    /**
+     * Para planificar un dia (el plan del dia y agregar una accion): vacio si ya activo su programa o no se puede saber; si no, el motivo para el modelo.
+     * Best-effort como el resto: sin lectura de la situacion no se bloquea y sigue decidiendo el servidor.
+     */
+    public Optional<String> bloqueoPorProgramaSinActivar(UserId actorId) {
+        try {
+            return situacion.de(actorId).filter(SituacionDelAprendiz::programaSinActivar).map(sinActivar -> PROGRAMA_SIN_ACTIVAR);
+        } catch (RuntimeException falla) {
+            log.info("[rag] la propuesta sale sin consultar si activó su programa: {}", falla.toString());
+            return Optional.empty();
+        }
     }
 
     /** Para el plan de la semana y los cambios a sus objetivos: solo hace falta la llave (las Rocas Maestras). */

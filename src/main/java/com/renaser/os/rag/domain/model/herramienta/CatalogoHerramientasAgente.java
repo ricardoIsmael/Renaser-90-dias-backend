@@ -38,8 +38,9 @@ public final class CatalogoHerramientasAgente {
     private static final DefinicionHerramienta CONSULTAR_HABITOS = DefinicionHerramienta.sinParametros(
             CONSULTAR_HABITOS_DEL_DIA,
             "Devuelve los habitos de hoy del aprendiz con su estado, los puntos que paga cada uno si lo "
-                    + "entrega ahora y hasta que hora puede entregarlo. Usala antes de responder cualquier "
-                    + "cosa sobre que le toca hacer, que le falta o como va el dia.");
+                    + "entrega ahora y hasta que hora puede entregarlo. Los que miden kilometros traen mide=km, "
+                    + "meta y lleva (lo ya registrado hoy), y registro=automatico si sus pasos los miden solos. "
+                    + "Usala antes de responder cualquier cosa sobre que le toca hacer, que le falta o como va el dia.");
 
     private static final DefinicionHerramienta CONSULTAR_PUNTOS = DefinicionHerramienta.sinParametros(
             CONSULTAR_PUNTOS_EN_JUEGO,

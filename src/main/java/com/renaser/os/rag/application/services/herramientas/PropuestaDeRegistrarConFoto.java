@@ -37,6 +37,10 @@ import java.util.UUID;
  * seguir PENDIENTE o EN_CURSO, y pedir evidencia. La Clase diaria tambien la pide en el catalogo,
  * pero se cierra con su resumen: no se le ofrece camara.
  *
+ * <p><b>Spec 037 (T021 de la 038): los kilometros medidos por el telefono no piden foto.</b> Si la persona ya mide KILOMETROS DIARIOS con sus pasos conectados
+ * ({@link HabitoDelDia#seMideSolo()}), no se le deja la tarjeta de la camara: se le dice al modelo que la mande al «Registrar» de la fila de Training. Sin
+ * pasos conectados todo sigue como antes (camara o galeria, y los km).
+ *
  * <p><b>La tarjeta vence al terminar el dia local de la persona</b> (regla 02): despues ese registro
  * ya no es el de hoy. No se usa la vigencia de las propuestas (10 minutos) porque no hay nada que
  * confirmar en el servidor: la app puede sacar la foto un rato despues sin que nada caduque.
@@ -107,6 +111,12 @@ public class PropuestaDeRegistrarConFoto implements HerramientaAgente {
         };
         if (motivo == null && HabitoDelDia.CLAVE_CLASE_DIARIA.equals(habito.claveSistema())) {
             motivo = "La Clase diaria se entrega con su resumen, no con foto: usa proponer_entregar_clase_de_hoy.";
+        } else if (motivo == null && habito.seMideSolo()) {
+            // Spec 037 (T021 de la 038): con sus pasos conectados los km los lee su telefono; la foto sobra y el boton de la camara llevaria a algo que no es.
+            motivo = titulo + " mide los kilometros solo, con los pasos que la persona conecto en su telefono: no hay foto que pedir. No dejes "
+                    + "boton de camara. Dile que abra Training y toque «Registrar» en la fila de Kilometros diarios cuando llegue a su meta"
+                    + (habito.medicion().meta() == null ? "" : " de " + habito.medicion().meta().stripTrailingZeros().toPlainString() + " km")
+                    + " (si ahi ve «Subir captura», tambien puede subirla desde esa fila). No digas que ya quedo registrado.";
         } else if (motivo == null && !habito.exigeEvidencia()) {
             motivo = titulo + " no pide foto: para marcarlo usa marcar_habito_completado.";
         }

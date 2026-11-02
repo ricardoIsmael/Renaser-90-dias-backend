@@ -48,14 +48,26 @@ import java.util.UUID;
  * @param habitoId       el id del habito (catalogo o propio) del que es este registro, o {@code null} si no se sabe (spec 038). Es lo que la app necesita
  *                       para apagar las alarmas de ESE habito (issue #33) cuando SER lo cumple por una propuesta
  * @param fecha          el dia del habito de este registro ({@code fechaEjecucion}, en la zona de la persona), o {@code null} (spec 038)
+ * @param medicion       la medicion del habito si mide un numero por dia (hoy KILOMETROS DIARIOS): meta, lo registrado hoy y si la persona ya mide con el
+ *                       telefono (spec 037, sobre la tarea T021 de la 038); {@code null} en todos los demas
  */
 public record HabitoEnJuegoResumen(UUID registroId, String titulo, String estado, Integer puntosEnJuego,
                                     Integer puntosMaximos, Instant plazo, boolean exigeEvidencia,
                                     List<TramoPuntos> tramos, String claveSistema, String tituloDelPrograma,
-                                    LocalTime horaInicio, String categoriaClave, UUID habitoId, java.time.LocalDate fecha) {
+                                    LocalTime horaInicio, String categoriaClave, UUID habitoId, java.time.LocalDate fecha,
+                                    MedicionDelHabito medicion) {
 
     public HabitoEnJuegoResumen {
         tramos = tramos == null ? List.of() : List.copyOf(tramos);
+    }
+
+    /** Sin medicion (lo que habia antes de la spec 037 en SER). */
+    public HabitoEnJuegoResumen(UUID registroId, String titulo, String estado, Integer puntosEnJuego,
+                                Integer puntosMaximos, Instant plazo, boolean exigeEvidencia,
+                                List<TramoPuntos> tramos, String claveSistema, String tituloDelPrograma,
+                                LocalTime horaInicio, String categoriaClave, UUID habitoId, java.time.LocalDate fecha) {
+        this(registroId, titulo, estado, puntosEnJuego, puntosMaximos, plazo, exigeEvidencia, tramos, claveSistema,
+                tituloDelPrograma, horaInicio, categoriaClave, habitoId, fecha, null);
     }
 
     /** Sin el habito ni el dia (lo que habia antes de la spec 038). */

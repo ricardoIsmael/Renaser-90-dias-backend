@@ -35,9 +35,9 @@ Estado: **[x]** hecho y probado · **[ ]** pendiente. Decisión **D-311**, migra
 - [x] T018 Regla en el prompt, memoria sin dinero, descripción de `consultar_mi_diagnostico`.
 - [x] T019 Política de privacidad de la app: una línea sobre el diagnóstico y el modelo de IA.
 
-## 8. Cuando se integren 036 y 037 (no se programa aquí)
-- [ ] T020 **036:** situación «tu programa empieza mañana» con el plazo de su formación; `proponer_plan_del_dia` exige el Día 1 elegido.
-- [ ] T021 **037:** `consultar_habitos_del_dia` con `mide=km, meta, lleva`; SER no pide foto si hay pasos conectados y dice «Registrar» de la fila de Training; el prompt lo explica.
+## 8. Con la 036 y la 037 ya integradas (consolidación del 2026-11-02)
+- [x] T020 **036:** situación «tu programa empieza mañana» con el plazo de su formación (`SituacionDelAprendiz.diaUno`, `GoogleGenAiRenasiaChatAdapter.programaPorEmpezar`); `proponer_plan_del_dia` y `proponer_agregar_accion` exigen el programa activado (`CompuertaParaProponer.bloqueoPorProgramaSinActivar`). Pruebas: `SituacionAntesDelDiaUnoEnElPromptTest`, `PropuestasSinProgramaActivadoTest`, `ConsultarSituacionDelAprendizAdapterTest`.
+- [x] T021 **037:** `consultar_habitos_del_dia` con `mide=km, meta, lleva`; SER no pide foto si hay pasos conectados y dice «Registrar» de la fila de Training; el prompt lo explica (`HabitoEnJuegoResumen.medicion`, `LoQueLeFaltaHoy`, `PropuestaDeRegistrarConFoto`, `renasia-sistema.st`). Pruebas: `LoQueLeFaltaHoyTest`, `PropuestaDeRegistrarConFotoTest`, `AgendaDelDiaFinderServiceTest`, `ConsultarAgendaHabitosAdapterTest`, `SituacionDelTurnoServiceTest`, `HabitosDeHoyEnElPromptTest`, `PromptSistemaRenasiaTest`.
 
 ## Verificación
 - [x] Compilado y probado a mano con `javac` + el lanzador de JUnit (1261 de 1263 pruebas unitarias de `rag`, la otra de Piper es del entorno; 1260 de `rocks` y `habits.application`).

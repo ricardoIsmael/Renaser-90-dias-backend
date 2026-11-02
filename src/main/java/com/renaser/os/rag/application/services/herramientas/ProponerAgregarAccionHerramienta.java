@@ -132,6 +132,10 @@ public class ProponerAgregarAccionHerramienta implements HerramientaAgente {
             log.warn("[rag] la herramienta {} no pudo leer las rocas", NOMBRE, falla);
             return ResultadoHerramienta.fallo("No pude revisar su plan en este momento.");
         }
+        Optional<String> sinActivar = compuerta.bloqueoPorProgramaSinActivar(actorId);
+        if (sinActivar.isPresent()) {
+            return ResultadoHerramienta.fallo(sinActivar.get());
+        }
         LocalDate fecha = pedida.fecha() == null ? manana : pedida.fecha();
         Optional<String> habito = "si".equalsIgnoreCase(String.valueOf(invocacion.argumento(ACCION_APARTE)).strip())
                 ? Optional.empty() : habitoQueNombra(actorId, pedida.accion().titulo());

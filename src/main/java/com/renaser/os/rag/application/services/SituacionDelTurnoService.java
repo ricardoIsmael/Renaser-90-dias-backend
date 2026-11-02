@@ -140,8 +140,8 @@ public class SituacionDelTurnoService implements ConsultarSituacionDelTurnoUseCa
         Instant ahora = clock.now();
         return agendaPort.deHoyDe(participanteId).stream()
                 .map(habito -> new HabitoDeHoy(habito.titulo(), estadoDe(habito, ahora),
-                        habito.seRegistraConFoto() && !habito.seRegistraEscribiendo(), habito.tituloDelPrograma(),
-                        habito.seRegistraEscribiendo()))
+                        habito.seRegistraConFoto() && !habito.seRegistraEscribiendo() && !habito.seMideSolo(),
+                        habito.tituloDelPrograma(), habito.seRegistraEscribiendo(), habito.seMideSolo()))
                 .toList();
     }
 

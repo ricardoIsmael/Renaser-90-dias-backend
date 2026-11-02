@@ -103,6 +103,10 @@ El diagnóstico completo llega al modelo (Q8-B). SER lo usa con sus palabras, no
 - **Lo que no está ligado a una lección** (`leccion_id IS NULL`: enseñanzas generales, transcripciones de YouTube) **no se separa**: `PgVectorNativoAdapter` deja pasar ese material a todas las personas. Hoy toda esa base es del contenido de la Escuela, así que una persona del Diplomado o de la Certificación podría ver citado, en el material de fondo, algo que solo es de la Escuela.
 - **Forma más simple de separarlo, sin tablas nuevas** (no se implementa en esta spec; necesita decisión del dueño): una clave `formacion` en `base_conocimiento.metadatos` (el `jsonb` ya existe y tiene índice GIN). La ingesta (`ConocimientoService.indexar`, que ya recibe `metadatos`) la escribe cuando el material es de una sola formación. La búsqueda agrega al `WHERE` de lo no ligado a lecciones `(metadatos->>'formacion' IS NULL OR metadatos->>'formacion' = ANY(:formaciones))`, con las formaciones que `AlcanceDeFormacionFinder` da para la persona. Lo que no tiene la clave sigue valiendo para todas (compatible hacia atrás). Un `UPDATE` de una sola vez marca como `ESCUELA` lo que el dueño confirme que lo es.
 
+## Integrado el 2026-11-02 (tareas T020 y T021): 036 y 037 en SER
+
+Lo de abajo se hizo en la consolidación; queda como la descripción de lo que se hizo (ver `tasks.md`, §8).
+
 ## Fuera de alcance / para cuando se integren 036 y 037
 
 - **036 (el programa empieza al día siguiente):** hoy la situación dice «su dia 0 de 90» y el primer encuentro con SER cae justo ahí. Al integrarla: en `GoogleGenAiRenasiaChatAdapter.formatearSituacion`, si `diaPrograma < 1`, decir «Su programa de N dias empieza mañana (el martes 3 de noviembre). No hables de dia ni de fase.» (con el plazo de su formación); y `proponer_plan_del_dia` debe comprobar que ya eligió su Día 1 (sin él `semanasParaPlanificarUnDia` rechaza con `INVALID_DATE`).

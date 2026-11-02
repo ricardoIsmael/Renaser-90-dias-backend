@@ -42,6 +42,9 @@ import java.util.NoSuchElementException;
  * el lunes). Es la misma regla de {@code FechasPlanificables} con los datos que ya expone {@code consultar_rocas} (manana, si la ventana esta abierta y el fin de
  * la semana); si alguno no se puede leer, no se bloquea y sigue decidiendo el servidor. Cuantas acciones por eje NO se revisa aca: lo corre el caso de uso.
  *
+ * <p><b>Spec 036: exige que el programa este activado.</b> Quien todavia no activo su programa no tiene Dia 1 y {@code rocks} rechaza cualquier fecha ({@code INVALID_DATE});
+ * se lo dice antes de proponer, y manda al boton «Empezar manana». Quien lo activo (su programa empieza manana) si puede planificar: es lo que deja el servidor.
+ *
  * <p>Solo existe con {@code renaser.ia.acompanante.confirmacion-con-botones=true}: sin los botones
  * en la app, una propuesta no se puede confirmar.
  */
@@ -112,6 +115,10 @@ public class ProponerPlanDelDiaHerramienta implements HerramientaAgente {
     }
 
     private ResultadoHerramienta proponerSobreLoQueYaTiene(UserId actorId, PlanDelDia pedido) {
+        Optional<String> sinActivar = compuerta.bloqueoPorProgramaSinActivar(actorId);
+        if (sinActivar.isPresent()) {
+            return ResultadoHerramienta.fallo(sinActivar.get());
+        }
         RocasDelDia manana = rocasPort.deManana(actorId);
         LocalDate fecha = pedido.fecha() == null ? manana.fecha() : pedido.fecha();
         if (esHoyYaArmado(actorId, fecha, manana.fecha())) {

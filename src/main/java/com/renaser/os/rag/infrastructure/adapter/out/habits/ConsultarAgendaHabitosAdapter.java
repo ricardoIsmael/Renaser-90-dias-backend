@@ -71,7 +71,12 @@ class ConsultarAgendaHabitosAdapter implements ConsultarAgendaHabitosPort {
                 resumen.puntosMaximos(), resumen.plazo(), resumen.exigeEvidencia(),
                 resumen.tramos().stream().map(ConsultarAgendaHabitosAdapter::aTramo).toList(), resumen.claveSistema(),
                 resumen.tituloDelPrograma(), resumen.horaInicio(),
-                dimensionDe(resumen.categoriaClave(), nombres), resumen.habitoId(), resumen.fecha());
+                dimensionDe(resumen.categoriaClave(), nombres), resumen.habitoId(), resumen.fecha(), aMedicion(resumen.medicion()));
+    }
+
+    private static MedicionDelHabito aMedicion(com.renaser.os.habits.api.MedicionDelHabito medicion) {
+        return medicion == null ? null : new MedicionDelHabito(medicion.unidad(), medicion.meta(), medicion.valorDelDia(),
+                medicion.origenDelDia(), medicion.fuenteDelDia(), medicion.conPasosConectados());
     }
 
     private static String dimensionDe(String categoriaClave, Map<String, String> nombres) {

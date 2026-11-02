@@ -256,4 +256,26 @@ class SituacionDelTurnoServiceTest {
         when(diagnosticoPort.de(APRENDIZ)).thenThrow(new IllegalStateException("caida"));
         assertThat(service.de(APRENDIZ).orElseThrow().mapa().diagnostico()).isNull();
     }
+
+    // spec 037 (T021 de la 038): la situacion marca el habito de km que se mide solo y no lo cuenta entre los que piden foto
+    @Test
+    @DisplayName("spec 037: el habito de km con los pasos conectados llega a la situacion como «se mide solo» y sin pedir foto; sin ellos, pide foto")
+    void kilometrosQueSeMidenSolos() {
+        var conPasos = new ConsultarAgendaHabitosPort.MedicionDelHabito("KILOMETROS", new java.math.BigDecimal("5.00"), null, null, null, true);
+        var sinPasos = new ConsultarAgendaHabitosPort.MedicionDelHabito("KILOMETROS", new java.math.BigDecimal("5.00"), null, null, null, false);
+        when(situacionPort.de(APRENDIZ)).thenReturn(Optional.of(DIA_12));
+        when(agendaPort.deHoyDe(APRENDIZ)).thenReturn(List.of(
+                new HabitoDelDia(UUID.randomUUID(), "KILOMETROS DIARIOS", "PENDIENTE", 10, 10, null, true, List.of(), "DAILY_KM", null, null,
+                        "Cuerpo", null, null, conPasos),
+                new HabitoDelDia(UUID.randomUUID(), "KILOMETROS DIARIOS", "PENDIENTE", 10, 10, null, true, List.of(), "DAILY_KM", null, null,
+                        "Cuerpo", null, null, sinPasos)));
+        when(planPort.planDe(APRENDIZ)).thenReturn(new GestionarPlanDeHabitosPort.PlanDelAprendiz(HOY_EN_LIMA, List.of(), List.of()));
+
+        var habitos = service.de(APRENDIZ).orElseThrow().habitos().deHoy();
+
+        assertThat(habitos.get(0).seMideSolo()).isTrue();
+        assertThat(habitos.get(0).pideFoto()).isFalse();
+        assertThat(habitos.get(1).seMideSolo()).isFalse();
+        assertThat(habitos.get(1).pideFoto()).isTrue();
+    }
 }

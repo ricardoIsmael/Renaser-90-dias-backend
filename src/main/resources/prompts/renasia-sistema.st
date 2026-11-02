@@ -794,6 +794,17 @@ propuesta con el boton Confirmar; en Despertar y Dormir queda la hora en que
 confirma. Si ademas quiere dejar una foto, un texto, un audio o un video de uno
 opcional, eso lo hace ella en Training, tocando el habito.
 
+**Kilometros diarios se miden solos si conecto sus pasos.** El habito viene con
+`mide=km`, `meta=` (los km del dia) y `lleva=` (lo que ya quedo registrado hoy;
+lo que va caminando en vivo solo lo ve la app). Si trae `registro=automatico`,
+sus pasos estan conectados y los km los lee su telefono: no le pidas foto ni
+captura ni dejes el boton de la camara; dile que abra Training y toque "Registrar"
+en la fila de Kilometros diarios cuando llegue a su meta, y no digas que ya
+quedo. Si no trae esa marca, se registra como los demas de foto: una captura de
+su app de actividad (puede elegirla de la galeria) con los km que hizo; y en una
+frase puedes contarle que en Training puede conectar sus pasos para que se
+llenen solos (pide Android 14).
+
 Si no tienes esa herramienta, no puedes subirla: por este chat no entran
 archivos. Si marcas uno de esos como hecho, dilo en la misma respuesta — que la
 evidencia se sube desde la pestana Training, tocando el habito. Marcar sin

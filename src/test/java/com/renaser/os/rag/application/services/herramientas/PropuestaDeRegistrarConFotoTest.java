@@ -158,4 +158,49 @@ class PropuestaDeRegistrarConFotoTest {
         assertThat(PropuestaDeRegistrarConFoto.finDelDiaLocal(FIN_DEL_VIERNES_EN_LIMA, LIMA))
                 .isEqualTo(Instant.parse("2026-09-27T05:00:00Z"));
     }
+
+    private static HabitoDelDia kilometros(String estado, boolean conPasosConectados) {
+        var medicion = new ConsultarAgendaHabitosPort.MedicionDelHabito("KILOMETROS", new java.math.BigDecimal("5.00"), null, null, null,
+                conPasosConectados);
+        Integer puntos = estado.equals("PENDIENTE") ? 10 : null;
+        return new HabitoDelDia(JUGO, "KILOMETROS DIARIOS", estado, puntos, 10, null, true, List.of(), "DAILY_KM", null, null, "Cuerpo",
+                null, null, medicion);
+    }
+
+    // spec 037 (T021 de la 038): con sus pasos conectados los km los lee el telefono; SER no deja el boton de la camara y manda al «Registrar» de Training
+    @Test
+    @DisplayName("spec 037: kilometros con los pasos conectados no piden foto ni dejan tarjeta: mandan al «Registrar» de la fila de Training")
+    void kilometrosConPasosConectadosNoPidenFoto() {
+        when(agenda.deHoyDe(APRENDIZ)).thenReturn(List.of(kilometros("PENDIENTE", true)));
+        when(agenda.zonaDe(APRENDIZ)).thenReturn(LIMA);
+
+        String motivo = fallo(pedirFoto(JUGO.toString()));
+
+        assertThat(motivo).contains("mide los kilometros solo").contains("No dejes boton de camara")
+                .contains("toque «Registrar» en la fila de Kilometros diarios").contains("meta de 5 km")
+                .contains("No digas que ya quedo registrado");
+        assertThat(pedidosDelTurno()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("spec 037: kilometros sin pasos conectados siguen con la tarjeta de la camara de siempre (captura o galeria)")
+    void kilometrosSinPasosConectadosSiguenConLaCamara() {
+        when(agenda.deHoyDe(APRENDIZ)).thenReturn(List.of(kilometros("PENDIENTE", false)));
+        when(agenda.zonaDe(APRENDIZ)).thenReturn(LIMA);
+
+        ResultadoHerramienta resultado = pedirFoto(JUGO.toString());
+
+        assertThat(((ResultadoHerramienta.Exito) resultado).contenido()).contains("Boton de la camara listo para 'KILOMETROS DIARIOS'");
+        assertThat(pedidosDelTurno()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("spec 037: kilometros ya registrados (por pasos) dicen que ya quedo, no que se mide solo; y un dia cerrado sigue siendo dia cerrado")
+    void kilometrosYaRegistradosOCerrados() {
+        when(agenda.deHoyDe(APRENDIZ)).thenReturn(List.of(kilometros("COMPLETADO", true)));
+        assertThat(fallo(pedirFoto(JUGO.toString()))).contains("ya esta registrado hoy");
+
+        when(agenda.deHoyDe(APRENDIZ)).thenReturn(List.of(kilometros("EXPIRADO", true)));
+        assertThat(fallo(pedirFoto(JUGO.toString()))).contains("es de un dia que ya cerro");
+    }
 }

@@ -188,4 +188,18 @@ class HabitosDeHoyEnElPromptTest {
                 .contains("Trato: femenino.");
         assertThat(GoogleGenAiRenasiaChatAdapter.formatearSituacion(base)).contains("Trato: neutro (sin dato).");
     }
+
+    // spec 037 (T021 de la 038): un habito de km con los pasos conectados no «pide foto»: se mide solo y se registra en Training
+    @Test
+    @DisplayName("spec 037: un habito que se mide solo dice que se registra en Training con «Registrar» y no habla de foto")
+    void kilometrosSeMidenSolos() {
+        String texto = HabitosDeHoyEnElPrompt.texto(new HabitosDeHoy(List.of(
+                new HabitoDeHoy("KILOMETROS DIARIOS", EstadoDeHoy.PENDIENTE, false, null, false, true),
+                new HabitoDeHoy("KILOMETROS DIARIOS", EstadoDeHoy.HECHO, false, null, false, true)), List.of()));
+
+        assertThat(texto).contains("- KILOMETROS DIARIOS: pendiente, se mide solo con sus pasos (sin foto: lo registra en Training con «Registrar»)")
+                .doesNotContain("pide foto");
+        // Ya hecho no necesita explicacion: queda en «Ya hechos hoy».
+        assertThat(texto).contains("Ya hechos hoy (no le propongas hacerlos, saltarlos ni registrarlos otra vez): KILOMETROS DIARIOS.");
+    }
 }

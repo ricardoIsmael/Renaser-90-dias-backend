@@ -6,6 +6,7 @@ import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseC
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase.TrackDelDiaConCatalogo;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
+import com.renaser.os.habits.application.ports.out.medicion.ContarMedicionesAutomaticasPort;
 import com.renaser.os.habits.domain.model.habito.ExigenciaEvidencia;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
@@ -52,8 +53,9 @@ class AgendaDelDiaFinderServiceTest {
     private final ConsultarProgresoParticipanteHabitsPort progreso =
             mock(ConsultarProgresoParticipanteHabitsPort.class);
     private final LoadHabitoPort habitos = mock(LoadHabitoPort.class);
+    private final ContarMedicionesAutomaticasPort automaticas = mock(ContarMedicionesAutomaticasPort.class);
     private final AgendaDelDiaFinderService service = new AgendaDelDiaFinderService(tracks,
-            mock(CompletarRegistroUseCase.class), progreso, habitos);
+            mock(CompletarRegistroUseCase.class), progreso, habitos, automaticas);
 
     /** 20:00 -> 22:00 en Lima, extension por defecto: la gracia va de 23:50 a 00:00 del dia siguiente. */
     private static VentanaEntrega ventanaNocturna() {
@@ -167,5 +169,63 @@ class AgendaDelDiaFinderServiceTest {
 
         assertThat(resumen.horaInicio()).isEqualTo(LocalTime.of(19, 0));
         assertThat(resumen.categoriaClave()).isEqualTo("CUERPO");
+    }
+
+    // spec 037 FR-012 (la agenda de hoy trae medicion.meta) y spec 038 T021: SER lee la meta, lo que lleva y si ya mide con el telefono
+    @Test
+    @DisplayName("spec 038 T021: un habito de km sale con su meta, lo registrado hoy y la pista de que ya mide con el telefono")
+    void kilometrosTraenMetaYLaPistaDeLosPasos() {
+        RegistroHabito registro = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), APRENDIZ,
+                HabitoId.of(UUID.randomUUID()), FECHA, 5, TipoDia.DISCIPLINA, false, Instant.parse("2026-09-23T15:00:00Z"));
+        var medicion = new ConsultarTracksDelDiaConCatalogoUseCase.MedicionDelTrack(
+                com.renaser.os.habits.domain.model.medicion.UnidadMedicion.KILOMETROS, null, new java.math.BigDecimal("12.50"),
+                new java.math.BigDecimal("5.00"), null, null);
+        when(tracks.consultarHoyDe(APRENDIZ)).thenReturn(List.of(new TrackDelDiaConCatalogo(registro, "KILOMETROS DIARIOS",
+                TipoHabito.CHECKBOX, null, null, null, null, false, true, "DAILY_KM", null, medicion)));
+        when(automaticas.conAlgunaMedicionAutomatica(List.of(APRENDIZ), "DAILY_KM", FECHA)).thenReturn(java.util.Set.of(APRENDIZ));
+
+        var resumen = service.deHoyDe(APRENDIZ).get(0).medicion();
+
+        assertThat(resumen.unidad()).isEqualTo("KILOMETROS");
+        assertThat(resumen.meta()).isEqualByComparingTo("5");
+        assertThat(resumen.valorDelDia()).isNull();
+        assertThat(resumen.conPasosConectados()).isTrue();
+    }
+
+    @Test
+    @DisplayName("spec 038 T021: sin ningun dia medido por el telefono no hay pasos conectados, y un habito que no mide no lleva medicion ni gasta la consulta")
+    void sinPasosConectadosNiMedicion() {
+        RegistroHabito km = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), APRENDIZ,
+                HabitoId.of(UUID.randomUUID()), FECHA, 5, TipoDia.DISCIPLINA, false, Instant.parse("2026-09-23T15:00:00Z"));
+        RegistroHabito lectura = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), APRENDIZ,
+                HabitoId.of(UUID.randomUUID()), FECHA, 5, TipoDia.DISCIPLINA, false, Instant.parse("2026-09-23T15:00:00Z"));
+        var medicion = new ConsultarTracksDelDiaConCatalogoUseCase.MedicionDelTrack(
+                com.renaser.os.habits.domain.model.medicion.UnidadMedicion.KILOMETROS, null, java.math.BigDecimal.ZERO);
+        when(tracks.consultarHoyDe(APRENDIZ)).thenReturn(List.of(
+                new TrackDelDiaConCatalogo(km, "KILOMETROS DIARIOS", TipoHabito.CHECKBOX, null, null, null, null, false, true, "DAILY_KM", null, medicion),
+                new TrackDelDiaConCatalogo(lectura, "Leer", TipoHabito.CHECKBOX, null, null, null, null, false, false)));
+        when(automaticas.conAlgunaMedicionAutomatica(List.of(APRENDIZ), "DAILY_KM", FECHA)).thenReturn(java.util.Set.of());
+
+        var resumenes = service.deHoyDe(APRENDIZ);
+
+        assertThat(resumenes.get(0).medicion().conPasosConectados()).isFalse();
+        assertThat(resumenes.get(1).medicion()).isNull();
+        org.mockito.Mockito.verify(automaticas, org.mockito.Mockito.times(1)).conAlgunaMedicionAutomatica(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("spec 038 T021: si la consulta de las lecturas automaticas falla, la medicion sale sin la pista y la agenda no se cae")
+    void siFallaLaPistaLaAgendaSigue() {
+        RegistroHabito km = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), APRENDIZ,
+                HabitoId.of(UUID.randomUUID()), FECHA, 5, TipoDia.DISCIPLINA, false, Instant.parse("2026-09-23T15:00:00Z"));
+        var medicion = new ConsultarTracksDelDiaConCatalogoUseCase.MedicionDelTrack(
+                com.renaser.os.habits.domain.model.medicion.UnidadMedicion.KILOMETROS, null, java.math.BigDecimal.ZERO);
+        when(tracks.consultarHoyDe(APRENDIZ)).thenReturn(List.of(new TrackDelDiaConCatalogo(km, "KILOMETROS DIARIOS",
+                TipoHabito.CHECKBOX, null, null, null, null, false, true, "DAILY_KM", null, medicion)));
+        when(automaticas.conAlgunaMedicionAutomatica(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any())).thenThrow(new IllegalStateException("base caida"));
+
+        assertThat(service.deHoyDe(APRENDIZ).get(0).medicion().conPasosConectados()).isFalse();
     }
 }

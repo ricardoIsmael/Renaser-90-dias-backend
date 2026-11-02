@@ -2,6 +2,7 @@ package com.renaser.os.rag.application.ports.out.habitos;
 
 import com.renaser.os.shared.domain.UserId;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -73,10 +74,12 @@ public interface ConsultarAgendaHabitosPort {
      * @param habitoId       el habito (catalogo o propio) del que es el registro, {@code null} si no se sabe (spec 038): la app apaga con el
      *                       las alarmas de ese habito cuando SER lo cumple
      * @param fecha          el dia de este registro (su {@code fechaEjecucion}), {@code null} si no se sabe (spec 038)
+     * @param medicion       la medicion del habito si mide un numero por dia (hoy KILOMETROS DIARIOS), {@code null} en los demas (spec 037, T021 de la 038)
      */
     record HabitoDelDia(UUID registroId, String titulo, String estado, Integer puntosEnJuego, Integer puntosMaximos,
                          Instant plazo, boolean exigeEvidencia, List<TramoPuntos> tramos, String claveSistema,
-                         String tituloDelPrograma, LocalTime horaInicio, String dimension, UUID habitoId, LocalDate fecha) {
+                         String tituloDelPrograma, LocalTime horaInicio, String dimension, UUID habitoId, LocalDate fecha,
+                         MedicionDelHabito medicion) {
 
         /** La Clase diaria se cierra con su resumen, nunca por el camino generico ni con una foto. */
         public static final String CLAVE_CLASE_DIARIA = "DAILY_CLASS";
@@ -87,6 +90,14 @@ public interface ConsultarAgendaHabitosPort {
 
         public HabitoDelDia {
             tramos = tramos == null ? List.of() : List.copyOf(tramos);
+        }
+
+        /** Sin medicion (lo que habia antes de la spec 037 en SER). */
+        public HabitoDelDia(UUID registroId, String titulo, String estado, Integer puntosEnJuego, Integer puntosMaximos,
+                            Instant plazo, boolean exigeEvidencia, List<TramoPuntos> tramos, String claveSistema,
+                            String tituloDelPrograma, LocalTime horaInicio, String dimension, UUID habitoId, LocalDate fecha) {
+            this(registroId, titulo, estado, puntosEnJuego, puntosMaximos, plazo, exigeEvidencia, tramos, claveSistema,
+                    tituloDelPrograma, horaInicio, dimension, habitoId, fecha, null);
         }
 
         /** Sin el habito ni el dia (lo que habia antes de la spec 038). */
@@ -147,9 +158,43 @@ public interface ConsultarAgendaHabitosPort {
             return preguntaQueSintio();
         }
 
+        /** Mide kilometros por dia (KILOMETROS DIARIOS): lleva meta y lo registrado hoy. */
+        public boolean mideKilometros() {
+            return medicion != null && medicion.esKilometros();
+        }
+
+        /**
+         * Spec 037 (T021 de la 038): los kilometros se miden SOLOS con los pasos que la persona ya conecto en su telefono (Health Connect). Entonces SER no pide foto
+         * ni captura: la manda al «Registrar» de la fila de Training, que cierra el habito con la lectura. Es la mejor pista que tiene el servidor
+         * ({@link MedicionDelHabito#conPasosConectados()}): el permiso vive en el telefono.
+         */
+        public boolean seMideSolo() {
+            return mideKilometros() && medicion.conPasosConectados();
+        }
+
         /** Un habito con puntos en juego es, por definicion, uno que todavia se puede entregar. */
         public boolean sigueEnJuego() {
             return puntosEnJuego != null;
+        }
+    }
+
+    /**
+     * La medicion de un habito medible, como la ve SER (spec 037; T021 de la 038).
+     *
+     * @param unidad             {@code KILOMETROS}
+     * @param meta               los km del dia; {@code null} si no se sabe
+     * @param valorDelDia        lo ya registrado hoy; {@code null} si todavia nada (lo que la persona va caminando en vivo lo ve la app, no el servidor)
+     * @param origenDelDia       {@code MANUAL} (captura) o {@code HEALTH_CONNECT}; {@code null} mientras no hay registro
+     * @param fuenteDelDia       la fuente que la persona lee («Galaxy Watch»), solo en la lectura automatica
+     * @param conPasosConectados si ya tiene algun dia medido por el telefono: SER no le pide foto
+     */
+    record MedicionDelHabito(String unidad, BigDecimal meta, BigDecimal valorDelDia, String origenDelDia, String fuenteDelDia,
+                             boolean conPasosConectados) {
+
+        public static final String KILOMETROS = "KILOMETROS";
+
+        public boolean esKilometros() {
+            return KILOMETROS.equals(unidad);
         }
     }
 

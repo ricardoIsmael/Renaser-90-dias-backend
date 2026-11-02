@@ -99,4 +99,48 @@ class LoQueLeFaltaHoyTest {
 
         assertThat(texto).startsWith("Hoy ya hizo todos sus habitos (1).").doesNotContain("Le faltan");
     }
+
+    private static HabitoDelDia kilometros(String estado, java.math.BigDecimal lleva, String origen, boolean conPasosConectados) {
+        var medicion = new com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort.MedicionDelHabito("KILOMETROS",
+                new java.math.BigDecimal("5.00"), lleva, origen, null, conPasosConectados);
+        return new HabitoDelDia(UUID.randomUUID(), "KILOMETROS DIARIOS", estado, estado.equals("PENDIENTE") ? 10 : null, 10, null, true,
+                List.of(), "DAILY_KM", null, LocalTime.of(17, 0), "Cuerpo", null, null, medicion);
+    }
+
+    // spec 037 (T021 de la 038): consultar_habitos_del_dia suma mide=km, la meta y lo que lleva
+    @Test
+    @DisplayName("spec 037: el habito de km sale con mide=km, la meta y lo que lleva; sin pasos conectados sigue marcado exige_evidencia")
+    void kilometrosSinPasosConectados() {
+        String texto = LoQueLeFaltaHoy.texto(List.of(kilometros("PENDIENTE", null, null, false)), AHORA);
+
+        assertThat(texto).contains("KILOMETROS DIARIOS | Cuerpo | estado=PENDIENTE").contains("| mide=km | meta=5 | lleva=0")
+                .contains("| exige_evidencia=si").doesNotContain("registro=automatico");
+    }
+
+    @Test
+    @DisplayName("spec 037: con los pasos conectados dice registro=automatico y no pide foto ni la deja como exige_evidencia")
+    void kilometrosConPasosConectados() {
+        String texto = LoQueLeFaltaHoy.texto(List.of(kilometros("PENDIENTE", null, null, true)), AHORA);
+
+        assertThat(texto).contains("| mide=km | meta=5 | lleva=0").contains("registro=automatico")
+                .contains("No pidas foto ni captura").contains("proponer_registrar_con_foto")
+                .contains("«Registrar» en la fila de Kilometros diarios en Training").doesNotContain("exige_evidencia=si");
+    }
+
+    @Test
+    @DisplayName("spec 037: ya registrado dice cuanto llevo y de donde salio (pasos o captura), sin ceros de mas")
+    void kilometrosYaRegistrados() {
+        String porPasos = LoQueLeFaltaHoy.texto(List.of(kilometros("COMPLETADO", new java.math.BigDecimal("5.40"), "HEALTH_CONNECT", true)), AHORA);
+        String porCaptura = LoQueLeFaltaHoy.texto(List.of(kilometros("COMPLETADO", new java.math.BigDecimal("7.00"), "MANUAL", false)), AHORA);
+
+        assertThat(porPasos).contains("| mide=km | meta=5 | lleva=5.4 | origen=pasos");
+        assertThat(porCaptura).contains("| mide=km | meta=5 | lleva=7 | origen=captura");
+    }
+
+    @Test
+    @DisplayName("spec 037: un habito que no mide nada no lleva mide, meta ni lleva")
+    void otrosHabitosNoLlevanMedicion() {
+        assertThat(LoQueLeFaltaHoy.texto(List.of(habito("Leer", "PENDIENTE", 10, AHORA.plusSeconds(3600), LocalTime.of(20, 30), "Mente")), AHORA))
+                .doesNotContain("mide=").doesNotContain("lleva=");
+    }
 }
