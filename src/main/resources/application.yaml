@@ -91,6 +91,10 @@ spring:
       maximum-pool-size: ${DB_POOL_MAX_SIZE:20}
       minimum-idle: ${DB_POOL_MIN_IDLE:5}
       connection-timeout: ${DB_POOL_CONNECTION_TIMEOUT_MS:5000}
+      # Auditoria de consultas del 2026-11-02 (H-03). El driver reescribe un lote de INSERT en una sola sentencia de varias filas. Va como propiedad del
+      # driver y no en la URL para que valga con cualquier `DB_URL` (en produccion llega de Parameter Store).
+      data-source-properties:
+        reWriteBatchedInserts: true
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -155,6 +159,13 @@ spring:
     properties:
       hibernate:
         default_batch_fetch_size: 50
+        # H-03 (auditoria de consultas del 2026-11-02): sin esto cada INSERT y cada UPDATE de un `saveAll` salia como una sentencia suelta. Con lotes de 50
+        # y las sentencias ordenadas por tabla, Hibernate las agrupa. Solo ayuda a las entidades que Spring Data reconoce como nuevas (`persist`); las de id
+        # asignado que hacian `merge` (un SELECT por fila) se escriben por `persist` o por `batchUpdate` donde importa (ranking, semana planificada).
+        jdbc:
+          batch_size: 50
+        order_inserts: true
+        order_updates: true
   ai:
     model:
       chat: none
