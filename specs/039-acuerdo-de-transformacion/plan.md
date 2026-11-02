@@ -33,7 +33,7 @@ Cuatro piezas sobre lo que ya existe: (1) **V162** publica el texto nuevo en las
 | Archivo | Cambio |
 |---|---|
 | `db/migration/V162__acuerdo_de_transformacion.sql` | columnas de la constancia, tres versiones, descarte de borradores copia; idempotente |
-| `shared/.../ParticipacionPrograma` (users) | `finParaMostrar`, `inicioParaMostrar` |
+| `users/domain/.../ParticipacionPrograma` | `inicioQueSeMuestra`, `finQueSeMuestra` |
 | `users/api/FechasDelProgramaFinder` + `users/application/services/FechasDelProgramaService` | fechas del programa de una persona |
 | `onboarding/domain/model/terminos/ProgramaDelAcuerdo` | nombre del programa y su etiqueta |
 | `onboarding/application/ports/in/pagos/CronogramaParaFirmarUseCase` + servicio | el cronograma a firmar y su huella |
@@ -42,7 +42,7 @@ Cuatro piezas sobre lo que ya existe: (1) **V162** publica el texto nuevo en las
 | `AceptacionDeTerminosService`, `RegistrarAceptacionDeTerminosUseCase`, `EstadoOnboardingService`, `AceptarHitoRequest`, `AceptarHitoOnboardingUseCase` | pedido con inicio y huella; confirma el cronograma |
 | `AceptacionesDeTerminosPort` + `AceptacionesDeTerminosJdbcAdapter` | guarda y lee lo mostrado |
 | `ConsultaDeTerminosService`, `TerminosAdminController` | la constancia lleva programa y fechas |
-| `docs/MODULOS_A_AVANZAR.md`, `docs/MODULO_ONBOARDING.md` | D-312 |
+| `docs/MODULOS_A_AVANZAR.md` | D-312 |
 
 ## Pruebas (backend)
 

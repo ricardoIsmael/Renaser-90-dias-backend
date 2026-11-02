@@ -35,11 +35,11 @@ Todo es **aditivo**. Un cliente anterior ignora lo nuevo y un servidor anterior 
 
 ## `GET /api/v1/onboarding/terms/accepted`  (suma `agreement`)
 
-`"agreement": { "program": "…", "startDate": "…", "endDate": "…", "scheduleConfirmed": true }` o `null` si la aceptación es anterior a esta spec.
+`"agreement": { "program": "…", "startDate": "…", "endDate": "…", "scheduleSigned": true }` o `null` si la aceptación es anterior a esta spec. `scheduleSigned`: firmó su cronograma con los términos.
 
 ## `GET /api/v1/admin/terms/people/{id}`  (suma a cada elemento)
 
-`program`, `startDate`, `endDate` y `scheduleConfirmed` (nulos / `false` en las aceptaciones anteriores).
+`program`, `startDate`, `endDate` y `scheduleSigned` (nulos / `false` en las aceptaciones anteriores).
 
 ## Base de datos (V162)
 
