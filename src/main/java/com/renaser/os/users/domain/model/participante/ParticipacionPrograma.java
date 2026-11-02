@@ -535,6 +535,22 @@ public final class ParticipacionPrograma {
     }
 
     /**
+     * El inicio de su programa tal como se le muestra en «Mi aceptación» (spec 039): la fecha que ya tiene si activó, o la que tendrá al activar (mañana en SU zona,
+     * la misma que ofrece {@link #opcionesDeActivacion}). Así las fechas del acuerdo y las de «Tu programa empieza mañana» salen de una sola cuenta.
+     */
+    public LocalDate inicioQueSeMuestra(Clock clock) {
+        return estaActivado() ? fechaInicio : inicioAlActivar(clock);
+    }
+
+    /**
+     * El último día de su programa tal como se le muestra en «Mi aceptación» (spec 039): con el programa activado, {@link #ultimaFechaDelPrograma()} (con el ajuste
+     * de días si lo hubo); sin activar, el inicio de mañana más la duración de SU programa menos un día. Nunca un 90 escrito a mano: 90 días, 3 meses (90) o 1 año (365).
+     */
+    public LocalDate finQueSeMuestra(Clock clock) {
+        return estaActivado() ? ultimaFechaDelPrograma() : inicioAlActivar(clock).plusDays(duracionDias - 1L);
+    }
+
+    /**
      * Materializa {@link #diaProgramaDerivado(LocalDate)} en el agregado — lo que corre
      * el barrido del reloj (V20; antes {@code avanzarDiaDelPrograma}, incremental).
      * {@code hoyEnZonaParticipante} lo calcula el llamador

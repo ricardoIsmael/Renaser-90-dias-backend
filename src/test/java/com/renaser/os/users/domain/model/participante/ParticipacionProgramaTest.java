@@ -1,6 +1,7 @@
 package com.renaser.os.users.domain.model.participante;
 
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FasePrograma;
 import org.junit.jupiter.api.Test;
@@ -818,5 +819,59 @@ class ParticipacionProgramaTest {
         p.fijarDia(35, CLOCK);
 
         assertThat(p.fase()).isEqualTo(FasePrograma.PHASE_3_ALCHEMIST_WARRIOR);
+    }
+
+    // ─── «Mi aceptación» (spec 039): el inicio y el fin que se le muestran ─────
+
+    /**
+     * Sin activar, el acuerdo muestra lo que vendrá: mañana en su zona (la regla de la spec 036) y, como fin, mañana más la duración de SU programa menos un día.
+     * 90 días (Escuela y Certificación), 3 meses del Diplomado (también 90) y 1 año (365); nunca un 90 escrito a mano.
+     */
+    @Test
+    void sinActivarElAcuerdoMuestraMananaYElFinSegunLaDuracionDeSuPrograma() {
+        FixedClock alMediodiaEnLima = FixedClock.at(Instant.parse("2026-11-02T17:00:00Z"));
+        record Caso(Formacion formacion, int dias, String fin) { }
+        for (Caso caso : new Caso[] {
+                new Caso(Formacion.ESCUELA, 90, "2027-01-31"),
+                new Caso(Formacion.CERTIFICACION, 90, "2027-01-31"),
+                new Caso(Formacion.DIPLOMADO, 90, "2027-01-31"),
+                new Caso(Formacion.DIPLOMADO, 365, "2027-11-02")}) {
+            ParticipacionPrograma p = ParticipacionPrograma.inscribirTraineeAprobado(UserId.of(UUID.randomUUID()), alMediodiaEnLima, caso.formacion(), caso.dias());
+
+            assertThat(p.inicioQueSeMuestra(alMediodiaEnLima)).as("inicio %s %s", caso.formacion(), caso.dias()).isEqualTo(LocalDate.parse("2026-11-03"));
+            assertThat(p.finQueSeMuestra(alMediodiaEnLima)).as("fin %s %s", caso.formacion(), caso.dias()).isEqualTo(LocalDate.parse(caso.fin()));
+        }
+    }
+
+    /** El inicio que se muestra es EL MISMO que ofrece y activa la spec 036, también en el borde de la medianoche de Lima (regla 02 §3). */
+    @Test
+    void elInicioDelAcuerdoEsElMismoDeTuProgramaEmpiezaMananaTambienEnLaMadrugadaUtc() {
+        FixedClock lasOnceYMediaEnLima = FixedClock.at(Instant.parse("2026-11-03T04:59:00Z"));
+        FixedClock pasadaLaMedianoche = FixedClock.at(Instant.parse("2026-11-03T05:01:00Z"));
+        ParticipacionPrograma p = traineePausado();
+
+        assertThat(p.inicioQueSeMuestra(lasOnceYMediaEnLima)).isEqualTo(p.inicioAlActivar(lasOnceYMediaEnLima)).isEqualTo(LocalDate.parse("2026-11-03"));
+        assertThat(p.inicioQueSeMuestra(pasadaLaMedianoche)).isEqualTo(p.opcionesDeActivacion(pasadaLaMedianoche).get(0)).isEqualTo(LocalDate.parse("2026-11-04"));
+        assertThat(p.finQueSeMuestra(pasadaLaMedianoche)).isEqualTo(LocalDate.parse("2026-11-04").plusDays(89));
+    }
+
+    /** Quien ya activó (vuelve a aceptar un texto nuevo) ve su inicio real y el último día de su programa, con la misma cuenta que usa el servidor. */
+    @Test
+    void conElProgramaActivadoElAcuerdoMuestraLasFechasReales() {
+        FixedClock reloj = FixedClock.at(Instant.parse("2026-11-02T17:00:00Z"));
+        ParticipacionPrograma sinAjuste = activadoDesde("2026-10-26", 0, Formacion.ESCUELA, 90);
+        ParticipacionPrograma conAjuste = activadoDesde("2026-10-26", 7, Formacion.ESCUELA, 90);
+        ParticipacionPrograma deUnAnio = activadoDesde("2026-10-26", 0, Formacion.DIPLOMADO, 365);
+
+        assertThat(sinAjuste.inicioQueSeMuestra(reloj)).isEqualTo(LocalDate.parse("2026-10-26"));
+        assertThat(sinAjuste.finQueSeMuestra(reloj)).isEqualTo(LocalDate.parse("2026-10-26").plusDays(89)).isEqualTo(sinAjuste.ultimaFechaDelPrograma());
+        assertThat(conAjuste.finQueSeMuestra(reloj)).as("el ajuste corre el último día").isEqualTo(LocalDate.parse("2026-10-26").plusDays(96));
+        assertThat(deUnAnio.finQueSeMuestra(reloj)).isEqualTo(LocalDate.parse("2026-10-26").plusDays(364));
+    }
+
+    private ParticipacionPrograma activadoDesde(String fechaInicio, int diasAjuste, Formacion formacion, int duracionDias) {
+        return ParticipacionPrograma.rehydrate(UserId.of(UUID.randomUUID()), null, null, 5, FasePrograma.PHASE_1_REBIRTH, LocalDate.parse(fechaInicio),
+                Instant.parse("2026-10-25T17:00:00Z"), ZoneId.of("America/Lima"), false, 0, CLOCK.now(), CLOCK.now(), null, null, null, null, diasAjuste, formacion,
+                duracionDias);
     }
 }
