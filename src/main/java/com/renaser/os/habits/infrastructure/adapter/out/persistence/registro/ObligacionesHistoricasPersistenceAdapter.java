@@ -2,11 +2,14 @@ package com.renaser.os.habits.infrastructure.adapter.out.persistence.registro;
 
 import com.renaser.os.habits.api.EstadoObligacion;
 import com.renaser.os.habits.infrastructure.adapter.out.persistence.habito.ExigenciaEvidenciaJpa;
+import com.renaser.os.habits.api.MedicionDeLaObligacion;
 import com.renaser.os.habits.api.ObligacionHabito;
 import com.renaser.os.habits.application.ports.out.registro.ConsultarObligacionesHistoricasPort;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
@@ -44,7 +47,17 @@ class ObligacionesHistoricasPersistenceAdapter implements ConsultarObligacionesH
                 fila[6] == ExigenciaEvidenciaJpa.OBLIGATORIA,
                 Boolean.TRUE.equals(fila[7]),
                 (String) fila[8],
-                (String) fila[9]);
+                (String) fila[9],
+                medicionDe(fila));
+    }
+
+    /** Las columnas 10 a 16 de la proyección: el número del día (D-226) y, si lo leyó el teléfono, su lectura (spec 037). */
+    private static MedicionDeLaObligacion medicionDe(Object[] fila) {
+        if (fila[10] == null) {
+            return null;
+        }
+        return new MedicionDeLaObligacion((BigDecimal) fila[10], (String) fila[11], (Integer) fila[12],
+                (String) fila[13], (String) fila[14], (Instant) fila[15], Boolean.TRUE.equals(fila[16]));
     }
 
     private static EstadoObligacion traducir(EstadoRegistroJpa estado) {

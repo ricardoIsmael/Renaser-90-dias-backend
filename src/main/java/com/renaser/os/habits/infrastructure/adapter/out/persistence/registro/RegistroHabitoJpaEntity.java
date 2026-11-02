@@ -61,6 +61,17 @@ public class RegistroHabitoJpaEntity {
     /** D-226 (V84): el numero del dia de un habito medible. Va junto con {@link #origenMedicion} o ninguno. */
     private BigDecimal valorMedido;
 
-    /** D-226 (V84): texto con CHECK en la base ('MANUAL'), no enum de Postgres. */
+    /** D-226 (V84) y spec 037 (V161): texto con CHECK en la base ('MANUAL' o 'HEALTH_CONNECT'), no enum de Postgres. */
     private String origenMedicion;
+
+    /** Spec 037 (V161): la lectura de Health Connect. Todo esto es null o false si el origen es MANUAL. */
+    private Integer pasosMedidos;
+
+    private String fuenteMedicion;
+
+    private String dispositivoMedicion;
+
+    private Instant medicionLeidaEn;
+
+    private boolean medicionPorRevisar;
 }

@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Contrato entre módulos (D-226): lo que cada participante MIDIÓ en un hábito medible, sumado desde su
@@ -40,4 +41,12 @@ public interface MedicionAcumuladaFinder {
      *         pone con cero, al fondo.
      */
     Map<UserId, Integer> diasDeGimnasio(Collection<UserId> participantes, LocalDate hasta);
+
+    /**
+     * Spec 037: de {@code participantes}, quiénes tienen al menos un día de km que leyó el teléfono (Health Connect) hasta
+     * {@code hasta} inclusive. El ranking los marca «auto» junto a su total. Las cifras y las reglas del ranking no cambian.
+     *
+     * @return solo quienes tienen alguno; vacío si no hay ninguno
+     */
+    Set<UserId> conKilometrosAutomaticos(Collection<UserId> participantes, LocalDate hasta);
 }

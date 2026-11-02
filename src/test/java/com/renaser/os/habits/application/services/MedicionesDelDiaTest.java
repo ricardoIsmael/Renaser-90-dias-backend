@@ -63,8 +63,9 @@ class MedicionesDelDiaTest {
                 .de(ana, List.of(deKm, delOtro), Map.of(km.id(), km, otro.id(), otro), HOY);
 
         assertThat(resultado).containsOnlyKeys(deKm);
-        assertThat(resultado.get(deKm)).isEqualTo(
-                new MedicionDelTrack(UnidadMedicion.KILOMETROS, null, new BigDecimal("12.50")));
+        // Spec 037: el hábito de km trae además la meta que rige (sin otra fijada, la del programa) y ningún origen aún.
+        assertThat(resultado.get(deKm)).isEqualTo(new MedicionDelTrack(UnidadMedicion.KILOMETROS, null,
+                new BigDecimal("12.50"), PoliticaKilometros.META_POR_DEFECTO_KM, null, null));
         assertThat(consultas).containsExactly("DAILY_KM@" + HOY);
     }
 

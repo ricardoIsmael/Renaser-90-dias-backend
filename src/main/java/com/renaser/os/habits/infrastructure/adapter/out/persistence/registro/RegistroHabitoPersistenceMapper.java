@@ -2,6 +2,8 @@ package com.renaser.os.habits.infrastructure.adapter.out.persistence.registro;
 
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
+import com.renaser.os.habits.domain.model.medicion.DispositivoDeMedicion;
+import com.renaser.os.habits.domain.model.medicion.LecturaAutomatica;
 import com.renaser.os.habits.domain.model.medicion.MedicionDiaria;
 import com.renaser.os.habits.domain.model.medicion.OrigenMedicion;
 import com.renaser.os.habits.domain.model.registro.EstadoRegistro;
@@ -29,7 +31,16 @@ class RegistroHabitoPersistenceMapper {
                 r.calificacionProductividad() != null ? r.calificacionProductividad().shortValue() : null,
                 r.entradaDiarioId(), r.completadoEn(), r.creadoEn(), r.actualizadoEn(),
                 r.medicion() != null ? r.medicion().valor() : null,
-                r.medicion() != null ? toJpaOrigen(r.medicion().origen()) : null);
+                r.medicion() != null ? toJpaOrigen(r.medicion().origen()) : null,
+                lectura(r) != null ? lectura(r).pasos() : null,
+                lectura(r) != null ? lectura(r).fuente() : null,
+                lectura(r) != null ? lectura(r).dispositivo().name() : null,
+                lectura(r) != null ? lectura(r).leidaEn() : null,
+                lectura(r) != null && lectura(r).porRevisar());
+    }
+
+    private static LecturaAutomatica lectura(RegistroHabito r) {
+        return r.medicion() != null ? r.medicion().lectura() : null;
     }
 
     /** La base garantiza que valor y origen van juntos (CHECK de V84): basta mirar el valor. */
@@ -37,18 +48,27 @@ class RegistroHabitoPersistenceMapper {
         if (e.getValorMedido() == null) {
             return null;
         }
-        return new MedicionDiaria(e.getValorMedido(), toDomainOrigen(e.getOrigenMedicion()));
+        OrigenMedicion origen = toDomainOrigen(e.getOrigenMedicion());
+        if (origen == OrigenMedicion.HEALTH_CONNECT) {
+            // La base garantiza que fuente, dispositivo y hora de lectura van con este origen (CHECK de V161).
+            return new MedicionDiaria(e.getValorMedido(), origen, new LecturaAutomatica(e.getPasosMedidos(),
+                    e.getFuenteMedicion(), DispositivoDeMedicion.valueOf(e.getDispositivoMedicion()),
+                    e.getMedicionLeidaEn(), e.isMedicionPorRevisar()));
+        }
+        return new MedicionDiaria(e.getValorMedido(), origen);
     }
 
     private String toJpaOrigen(OrigenMedicion origen) {
         return switch (origen) {
             case MANUAL -> "MANUAL";
+            case HEALTH_CONNECT -> "HEALTH_CONNECT";
         };
     }
 
     private OrigenMedicion toDomainOrigen(String origen) {
         return switch (origen) {
             case "MANUAL" -> OrigenMedicion.MANUAL;
+            case "HEALTH_CONNECT" -> OrigenMedicion.HEALTH_CONNECT;
             default -> throw new IllegalStateException("origen_medicion desconocido: " + origen);
         };
     }

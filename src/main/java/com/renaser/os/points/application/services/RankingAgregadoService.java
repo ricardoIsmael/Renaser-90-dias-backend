@@ -2,6 +2,7 @@ package com.renaser.os.points.application.services;
 
 import com.renaser.os.community.api.CelulaFinder;
 import com.renaser.os.community.api.CelulaFinder.CelulaParticipanteResumen;
+import com.renaser.os.points.api.MedicionAcumuladaFinder;
 import com.renaser.os.points.application.ports.in.ranking.ConsultarRankingAgregadoUseCase;
 import com.renaser.os.points.application.ports.in.ranking.ConsultarRankingUseCase;
 import com.renaser.os.points.application.ports.in.ranking.ConsultarRankingUseCase.EntradaRanking;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Implementa {@link ConsultarRankingAgregadoUseCase} reutilizando
@@ -24,10 +26,13 @@ public class RankingAgregadoService implements ConsultarRankingAgregadoUseCase {
 
     private final ConsultarRankingUseCase consultarRankingUseCase;
     private final CelulaFinder celulaFinder;
+    private final MedicionAcumuladaFinder medicionAcumuladaFinder;
 
-    public RankingAgregadoService(ConsultarRankingUseCase consultarRankingUseCase, CelulaFinder celulaFinder) {
+    public RankingAgregadoService(ConsultarRankingUseCase consultarRankingUseCase, CelulaFinder celulaFinder,
+                                  MedicionAcumuladaFinder medicionAcumuladaFinder) {
         this.consultarRankingUseCase = consultarRankingUseCase;
         this.celulaFinder = celulaFinder;
+        this.medicionAcumuladaFinder = medicionAcumuladaFinder;
     }
 
     @Override
@@ -43,7 +48,14 @@ public class RankingAgregadoService implements ConsultarRankingAgregadoUseCase {
         RankingAgregado.CelulaResumen celula = celulaFinder.celulaDeParticipante(actorId)
                 .map(RankingAgregadoService::aCelulaResumen)
                 .orElse(null);
-        return new RankingAgregado(fecha, celula, liga, coherenciaIndividual, general, kilometros, gimnasio);
+        return new RankingAgregado(fecha, celula, liga, coherenciaIndividual, general, kilometros, gimnasio,
+                conKilometrosAutomaticos(kilometros, fecha));
+    }
+
+    /** Spec 037: de quienes salen en la lista de km, los que tienen algún día leído por el teléfono (una consulta en lote). */
+    private Set<UserId> conKilometrosAutomaticos(List<EntradaRanking> kilometros, LocalDate fecha) {
+        List<UserId> ids = kilometros.stream().map(EntradaRanking::participanteId).toList();
+        return ids.isEmpty() ? Set.of() : medicionAcumuladaFinder.conKilometrosAutomaticos(ids, fecha);
     }
 
     private static RankingAgregado.CelulaResumen aCelulaResumen(CelulaParticipanteResumen resumen) {
