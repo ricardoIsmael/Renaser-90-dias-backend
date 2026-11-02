@@ -73,6 +73,7 @@ class EmpiezaAlDiaSiguienteIT {
         usuarios.reversed().forEach(id -> jdbcTemplate.update("DELETE FROM renaser.usuarios WHERE id = ?", id));
     }
 
+    // spec 036 FR-001, FR-002, SC-002
     @Test
     @DisplayName("a las 23:59 de Lima el aprendiz ve una sola fecha, mañana de Lima, y sin cuerpo empieza ese día")
     void sinCuerpoEmpiezaManianaDeLimaYNoElDiaSiguienteDeUtc() throws Exception {
@@ -90,6 +91,7 @@ class EmpiezaAlDiaSiguienteIT {
         assertThat(inicioGuardado(aprendiz)).isEqualTo("2026-10-08");
     }
 
+    // spec 036 FR-001, SC-002
     @Test
     @DisplayName("pasada la medianoche de Lima mañana ya es otro día")
     void pasadaLaMedianocheMananaEsElDiaSiguiente() throws Exception {
@@ -104,6 +106,7 @@ class EmpiezaAlDiaSiguienteIT {
         assertThat(inicioGuardado(aprendiz)).isEqualTo("2026-10-09");
     }
 
+    // spec 036 FR-003, SC-003
     @Test
     @DisplayName("la pantalla quedó abierta pasada la medianoche: 400 con la fecha nueva, nada se activa, y con la nueva sí")
     void laFechaQueYaNoEsManianaSeRechazaYSePuedeReintentarConLaNueva() throws Exception {
@@ -124,6 +127,7 @@ class EmpiezaAlDiaSiguienteIT {
                 .isEqualTo("2026-10-09");
     }
 
+    // spec 036 FR-003, SC-003
     @Test
     @DisplayName("el APK anterior mandaba +2 o +3: ahora es 400 y la fila queda sin activar")
     void lasFechasDeAntesSeRechazan() throws Exception {
@@ -137,6 +141,7 @@ class EmpiezaAlDiaSiguienteIT {
         assertThat(estaActivado(aprendiz)).isFalse();
     }
 
+    // spec 036 FR-004
     @Test
     @DisplayName("activar dos veces es idempotente, también pasada la medianoche y con la fecha que se vio antes")
     void activarDosVecesNoMueveLaFecha() throws Exception {
@@ -161,6 +166,7 @@ class EmpiezaAlDiaSiguienteIT {
         assertThat(leer(pedir("GET", sesion, null)).get("validStartDates")).isEmpty();
     }
 
+    // spec 036 FR-005
     @Test
     @DisplayName("la duración no cambia: un año sigue siendo un año, contado desde mañana")
     void laDuracionDeLaFormacionNoCambia() throws Exception {

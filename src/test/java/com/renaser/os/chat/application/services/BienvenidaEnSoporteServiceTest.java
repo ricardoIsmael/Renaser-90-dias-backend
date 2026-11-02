@@ -109,6 +109,7 @@ class BienvenidaEnSoporteServiceTest {
                 ContenidoDelPrograma.texto("Hola María, tu ingreso está confirmado"));
     }
 
+    // spec 035 FR-006
     @Test
     @DisplayName("Spec 035: una persona del Diplomado recibe la tarjeta sobre la portada del Diplomado y los textos del Diplomado, nunca los de la Escuela")
     void cadaSoporteRecibeLoDeSuFormacion() {

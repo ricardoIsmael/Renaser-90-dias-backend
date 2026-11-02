@@ -185,6 +185,7 @@ class PropuestaDeCrearHabitoPersonalTest {
     }
 
     /** Spec 038: SER nunca ofrece ni crea una categoria de otra formacion. */
+    // spec 038 FR-011
     @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
     @org.junit.jupiter.params.provider.MethodSource("formaciones")
     @DisplayName("spec 038: solo ofrece y acepta las categorias de la formacion de la persona")

@@ -20,6 +20,7 @@ class ImagenesDeLasFormacionesTest {
     private final AlmacenamientoEnMemoria almacenamiento = new AlmacenamientoEnMemoria();
     private final ImagenesDeLasFormaciones imagenes = new ImagenesDeLasFormaciones(almacenamiento);
 
+    // spec 035 FR-010
     @Test
     @DisplayName("una imagen cualquiera sale como JPEG cuadrado de 512 px, con huella estable")
     void salenCuadradaYEn512() {

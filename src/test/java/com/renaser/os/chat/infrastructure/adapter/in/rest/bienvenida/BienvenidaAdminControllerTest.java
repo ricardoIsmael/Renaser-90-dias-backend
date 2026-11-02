@@ -228,6 +228,7 @@ class BienvenidaAdminControllerTest {
         }
     }
 
+    // spec 035 FR-009, FR-012
     @Test
     @DisplayName("Spec 035: ?formation= elige la formación; sin él es la Escuela (la app anterior); un código que no existe es 400")
     void laFormacionVieneEnLaQuery() throws Exception {

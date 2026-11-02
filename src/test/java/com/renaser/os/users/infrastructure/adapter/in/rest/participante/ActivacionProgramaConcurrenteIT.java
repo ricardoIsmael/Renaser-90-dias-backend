@@ -66,6 +66,7 @@ class ActivacionProgramaConcurrenteIT {
         usuarios.forEach(id -> jdbc.update("DELETE FROM renaser.usuarios WHERE id = ?", id));
     }
 
+    // spec 036 FR-006
     @ParameterizedTest(name = "{0}, fila={1}, misma fecha={2}: una elección por cuenta")
     @MethodSource("casos")
     void dosConfirmacionesConservanLaPrimeraFecha(String rol, boolean conFila, boolean mismaFecha) throws Exception {

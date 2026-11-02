@@ -107,6 +107,7 @@ class MedicionAutomaticaIT {
         habitos.forEach(id -> jdbc.update("DELETE FROM renaser.habitos WHERE id = ?", id));
     }
 
+    // spec 037 FR-008, FR-011
     @Test
     @DisplayName("con la meta alcanzada cierra el hábito sin captura y la base guarda la lectura entera")
     void cierraYGuardaLaLectura() throws Exception {
@@ -130,6 +131,7 @@ class MedicionAutomaticaIT {
         assertThat(fila.get("medicion_leida_en")).isNotNull();
     }
 
+    // spec 037 FR-009
     @Test
     @DisplayName("es idempotente: reenviar (aunque con otro número) devuelve lo ya cerrado, sin pagar ni cambiar nada")
     void esIdempotente() throws Exception {
@@ -157,6 +159,7 @@ class MedicionAutomaticaIT {
         assertThat(estadoDe(kmDeAnaHoy)).isEqualTo("PENDIENTE");
     }
 
+    // spec 037 FR-012
     @Test
     @DisplayName("la meta que fija Administración rige desde ya; volver a la del programa la quita")
     void laMetaDeAdministracion() throws Exception {
@@ -193,6 +196,7 @@ class MedicionAutomaticaIT {
                 .statusCode()).isEqualTo(404);
     }
 
+    // spec 037 FR-010
     @Test
     @DisplayName("lo dudoso (más de 30 km) se acepta y queda por revisar para el mentor")
     void loDudosoQuedaMarcado() throws Exception {
@@ -209,6 +213,7 @@ class MedicionAutomaticaIT {
         assertThat(estadoDe(kmDeAnaHoy)).isEqualTo("PENDIENTE");
     }
 
+    // spec 037 FR-009
     @Test
     @DisplayName("un hábito ya cumplido con la captura es un 409 y no se pisa")
     void cumplidoConLaCaptura() throws Exception {
@@ -223,6 +228,7 @@ class MedicionAutomaticaIT {
                 cumplido)).isEqualTo("MANUAL");
     }
 
+    // spec 037 FR-008
     @Test
     @DisplayName("el hábito de un día que ya terminó no se cierra: 409 (D-259), y una lectura de otro día es 400")
     void diaCerradoYLecturaDeOtroDia() throws Exception {
@@ -252,6 +258,7 @@ class MedicionAutomaticaIT {
         assertThat(despues.at("/medicion/valorDelDia").decimalValue()).isEqualByComparingTo("5.40");
     }
 
+    // spec 037 FR-014
     @Test
     @DisplayName("el ranking de km no cambia sus cifras y marca «auto» solo a quien tiene días leídos por el teléfono")
     void elRankingMarcaAuto() throws Exception {
@@ -271,6 +278,7 @@ class MedicionAutomaticaIT {
         assertThat(puntajeDe(agregado.get("kilometros"), beto)).isEqualByComparingTo("3.00");
     }
 
+    // spec 037 FR-011
     @Test
     @DisplayName("la base no deja una lectura automática a medias: sin fuente, dispositivo y hora no se guarda")
     void laBaseNoDejaLecturasIncompletas() {

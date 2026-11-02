@@ -181,6 +181,7 @@ class PortadaDeBienvenidaAdminServiceTest {
         assertThat(cambios.filas()).isEmpty();
     }
 
+    // spec 035 FR-004
     @Test
     @DisplayName("Spec 035: la portada del Diplomado es suya; sin ella usa la vigente de la Escuela; volver es volver a la de la Escuela")
     void laPortadaDeCadaFormacion() {
@@ -207,6 +208,7 @@ class PortadaDeBienvenidaAdminServiceTest {
         assertThat(devuelta.portada().heredada()).isTrue();
     }
 
+    // spec 035 FR-007
     @Test
     @DisplayName("Spec 035: la vista previa del Diplomado se dibuja sobre SU portada")
     void laVistaPreviaEsDeLaFormacion() {

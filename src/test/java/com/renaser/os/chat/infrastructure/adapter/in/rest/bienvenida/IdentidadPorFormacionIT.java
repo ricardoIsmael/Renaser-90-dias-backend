@@ -103,6 +103,7 @@ class IdentidadPorFormacionIT {
 
     // ── La bienvenida de cada formación ─────────────────────────────────────
 
+    // spec 035 FR-002, FR-011
     @Test
     @DisplayName("cada persona recibe la bienvenida de SU formación: lo editado en el Diplomado no llega a la Escuela ni a la Certificación, y volver al original es al del Diplomado")
     void cadaSoporteRecibeLoDeSuFormacion() throws Exception {
@@ -136,6 +137,7 @@ class IdentidadPorFormacionIT {
                 .contains("al Diplomado Renaser").doesNotContain("Formación Renaser");
     }
 
+    // spec 035 FR-004
     @Test
     @DisplayName("la portada del Diplomado: sin la suya sigue a la Escuela (heredada); la Escuela nunca hereda")
     void laPortadaSeHereda() throws Exception {
@@ -156,6 +158,7 @@ class IdentidadPorFormacionIT {
 
     // ── La imagen de cada formación ─────────────────────────────────────────
 
+    // spec 035 FR-005, FR-008, FR-011
     @Test
     @DisplayName("la imagen: la del Diplomado llega solo a los chats del Diplomado; la Certificación sigue a la Escuela cuando esta tiene; la foto de otra formación es 404")
     void laImagenDeCadaFormacion() throws Exception {
@@ -193,6 +196,7 @@ class IdentidadPorFormacionIT {
                 .isEqualTo(404);
     }
 
+    // spec 035 FR-009
     @Test
     @DisplayName("Administración ve la imagen de cada formación (propia, heredada o ninguna); sin almacenamiento de verdad no se sube (409) y la vista previa sin imagen es 404")
     void administracionVeLaImagen() throws Exception {
@@ -231,6 +235,7 @@ class IdentidadPorFormacionIT {
         assertThat(json.readTree(vuelta.body()).path("hayImagen").asBoolean()).isFalse();
     }
 
+    // spec 035 FR-009
     @Test
     @DisplayName("autorización negativa: MENTOR, LÍDER, APRENDIZ, un ADMIN SUSPENDIDO y sin sesión reciben 403 en cada ruta nueva y en las de bienvenida con formación; no queda nada")
     void losDemasNo() throws Exception {
@@ -255,6 +260,7 @@ class IdentidadPorFormacionIT {
         assertThat(cambiosDeEstaPrueba()).isZero();
     }
 
+    // spec 035 FR-001, FR-012
     @Test
     @DisplayName("V159: la formación de un cambio existe, la imagen solo acepta su prefijo y la carta de la caja es única; sin formación es de la Escuela")
     void laTablaDeV159() {

@@ -36,6 +36,7 @@ class AceptarHitoCommandTest {
                 .isInstanceOf(ConstraintViolationException.class);
     }
 
+    // spec 039 FR-011
     @Test
     @DisplayName("el comando solo tiene usuarioId, hito y lo que firma en Términos (versión, inicio visto y huella del cronograma), sin rol (CLAUDE.MD §5.3.3)")
     void tieneSoloLosComponentesDeLaAceptacion() {

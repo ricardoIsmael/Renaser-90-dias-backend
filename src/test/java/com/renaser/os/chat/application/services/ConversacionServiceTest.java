@@ -331,6 +331,7 @@ class ConversacionServiceTest {
      * Spec 035: la comunidad general y los grupos llevan desde cuándo es la imagen de SU formación, una consulta por formación (no por conversación); el
      * soporte y los 1 a 1 no, y una formación sin imagen no trae nada.
      */
+    // spec 035 FR-008
     @Test
     void laListaTraeLaImagenDeLaFormacionDeLaComunidadYDeLosGruposUnaVezPorFormacion() {
         Conversacion global = Conversacion.crearGlobal(ConversacionId.of(UUID.randomUUID()), "Diplomado Renaser Global", CLOCK.now(),

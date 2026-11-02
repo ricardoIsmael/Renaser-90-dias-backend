@@ -74,6 +74,7 @@ class PropuestaDeRegistrarConFotoTest {
                 .contains("No preguntes si quiere").doesNotContain("Hoy");
     }
 
+    // spec 038 FR-007, SC-002
     @Test
     @DisplayName("spec 038: los tres rituales se registran ESCRIBIENDO (sin foto); en el jugo verde, foto y listo")
     void losRitualesSeEscriben() {
@@ -109,6 +110,7 @@ class PropuestaDeRegistrarConFotoTest {
         assertThat(pedidosDelTurno()).isEmpty();
     }
 
+    // spec 038 FR-010
     @Test
     @DisplayName("ya completado, dia cerrado (EXPIRADO, D-259) o fallido: no pide la foto y dice por que, sin decir que vencio")
     void estadosTerminales() {

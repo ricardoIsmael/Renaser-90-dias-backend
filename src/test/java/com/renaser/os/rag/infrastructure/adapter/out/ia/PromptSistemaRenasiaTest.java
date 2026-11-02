@@ -566,6 +566,7 @@ class PromptSistemaRenasiaTest {
      * diagnostico (consultar_mi_diagnostico) y consultar_rocas con alcance noventa; SER nunca manda a hacer el Mapa
      * (el servidor lo rechaza con 409 MAPA_RETIRADO) y lo que no puede escribir lo lleva a Plan. Reemplaza a la prueba de D-233/D-234.
      */
+    // spec 038 FR-001, FR-002
     @Test
     @DisplayName("spec 038: usa su diagnostico y sus objetivos, no manda al Mapa y lleva a Plan lo que no puede escribir")
     void usaSuDiagnosticoYSusObjetivosSinMapa() {
@@ -595,6 +596,7 @@ class PromptSistemaRenasiaTest {
     }
 
     /** Spec 038: lo que SER no puede escribir lo lleva a Plan, y los habitos estan en Training (no en Plan ni en Hoy). */
+    // spec 038 FR-004, FR-013
     @Test
     @DisplayName("spec 038: lleva a Plan lo que no escribe y orienta con los nombres de hoy: habitos en Training, Cierra tu dia en Plan")
     void orientaConLosNombresDeLaApp() {
@@ -616,6 +618,7 @@ class PromptSistemaRenasiaTest {
     }
 
     /** Spec 038: los rituales se registran escribiendo y un dia cerrado no se registra (D-259). */
+    // spec 038 FR-007, FR-010
     @Test
     @DisplayName("spec 038: los rituales se escriben (sin foto), lo opcional se marca y un dia cerrado no se registra")
     void ritualesPorTextoYDiaCerrado() {

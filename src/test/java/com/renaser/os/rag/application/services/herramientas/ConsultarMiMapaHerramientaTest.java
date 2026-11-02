@@ -106,6 +106,7 @@ class ConsultarMiMapaHerramientaTest {
         assertThat(texto).contains("no se su dia del programa").doesNotContain("PROXIMO").contains("- Dia 30: Salud");
     }
 
+    // spec 038 FR-001
     @Test
     @DisplayName("sin Mapa (spec 038): es lo normal, no la invita a hacerlo y la manda al diagnostico y a Plan, a cualquier dia")
     void sinMapa() {

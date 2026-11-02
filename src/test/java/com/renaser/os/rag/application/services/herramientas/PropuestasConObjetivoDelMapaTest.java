@@ -113,6 +113,7 @@ class PropuestasConObjetivoDelMapaTest {
                 .contains("Su Mapa no tiene objetivo de Relaciones: diselo en una linea y sugiere como conectarlo");
     }
 
+    // spec 038 FR-001
     @Test
     @DisplayName("sin Mapa se propone igual y NO se la invita a hacerlo (el Mapa se retiro, spec 038); si no se lee, sale como antes")
     void sinMapa() {

@@ -30,6 +30,7 @@ class PoliticaKilometrosAutomaticaTest {
         return ((DecisionPolitica.NoProcede) decision).motivo();
     }
 
+    // spec 037 FR-012
     @Test
     @DisplayName("la meta por defecto son 5 km y una meta fijada por Administración manda sobre ella")
     void laMetaPorDefectoSonCincoKm() {
@@ -66,6 +67,7 @@ class PoliticaKilometrosAutomaticaTest {
                 .isEqualTo("Todavía no llegas a tu meta de 6,5 km.");
     }
 
+    // spec 037 FR-008
     @Test
     @DisplayName("más de 60 km o de 150 000 pasos en un día no se registra solo: se sube la captura")
     void losTopes() {
@@ -103,6 +105,7 @@ class PoliticaKilometrosAutomaticaTest {
         assertThat(politica.conRevision(lectura("30.00", 40000)).lectura().porRevisar()).isFalse();
     }
 
+    // spec 037 FR-010
     @Test
     @DisplayName("más de 30 km, o una zancada imposible, se acepta pero queda por revisar")
     void loDudosoSeMarca() {

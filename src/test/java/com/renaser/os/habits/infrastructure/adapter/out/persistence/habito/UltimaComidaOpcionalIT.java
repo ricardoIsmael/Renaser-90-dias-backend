@@ -31,12 +31,14 @@ class UltimaComidaOpcionalIT {
         return jdbc.queryForObject("SELECT exigencia_evidencia::text FROM habitos WHERE id = ?", String.class, habito);
     }
 
+    // spec 038 FR-008
     @Test
     @DisplayName("V160: la ultima comida del dia queda de evidencia OPCIONAL")
     void laUltimaComidaEsOpcional() {
         assertThat(exigencia(ULTIMA_COMIDA)).isEqualTo("OPCIONAL");
     }
 
+    // spec 038 FR-008
     @Test
     @DisplayName("V160 es idempotente: volver a correrla no cambia nada ni mueve la fecha de la ultima comida")
     void esIdempotente() throws Exception {

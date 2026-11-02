@@ -119,6 +119,7 @@ class AcuerdoDeTransformacionIT {
 
     // ── V162 ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
+    // spec 039 FR-002
     @Test
     @DisplayName("V162 publica el texto del dueño en las tres formaciones: la Escuela pasa a la versión 2 (pide aceptar de nuevo) y el Diplomado y la Certificación quedan con la 1")
     void v162PublicaElTextoEnLasTresFormaciones() {
@@ -134,6 +135,7 @@ class AcuerdoDeTransformacionIT {
                 + "AND publicada_en IS NOT NULL", Integer.class)).as("publicadas a nombre del sistema, con su fecha").isEqualTo(3);
     }
 
+    // spec 039 FR-001, SC-001
     @Test
     @DisplayName("el texto de cada formación es el del dueño tal cual: 23 cláusulas numeradas, con el nombre del programa en la introducción y sin marcadores")
     void elTextoPorFormacion() {
@@ -163,6 +165,7 @@ class AcuerdoDeTransformacionIT {
         }
     }
 
+    // spec 039 FR-002
     @Test
     @DisplayName("V162 es idempotente: correrla otra vez no duplica versiones ni columnas ni toca lo publicado")
     void v162EsIdempotente() throws Exception {
@@ -176,6 +179,7 @@ class AcuerdoDeTransformacionIT {
                 + "AND column_name IN ('programa_mostrado', 'inicio_mostrado', 'fin_mostrado', 'cronograma_huella')", Integer.class)).isEqualTo(4);
     }
 
+    // spec 039 FR-002
     @Test
     @DisplayName("un borrador que Administración ya editó se conserva; el que sigue idéntico a la copia de la spec 027 se descarta")
     void unBorradorEditadoSeConserva() throws Exception {
@@ -191,6 +195,7 @@ class AcuerdoDeTransformacionIT {
         assertThat(jdbc.queryForObject("SELECT numero FROM renaser.terminos_versiones WHERE formacion = 'DIPLOMADO' AND estado = 'PUBLICADA'", Integer.class)).isEqualTo(1);
     }
 
+    // spec 039 FR-010
     @Test
     @DisplayName("el editor de Administración (spec 027) muestra las 23 cláusulas, con sus dos párrafos, y deja editarlas: queda un borrador sobre la versión nueva")
     void elEditorDeAdministracionLasMuestraYLasDejaEditar() throws Exception {
@@ -218,6 +223,7 @@ class AcuerdoDeTransformacionIT {
 
     // ── La persona: «Mi aceptación» ─────────────────────────────────────────────────────────────────────────────────
 
+    // spec 039 FR-003, FR-004, FR-005, SC-003
     @Test
     @DisplayName("sin cronograma: «Mi aceptación» trae el nombre completo, el programa, mañana de Lima y el fin 89 días después; sin sección de cronograma")
     void sinCronograma() throws Exception {
@@ -242,6 +248,7 @@ class AcuerdoDeTransformacionIT {
                 .isEqualTo(acuerdo.get("startDate").asText());
     }
 
+    // spec 039 FR-007
     @Test
     @DisplayName("sin cronograma, aceptar guarda lo que se mostró (programa, inicio y fin), no confirma ningún cronograma, y se puede releer y consultar")
     void aceptarSinCronogramaGuardaLoMostrado() throws Exception {
@@ -272,6 +279,7 @@ class AcuerdoDeTransformacionIT {
         assertThat(deAdministracion.get(0).get("scheduleSigned").asBoolean()).isFalse();
     }
 
+    // spec 039 FR-004, SC-004
     @Test
     @DisplayName("el Diplomado de 3 meses, el de 1 año y la Certificación dicen su programa y su fin: 89, 89 y 364 días después del inicio")
     void duracionesPorFormacion() throws Exception {
@@ -289,6 +297,7 @@ class AcuerdoDeTransformacionIT {
         }
     }
 
+    // spec 039 FR-007
     @Test
     @DisplayName("pasó la medianoche con la pantalla abierta: el inicio que vio ya no es mañana → 409 y no queda constancia; con la fecha nueva sí")
     void laMedianocheEnLaMitad() throws Exception {
@@ -313,6 +322,7 @@ class AcuerdoDeTransformacionIT {
 
     // ── La persona: con cronograma ──────────────────────────────────────────────────────────────────────────────────
 
+    // spec 039 FR-008, SC-002
     @Test
     @DisplayName("con cronograma: debajo de «Mi aceptación» llega el cronograma (moneda, cuotas y huella); al firmar queda confirmado con la MISMA confirmación de «Mi ingreso»")
     void conCronogramaSeFirmaConLoMismo() throws Exception {
@@ -345,6 +355,7 @@ class AcuerdoDeTransformacionIT {
         assertThat(json.readTree(ok(enviar("GET", TERMINOS + "/accepted", sesion, null))).get("agreement").get("scheduleSigned").asBoolean()).isTrue();
     }
 
+    // spec 039 FR-008
     @Test
     @DisplayName("Administración cambió el cronograma mientras leía: 409, no queda aceptación ni confirmación; con la huella nueva sí")
     void elCronogramaCambioMientrasLeia() throws Exception {
@@ -370,6 +381,7 @@ class AcuerdoDeTransformacionIT {
         assertThat(jdbc.queryForObject("SELECT cronograma_confirmado_huella FROM renaser.estado_onboarding WHERE usuario_id = ?", String.class, ana)).isEqualTo(huellaNueva);
     }
 
+    // spec 039 FR-009, FR-011
     @Test
     @DisplayName("aceptar sin la huella (una app anterior) con un cronograma asignado no lo confirma: «Mi ingreso» lo sigue pidiendo")
     void sinLaHuellaNoSeConfirmaNada() throws Exception {
@@ -403,6 +415,7 @@ class AcuerdoDeTransformacionIT {
 
     // ── Quien ya estaba dentro ──────────────────────────────────────────────────────────────────────────────────────
 
+    // spec 039 FR-006, FR-009
     @Test
     @DisplayName("volver a aceptar (ya estaba dentro): bloquea, trae su programa y fechas reales (ya empezó) y NO ofrece el cronograma aunque tenga uno; firmar no lo confirma")
     void volverAAceptar() throws Exception {

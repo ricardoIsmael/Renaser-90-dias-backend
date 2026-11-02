@@ -59,6 +59,7 @@ class LoQueLeFaltaHoyTest {
     }
 
     /** Spec 038 (D-259): un registro EXPIRADO es un dia cerrado: no se cuenta entre lo que falta ni se le deja boton. */
+    // spec 038 FR-010
     @Test
     @DisplayName("spec 038: un EXPIRADO es un dia cerrado: no cuenta entre los que faltan, no lleva marca de evidencia y se dice que no se registra")
     void unDiaCerradoNoSeRegistra() {

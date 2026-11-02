@@ -119,6 +119,7 @@ class ProponerPlanDelDiaHerramientaTest {
                 + "Cuerpo: 1) Nadar (hasta 08:00). Si ese dia ya tiene acciones, se reemplazan."));
     }
 
+    // spec 038 FR-006
     @Test
     @DisplayName("el dia en curso ya armado no se reacomoda: Fallo y ninguna propuesta")
     void hoyYaArmado() {
@@ -188,6 +189,7 @@ class ProponerPlanDelDiaHerramientaTest {
     }
 
     /** Spec 038: SER nunca propone lo que el servidor va a rechazar al confirmar (fecha fuera de lo planificable). */
+    // spec 038 FR-005
     @Test
     @DisplayName("spec 038: con la ventana de las 18:00 abierta, el dia en curso no se propone y se le dice desde cuando si se puede")
     void conLaVentanaAbiertaHoyNoSePropone() {
@@ -205,6 +207,7 @@ class ProponerPlanDelDiaHerramientaTest {
         verify(proponer, never()).proponer(any(), any(), anyString());
     }
 
+    // spec 038 FR-005
     @Test
     @DisplayName("spec 038: un dia que paso, o que cae despues del domingo, no se propone")
     void unDiaQueYaPasoOMuyLejos() {
@@ -220,6 +223,7 @@ class ProponerPlanDelDiaHerramientaTest {
         verify(proponer, never()).proponer(any(), any(), anyString());
     }
 
+    // spec 038 FR-005
     @Test
     @DisplayName("spec 038: el domingo a la noche el lunes si se puede, y el ultimo dia de la semana tambien")
     void elLunesDelDomingoYElUltimoDia() {
@@ -233,6 +237,7 @@ class ProponerPlanDelDiaHerramientaTest {
         verify(proponer, org.mockito.Mockito.times(2)).proponer(any(), any(), anyString());
     }
 
+    // spec 038 FR-005
     @Test
     @DisplayName("spec 038: antes de las 18:00 el dia en curso todavia se puede armar; si el fin de la semana no se sabe, decide el servidor")
     void antesDeLasDieciochoHoySiYSinFinDeSemanaNoBloquea() {

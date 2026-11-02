@@ -85,6 +85,7 @@ class EstadoDePiezaTest {
         assertThatThrownBy(() -> PiezaDeBienvenida.textoDe(null)).isInstanceOf(IllegalArgumentException.class);
     }
 
+    // spec 035 FR-004
     @Test
     @DisplayName("la portada de una formación sin la suya es la vigente de la Escuela, y con la suya, la suya")
     void laPortadaSeHeredaDeLaEscuela() {
@@ -101,6 +102,7 @@ class EstadoDePiezaTest {
                 .as("la Escuela nunca mira a otra formación").isEqualTo("bienvenida/portadas/escuela");
     }
 
+    // spec 035 FR-003
     @Test
     @DisplayName("volver al original en el Diplomado es volver a la de la Escuela, no a la de fábrica")
     void volverEnElDiplomadoEsVolverALaEscuela() {
@@ -113,6 +115,7 @@ class EstadoDePiezaTest {
         assertThat(estado.cambiada()).isFalse();
     }
 
+    // spec 035 FR-005
     @Test
     @DisplayName("la imagen de una formación: la suya, la de la Escuela o ninguna")
     void laImagenDeLaFormacion() {

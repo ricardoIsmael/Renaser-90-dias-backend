@@ -422,6 +422,7 @@ class RadarMiRadarIT {
         }
     }
 
+    // spec 036 FR-011
     @Test
     @DisplayName("FR-019: el personal sin su programa activado no lo usa: 403 con el motivo PROGRAMA_NO_ACTIVADO en GET, PUT y POST (la puerta es tener el programa andando, no el rol)")
     void elPersonalSinPrograma() throws Exception {

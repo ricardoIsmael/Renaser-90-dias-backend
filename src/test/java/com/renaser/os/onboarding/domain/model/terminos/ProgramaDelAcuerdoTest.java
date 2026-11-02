@@ -10,6 +10,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /** Cómo se nombra el programa en «Mi aceptación» (spec 039): lógica pura. */
 class ProgramaDelAcuerdoTest {
 
+    // spec 039 FR-004
     @Test
     @DisplayName("cada formación tiene su nombre: la Escuela se llama «Formación RENASER»")
     void nombres() {
@@ -18,6 +19,7 @@ class ProgramaDelAcuerdoTest {
         assertThat(ProgramaDelAcuerdo.nombre(Formacion.CERTIFICACION)).isEqualTo("Certificación RENASER");
     }
 
+    // spec 039 FR-004
     @Test
     @DisplayName("la Escuela y la Certificación dicen sus 90 días; el Diplomado dice 3 meses o 1 año")
     void etiquetaConLaDuracion() {

@@ -63,6 +63,7 @@ class SerEnLasTresFormacionesTest {
         return new SituacionDelAprendiz(12, 2, HOY).conDuracion(dias).conFormacion(formacion);
     }
 
+    // spec 038 FR-003
     @ParameterizedTest(name = "{0}")
     @MethodSource("formaciones")
     @DisplayName("spec 038: la situacion dice la duracion de SU programa y nombra el objetivo grande con su plazo")
@@ -79,6 +80,7 @@ class SerEnLasTresFormacionesTest {
         assertThat(linea).as(nombre).doesNotContain("Escuela").doesNotContain("Diplomado").doesNotContain("Certificacion");
     }
 
+    // spec 038 FR-002, FR-003
     @ParameterizedTest(name = "{0}")
     @MethodSource("formaciones")
     @DisplayName("spec 038: los objetivos se dicen con el plazo de su formacion, con y sin objetivos, y sin objetivos manda a Plan (nunca al Mapa)")
@@ -110,6 +112,7 @@ class SerEnLasTresFormacionesTest {
                 .contains("abrir la pestana Plan").doesNotContain("Mapa");
     }
 
+    // spec 038 SC-001
     @ParameterizedTest(name = "{0}")
     @MethodSource("formaciones")
     @DisplayName("spec 038: sin Mapa (retirado) SER no la invita a hacerlo y la manda al diagnostico o a Plan, en cualquiera de las tres")
@@ -124,6 +127,7 @@ class SerEnLasTresFormacionesTest {
                 .doesNotContain("invitala a completar").doesNotContain("se arma el dia 7");
     }
 
+    // spec 038 FR-003, FR-004, SC-004
     @ParameterizedTest(name = "{0}")
     @MethodSource("formaciones")
     @DisplayName("spec 038: el prompt no nombra ninguna formacion ni una duracion fija, y manda a Training (habitos) y a Plan (objetivos)")

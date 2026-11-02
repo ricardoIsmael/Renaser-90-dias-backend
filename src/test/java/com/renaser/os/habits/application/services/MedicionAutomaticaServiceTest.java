@@ -123,6 +123,7 @@ class MedicionAutomaticaServiceTest {
         assertThat(enviado.medicion().lectura().porRevisar()).isFalse();
     }
 
+    // spec 037 FR-010
     @Test
     @DisplayName("una lectura dudosa se acepta y viaja marcada por revisar")
     void loDudosoSeMarca() {
@@ -131,6 +132,7 @@ class MedicionAutomaticaServiceTest {
         assertThat(comandoEnviado().medicion().lectura().porRevisar()).isTrue();
     }
 
+    // spec 037 FR-008
     @Test
     @DisplayName("faltar para la meta es un 400 que dice cuál es, y no cierra nada")
     void faltaLaMeta() {
@@ -149,6 +151,7 @@ class MedicionAutomaticaServiceTest {
         assertThat(comandoEnviado().medicion().valor()).isEqualByComparingTo("3.20");
     }
 
+    // spec 037 FR-008
     @Test
     @DisplayName("más de 60 km no se registra solo")
     void elTope() {
@@ -175,6 +178,7 @@ class MedicionAutomaticaServiceTest {
         assertThatThrownBy(() -> service.registrar(comando("6", AHORA))).isInstanceOf(NoSuchElementException.class);
     }
 
+    // spec 037 FR-008
     @Test
     @DisplayName("un hábito que no es el de kilómetros no se registra con pasos")
     void soloElDeKilometros() {
@@ -186,6 +190,7 @@ class MedicionAutomaticaServiceTest {
         verifyNoInteractions(completar);
     }
 
+    // spec 037 FR-009
     @Test
     @DisplayName("idempotente: lo que ya cerró Health Connect se devuelve igual, sin completar otra vez")
     void idempotente() {
@@ -198,6 +203,7 @@ class MedicionAutomaticaServiceTest {
         verify(completar, never()).completar(any());
     }
 
+    // spec 037 FR-009
     @Test
     @DisplayName("un hábito cumplido con la captura es un 409 que lo dice, y no se pisa")
     void cumplidoConLaCaptura() {
@@ -208,6 +214,7 @@ class MedicionAutomaticaServiceTest {
         verify(completar, never()).completar(any());
     }
 
+    // spec 037 FR-008
     @Test
     @DisplayName("una lectura del futuro es inválida; el reloj corrido unos minutos se tolera")
     void laLecturaNoEsDelFuturo() {
@@ -218,6 +225,7 @@ class MedicionAutomaticaServiceTest {
         verify(completar).completar(any());
     }
 
+    // spec 037 FR-008
     @Test
     @DisplayName("con el reloj en la madrugada UTC, una lectura de las 23:59 del día anterior en Lima es de otro día")
     void laLecturaEsDeEseDiaEnLaZonaDeLaPersona() {

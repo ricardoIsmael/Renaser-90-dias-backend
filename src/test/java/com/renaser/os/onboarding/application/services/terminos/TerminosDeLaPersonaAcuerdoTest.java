@@ -38,6 +38,7 @@ import static org.mockito.Mockito.when;
 
 /**
  * Cuándo la lectura de los términos trae «Mi aceptación» y cuándo trae además el cronograma para firmar (spec 039): el cronograma SOLO en el primer ingreso, y solo si no lo
+ // spec 039 FR-006
  * tiene ya confirmado; quien ya estaba dentro y vuelve a aceptar un texto nuevo lo ve sin esa sección (se le sigue pidiendo en «Mi ingreso»).
  */
 @ExtendWith(MockitoExtension.class)
@@ -86,6 +87,7 @@ class TerminosDeLaPersonaAcuerdoTest {
         return new CronogramaParaFirmar(Moneda.PEN, List.of(), "huella-1", yaConfirmado);
     }
 
+    // spec 039 FR-003, FR-006
     @Test
     @DisplayName("primer ingreso con cronograma sin confirmar: «Mi aceptación» trae el cronograma para firmar")
     void primerIngresoConCronograma() {
@@ -103,6 +105,7 @@ class TerminosDeLaPersonaAcuerdoTest {
         assertThat(acuerdo.cronograma()).hasValueSatisfying(c -> assertThat(c.huella()).isEqualTo("huella-1"));
     }
 
+    // spec 039 FR-006
     @Test
     @DisplayName("primer ingreso sin cronograma, con «pagó completo» o con el cronograma ya confirmado: «Mi aceptación» sin cronograma")
     void primerIngresoSinNadaQueFirmar() {

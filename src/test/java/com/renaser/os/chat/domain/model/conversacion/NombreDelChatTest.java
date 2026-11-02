@@ -40,6 +40,7 @@ class NombreDelChatTest {
                 .isEqualTo("Formación Renaser Global");
     }
 
+    // spec 035 FR-013
     @Test
     @DisplayName("spec 035: el programa firma con el nombre de la formación de la conversación; la Escuela conserva «Formación Renaser»")
     void laFirmaDelProgramaEsDeLaFormacion() {

@@ -19,6 +19,7 @@ class ParticipacionProgramaTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"));
 
+    // spec 036 FR-007
     @Test
     void activarSeguimientoPersonalArrancaEnDiaUnoFaseInicialYZonaPorDefecto() {
         UserId participanteId = UserId.of(UUID.randomUUID());
@@ -271,6 +272,7 @@ class ParticipacionProgramaTest {
         assertThat(p.estaActivado()).isFalse();
     }
 
+    // spec 036 FR-001
     @Test
     void activarProgramaConLaFechaDeManianaActivaConEsaFecha() {
         ParticipacionPrograma p = traineePausado();
@@ -285,6 +287,7 @@ class ParticipacionProgramaTest {
     }
 
     /** Spec 036: la persona ya no elige, asi que sin fecha el programa empieza mañana. */
+    // spec 036 FR-003
     @Test
     void activarProgramaSinFechaEmpiezaManiana() {
         ParticipacionPrograma p = traineePausado();
@@ -301,6 +304,7 @@ class ParticipacionProgramaTest {
      * Spec 036 (D-309): antes se podia empezar en +2 o +3. Ya no: cualquier fecha que no sea mañana se rechaza (400) y la
      * fila queda sin activar. Es lo que protege al APK anterior de activar con una fecha que la persona no vio.
      */
+    // spec 036 FR-001, FR-003
     @Test
     void activarProgramaRechazaCualquierFechaQueNoSeaManiana() {
         for (int dias : new int[] {-1, 0, 2, 3, 4}) {
@@ -431,6 +435,7 @@ class ParticipacionProgramaTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    // spec 036 FR-004
     @Test
     void activarProgramaRechazaReactivarConUnaFechaDistinta() {
         ParticipacionPrograma p = traineePausado();
@@ -443,6 +448,7 @@ class ParticipacionProgramaTest {
     /** Distincion tecnica, no de negocio (E-?): un reintento de red con la MISMA fecha
      * ya activada es un no-op, nunca un error — así lo pidio el dueño del proyecto
      * explicitamente para este endpoint. */
+    // spec 036 FR-004
     @Test
     void activarProgramaConLaMismaFechaYaActivadaEsUnNoOpSilencioso() {
         ParticipacionPrograma p = traineePausado();
@@ -456,6 +462,7 @@ class ParticipacionProgramaTest {
     }
 
     /** Un reintento sin fecha tras activar de noche, ya pasada la medianoche, tampoco mueve nada. */
+    // spec 036 FR-004
     @Test
     void activarProgramaSinFechaYaActivadoEsUnNoOpAunquePaseLaMedianoche() {
         FixedClock lasOnceYMediaEnLima = FixedClock.at(Instant.parse("2026-11-03T04:59:00Z"));
@@ -471,6 +478,7 @@ class ParticipacionProgramaTest {
         assertThat(p.programaActivadoEn()).isEqualTo(activadoEnOriginal);
     }
 
+    // spec 036 FR-002, SC-002
     @Test
     void opcionesDeActivacionDevuelveSoloManiana() {
         ParticipacionPrograma p = traineePausado();

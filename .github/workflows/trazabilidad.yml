@@ -1,0 +1,69 @@
+# Trazabilidad de specs: cada requisito (FR-NNN) y cada criterio de exito (SC-NNN) de las specs exigidas tiene que
+# tener, por lo menos, una prueba que lo cubra. Lo comprueba `scripts/trazabilidad-specs.mjs`; la convencion y la
+# lista de specs exigidas (`specs/trazabilidad.json`) estan en `.claude/rules/06-trazabilidad-de-specs.md`.
+#
+# Workflow aparte de `ci.yml` a proposito: no compila ni corre las pruebas (eso tarda ~45 minutos), solo lee texto
+# (las specs y las marcas `spec NNN FR-NNN` de las pruebas), asi que termina en segundos y avisa de un requisito
+# sin prueba sin esperar al resto.
+#
+# LAS PRUEBAS DE LA APP viven en otro repositorio (Jest y flujos de Maestro del frontend). Es PUBLICO, asi que se
+# baja sin token ni secreto. Se busca primero la rama `integracion-formaciones` (donde estan las marcas de las specs
+# 035 a 039 mientras se consolidan) y, si todavia no existe o ya se borro, `master`. Cuando las marcas de la app lleguen
+# a su `master`, la primera rama deja de existir y este job sigue funcionando sin tocarlo.
+#
+# Sale con 1 si un requisito exigido no tiene prueba o si una marca apunta a un requisito que la spec no define; con 2
+# si la configuracion esta mal (una spec de la lista sin carpeta). El resumen en tablas queda en la pagina del job.
+#
+# Las acciones van fijadas por SHA de commit, con la version en un comentario (Dependabot las actualiza y respeta ese formato).
+name: Trazabilidad de specs
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: trazabilidad-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  trazabilidad:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Backend
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # El repositorio de la app es publico: sin `token`, sin PAT. Si la rama de consolidacion no existe, el paso falla
+      # (continue-on-error) y el siguiente baja `master`.
+      - name: App (rama integracion-formaciones)
+        id: app_rama
+        continue-on-error: true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: RENASER-LAB/Renaser-90-dias-frontend-
+          ref: integracion-formaciones
+          path: app
+          persist-credentials: false
+
+      - name: App (master, si no hay rama de consolidacion)
+        if: steps.app_rama.outcome != 'success'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: RENASER-LAB/Renaser-90-dias-frontend-
+          ref: master
+          path: app
+          persist-credentials: false
+
+      # Node ya viene en el runner (el script pide Node 18 o mas y no tiene dependencias).
+      - name: Pruebas del propio script
+        run: node --test scripts/trazabilidad-specs.test.mjs
+
+      - name: Trazabilidad de las specs exigidas
+        run: node scripts/trazabilidad-specs.mjs app --md "$GITHUB_STEP_SUMMARY"

@@ -109,6 +109,7 @@ class ImagenDeLaFormacionAdminServiceTest {
         assertThat(servicio.ver(kelin, Formacion.ESCUELA).heredada()).as("la Escuela nunca hereda").isFalse();
     }
 
+    // spec 035 FR-010
     @Test
     @DisplayName("una imagen que no pasa la revisión no queda vigente")
     void laQueNoPasaNoQueda() {

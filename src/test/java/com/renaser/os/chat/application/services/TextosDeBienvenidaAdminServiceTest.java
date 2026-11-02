@@ -189,6 +189,7 @@ class TextosDeBienvenidaAdminServiceTest {
         assertThat(formal.ultimoCambio().por()).isNull();
     }
 
+    // spec 035 FR-001, FR-002, FR-003
     @Test
     @DisplayName("Spec 035: lo que se cambia en el Diplomado no toca la Escuela ni la Certificación, y volver al original es al original DEL Diplomado")
     void cadaFormacionTieneLosSuyos() {
@@ -209,6 +210,7 @@ class TextosDeBienvenidaAdminServiceTest {
         assertThat(vuelto.textos().get(1).original()).contains("ingreso al Diplomado");
     }
 
+    // spec 035 FR-003
     @Test
     @DisplayName("Spec 035: editar la Escuela no cambia lo que sale en el Diplomado")
     void editarLaEscuelaNoCambiaElDiplomado() {

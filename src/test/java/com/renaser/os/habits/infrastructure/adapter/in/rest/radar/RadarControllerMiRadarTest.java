@@ -253,6 +253,7 @@ class RadarControllerMiRadarTest {
         verifyNoInteractions(consultarMiRadar, configurarMiRadar);
     }
 
+    // spec 036 FR-011
     @Test
     @DisplayName("lo que el caso de uso niega es 403 y dice POR QUE: PROGRAMA_NO_ACTIVADO (personal sin Dia 1) o CUENTA_SUSPENDIDA, con el formato de error de siempre mas `codigo`")
     void elCasoDeUsoNiega() throws Exception {

@@ -65,6 +65,7 @@ class MedicionesDelDiaConMetaTest {
                 true, Instant.EPOCH);
     }
 
+    // spec 037 FR-012
     @Test
     @DisplayName("sin meta fijada trae los 5 km del programa; con una fijada por Administración, esa")
     void trae_la_meta_que_rige() {

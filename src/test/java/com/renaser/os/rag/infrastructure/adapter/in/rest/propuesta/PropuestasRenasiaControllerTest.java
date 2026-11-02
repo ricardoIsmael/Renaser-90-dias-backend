@@ -80,6 +80,7 @@ class PropuestasRenasiaControllerTest {
     }
 
     /** Spec 038: la app apaga las alarmas del habito cumplido (issue #33) con el habito y el dia que trae la respuesta. */
+    // spec 038 FR-009, SC-003
     @Test
     @DisplayName("spec 038: confirmar un habito cumplido trae registro, habito, dia y puntos; sin cumplir, el campo no viaja")
     void confirmarTraeElHabitoCumplido() throws Exception {

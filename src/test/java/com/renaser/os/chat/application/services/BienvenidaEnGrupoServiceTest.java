@@ -123,6 +123,7 @@ class BienvenidaEnGrupoServiceTest {
                 + "¡Te damos la bienvenida!");
     }
 
+    // spec 035 FR-006
     @Test
     @DisplayName("Spec 035: el texto es el de la formación del chat del grupo; el de la Escuela no llega al Diplomado")
     void elTextoEsDeLaFormacionDelGrupo() {

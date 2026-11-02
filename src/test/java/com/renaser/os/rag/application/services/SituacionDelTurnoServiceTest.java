@@ -135,6 +135,7 @@ class SituacionDelTurnoServiceTest {
         when(planPort.planDe(APRENDIZ)).thenReturn(new PlanDelAprendiz(HOY_EN_LIMA, List.of(habitos), List.of()));
     }
 
+    // spec 038 FR-010
     @Test
     @DisplayName("lleva cada habito de hoy con su estado en palabras, si pide foto, y los pausados con su fin")
     void habitosDeHoyYPausados() {

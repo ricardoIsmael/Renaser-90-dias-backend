@@ -53,6 +53,7 @@ class ConsultarAgendaHabitosAdapterTest {
                 categoriaClave, HABITO, DIA);
     }
 
+    // spec 038 FR-011
     @ParameterizedTest(name = "{0}")
     @MethodSource("formaciones")
     @DisplayName("spec 038: el habito lleva el nombre de la categoria de SU formacion, y su habito y su dia para apagar las alarmas")

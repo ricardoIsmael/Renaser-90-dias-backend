@@ -40,6 +40,7 @@ class ArmadorDelAcuerdoTest {
         when(actores.deActor(persona)).thenReturn(Optional.of(new ActorOnboarding(persona, false, "  Ana María Pérez Soto ", false)));
     }
 
+    // spec 039 FR-004, FR-005, SC-004
     @Test
     @DisplayName("sin activar: nombre completo del perfil, «Formación RENASER · 90 días», inicio mañana y fin 89 días después; todavía no empezó")
     void aprendizDeLaEscuela() {
@@ -55,6 +56,7 @@ class ArmadorDelAcuerdoTest {
         assertThat(acuerdo.cronograma()).as("el cronograma lo agrega quien sabe si es el primer ingreso").isEmpty();
     }
 
+    // spec 039 FR-004, SC-004
     @Test
     @DisplayName("el Diplomado dice sus 3 meses o su año, y la Certificación sus 90 días")
     void duracionesPorFormacion() {
@@ -70,6 +72,7 @@ class ArmadorDelAcuerdoTest {
         assertThat(armador.armar(persona, Formacion.CERTIFICACION).programa()).isEqualTo("Certificación RENASER · 90 días");
     }
 
+    // spec 039 FR-005
     @Test
     @DisplayName("quien ya empezó (vuelve a aceptar): sus fechas reales y empezado verdadero")
     void yaEmpezo() {

@@ -99,6 +99,7 @@ class AceptacionDeTerminosServiceTest {
         return new CronogramaParaFirmar(Moneda.PEN, List.of(), huella, yaConfirmado);
     }
 
+    // spec 039 FR-007
     @Test
     @DisplayName("la constancia guarda lo que se le mostró: programa, inicio y fin; sin cronograma firmado no hay huella ni confirmación")
     void guardaLoMostrado() {
@@ -111,6 +112,7 @@ class AceptacionDeTerminosServiceTest {
         verify(cronogramas, never()).de(any());
     }
 
+    // spec 039 FR-009, FR-011
     @Test
     @DisplayName("una app anterior (sin versión ni inicio en el pedido) acepta igual y la constancia guarda lo de ahora")
     void unaAppAnterior() {
@@ -121,6 +123,7 @@ class AceptacionDeTerminosServiceTest {
         assertThat(loGuardado()).isEqualTo(new LoMostrado("Formación RENASER · 90 días", INICIO, FIN, null));
     }
 
+    // spec 039 FR-007
     @Test
     @DisplayName("pasó la medianoche: el inicio que vio ya no es el de ahora → 409 y no queda constancia")
     void inicioVencido() {
@@ -141,6 +144,7 @@ class AceptacionDeTerminosServiceTest {
         verify(aceptaciones, never()).registrar(any(), any(), any(), any(), any(), any());
     }
 
+    // spec 039 FR-008, SC-002
     @Test
     @DisplayName("con la huella del cronograma vigente: queda la huella en la constancia y se devuelve qué confirmar, con el nombre completo del perfil")
     void firmaElCronograma() {
@@ -156,6 +160,7 @@ class AceptacionDeTerminosServiceTest {
         });
     }
 
+    // spec 039 FR-008
     @Test
     @DisplayName("Administración cambió el cronograma mientras leía: 409, no queda constancia ni confirmación")
     void cronogramaCambiado() {

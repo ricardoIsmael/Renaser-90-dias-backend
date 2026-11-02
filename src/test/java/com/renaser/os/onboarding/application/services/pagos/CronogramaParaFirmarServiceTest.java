@@ -79,6 +79,7 @@ class CronogramaParaFirmarServiceTest {
         assertThat(cronograma.yaConfirmado()).isFalse();
     }
 
+    // spec 039 FR-008, SC-002
     @Test
     @DisplayName("la huella es la MISMA que guarda «Mi ingreso» al confirmar: confirmar allá lo deja confirmado acá")
     void laMismaHuellaQueMiIngreso() {

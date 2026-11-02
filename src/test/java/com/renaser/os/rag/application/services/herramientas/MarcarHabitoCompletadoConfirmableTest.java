@@ -59,6 +59,7 @@ class MarcarHabitoCompletadoConfirmableTest {
     }
 
     /** Spec 038 (issue #33): la app necesita el habito y el dia para apagar sus alarmas cuando SER lo cumple. */
+    // spec 038 FR-009, SC-003
     @Test
     @DisplayName("spec 038: el exito dice que habito se cumplio, de que dia y con cuantos puntos, para que la app apague sus alarmas")
     void completaYDiceQueHabitoSeCumplio() {

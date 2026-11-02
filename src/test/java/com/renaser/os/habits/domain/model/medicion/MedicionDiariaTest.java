@@ -48,6 +48,7 @@ class MedicionDiariaTest {
                 java.time.Instant.parse("2026-11-04T22:10:00Z"), false);
     }
 
+    // spec 037 FR-011
     @Test
     @DisplayName("spec 037: una medición de Health Connect lleva su lectura y una manual no")
     void laLecturaVaConHealthConnect() {
@@ -64,6 +65,7 @@ class MedicionDiariaTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    // spec 037 FR-011
     @Test
     @DisplayName("spec 037: la lectura exige fuente de 1 a 60 caracteres y pasos que no sean negativos")
     void laLecturaValidaSusCampos() {

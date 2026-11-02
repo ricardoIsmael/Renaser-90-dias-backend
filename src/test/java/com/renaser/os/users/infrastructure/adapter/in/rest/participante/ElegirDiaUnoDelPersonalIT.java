@@ -103,6 +103,7 @@ class ElegirDiaUnoDelPersonalIT {
         assertThat(((Number) fila.get("dia")).intValue()).as("todavía no llegó: día 0, como el aprendiz").isZero();
     }
 
+    // spec 036 FR-006
     @Test
     @DisplayName("el aprendiz sigue igual: con la fila sin activar empieza mañana por el mismo endpoint")
     void elAprendizSigueIgual() throws Exception {

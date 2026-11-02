@@ -35,6 +35,7 @@ class ImagenDeLaFormacionServiceTest {
     private final ImagenDeLaFormacionPort imagenes = mock(ImagenDeLaFormacionPort.class);
     private final ImagenDeLaFormacionService servicio = new ImagenDeLaFormacionService(cambios, imagenes);
 
+    // spec 035 FR-012
     @Test
     @DisplayName("sin ninguna imagen subida no hay imagen de formación en ninguna: los chats usan la de la app, y no se abre nada")
     void sinNingunaImagen() {
@@ -45,6 +46,7 @@ class ImagenDeLaFormacionServiceTest {
         verifyNoInteractions(imagenes);
     }
 
+    // spec 035 FR-005
     @Test
     @DisplayName("si solo la Escuela subió una, el Diplomado y la Certificación la siguen, con el instante de ESA subida")
     void siguenALaEscuela() {
@@ -86,6 +88,7 @@ class ImagenDeLaFormacionServiceTest {
         assertThat(servicio.vigente(Formacion.DIPLOMADO)).as("el Diplomado ya no tiene la suya y la Escuela volvió a la de la app").isEmpty();
     }
 
+    // spec 035 FR-008
     @Test
     @DisplayName("servir abre la imagen vigente de ESA formación; si ya no abre, no hay imagen (sin romper la lista de chats)")
     void servir() {

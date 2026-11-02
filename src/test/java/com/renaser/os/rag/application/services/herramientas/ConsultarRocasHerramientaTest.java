@@ -198,6 +198,7 @@ class ConsultarRocasHerramientaTest {
                 .contains("- RELACIONES | Estar presente | sin meta numerica");
     }
 
+    // spec 038 FR-002
     @Test
     @DisplayName("noventa (spec 038): sin objetivos la manda a Plan o al diagnostico, nunca al Mapa; los del diagnostico salen POR CONFIRMAR en Plan")
     void noventaSinObjetivosYPorConfirmar() {
@@ -217,6 +218,7 @@ class ConsultarRocasHerramientaTest {
                 .contains("POR CONFIRMAR nacieron de su diagnostico").contains("llevala a Plan");
     }
 
+    // spec 038 FR-003
     @Test
     @DisplayName("noventa: el objetivo grande lleva el plazo de la persona (90 días, 3 meses o 1 año), no un 90 fijo")
     void noventaConElPlazoDeLaPersona() {

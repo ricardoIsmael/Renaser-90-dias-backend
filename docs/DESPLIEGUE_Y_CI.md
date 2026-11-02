@@ -268,6 +268,17 @@ de un día para otro). Tres jobs independientes, con permisos mínimos (`content
 
 ---
 
+### 3.4 Trazabilidad de specs (`.github/workflows/trazabilidad.yml`, 2026-11-02)
+
+Comprueba que cada requisito (`FR-NNN`) y criterio de éxito (`SC-NNN`) de las specs de `specs/trazabilidad.json` (hoy 035 a 039) tiene por lo menos una prueba con su marca
+`spec NNN FR-NNN` (`scripts/trazabilidad-specs.mjs`; la convención está en `.claude/rules/06-trazabilidad-de-specs.md`). No compila nada: lee texto y termina en segundos, por eso
+es un workflow aparte de `ci.yml`. Corre en cada PR y en cada push a `master`.
+
+- **Las pruebas de la app están en otro repositorio** (`RENASER-LAB/Renaser-90-dias-frontend-`, **público**): se baja sin token ni secreto, primero la rama `integracion-formaciones`
+  y, si no existe, `master`. Cuando las marcas de la app lleguen a su `master`, la primera rama deja de existir y el job sigue igual.
+- Una spec entra a la lista **en el mismo cambio que le pone sus marcas**. Para exigir una spec nueva: agregar su número a `specs/trazabilidad.json` y marcar sus pruebas.
+- Falla (exit 1) con un requisito sin prueba o con una marca a un requisito que la spec no define; el resumen en tablas queda en la página del job.
+
 ## 4. SonarCloud (`.github/workflows/sonarcloud.yml`)
 
 **Nada de esto existe todavía.** Mientras falte el secret `SONAR_TOKEN`, el workflow imprime un

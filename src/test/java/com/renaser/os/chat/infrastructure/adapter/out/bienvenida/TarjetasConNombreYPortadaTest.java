@@ -91,6 +91,7 @@ class TarjetasConNombreYPortadaTest {
         assertThat(texto(tarjetas.tarjetaDe("Ana", Formacion.ESCUELA))).isEqualTo("ANA@" + NUEVA);
     }
 
+    // spec 035 FR-007
     @Test
     @DisplayName("Spec 035: la formación con su portada propia no comparte tarjeta con la Escuela; la que sigue a la Escuela sí")
     void cadaFormacionSuPortada() {
