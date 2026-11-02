@@ -443,8 +443,8 @@ mismo.
   **409**: el pedido **cambia** hoy o un día pasado (`Hoy y los días que pasaron no se pueden cambiar`; repetir un día tal como está se
   acepta). **403**: solo la propia persona con el programa andando, y **el cuerpo dice por qué** con el formato de siempre
   (`{ "message", "timestamp", "codigo" }`, el de `ApiErrorConCodigo`; `codigo` es aditivo y un cliente que no lo conoce lee `message`):
-  `PROGRAMA_NO_ACTIVADO` («Mi Radar empieza en tu día 8. Primero elige tu Día 1.»: el personal que todavía no eligió su Día 1, con o sin
-  fila de programa; vale para `GET` y `PUT /radar/mi-radar` y para `POST /radar`), `CUENTA_SUSPENDIDA` («Cuenta suspendida») y
+  `PROGRAMA_NO_ACTIVADO` («Mi Radar empieza en tu día 8. Primero empieza tu programa.»: el personal que todavía no empezó su programa, con o sin
+  fila de programa; *(corregido 2026-11-02, spec 036: decía «Primero elige tu Día 1» y «no eligió su Día 1»; ya nadie elige el Día 1)*; vale para `GET` y `PUT /radar/mi-radar` y para `POST /radar`), `CUENTA_SUSPENDIDA` («Cuenta suspendida») y
   `SIN_PERMISO` («No autorizado», cuando el rol no tiene el permiso del endpoint). El 403 de «cuenta de prueba» no trae código. La
   suspensión y la falta de permiso las escribe el filtro de permisos (`PermissionEnforcementInterceptor`), así que el `codigo` aparece en
   **todos** los 403 de esos dos motivos, no solo en Mi Radar.

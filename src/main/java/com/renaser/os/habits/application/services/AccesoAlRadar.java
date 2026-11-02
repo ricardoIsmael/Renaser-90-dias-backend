@@ -18,7 +18,7 @@ import org.springframework.stereotype.Component;
 @Component
 class AccesoAlRadar {
 
-    static final String MENSAJE_SIN_PROGRAMA = "Mi Radar empieza en tu día 8. Primero elige tu Día 1.";
+    static final String MENSAJE_SIN_PROGRAMA = "Mi Radar empieza en tu día 8. Primero empieza tu programa.";
 
     private final ConsultarProgresoParticipanteHabitsPort progresoPort;
 

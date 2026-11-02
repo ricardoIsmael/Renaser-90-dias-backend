@@ -42,7 +42,7 @@ Como aprendiz, al terminar la ficha y aceptar los Términos quiero ver que mi pr
 1. **Given** un aprendiz sin Día 1 en cualquier hora del día (también 23:58), **When** llega al último paso del onboarding, **Then** ve «Tu programa empieza mañana», la fecha de mañana en su zona («Martes 3 de noviembre»), «Son tus 90 días.» (o «Son tus 3 meses.» / «Es tu año.» según su formación) y un solo botón, «Entendido». No hay lista de fechas.
 2. **Given** esa pantalla, **When** toca «Entendido», **Then** el programa queda activado con inicio mañana, suena el logro y entra a Hoy, donde ve «Tu programa empieza el martes 3 de noviembre».
 3. **Given** que se pierde la red al tocar «Entendido», **Then** se dice «No pudimos activar tu programa. Revisa tu conexión e inténtalo de nuevo.» y el mismo botón reintenta. Si no se pudo ni leer la fecha, «Reintentar».
-4. **Given** que la persona dejó la pantalla abierta pasada la medianoche, **When** toca «Entendido», **Then** el servidor rechaza (400) porque la fecha que se mostraba ya no es «mañana»; la pantalla se refresca con la fecha nueva y dice «Tu fecha cambió. Ahora tu programa empieza mañana, el …»; nunca se activa con una fecha distinta a la que se vio.
+4. **Given** que la persona dejó la pantalla abierta pasada la medianoche, **When** toca «Entendido», **Then** el servidor rechaza (400) porque la fecha que se mostraba ya no es «mañana»; la pantalla vuelve a leer, muestra la fecha nueva y dice «Pasó la medianoche y tu fecha cambió. Mira la nueva.»; nunca se activa con una fecha distinta a la que se vio.
 5. **Given** que el programa ya estaba activado (cerró la app a mitad del paso), **Then** sigue directo a Hoy sin mostrar nada.
 
 ---
@@ -91,6 +91,7 @@ Como persona que nunca eligió su Día 1 (cuenta anterior a este cambio), quiero
 - **FR-008** *(app)*: el paso «Elige tu Día 1» se reemplaza por una pantalla corta: título «Tu programa empieza mañana», la fecha, una línea con el plazo («Son tus 90 días.», «Son tus 3 meses.», «Es tu año.») y «Entendido». Sin selector de fechas en ningún lugar.
 - **FR-009** *(app)*: la manda el servidor: la fecha que se muestra es la que ofrece `validStartDates[0]`, y es la que se envía al activar.
 - **FR-010** *(app)*: todas las entradas pasan a la regla nueva con los mismos textos cortos: fila de Hoy/Plan «Haz tu programa de {plazo} · Empieza mañana ›» y «Todavía no empezaste tu programa · Empieza mañana ›»; botón «Empezar mañana»; Mi Radar «Primero empieza tu programa».
+- **FR-011**: el 403 `PROGRAMA_NO_ACTIVADO` de Mi Radar dice «Mi Radar empieza en tu día 8. Primero empieza tu programa.» (antes «Primero elige tu Día 1.»); el `codigo` y el comportamiento no cambian.
 
 ### Edge cases
 
@@ -110,6 +111,6 @@ Como persona que nunca eligió su Día 1 (cuenta anterior a este cambio), quiero
 
 ## Success Criteria
 
-- **SC-001**: ningún texto de la app, flujo de Maestro ni prueba de Jest dice «Elegir mi Día 1», «Elige tu Día 1», «Primero elige tu Día 1» ni «Confirmar mi Día 1».
+- **SC-001**: ningún texto visible de la app, mensaje del servidor ni flujo de Maestro dice «Elegir mi Día 1», «Elige tu Día 1», «Primero elige tu Día 1» ni «Confirmar mi Día 1» (quedan solo en comentarios que cuentan lo que había antes, y en las comprobaciones de que ya no están).
 - **SC-002**: para cualquier hora UTC, `validStartDates` es exactamente `[hoy_en_su_zona + 1]` y el `POST` sin fecha activa con ese día.
 - **SC-003**: un APK anterior activa sin error contra el servidor nuevo.
