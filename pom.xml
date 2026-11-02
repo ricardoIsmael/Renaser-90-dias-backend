@@ -5,7 +5,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>4.1.1</version>
+		<version>4.1.2</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.renaser</groupId>
@@ -425,6 +425,18 @@
 	</dependencies>
 	<dependencyManagement>
 		<dependencies>
+			<!--
+				Guava (2026-11-02): lo trae google-genai (el modelo de Gemini de Spring AI) en la 33.4.0-android, que
+				tiene un aviso de severidad alta (CVE-2026-102554: denegacion de servicio al deserializar
+				CompactHashMap/CompactHashSet) corregido en la 33.7.2. Ninguno de los BOM importados lo gobierna.
+				Se queda en la variante `-android`, la misma que ya usaba el proyecto (la `-jre` es otra rama de
+				publicacion). Si google-genai sube a una Guava mas nueva por su cuenta, esta fijacion se puede borrar.
+			-->
+			<dependency>
+				<groupId>com.google.guava</groupId>
+				<artifactId>guava</artifactId>
+				<version>33.7.2-android</version>
+			</dependency>
 			<dependency>
 				<groupId>org.springframework.ai</groupId>
 				<artifactId>spring-ai-bom</artifactId>
