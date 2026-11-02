@@ -71,7 +71,8 @@ class DespacharAvisosHabitoScheduler {
         if (ProcesosConInterruptor.saltaEsteTurno(interruptores, "habitos", "habits.avisos")) {
             return;
         }
-        List<UserId> participantes = progresoPort.participantesInscritosActivos();
+        // H-05: solo a quien tiene un registro sin terminar se le abre una transaccion; el resto no puede tener ningun aviso por dar.
+        List<UserId> participantes = despacharAvisosUseCase.conAlgoPorAvisar(progresoPort.participantesInscritosActivos());
         int avisos = 0;
         int fallidos = 0;
         for (UserId participanteId : participantes) {
