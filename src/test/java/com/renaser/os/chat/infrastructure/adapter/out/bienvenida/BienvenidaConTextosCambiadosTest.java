@@ -19,6 +19,7 @@ import com.renaser.os.chat.domain.model.mensaje.Mensaje;
 import com.renaser.os.chat.domain.model.mensaje.MensajeId;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
@@ -68,12 +69,12 @@ class BienvenidaConTextosCambiadosTest {
 
         assertThat(formalQueRecibe(soporte, "Ana Pérez")).isEqualTo(delRepo.soporteFormal().replace("{nombre}", "Ana"));
 
-        cambios.registrar(CambioDeBienvenida.texto(PiezaDeBienvenida.SOPORTE_FORMAL,
+        cambios.registrar(CambioDeBienvenida.texto(Formacion.ESCUELA, PiezaDeBienvenida.SOPORTE_FORMAL,
                 "Hola, {nombre}. Te damos la bienvenida oficial a la Formación Renaser.", KELIN, AHORA));
         assertThat(formalQueRecibe(soporte, "Luis Soto"))
                 .isEqualTo("Hola, Luis. Te damos la bienvenida oficial a la Formación Renaser.");
 
-        cambios.registrar(CambioDeBienvenida.volverAlOriginal(PiezaDeBienvenida.SOPORTE_FORMAL, KELIN, AHORA));
+        cambios.registrar(CambioDeBienvenida.volverAlOriginal(Formacion.ESCUELA, PiezaDeBienvenida.SOPORTE_FORMAL, KELIN, AHORA));
         assertThat(formalQueRecibe(soporte, "Eva Díaz")).isEqualTo(delRepo.soporteFormal().replace("{nombre}", "Eva"));
     }
 
@@ -94,13 +95,64 @@ class BienvenidaConTextosCambiadosTest {
         when(usuarios.findByIds(any())).thenReturn(Map.of(
                 mentor, new UserSummary(mentor, "carlos ramírez", null, UserRole.MENTOR, UserStatus.ACTIVE),
                 ana, new UserSummary(ana, "Ana Pérez", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
-        cambios.registrar(CambioDeBienvenida.texto(PiezaDeBienvenida.GRUPO,
+        cambios.registrar(CambioDeBienvenida.texto(Formacion.ESCUELA, PiezaDeBienvenida.GRUPO,
                 "¡{nombre}, qué bueno tenerte! {mentor} te acompaña.", KELIN, AHORA));
 
         new BienvenidaEnGrupoService(pendientes, textos, conversaciones, delPrograma, usuarios,
                 mock(PlatformTransactionManager.class), FixedClock.at(AHORA), true).darBienvenidas(grupo);
 
         verify(delPrograma).enviarDelPrograma(chat, ana, ContenidoDelPrograma.texto("¡Ana, qué bueno tenerte! Carlos te acompaña."));
+    }
+
+    @Test
+    @DisplayName("Spec 035: el soporte del Diplomado recibe el formal del Diplomado (con su nombre), aunque la Escuela haya editado el suyo; y viceversa")
+    void enElSoporteDelDiplomado() {
+        when(delPrograma.enviarDelPrograma(any(), any(), any())).thenAnswer(inv -> Mensaje.delPrograma(
+                MensajeId.of(UUID.randomUUID()), inv.getArgument(0), inv.getArgument(1), inv.getArgument(2), AHORA));
+        cambios.registrar(CambioDeBienvenida.texto(Formacion.ESCUELA, PiezaDeBienvenida.SOPORTE_FORMAL,
+                "Hola, {nombre}. Edición de la Escuela.", KELIN, AHORA));
+
+        String delDiplomado = formalQueRecibe(servicioDelSoporte(Formacion.DIPLOMADO), "Ana Pérez");
+
+        assertThat(delDiplomado).contains("Diplomado Renaser").doesNotContain("Formación Renaser").doesNotContain("Edición de la Escuela");
+        assertThat(delDiplomado).isEqualTo(delRepo.original(Formacion.DIPLOMADO, PiezaDeBienvenida.SOPORTE_FORMAL).replace("{nombre}", "Ana"));
+
+        cambios.registrar(CambioDeBienvenida.texto(Formacion.DIPLOMADO, PiezaDeBienvenida.SOPORTE_FORMAL,
+                "Hola, {nombre}. Edición del Diplomado.", KELIN, AHORA));
+
+        assertThat(formalQueRecibe(servicioDelSoporte(Formacion.DIPLOMADO), "Luis Soto")).isEqualTo("Hola, Luis. Edición del Diplomado.");
+        assertThat(formalQueRecibe(servicioDelSoporte(Formacion.ESCUELA), "Eva Díaz")).isEqualTo("Hola, Eva. Edición de la Escuela.");
+        assertThat(formalQueRecibe(servicioDelSoporte(Formacion.CERTIFICACION), "Rita Vega"))
+                .contains("Certificación Renaser").doesNotContain("Edición");
+    }
+
+    @Test
+    @DisplayName("Spec 035: el grupo del Diplomado usa el texto del grupo de la Escuela del repo (no nombra la institución) y respeta el que se guarde para él")
+    void enElGrupoDelDiplomado() {
+        UUID grupo = UUID.randomUUID();
+        ConversacionId chat = ConversacionId.of(UUID.randomUUID());
+        UserId mentor = UserId.of(UUID.randomUUID());
+        UserId ana = UserId.of(UUID.randomUUID());
+        UUID asignacion = UUID.randomUUID();
+        BienvenidaEnGrupoPort pendientes = mock(BienvenidaEnGrupoPort.class);
+        LoadConversacionPort conversaciones = mock(LoadConversacionPort.class);
+        when(pendientes.pendientes(grupo)).thenReturn(Optional.of(new Pendientes(mentor,
+                List.of(new Pendiente(asignacion, ana, AHORA.minusSeconds(60))))));
+        when(pendientes.marcarDada(asignacion)).thenReturn(true);
+        when(conversaciones.porCelulaId(grupo)).thenReturn(Optional.of(Conversacion.crearCelula(chat, grupo, AHORA, Formacion.DIPLOMADO)));
+        when(usuarios.findByIds(any())).thenReturn(Map.of(
+                mentor, new UserSummary(mentor, "carlos ramírez", null, UserRole.MENTOR, UserStatus.ACTIVE),
+                ana, new UserSummary(ana, "Ana Pérez", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
+        cambios.registrar(CambioDeBienvenida.texto(Formacion.ESCUELA, PiezaDeBienvenida.GRUPO,
+                "¡{nombre}! Edición de la Escuela con {mentor}.", KELIN, AHORA));
+        cambios.registrar(CambioDeBienvenida.texto(Formacion.DIPLOMADO, PiezaDeBienvenida.GRUPO,
+                "¡{nombre}! Edición del Diplomado con {mentor}.", KELIN, AHORA));
+
+        new BienvenidaEnGrupoService(pendientes, textos, conversaciones, delPrograma, usuarios,
+                mock(PlatformTransactionManager.class), FixedClock.at(AHORA), true).darBienvenidas(grupo);
+
+        verify(delPrograma).enviarDelPrograma(chat, ana, ContenidoDelPrograma.texto("¡Ana! Edición del Diplomado con Carlos."));
+        assertThat(delRepo.original(Formacion.DIPLOMADO, PiezaDeBienvenida.GRUPO)).isEqualTo(delRepo.grupo());
     }
 
     /** Un aprendiz nuevo recibe su bienvenida; con el almacenamiento de marcador sale solo el formal (G-5). */
@@ -117,9 +169,17 @@ class BienvenidaConTextosCambiadosTest {
     }
 
     private BienvenidaEnSoporteService servicioDelSoporte() {
+        return servicioDelSoporte(Formacion.ESCUELA);
+    }
+
+    /** El soporte vive en una formación (spec 035): de ella salen los textos. */
+    private BienvenidaEnSoporteService servicioDelSoporte(Formacion formacion) {
         AlmacenamientoPort sinAlmacenamiento = mock(AlmacenamientoPort.class);
         when(sinAlmacenamiento.guardaObjetos()).thenReturn(false);
+        LoadConversacionPort conversaciones = mock(LoadConversacionPort.class);
+        when(conversaciones.porId(SOPORTE)).thenReturn(Optional.of(
+                Conversacion.crearSoporte(SOPORTE, KELIN, "Ana – " + formacion, AHORA, formacion)));
         return new BienvenidaEnSoporteService(mock(DibujarBienvenidaPort.class), sinAlmacenamiento, delPrograma, usuarios,
-                mock(MarcaDeBienvenidaPort.class), textos, UUID::randomUUID, mock(PlatformTransactionManager.class), true);
+                mock(MarcaDeBienvenidaPort.class), textos, UUID::randomUUID, mock(PlatformTransactionManager.class), conversaciones, true);
     }
 }

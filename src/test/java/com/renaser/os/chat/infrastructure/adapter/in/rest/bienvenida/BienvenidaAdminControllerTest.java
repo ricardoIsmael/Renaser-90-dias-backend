@@ -11,6 +11,7 @@ import com.renaser.os.chat.application.ports.in.bienvenida.VerBienvenidaUseCase;
 import com.renaser.os.chat.application.ports.in.bienvenida.VerTarjetaDeMuestraUseCase;
 import com.renaser.os.chat.domain.model.bienvenida.PiezaDeBienvenida;
 import com.renaser.os.shared.domain.NotAuthorizedException;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
@@ -62,14 +63,14 @@ class BienvenidaAdminControllerTest {
     private static final String BASE = "/api/v1/admin/bienvenida";
     private static final byte[] JPEG = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 7};
     private static final Instant EN = Instant.parse("2026-09-27T15:04:05Z");
-    private static final BienvenidaEditable BIENVENIDA = new BienvenidaEditable(false, 1000, List.of(
+    private static final BienvenidaEditable BIENVENIDA = new BienvenidaEditable(Formacion.ESCUELA, false, 1000, List.of(
             new TextoEditable(PiezaDeBienvenida.SOPORTE_CON_LA_TARJETA, "{nombre}, esta tarjeta", "{nombre}, esta tarjeta",
                     false, List.of("{nombre}"), null),
             new TextoEditable(PiezaDeBienvenida.SOPORTE_FORMAL, "Hola, {nombre}. Nuevo", "Hola, {nombre}", true,
                     List.of("{nombre}"), new UltimoCambio("Kelin Rojas", EN, false)),
             new TextoEditable(PiezaDeBienvenida.GRUPO, "¡{nombre}! {mentor}", "¡{nombre}! {mentor}", false,
                     List.of("{nombre}", "{mentor}"), new UltimoCambio(null, EN, true))),
-            new PortadaEditable(false, true, null));
+            new PortadaEditable(false, false, true, null));
 
     @Autowired
     private MockMvc mockMvc;
@@ -89,7 +90,7 @@ class BienvenidaAdminControllerTest {
     @DisplayName("GET: la bienvenida entera, con los tres mensajes en orden, su original, el último cambio y la portada")
     void laBienvenida() throws Exception {
         UUID actor = cuenta(UserRole.ADMIN, UserStatus.ACTIVE);
-        when(verUseCase.ver(UserId.of(actor))).thenReturn(BIENVENIDA);
+        when(verUseCase.ver(UserId.of(actor), Formacion.ESCUELA)).thenReturn(BIENVENIDA);
 
         mockMvc.perform(get(BASE).header("X-Actor-Id", actor.toString()))
                 .andExpect(status().isOk())
@@ -115,8 +116,8 @@ class BienvenidaAdminControllerTest {
     @DisplayName("PUT y DELETE de un texto: la clave de la ruta y el texto del cuerpo llegan al caso de uso")
     void cambiarYVolverUnTexto() throws Exception {
         UUID actor = cuenta(UserRole.ALCHEMIST, UserStatus.ACTIVE);
-        when(textoUseCase.cambiar(UserId.of(actor), "SOPORTE_FORMAL", "Hola, {nombre}. Nuevo")).thenReturn(BIENVENIDA);
-        when(textoUseCase.volverAlOriginal(UserId.of(actor), "GRUPO")).thenReturn(BIENVENIDA);
+        when(textoUseCase.cambiar(UserId.of(actor), Formacion.ESCUELA, "SOPORTE_FORMAL", "Hola, {nombre}. Nuevo")).thenReturn(BIENVENIDA);
+        when(textoUseCase.volverAlOriginal(UserId.of(actor), Formacion.ESCUELA, "GRUPO")).thenReturn(BIENVENIDA);
 
         mockMvc.perform(put(BASE + "/textos/SOPORTE_FORMAL").header("X-Actor-Id", actor.toString())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"texto\":\"Hola, {nombre}. Nuevo\"}"))
@@ -129,7 +130,7 @@ class BienvenidaAdminControllerTest {
     @DisplayName("400 con el motivo del dominio (p. ej. un texto sin {nombre}), en JSON")
     void textoQueNoSirve() throws Exception {
         UUID actor = cuenta(UserRole.ADMIN, UserStatus.ACTIVE);
-        when(textoUseCase.cambiar(eq(UserId.of(actor)), eq("SOPORTE_FORMAL"), any()))
+        when(textoUseCase.cambiar(eq(UserId.of(actor)), eq(Formacion.ESCUELA), eq("SOPORTE_FORMAL"), any()))
                 .thenThrow(new IllegalArgumentException("Al mensaje le falta {nombre}: es donde va el nombre de la persona."));
 
         mockMvc.perform(put(BASE + "/textos/SOPORTE_FORMAL").header("X-Actor-Id", actor.toString())
@@ -145,12 +146,12 @@ class BienvenidaAdminControllerTest {
         String ruta = "bienvenida/portadas/abc";
         when(portadaUseCase.solicitarSubida(UserId.of(actor), "image/jpeg"))
                 .thenReturn(new UrlDeSubida(URI.create("https://almacen.test/" + ruta), ruta));
-        when(portadaUseCase.confirmar(UserId.of(actor), ruta)).thenReturn(BIENVENIDA);
-        when(portadaUseCase.confirmar(UserId.of(actor), "bienvenida/portadas/sin-almacen"))
+        when(portadaUseCase.confirmar(UserId.of(actor), Formacion.ESCUELA, ruta)).thenReturn(BIENVENIDA);
+        when(portadaUseCase.confirmar(UserId.of(actor), Formacion.ESCUELA, "bienvenida/portadas/sin-almacen"))
                 .thenThrow(new IllegalStateException("Este servidor no tiene dónde guardar imágenes"));
-        when(portadaUseCase.confirmar(UserId.of(actor), "bienvenida/portadas/perdida"))
+        when(portadaUseCase.confirmar(UserId.of(actor), Formacion.ESCUELA, "bienvenida/portadas/perdida"))
                 .thenThrow(new NoSuchElementException("No encontramos la imagen subida: vuelve a elegirla."));
-        when(portadaUseCase.volverALaOriginal(UserId.of(actor))).thenReturn(BIENVENIDA);
+        when(portadaUseCase.volverALaOriginal(UserId.of(actor), Formacion.ESCUELA)).thenReturn(BIENVENIDA);
 
         mockMvc.perform(post(BASE + "/portada/upload-url").header("X-Actor-Id", actor.toString())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"contentType\":\"image/jpeg\"}"))
@@ -168,8 +169,8 @@ class BienvenidaAdminControllerTest {
     @DisplayName("la tarjeta de muestra: image/jpeg sin caché; con la candidata, la pasa al caso de uso")
     void tarjetaDeMuestra() throws Exception {
         UUID actor = cuenta(UserRole.ADMIN, UserStatus.ACTIVE);
-        when(muestraUseCase.muestra(eq(UserId.of(actor)), eq("María"), isNull())).thenReturn(JPEG);
-        when(muestraUseCase.muestra(UserId.of(actor), "Ana", "bienvenida/portadas/abc")).thenReturn(JPEG);
+        when(muestraUseCase.muestra(eq(UserId.of(actor)), eq(Formacion.ESCUELA), eq("María"), isNull())).thenReturn(JPEG);
+        when(muestraUseCase.muestra(UserId.of(actor), Formacion.ESCUELA, "Ana", "bienvenida/portadas/abc")).thenReturn(JPEG);
 
         mockMvc.perform(get(BASE + "/tarjeta").param("nombre", "María").header("X-Actor-Id", actor.toString())
                         .accept(MediaType.IMAGE_JPEG, MediaType.APPLICATION_JSON))
@@ -180,14 +181,14 @@ class BienvenidaAdminControllerTest {
         mockMvc.perform(get(BASE + "/tarjeta").param("nombre", "Ana").param("portada", "bienvenida/portadas/abc")
                         .header("X-Actor-Id", actor.toString()))
                 .andExpect(status().isOk());
-        verify(muestraUseCase).muestra(UserId.of(actor), "Ana", "bienvenida/portadas/abc");
+        verify(muestraUseCase).muestra(UserId.of(actor), Formacion.ESCUELA, "Ana", "bienvenida/portadas/abc");
     }
 
     @Test
     @DisplayName("una candidata que no sirve: 400 con el motivo en JSON, aunque se haya pedido la imagen")
     void candidataQueNoSirve() throws Exception {
         UUID actor = cuenta(UserRole.ADMIN, UserStatus.ACTIVE);
-        when(muestraUseCase.muestra(UserId.of(actor), "Ana", "bienvenida/portadas/oscura"))
+        when(muestraUseCase.muestra(UserId.of(actor), Formacion.ESCUELA, "Ana", "bienvenida/portadas/oscura"))
                 .thenThrow(new IllegalArgumentException("El nombre no se leería"));
 
         mockMvc.perform(get(BASE + "/tarjeta").param("nombre", "Ana").param("portada", "bienvenida/portadas/oscura")
@@ -213,18 +214,43 @@ class BienvenidaAdminControllerTest {
     void rechazoDelServicio() throws Exception {
         UUID actor = cuenta(UserRole.MENTOR, UserStatus.ACTIVE);
         NotAuthorizedException rechazo = new NotAuthorizedException("Solo Administración y Alquimista pueden cambiar la bienvenida");
-        when(verUseCase.ver(UserId.of(actor))).thenThrow(rechazo);
-        when(textoUseCase.cambiar(any(), any(), any())).thenThrow(rechazo);
-        when(textoUseCase.volverAlOriginal(any(), any())).thenThrow(rechazo);
+        when(verUseCase.ver(UserId.of(actor), Formacion.ESCUELA)).thenThrow(rechazo);
+        when(textoUseCase.cambiar(any(), any(), any(), any())).thenThrow(rechazo);
+        when(textoUseCase.volverAlOriginal(any(), any(), any())).thenThrow(rechazo);
         when(portadaUseCase.solicitarSubida(any(), any())).thenThrow(rechazo);
-        when(portadaUseCase.confirmar(any(), any())).thenThrow(rechazo);
-        when(portadaUseCase.volverALaOriginal(any())).thenThrow(rechazo);
-        when(muestraUseCase.muestra(any(), any(), any())).thenThrow(rechazo);
+        when(portadaUseCase.confirmar(any(), any(), any())).thenThrow(rechazo);
+        when(portadaUseCase.volverALaOriginal(any(), any())).thenThrow(rechazo);
+        when(muestraUseCase.muestra(any(), any(), any(), any())).thenThrow(rechazo);
 
         for (RequestBuilder pedido : todos(actor)) {
             mockMvc.perform(pedido).andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.message").value("Solo Administración y Alquimista pueden cambiar la bienvenida"));
         }
+    }
+
+    @Test
+    @DisplayName("Spec 035: ?formation= elige la formación; sin él es la Escuela (la app anterior); un código que no existe es 400")
+    void laFormacionVieneEnLaQuery() throws Exception {
+        UUID actor = cuenta(UserRole.ADMIN, UserStatus.ACTIVE);
+        BienvenidaEditable delDiplomado = new BienvenidaEditable(Formacion.DIPLOMADO, false, 1000, BIENVENIDA.textos(),
+                new PortadaEditable(false, true, true, null));
+        when(verUseCase.ver(UserId.of(actor), Formacion.DIPLOMADO)).thenReturn(delDiplomado);
+        when(verUseCase.ver(UserId.of(actor), Formacion.ESCUELA)).thenReturn(BIENVENIDA);
+        when(textoUseCase.cambiar(UserId.of(actor), Formacion.DIPLOMADO, "GRUPO", "¡{nombre}! {mentor}")).thenReturn(delDiplomado);
+
+        mockMvc.perform(get(BASE).param("formation", "DIPLOMADO").header("X-Actor-Id", actor.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.formation").value("DIPLOMADO"))
+                .andExpect(jsonPath("$.portada.heredada").value(true));
+        mockMvc.perform(get(BASE).header("X-Actor-Id", actor.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.formation").value("ESCUELA"))
+                .andExpect(jsonPath("$.portada.heredada").value(false));
+        mockMvc.perform(put(BASE + "/textos/GRUPO").param("formation", "diplomado").header("X-Actor-Id", actor.toString())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"texto\":\"¡{nombre}! {mentor}\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.formation").value("DIPLOMADO"));
+        mockMvc.perform(get(BASE).param("formation", "MAESTRIA").header("X-Actor-Id", actor.toString()))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

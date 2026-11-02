@@ -38,6 +38,8 @@ import java.util.UUID;
  * Administración desde la app (D-210) o el original de {@code bienvenida/mensajes.yaml}. Sin tarjeta: la
  * tarjeta es del soporte.
  *
+ * <p><b>De la formación del grupo</b> (spec 035): el texto es el de la formación del CHAT del grupo, no el de otra.
+ *
  * <p><b>La firma el programa, no el mentor</b> (D-204, 2026-09-27): sale como mensaje de SISTEMA
  * ({@link EnviarMensajeDelProgramaUseCase}), guardado a nombre del aprendiz al que se le da. El mentor
  * vigente sigue haciendo falta: el texto lo nombra ({@code {mentor}}) y sin él la bienvenida espera.
@@ -101,7 +103,7 @@ public class BienvenidaEnGrupoService implements DarBienvenidaEnGrupoUseCase {
 
     @Override
     public int darBienvenidas(UUID celulaId) {
-        if (!activa || textos.grupo().isEmpty()) {
+        if (!activa) {
             return 0;
         }
         Optional<Pendientes> pendientes = bienvenidaPort.pendientes(celulaId).map(this::soloQuienEntroHacePoco)
@@ -109,15 +111,19 @@ public class BienvenidaEnGrupoService implements DarBienvenidaEnGrupoUseCase {
         if (pendientes.isEmpty()) {
             return 0;
         }
-        Optional<ConversacionId> chat = loadConversacionPort.porCelulaId(celulaId).map(Conversacion::id);
+        Optional<Conversacion> chat = loadConversacionPort.porCelulaId(celulaId);
         if (chat.isEmpty()) {
             log.warn("[chat.bienvenida-grupo] el grupo {} no tiene chat: la bienvenida queda pendiente", celulaId);
             return 0;
         }
-        return darATodos(chat.get(), pendientes.get(), cuentasActivas(pendientes.get()));
+        String texto = textos.grupo(chat.get().formacion());
+        if (texto.isEmpty()) {
+            return 0;
+        }
+        return darATodos(chat.get().id(), texto, pendientes.get(), cuentasActivas(pendientes.get()));
     }
 
-    private int darATodos(ConversacionId chat, Pendientes pendientes, Map<UserId, UserSummary> activas) {
+    private int darATodos(ConversacionId chat, String plantilla, Pendientes pendientes, Map<UserId, UserSummary> activas) {
         UserSummary mentor = activas.get(pendientes.mentorId());
         if (mentor == null) {
             log.warn("[chat.bienvenida-grupo] el mentor {} no tiene cuenta activa: la bienvenida queda pendiente",
@@ -132,7 +138,7 @@ public class BienvenidaEnGrupoService implements DarBienvenidaEnGrupoUseCase {
                 continue;
             }
             try {
-                dadas += dar(chat, pendiente, mentor, aprendiz) ? 1 : 0;
+                dadas += dar(chat, plantilla, pendiente, mentor, aprendiz) ? 1 : 0;
             } catch (RuntimeException e) {
                 log.warn("[chat.bienvenida-grupo] no se pudo dar la bienvenida a {}; se reintentara",
                         pendiente.aprendizId(), e);
@@ -169,8 +175,9 @@ public class BienvenidaEnGrupoService implements DarBienvenidaEnGrupoUseCase {
     }
 
     /** La marca y el mensaje en una transacción. {@code false} si otra entrega ya la había dado. */
-    private boolean dar(ConversacionId chat, Pendiente pendiente, UserSummary mentor, UserSummary aprendiz) {
-        String texto = textos.grupo()
+    private boolean dar(ConversacionId chat, String plantilla, Pendiente pendiente, UserSummary mentor,
+                         UserSummary aprendiz) {
+        String texto = plantilla
                 .replace("{nombre}", PrimerNombre.de(aprendiz.fullName()))
                 .replace("{mentor}", PrimerNombre.de(mentor.fullName()));
         return Boolean.TRUE.equals(transaccionPropia.execute(status -> {

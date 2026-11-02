@@ -4,6 +4,7 @@ import com.renaser.os.chat.application.ports.out.bienvenida.CambiosDeBienvenidaE
 import com.renaser.os.chat.domain.model.bienvenida.CambioDeBienvenida;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoEnMemoria;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.domain.Formacion;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -84,7 +85,7 @@ class BienvenidaJava2dAdapterTest {
     @DisplayName("D-210: con la portada nueva, la tarjeta sale sobre la nueva y el nombre se sigue leyendo")
     void conLaPortadaNueva() throws IOException {
         almacenamiento.guardar(NUEVA, ImagenesDePrueba.lisa(1200, 1200, ImagenesDePrueba.CELESTE, "jpeg"));
-        cambios.registrar(CambioDeBienvenida.portada(NUEVA, UserId.of(UUID.randomUUID()), Instant.parse("2026-09-27T04:30:00Z")));
+        cambios.registrar(CambioDeBienvenida.portada(Formacion.ESCUELA, NUEVA, UserId.of(UUID.randomUUID()), Instant.parse("2026-09-27T04:30:00Z")));
 
         BufferedImage tarjeta = leer(adapter.dibujar("Flor de María"));
 
@@ -100,7 +101,7 @@ class BienvenidaJava2dAdapterTest {
     @DisplayName("D-210: se puede dibujar sobre una portada dada aunque la vigente sea otra")
     void sobreUnaPortadaDada() throws IOException {
         almacenamiento.guardar(NUEVA, ImagenesDePrueba.lisa(1200, 1200, ImagenesDePrueba.CELESTE, "jpeg"));
-        cambios.registrar(CambioDeBienvenida.portada(NUEVA, UserId.of(UUID.randomUUID()), Instant.parse("2026-09-27T04:30:00Z")));
+        cambios.registrar(CambioDeBienvenida.portada(Formacion.ESCUELA, NUEVA, UserId.of(UUID.randomUUID()), Instant.parse("2026-09-27T04:30:00Z")));
 
         BufferedImage sobreLaOriginal = leer(adapter.dibujar("Flor de María", "original"));
         BufferedImage referencia = ImageIO.read(recurso("/bienvenida/referencia-flor-de-maria.png"));

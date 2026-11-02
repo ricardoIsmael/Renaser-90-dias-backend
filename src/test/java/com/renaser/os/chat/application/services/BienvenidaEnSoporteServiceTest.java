@@ -4,11 +4,14 @@ import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeDelPrograma
 import com.renaser.os.chat.application.ports.out.bienvenida.DibujarBienvenidaPort;
 import com.renaser.os.chat.application.ports.out.bienvenida.MarcaDeBienvenidaPort;
 import com.renaser.os.chat.application.ports.out.bienvenida.TextosDeBienvenidaPort;
+import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort;
+import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.mensaje.ContenidoDelPrograma;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
 import com.renaser.os.chat.domain.model.mensaje.MensajeId;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -75,6 +78,8 @@ class BienvenidaEnSoporteServiceTest {
     private MarcaDeBienvenidaPort marcaPort;
     @Mock
     private PlatformTransactionManager transactionManager;
+    @Mock
+    private LoadConversacionPort conversaciones;
 
     /** Encendida (BIENVENIDA_ACTIVA=true): el resto de las pruebas mira lo que pasa cuando SÍ sale. */
     private BienvenidaEnSoporteService servicio() {
@@ -83,7 +88,7 @@ class BienvenidaEnSoporteServiceTest {
 
     private BienvenidaEnSoporteService servicio(TextosDeBienvenidaPort textos, boolean activa) {
         return new BienvenidaEnSoporteService(dibujarPort, almacenamientoPort, delPrograma, userSummaryFinder,
-                marcaPort, textos, idGenerator, transactionManager, activa);
+                marcaPort, textos, idGenerator, transactionManager, conversaciones, activa);
     }
 
     @Test
@@ -93,7 +98,7 @@ class BienvenidaEnSoporteServiceTest {
 
         servicio().darBienvenida(SOPORTE, ANA);
 
-        verify(dibujarPort).dibujar("María");
+        verify(dibujarPort).dibujarDe("María", Formacion.ESCUELA);
         String ruta = "chat/" + SOPORTE.value() + "/fotos/" + ID_FOTO;
         verify(almacenamientoPort).subir(ruta, TARJETA, "image/jpeg");
         ArgumentCaptor<ContenidoDelPrograma> enviados = ArgumentCaptor.forClass(ContenidoDelPrograma.class);
@@ -102,6 +107,34 @@ class BienvenidaEnSoporteServiceTest {
                 ContenidoDelPrograma.imagen(ruta, "image/jpeg", TARJETA.length),
                 ContenidoDelPrograma.texto("Esta tarjeta es para ti, María"),
                 ContenidoDelPrograma.texto("Hola María, tu ingreso está confirmado"));
+    }
+
+    @Test
+    @DisplayName("Spec 035: una persona del Diplomado recibe la tarjeta sobre la portada del Diplomado y los textos del Diplomado, nunca los de la Escuela")
+    void cadaSoporteRecibeLoDeSuFormacion() {
+        preparar("Ana", Formacion.DIPLOMADO);
+
+        servicio(new TextosPorFormacion(), true).darBienvenida(SOPORTE, ANA);
+
+        verify(dibujarPort).dibujarDe("Ana", Formacion.DIPLOMADO);
+        verify(dibujarPort, never()).dibujarDe(anyString(), eq(Formacion.ESCUELA));
+        ArgumentCaptor<ContenidoDelPrograma> enviados = ArgumentCaptor.forClass(ContenidoDelPrograma.class);
+        verify(delPrograma, times(3)).enviarDelPrograma(eq(SOPORTE), eq(ANA), enviados.capture());
+        assertThat(enviados.getAllValues()).extracting(ContenidoDelPrograma::texto).contains(
+                "Tarjeta de DIPLOMADO para Ana", "Formal de DIPLOMADO para Ana");
+        assertThat(enviados.getAllValues()).extracting(ContenidoDelPrograma::texto)
+                .noneMatch(texto -> texto != null && texto.contains("ESCUELA"));
+    }
+
+    @Test
+    @DisplayName("Spec 035: si el soporte ya no existe no se sabe de qué formación es y no se manda nada (el outbox lo reintenta)")
+    void sinSoporteNoSeMandaNada() {
+        when(userSummaryFinder.findById(ANA)).thenReturn(Optional.of(
+                new UserSummary(ANA, "Ana", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
+        when(conversaciones.porId(SOPORTE)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> servicio().darBienvenida(SOPORTE, ANA)).isInstanceOf(java.util.NoSuchElementException.class);
+        verifyNoInteractions(dibujarPort, almacenamientoPort, delPrograma);
     }
 
     @Test
@@ -183,7 +216,7 @@ class BienvenidaEnSoporteServiceTest {
 
         servicio().darBienvenida(SOPORTE, ANA);
 
-        verify(dibujarPort, never()).dibujar(anyString());
+        verify(dibujarPort, never()).dibujarDe(anyString(), any());
         verify(almacenamientoPort, never()).subir(anyString(), any(), anyString());
         verify(delPrograma, times(1)).enviarDelPrograma(SOPORTE, ANA,
                 ContenidoDelPrograma.texto("Hola Ana, tu ingreso está confirmado"));
@@ -191,9 +224,15 @@ class BienvenidaEnSoporteServiceTest {
     }
 
     private void preparar(String nombreAprendiz) {
+        preparar(nombreAprendiz, Formacion.ESCUELA);
+    }
+
+    private void preparar(String nombreAprendiz, Formacion formacion) {
         when(userSummaryFinder.findById(ANA)).thenReturn(Optional.of(
                 new UserSummary(ANA, nombreAprendiz, null, UserRole.TRAINEE, UserStatus.ACTIVE)));
-        lenient().when(dibujarPort.dibujar(anyString())).thenReturn(TARJETA);
+        lenient().when(conversaciones.porId(SOPORTE)).thenReturn(Optional.of(
+                Conversacion.crearSoporte(SOPORTE, ANA, "Ana – Formación Renaser", Instant.parse("2026-09-27T14:00:00Z"), formacion)));
+        lenient().when(dibujarPort.dibujarDe(anyString(), any())).thenReturn(TARJETA);
         lenient().when(idGenerator.newId()).thenReturn(ID_FOTO);
         lenient().when(almacenamientoPort.guardaObjetos()).thenReturn(true);
         // Cada envío devuelve el mensaje guardado: el primero es el que queda en la marca.
@@ -211,7 +250,35 @@ class BienvenidaEnSoporteServiceTest {
 
     private record TextosFijos(String soporteConLaTarjeta, String soporteFormal) implements TextosDeBienvenidaPort {
         @Override
-        public String grupo() {
+        public String soporteConLaTarjeta(Formacion formacion) {
+            return soporteConLaTarjeta;
+        }
+
+        @Override
+        public String soporteFormal(Formacion formacion) {
+            return soporteFormal;
+        }
+
+        @Override
+        public String grupo(Formacion formacion) {
+            return "";
+        }
+    }
+
+    /** Los textos de cada formación, para probar que cada soporte recibe los suyos. */
+    private record TextosPorFormacion() implements TextosDeBienvenidaPort {
+        @Override
+        public String soporteConLaTarjeta(Formacion formacion) {
+            return "Tarjeta de " + formacion + " para {nombre}";
+        }
+
+        @Override
+        public String soporteFormal(Formacion formacion) {
+            return "Formal de " + formacion + " para {nombre}";
+        }
+
+        @Override
+        public String grupo(Formacion formacion) {
             return "";
         }
     }

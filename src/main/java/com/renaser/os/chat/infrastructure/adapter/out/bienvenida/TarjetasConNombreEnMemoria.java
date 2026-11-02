@@ -4,6 +4,7 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.renaser.os.chat.application.ports.out.bienvenida.DibujarBienvenidaPort;
 import com.renaser.os.chat.application.ports.out.bienvenida.TarjetaConNombrePort;
+import com.renaser.os.shared.domain.Formacion;
 import org.springframework.stereotype.Component;
 
 import java.security.MessageDigest;
@@ -25,7 +26,8 @@ import java.util.Locale;
  * o la letra, cambia sola y los teléfonos que tengan la vieja la vuelven a bajar.
  *
  * <p><b>La portada va en la clave</b> (D-210): Administración puede cambiar la portada desde la app, y
- * una tarjeta guardada con la vieja no se vuelve a servir. Se dibuja sobre la MISMA portada de la clave
+ * una tarjeta guardada con la vieja no se vuelve a servir. La portada que va en la clave es la
+ * VIGENTE de la formación (spec 035): dos formaciones con la misma portada comparten tarjetas, y la que tiene la suya no mezcla. Se dibuja sobre la MISMA portada de la clave
  * ({@link DibujarBienvenidaPort#dibujar(String, String)}), no sobre la que esté vigente al terminar: si
  * cambia justo mientras se dibuja, lo guardado igual corresponde a su clave. Las de la portada vieja no
  * se borran: se van solas por el tope de peso.
@@ -49,8 +51,8 @@ class TarjetasConNombreEnMemoria implements TarjetaConNombrePort {
 
     /** Dos pedidos del mismo nombre a la vez dibujan una sola vez: el segundo espera al primero. */
     @Override
-    public TarjetaConNombre tarjetaDe(String primerNombre) {
-        return tarjetas.get(new Clave(dibujante.portadaVigente(), clave(primerNombre)), this::dibujar);
+    public TarjetaConNombre tarjetaDe(String primerNombre, Formacion formacion) {
+        return tarjetas.get(new Clave(dibujante.portadaVigente(formacion), clave(primerNombre)), this::dibujar);
     }
 
     private TarjetaConNombre dibujar(Clave clave) {

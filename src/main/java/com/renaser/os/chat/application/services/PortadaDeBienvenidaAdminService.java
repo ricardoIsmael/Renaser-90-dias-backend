@@ -7,11 +7,13 @@ import com.renaser.os.chat.application.ports.out.bienvenida.CambiosDeBienvenidaP
 import com.renaser.os.chat.application.ports.out.bienvenida.DibujarBienvenidaPort;
 import com.renaser.os.chat.application.ports.out.bienvenida.PortadaDeBienvenidaPort;
 import com.renaser.os.chat.domain.model.bienvenida.CambioDeBienvenida;
+import com.renaser.os.chat.domain.model.bienvenida.EstadoDePieza;
 import com.renaser.os.chat.domain.model.bienvenida.PiezaDeBienvenida;
 import com.renaser.os.chat.domain.model.bienvenida.PortadaDeBienvenida;
 import com.renaser.os.chat.domain.model.conversacion.PrimerNombre;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
@@ -20,6 +22,9 @@ import java.time.Duration;
 
 /**
  * Cambiar la portada de la tarjeta de bienvenida desde la app y verla antes de usarla (D-210).
+ *
+ * <p><b>Por formación</b> (spec 035): cada formación tiene su portada; la que no subió la suya usa la vigente de la Escuela. La URL de subida no
+ * depende de la formación: la ruta es nueva en cada subida y recién {@link #confirmar} la deja vigente para una.
  *
  * <p><b>Dónde queda la imagen:</b> en el mismo almacenamiento que las fotos de evidencia
  * ({@link AlmacenamientoPort}), bajo {@link PortadaDeBienvenida#PREFIJO_RUTA}, subida por el teléfono con
@@ -72,31 +77,32 @@ public class PortadaDeBienvenidaAdminService implements CambiarPortadaDeBienveni
     }
 
     @Override
-    public BienvenidaEditable confirmar(UserId actorId, String ruta) {
+    public BienvenidaEditable confirmar(UserId actorId, Formacion formacion, String ruta) {
         bienvenida.exigirQuePuedaCambiarla(actorId);
         String propia = PortadaDeBienvenida.exigirRutaPropia(ruta);
-        if (!propia.equals(bienvenida.estado(PiezaDeBienvenida.PORTADA).vigente())) {
+        EstadoDePieza estado = bienvenida.estado(formacion, PiezaDeBienvenida.PORTADA);
+        if (!(estado.cambiada() && propia.equals(estado.vigente()))) {
             revisar(propia);
-            cambios.registrar(CambioDeBienvenida.portada(propia, actorId, clock.now()));
+            cambios.registrar(CambioDeBienvenida.portada(formacion, propia, actorId, clock.now()));
         }
-        return bienvenida.leer();
+        return bienvenida.leer(formacion);
     }
 
     @Override
-    public BienvenidaEditable volverALaOriginal(UserId actorId) {
+    public BienvenidaEditable volverALaOriginal(UserId actorId, Formacion formacion) {
         bienvenida.exigirQuePuedaCambiarla(actorId);
-        if (bienvenida.estado(PiezaDeBienvenida.PORTADA).cambiada()) {
-            cambios.registrar(CambioDeBienvenida.volverAlOriginal(PiezaDeBienvenida.PORTADA, actorId, clock.now()));
+        if (bienvenida.estado(formacion, PiezaDeBienvenida.PORTADA).cambiada()) {
+            cambios.registrar(CambioDeBienvenida.volverAlOriginal(formacion, PiezaDeBienvenida.PORTADA, actorId, clock.now()));
         }
-        return bienvenida.leer();
+        return bienvenida.leer(formacion);
     }
 
     @Override
-    public byte[] muestra(UserId actorId, String nombre, String portadaCandidata) {
+    public byte[] muestra(UserId actorId, Formacion formacion, String nombre, String portadaCandidata) {
         bienvenida.exigirQuePuedaCambiarla(actorId);
         String primerNombre = primerNombreDeMuestra(nombre);
         if (portadaCandidata == null || portadaCandidata.isBlank()) {
-            return dibujante.dibujar(primerNombre);
+            return dibujante.dibujarDe(primerNombre, formacion);
         }
         String propia = PortadaDeBienvenida.exigirRutaPropia(portadaCandidata);
         revisar(propia);

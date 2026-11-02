@@ -5,6 +5,7 @@ import com.renaser.os.chat.domain.model.bienvenida.CambioDeBienvenida;
 import com.renaser.os.chat.domain.model.bienvenida.PiezaDeBienvenida;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoEnMemoria;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.domain.Formacion;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -30,13 +31,32 @@ class PortadasDeBienvenidaTest {
     @Test
     @DisplayName("la vigente es la original, después la subida, y otra vez la original al volver")
     void laVigente() {
-        assertThat(portadas.vigente()).isEqualTo("original");
+        assertThat(portadas.vigente(Formacion.ESCUELA)).isEqualTo("original");
 
-        cambios.registrar(CambioDeBienvenida.portada(NUEVA, KELIN, AHORA));
-        assertThat(portadas.vigente()).isEqualTo(NUEVA);
+        cambios.registrar(CambioDeBienvenida.portada(Formacion.ESCUELA, NUEVA, KELIN, AHORA));
+        assertThat(portadas.vigente(Formacion.ESCUELA)).isEqualTo(NUEVA);
 
-        cambios.registrar(CambioDeBienvenida.volverAlOriginal(PiezaDeBienvenida.PORTADA, KELIN, AHORA));
-        assertThat(portadas.vigente()).isEqualTo("original");
+        cambios.registrar(CambioDeBienvenida.volverAlOriginal(Formacion.ESCUELA, PiezaDeBienvenida.PORTADA, KELIN, AHORA));
+        assertThat(portadas.vigente(Formacion.ESCUELA)).isEqualTo("original");
+    }
+
+    @Test
+    @DisplayName("Spec 035: sin portada propia una formación sigue a la Escuela; con la suya usa la suya; al volver, otra vez la de la Escuela")
+    void laVigenteDeCadaFormacion() {
+        assertThat(portadas.vigente(Formacion.DIPLOMADO)).isEqualTo("original");
+
+        cambios.registrar(CambioDeBienvenida.portada(Formacion.ESCUELA, NUEVA, KELIN, AHORA));
+        assertThat(portadas.vigente(Formacion.DIPLOMADO)).as("sigue a la Escuela").isEqualTo(NUEVA);
+        assertThat(portadas.vigente(Formacion.CERTIFICACION)).isEqualTo(NUEVA);
+
+        String delDiplomado = "bienvenida/portadas/22222222-bbbb-4bbb-8bbb-222222222222";
+        cambios.registrar(CambioDeBienvenida.portada(Formacion.DIPLOMADO, delDiplomado, KELIN, AHORA));
+        assertThat(portadas.vigente(Formacion.DIPLOMADO)).isEqualTo(delDiplomado);
+        assertThat(portadas.vigente(Formacion.ESCUELA)).as("la Escuela no mira a las otras").isEqualTo(NUEVA);
+        assertThat(portadas.vigente(Formacion.CERTIFICACION)).isEqualTo(NUEVA);
+
+        cambios.registrar(CambioDeBienvenida.volverAlOriginal(Formacion.DIPLOMADO, PiezaDeBienvenida.PORTADA, KELIN, AHORA));
+        assertThat(portadas.vigente(Formacion.DIPLOMADO)).isEqualTo(NUEVA);
     }
 
     @Test
