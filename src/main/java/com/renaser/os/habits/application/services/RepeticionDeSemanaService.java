@@ -94,7 +94,8 @@ public class RepeticionDeSemanaService implements RepetirSemanaUseCase {
             throw new IllegalStateException("Esa semana ya tiene cambios tuyos que se reemplazarían. Confirma para reemplazarlos.");
         }
         savePreferenciaPort.guardarFechasPropias(actorId, contexto.plan.escrituras());
-        contexto.plan.borrados().forEach(b -> savePreferenciaPort.borrarParaFecha(actorId, b.habitoId(), b.fecha()));
+        savePreferenciaPort.borrarParaFechas(actorId, contexto.plan.borrados().stream()
+                .map(b -> new SavePreferenciaHorarioPort.FechaABorrar(b.habitoId(), b.fecha())).toList());
         int habitos = (int) contexto.plan.cambios().stream().map(CambioPlaneado::habitoId).distinct().count();
         return new ResultadoDeRepeticion(destino, contexto.plan.escrituras().size(), contexto.plan.borrados().size(), habitos,
                 excluidosDe(contexto.plan));

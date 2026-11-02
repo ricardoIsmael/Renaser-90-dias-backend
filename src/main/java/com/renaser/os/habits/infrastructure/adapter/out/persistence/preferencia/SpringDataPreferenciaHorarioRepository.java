@@ -12,4 +12,8 @@ interface SpringDataPreferenciaHorarioRepository
 
     java.util.List<PreferenciaHorarioJpaEntity> findByParticipanteIdAndHabitoIdIn(UUID participanteId,
                                                                                     java.util.Collection<UUID> habitoIds);
+
+    /** H-01: la preferencia general de UN habito para varias personas, en una consulta. */
+    java.util.List<PreferenciaHorarioJpaEntity> findByParticipanteIdInAndHabitoId(java.util.Collection<UUID> participanteIds,
+                                                                                    UUID habitoId);
 }

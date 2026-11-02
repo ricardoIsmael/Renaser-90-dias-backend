@@ -22,6 +22,19 @@ public interface ConsultarProgresoParticipanteHabitsPort {
     Optional<ProgresoParticipanteHabits> deParticipante(UserId participanteId);
 
     /**
+     * El progreso de VARIAS personas en UNA consulta (auditoria de consultas del 2026-11-02, H-01): quien arma una lista con una fila por persona no
+     * puede llamar a {@link #deParticipante} dentro de un {@code for}. Mismo contrato: quien no esta inscrito (o no existe) no aparece. El cuerpo por
+     * defecto pregunta de a una (para los dobles de prueba); el adaptador real lo sobreescribe con una sola consulta.
+     */
+    default java.util.Map<UserId, ProgresoParticipanteHabits> deVarios(java.util.Collection<UserId> participantes) {
+        java.util.Map<UserId, ProgresoParticipanteHabits> resultado = new java.util.LinkedHashMap<>();
+        for (UserId participante : participantes) {
+            deParticipante(participante).ifPresent(progreso -> resultado.put(participante, progreso));
+        }
+        return resultado;
+    }
+
+    /**
      * Padron para el barrido nocturno que genera los tracks del dia. En lote a proposito:
      * llamar a {@link #deParticipante} en un bucle seria un N+1.
      */

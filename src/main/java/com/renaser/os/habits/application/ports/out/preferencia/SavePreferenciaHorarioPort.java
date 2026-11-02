@@ -22,6 +22,19 @@ public interface SavePreferenciaHorarioPort {
     /** Borra la excepcion de esa fecha: el dia vuelve a regirse por lo general. Idempotente. */
     void borrarParaFecha(UserId participanteId, HabitoId habitoId, LocalDate fecha);
 
+    /** Una excepcion por fecha que se borra: el habito y el dia. */
+    record FechaABorrar(HabitoId habitoId, LocalDate fecha) {
+    }
+
+    /**
+     * Borra de una vez las excepciones de esas fechas (auditoria de consultas del 2026-11-02, H-06): planificar o repetir una semana borraba una por una
+     * ({@link #borrarParaFecha}: un {@code existsById}, un {@code deleteById} y un {@code flush} por fecha, hasta 140). Idempotente: lo que no existe se ignora.
+     * El cuerpo por defecto borra de a una (para los dobles de prueba); el adaptador real agrupa por habito.
+     */
+    default void borrarParaFechas(UserId participanteId, Collection<FechaABorrar> fechas) {
+        fechas.forEach(f -> borrarParaFecha(participanteId, f.habitoId(), f.fecha()));
+    }
+
     /**
      * Fija la hora (y el apagado) de un habito para UN dia de la semana, todas las semanas (V39, V40).
      *

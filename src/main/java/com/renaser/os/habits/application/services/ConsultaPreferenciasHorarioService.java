@@ -262,7 +262,7 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
      * <p>D-200: si el habito ya corrio y un retroceso dejo el dia por debajo del inicio de su
      * horario, rige ese horario (el mismo con el que se lo genera).
      */
-    private static HorarioHabito vigenteDeCatalogo(HorariosDelHabito horarios, int diaPrograma, TipoDia tipoDia,
+    static HorarioHabito vigenteDeCatalogo(HorariosDelHabito horarios, int diaPrograma, TipoDia tipoDia,
                                                    Integer diaMasAltoYaGenerado) {
         int diaAConsultar = Math.max(diaPrograma, PRIMER_DIA_DEL_PROGRAMA);
         int dia = horarios.diaEfectivo(diaAConsultar, tipoDia, diaMasAltoYaGenerado);

@@ -34,6 +34,17 @@ class ConsultarProgresoParticipanteHabitsPersistenceAdapter implements Consultar
     }
 
     @Override
+    public java.util.Map<UserId, ProgresoParticipanteHabits> deVarios(java.util.Collection<UserId> participantes) {
+        java.util.Map<UserId, ProgresoParticipanteHabits> resultado = new java.util.LinkedHashMap<>();
+        participacionFinder.deParticipantes(participantes).forEach((id, participacion) -> {
+            if (participacion.inscrito()) {
+                resultado.put(id, aProgreso(participacion));
+            }
+        });
+        return resultado;
+    }
+
+    @Override
     public List<UserId> participantesInscritosActivos() {
         return participacionFinder.participantesInscritosActivos();
     }

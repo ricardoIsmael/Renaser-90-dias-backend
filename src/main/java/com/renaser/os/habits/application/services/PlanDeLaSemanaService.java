@@ -92,8 +92,8 @@ public class PlanDeLaSemanaService implements PlanDeLaSemanaUseCase {
                     habito.desactivable());
             queda.ifPresentOrElse(aGuardar::add, () -> aBorrar.add(cambio.fecha()));
         }
-        aBorrar.stream().filter(existentes::containsKey)
-                .forEach(fecha -> savePreferenciaPort.borrarParaFecha(actorId, habitoId, fecha));
+        savePreferenciaPort.borrarParaFechas(actorId, aBorrar.stream().filter(existentes::containsKey)
+                .map(fecha -> new SavePreferenciaHorarioPort.FechaABorrar(habitoId, fecha)).toList());
         savePreferenciaPort.guardarFechasPropias(actorId, aGuardar);
     }
 

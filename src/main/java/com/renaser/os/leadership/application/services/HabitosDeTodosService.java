@@ -5,7 +5,6 @@ import com.renaser.os.evidence.api.EntregasPorRegistroFinder;
 import com.renaser.os.habits.api.CumplimientoDelDiaFinder;
 import com.renaser.os.habits.api.CumplimientoDelDiaFinder.RegistroDelDia;
 import com.renaser.os.habits.api.HorarioDelDiaFinder;
-import com.renaser.os.habits.api.HorarioDelDiaFinder.HorarioResuelto;
 import com.renaser.os.leadership.application.ports.in.ConsultarHabitosDeTodosUseCase;
 import com.renaser.os.leadership.application.services.PersonasDelPrograma.Alumno;
 import com.renaser.os.leadership.domain.model.cumplimiento.BusquedaPorNombre;
@@ -15,7 +14,6 @@ import com.renaser.os.leadership.domain.model.habitos.VentanaDeLosHabitos;
 import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.Formacion;
-import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import com.renaser.os.users.api.ParticipacionPrograma;
@@ -189,19 +187,25 @@ public class HabitosDeTodosService implements ConsultarHabitosDeTodosUseCase {
     private List<FilaDePersona> filas(List<Fila> pagina, UUID habitoId, LocalDate fecha) {
         Map<UUID, EntregaDeEvidencia> evidencias = entregas.porRegistros(pagina.stream().map(Fila::registro)
                 .filter(registro -> registro != null && registro.estado().cumplido()).map(RegistroDelDia::registroId).toList());
+        // Auditoria de consultas del 2026-11-02 (H-01): el programa de cada persona y su hora de ESTE habito se piden UNA vez para toda la pagina. Antes eran
+        // `deParticipante` y `deFecha` (unas 20 consultas) por fila: ~630 por pagina de 30 y ~2.100 por una de 100.
+        Map<UserId, ParticipacionPrograma> programas = participaciones.deParticipantes(pagina.stream().map(fila -> fila.alumno().perfil().id()).toList());
+        Map<UserId, LocalTime> horas = horarios.horaDeUnHabito(pagina.stream().filter(fila -> fila.registro() != null)
+                .map(fila -> fila.alumno().perfil().id()).toList(), habitoId, fecha);
         List<FilaDePersona> filas = new ArrayList<>();
         for (Fila fila : pagina) {
-            filas.add(filaDe(fila, habitoId, fecha, evidencias));
+            filas.add(filaDe(fila, fecha, evidencias, programas, horas));
         }
         return filas;
     }
 
-    private FilaDePersona filaDe(Fila fila, UUID habitoId, LocalDate fecha, Map<UUID, EntregaDeEvidencia> evidencias) {
+    private FilaDePersona filaDe(Fila fila, LocalDate fecha, Map<UUID, EntregaDeEvidencia> evidencias,
+                                 Map<UserId, ParticipacionPrograma> programas, Map<UserId, LocalTime> horas) {
         var perfil = fila.alumno().perfil();
         var grupo = fila.alumno().grupo();
         UUID grupoId = grupo == null ? null : grupo.grupoId();
         String nombreDelGrupo = grupo == null ? null : grupo.nombre();
-        Optional<ParticipacionPrograma> programaDeLaPersona = participaciones.deParticipante(perfil.id());
+        Optional<ParticipacionPrograma> programaDeLaPersona = Optional.ofNullable(programas.get(perfil.id()));
         if (fila.registro() == null) {
             return new FilaDePersona(perfil.id().value(), perfil.fullName(), perfil.avatarUrl(), grupoId, nombreDelGrupo,
                     EstadoEnElDia.SIN_DATOS.name(), motivoSinRegistro(programaDeLaPersona.orElse(null), fecha), null, null, null);
@@ -212,23 +216,13 @@ public class HabitosDeTodosService implements ConsultarHabitosDeTodosUseCase {
         String cumplioA = fila.registro().completadoEn() == null ? null : HORA.format(fila.registro().completadoEn().atZone(zona));
         EntregaDeEvidencia entrega = evidencias.get(fila.registro().registroId());
         return new FilaDePersona(perfil.id().value(), perfil.fullName(), perfil.avatarUrl(), grupoId, nombreDelGrupo, estado.name(),
-                motivo, horaPlanificada(perfil.id(), habitoId, fecha), cumplioA, entrega == null ? null : entrega.evidenciaId());
+                motivo, horas.get(perfil.id()), cumplioA, entrega == null ? null : entrega.evidenciaId());
     }
 
     /** Antes de su Día 1 («todavía no empezaba») o, si ya había empezado, «no le tocaba o estaba en pausa»: ninguno es un incumplimiento. */
     private static String motivoSinRegistro(ParticipacionPrograma programa, LocalDate fecha) {
         LocalDate diaUno = programa == null ? null : programa.diaUnoElegido();
         return diaUno == null || fecha.isBefore(diaUno) ? "ANTES_DEL_DIA_1" : "NO_LE_TOCABA";
-    }
-
-    /** La hora que ESA persona tiene ese día para ese hábito (su preferencia sobre el catálogo); una persona suspendida o sin programa no tiene. */
-    private LocalTime horaPlanificada(UserId persona, UUID habitoId, LocalDate fecha) {
-        try {
-            return horarios.deFecha(persona, fecha).habitos().stream().filter(h -> h.habitoId().equals(habitoId))
-                    .map(HorarioResuelto::horaDisparo).filter(java.util.Objects::nonNull).findFirst().orElse(null);
-        } catch (NoSuchElementException | NotAuthorizedException sinHorario) {
-            return null;
-        }
     }
 
     private record Dia(List<Alumno> alumnos, Map<UUID, List<RegistroDelDia>> porHabito) {

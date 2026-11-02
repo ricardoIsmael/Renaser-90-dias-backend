@@ -51,9 +51,11 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -100,7 +102,9 @@ class HabitosDeTodosServiceTest {
         lenient().when(formaciones.de(lider)).thenReturn(AlcanceDeFormacion.de(Formacion.ESCUELA));
         lenient().when(programa.alumnos(any(), any())).thenReturn(List.of(alumno(ana, "Ana", fenix), alumno(beto, "Beto", fenix), alumno(carla, "Carla", null)));
         lenient().when(entregas.porRegistros(any())).thenReturn(java.util.Map.of());
-        lenient().when(horarios.deFecha(any(), any())).thenReturn(new HorariosDelDia(HOY, 21, List.of(), null));
+        // H-01: el programa y la hora de las filas se piden en lote; por defecto, nadie tiene programa ni hora.
+        lenient().when(participaciones.deParticipantes(any())).thenReturn(java.util.Map.of());
+        lenient().when(horarios.horaDeUnHabito(any(), any(), any())).thenReturn(java.util.Map.of());
     }
 
     private HabitosDeTodosService servicioA(Instant ahora) {
@@ -310,11 +314,12 @@ class HabitosDeTodosServiceTest {
     void personasDeUnHabito() {
         RegistroDelDia deAna = registro(ana, despertar, "Despertar", EstadoObligacion.COMPLETADO, false);
         registros(deAna, registro(beto, despertar, "Despertar", EstadoObligacion.EXPIRADO, false));
-        for (UserId persona : List.of(ana, beto, carla)) {
-            when(participaciones.deParticipante(persona)).thenReturn(Optional.of(programaDe(persona, HOY.minusDays(20), true)));
-            lenient().when(horarios.deFecha(eq(persona), eq(HOY))).thenReturn(new HorariosDelDia(HOY, 21, List.of(
-                    new HorarioResuelto(despertar, "Despertar", LocalTime.of(6, 0), null, false, false, false, false, null)), null));
-        }
+        when(participaciones.deParticipantes(any())).thenReturn(java.util.Map.of(
+                ana, programaDe(ana, HOY.minusDays(20), true), beto, programaDe(beto, HOY.minusDays(20), true),
+                carla, programaDe(carla, HOY.minusDays(20), true)));
+        // Solo las filas con registro (Ana y Beto) piden su hora; la de Carla, que no tenia nada que medir, no se pregunta.
+        when(horarios.horaDeUnHabito(argThat(personas -> personas.size() == 2 && personas.contains(ana) && personas.contains(beto)),
+                eq(despertar), eq(HOY))).thenReturn(java.util.Map.of(ana, LocalTime.of(6, 0), beto, LocalTime.of(6, 0)));
         UUID evidencia = UUID.randomUUID();
         when(entregas.porRegistros(any())).thenReturn(java.util.Map.of(deAna.registroId(),
                 new EntregaDeEvidencia(deAna.registroId(), evidencia, Instant.EPOCH, null, 1)));
@@ -330,15 +335,21 @@ class HabitosDeTodosServiceTest {
         assertThat(filaDeAna.evidenciaId()).isEqualTo(evidencia);
         assertThat(filaDeAna.horaPlanificada()).isEqualTo(LocalTime.of(6, 0));
         assertThat(resultado.personas().get(2).motivo()).isEqualTo("NO_LE_TOCABA");
+        // H-01: UNA lectura del programa y UNA de la hora para toda la pagina, nunca una por fila.
+        verify(participaciones, times(1)).deParticipantes(any());
+        verify(participaciones, never()).deParticipante(any());
+        verify(horarios, times(1)).horaDeUnHabito(any(), any(), any());
+        verify(horarios, never()).deFecha(any(), any());
     }
 
     @Test
     @DisplayName("quien todavía no empezaba (antes de su Día 1) o no lo tenía elegido dice «antes del Día 1», nunca un incumplimiento")
     void antesDelDiaUno() {
         registros(registro(ana, despertar, "Despertar", EstadoObligacion.COMPLETADO, false));
-        when(participaciones.deParticipante(ana)).thenReturn(Optional.of(programaDe(ana, HOY.minusDays(20), true)));
-        when(participaciones.deParticipante(beto)).thenReturn(Optional.of(programaDe(beto, HOY.plusDays(2), true)));
-        when(participaciones.deParticipante(carla)).thenReturn(Optional.of(programaDe(carla, HOY.minusDays(3), false)));
+        when(participaciones.deParticipantes(any())).thenReturn(java.util.Map.of(
+                ana, programaDe(ana, HOY.minusDays(20), true),
+                beto, programaDe(beto, HOY.plusDays(2), true),
+                carla, programaDe(carla, HOY.minusDays(3), false)));
 
         PersonasDeUnHabito resultado = servicio.personas(new ConsultaPersonasDeUnHabito(lider, despertar, null, null, null, null, 0, 30));
 
@@ -350,15 +361,14 @@ class HabitosDeTodosServiceTest {
     @DisplayName("buscar por nombre (sin tildes ni mayúsculas) y paginar; la hora planificada solo se pide de la página")
     void busquedaYPaginas() {
         registros(registro(ana, despertar, "Despertar", EstadoObligacion.COMPLETADO, false));
-        lenient().when(participaciones.deParticipante(any())).thenReturn(Optional.empty());
-
         PersonasDeUnHabito busqueda = servicio.personas(new ConsultaPersonasDeUnHabito(lider, despertar, null, null, null, "ANA", 0, 30));
         assertThat(busqueda.personas()).extracting(FilaDePersona::nombre).containsExactly("Ana");
 
         PersonasDeUnHabito pagina = servicio.personas(new ConsultaPersonasDeUnHabito(lider, despertar, null, null, null, null, 1, 1));
         assertThat(pagina.total()).isEqualTo(3);
         assertThat(pagina.personas()).hasSize(1);
-        verify(horarios, never()).deFecha(eq(carla), any());
+        // La hora solo se pide de las filas de la pagina que tienen registro: Beto y Carla no tienen, y nunca se preguntan.
+        verify(horarios, never()).horaDeUnHabito(argThat(personas -> personas.contains(beto) || personas.contains(carla)), any(), any());
     }
 
     @Test

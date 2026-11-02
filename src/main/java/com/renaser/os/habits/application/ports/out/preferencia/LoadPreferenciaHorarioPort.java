@@ -42,6 +42,15 @@ public interface LoadPreferenciaHorarioPort {
                                                                         Collection<HabitoId> habitoIds,
                                                                         LocalDate fecha);
 
+    /**
+     * La preferencia efectiva en la fecha para UN habito de VARIAS personas, en pocas consultas que no crecen con la cantidad de personas (auditoria de
+     * consultas del 2026-11-02, H-01). Es la misma resolucion por capas que {@link #porParticipanteHabitosYFechaSinAvisoDelDia} (general, cambio general
+     * vigente, dia de la semana y fecha exacta), pero solo la HORA: quien la usa es la lista «Hábitos de todos → personas de un hábito», que dice a
+     * que hora le toca a cada una. Quien no tiene ninguna capa no aparece en el mapa.
+     */
+    java.util.Map<UserId, PreferenciaHorario> horaDeUnHabitoDeVarios(Collection<UserId> participantes, HabitoId habitoId,
+                                                                      LocalDate fecha);
+
     /** Las filas de dia de la semana de varios habitos en UNA consulta (hora, apagado y aviso propios). */
     List<HorarioSemanal> horariosSemanalesDe(UserId participanteId, Collection<HabitoId> habitoIds);
 

@@ -123,8 +123,8 @@ class PersonasDelPrograma {
         Set<UserId> ids = new HashSet<>();
         pagina.forEach(perfil -> ids.add(perfil.id()));
         Map<UserId, List<GrupoDeLaPersona>> gruposPorPersona = gruposDe(ids, ahora);
-        Map<UserId, ParticipacionPrograma> programas = new HashMap<>();
-        pagina.forEach(perfil -> participaciones.deParticipante(perfil.id()).ifPresent(p -> programas.put(perfil.id(), p)));
+        // Auditoria de consultas del 2026-11-02 (H-07): el programa de las personas de la pagina en UNA consulta, no una por fila (con el buscador, una por tecla).
+        Map<UserId, ParticipacionPrograma> programas = new HashMap<>(participaciones.deParticipantes(ids));
         Map<UserId, GrupoDeLaPersona> elegidos = new HashMap<>();
         for (UserSummary perfil : pagina) {
             ParticipacionPrograma programa = programas.get(perfil.id());

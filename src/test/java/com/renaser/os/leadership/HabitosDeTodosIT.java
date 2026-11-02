@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
+import jakarta.persistence.EntityManagerFactory;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -19,6 +22,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.session.Session;
 import org.springframework.session.SessionRepository;
+import org.springframework.test.context.TestPropertySource;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -43,6 +47,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Import(TestcontainersConfiguration.class)
+@TestPropertySource(properties = "spring.jpa.properties.hibernate.generate_statistics=true")
 class HabitosDeTodosIT {
 
     private static final Instant MADRUGADA_UTC = Instant.parse("2026-10-31T03:00:00Z");
@@ -56,6 +61,8 @@ class HabitosDeTodosIT {
     private JdbcTemplate jdbc;
     @Autowired
     private RelojDePrueba reloj;
+    @Autowired
+    private EntityManagerFactory entityManagerFactory;
 
     private final HttpClient http = HttpClient.newHttpClient();
     private final ObjectMapper json = new ObjectMapper();
@@ -226,6 +233,35 @@ class HabitosDeTodosIT {
         assertThat(laQueCumplio.get("groupName").asText()).isEqualTo("Fénix " + marca);
         assertThat(gente.get(0).get("groupId").isNull() || gente.get(1).get("groupId").isNull()).isTrue();
         assertThat(cuerpo.toString()).doesNotContain("@renaser.test").doesNotContain("email");
+    }
+
+    // Auditoria de consultas del 2026-11-02 (H-01): la lista de personas de un habito pedia el programa y el horario de CADA fila (~20 consultas por persona:
+    // ~630 por pagina de 30, ~2.100 por una de 100). Ahora son pocas consultas para toda la pagina, y su numero no depende de cuantas filas haya.
+    @Test
+    @DisplayName("las personas de un hábito: la cantidad de sentencias no crece con las filas (3 personas o 15 dan las mismas) y la hora de cada una sigue saliendo")
+    void personasDelHabitoNoHacenUnaConsultaPorFila() throws Exception {
+        String ruta = "/api/v1/leadership/habits/" + despertar + "/people?q=" + marca + "&size=100";
+        Statistics estadisticas = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        obtener(ruta, lider); // calienta lo que se arma una sola vez (permisos, cachés)
+
+        estadisticas.clear();
+        JsonNode pocas = obtener(ruta, lider);
+        long sentenciasConTres = estadisticas.getPrepareStatementCount();
+
+        for (int i = 0; i < 12; i++) {
+            UUID otra = usuario("APRENDIZ", "Extra " + i + " " + marca);
+            programa(otra, "ESCUELA");
+            registro(otra, despertar, HOY, i % 3 == 0 ? "COMPLETADO" : "PENDIENTE", false, i % 3 == 0 ? Instant.parse("2026-10-30T11:30:00Z") : null);
+        }
+        estadisticas.clear();
+        JsonNode muchas = obtener(ruta, lider);
+        long sentenciasConQuince = estadisticas.getPrepareStatementCount();
+
+        assertThat(pocas.get("total").asInt()).isEqualTo(3);
+        assertThat(muchas.get("total").asInt()).isEqualTo(15);
+        assertThat(sentenciasConQuince).as("sentencias con 15 personas contra 3").isEqualTo(sentenciasConTres);
+        // La hora planificada (el horario del catalogo, 06:00) sigue saliendo en cada fila con registro.
+        assertThat(muchas.get("people")).allSatisfy(persona -> assertThat(persona.get("plannedTime").asText()).startsWith("06:00"));
     }
 
     @Test

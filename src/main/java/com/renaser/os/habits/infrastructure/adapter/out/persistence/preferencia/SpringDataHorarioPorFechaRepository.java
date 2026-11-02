@@ -12,6 +12,10 @@ interface SpringDataHorarioPorFechaRepository extends JpaRepository<HorarioPorFe
     List<HorarioPorFechaJpaEntity> findByParticipanteIdAndHabitoIdInAndFecha(
             UUID participanteId, Collection<UUID> habitoIds, LocalDate fecha);
 
+    /** H-01: la excepcion de ESA fecha para UN habito, de varias personas, en una consulta. */
+    List<HorarioPorFechaJpaEntity> findByParticipanteIdInAndHabitoIdAndFecha(
+            Collection<UUID> participanteIds, UUID habitoId, LocalDate fecha);
+
     @Query("SELECT DISTINCT h.habitoId FROM HorarioPorFechaJpaEntity h "
             + "WHERE h.participanteId = :participanteId AND h.fecha BETWEEN :desde AND :hasta")
     List<UUID> habitosEntre(UUID participanteId, LocalDate desde, LocalDate hasta);
@@ -39,4 +43,10 @@ interface SpringDataHorarioPorFechaRepository extends JpaRepository<HorarioPorFe
     @Query("DELETE FROM HorarioPorFechaJpaEntity h WHERE h.participanteId = :participanteId "
             + "AND h.habitoId = :habitoId AND h.fecha BETWEEN :desde AND :hasta")
     int borrarDeUnHabitoEntre(UUID participanteId, UUID habitoId, LocalDate desde, LocalDate hasta);
+
+    /** H-06: borra de una vez las excepciones de UN habito en esas fechas exactas (antes, un `existsById` + `deleteById` + `flush` por fecha). */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("DELETE FROM HorarioPorFechaJpaEntity h WHERE h.participanteId = :participanteId "
+            + "AND h.habitoId = :habitoId AND h.fecha IN :fechas")
+    int borrarDeUnHabitoEn(UUID participanteId, UUID habitoId, Collection<LocalDate> fechas);
 }

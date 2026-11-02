@@ -38,6 +38,13 @@ public interface LoadRegistroHabitoPort {
     List<RegistroHabito> porParticipanteYFecha(UserId participanteId, LocalDate fecha);
 
     /**
+     * Quienes tienen AL MENOS un registro sin terminar (PENDIENTE o EN_CURSO) con fecha entre {@code desde} y {@code hasta}, ambas inclusive: UNA consulta
+     * apoyada en {@code registros_estado_idx} (auditoria de consultas del 2026-11-02, H-05). Es el prefiltro del barrido de avisos: quien no aparece aca no
+     * tiene nada que avisar y no hace falta abrirle una transaccion cada cinco minutos.
+     */
+    java.util.Set<UserId> participantesConRegistrosSinTerminarEntre(LocalDate desde, LocalDate hasta);
+
+    /**
      * El {@code dia_programa} MAS ALTO con el que cada uno de estos habitos ya genero un registro
      * para este participante (D-196). Es la prueba de que el habito ya estuvo activo: el snapshot
      * del registro dice en que dia del programa se genero, asi que un maximo >= al
@@ -46,6 +53,12 @@ public interface LoadRegistroHabitoPort {
      * <p>Una sola consulta agregada; los habitos sin ningun registro no aparecen en el mapa.
      */
     Map<HabitoId, Integer> diaProgramaMasAltoGeneradoPorHabito(UserId participanteId, Collection<HabitoId> habitos);
+
+    /**
+     * Lo mismo que {@link #diaProgramaMasAltoGeneradoPorHabito} para UN habito y VARIAS personas, en una consulta (auditoria de consultas del 2026-11-02,
+     * H-01). Quien nunca genero un registro de ese habito no aparece en el mapa.
+     */
+    Map<UserId, Integer> diaProgramaMasAltoGeneradoDeVarios(Collection<UserId> participantes, HabitoId habito);
 
     /**
      * Para el barrido de expiracion (E-534): lo {@code PENDIENTE} de UN participante con fecha anterior a su hoy.

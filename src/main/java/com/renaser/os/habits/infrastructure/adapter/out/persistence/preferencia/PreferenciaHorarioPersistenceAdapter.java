@@ -13,6 +13,7 @@ import com.renaser.os.habits.domain.model.preferencia.RecordatorioDelDia;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -35,19 +36,21 @@ class PreferenciaHorarioPersistenceAdapter implements LoadPreferenciaHorarioPort
     private final SpringDataHorarioSemanalRepository semanalRepository;
     private final SpringDataCambioHorarioPendienteRepository pendientesRepository;
     private final Clock clock;
+    private final jakarta.persistence.EntityManager entityManager;
 
     PreferenciaHorarioPersistenceAdapter(SpringDataPreferenciaHorarioRepository repository,
                                           PreferenciaHorarioPersistenceMapper mapper,
                                           SpringDataHorarioPorFechaRepository fechasRepository,
                                           SpringDataHorarioSemanalRepository semanalRepository,
                                           SpringDataCambioHorarioPendienteRepository pendientesRepository,
-                                          Clock clock) {
+                                          Clock clock, jakarta.persistence.EntityManager entityManager) {
         this.repository = repository;
         this.mapper = mapper;
         this.fechasRepository = fechasRepository;
         this.semanalRepository = semanalRepository;
         this.pendientesRepository = pendientesRepository;
         this.clock = clock;
+        this.entityManager = entityManager;
     }
 
     @Override
@@ -153,6 +156,51 @@ class PreferenciaHorarioPersistenceAdapter implements LoadPreferenciaHorarioPort
             efectivos.put(id, conCapaDeLaFecha(participanteId, efectivos.get(id), p, conHora, conAviso));
         }
         return List.copyOf(efectivos.values());
+    }
+
+    /**
+     * H-01: las mismas capas de {@link #resolverPorCapas} (general, cambio general vigente, dia de la semana y fecha exacta, de la mas general a la mas
+     * especifica) para UN habito y VARIAS personas, con una consulta por capa en vez de cuatro por persona. Solo la hora: las capas de aviso no entran
+     * ({@code conAvisoDelDia = false}), y las funciones que mezclan cada capa son las MISMAS que usa la lectura de una sola persona.
+     */
+    @Override
+    public Map<UserId, PreferenciaHorario> horaDeUnHabitoDeVarios(Collection<UserId> participantes, HabitoId habitoId, LocalDate fecha) {
+        if (participantes.isEmpty()) {
+            return Map.of();
+        }
+        List<UUID> ids = participantes.stream().map(UserId::value).distinct().toList();
+        Map<UserId, PreferenciaHorario> efectivos = new HashMap<>();
+        repository.findByParticipanteIdInAndHabitoId(ids, habitoId.value()).forEach(p -> efectivos.put(UserId.of(p.getParticipanteId()),
+                mapper.toDomain(p)));
+        for (var p : pendientesRepository.findByParticipanteIdInAndHabitoId(ids, habitoId.value())) {
+            if (p.getFechaEfectiva().isAfter(fecha)) {
+                continue;
+            }
+            UserId persona = UserId.of(p.getParticipanteId());
+            var anterior = efectivos.get(persona);
+            Integer minutos = anterior != null ? anterior.minutosRecordatorio() : null;
+            if (p.getMinutosRecordatorio() != null) minutos = p.getMinutosRecordatorio().intValue();
+            boolean activo = p.getRecordatorioActivo() != null ? p.getRecordatorioActivo()
+                    : anterior != null && anterior.recordatorioActivo();
+            efectivos.put(persona, PreferenciaHorario.rehydrate(persona, habitoId, p.getHoraDisparo(), p.getHoraLimite(), activo, minutos,
+                    conjuntoTras(anterior, activo, minutos), alarmaDe(anterior), p.getCreadoEn(), p.getCreadoEn()));
+        }
+        short diaIso = (short) fecha.getDayOfWeek().getValue();
+        for (var p : semanalRepository.findByParticipanteIdInAndHabitoIdAndDiaSemana(ids, habitoId.value(), diaIso)) {
+            if (p.getHoraDisparo() == null) {
+                continue; // una fila que solo apaga el dia no trae hora y no pisa la que regia (V40)
+            }
+            UserId persona = UserId.of(p.getParticipanteId());
+            efectivos.put(persona, conCapaDelDia(efectivos.get(persona), p, true, false));
+        }
+        for (var p : fechasRepository.findByParticipanteIdInAndHabitoIdAndFecha(ids, habitoId.value(), fecha)) {
+            if (p.getHoraDisparo() == null) {
+                continue; // una fila que solo apaga la fecha (o trae como suena) no trae hora (V38)
+            }
+            UserId persona = UserId.of(p.getParticipanteId());
+            efectivos.put(persona, conCapaDeLaFecha(persona, efectivos.get(persona), p, true, false));
+        }
+        return efectivos;
     }
 
     /**
@@ -284,12 +332,27 @@ class PreferenciaHorarioPersistenceAdapter implements LoadPreferenciaHorarioPort
                 .stream().map(PreferenciaHorarioPersistenceAdapter::aFechaPropia).toList();
     }
 
+    /**
+     * Auditoria de consultas del 2026-11-02 (H-06): antes, por fila, un {@code findById} y un {@code saveAndFlush} (que hace {@code merge} = un SELECT, y un
+     * flush) → hasta 140 filas son 300 a 420 viajes. Ahora: UNA consulta trae lo que ya existia en esas fechas (de ahi sale {@code creado_en} y esas filas
+     * quedan gestionadas), lo que ya existia se actualiza en su sitio, lo nuevo se inserta con {@code persist} (sin SELECT previo), y se hace UN flush.
+     * Con {@code hibernate.jdbc.batch_size} las sentencias salen en lotes.
+     */
     @Override
+    @Transactional
     public void guardarFechasPropias(UserId participanteId, Collection<FechaPropia> filas) {
+        if (filas.isEmpty()) {
+            return;
+        }
+        LocalDate desde = filas.stream().map(FechaPropia::fecha).min(java.util.Comparator.naturalOrder()).orElseThrow();
+        LocalDate hasta = filas.stream().map(FechaPropia::fecha).max(java.util.Comparator.naturalOrder()).orElseThrow();
+        Map<HabitoYFecha, HorarioPorFechaJpaEntity> existentes = new HashMap<>();
+        fechasRepository.findByParticipanteIdAndFechaBetween(participanteId.value(), desde, hasta)
+                .forEach(e -> existentes.put(new HabitoYFecha(e.getHabitoId(), e.getFecha()), e));
+        var ahora = clock.now();
         for (FechaPropia f : filas) {
-            var key = new HorarioPorFechaPk(participanteId.value(), f.habitoId().value(), f.fecha());
-            var ahora = clock.now();
-            var creadoEn = fechasRepository.findById(key).map(HorarioPorFechaJpaEntity::getCreadoEn).orElse(ahora);
+            var previa = existentes.get(new HabitoYFecha(f.habitoId().value(), f.fecha()));
+            var creadoEn = previa == null ? ahora : previa.getCreadoEn();
             RecordatorioDelDia aviso = f.recordatorio();
             AjusteDeAlarma alarma = f.alarma();
             var fila = new HorarioPorFechaJpaEntity(participanteId.value(), f.habitoId().value(), f.fecha(), f.horaDisparo(),
@@ -297,8 +360,25 @@ class PreferenciaHorarioPersistenceAdapter implements LoadPreferenciaHorarioPort
                     aviso == null || !aviso.activo() ? null : aviso.minutosMasTemprana().shortValue(), creadoEn, ahora,
                     antelacionesDe(aviso), alarma == null ? null : alarma.sonido(), alarma == null ? null : alarma.vibracion(),
                     alarma == null ? null : alarma.voz(), alarma == null ? null : alarma.repetir());
-            fechasRepository.saveAndFlush(fila);
+            if (previa == null) {
+                entityManager.persist(fila);
+            } else {
+                entityManager.merge(fila); // `previa` ya esta gestionada: se copia sobre ella, sin consulta
+            }
         }
+        entityManager.flush();
+    }
+
+    /** La clave de una excepcion dentro de UNA persona: el habito y el dia. */
+    private record HabitoYFecha(UUID habitoId, LocalDate fecha) {
+    }
+
+    @Override
+    @Transactional
+    public void borrarParaFechas(UserId participanteId, Collection<FechaABorrar> fechas) {
+        Map<UUID, java.util.Set<LocalDate>> porHabito = new HashMap<>();
+        fechas.forEach(f -> porHabito.computeIfAbsent(f.habitoId().value(), id -> new java.util.HashSet<>()).add(f.fecha()));
+        porHabito.forEach((habito, dias) -> fechasRepository.borrarDeUnHabitoEn(participanteId.value(), habito, dias));
     }
 
     @Override

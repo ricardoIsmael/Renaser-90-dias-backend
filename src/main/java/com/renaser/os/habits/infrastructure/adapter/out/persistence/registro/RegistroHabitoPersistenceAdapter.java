@@ -35,6 +35,12 @@ class RegistroHabitoPersistenceAdapter implements LoadRegistroHabitoPort, SaveRe
     }
 
     @Override
+    public java.util.Set<UserId> participantesConRegistrosSinTerminarEntre(LocalDate desde, LocalDate hasta) {
+        return repository.participantesConRegistrosSinTerminarEntre(desde, hasta).stream().map(UserId::of)
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    @Override
     public Optional<RegistroHabito> byIdParaEscritura(RegistroHabitoId id) {
         return repository.findByIdParaEscritura(id.value()).map(mapper::toDomain);
     }
@@ -74,6 +80,17 @@ class RegistroHabitoPersistenceAdapter implements LoadRegistroHabitoPort, SaveRe
         repository.diaProgramaMasAltoPorHabito(participanteId.value(),
                         habitos.stream().map(HabitoId::value).distinct().toList())
                 .forEach(fila -> resultado.put(HabitoId.of((UUID) fila[0]), ((Number) fila[1]).intValue()));
+        return resultado;
+    }
+
+    @Override
+    public Map<UserId, Integer> diaProgramaMasAltoGeneradoDeVarios(Collection<UserId> participantes, HabitoId habito) {
+        if (participantes.isEmpty()) {
+            return Map.of();
+        }
+        Map<UserId, Integer> resultado = new HashMap<>();
+        repository.diaProgramaMasAltoDeVariosParaUnHabito(participantes.stream().map(UserId::value).distinct().toList(), habito.value())
+                .forEach(fila -> resultado.put(UserId.of((UUID) fila[0]), ((Number) fila[1]).intValue()));
         return resultado;
     }
 

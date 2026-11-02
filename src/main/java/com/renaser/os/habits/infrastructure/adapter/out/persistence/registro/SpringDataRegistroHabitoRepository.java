@@ -74,6 +74,25 @@ interface SpringDataRegistroHabitoRepository extends JpaRepository<RegistroHabit
     List<Object[]> diaProgramaMasAltoPorHabito(@Param("participanteId") UUID participanteId,
                                                @Param("habitos") Collection<UUID> habitos);
 
+    /**
+     * H-05: los participantes con algun registro sin terminar en esas fechas. Nativa por el mismo motivo que {@link #borrarPendientesEnRango}: el estado es
+     * un enum de Postgres y el literal necesita su CAST al tipo real.
+     */
+    @Query(value = """
+            SELECT DISTINCT participante_id
+            FROM renaser.registros_habito
+            WHERE estado IN (CAST('PENDIENTE' AS renaser.estado_registro), CAST('EN_CURSO' AS renaser.estado_registro))
+              AND fecha_ejecucion BETWEEN :desde AND :hasta
+            """, nativeQuery = true)
+    List<UUID> participantesConRegistrosSinTerminarEntre(@Param("desde") LocalDate desde, @Param("hasta") LocalDate hasta);
+
+    /** H-01: por persona, el `dia_programa` mas alto con el que ya se genero un registro de UN habito. Filas (participanteId, max). */
+    @Query("SELECT r.participanteId, MAX(r.diaPrograma) FROM RegistroHabitoJpaEntity r "
+            + "WHERE r.participanteId IN :participantes AND r.habitoId = :habito AND r.diaPrograma IS NOT NULL "
+            + "GROUP BY r.participanteId")
+    List<Object[]> diaProgramaMasAltoDeVariosParaUnHabito(@Param("participantes") Collection<UUID> participantes,
+                                                          @Param("habito") UUID habito);
+
     /** E-534: lo de UN participante en un estado, antes de su hoy. Usa {@code registros_dia_idx}. */
     List<RegistroHabitoJpaEntity> findByParticipanteIdAndEstadoAndFechaEjecucionLessThan(UUID participanteId,
                                                                                          EstadoRegistroJpa estado,
