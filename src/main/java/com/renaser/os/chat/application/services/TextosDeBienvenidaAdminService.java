@@ -8,11 +8,14 @@ import com.renaser.os.chat.domain.model.bienvenida.CambioDeBienvenida;
 import com.renaser.os.chat.domain.model.bienvenida.EstadoDePieza;
 import com.renaser.os.chat.domain.model.bienvenida.PiezaDeBienvenida;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
 
 /**
  * Ver la bienvenida y cambiar sus mensajes desde la app (D-210, pedido del dueño del 2026-09-27).
+ *
+ * <p><b>Por formación</b> (spec 035): cada formación tiene sus tres mensajes, y cambiar los de una no toca los de otra.
  *
  * <p>Lo guardado reemplaza al texto de {@code bienvenida/mensajes.yaml} desde la PRÓXIMA bienvenida: los
  * servicios que la mandan leen los textos vigentes en cada envío ({@code TextosDeBienvenidaVigentes}).
@@ -36,30 +39,30 @@ public class TextosDeBienvenidaAdminService implements VerBienvenidaUseCase, Cam
     }
 
     @Override
-    public BienvenidaEditable ver(UserId actorId) {
+    public BienvenidaEditable ver(UserId actorId, Formacion formacion) {
         bienvenida.exigirQuePuedaCambiarla(actorId);
-        return bienvenida.leer();
+        return bienvenida.leer(formacion);
     }
 
     @Override
-    public BienvenidaEditable cambiar(UserId actorId, String clave, String texto) {
+    public BienvenidaEditable cambiar(UserId actorId, Formacion formacion, String clave, String texto) {
         bienvenida.exigirQuePuedaCambiarla(actorId);
         PiezaDeBienvenida pieza = PiezaDeBienvenida.textoDe(clave);
-        CambioDeBienvenida cambio = CambioDeBienvenida.texto(pieza, texto, actorId, clock.now());
-        if (!cambio.valor().equals(bienvenida.estado(pieza).vigente())) {
+        CambioDeBienvenida cambio = CambioDeBienvenida.texto(formacion, pieza, texto, actorId, clock.now());
+        if (!cambio.valor().equals(bienvenida.estado(formacion, pieza).vigente())) {
             cambios.registrar(cambio);
         }
-        return bienvenida.leer();
+        return bienvenida.leer(formacion);
     }
 
     @Override
-    public BienvenidaEditable volverAlOriginal(UserId actorId, String clave) {
+    public BienvenidaEditable volverAlOriginal(UserId actorId, Formacion formacion, String clave) {
         bienvenida.exigirQuePuedaCambiarla(actorId);
         PiezaDeBienvenida pieza = PiezaDeBienvenida.textoDe(clave);
-        EstadoDePieza estado = bienvenida.estado(pieza);
+        EstadoDePieza estado = bienvenida.estado(formacion, pieza);
         if (estado.cambiada()) {
-            cambios.registrar(CambioDeBienvenida.volverAlOriginal(pieza, actorId, clock.now()));
+            cambios.registrar(CambioDeBienvenida.volverAlOriginal(formacion, pieza, actorId, clock.now()));
         }
-        return bienvenida.leer();
+        return bienvenida.leer(formacion);
     }
 }

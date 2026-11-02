@@ -8,7 +8,9 @@ import com.renaser.os.chat.application.ports.out.bienvenida.PortadaDeBienvenidaP
 import com.renaser.os.chat.domain.model.bienvenida.EstadoDePieza;
 import com.renaser.os.chat.domain.model.bienvenida.PiezaDeBienvenida;
 import com.renaser.os.chat.domain.model.bienvenida.PortadaDeBienvenida;
+import com.renaser.os.chat.domain.model.bienvenida.CambioDeBienvenida;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
+import com.renaser.os.shared.domain.Formacion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -24,8 +26,8 @@ import java.util.NoSuchElementException;
  * Las portadas de la tarjeta de bienvenida (D-210): cuál es la vigente y sus píxeles.
  *
  * <p><b>Cuál es la vigente</b> lo dice la bitácora ({@code cambios_bienvenida}, V73): la ruta de la última
- * portada que subió Administración, o {@link DibujarBienvenidaPort#PORTADA_ORIGINAL} si nunca cambió o
- * alguien volvió a la original. Se pregunta en cada dibujo (una lectura indexada de una fila): así un
+ * portada que subió Administración para la formación, o la vigente de la Escuela (la subida, o
+ * {@link DibujarBienvenidaPort#PORTADA_ORIGINAL}) si esa formación no tiene propia. Se pregunta en cada dibujo (una lectura indexada de una fila): así un
  * cambio vale en el acto, sin avisos entre procesos.
  *
  * <p><b>Los píxeles.</b> La original ({@code bienvenida/fondo.png}) se carga al arrancar, como antes. Las
@@ -54,10 +56,16 @@ class PortadasDeBienvenida implements PortadaDeBienvenidaPort {
         this.original = leerOriginal("/bienvenida/fondo.png");
     }
 
-    /** La versión vigente: {@link DibujarBienvenidaPort#PORTADA_ORIGINAL} o la ruta de la subida. */
-    String vigente() {
-        return new EstadoDePieza(PiezaDeBienvenida.PORTADA, DibujarBienvenidaPort.PORTADA_ORIGINAL,
-                cambios.ultimo(PiezaDeBienvenida.PORTADA).orElse(null)).vigente();
+    /**
+     * La versión vigente en {@code formacion} (spec 035): {@link DibujarBienvenidaPort#PORTADA_ORIGINAL} o la ruta de la subida. La que subió
+     * Administración para ella o, si no subió ninguna, la vigente de la Escuela (dos lecturas indexadas; una sola en la Escuela).
+     */
+    String vigente(Formacion formacion) {
+        CambioDeBienvenida delaEscuela = cambios.ultimo(Formacion.POR_DEFECTO, PiezaDeBienvenida.PORTADA).orElse(null);
+        CambioDeBienvenida propio = formacion == Formacion.POR_DEFECTO ? delaEscuela
+                : cambios.ultimo(formacion, PiezaDeBienvenida.PORTADA).orElse(null);
+        return EstadoDePieza.deImagen(formacion, PiezaDeBienvenida.PORTADA, DibujarBienvenidaPort.PORTADA_ORIGINAL, delaEscuela, propio)
+                .vigente();
     }
 
     /** La imagen de esa versión, en el lienzo de 1200 × 1200. Nunca falla: si no abre, la original. */

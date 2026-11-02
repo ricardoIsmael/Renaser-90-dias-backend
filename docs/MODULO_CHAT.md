@@ -1330,3 +1330,14 @@ Spec 024 (D-301, 2026-10-31): contrato completo en `specs/024-comunidad-por-form
 - **Traslado**: `AprendizTrasladadoDeFormacionChatListener` saca al aprendiz de la comunidad general y del soporte de la anterior y lo entra a los de la nueva.
 - **Podio semanal**: uno por formación, en su comunidad general; los ids de la Escuela son los de siempre.
 - **Pendiente**: ocultar Kilómetros/Gimnasio del ranking según los hábitos de la formación depende de la spec 023.
+
+## Identidad por formación (spec 035, D-308, 2026-11-02)
+
+Contrato en `specs/035-identidad-por-formacion/contracts/api.md`. La bienvenida (tres mensajes y portada) y la imagen de los chats son de cada formación:
+
+- **Una columna, no una tabla**: `cambios_bienvenida.formacion` (V159, default `ESCUELA`) y la pieza `IMAGEN_DE_LA_FORMACION` (ruta bajo `formaciones/imagenes/`). Sigue siendo append-only; lo vigente de una pieza en una formación es su última fila.
+- **Una sola regla**, `EstadoDePieza`: un texto = último cambio de su formación o su original (`bienvenida/mensajes.yaml`, secciones `diplomado:` y `certificacion:`; la clave que falta usa la de la Escuela); la portada y la imagen sin la propia = la vigente de la Escuela (`deImagen`), y sin ninguna, la app usa lo suyo.
+- **La formación sale del objeto**: `BienvenidaEnSoporteService` lee la formación de la conversación del soporte; `BienvenidaEnGrupoService`, la del chat del grupo; `FotosDelChatService`, la de la conversación cuya foto se pide (y es 404 si es de otra formación). Las tarjetas con nombre se cachean por (portada vigente, nombre).
+- **Imagen**: `ImagenDeLaFormacionService` (consulta, sin autorizar: lo hace quien llama) e `ImagenDeLaFormacionAdminService` (ADMIN/ALCHEMIST activos). `ImagenesDeLasFormaciones` abre la imagen con `ImagenDePortada.abrir` (misma revisión de formato, peso y medidas que la portada, sin medir el nombre), la lleva a un cuadrado de 512 px y guarda el JPEG ya servido.
+- **Firma del programa**: `NombreDelChat.delPrograma(formacion)` en el listado de mensajes y en los avisos.
+

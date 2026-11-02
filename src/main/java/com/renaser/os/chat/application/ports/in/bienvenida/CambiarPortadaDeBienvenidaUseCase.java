@@ -1,5 +1,6 @@
 package com.renaser.os.chat.application.ports.in.bienvenida;
 
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 
 import java.net.URI;
@@ -26,10 +27,12 @@ public interface CambiarPortadaDeBienvenidaUseCase {
      * @throws java.util.NoSuchElementException si no hay nada subido en esa ruta
      * @throws IllegalStateException si el servidor no guarda imágenes
      */
-    BienvenidaEditable confirmar(UserId actorId, String ruta);
+    BienvenidaEditable confirmar(UserId actorId, Formacion formacion, String ruta);
 
-    /** Si ya salía la original, no cambia nada. */
-    BienvenidaEditable volverALaOriginal(UserId actorId);
+    /**
+     * La Escuela vuelve a la portada original; el Diplomado y la Certificación, a la vigente de la Escuela (spec 035). Si ya salía, no cambia nada.
+     */
+    BienvenidaEditable volverALaOriginal(UserId actorId, Formacion formacion);
 
     /** @param ruta la que hay que mandar después a {@link #confirmar} */
     record UrlDeSubida(URI url, String ruta) {

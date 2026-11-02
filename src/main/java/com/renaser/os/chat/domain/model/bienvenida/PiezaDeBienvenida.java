@@ -30,7 +30,13 @@ public enum PiezaDeBienvenida {
      * bienvenida, pero es la misma idea —una imagen de Operaciones con el nombre encima, que el Admin cambia
      * desde la app— y comparte su bitácora en vez de abrir otra tabla (regla del dueño para la caja).
      */
-    CARTA_CAJA(List.of());
+    CARTA_CAJA(List.of()),
+
+    /**
+     * La imagen de una formación en el chat (spec 035, V159): la de la comunidad general y la de los grupos sin foto propia. Tampoco es de la bienvenida,
+     * pero es la misma idea que la portada y la carta de la caja —una imagen del chat que Administración cambia desde la app— y comparte su bitácora.
+     */
+    IMAGEN_DE_LA_FORMACION(List.of());
 
     private final List<String> marcadores;
 
@@ -47,7 +53,12 @@ public enum PiezaDeBienvenida {
     }
 
     public boolean esTexto() {
-        return this != PORTADA && this != CARTA_CAJA;
+        return !esImagen();
+    }
+
+    /** La portada, la carta de la caja y la imagen de la formación: piezas cuyo valor es la ruta de una imagen subida. */
+    public boolean esImagen() {
+        return this == PORTADA || this == CARTA_CAJA || this == IMAGEN_DE_LA_FORMACION;
     }
 
     /** Las tres piezas de texto, en el orden en que salen (soporte: tarjeta, formal; después, el grupo). */

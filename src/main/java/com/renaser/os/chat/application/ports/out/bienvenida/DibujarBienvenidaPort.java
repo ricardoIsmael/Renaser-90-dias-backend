@@ -1,5 +1,7 @@
 package com.renaser.os.chat.application.ports.out.bienvenida;
 
+import com.renaser.os.shared.domain.Formacion;
+
 /**
  * La tarjeta de bienvenida de Operaciones (el Canva "Programa Formación Renaser") con el nombre
  * de la persona escrito encima (D-174).
@@ -29,7 +31,20 @@ public interface DibujarBienvenidaPort {
      * <p>Por defecto, la original: quien no sabe de portadas (un doble de prueba) dibuja siempre sobre ella.
      */
     default String portadaVigente() {
+        return portadaVigente(Formacion.POR_DEFECTO);
+    }
+
+    /**
+     * La portada vigente de {@code formacion} (spec 035): la que subió Administración para ella o, si no subió ninguna, la vigente de la Escuela.
+     * Por defecto, la original.
+     */
+    default String portadaVigente(Formacion formacion) {
         return PORTADA_ORIGINAL;
+    }
+
+    /** La tarjeta de {@code formacion}: el nombre sobre SU portada vigente. */
+    default byte[] dibujarDe(String nombre, Formacion formacion) {
+        return dibujar(nombre, portadaVigente(formacion));
     }
 
     /**

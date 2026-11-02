@@ -2,6 +2,7 @@ package com.renaser.os.chat.infrastructure.adapter.out.bienvenida;
 
 import com.renaser.os.chat.application.ports.out.bienvenida.DibujarBienvenidaPort;
 import com.renaser.os.chat.application.ports.out.bienvenida.TarjetaConNombrePort.TarjetaConNombre;
+import com.renaser.os.shared.domain.Formacion;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -39,8 +40,8 @@ class TarjetasConNombreEnMemoriaTest {
         DibujanteDePrueba dibujante = new DibujanteDePrueba(64);
         TarjetasConNombreEnMemoria tarjetas = new TarjetasConNombreEnMemoria(dibujante);
 
-        TarjetaConNombre primera = tarjetas.tarjetaDe("Ana");
-        TarjetaConNombre segunda = tarjetas.tarjetaDe(" ANA ");
+        TarjetaConNombre primera = tarjetas.tarjetaDe("Ana", Formacion.ESCUELA);
+        TarjetaConNombre segunda = tarjetas.tarjetaDe(" ANA ", Formacion.ESCUELA);
 
         assertThat(dibujante.dibujados).containsExactly("ANA");
         assertThat(segunda).isSameAs(primera);
@@ -51,8 +52,8 @@ class TarjetasConNombreEnMemoriaTest {
     void huellaDelContenido() {
         TarjetasConNombreEnMemoria tarjetas = new TarjetasConNombreEnMemoria(new DibujanteDePrueba(64));
 
-        TarjetaConNombre ana = tarjetas.tarjetaDe("Ana");
-        TarjetaConNombre luis = tarjetas.tarjetaDe("Luis");
+        TarjetaConNombre ana = tarjetas.tarjetaDe("Ana", Formacion.ESCUELA);
+        TarjetaConNombre luis = tarjetas.tarjetaDe("Luis", Formacion.ESCUELA);
 
         assertThat(ana.huella()).hasSize(32).isEqualTo(TarjetasConNombreEnMemoria.huella(ana.jpeg()));
         assertThat(luis.huella()).isNotEqualTo(ana.huella());
@@ -64,7 +65,7 @@ class TarjetasConNombreEnMemoriaTest {
         TarjetasConNombreEnMemoria tarjetas = new TarjetasConNombreEnMemoria(new DibujanteDePrueba(1024 * 1024));
 
         for (int i = 0; i < 20; i++) {
-            tarjetas.tarjetaDe("Nombre" + i);
+            tarjetas.tarjetaDe("Nombre" + i, Formacion.ESCUELA);
         }
 
         assertThat(tarjetas.guardadas()).isLessThanOrEqualTo(6);

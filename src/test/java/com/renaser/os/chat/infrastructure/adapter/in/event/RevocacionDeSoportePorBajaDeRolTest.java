@@ -233,7 +233,7 @@ class RevocacionDeSoportePorBajaDeRolTest {
         bandeja = new ConversacionService(conversaciones, guardarConversacion, agregarParticipante,
                 esParticipante, accesoAGrupos, marcarLeidoPort, conversacion -> { }, contarNoLeidos, cargarMensajes, roster,
                 usuarios, sinFotosPropias(),
-                new com.renaser.os.chat.application.services.NombresDeLosChatsService(grupos -> java.util.Map.of(), usuarios, org.mockito.Mockito.mock(com.renaser.os.users.api.FormacionesFinder.class)), CLOCK, idGenerator, transacciones, ids -> java.util.Set.of(), new com.renaser.os.users.api.AlcanceDeFormacionSoloEscuela(), org.mockito.Mockito.mock(com.renaser.os.users.api.FormacionesFinder.class), new com.renaser.os.chat.application.services.VisibilidadPermisiva());
+                new com.renaser.os.chat.application.services.NombresDeLosChatsService(grupos -> java.util.Map.of(), usuarios, org.mockito.Mockito.mock(com.renaser.os.users.api.FormacionesFinder.class)), CLOCK, idGenerator, transacciones, ids -> java.util.Set.of(), new com.renaser.os.users.api.AlcanceDeFormacionSoloEscuela(), org.mockito.Mockito.mock(com.renaser.os.users.api.FormacionesFinder.class), new com.renaser.os.chat.application.services.VisibilidadPermisiva(), org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.in.bienvenida.ConsultarImagenDeLaFormacionUseCase.class));
         presencia = new PresenciaService(presenciaPort, fanoutPresencia, conversacionesDeUsuario, roster,
                 conversaciones, esParticipante, accesoAGrupos, usuarios, new com.renaser.os.chat.application.services.VisibilidadPermisiva());
     }

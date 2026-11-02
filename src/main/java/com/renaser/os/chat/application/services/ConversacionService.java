@@ -1,5 +1,6 @@
 package com.renaser.os.chat.application.services;
 
+import com.renaser.os.chat.application.ports.in.bienvenida.ConsultarImagenDeLaFormacionUseCase;
 import com.renaser.os.chat.application.ports.in.conversacion.CrearConversacionCelulaUseCase;
 import com.renaser.os.chat.application.ports.in.conversacion.CrearConversacionDirectaUseCase;
 import com.renaser.os.chat.application.ports.in.conversacion.ListarConversacionesUseCase;
@@ -45,6 +46,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -88,6 +90,8 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
     private final AlcanceDeFormacionFinder formaciones;
     private final FormacionesFinder catalogo;
     private final VisibilidadPorFormacion visibilidad;
+    /** Spec 035: la imagen de cada formación, para la comunidad general y los grupos sin foto propia. */
+    private final ConsultarImagenDeLaFormacionUseCase imagenesDeFormacion;
 
     public ConversacionService(LoadConversacionPort loadConversacionPort, SaveConversacionPort saveConversacionPort,
                                 AgregarParticipantePort agregarParticipantePort,
@@ -99,7 +103,9 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
                                 UserSummaryFinder userSummaryFinder, FotoPropiaDelGrupoFinder fotosDeGrupos,
                                 NombresDeLosChatsService nombresDeLosChats, Clock clock, IdGenerator idGenerator, PlatformTransactionManager transactionManager,
                                 CuentasCerradasFinder cuentasCerradas, AlcanceDeFormacionFinder formaciones,
-                                FormacionesFinder catalogo, VisibilidadPorFormacion visibilidad) {
+                                FormacionesFinder catalogo, VisibilidadPorFormacion visibilidad,
+                                ConsultarImagenDeLaFormacionUseCase imagenesDeFormacion) {
+        this.imagenesDeFormacion = imagenesDeFormacion;
         this.formaciones = formaciones;
         this.catalogo = catalogo;
         this.visibilidad = visibilidad;
@@ -229,6 +235,7 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
         Map<UserId, UserSummary> perfiles = userSummaryFinder.findByIds(otros.values().stream().distinct().toList());
         Map<UUID, Instant> fotosPropias = fotosPropiasDeLosGrupos(conversaciones);
         Map<ConversacionId, String> nombres = nombresDeLosChats.nombresDe(conversaciones);
+        Map<Formacion, Instant> imagenes = imagenesDeLasFormaciones(conversaciones);
         return conversaciones.stream()
                 .map(c -> {
                     UserId otro = c.tipo() == TipoConversacion.DIRECTA ? otros.get(c.id()) : null;
@@ -236,7 +243,8 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
                     return new ConversacionResumen(c, ultimos.get(c.id()), noLeidos.getOrDefault(c.id(), 0L),
                             otro, perfil != null ? perfil.fullName() : null,
                             perfil != null ? perfil.avatarUrl() : null,
-                            c.celulaId() != null ? fotosPropias.get(c.celulaId()) : null, nombres.get(c.id()));
+                            c.celulaId() != null ? fotosPropias.get(c.celulaId()) : null, nombres.get(c.id()),
+                            conImagenDeLaFormacion(c) ? imagenes.get(c.formacion()) : null);
                 })
                 .sorted(Comparator.comparing(ConversacionService::actividadDe).reversed())
                 .toList();
@@ -302,6 +310,23 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
                 .distinct()
                 .toList();
         return grupos.isEmpty() ? Map.of() : fotosDeGrupos.cambiadasEn(grupos);
+    }
+
+    /**
+     * Spec 035: desde cuándo es la imagen de cada formación cuya comunidad general o cuyos grupos están en la lista, en pocas lecturas indexadas
+     * (una o dos por formación, y a lo sumo tres formaciones). Las que no tienen imagen no figuran: esos chats usan la de la app.
+     */
+    private Map<Formacion, Instant> imagenesDeLasFormaciones(List<Conversacion> conversaciones) {
+        Map<Formacion, Instant> desde = new EnumMap<>(Formacion.class);
+        conversaciones.stream().filter(ConversacionService::conImagenDeLaFormacion).map(Conversacion::formacion).distinct()
+                .forEach(formacion -> imagenesDeFormacion.vigente(formacion)
+                        .ifPresent(imagen -> desde.put(formacion, imagen.desde())));
+        return desde;
+    }
+
+    /** La comunidad general y los grupos llevan la imagen de su formación (el grupo, solo si no tiene foto propia: eso lo resuelve la respuesta). */
+    private static boolean conImagenDeLaFormacion(Conversacion c) {
+        return c.tipo() == TipoConversacion.GLOBAL || c.tipo() == TipoConversacion.CELULA;
     }
 
     /** Conversacion sin mensajes: ordena por su fecha de creacion. */

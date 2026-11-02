@@ -3,6 +3,7 @@ package com.renaser.os.chat.infrastructure.adapter.out.persistence.bienvenida;
 import com.renaser.os.chat.application.ports.out.bienvenida.CambiosDeBienvenidaPort;
 import com.renaser.os.chat.domain.model.bienvenida.CambioDeBienvenida;
 import com.renaser.os.chat.domain.model.bienvenida.PiezaDeBienvenida;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
@@ -22,25 +23,26 @@ import java.util.UUID;
  *
  * <p>El texto y la ruta de la portada van en columnas separadas: así la base puede exigir, fila por
  * fila, que un texto no traiga ruta, que la portada no traiga texto y el largo de cada uno. Las dos en
- * {@code NULL} = volvió al original. «El último» es el de {@code id} más alto (identidad creciente), no
+ * {@code NULL} = volvió al original. Cada lectura es de UNA formación (V159, spec 035). «El último» es el de {@code id} más alto (identidad creciente), no
  * el de {@code cambiado_en}: dos cambios en el mismo instante tendrían un orden ambiguo.
  */
 @Component
 class CambiosDeBienvenidaJdbcAdapter implements CambiosDeBienvenidaPort {
 
     private static final String REGISTRAR = """
-            INSERT INTO renaser.cambios_bienvenida (pieza, texto, portada_ruta, cambiado_por, cambiado_en)
-            VALUES (:pieza, :texto, :ruta, :por, :en)
+            INSERT INTO renaser.cambios_bienvenida (formacion, pieza, texto, portada_ruta, cambiado_por, cambiado_en)
+            VALUES (:formacion, :pieza, :texto, :ruta, :por, :en)
             """;
     private static final String ULTIMOS = """
-            SELECT DISTINCT ON (pieza) pieza, texto, portada_ruta, cambiado_por, cambiado_en
+            SELECT DISTINCT ON (pieza) formacion, pieza, texto, portada_ruta, cambiado_por, cambiado_en
               FROM renaser.cambios_bienvenida
+             WHERE formacion = :formacion
              ORDER BY pieza, id DESC
             """;
     private static final String ULTIMO = """
-            SELECT pieza, texto, portada_ruta, cambiado_por, cambiado_en
+            SELECT formacion, pieza, texto, portada_ruta, cambiado_por, cambiado_en
               FROM renaser.cambios_bienvenida
-             WHERE pieza = :pieza
+             WHERE formacion = :formacion AND pieza = :pieza
              ORDER BY id DESC
              LIMIT 1
             """;
@@ -53,26 +55,29 @@ class CambiosDeBienvenidaJdbcAdapter implements CambiosDeBienvenidaPort {
 
     @Override
     public void registrar(CambioDeBienvenida cambio) {
-        boolean esPortada = !cambio.pieza().esTexto();
+        boolean esImagen = cambio.pieza().esImagen();
         jdbcClient.sql(REGISTRAR)
+                .param("formacion", cambio.formacion().codigo())
                 .param("pieza", cambio.pieza().name())
-                .param("texto", esPortada ? null : cambio.valor(), Types.VARCHAR)
-                .param("ruta", esPortada ? cambio.valor() : null, Types.VARCHAR)
+                .param("texto", esImagen ? null : cambio.valor(), Types.VARCHAR)
+                .param("ruta", esImagen ? cambio.valor() : null, Types.VARCHAR)
                 .param("por", cambio.quien().map(UserId::value).orElse(null), Types.OTHER)
                 .param("en", Timestamp.from(cambio.cambiadoEn()))
                 .update();
     }
 
     @Override
-    public Map<PiezaDeBienvenida, CambioDeBienvenida> ultimos() {
+    public Map<PiezaDeBienvenida, CambioDeBienvenida> ultimos(Formacion formacion) {
         Map<PiezaDeBienvenida, CambioDeBienvenida> ultimos = new EnumMap<>(PiezaDeBienvenida.class);
-        jdbcClient.sql(ULTIMOS).query((rs, n) -> cambio(rs)).list().forEach(c -> ultimos.put(c.pieza(), c));
+        jdbcClient.sql(ULTIMOS).param("formacion", formacion.codigo()).query((rs, n) -> cambio(rs)).list()
+                .forEach(c -> ultimos.put(c.pieza(), c));
         return ultimos;
     }
 
     @Override
-    public Optional<CambioDeBienvenida> ultimo(PiezaDeBienvenida pieza) {
-        return jdbcClient.sql(ULTIMO).param("pieza", pieza.name()).query((rs, n) -> cambio(rs)).optional();
+    public Optional<CambioDeBienvenida> ultimo(Formacion formacion, PiezaDeBienvenida pieza) {
+        return jdbcClient.sql(ULTIMO).param("formacion", formacion.codigo()).param("pieza", pieza.name())
+                .query((rs, n) -> cambio(rs)).optional();
     }
 
     /** Rehidrata sin volver a validar: lo que la base ya aceptó se sigue leyendo aunque cambien las reglas. */
@@ -80,7 +85,7 @@ class CambiosDeBienvenidaJdbcAdapter implements CambiosDeBienvenidaPort {
         PiezaDeBienvenida pieza = PiezaDeBienvenida.valueOf(rs.getString("pieza"));
         String valor = pieza.esTexto() ? rs.getString("texto") : rs.getString("portada_ruta");
         UUID por = rs.getObject("cambiado_por", UUID.class);
-        return new CambioDeBienvenida(pieza, valor, por == null ? null : UserId.of(por),
+        return new CambioDeBienvenida(Formacion.desde(rs.getString("formacion")), pieza, valor, por == null ? null : UserId.of(por),
                 rs.getTimestamp("cambiado_en").toInstant());
     }
 }

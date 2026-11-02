@@ -12,12 +12,13 @@ import java.util.List;
  * La bienvenida para editarla (D-210), como la lee la app. Mapeo a mano y campo por campo: un campo
  * nuevo del caso de uso no llega al teléfono sin que alguien lo agregue acá.
  *
- * @param textos en el orden en que salen: SOPORTE_CON_LA_TARJETA, SOPORTE_FORMAL, GRUPO
+ * @param formation el código de la formación de esta bienvenida (spec 035)
+ * @param textos     en el orden en que salen: SOPORTE_CON_LA_TARJETA, SOPORTE_FORMAL, GRUPO
  */
-record BienvenidaResponse(boolean activa, int largoMaximo, List<TextoResponse> textos, PortadaResponse portada) {
+record BienvenidaResponse(String formation, boolean activa, int largoMaximo, List<TextoResponse> textos, PortadaResponse portada) {
 
     static BienvenidaResponse from(BienvenidaEditable bienvenida) {
-        return new BienvenidaResponse(bienvenida.activa(), bienvenida.largoMaximo(),
+        return new BienvenidaResponse(bienvenida.formacion().codigo(), bienvenida.activa(), bienvenida.largoMaximo(),
                 bienvenida.textos().stream().map(TextoResponse::from).toList(),
                 PortadaResponse.from(bienvenida.portada()));
     }
@@ -38,11 +39,14 @@ record BienvenidaResponse(boolean activa, int largoMaximo, List<TextoResponse> t
         }
     }
 
-    /** @param sePuedeCambiar {@code false} si el servidor no guarda imágenes (almacenamiento de marcador) */
-    record PortadaResponse(boolean cambiada, boolean sePuedeCambiar, UltimoCambioResponse ultimoCambio) {
+    /**
+     * @param heredada       {@code true} si la formación no tiene portada propia y usa la vigente de la Escuela (spec 035); siempre {@code false} en la Escuela
+     * @param sePuedeCambiar {@code false} si el servidor no guarda imágenes (almacenamiento de marcador)
+     */
+    record PortadaResponse(boolean cambiada, boolean heredada, boolean sePuedeCambiar, UltimoCambioResponse ultimoCambio) {
 
         static PortadaResponse from(PortadaEditable portada) {
-            return new PortadaResponse(portada.cambiada(), portada.sePuedeCambiar(),
+            return new PortadaResponse(portada.cambiada(), portada.heredada(), portada.sePuedeCambiar(),
                     UltimoCambioResponse.from(portada.ultimoCambio()));
         }
     }

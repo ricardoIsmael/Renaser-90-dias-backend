@@ -48,7 +48,7 @@ final class MensajesParaMostrar {
      * {@code userSummaryFinder.findByIds} (todos los emisores, de los mensajes y de los citados) —, ninguna si
      * la página está vacía.
      */
-    List<MensajeEnriquecido> deLaPagina(List<Mensaje> mensajes, UserId quienMira) {
+    List<MensajeEnriquecido> deLaPagina(List<Mensaje> mensajes, UserId quienMira, String firmaDelPrograma) {
         if (mensajes.isEmpty()) {
             return List.of();
         }
@@ -63,7 +63,8 @@ final class MensajesParaMostrar {
         Map<UserId, UserSummary> usuarios = userSummaryFinder.findByIds(idsUsuarios);
 
         return mensajes.stream()
-                .map(m -> enriquecido(m, resumenSiSePuede(m, citadoDe(m, citados), usuarios, quienMira), usuarios))
+                .map(m -> enriquecido(m, resumenSiSePuede(m, citadoDe(m, citados), usuarios, quienMira, firmaDelPrograma), usuarios,
+                        firmaDelPrograma))
                 .toList();
     }
 
@@ -81,19 +82,20 @@ final class MensajesParaMostrar {
      * tiene y los toma de lo que mandó), pero con el resumen de lo que cita. El citado es el que validó
      * {@link Cita#aResponder} en esta misma transacción: no se vuelve a buscar.
      */
-    MensajeEnriquecido recienEnviado(Mensaje mensaje, Cita cita, UserId quienEscribe) {
+    MensajeEnriquecido recienEnviado(Mensaje mensaje, Cita cita, UserId quienEscribe, String firmaDelPrograma) {
         if (cita == null) {
             return new MensajeEnriquecido(mensaje, null, null, null, null);
         }
         Mensaje citado = cita.citado();
         Map<UserId, UserSummary> autor = citado.esDelPrograma() ? Map.of()
                 : userSummaryFinder.findById(citado.emisorId()).map(u -> Map.of(u.id(), u)).orElse(Map.of());
-        return new MensajeEnriquecido(mensaje, null, null, resumen(citado, autor, quienEscribe), null);
+        return new MensajeEnriquecido(mensaje, null, null, resumen(citado, autor, quienEscribe, firmaDelPrograma), null);
     }
 
-    private MensajeEnriquecido enriquecido(Mensaje mensaje, RespuestaPreview resumen, Map<UserId, UserSummary> usuarios) {
+    private MensajeEnriquecido enriquecido(Mensaje mensaje, RespuestaPreview resumen, Map<UserId, UserSummary> usuarios,
+                                           String firmaDelPrograma) {
         if (mensaje.esDelPrograma()) {
-            return new MensajeEnriquecido(mensaje, Mensaje.NOMBRE_DEL_PROGRAMA, null, resumen, urlDeLectura(mensaje));
+            return new MensajeEnriquecido(mensaje, firmaDelPrograma, null, resumen, urlDeLectura(mensaje));
         }
         UserSummary emisor = usuarios.get(mensaje.emisorId());
         return new MensajeEnriquecido(mensaje, emisor != null ? emisor.fullName() : null,
@@ -105,13 +107,14 @@ final class MensajesParaMostrar {
      * borrado, retirado, o de otra conversación. En los dos últimos casos la fila existe, pero su texto no sale.
      */
     private RespuestaPreview resumenSiSePuede(Mensaje mensaje, Mensaje citado, Map<UserId, UserSummary> usuarios,
-                                              UserId quienMira) {
-        return Cita.sePuedeMostrar(mensaje, citado) ? resumen(citado, usuarios, quienMira) : null;
+                                              UserId quienMira, String firmaDelPrograma) {
+        return Cita.sePuedeMostrar(mensaje, citado) ? resumen(citado, usuarios, quienMira, firmaDelPrograma) : null;
     }
 
-    private RespuestaPreview resumen(Mensaje citado, Map<UserId, UserSummary> usuarios, UserId quienMira) {
+    private RespuestaPreview resumen(Mensaje citado, Map<UserId, UserSummary> usuarios, UserId quienMira,
+                                     String firmaDelPrograma) {
         String miniatura = esImagen(citado) ? urlDeLectura(citado) : null;
-        return new RespuestaPreview(citado.id(), nombreDeQuienFirma(citado, usuarios), citado.tipo(),
+        return new RespuestaPreview(citado.id(), nombreDeQuienFirma(citado, usuarios, firmaDelPrograma), citado.tipo(),
                 extracto(citado.texto()), citado.mediaMime(), citado.mediaDuracionS(), miniatura,
                 citado.escritoPor(quienMira));
     }
@@ -132,10 +135,13 @@ final class MensajesParaMostrar {
         return almacenamientoPort.firmarLectura(mensaje.mediaRuta(), VALIDEZ_URL_LECTURA).toString();
     }
 
-    /** El programa firma sus mensajes; los demás, su emisor (o nadie si su cuenta ya no está). */
-    private static String nombreDeQuienFirma(Mensaje mensaje, Map<UserId, UserSummary> usuarios) {
+    /**
+     * El programa firma sus mensajes con el nombre de la formación de la conversación (spec 035); los demás, su emisor (o nadie si su cuenta ya no
+     * está).
+     */
+    private static String nombreDeQuienFirma(Mensaje mensaje, Map<UserId, UserSummary> usuarios, String firmaDelPrograma) {
         if (mensaje.esDelPrograma()) {
-            return Mensaje.NOMBRE_DEL_PROGRAMA;
+            return firmaDelPrograma;
         }
         UserSummary emisor = usuarios.get(mensaje.emisorId());
         return emisor != null ? emisor.fullName() : null;
