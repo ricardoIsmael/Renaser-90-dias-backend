@@ -3,6 +3,7 @@ package com.renaser.os.rag.application.ports.out.habitos;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
@@ -67,12 +68,15 @@ public interface ConsultarAgendaHabitosPort {
      *                       verde" con "Batido de papaya". Nunca trae el motivo del renombre
      * @param horaInicio     la hora de hoy a la que le toca (su preferencia si la tiene), {@code null}
      *                       sin horario (E-455): "lo que falta" se ordena por el horario de la persona
-     * @param dimension      Cuerpo, Mente, Emociones o Espiritu, como la ve la persona; {@code null} si
-     *                       no se sabe (E-455): "te faltan 27: Cuerpo 13, Mente 8..."
+     * @param dimension      la categoria del habito, con el nombre que ve la persona en Training (Cuerpo, Mente...; las de
+     *                       su formacion, spec 038); {@code null} si no se sabe (E-455): "te faltan 27: Cuerpo 13, Mente 8..."
+     * @param habitoId       el habito (catalogo o propio) del que es el registro, {@code null} si no se sabe (spec 038): la app apaga con el
+     *                       las alarmas de ese habito cuando SER lo cumple
+     * @param fecha          el dia de este registro (su {@code fechaEjecucion}), {@code null} si no se sabe (spec 038)
      */
     record HabitoDelDia(UUID registroId, String titulo, String estado, Integer puntosEnJuego, Integer puntosMaximos,
                          Instant plazo, boolean exigeEvidencia, List<TramoPuntos> tramos, String claveSistema,
-                         String tituloDelPrograma, LocalTime horaInicio, String dimension) {
+                         String tituloDelPrograma, LocalTime horaInicio, String dimension, UUID habitoId, LocalDate fecha) {
 
         /** La Clase diaria se cierra con su resumen, nunca por el camino generico ni con una foto. */
         public static final String CLAVE_CLASE_DIARIA = "DAILY_CLASS";
@@ -83,6 +87,14 @@ public interface ConsultarAgendaHabitosPort {
 
         public HabitoDelDia {
             tramos = tramos == null ? List.of() : List.copyOf(tramos);
+        }
+
+        /** Sin el habito ni el dia (lo que habia antes de la spec 038). */
+        public HabitoDelDia(UUID registroId, String titulo, String estado, Integer puntosEnJuego, Integer puntosMaximos,
+                            Instant plazo, boolean exigeEvidencia, List<TramoPuntos> tramos, String claveSistema,
+                            String tituloDelPrograma, LocalTime horaInicio, String dimension) {
+            this(registroId, titulo, estado, puntosEnJuego, puntosMaximos, plazo, exigeEvidencia, tramos, claveSistema,
+                    tituloDelPrograma, horaInicio, dimension, null, null);
         }
 
         /** Sin hora ni dimension (lo que habia antes de E-455). */
@@ -122,9 +134,17 @@ public interface ConsultarAgendaHabitosPort {
             return exigeEvidencia && !CLAVE_CLASE_DIARIA.equals(claveSistema);
         }
 
-        /** Despues de la foto, la app pregunta "¿Que sentiste?" solo en los rituales (D-172). */
+        /**
+         * Es uno de los tres rituales (D-172). Desde el 2026-10-31 (spec 038) NO se registran con foto: la persona <b>escribe</b> como se siente
+         * ("¿Como te sientes despues de realizar el ritual?"), en el mismo registro por texto de Training. Antes la foto iba seguida de "¿Que sentiste?".
+         */
         public boolean preguntaQueSintio() {
             return claveSistema != null && CLAVES_DE_RITUAL.contains(claveSistema);
+        }
+
+        /** Se registra escribiendo, sin camara: los rituales. */
+        public boolean seRegistraEscribiendo() {
+            return preguntaQueSintio();
         }
 
         /** Un habito con puntos en juego es, por definicion, uno que todavia se puede entregar. */

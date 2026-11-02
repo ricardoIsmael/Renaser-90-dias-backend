@@ -28,12 +28,18 @@ public record HabitosDeHoy(List<HabitoDeHoy> deHoy, List<HabitoPausado> pausados
      * @param pideFoto          si se registra con la camara de la app (D-171)
      * @param tituloDelPrograma el del catalogo cuando la persona lo renombro, {@code null} si no
      *                          (E-290): para que el modelo una "jugo verde" con "Batido de papaya"
+     * @param pideTexto         si se registra ESCRIBIENDO, sin camara: los tres rituales (spec 038). Un habito no pide foto y texto a la vez
      */
-    public record HabitoDeHoy(String titulo, EstadoDeHoy estado, boolean pideFoto, String tituloDelPrograma) {
+    public record HabitoDeHoy(String titulo, EstadoDeHoy estado, boolean pideFoto, String tituloDelPrograma, boolean pideTexto) {
 
         public HabitoDeHoy {
             Objects.requireNonNull(titulo, "titulo es obligatorio");
             Objects.requireNonNull(estado, "estado es obligatorio");
+        }
+
+        /** Un habito que no se registra escribiendo. */
+        public HabitoDeHoy(String titulo, EstadoDeHoy estado, boolean pideFoto, String tituloDelPrograma) {
+            this(titulo, estado, pideFoto, tituloDelPrograma, false);
         }
 
         /** Un habito sin renombre. */
@@ -52,13 +58,16 @@ public record HabitosDeHoy(List<HabitoDeHoy> deHoy, List<HabitoPausado> pausados
 
     /**
      * El estado en palabras de la persona, no el de {@code registros_habito}: {@code VENCIDO} junta
-     * un registro EXPIRADO y uno PENDIENTE al que ya se le paso el plazo, que para ella son lo mismo
-     * (se le paso la hora). Lo decide {@code SituacionDelTurnoService}, no el modelo.
+     * un registro PENDIENTE al que ya se le paso el plazo (se le paso la hora de sus puntos, pero se puede registrar). Un registro EXPIRADO es
+     * {@code DIA_CERRADO} desde la spec 038. Lo decide {@code SituacionDelTurnoService}, no el modelo.
      *
      * <p>E-455: {@code VENCIDO} quiere decir "ya no da puntos", no que el habito vencio: se puede
      * completar igual (paga 0). Al modelo se le dice asi, nunca "vencido".
+     *
+     * <p>Spec 038 (D-259): {@code DIA_CERRADO} es un registro EXPIRADO: el barrido ya lo cerro porque su dia termino y NO se puede registrar. Antes se
+     * juntaba con {@code VENCIDO} y SER decia «igual puedes hacerlo» de algo que el servidor rechaza.
      */
     public enum EstadoDeHoy {
-        PENDIENTE, EN_CURSO, HECHO, VENCIDO, FALLIDO
+        PENDIENTE, EN_CURSO, HECHO, VENCIDO, FALLIDO, DIA_CERRADO
     }
 }

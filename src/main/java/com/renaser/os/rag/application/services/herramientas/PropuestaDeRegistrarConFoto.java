@@ -24,9 +24,13 @@ import java.util.UUID;
  * {@code proponer_registrar_con_foto} (D-171, decision del dueno): registrar un habito de hoy que
  * exige evidencia. El acompanante no recibe fotos, asi que no lo marca ni manda a la pantalla de
  * Hoy: le deja a la app una tarjeta con la camara ({@code EventoRenasia.Evidencia}). La persona saca
- * la foto y la app sube la evidencia FOTO y completa el habito, con los endpoints de siempre. Solo en
- * los tres rituales la app pregunta antes "¿Que sentiste?" (D-172, decision del dueno: "solo para
- * los rituales"). Aca solo se valida y se pide la tarjeta.
+ * la foto y la app sube la evidencia FOTO y completa el habito, con los endpoints de siempre. Aca solo se valida y se
+ * pide la tarjeta.
+ *
+ * <p><b>Spec 038: los tres rituales no piden foto, se registran ESCRIBIENDO</b> (decision del dueno, 2026-10-31): la tarjeta es la misma
+ * ({@code conPregunta = true}) pero la app, en vez de la camara, abre el registro por texto de Training con «¿Como te sientes despues de
+ * realizar el ritual?» (el que llama a {@code confirmarEvidencia} TEXTO y {@code completarRegistro}). Antes se sacaba la foto y despues se
+ * contestaba «¿Que sentiste?» (D-172). Aqui solo cambia lo que se le dice al modelo; el servidor no tiene endpoint ni tabla nueva.
  *
  * <p><b>Valida con los datos de {@code habits}</b>, igual que {@link PropuestaDeMarcarHabito}: el
  * registro tiene que ser uno de SUS habitos de hoy ({@code deHoyDe} ya resuelve "hoy" en su zona),
@@ -48,7 +52,8 @@ public class PropuestaDeRegistrarConFoto implements HerramientaAgente {
 
     private static final DefinicionHerramienta DEFINICION = new DefinicionHerramienta(NOMBRE,
             "Para registrar un habito de hoy marcado exige_evidencia=si: le deja a la persona en la app un "
-                    + "boton que abre la camara; saca la foto y la app lo registra. NO lo registra por si "
+                    + "boton que abre la camara; saca la foto y la app lo registra. En los tres rituales (registro=escribir) "
+                    + "el boton NO abre la camara: abre donde escribe como se siente. NO lo registra por si "
                     + "sola. Usala directo cuando pida marcar o registrar uno de esos habitos, "
                     + "sin preguntar antes. Nunca uses marcar_habito_completado para esos habitos.",
             List.of(ParametroHerramienta.obligatorio(CatalogoHerramientasAgente.ARGUMENTO_REGISTRO_ID,
@@ -95,8 +100,9 @@ public class PropuestaDeRegistrarConFoto implements HerramientaAgente {
         String motivo = switch (habito.estado()) {
             case "PENDIENTE", "EN_CURSO" -> null;
             case "COMPLETADO" -> titulo + " ya esta registrado hoy: no hace falta otra foto.";
-            case "EXPIRADO" -> titulo + " ya no da puntos hoy (paso su hora): registrarlo ahora no suma puntos. "
-                    + "Si igual lo hizo, puede subir la foto desde Hoy.";
+            // Spec 038 (D-259): EXPIRADO es un dia que ya cerro. Un PENDIENTE al que se le paso la hora SI se registra (arriba).
+            case "EXPIRADO" -> titulo + " es de un dia que ya cerro: ya no se puede registrar. No dejes boton; dile que ese dia "
+                    + "termino y que lo que sigue es el de hoy.";
             default -> titulo + " ya se cerro y no se puede registrar.";
         };
         if (motivo == null && HabitoDelDia.CLAVE_CLASE_DIARIA.equals(habito.claveSistema())) {
@@ -111,11 +117,16 @@ public class PropuestaDeRegistrarConFoto implements HerramientaAgente {
         Instant ahora = clock.now();
         pedidos.pedir(actorId, new PedidoDeEvidencia(habito.registroId(), habito.titulo(), ahora,
                 finDelDiaLocal(ahora, agendaPort.zonaDe(actorId)), habito.preguntaQueSintio()));
-        String alRegistrar = habito.preguntaQueSintio() ? "saque la foto y cuente que sintio" : "saque la foto";
+        if (habito.seRegistraEscribiendo()) {
+            return ResultadoHerramienta.exito("Boton para escribir como se siente listo para '" + habito.titulo() + "'. TODAVIA NO "
+                    + "esta registrado: se registra cuando la persona escribe como se siente despues del ritual, en la app. "
+                    + "Dilo en una sola frase corta, por ejemplo \"Te deje abajo el boton para contar como te sientes despues de "
+                    + habito.titulo() + "\". No le pidas foto, no le preguntes tu que sintio, no digas que ya quedo y no la mandes a otra pantalla.");
+        }
         return ResultadoHerramienta.exito("Boton de la camara listo para '" + habito.titulo() + "'. TODAVIA NO "
-                + "esta registrado: se registra cuando la persona " + alRegistrar + ", en la app. "
+                + "esta registrado: se registra cuando la persona saque la foto, en la app. "
                 + "Dilo en una sola frase corta, por ejemplo \"Te deje abajo el boton para sacarle foto a "
-                + habito.titulo() + "\". No preguntes si quiere, no digas que ya quedo y no la mandes a Hoy.");
+                + habito.titulo() + "\". No preguntes si quiere, no digas que ya quedo y no la mandes a otra pantalla.");
     }
 
     /** La medianoche que cierra el dia de la persona, en SU zona: no la del servidor (regla 02). */

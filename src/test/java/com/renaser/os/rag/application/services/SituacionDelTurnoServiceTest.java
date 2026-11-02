@@ -157,11 +157,26 @@ class SituacionDelTurnoServiceTest {
                 // 04:30 UTC = 23:30 del sabado en Lima: a las 22:00 de Lima sigue pendiente
                 new HabitoDeHoy("MEDITAR", EstadoDeHoy.PENDIENTE, true),
                 new HabitoDeHoy("CAMINAR", EstadoDeHoy.VENCIDO, false),
-                new HabitoDeHoy("LECTURA", EstadoDeHoy.VENCIDO, false),
+                // spec 038 (D-259): un EXPIRADO es un dia cerrado, no «ya no da puntos»; un PENDIENTE con el plazo pasado si se puede registrar
+                new HabitoDeHoy("LECTURA", EstadoDeHoy.DIA_CERRADO, false),
                 // la Clase diaria pide evidencia en el catalogo, pero se cierra con su resumen (D-171)
                 new HabitoDeHoy("CLASE DIARIA", EstadoDeHoy.EN_CURSO, false));
         assertThat(habitos.pausados()).containsExactly(
                 new HabitoPausado("DUCHA FRIA", LocalDate.of(2026, 9, 27)), new HabitoPausado("YOGA", null));
+    }
+
+    @Test
+    @DisplayName("spec 038: un ritual no pide foto, pide escribir; y el resto de los que exigen evidencia sigue pidiendo foto")
+    void ritualPideEscribir() {
+        when(situacionPort.de(APRENDIZ)).thenReturn(Optional.of(DIA_12));
+        when(agendaPort.deHoyDe(APRENDIZ)).thenReturn(List.of(
+                habito("RITUAL DE LA MAÑANA", "PENDIENTE", null, true, "RITUAL_MORNING"),
+                habito("JUGO VERDE", "PENDIENTE", null, true, null)));
+        conPlan();
+
+        assertThat(service.de(APRENDIZ).orElseThrow().habitos().deHoy()).containsExactly(
+                new HabitoDeHoy("RITUAL DE LA MAÑANA", EstadoDeHoy.PENDIENTE, false, null, true),
+                new HabitoDeHoy("JUGO VERDE", EstadoDeHoy.PENDIENTE, true, null, false));
     }
 
     @Test

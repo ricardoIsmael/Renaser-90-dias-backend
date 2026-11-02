@@ -53,6 +53,20 @@ class HabitosDeHoyEnElPromptTest {
                 YOGA (sin fecha de fin).""");
     }
 
+    @Test
+    @DisplayName("spec 038: un ritual dice «pide escribir», un dia cerrado dice que no se registra, y ninguno de los dos habla de foto")
+    void ritualDiaCerradoYFoto() {
+        String texto = HabitosDeHoyEnElPrompt.texto(new HabitosDeHoy(List.of(
+                new HabitoDeHoy("RITUAL DE LA MAÑANA", EstadoDeHoy.PENDIENTE, false, null, true),
+                new HabitoDeHoy("JUGO VERDE", EstadoDeHoy.VENCIDO, true, null, false),
+                new HabitoDeHoy("LECTURA", EstadoDeHoy.DIA_CERRADO, true, null, false)), List.of()));
+
+        assertThat(texto).contains("- RITUAL DE LA MAÑANA: pendiente, pide escribir")
+                .contains("- JUGO VERDE: ya no da puntos (paso su hora; igual puede hacerlo), pide foto")
+                .contains("- LECTURA: dia cerrado (ese dia ya termino: no se puede registrar)")
+                .doesNotContain("dia cerrado (ese dia ya termino: no se puede registrar), pide foto");
+    }
+
     /**
      * E-289: con la ultima comida "hecho" en su propia linea de la lista, a "me salto la ultima comida"
      * el modelo contesto que saltarsela lo alejaba de su objetivo. Lo hecho va primero, junto, y con la

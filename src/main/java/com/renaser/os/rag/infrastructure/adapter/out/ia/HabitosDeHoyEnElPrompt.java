@@ -90,12 +90,18 @@ final class HabitosDeHoyEnElPrompt {
         return propio + " (" + titulo(habito.tituloDelPrograma()) + " del programa)";
     }
 
-    /** "pide foto" solo en lo que falta entregar: en uno hecho no aporta nada. */
+    /** "pide foto" o "pide escribir" solo en lo que falta entregar: en uno hecho, o de un dia ya cerrado, no aporta nada. */
     private static String estado(HabitoDeHoy habito) {
         String palabra = palabra(habito.estado());
         boolean faltaEntregar = habito.estado() == EstadoDeHoy.PENDIENTE || habito.estado() == EstadoDeHoy.EN_CURSO
                 || habito.estado() == EstadoDeHoy.VENCIDO;
-        return habito.pideFoto() && faltaEntregar ? palabra + ", pide foto" : palabra;
+        if (!faltaEntregar) {
+            return palabra;
+        }
+        if (habito.pideTexto()) {
+            return palabra + ", pide escribir";
+        }
+        return habito.pideFoto() ? palabra + ", pide foto" : palabra;
     }
 
     private static String palabra(EstadoDeHoy estado) {
@@ -105,6 +111,7 @@ final class HabitosDeHoyEnElPrompt {
             case HECHO -> "hecho";
             case VENCIDO -> "ya no da puntos (paso su hora; igual puede hacerlo)";
             case FALLIDO -> "no cumplido";
+            case DIA_CERRADO -> "dia cerrado (ese dia ya termino: no se puede registrar)";
         };
     }
 

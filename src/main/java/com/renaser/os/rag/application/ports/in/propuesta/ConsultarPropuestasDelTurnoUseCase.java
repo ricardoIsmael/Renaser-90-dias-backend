@@ -37,8 +37,10 @@ public interface ConsultarPropuestasDelTurnoUseCase {
      * @param registroId  el registro del dia del habito, o el id de la roca diaria si
      *                    {@code destino} es {@link DestinoDeEvidencia#ROCA}
      * @param venceEn     el fin del dia local de la persona (despues, ese registro ya no es el de hoy)
-     * @param conPregunta si la app pregunta "¿Que sentiste?" despues de la foto: solo en los rituales
-     *                    (D-172). Una accion del dia nunca pregunta
+     * @param conPregunta es un ritual (D-172). Desde la spec 038 la app NO abre la camara para un ritual: abre el registro por texto de
+     *                    Training («¿Como te sientes despues de realizar el ritual?»); antes sacaba la foto y despues preguntaba "¿Que
+     *                    sentiste?". El campo conserva su nombre y su forma en el cable para no romper a las apps ya instaladas. Una accion
+     *                    del dia nunca es un ritual
      */
     record PedidoDeEvidencia(UUID registroId, String titulo, Instant pedidoEn, Instant venceEn,
                              boolean conPregunta, DestinoDeEvidencia destino) {

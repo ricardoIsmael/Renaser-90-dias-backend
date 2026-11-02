@@ -71,24 +71,32 @@ class PropuestaDeRegistrarConFotoTest {
         assertThat(((ResultadoHerramienta.Exito) resultado).contenido())
                 .contains("TODAVIA NO esta registrado")
                 .contains("Te deje abajo el boton para sacarle foto a JUGO VERDE")
-                .contains("No preguntes si quiere");
+                .contains("No preguntes si quiere").doesNotContain("Hoy");
     }
 
     @Test
-    @DisplayName("D-172: solo en los rituales la tarjeta pide ademas \"¿Que sentiste?\"; en el jugo verde, foto y listo")
-    void soloLosRitualesPreguntan() {
+    @DisplayName("spec 038: los tres rituales se registran ESCRIBIENDO (sin foto); en el jugo verde, foto y listo")
+    void losRitualesSeEscriben() {
         when(agenda.zonaDe(APRENDIZ)).thenReturn(LIMA);
-        when(agenda.deHoyDe(APRENDIZ)).thenReturn(List.of(habito("PENDIENTE", true, "RITUAL_NIGHT")));
+        for (String clave : List.of("RITUAL_MORNING", "RITUAL_MIDDAY", "RITUAL_NIGHT")) {
+            when(agenda.deHoyDe(APRENDIZ)).thenReturn(List.of(habito("PENDIENTE", true, clave)));
 
-        ResultadoHerramienta ritual = pedirFoto(JUGO.toString());
+            ResultadoHerramienta ritual = pedirFoto(JUGO.toString());
 
-        assertThat(pedidosDelTurno()).extracting(PedidoDeEvidencia::conPregunta).containsExactly(true);
-        assertThat(((ResultadoHerramienta.Exito) ritual).contenido()).contains("saque la foto y cuente que sintio");
+            assertThat(((ResultadoHerramienta.Exito) ritual).contenido()).as(clave)
+                    .contains("Boton para escribir como se siente").contains("TODAVIA NO esta registrado")
+                    .contains("Te deje abajo el boton para contar como te sientes despues de")
+                    .contains("No le pidas foto").contains("no le preguntes tu que sintio")
+                    .doesNotContain("camara").doesNotContain("sacarle foto").doesNotContain("saque la foto");
+        }
+        // La tarjeta viaja con conPregunta=true: la app lee «ritual: se escribe» y abre el registro por texto de Training, no la camara.
+        assertThat(pedidosDelTurno()).extracting(PedidoDeEvidencia::conPregunta).containsOnly(true);
 
         when(agenda.deHoyDe(APRENDIZ)).thenReturn(List.of(habito("PENDIENTE", true, "GREEN_JUICE")));
         ResultadoHerramienta jugo = pedirFoto(JUGO.toString());
 
-        assertThat(((ResultadoHerramienta.Exito) jugo).contenido()).doesNotContain("cuente que sintio");
+        assertThat(((ResultadoHerramienta.Exito) jugo).contenido()).contains("Boton de la camara").doesNotContain("escribir")
+                .doesNotContain("sintio");
     }
 
     @Test
@@ -102,14 +110,14 @@ class PropuestaDeRegistrarConFotoTest {
     }
 
     @Test
-    @DisplayName("ya completado, sin puntos (EXPIRADO) o fallido: no pide la foto y dice por que, sin decir que vencio")
+    @DisplayName("ya completado, dia cerrado (EXPIRADO, D-259) o fallido: no pide la foto y dice por que, sin decir que vencio")
     void estadosTerminales() {
         when(agenda.deHoyDe(APRENDIZ)).thenReturn(List.of(habito("COMPLETADO", true, null)));
         assertThat(fallo(pedirFoto(JUGO.toString()))).contains("ya esta registrado hoy");
 
         when(agenda.deHoyDe(APRENDIZ)).thenReturn(List.of(habito("EXPIRADO", true, null)));
-        assertThat(fallo(pedirFoto(JUGO.toString()))).contains("ya no da puntos hoy (paso su hora)")
-                .doesNotContain("vencio");
+        assertThat(fallo(pedirFoto(JUGO.toString()))).contains("es de un dia que ya cerro: ya no se puede registrar")
+                .contains("No dejes boton").doesNotContain("vencio").doesNotContain("desde Hoy");
 
         when(agenda.deHoyDe(APRENDIZ)).thenReturn(List.of(habito("FALLIDO", true, null)));
         assertThat(fallo(pedirFoto(JUGO.toString()))).contains("ya se cerro");

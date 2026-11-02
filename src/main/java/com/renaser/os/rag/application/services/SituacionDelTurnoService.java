@@ -139,8 +139,9 @@ public class SituacionDelTurnoService implements ConsultarSituacionDelTurnoUseCa
     private List<HabitoDeHoy> deHoy(UserId participanteId) {
         Instant ahora = clock.now();
         return agendaPort.deHoyDe(participanteId).stream()
-                .map(habito -> new HabitoDeHoy(habito.titulo(), estadoDe(habito, ahora), habito.seRegistraConFoto(),
-                        habito.tituloDelPrograma()))
+                .map(habito -> new HabitoDeHoy(habito.titulo(), estadoDe(habito, ahora),
+                        habito.seRegistraConFoto() && !habito.seRegistraEscribiendo(), habito.tituloDelPrograma(),
+                        habito.seRegistraEscribiendo()))
                 .toList();
     }
 
@@ -153,13 +154,13 @@ public class SituacionDelTurnoService implements ConsultarSituacionDelTurnoUseCa
 
     /**
      * Mismo criterio que {@code consultar_habitos_del_dia}: un pendiente con el plazo cumplido ya
-     * vencio, aunque el barrido todavia no lo haya marcado EXPIRADO. Un estado que no se conoce se
+     * no da puntos (pero se puede registrar hoy: D-259); un EXPIRADO es un dia cerrado y no se registra (spec 038). Un estado que no se conoce se
      * dice pendiente, que es lo que obliga a consultar antes de darlo por hecho.
      */
     static EstadoDeHoy estadoDe(HabitoDelDia habito, Instant ahora) {
         return switch (habito.estado()) {
             case "COMPLETADO" -> EstadoDeHoy.HECHO;
-            case "EXPIRADO" -> EstadoDeHoy.VENCIDO;
+            case "EXPIRADO" -> EstadoDeHoy.DIA_CERRADO;
             case "FALLIDO" -> EstadoDeHoy.FALLIDO;
             default -> sinEntregar(habito, ahora);
         };
