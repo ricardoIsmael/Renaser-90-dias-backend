@@ -1,0 +1,86 @@
+# Dependabot: actualizaciones de versiones (las de seguridad se activan aparte, en Settings → Code security).
+#
+# Una sola PR semanal con las subidas menores y de parche, y otra por cada salto mayor, para que un cambio de
+# API no viaje escondido dentro de un grupo de parches.
+#
+# Spring va en su propio grupo: Spring Boot, Spring AI, Spring Modulith y Spring Cloud AWS se alinean por línea
+# (el `pom.xml` explica lo que pasa cuando un BOM se desalinea) y conviene verlos juntos, no mezclados con
+# Testcontainers o MapStruct.
+version: 2
+
+updates:
+  - package-ecosystem: maven
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: America/Lima
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: Dependencias
+    groups:
+      spring:
+        patterns:
+          - 'org.springframework*'
+          - 'io.awspring*'
+        update-types: [minor, patch]
+      menores-y-parches:
+        update-types: [minor, patch]
+    ignore:
+      # Un salto mayor de Spring Boot (4.x → 5.x) se sube aparte, a mano, con su guía de migración y la suite
+      # completa. Las menores y los parches (4.1.x, 4.2.x) sí llegan, en el grupo `spring`.
+      - dependency-name: 'org.springframework.boot:spring-boot-starter-parent'
+        update-types: ['version-update:semver-major']
+
+  # Las acciones de los workflows (`actions/checkout`, `github/codeql-action`…). Van fijadas por SHA con la versión
+  # en un comentario; Dependabot actualiza las dos cosas juntas.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: America/Lima
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: CI
+    groups:
+      acciones:
+        update-types: [minor, patch]
+
+  # Las imágenes base del `Dockerfile` del backend (`eclipse-temurin`).
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: America/Lima
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: Docker
+    groups:
+      imagenes:
+        update-types: [minor, patch]
+    ignore:
+      # Java 25 es la versión LTS que fijan `java.version` del `pom.xml` y el `setup-java` del CI. Pasar a otra
+      # (26 no es LTS) es una decisión del equipo, no una subida automática.
+      - dependency-name: eclipse-temurin
+        update-types: ['version-update:semver-major']
+
+  # La imagen de la voz de SER (Piper). Sus paquetes de pip van fijados dentro del propio `Dockerfile` y las
+  # ruedas de `piper-tts` se publican para una versión de Python concreta: la 3.12 no se mueve sola.
+  - package-ecosystem: docker
+    directory: /infra/piper
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: America/Lima
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: Docker
+    ignore:
+      - dependency-name: python
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']

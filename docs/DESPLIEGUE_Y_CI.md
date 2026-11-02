@@ -223,6 +223,49 @@ El arreglo es siempre el mismo — que el test derive el valor por el **mismo ca
 del 2026-09-05: `ControlCuotaRedisAdapterTest` era el único test del repo que caía en esto contra el
 reloj real; el resto usa `FixedClock` (determinista) o ya replica la zona de producción.
 
+### 3.3 Seguridad (`.github/workflows/seguridad.yml`, 2026-11-02)
+
+Workflow aparte de `ci.yml`, `cd.yml` y `sonarcloud.yml`: corre en cada PR, en cada push a `master`, a mano y **cada
+lunes a las 05:41 de Lima** aunque nadie toque el repositorio (una dependencia sin cambios puede volverse vulnerable
+de un día para otro). Tres jobs independientes, con permisos mínimos (`contents: read`; solo CodeQL suma
+`security-events: write`) y sin ningún secret:
+
+| Job | Qué revisa | Frena |
+|---|---|---|
+| **Secretos (gitleaks)** | **Todo el historial** de Git (`fetch-depth: 0`), con `--redact` porque el registro es público. Reglas por defecto + las excepciones de `.gitleaks.toml` | Sí |
+| **Dependencias vulnerables (trivy)** | `pom.xml` con **todo el árbol** de Maven, incluido lo que fija el BOM de Spring Boot (el grafo de Dependabot solo ve lo que el `pom.xml` declara). Imprime todas las severidades y **falla con ALTA o CRÍTICA que ya tenga versión corregida** | Sí |
+| **Análisis estático (CodeQL)** | Java con `build-mode: manual` (se compila `src/main` con el wrapper, para que Lombok y MapStruct generen su código antes de analizar). Sube los hallazgos a *Security → Code scanning* | No: los hallazgos no ponen el job en rojo |
+
+- **Herramientas.** gitleaks y trivy se bajan como binarios de la página de *releases* con versión y SHA-256 escritos en el
+  workflow (`GITLEAKS_*` y `TRIVY_*`); nunca desde un script de instalación ni una acción de terceros. Subir de versión es
+  cambiar la versión **y** la suma juntas (sale del `*_checksums.txt` de ese release). Las acciones (`checkout`, `setup-java`,
+  `codeql-action`) van **fijadas por SHA de commit** con la versión en un comentario; Dependabot las mantiene.
+- **Excepciones de gitleaks** (`.gitleaks.toml`): 22 hallazgos del historial, todos revisados y ninguno es un secreto. 16 son los
+  tokens firmados de **miniaturas de video de Mux** que trae `V6__catalogo_academy_default.sql` (`aud: "t"`, vencen en 2126;
+  dan acceso a una miniatura, no son la clave de firma); 5 son datos de prueba («una-contrasena-de-12-o-mas» y el
+  `Sec-WebSocket-Key` de ejemplo del RFC 6455); 1 es la cabecera `BEGIN PRIVATE KEY` de una prueba que genera su clave al
+  ejecutarse. Cada excepción está limitada a una regla, a un archivo y al texto exacto, para que un secreto de verdad pegado
+  en el mismo lugar siga saltando. **No se reescribió el historial**: una migración de Flyway ya aplicada no se edita. Si no se
+  quiere que esas 8 miniaturas sean públicas, lo que las invalida es rotar la clave de firma en Mux o poner esos videos en
+  política privada, no tocar este repositorio.
+- **Excepciones de trivy** (`.trivyignore.yaml`): vacío. Lo que no tiene versión corregida no hace falta anotarlo (`--ignore-unfixed`).
+  Una con arreglo que no se pueda aplicar todavía se anota con su motivo y un `expired_at`: al vencer, el job vuelve a fallar.
+- **Dependabot** (`.github/dependabot.yml`): semanal (lunes 06:00 de Lima), con tope de PR abiertas, para `maven`, `github-actions`
+  y las dos imágenes de `docker` (`Dockerfile` y `infra/piper`). Las subidas menores y de parche llegan agrupadas (Spring en su
+  propio grupo, por la alineación entre Boot, Spring AI, Modulith y Spring Cloud AWS). **Un salto mayor de Spring Boot se ignora**
+  y se sube a mano; igual el cambio de versión de Java (`eclipse-temurin`) y el de Python de la voz.
+- **CodeQL y el «por defecto» de GitHub no pueden convivir.** Hoy `code-scanning/default-setup` está `not-configured`, así que no
+  chocan. Si alguien lo enciende desde *Settings → Code security*, hay que quitar el job `codeql` de este workflow.
+- **Por qué el job de trivy corre antes `./mvnw dependency:tree` y trivy lleva `--offline-scan`** (E-660): trivy arma el árbol
+  leyendo cada POM y los que no tiene en `~/.m2` los pide uno por uno a Maven Central (incluso algunos que Maven descarta por
+  mediación); son cientos y Central responde `429 Too Many Requests` (con `Retry-After` de 20 a 30 minutos) a quien los pide en
+  ráfaga. Maven sí pide con calma y deja en `~/.m2` (la misma caché que usa `ci.yml`) justo los POM del árbol real; con
+  `--offline-scan` trivy lee solo esos y no sale a la red. Solo se bajan POM, no los jar. Comprobado en local: el `pom.xml` de
+  antes de estos arreglos sigue marcando Tomcat, Jackson, Guava, jose4j y async-http-client, y el de ahora da 0.
+- **No verificado hasta el primer push** (como todos los workflows de este repo): el YAML está validado y los comandos de gitleaks y
+  trivy se corrieron en local con los mismos binarios y sumas, pero los jobs en sí, la subida a *Code scanning* y la compilación
+  de CodeQL con el wrapper solo se pueden ver en GitHub.
+
 ---
 
 ## 4. SonarCloud (`.github/workflows/sonarcloud.yml`)

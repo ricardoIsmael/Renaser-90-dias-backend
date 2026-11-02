@@ -1,0 +1,16 @@
+# Excepciones del escaneo de dependencias (job «Dependencias vulnerables» del workflow Seguridad).
+#
+# Vacío a propósito: hoy no hay ninguna vulnerabilidad alta o crítica con arreglo que no se pueda aplicar.
+# Lo que no tiene versión corregida no hace falta anotarlo, trivy ya lo ignora (`--ignore-unfixed`).
+#
+# Para aceptar una con arreglo que no se puede aplicar todavía (por ejemplo, porque exige un salto mayor de
+# Spring Boot), agrega una entrada con su motivo y una fecha de vencimiento: al vencer, el job vuelve a fallar y
+# obliga a mirarla de nuevo. Limita la excepción al paquete y la versión exactos con `purls`, para que el
+# mismo aviso sobre otra copia del paquete (o sobre la versión que se instale mañana) no quede tapado:
+#
+#   vulnerabilities:
+#     - id: CVE-2026-00000
+#       purls: ['pkg:maven/org.ejemplo/paquete@1.2.3']
+#       statement: Solo se usa en pruebas; el arreglo exige Spring Boot 5.
+#       expired_at: 2026-12-31
+vulnerabilities: []
