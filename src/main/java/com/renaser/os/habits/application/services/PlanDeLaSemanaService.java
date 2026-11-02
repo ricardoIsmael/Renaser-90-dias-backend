@@ -64,8 +64,9 @@ public class PlanDeLaSemanaService implements PlanDeLaSemanaUseCase {
     @Transactional(readOnly = true)
     public List<PlanDeLaSemana.DiaDeLaFecha> consultar(UserId actorId, HabitoId habitoId, SemanaCalendaria semana) {
         ProgresoParticipanteHabits progreso = requireProgreso(actorId);
-        Habito habito = requireAplicable(actorId, progreso, habitoId, semana);
         LocalDate hoy = hoyDe(progreso);
+        requireDentroDelPrograma(progreso, hoy, semana);
+        Habito habito = requireAplicable(actorId, progreso, habitoId, semana);
         return PlanDeLaSemana.resolver(semana, baseDe(actorId, habito), filasDe(actorId, habito, semana), hoy);
     }
 
@@ -73,8 +74,9 @@ public class PlanDeLaSemanaService implements PlanDeLaSemanaUseCase {
     @Transactional
     public void guardar(UserId actorId, HabitoId habitoId, SemanaCalendaria semana, List<CambioDeFecha> cambios) {
         ProgresoParticipanteHabits progreso = requireProgreso(actorId);
-        Habito habito = requireAplicable(actorId, progreso, habitoId, semana);
         LocalDate hoy = hoyDe(progreso);
+        requireDentroDelPrograma(progreso, hoy, semana);
+        Habito habito = requireAplicable(actorId, progreso, habitoId, semana);
         requireCambiosValidos(semana, cambios, hoy);
 
         Map<DayOfWeek, SemanaDelHabito.Dia> base = baseDe(actorId, habito).stream()
@@ -104,6 +106,23 @@ public class PlanDeLaSemanaService implements PlanDeLaSemanaUseCase {
         LocalDate desde = semana.lunes().isAfter(hoy) ? semana.lunes() : hoy.plusDays(1);
         if (!desde.isAfter(semana.domingo())) {
             savePreferenciaPort.borrarFechasPropias(actorId, List.of(habitoId), desde, semana.domingo());
+        }
+    }
+
+    /**
+     * «Por semana» deja planificar cualquier semana por venir, pero solo hasta la ultima del programa de ESTA persona (90 o 365 dias, spec 022):
+     * una semana que empieza despues del ultimo dia del programa no existe para ella y se rechaza con 400 (2026-11-02). La semana en curso y las
+     * pasadas no se acotan (la lectura de lo que ya paso sigue sirviendo). Sin dia de programa no hay con que acotar y todo sigue como antes. Es
+     * la misma cuenta con que {@link RepeticionDeSemanaService} decide si ofrece repetir: {@code diaPrograma + dias hasta el lunes <= duracion}.
+     */
+    private static void requireDentroDelPrograma(ProgresoParticipanteHabits progreso, LocalDate hoy, SemanaCalendaria semana) {
+        if (progreso.diaPrograma() < 1 || !semana.lunes().isAfter(hoy)) {
+            return;
+        }
+        LocalDate ultimoDia = hoy.plusDays((long) progreso.duracionDias() - progreso.diaPrograma());
+        if (semana.lunes().isAfter(ultimoDia)) {
+            throw new IllegalArgumentException("La semana que empieza el " + semana.lunes()
+                    + " ya queda fuera de tu programa, que termina el " + ultimoDia);
         }
     }
 

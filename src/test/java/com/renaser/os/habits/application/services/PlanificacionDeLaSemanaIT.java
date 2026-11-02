@@ -183,6 +183,25 @@ class PlanificacionDeLaSemanaIT {
     }
 
     @Test
+    @DisplayName("se planifica una semana lejana mientras sea del programa (dia 31 de 90: el ultimo es el 26/12) y no una de despues")
+    void unaSemanaLejanaDelPrograma() {
+        SemanaCalendaria lejana = SemanaCalendaria.desde(LocalDate.of(2026, 12, 21));
+        LocalDate sabadoLejano = LocalDate.of(2026, 12, 26);
+
+        planDeLaSemana.guardar(persona, despertar, lejana, List.of(mover(sabadoLejano, 9)));
+
+        assertThat(horaResuelta(persona, despertar, sabadoLejano)).isEqualTo(LocalTime.of(9, 0));
+        assertThat(horaResuelta(persona, despertar, SABADO_SIGUIENTE)).as("las demas fechas siguen a la de siempre").isNull();
+        assertThat(planDeLaSemana.consultar(persona, despertar, lejana)).hasSize(7);
+
+        SemanaCalendaria despues = SemanaCalendaria.desde(LocalDate.of(2027, 1, 4));
+        assertThatThrownBy(() -> planDeLaSemana.consultar(persona, despertar, despues)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> planDeLaSemana.guardar(persona, despertar, despues, List.of(mover(LocalDate.of(2027, 1, 9), 9))))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(load.fechasPropiasEntre(persona, despues.lunes(), despues.domingo())).isEmpty();
+    }
+
+    @Test
     @DisplayName("un habito desactivado se deja afuera de la repeticion y de lo que se puede planificar")
     void habitoQueYaNoLeCorresponde() {
         planDeLaSemana.guardar(persona, despertar, MODELO, List.of(mover(SABADO, 9)));
