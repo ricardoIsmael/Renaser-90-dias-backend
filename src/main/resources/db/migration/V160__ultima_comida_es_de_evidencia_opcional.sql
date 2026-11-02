@@ -17,6 +17,8 @@
 --   AYUNO)» y el resto del catálogo siguen como estaban: el dueño nombró solo la última comida.
 --
 -- Idempotente: si el hábito ya es OPCIONAL (o el id no existe en ese entorno) no cambia ninguna fila.
+SET search_path TO renaser, public;
+
 UPDATE habitos
    SET exigencia_evidencia = 'OPCIONAL',
        actualizado_en = now()
