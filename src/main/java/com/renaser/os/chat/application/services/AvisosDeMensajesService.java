@@ -79,7 +79,7 @@ public class AvisosDeMensajesService implements AvisosDeMensajesFinder {
     }
 
     private AvisoDeMensaje aviso(Mensaje mensaje, Conversacion conversacion) {
-        String autor = autorDe(mensaje);
+        String autor = autorDe(mensaje, conversacion);
         boolean unoAUno = conversacion.tipo() == TipoConversacion.DIRECTA;
         String nombreDelChat = unoAUno ? autor : nombresDeLosChats.nombreDe(conversacion);
         List<UserId> destinatarios = destinatarios(mensaje, conversacion);
@@ -134,9 +134,9 @@ public class AvisosDeMensajesService implements AvisosDeMensajesFinder {
         return perfil != null && perfil.role().canManageRoles();
     }
 
-    private String autorDe(Mensaje mensaje) {
+    private String autorDe(Mensaje mensaje, Conversacion conversacion) {
         if (mensaje.esDelPrograma()) {
-            return NombreDelChat.FORMACION_RENASER;
+            return NombreDelChat.delPrograma(conversacion.formacion());
         }
         return userSummaryFinder.findById(mensaje.emisorId())
                 .map(UserSummary::fullName)

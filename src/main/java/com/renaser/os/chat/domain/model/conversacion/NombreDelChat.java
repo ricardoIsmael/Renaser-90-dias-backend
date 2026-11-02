@@ -1,5 +1,7 @@
 package com.renaser.os.chat.domain.model.conversacion;
 
+import com.renaser.os.shared.domain.Formacion;
+
 /**
  * Cómo se llama cada chat de grupo (D-221, pedido del dueño del 29/09):
  *
@@ -58,6 +60,18 @@ public final class NombreDelChat {
     public static String deSoporte(String nombreCompletoDelAprendiz, String nombreDeLaFormacion) {
         String primerNombre = PrimerNombre.de(nombreCompletoDelAprendiz);
         return primerNombre.isEmpty() ? nombreDeLaFormacion : primerNombre + SEPARADOR_SOPORTE + nombreDeLaFormacion;
+    }
+
+    /**
+     * Con qué nombre firma el programa sus mensajes de sistema en las conversaciones de {@code formacion} (spec 035): «Formación Renaser» en la Escuela (como siempre)
+     * y el nombre de la institución en las otras dos. Son los mismos nombres que llevan sus chats ({@code «Pedro – Diplomado Renaser»}).
+     */
+    public static String delPrograma(Formacion formacion) {
+        return switch (formacion) {
+            case ESCUELA -> FORMACION_RENASER;
+            case DIPLOMADO -> "Diplomado Renaser";
+            case CERTIFICACION -> "Certificación Renaser";
+        };
     }
 
     /** La comunidad general de una formación que no es la Escuela: «Diplomado Renaser Global». La de la Escuela es {@link #DE_LA_COMUNIDAD}. */

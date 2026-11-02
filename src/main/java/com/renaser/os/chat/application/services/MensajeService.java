@@ -14,6 +14,7 @@ import com.renaser.os.chat.application.ports.out.metricas.RegistrarMetricaDelCha
 import com.renaser.os.chat.application.ports.out.participante.EsParticipantePort;
 import com.renaser.os.chat.application.ports.out.participante.MarcarLeidoPort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
+import com.renaser.os.chat.domain.model.conversacion.NombreDelChat;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.conversacion.TipoConversacion;
 import com.renaser.os.chat.domain.model.mensaje.Cita;
@@ -142,7 +143,12 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
         if (guardado.mediaRuta() != null && command.origenMedia() != OrigenMedia.MURO_COMPARTIDO) {
             metricas.mediaEnviada(guardado.tipo());
         }
-        return paraMostrar.recienEnviado(guardado, cita, command.actorId());
+        return paraMostrar.recienEnviado(guardado, cita, command.actorId(), firmaDelProgramaEn(conversacion));
+    }
+
+    /** Con qué nombre firma el programa en esta conversación (spec 035): el de su formación. */
+    private static String firmaDelProgramaEn(Conversacion conversacion) {
+        return NombreDelChat.delPrograma(conversacion.formacion());
     }
 
     /** {@code null} si la app no pidió responder (la app vieja nunca lo pide). Las reglas, en {@link Cita}. */
@@ -250,7 +256,7 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
         List<Mensaje> resultado = hayMas ? pagina.subList(0, limiteEfectivo) : pagina;
         Instant siguienteCursor = hayMas ? resultado.get(resultado.size() - 1).creadoEn() : null;
 
-        List<MensajeEnriquecido> enriquecidos = conMarcaDeEntrega(paraMostrar.deLaPagina(resultado, actorId),
+        List<MensajeEnriquecido> enriquecidos = conMarcaDeEntrega(paraMostrar.deLaPagina(resultado, actorId, firmaDelProgramaEn(conversacion)),
                 conversacion, actorId);
         return new PaginaMensajes(enriquecidos, siguienteCursor, hayMas);
     }
