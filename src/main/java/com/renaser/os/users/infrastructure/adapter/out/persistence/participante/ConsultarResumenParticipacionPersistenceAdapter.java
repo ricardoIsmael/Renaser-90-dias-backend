@@ -58,6 +58,26 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
             WHERE u.id = ?1
             """;
 
+    /** Las mismas columnas de {@link #QUERY_RESUMEN}, en el mismo orden, y el id al final (H-01: una consulta para varias personas). */
+    private static final String QUERY_RESUMEN_DE_VARIOS = """
+            SELECT (pp.usuario_id IS NOT NULL) AS inscrito,
+                   COALESCE(pp.dia_programa, 0) AS dia_programa,
+                   pp.fecha_inicio,
+                   COALESCE(pp.timezone, 'America/Lima') AS timezone,
+                   pp.celula_id,
+                   pp.mentor_id,
+                   u.rol,
+                   u.estado,
+                   pp.programa_activado_en,
+                   COALESCE(pp.dias_ajuste_programa, 0) AS dias_ajuste_programa,
+                   COALESCE(pp.formacion, 'ESCUELA') AS formacion,
+                   COALESCE(pp.duracion_dias, 90) AS duracion_dias,
+                   u.id
+            FROM renaser.usuarios u
+            LEFT JOIN renaser.participantes_programa pp ON pp.usuario_id = u.id
+            WHERE u.id = ANY (CAST(?1 AS uuid[]))
+            """;
+
     private static final String QUERY_MIEMBROS_ACTIVOS = """
             SELECT pp.usuario_id
             FROM renaser.participantes_programa pp
@@ -235,6 +255,22 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
             return Optional.empty();
         }
         return Optional.of(aResumen(usuarioId, filas.get(0)));
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public java.util.Map<UserId, ParticipacionPrograma> resumenDeVarios(java.util.Collection<UserId> usuarios) {
+        if (usuarios.isEmpty()) {
+            return java.util.Map.of();
+        }
+        String[] ids = usuarios.stream().map(u -> u.value().toString()).distinct().toArray(String[]::new);
+        List<Object[]> filas = entityManager.createNativeQuery(QUERY_RESUMEN_DE_VARIOS).setParameter(1, ids).getResultList();
+        java.util.Map<UserId, ParticipacionPrograma> resumenes = new java.util.LinkedHashMap<>();
+        for (Object[] fila : filas) {
+            UserId id = UserId.of(aUuid(fila[12]));
+            resumenes.put(id, aResumen(id, fila));
+        }
+        return resumenes;
     }
 
     @Override

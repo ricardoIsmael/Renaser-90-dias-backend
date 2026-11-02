@@ -229,6 +229,12 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
     }
 
     @Override
+    public java.util.Map<UserId, com.renaser.os.users.api.ParticipacionPrograma> deParticipantes(
+            java.util.Collection<UserId> participantes) {
+        return consultarResumenParticipacionPort.resumenDeVarios(participantes);
+    }
+
+    @Override
     public List<UserId> miembrosActivosDeCelula(UUID celulaId) {
         return consultarResumenParticipacionPort.miembrosActivosDeCelula(celulaId);
     }

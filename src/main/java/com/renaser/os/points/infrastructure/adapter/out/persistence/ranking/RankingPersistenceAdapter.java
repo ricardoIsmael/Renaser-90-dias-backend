@@ -9,7 +9,6 @@ import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.infrastructure.persistence.FiltroDeFormacionSql;
-import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
@@ -57,14 +56,9 @@ class RankingPersistenceAdapter implements LoadRankingCandidatosPort, SaveRankin
     private final UserSummaryFinder userSummaryFinder;
     /** E-450: el padron del ranking se cruza con quienes tienen fila en el programa. */
     private final ParticipacionProgramaFinder participacionProgramaFinder;
-    /** Spec 024: en qué formación está cada aprendiz, para que cada ranking compare solo a los suyos. */
-    private final AlcanceDeFormacionFinder formaciones;
-
     RankingPersistenceAdapter(SpringDataRankingAprendizRepository repository, RankingPersistenceMapper mapper,
                                JdbcTemplate jdbcTemplate, UserSummaryFinder userSummaryFinder,
-                               ParticipacionProgramaFinder participacionProgramaFinder,
-                               AlcanceDeFormacionFinder formaciones) {
-        this.formaciones = formaciones;
+                               ParticipacionProgramaFinder participacionProgramaFinder) {
         this.repository = repository;
         this.mapper = mapper;
         this.jdbcTemplate = jdbcTemplate;
@@ -117,13 +111,17 @@ class RankingPersistenceAdapter implements LoadRankingCandidatosPort, SaveRankin
                 .toList();
     }
 
-    /** La formación de cada aprendiz del padrón: tres consultas en lote (una por formación), nunca una por persona. */
+    /**
+     * La formación de cada aprendiz del padrón (spec 024: cada ranking compara solo a los suyos), en UNA consulta para todos.
+     *
+     * <p>Auditoría de consultas del 2026-11-02 (H-02): antes eran tres consultas ({@code dentroDelAlcance} una vez por formación) con los ~1.000 ids
+     * del padrón en cada una. El padrón ya salió de {@code participantes_programa} (solo compite quien tiene fila: {@link #enElPrograma}), y la formación
+     * de un aprendiz es la de su participación, así que se lee directo de ahí.
+     */
     private Map<UserId, Formacion> formacionesDe(List<UserSummary> padron) {
-        List<UserId> ids = padron.stream().map(UserSummary::id).toList();
         Map<UserId, Formacion> resultado = new HashMap<>();
-        for (Formacion formacion : Formacion.values()) {
-            formaciones.dentroDelAlcance(ids, AlcanceDeFormacion.de(formacion)).forEach(id -> resultado.putIfAbsent(id, formacion));
-        }
+        participacionProgramaFinder.deParticipantes(padron.stream().map(UserSummary::id).toList())
+                .forEach((id, participacion) -> resultado.put(id, participacion.formacion()));
         return resultado;
     }
 
@@ -168,8 +166,32 @@ class RankingPersistenceAdapter implements LoadRankingCandidatosPort, SaveRankin
     public void reemplazar(TipoRanking tipo, LocalDate fecha, List<PosicionRanking> posiciones) {
         TipoRankingJpa tipoJpa = mapper.toJpaTipo(tipo);
         repository.deleteByTipoAndFecha(tipoJpa, fecha);
-        repository.saveAllAndFlush(posiciones.stream().map(mapper::toEntity).toList());
+        if (posiciones.isEmpty()) {
+            return;
+        }
+        // Auditoría de consultas del 2026-11-02 (H-02): `saveAllAndFlush` de entidades con @IdClass y sin @Version hace `merge()` = un SELECT y un INSERT por
+        // fila (≈ 10.800 viajes por noche con ~900 aprendices y seis tablas). Un INSERT por lote, con `ON CONFLICT` por si una persona se repitiera en la
+        // lista (el corte es idempotente: la última posición gana).
+        jdbcTemplate.batchUpdate(SQL_INSERTAR_POSICION, posiciones, TAMANO_DEL_LOTE, (ps, posicion) -> {
+            ps.setObject(1, posicion.fecha());
+            ps.setString(2, tipoJpa.name());
+            ps.setObject(3, posicion.participanteId().value());
+            ps.setInt(4, posicion.posicion());
+            ps.setBigDecimal(5, posicion.puntaje());
+            ps.setString(6, posicion.formacion().codigo());
+        });
     }
+
+    /** El tipo es un ENUM nativo de Postgres: se manda su nombre como texto y se castea (el mismo valor que el `@Enumerated(STRING)` de la entidad). */
+    private static final String SQL_INSERTAR_POSICION = """
+            INSERT INTO renaser.ranking_aprendices (fecha, tipo, participante_id, posicion, puntaje, formacion)
+            VALUES (?, CAST(? AS renaser.tipo_ranking), ?, ?, ?, ?)
+            ON CONFLICT (fecha, tipo, participante_id) DO UPDATE
+               SET posicion = EXCLUDED.posicion, puntaje = EXCLUDED.puntaje, formacion = EXCLUDED.formacion
+            """;
+
+    /** Filas por lote de JDBC: acota la memoria del servidor y deja que el driver reescriba cada lote en pocas sentencias. */
+    private static final int TAMANO_DEL_LOTE = 500;
 
     /**
      * Cacheado en memoria (D-63): es el hot path que muchas personas miran a la vez y que

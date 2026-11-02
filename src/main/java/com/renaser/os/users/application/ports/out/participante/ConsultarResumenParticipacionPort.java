@@ -24,6 +24,9 @@ public interface ConsultarResumenParticipacionPort {
     /** {@code Optional.empty()} SOLO si el usuario no existe en `usuarios` — ver javadoc de {@link ParticipacionPrograma}. */
     Optional<ParticipacionPrograma> resumenDe(UserId usuarioId);
 
+    /** Lo mismo que {@link #resumenDe} para varias personas en UNA consulta; las que no existen en `usuarios` no aparecen. */
+    java.util.Map<UserId, ParticipacionPrograma> resumenDeVarios(java.util.Collection<UserId> usuarios);
+
     List<UserId> miembrosActivosDeCelula(UUID celulaId);
 
     List<UserId> miembrosDeCelula(UUID celulaId);

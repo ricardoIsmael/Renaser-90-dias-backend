@@ -168,7 +168,7 @@ class RankingPersistenceAdapterCacheTest {
         RankingPersistenceAdapter rankingPersistenceAdapter(SpringDataRankingAprendizRepository repository,
                 RankingPersistenceMapper mapper, JdbcTemplate jdbcTemplate, UserSummaryFinder userSummaryFinder) {
             return new RankingPersistenceAdapter(repository, mapper, jdbcTemplate, userSummaryFinder,
-                    mock(ParticipacionProgramaFinder.class), new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
+                    mock(ParticipacionProgramaFinder.class));
         }
     }
 }
