@@ -236,8 +236,9 @@ ya lo servía:
 | `POST /api/v1/mentor/activate-tracking` | 200 `{ traineeProfileId, programDay }` / 409 si ya existía | `ActivateSelfTrackingUseCase` — arranca en día 1, fase inicial, zona `America/Lima` (mismos defaults que `datosDeActivacion()` del backend viejo) |
 | `DELETE /api/v1/mentor/activate-tracking` | 200 `{ deactivated: boolean }`, idempotente | `DeactivateSelfTrackingUseCase` — hard delete de la fila (cascada limpia hábitos/rocas), replica `deleteTraineeProfileForMentor` |
 
-> **2026-10-07 (D-261).** La app nueva ya no llama a `POST /mentor/activate-tracking`: el personal sin fila elige su
-> Día 1 por `GET/POST /api/v1/onboarding/activate-program`, que le crea la fila con la fecha elegida (como el aprendiz).
+> **2026-10-07 (D-261).** La app nueva ya no llama a `POST /mentor/activate-tracking`: el personal sin fila activa su
+> programa por `GET/POST /api/v1/onboarding/activate-program`, que le crea la fila (como el aprendiz).
+> **Corregido 2026-11-02 (D-309, spec 036).** Decía «elige su Día 1 … con la fecha elegida». Ya no se elige: empieza mañana.
 > El `POST` de esta tabla queda **igual** (arranque hoy) porque lo siguen llamando los APK 1.5.0 y anteriores.
 
 Este endpoint **construye el Java equivalente 1:1**, incluidos los roles permitidos

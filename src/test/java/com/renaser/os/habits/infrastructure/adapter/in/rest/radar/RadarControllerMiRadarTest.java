@@ -257,14 +257,14 @@ class RadarControllerMiRadarTest {
     @DisplayName("lo que el caso de uso niega es 403 y dice POR QUE: PROGRAMA_NO_ACTIVADO (personal sin Dia 1) o CUENTA_SUSPENDIDA, con el formato de error de siempre mas `codigo`")
     void elCasoDeUsoNiega() throws Exception {
         actor(UserStatus.ACTIVE);
-        doThrow(new NotAuthorizedException("Mi Radar empieza en tu día 8. Primero elige tu Día 1.",
+        doThrow(new NotAuthorizedException("Mi Radar empieza en tu día 8. Primero empieza tu programa.",
                 NotAuthorizedException.PROGRAMA_NO_ACTIVADO)).when(configurarMiRadar).configurar(any());
         doThrow(new NotAuthorizedException("Cuenta suspendida", NotAuthorizedException.CUENTA_SUSPENDIDA))
                 .when(consultarMiRadar).consultar(any(), any());
 
         guardar("{\"encendido\":true}").andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.codigo").value("PROGRAMA_NO_ACTIVADO"))
-                .andExpect(jsonPath("$.message").value("Mi Radar empieza en tu día 8. Primero elige tu Día 1."))
+                .andExpect(jsonPath("$.message").value("Mi Radar empieza en tu día 8. Primero empieza tu programa."))
                 .andExpect(jsonPath("$.timestamp").exists());
         leer().andExpect(status().isForbidden()).andExpect(jsonPath("$.codigo").value("CUENTA_SUSPENDIDA"));
     }

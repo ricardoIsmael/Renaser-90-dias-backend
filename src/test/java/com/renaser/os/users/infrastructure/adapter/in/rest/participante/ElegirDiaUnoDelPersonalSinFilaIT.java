@@ -39,14 +39,14 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * D-261 (decisión del dueño del 2026-10-07: «que elija el día como los demás») de punta a punta sobre
- * el Tomcat real: el personal SIN fila en {@code participantes_programa} elige su Día 1 por el mismo
- * camino que el aprendiz ({@code GET/POST /api/v1/onboarding/activate-program}); al elegir se le crea
- * la fila ya activada con esa fecha.
+ * D-261 (decisión del dueño del 2026-10-07) de punta a punta sobre el Tomcat real: el personal SIN fila en
+ * {@code participantes_programa} empieza su programa por el mismo camino que el aprendiz ({@code GET/POST
+ * /api/v1/onboarding/activate-program}); al activar se le crea la fila ya activada. Desde la spec 036 (D-309) el
+ * Día 1 es siempre mañana: no hay nada que elegir.
  *
  * <p><b>Reloj en la madrugada UTC (regla 02):</b> 03:30 UTC del 8 de octubre son las 22:30 del 7 en
- * Lima. Las fechas ofrecidas son 8, 9 y 10 (desde el 7 de Lima); contadas con la fecha del servidor
- * serían 9, 10 y 11.
+ * Lima. La fecha ofrecida es el 8 (mañana desde el 7 de Lima); contada con la fecha del servidor
+ * sería el 9.
  *
  * <p><b>Compatibilidad:</b> los APK 1.5.0 y anteriores siguen llamando {@code POST
  * /mentor/activate-tracking}, que tiene que seguir creando la fila activada HOY (D-07), como siempre.
@@ -87,19 +87,19 @@ class ElegirDiaUnoDelPersonalSinFilaIT {
         reloj.fijar(MADRUGADA_UTC);
     }
 
-    @ParameterizedTest(name = "{0} sin fila elige su Día 1: se crea la fila con esa fecha y el Día 1 es ese día")
+    @ParameterizedTest(name = "{0} sin fila empieza su programa mañana: se crea la fila con esa fecha")
     @ValueSource(strings = {"MENTOR", "LIDER_MENTORES", "ADMIN", "ALQUIMISTA"})
-    void elPersonalSinFilaEligeSuDiaUno(String rol) throws Exception {
+    void elPersonalSinFilaEmpiezaSuProgramaManiana(String rol) throws Exception {
         UUID persona = usuario(rol, "ACTIVO");
         String sesion = sesionDe(persona);
 
         JsonNode antes = leer(pedir("GET", ACTIVAR, sesion, null));
         assertThat(antes.get("activated").asBoolean()).isFalse();
-        assertThat(antes.get("validStartDates")).extracting(JsonNode::asText)
-                .containsExactly("2026-10-08", "2026-10-09", "2026-10-10");
-        assertThat(filas(persona)).as("consultar las fechas no crea la fila").isZero();
+        assertThat(antes.get("validStartDates")).extracting(JsonNode::asText).containsExactly("2026-10-08");
+        assertThat(filas(persona)).as("consultar la fecha no crea la fila").isZero();
 
-        HttpResponse<String> activada = pedir("POST", ACTIVAR, sesion, Map.of("startDate", "2026-10-09"));
+        // Sin cuerpo: la fecha la pone el servidor (spec 036).
+        HttpResponse<String> activada = pedir("POST", ACTIVAR, sesion, null);
 
         assertThat(activada.statusCode()).as(activada.body()).isEqualTo(200);
         Map<String, Object> fila = jdbcTemplate.queryForMap("""
@@ -107,33 +107,40 @@ class ElegirDiaUnoDelPersonalSinFilaIT {
                        programa_activado_en IS NOT NULL AS activado, timezone AS zona
                 FROM renaser.participantes_programa WHERE usuario_id = ?
                 """, persona);
-        assertThat(fila.get("inicio")).isEqualTo("2026-10-09");
+        assertThat(fila.get("inicio")).isEqualTo("2026-10-08");
         assertThat(((Number) fila.get("ajuste")).intValue()).isZero();
         assertThat(((Number) fila.get("dia")).intValue()).as("todavía no llegó: día 0, como el aprendiz").isZero();
         assertThat(fila.get("activado")).isEqualTo(true);
         assertThat(fila.get("zona")).isEqualTo("America/Lima");
         ParticipacionPrograma guardada = participaciones.byParticipanteId(UserId.of(persona)).orElseThrow();
-        assertThat(guardada.diaVigente(FixedClock.at(Instant.parse("2026-10-09T04:59:00Z")))).isZero();
-        assertThat(guardada.diaVigente(FixedClock.at(Instant.parse("2026-10-09T05:00:00Z")))).isEqualTo(1);
+        assertThat(guardada.diaVigente(FixedClock.at(Instant.parse("2026-10-08T04:59:00Z")))).isZero();
+        assertThat(guardada.diaVigente(FixedClock.at(Instant.parse("2026-10-08T05:00:00Z")))).isEqualTo(1);
 
         JsonNode despues = leer(pedir("GET", ACTIVAR, sesion, null));
         assertThat(despues.get("activated").asBoolean()).isTrue();
-        assertThat(despues.get("startDate").asText()).isEqualTo("2026-10-09");
+        assertThat(despues.get("startDate").asText()).isEqualTo("2026-10-08");
         assertThat(leer(pedir("GET", CONTEXTO, sesion, null)).at("/capabilities/canStartProgram").asBoolean())
                 .as("ya tiene programa: la invitación desaparece").isFalse();
         assertThat(pedir("POST", SEGUIMIENTO, sesion, null).statusCode())
-                .as("«Empezar» de un APK viejo después de elegir: 409 como con cualquier fila").isEqualTo(409);
+                .as("«Empezar» de un APK viejo después de activar: 409 como con cualquier fila").isEqualTo(409);
     }
 
-    @ParameterizedTest(name = "{0} sin fila con una fecha fuera de las ofrecidas: 400 y no se crea la fila")
+    @ParameterizedTest(name = "{0} sin fila con una fecha que no es mañana: 400 y no se crea la fila")
     @ValueSource(strings = {"MENTOR", "ADMIN"})
-    void fechaFueraDeLasOfrecidasNoCreaLaFila(String rol) throws Exception {
+    void unaFechaQueNoEsManianaNoCreaLaFila(String rol) throws Exception {
         UUID persona = usuario(rol, "ACTIVO");
+        String sesion = sesionDe(persona);
 
-        HttpResponse<String> hoy = pedir("POST", ACTIVAR, sesionDe(persona), Map.of("startDate", "2026-10-07"));
+        // 7 = hoy en Lima; 10 = mañana + 2, que antes de la spec 036 era una opción válida.
+        for (String fecha : List.of("2026-10-07", "2026-10-10")) {
+            HttpResponse<String> respuesta = pedir("POST", ACTIVAR, sesion, Map.of("startDate", fecha));
 
-        assertThat(hoy.statusCode()).as(hoy.body()).isEqualTo(400);
+            assertThat(respuesta.statusCode()).as(respuesta.body()).isEqualTo(400);
+            assertThat(respuesta.body()).contains("2026-10-08");
+        }
         assertThat(filas(persona)).isZero();
+        // La fecha que se vio en pantalla (mañana) sí activa.
+        assertThat(pedir("POST", ACTIVAR, sesion, Map.of("startDate", "2026-10-08")).statusCode()).isEqualTo(200);
     }
 
     @ParameterizedTest(name = "{0} suspendido sin fila: 403 y no se crea la fila")

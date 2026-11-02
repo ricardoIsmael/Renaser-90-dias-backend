@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,9 +28,13 @@ class AceptacionesDeTerminosJdbcAdapter implements AceptacionesDeTerminosPort {
     }
 
     @Override
-    public void registrar(UUID id, UserId usuario, UUID versionId, Instant en, Long firmaMediaId) {
-        jdbc.sql("INSERT INTO renaser.aceptaciones_de_terminos (id, usuario_id, version_id, aceptada_en, firma_media_id) VALUES (:id, :u, :v, :en, :firma)")
-                .param("id", id).param("u", usuario.value()).param("v", versionId).param("en", Timestamp.from(en)).param("firma", firmaMediaId).update();
+    public void registrar(UUID id, UserId usuario, UUID versionId, Instant en, Long firmaMediaId, LoMostrado mostrado) {
+        jdbc.sql("""
+                INSERT INTO renaser.aceptaciones_de_terminos (id, usuario_id, version_id, aceptada_en, firma_media_id, programa_mostrado, inicio_mostrado, fin_mostrado, cronograma_huella)
+                VALUES (:id, :u, :v, :en, :firma, :programa, :inicio, :fin, :huella)
+                """).param("id", id).param("u", usuario.value()).param("v", versionId).param("en", Timestamp.from(en)).param("firma", firmaMediaId)
+                .param("programa", mostrado.programa()).param("inicio", mostrado.inicio()).param("fin", mostrado.fin()).param("huella", mostrado.cronogramaHuella())
+                .update();
     }
 
     @Override
@@ -49,12 +54,14 @@ class AceptacionesDeTerminosJdbcAdapter implements AceptacionesDeTerminosPort {
     @Override
     public List<Aceptacion> delUsuario(UserId usuario) {
         return jdbc.sql("""
-                SELECT a.version_id, v.formacion, v.numero, a.aceptada_en, a.firma_media_id
+                SELECT a.version_id, v.formacion, v.numero, a.aceptada_en, a.firma_media_id, a.programa_mostrado, a.inicio_mostrado, a.fin_mostrado, a.cronograma_huella
                 FROM renaser.aceptaciones_de_terminos a JOIN renaser.terminos_versiones v ON v.id = a.version_id
                 WHERE a.usuario_id = :u ORDER BY a.aceptada_en DESC
                 """).param("u", usuario.value())
                 .query((rs, n) -> new Aceptacion(rs.getObject("version_id", UUID.class), Formacion.desde(rs.getString("formacion")), rs.getInt("numero"),
-                        rs.getTimestamp("aceptada_en").toInstant(), (Long) rs.getObject("firma_media_id"))).list();
+                        rs.getTimestamp("aceptada_en").toInstant(), (Long) rs.getObject("firma_media_id"),
+                        new LoMostrado(rs.getString("programa_mostrado"), rs.getObject("inicio_mostrado", LocalDate.class), rs.getObject("fin_mostrado", LocalDate.class),
+                                rs.getString("cronograma_huella")))).list();
     }
 
     @Override

@@ -433,7 +433,7 @@ class RadarMiRadarIT {
             assertThat(respuesta.statusCode()).isEqualTo(403);
             JsonNode cuerpo = json.readTree(respuesta.body());
             assertThat(cuerpo.get("codigo").asText()).isEqualTo("PROGRAMA_NO_ACTIVADO");
-            assertThat(cuerpo.get("message").asText()).isEqualTo("Mi Radar empieza en tu día 8. Primero elige tu Día 1.");
+            assertThat(cuerpo.get("message").asText()).isEqualTo("Mi Radar empieza en tu día 8. Primero empieza tu programa.");
             assertThat(cuerpo.has("timestamp")).isTrue();
         }
         assertThat(encendidoGuardado(sinPrograma)).isFalse();

@@ -3,8 +3,10 @@ package com.renaser.os.onboarding;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * Los términos en las pruebas de integración (spec 027). La migración deja publicada la versión 1 de la Escuela y un BORRADOR en el Diplomado y la Certificación
- * (sin publicar: esas formaciones no reciben a nadie hasta publicarlos). Las pruebas que aceptan gente en esas formaciones los publican con {@link #publicarEnTodas}
+ * Los términos en las pruebas de integración (spec 027). La base de las pruebas de edición es la que dejó la V149: publicada la versión 1 de la Escuela y un BORRADOR en
+ * el Diplomado y la Certificación (sin publicar: esas formaciones no reciben a nadie hasta publicarlos). La V162 (spec 039, el Acuerdo de transformación) publica
+ * encima el texto nuevo; {@link #restablecer} la deshace a propósito para que estas pruebas partan de un estado conocido, y la prueba de la V162
+ * ({@code AcuerdoDeTransformacionIT}) vuelve a correr esa migración sobre ese estado. Las pruebas que aceptan gente en esas formaciones los publican con {@link #publicarEnTodas}
  * y los dejan como estaban con {@link #restablecer}. Una versión publicada no se puede borrar (la base lo impide a propósito): quitarla exige apagar el
  * disparador un momento, y eso solo se hace aquí.
  */
@@ -21,7 +23,7 @@ public final class TerminosDePrueba {
                 """);
     }
 
-    /** Deja los términos como los dejó la migración: la versión 1 de la Escuela publicada y un borrador (copia) en las otras dos. Borra las aceptaciones de lo que se quita. */
+    /** Deja los términos como los dejó la V149 (antes de la V162): la versión 1 de la Escuela publicada y un borrador (copia) en las otras dos. Borra las aceptaciones de lo que se quita. */
     public static void restablecer(JdbcTemplate jdbc) {
         jdbc.execute("ALTER TABLE renaser.terminos_versiones DISABLE TRIGGER terminos_versiones_constancia");
         try {

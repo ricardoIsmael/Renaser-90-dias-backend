@@ -113,7 +113,8 @@ La app permite abrir el mapa sin filtrar por rol (`HoyScreen` y `RootNavigator`)
 El recorrido usa los endpoints existentes:
 
 1. `POST /api/v1/auth/login` entrega la sesión; `GET /api/v1/auth/me` confirma la identidad y el rol.
-2. `GET /api/v1/onboarding/activate-program` ofrece las fechas y el `POST` a esa ruta guarda la elegida. También crea la participación del personal que todavía no tiene fila (D-261).
+2. `GET /api/v1/onboarding/activate-program` ofrece la fecha de inicio (mañana) y el `POST` a esa ruta activa el programa con ella. También crea la participación del personal que todavía no tiene fila (D-261).
+   > **Corregido 2026-11-02 (D-309, spec 036).** Decía «ofrece las fechas y el `POST` guarda la elegida». La persona ya no elige: el programa empieza siempre mañana en su zona, `validStartDates` trae una sola fecha y `startDate` del `POST` es opcional (si viene y no es mañana, 400).
 3. `POST /api/v1/onboarding/answers`, `PUT /api/v1/mapa-renacimiento/acciones` y `/reemplazos` guardan el mapa propio. `/onboarding/media/upload-url` y `/onboarding/media` autorizan y registran sus archivos.
 4. La activación de la app define las tres Rocas Maestras (`PUT /api/v1/rocks/master/{eje}`), crea los hábitos propios (`POST /api/v1/habits`) y marca la etapa (`POST /api/v1/mapa-renacimiento/completar`). Los objetivos exigen tener el programa activado; guardar un borrador no inicia el programa.
 
