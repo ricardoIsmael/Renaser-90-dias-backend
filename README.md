@@ -276,7 +276,7 @@ sequenceDiagram
 | Pieza | Elección |
 |---|---|
 | Lenguaje / runtime | Java 25 (LTS), Virtual Threads |
-| Framework | Spring Boot 4.1.1 + Spring Modulith 2.1.0 |
+| Framework | Spring Boot 4.1.2 + Spring Modulith 2.1.0 |
 | Persistencia | PostgreSQL 16 + Flyway (baseline de 90 tablas, esquema `renaser`) |
 | Vectores (RAG) | `pgvector` sobre el mismo Postgres — SQL nativo propio (D-45), no el `PgVectorStore` genérico de Spring AI |
 | Caché / cuotas / fanout | Redis 7 |

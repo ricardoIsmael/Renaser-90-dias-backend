@@ -1,0 +1,195 @@
+# Seguridad del backend: secretos, dependencias vulnerables y analisis estatico del codigo.
+#
+# Workflow aparte de `ci.yml` (compilar y probar), `cd.yml` (desplegar) y `sonarcloud.yml` (calidad) a
+# proposito: la suite completa tarda ~45 minutos y esto tarda unos pocos, asi que no tiene sentido que un
+# aviso de seguridad espere a que terminen las pruebas ni que un cambio de pruebas espere a la seguridad.
+# Corre cuando hay algo que revisar (PR, master) y ademas una vez por semana aunque nadie toque el
+# repositorio: una dependencia sin cambios puede volverse vulnerable de un dia para otro.
+#
+# Que hay y por que:
+#   * gitleaks : secretos en TODO el historial de Git, no solo en el ultimo commit. El repositorio es publico:
+#                una clave que llego a un commit ya se considera filtrada aunque se borre despues.
+#   * trivy    : dependencias vulnerables segun `pom.xml`, con TODO el arbol de Maven (incluido lo que
+#                trae el BOM de Spring Boot, que el grafo de Dependabot no ve). Falla con severidad ALTA o
+#                CRITICA que ya tenga arreglo publicado. Lo medio y lo bajo se imprime pero no frena nada.
+#   * CodeQL   : analisis estatico de Java. No frena el CI: sube los hallazgos a la pestana
+#                Security -> Code scanning del repositorio.
+#
+# No choca con SonarCloud (mide calidad y cobertura, no son los mismos analisis) ni con el CodeQL "por
+# defecto" de GitHub: ese esta sin configurar (`code-scanning/default-setup` -> `not-configured`). Si algun
+# dia alguien lo enciende desde Settings -> Code security, hay que apagar el job `codeql` de aca: GitHub no
+# deja subir resultados de los dos a la vez y el analisis de este workflow se rechazaria.
+#
+# Las herramientas se bajan como binarios desde la pagina de releases y se comprueban contra un SHA-256 fijo
+# escrito aca (nunca desde un script de instalacion ni una accion de terceros): si alguien reemplaza el
+# archivo publicado, la suma no coincide y el job falla antes de ejecutar nada. Para subir de version hay que
+# cambiar la version y la suma JUNTAS; la suma sale del archivo `*_checksums.txt` de ese mismo release.
+# Las acciones oficiales (`actions/*`, `github/codeql-action`) van fijadas por SHA de commit, con la
+# version en un comentario; Dependabot (github-actions) las actualiza y respeta ese formato.
+#
+# Como se aceptan excepciones:
+#   * Una vulnerabilidad que no se puede arreglar todavia (sin version corregida) ya no frena: trivy la
+#     ignora con `--ignore-unfixed`.
+#   * Una con arreglo que no se puede aplicar (por ejemplo, exige un salto mayor de Spring Boot) se anota en
+#     `.trivyignore.yaml` con su motivo y una fecha `expired_at`; al vencer, el job vuelve a fallar para
+#     obligar a mirarla de nuevo. El archivo trae el formato y un ejemplo. (Hay que pasarselo a trivy con
+#     `--ignorefile`: la version que fijamos no busca el `.yaml` por su cuenta.)
+#   * Un secreto falso (un dato de prueba) se anota en `.gitleaks.toml`, limitado a una regla, a un archivo y,
+#     donde se puede, al texto exacto; o se marca la linea con un comentario `gitleaks:allow`. Un secreto de
+#     verdad se rota primero; ocultarlo no lo arregla.
+name: Seguridad
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  schedule:
+    # Lunes 05:41 en Lima (10:41 UTC). Minuto raro a proposito: a las horas en punto GitHub encola de mas.
+    - cron: '41 10 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: seguridad-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  GITLEAKS_VERSION: '8.30.1'
+  GITLEAKS_SHA256: '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb'
+  TRIVY_VERSION: '0.76.1'
+  TRIVY_SHA256: 'c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0'
+
+jobs:
+  secretos:
+    name: Secretos (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      # `fetch-depth: 0`: gitleaks recorre los commits; con el checkout superficial de siempre solo veria el ultimo.
+      - name: Descargar el codigo con todo el historial
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Instalar gitleaks
+        run: |
+          set -euo pipefail
+          archivo="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl --fail --silent --show-error --location --retry 3 \
+            --output "${RUNNER_TEMP}/${archivo}" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${archivo}"
+          echo "${GITLEAKS_SHA256}  ${RUNNER_TEMP}/${archivo}" | sha256sum --check --strict
+          mkdir "${RUNNER_TEMP}/gitleaks"
+          tar --extract --gzip --file "${RUNNER_TEMP}/${archivo}" --directory "${RUNNER_TEMP}/gitleaks" gitleaks
+          echo "${RUNNER_TEMP}/gitleaks" >> "${GITHUB_PATH}"
+
+      # `--redact`: el registro de este job es publico, asi que un hallazgo nunca imprime el secreto completo.
+      # `--config`: las excepciones documentadas (miniaturas firmadas de Mux y datos de prueba) estan en
+      # `.gitleaks.toml`, que parte de las reglas por defecto.
+      - name: Buscar secretos en todo el historial
+        run: gitleaks git --config .gitleaks.toml --redact --verbose --no-banner --exit-code 1 .
+
+  dependencias:
+    name: Dependencias vulnerables (trivy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Descargar el codigo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Para que Maven y trivy reutilicen la misma cache de `~/.m2` que ya llena `ci.yml` (misma clave: el hash de
+      # los `pom.xml`).
+      - name: Instalar JDK 25 (Temurin)
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      # Trivy no usa Maven: arma el arbol de dependencias leyendo cada POM (el padre de Spring Boot, los BOM y
+      # cada transitiva) y los que no tiene en `~/.m2` los pide a Maven Central uno por uno, y hasta algunos que
+      # Maven descarta por mediacion. Son cientos, y Maven Central corta con un `429 Too Many Requests` a quien
+      # los pide en rafaga (y bloquea la IP entre 20 y 30 minutos). Por eso primero lo resuelve Maven, que pide con
+      # calma y deja en `~/.m2` exactamente los POM del arbol real (solo POM, no los jar), y trivy corre despues con
+      # `--offline-scan`: lee solo esos y no sale a Maven Central.
+      - name: Dejar los POM del arbol de dependencias en la cache de Maven
+        run: ./mvnw -B -ntp dependency:tree
+
+      - name: Instalar trivy
+        run: |
+          set -euo pipefail
+          archivo="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl --fail --silent --show-error --location --retry 3 \
+            --output "${RUNNER_TEMP}/${archivo}" \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${archivo}"
+          echo "${TRIVY_SHA256}  ${RUNNER_TEMP}/${archivo}" | sha256sum --check --strict
+          mkdir "${RUNNER_TEMP}/trivy"
+          tar --extract --gzip --file "${RUNNER_TEMP}/${archivo}" --directory "${RUNNER_TEMP}/trivy" trivy
+          echo "${RUNNER_TEMP}/trivy" >> "${GITHUB_PATH}"
+
+      # Todo lo que trivy ve, de cualquier severidad, para que quede a la vista en el registro. No falla nunca:
+      # es el informe, no la puerta. Descarga ademas la base de vulnerabilidades, que el paso siguiente reutiliza.
+      - name: Informe de dependencias (no frena)
+        run: trivy fs --scanners vuln --offline-scan --no-progress --exit-code 0 pom.xml
+
+      # La puerta. `--ignore-unfixed`: sin version corregida no hay nada que hacer salvo esperar.
+      - name: Frenar con severidad alta o critica que ya tiene arreglo
+        run: >
+          trivy fs
+          --scanners vuln
+          --offline-scan
+          --severity HIGH,CRITICAL
+          --ignore-unfixed
+          --ignorefile .trivyignore.yaml
+          --skip-db-update
+          --no-progress
+          --exit-code 1
+          pom.xml
+
+  codeql:
+    name: Analisis estatico (CodeQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      # Para subir los hallazgos a la pestana Security -> Code scanning.
+      security-events: write
+
+    steps:
+      - name: Descargar el codigo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Instalar JDK 25 (Temurin)
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      # Java con Lombok y MapStruct: sin compilar de verdad (`build-mode: none`) CodeQL no ve los getters ni los
+      # mappers que esos procesadores generan y el analisis queda incompleto. Con `manual` se compila el codigo
+      # de produccion con el wrapper, que es lo que CodeQL observa.
+      - name: Preparar CodeQL
+        uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          languages: java-kotlin
+          build-mode: manual
+
+      # Solo `src/main`: no se compilan las pruebas (`maven.test.skip`), asi que sus datos de ejemplo no entran al analisis.
+      - name: Compilar el codigo de produccion
+        run: ./mvnw -B -ntp -Dmaven.test.skip=true clean compile
+
+      - name: Analizar
+        uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          category: /language:java-kotlin

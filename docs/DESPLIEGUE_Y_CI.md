@@ -223,6 +223,49 @@ El arreglo es siempre el mismo — que el test derive el valor por el **mismo ca
 del 2026-09-05: `ControlCuotaRedisAdapterTest` era el único test del repo que caía en esto contra el
 reloj real; el resto usa `FixedClock` (determinista) o ya replica la zona de producción.
 
+### 3.3 Seguridad (`.github/workflows/seguridad.yml`, 2026-11-02)
+
+Workflow aparte de `ci.yml`, `cd.yml` y `sonarcloud.yml`: corre en cada PR, en cada push a `master`, a mano y **cada
+lunes a las 05:41 de Lima** aunque nadie toque el repositorio (una dependencia sin cambios puede volverse vulnerable
+de un día para otro). Tres jobs independientes, con permisos mínimos (`contents: read`; solo CodeQL suma
+`security-events: write`) y sin ningún secret:
+
+| Job | Qué revisa | Frena |
+|---|---|---|
+| **Secretos (gitleaks)** | **Todo el historial** de Git (`fetch-depth: 0`), con `--redact` porque el registro es público. Reglas por defecto + las excepciones de `.gitleaks.toml` | Sí |
+| **Dependencias vulnerables (trivy)** | `pom.xml` con **todo el árbol** de Maven, incluido lo que fija el BOM de Spring Boot (el grafo de Dependabot solo ve lo que el `pom.xml` declara). Imprime todas las severidades y **falla con ALTA o CRÍTICA que ya tenga versión corregida** | Sí |
+| **Análisis estático (CodeQL)** | Java con `build-mode: manual` (se compila `src/main` con el wrapper, para que Lombok y MapStruct generen su código antes de analizar). Sube los hallazgos a *Security → Code scanning* | No: los hallazgos no ponen el job en rojo |
+
+- **Herramientas.** gitleaks y trivy se bajan como binarios de la página de *releases* con versión y SHA-256 escritos en el
+  workflow (`GITLEAKS_*` y `TRIVY_*`); nunca desde un script de instalación ni una acción de terceros. Subir de versión es
+  cambiar la versión **y** la suma juntas (sale del `*_checksums.txt` de ese release). Las acciones (`checkout`, `setup-java`,
+  `codeql-action`) van **fijadas por SHA de commit** con la versión en un comentario; Dependabot las mantiene.
+- **Excepciones de gitleaks** (`.gitleaks.toml`): 22 hallazgos del historial, todos revisados y ninguno es un secreto. 16 son los
+  tokens firmados de **miniaturas de video de Mux** que trae `V6__catalogo_academy_default.sql` (`aud: "t"`, vencen en 2126;
+  dan acceso a una miniatura, no son la clave de firma); 5 son datos de prueba («una-contrasena-de-12-o-mas» y el
+  `Sec-WebSocket-Key` de ejemplo del RFC 6455); 1 es la cabecera `BEGIN PRIVATE KEY` de una prueba que genera su clave al
+  ejecutarse. Cada excepción está limitada a una regla, a un archivo y al texto exacto, para que un secreto de verdad pegado
+  en el mismo lugar siga saltando. **No se reescribió el historial**: una migración de Flyway ya aplicada no se edita. Si no se
+  quiere que esas 8 miniaturas sean públicas, lo que las invalida es rotar la clave de firma en Mux o poner esos videos en
+  política privada, no tocar este repositorio.
+- **Excepciones de trivy** (`.trivyignore.yaml`): vacío. Lo que no tiene versión corregida no hace falta anotarlo (`--ignore-unfixed`).
+  Una con arreglo que no se pueda aplicar todavía se anota con su motivo y un `expired_at`: al vencer, el job vuelve a fallar.
+- **Dependabot** (`.github/dependabot.yml`): semanal (lunes 06:00 de Lima), con tope de PR abiertas, para `maven`, `github-actions`
+  y las dos imágenes de `docker` (`Dockerfile` y `infra/piper`). Las subidas menores y de parche llegan agrupadas (Spring en su
+  propio grupo, por la alineación entre Boot, Spring AI, Modulith y Spring Cloud AWS). **Un salto mayor de Spring Boot se ignora**
+  y se sube a mano; igual el cambio de versión de Java (`eclipse-temurin`) y el de Python de la voz.
+- **CodeQL y el «por defecto» de GitHub no pueden convivir.** Hoy `code-scanning/default-setup` está `not-configured`, así que no
+  chocan. Si alguien lo enciende desde *Settings → Code security*, hay que quitar el job `codeql` de este workflow.
+- **Por qué el job de trivy corre antes `./mvnw dependency:tree` y trivy lleva `--offline-scan`** (E-660): trivy arma el árbol
+  leyendo cada POM y los que no tiene en `~/.m2` los pide uno por uno a Maven Central (incluso algunos que Maven descarta por
+  mediación); son cientos y Central responde `429 Too Many Requests` (con `Retry-After` de 20 a 30 minutos) a quien los pide en
+  ráfaga. Maven sí pide con calma y deja en `~/.m2` (la misma caché que usa `ci.yml`) justo los POM del árbol real; con
+  `--offline-scan` trivy lee solo esos y no sale a la red. Solo se bajan POM, no los jar. Comprobado en local: el `pom.xml` de
+  antes de estos arreglos sigue marcando Tomcat, Jackson, Guava, jose4j y async-http-client, y el de ahora da 0.
+- **No verificado hasta el primer push** (como todos los workflows de este repo): el YAML está validado y los comandos de gitleaks y
+  trivy se corrieron en local con los mismos binarios y sumas, pero los jobs en sí, la subida a *Code scanning* y la compilación
+  de CodeQL con el wrapper solo se pueden ver en GitHub.
+
 ---
 
 ## 4. SonarCloud (`.github/workflows/sonarcloud.yml`)
@@ -1111,6 +1154,10 @@ se leen con `docker history` aunque el archivo se borre después.
 |---|---|---|
 | **Spring Cloud AWS** | **4.1.1** (GA, 2026-08-28) | Es la línea de Spring Boot 4.1. Verificado contra el POM publicado, no contra la tabla del README de awspring: `spring-cloud-aws-dependencies:4.1.1` hereda de `spring-cloud-dependencies-parent:5.0.3` (tren 2025.1.x) y alinea Spring Modulith 2.1.1, la misma línea de este repo. La tabla del README todavía resume la línea 4.x como "Spring Boot 4.0.x" sin desglosar parches |
 | **AWS SDK v2** | **2.54.3** (subido desde 2.42.41) | Es la versión a la que alinea Spring Cloud AWS 4.1.1. Nuestro BOM se importa primero y en Maven gana la primera declaración, así que el número de acá manda sobre *todos* los `software.amazon.awssdk:*`, incluido el `ssm` de Parameter Store. Dejarlo en 2.42.41 haría correr a spring-cloud-aws (compilado contra 2.54.3) sobre un `auth`/`regions` 12 versiones menores más viejo, y un `NoSuchMethodError` así solo aparece en producción. Con 2.54.3 el riesgo se traslada a nuestro adaptador de S3, que sí lo cubre la suite completa |
+| **Spring Boot** | **4.1.2** (subido desde 4.1.1, 2026-11-02) | Parche de la misma línea. La 4.1.1 traía Tomcat 11.0.24 (4 avisos críticos: salto de restricciones de seguridad y de autenticación DIGEST/FORM, HTTP/2) y Jackson 3.1.5 / 2.21.5 (avisos altos de denegación de servicio); la 4.1.2 trae Tomcat 11.0.27 y Jackson 3.1.7 / 2.21.7. Es lo que dejó `trivy` en verde, y lo que Dependabot habría propuesto el lunes |
+| **Guava** | **33.7.2-android** (fijada en `dependencyManagement`) | La trae `google-genai` (Gemini, vía Spring AI) en la 33.4.0-android, con un aviso alto de denegación de servicio al deserializar `CompactHashMap`/`CompactHashSet`, corregido en la 33.7.2. Ningún BOM la gobierna. Se queda en `-android`, la rama que ya usaba el proyecto |
+| **Web Push: jose4j y BouncyCastle** | **jose4j 0.9.6**, **bcprov-jdk18on 1.85.2** | jose4j (firma del JWT de VAPID) 0.7.9 → 0.9.6, la primera que cierra sus 4 avisos. BouncyCastle pasó de `bcprov-jdk15on` 1.70 (el artefacto se dejó de publicar ahí) a `bcprov-jdk18on`, la misma librería con los mismos paquetes; la 1.85.2 es la que alinea el BOM de Spring Cloud AWS. `WebPushAdapterFirmaYCifradoTest` verifica la firma ES256 y descifra el cuerpo con el JDK, para que una subida automática no pueda romper el Web Push sin que una prueba lo note |
+| **async-http-client** | *fuera del classpath* | `web-push` lo trae, pero solo lo usa `PushAsyncService`; el backend envía con `PushService` (Apache httpasyncclient). Se excluyó en el `pom.xml`: eran 14 avisos de Dependabot y 4 sin versión corregida (la rama 2.x termina en 2.16.1) |
 | **JaCoCo** | **0.8.15** | La 0.8.14 fue la primera con soporte oficial de Java 25 |
 | **sonar-maven-plugin** | **5.7.0.6970** | Última publicada. Se fija en `pluginManagement` para que `sonar:sonar` no resuelva "la que haya" y cambie entre máquinas |
 | **Acciones de GitHub** | `checkout@v7`, `setup-java@v6`, `upload-artifact@v7`, `cache@v6`, `configure-aws-credentials@v6`, `amazon-ecr-login@v2`, `build-push-action@v7`, `setup-buildx-action@v4`, `setup-qemu-action@v4` | Majors vigentes al 2026-09-05, consultados contra la API de releases de cada repositorio |
