@@ -38,10 +38,16 @@ final class TextoDeObjetivos {
 
     static String noventa(List<ObjetivoDeNoventaDias> objetivos, String plazoDelObjetivo) {
         if (objetivos.isEmpty()) {
-            return "Todavia no definio sus objetivos de " + plazoDelObjetivo + " (Rocas Maestras).";
+            return "Todavia no tiene objetivos de " + plazoDelObjetivo + ". Nacen de su diagnostico (consultar_mi_diagnostico dice si lo hizo) o los "
+                    + "escribe ella misma en la pestana Plan, en el eje que quiera (Cuerpo, Negocio, Relaciones). Tu no los puedes escribir: llevala a "
+                    + "Plan. No la mandes al Mapa de Renacimiento, que ya no existe.";
         }
-        StringBuilder texto = new StringBuilder("Objetivos de ").append(plazoDelObjetivo).append(" (Rocas Maestras), por eje:\n");
+        StringBuilder texto = new StringBuilder("Objetivos de ").append(plazoDelObjetivo).append(", por eje:\n");
         objetivos.forEach(objetivo -> texto.append(lineaDe(objetivo)).append('\n'));
+        if (objetivos.stream().anyMatch(ObjetivoDeNoventaDias::porConfirmar)) {
+            texto.append("Los marcados POR CONFIRMAR nacieron de su diagnostico: los lee y los confirma en la pestana Plan (puede reescribirlos una "
+                    + "sola vez; al confirmarlos quedan fijos). Tu no los confirmas: llevala a Plan.\n");
+        }
         return texto.toString().trim();
     }
 
@@ -73,6 +79,9 @@ final class TextoDeObjetivos {
 
     private static String lineaDe(ObjetivoDeNoventaDias objetivo) {
         StringBuilder linea = new StringBuilder("- ").append(objetivo.eje()).append(" | ").append(objetivo.objetivo());
+        if (objetivo.porConfirmar()) {
+            linea.append(" | POR CONFIRMAR en Plan");
+        }
         if (objetivo.meta() == null) {
             return linea.append(" | sin meta numerica").toString();
         }

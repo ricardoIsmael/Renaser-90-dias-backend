@@ -129,7 +129,7 @@ class CrearPlanDeRocasConfirmableTest {
         when(planificar.crearPlanDeLaSemana(any(), any())).thenReturn(new ResultadoPlan.Rechazado(Motivo.YA_PLANIFICADO));
 
         assertThat(deLaSemana.aplicar(APRENDIZ, invocacionDeLaSemana(PLAN_DE_LA_SEMANA))).isEqualTo(ResultadoHerramienta.fallo(
-                "Esa semana ya tiene objetivo en todos los ejes que pidio. Un objetivo ya guardado no se pisa: "
+                "Esa semana ya tiene objetivo en todos los ejes que pediste. Un objetivo ya guardado no se pisa: "
                         + "se corrige editandolo, dentro de su ventana de edicion."));
     }
 }

@@ -94,7 +94,7 @@ class PromptSistemaRenasiaTest {
                 .contains("busca con buscar_en_los_cursos el nombre\n  del habito");
         // E-454: en la app la seccion de cursos se llama Classroom (ComunidadScreen), ya no
         // "Recursos Exclusivos"; el modelo nombraba una seccion que la persona no encuentra.
-        assertThat(render).contains("Classroom (en Comunidad)").doesNotContain("Recursos Exclusivos");
+        assertThat(render).contains("Cursos (en Comunidad)").doesNotContain("Classroom").doesNotContain("Recursos Exclusivos");
     }
 
     /**
@@ -131,13 +131,14 @@ class PromptSistemaRenasiaTest {
 
     /** D-229: la herramienta nueva esta explicada y la dimension se pregunta, no se adivina. */
     @Test
-    @DisplayName("D-229: explica proponer_crear_habito_personal y que pregunte la dimension")
+    @DisplayName("D-229 y spec 038: explica proponer_crear_habito_personal y que pregunte la categoria, solo las de su formacion")
     void explicaCrearHabitoPersonal() {
         String render = renderizar("(vacio)");
 
         assertThat(render).contains("proponer_crear_habito_personal")
-                .contains("Si no dijo en que dimension va, preguntaselo")
-                .contains("Cuerpo, Mente, Emociones o");
+                .contains("Si no dijo en que categoria va, preguntaselo")
+                .contains("ofrecele SOLO las categorias de su formacion")
+                .contains("es un ejemplo, no una lista fija");
     }
 
     @Test
@@ -270,7 +271,7 @@ class PromptSistemaRenasiaTest {
         String render = renderizar("(vacio)");
 
         assertThat(render).contains("## Tus objetivos: el plan de la semana y las acciones del dia")
-                .contains("CUERPO, TRABAJO y RELACIONES")
+                .contains("Cuerpo, Negocio y Relaciones (en tus herramientas Negocio se")
                 .contains("su obstaculo (lo que puede")
                 .contains("la primera de cada eje es la verde")
                 .contains("El plan de manana se arma desde las 18:00")
@@ -561,48 +562,75 @@ class PromptSistemaRenasiaTest {
     }
 
     /**
-     * D-233: el Mapa de Renacimiento. Para sus objetivos, el porque de un habito y el desanimo se usa
-     * consultar_mi_mapa, con el protocolo de retorno en sus palabras; sin Mapa no se arman metas, y nunca se
-     * inventan numeros ni hitos. D-234: los objetivos de 90 dias del Mapa no se cambian; se ofrece ajustar la
-     * semana, las acciones del dia o el protocolo de retorno.
+     * Spec 038 (el Mapa se retiro, spec 026): para sus objetivos, el porque de un habito y el desanimo se usa el
+     * diagnostico (consultar_mi_diagnostico) y consultar_rocas con alcance noventa; SER nunca manda a hacer el Mapa
+     * (el servidor lo rechaza con 409 MAPA_RETIRADO) y lo que no puede escribir lo lleva a Plan. Reemplaza a la prueba de D-233/D-234.
      */
     @Test
-    @DisplayName("D-233: usa su Mapa para objetivos, porque y desanimo, sin inventar metas ni hitos")
-    void usaSuMapaDeRenacimiento() {
+    @DisplayName("spec 038: usa su diagnostico y sus objetivos, no manda al Mapa y lleva a Plan lo que no puede escribir")
+    void usaSuDiagnosticoYSusObjetivosSinMapa() {
         String render = renderizar("(vacio)");
 
-        assertThat(render).contains("## Su Mapa de Renacimiento")
-                .contains("Antes de\nhablar de ellos, llama consultar_mi_mapa.")
-                .contains("Un hito (dia 30, 60) es un paso, no la meta")
-                .contains("para que hace un habito o una accion: llama consultar_mi_mapa y\n  conectalo con el "
-                        + "objetivo")
-                .contains("duda de seguir con el programa: llama\n  consultar_mi_mapa (aunque tambien mires otra herramienta)")
-                .contains("su protocolo de retorno: di cual es, con sus propias palabras, no solo que\n  lo tiene.")
-                .contains("Antes de proponer un objetivo de la semana o acciones del dia, mira su Mapa")
-                .contains("Esa regla es para los objetivos (rocas y acciones del dia), no para los\n  habitos: un "
-                        + "habito no se cuelga de un objetivo ni se frena por su Mapa.")
-                .contains("Si lo que pide no se relaciona con\n  ningun objetivo de su Mapa, diselo en una linea y "
-                        + "sugiere como conectarlo; si\n  insiste, proponlo igual.")
-                // D-247 (E-496): sin Mapa (o sin Rocas Maestras) no se propone nada de objetivos.
-                .doesNotContain("pide proponer algo, proponlo igual")
-                .contains("Si la linea del Mapa dice \"sin completar\" o que sus objetivos de 90 dias no\n  quedaron "
-                        + "creados y pide planificar su dia, su semana o una accion de sus\n  objetivos: lo primero que "
-                        + "le dices es que todavia no se puede")
-                .contains("(completarlo en Plan, \"Ir al Mapa de\n  Renacimiento\", o escribir a soporte). No le "
-                        + "preguntes horarios ni acciones\n  para eso")
-                .doesNotContain("D-247")
-                .contains("los objetivos de 90 dias de su Mapa NO se cambian, ni por ti, ni\n  por una "
-                        + "herramienta, ni por su mentor. Diselo con calidez")
-                .contains("recuerdale su porque y su proximo hito")
-                .contains("ofrecele lo\n  que si se ajusta: su objetivo de la semana, sus acciones del dia, o su\n  "
-                        + "protocolo de retorno")
-                // D-234: ya no se deriva al mentor para cambiar la meta; la meta no se cambia.
-                .doesNotContain("converse con su mentor")
-                .doesNotContain("D-234")
+        assertThat(render).contains("## Su diagnostico y sus objetivos")
+                .contains("El Mapa de Renacimiento se retiro: ya nadie lo arma, y nunca mandes a nadie a\nhacerlo.")
+                .contains("Antes de hablar de ellas, llama consultar_mi_diagnostico.")
+                .contains("consultar_rocas con alcance noventa te\n  da el objetivo grande de cada eje")
+                .contains("los marcados POR CONFIRMAR")
+                .contains("Un hito o\n  el objetivo del mes es un paso, no la meta")
+                .contains("Pregunta para que hace un habito o una accion: llama consultar_mi_diagnostico")
+                .contains("duda de seguir con el programa: llama\n  consultar_mi_diagnostico")
+                .contains("Antes de proponer un objetivo de la semana o acciones del dia, mira sus\n  objetivos")
+                .contains("Esa regla es para\n  los objetivos (acciones del dia), no para los habitos")
+                .contains("(abrir Plan y escribir sus tres objetivos, o confirmar los de su\n  diagnostico)")
+                .contains("una vez confirmado en Plan queda\n  fijo, ni tu ni una herramienta lo cambian")
+                .contains("lo\n  puede reescribir en Plan una sola vez")
                 .contains("Nunca inventes metas, numeros ni hitos")
-                .doesNotContain("D-233");
-        // La seccion va antes de Tus limites, que sigue intacta.
-        assertThat(render.indexOf("## Su Mapa de Renacimiento")).isLessThan(render.indexOf("## Tus limites"));
+                // Privacidad: el diagnostico se usa con tacto y no se guarda el dinero en la memoria.
+                .contains("**Con tacto.**").contains("no nombres montos de\n  su dinero y no lo guardes en la memoria");
+        // Lo que ya no existe: nunca manda al Mapa ni lo ofrece.
+        assertThat(render).doesNotContain("## Su Mapa de Renacimiento").doesNotContain("Ir al Mapa")
+                .doesNotContain("completarlo en Plan").doesNotContain("llama consultar_mi_mapa y")
+                .doesNotContain("D-233").doesNotContain("D-234").doesNotContain("D-247").doesNotContain("spec 038");
+        assertThat(render.indexOf("## Su diagnostico y sus objetivos")).isLessThan(render.indexOf("## Tus limites"));
+    }
+
+    /** Spec 038: lo que SER no puede escribir lo lleva a Plan, y los habitos estan en Training (no en Plan ni en Hoy). */
+    @Test
+    @DisplayName("spec 038: lleva a Plan lo que no escribe y orienta con los nombres de hoy: habitos en Training, Cierra tu dia en Plan")
+    void orientaConLosNombresDeLaApp() {
+        String render = renderizar("(vacio)");
+
+        assertThat(render).contains("## Donde esta cada cosa en la app")
+                .contains("- **Training**: sus habitos del dia con su hora.")
+                .contains("Los habitos NO estan en\n  Plan ni en Hoy.")
+                .contains("\"Cierra tu dia\" (opcional, no da puntos)")
+                .contains("El eje que en tus herramientas se llama TRABAJO, en la app se llama Negocio")
+                .contains("**Lo que tu no escribes: llevala a Plan.**")
+                .contains("No tienes herramienta para escribir\n  ni confirmar el objetivo grande de su programa")
+                .contains("Eso lo armas en Plan, en el eje que quieras")
+                .contains("\"Cierra tu dia\" tambien\n  esta en Plan")
+                .contains("entra a Training, ahi estan tus\n  habitos del dia")
+                .contains("desde la pestana Training, tocando el habito")
+                .contains("Tu no ves sus pagos ni\n  hablas de ellos");
+        assertThat(render).doesNotContain("entra a Plan, ahi estan tus habitos").doesNotContain("pantalla de Hoy, tocando el habito");
+    }
+
+    /** Spec 038: los rituales se registran escribiendo y un dia cerrado no se registra (D-259). */
+    @Test
+    @DisplayName("spec 038: los rituales se escriben (sin foto), lo opcional se marca y un dia cerrado no se registra")
+    void ritualesPorTextoYDiaCerrado() {
+        String render = renderizar("(vacio)");
+
+        assertThat(render).contains("**Los rituales no piden foto: se registran escribiendo.**")
+                .contains("\"Escribir como me siento\"")
+                .contains("\"¿Como te sientes despues de realizar el ritual?\"")
+                .contains("No le pidas foto ni\nle preguntes tu que sintio")
+                .contains("`registro=escribir`")
+                .contains("Despertar, Dormir, la Ultima comida del dia y los demas habitos de evidencia\nopcional")
+                .contains("usa marcar_habito_completado, que deja la\npropuesta con el boton Confirmar")
+                .contains("**Un dia que ya cerro no se registra.**")
+                .contains("No lo confundas con \"ya no da puntos\"")
+                .doesNotContain("cuenta que sintio").doesNotContain("saque la foto y cuente");
     }
 
     /**

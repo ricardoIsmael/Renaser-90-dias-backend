@@ -41,7 +41,7 @@ class ConsultarMiDiagnosticoHerramientaTest {
 
         String texto = contenido(persona -> d);
 
-        assertThat(texto).contains("(completo)").contains("Prioridad principal: Salud y bienestar")
+        assertThat(texto).contains("(completo)").contains("Prioridad principal: Cuerpo (salud y bienestar)")
                 .contains("Relaciones:").contains("¿Cómo está tu pareja? -> Distante, hablamos poco")
                 .contains("Bajar de 92 a 85 kg y dormir mejor").contains("¿Y si no actúas? -> (sin responder)");
     }

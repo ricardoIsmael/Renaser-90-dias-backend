@@ -44,7 +44,8 @@ final class TextoDeRocas {
 
     static String delMes(List<ObjetivoDelMes> objetivos, String plazoDelObjetivo) {
         if (objetivos.isEmpty()) {
-            return "No tiene objetivo del mes: todavia no definio sus Rocas Maestras o el programa no esta en curso.";
+            return "No tiene objetivo del mes: todavia no tiene objetivos de su programa (nacen de su diagnostico o los escribe en la pestana "
+                    + "Plan) o el programa no esta en curso. El objetivo del mes se arma en Plan: tu no lo puedes escribir, llevala a Plan.";
         }
         StringBuilder texto = new StringBuilder("Objetivo del mes en curso, por eje (cifra = donde tiene que "
                 + "estar al cierre del mes; en una meta que se acumula, lo que tiene que sumar ese mes):\n");

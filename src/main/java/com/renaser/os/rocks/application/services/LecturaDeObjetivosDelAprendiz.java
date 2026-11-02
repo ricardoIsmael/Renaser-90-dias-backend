@@ -85,10 +85,10 @@ class LecturaDeObjetivosDelAprendiz {
         boolean adelante = maestra.eje() == EjeObjetivo.TRABAJO;
         if (meta == null) {
             return new ObjetivoDeNoventaDias(maestra.eje().name(), maestra.objetivo(), null, null, null, adelante,
-                    null, null);
+                    null, null, maestra.estaPorConfirmar());
         }
         return new ObjetivoDeNoventaDias(maestra.eje().name(), maestra.objetivo(), meta.objetivo(), meta.avance(),
-                meta.unidad(), adelante, meta.lineaBase(), meta.porcentaje());
+                meta.unidad(), adelante, meta.lineaBase(), meta.porcentaje(), maestra.estaPorConfirmar());
     }
 
     private static CierreDelEje aCierre(EjeObjetivo eje, RocaSemanal roca) {

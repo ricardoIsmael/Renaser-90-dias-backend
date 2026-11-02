@@ -82,7 +82,7 @@ public class ConsultarClaseDeHoyHerramienta implements HerramientaAgente {
 
     static String textoDe(ClaseDeHoy clase) {
         return switch (clase.estado()) {
-            case NO_INICIADO -> "Todavia no arranco su programa de 90 dias (dia 0): hoy no hay Clase Diaria.";
+            case NO_INICIADO -> "Todavia no arranco su programa (dia 0): hoy no hay Clase Diaria.";
             case PROXIMAMENTE -> "Hoy (dia " + clase.diaPrograma() + " del programa) no hay Clase Diaria "
                     + "publicada. No inventes una.";
             case DISPONIBLE -> textoDeDisponible(clase);

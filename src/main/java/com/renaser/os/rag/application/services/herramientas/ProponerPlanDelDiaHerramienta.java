@@ -35,8 +35,12 @@ import java.util.NoSuchElementException;
  * <p><b>Que se verifica antes de proponer, y que no.</b> La forma del JSON ({@link PlanDeRocasJson}),
  * y lo que {@code consultar_rocas} ya expone: que fecha es manana en la zona de la persona, que el
  * dia en curso ya armado no se reacomoda, y si manana ya tiene acciones (confirmar las reemplaza, y
- * el resumen lo dice). Cuantas acciones por eje, que fechas son planificables y la ventana de las
- * 18:00 NO se revisan aca: las corre el caso de uso al confirmar.
+ * el resumen lo dice).
+ *
+ * <p><b>Spec 038: la fecha se comprueba antes de proponer.</b> Una tarjeta que el servidor va a rechazar al confirmar («No se pudo») es peor que
+ * no dejarla: pasadas las 18:00 el dia en curso ya no se arma, un dia que paso no se arma, y solo se planifica hasta el fin de la semana (el domingo, hasta
+ * el lunes). Es la misma regla de {@code FechasPlanificables} con los datos que ya expone {@code consultar_rocas} (manana, si la ventana esta abierta y el fin de
+ * la semana); si alguno no se puede leer, no se bloquea y sigue decidiendo el servidor. Cuantas acciones por eje NO se revisa aca: lo corre el caso de uso.
  *
  * <p>Solo existe con {@code renaser.ia.acompanante.confirmacion-con-botones=true}: sin los botones
  * en la app, una propuesta no se puede confirmar.
@@ -113,6 +117,10 @@ public class ProponerPlanDelDiaHerramienta implements HerramientaAgente {
         if (esHoyYaArmado(actorId, fecha, manana.fecha())) {
             return ResultadoHerramienta.fallo(TextoDePlanDeRocas.rechazoDelDia(Motivo.YA_PLANIFICADO));
         }
+        Optional<String> noSePuede = fechaNoPlanificable(actorId, fecha, manana);
+        if (noSePuede.isPresent()) {
+            return ResultadoHerramienta.fallo(noSePuede.get());
+        }
         Optional<String> bloqueo = compuerta.bloqueoDelDia(actorId, fecha,
                 pedido.acciones().stream().map(PlanificarRocasPort.AccionDelPlan::eje).toList());
         if (bloqueo.isPresent()) {
@@ -120,6 +128,44 @@ public class ProponerPlanDelDiaHerramienta implements HerramientaAgente {
         }
         String resumen = TextoDePlanDeRocas.resumenDelDia(fecha, pedido.acciones()) + avisoDeReemplazo(fecha, manana);
         return proponer(actorId, new PlanDelDia(fecha, pedido.acciones()), resumen);
+    }
+
+    /**
+     * Spec 038: vacio si la fecha cae entre el primer dia que se puede planificar ahora y el fin de la semana; si no, el motivo para el modelo, con
+     * desde cuando y hasta cuando SI se puede. Con la ventana de las 18:00 abierta, hoy ya no; antes de las 18:00, hoy si.
+     */
+    private Optional<String> fechaNoPlanificable(UserId actorId, LocalDate fecha, RocasDelDia manana) {
+        LocalDate hoy = manana.fecha().minusDays(1);
+        boolean ventanaAbierta = manana.planDeManana() != null && manana.planDeManana().ventanaAbierta();
+        LocalDate desde = ventanaAbierta ? manana.fecha() : hoy;
+        LocalDate hasta = ultimoDiaPlanificable(actorId, manana.fecha());
+        boolean muyTemprano = fecha.isBefore(desde);
+        boolean muyLejos = hasta != null && fecha.isAfter(hasta);
+        if (!muyTemprano && !muyLejos) {
+            return Optional.empty();
+        }
+        String rango = hasta == null ? "desde el " + TextoDePlanDeRocas.diaYFecha(desde)
+                : "del " + TextoDePlanDeRocas.diaYFecha(desde) + " al " + TextoDePlanDeRocas.diaYFecha(hasta);
+        String porQue = muyLejos ? "solo se planifican los dias que quedan de esta semana (el domingo, tambien el lunes)"
+                : ventanaAbierta && fecha.equals(hoy) ? "desde las " + manana.planDeManana().ventanaAbreA()
+                        + " el dia en curso ya no se arma: se arma el de manana"
+                        : "ese dia ya paso";
+        return Optional.of(TextoDePlanDeRocas.rechazoDelDia(Motivo.FECHA_NO_PLANIFICABLE) + " No dejes la propuesta: " + porQue
+                + ". Hoy se puede planificar " + rango + ". Ofrecele uno de esos dias, o explicale cuando si se puede.");
+    }
+
+    /** El domingo de esta semana (el dia 90 en la 13); el domingo, el lunes. {@code null} si no se sabe (sin Dia 1, o no se pudo leer). */
+    private LocalDate ultimoDiaPlanificable(UserId actorId, LocalDate manana) {
+        try {
+            var semana = rocasPort.deLaSemana(actorId);
+            if (semana == null || semana.fin() == null) {
+                return null;
+            }
+            return manana.isAfter(semana.fin()) ? manana : semana.fin();
+        } catch (RuntimeException sinLeer) {
+            log.info("[rag] {} sale sin el fin de la semana: {}", NOMBRE, sinLeer.toString());
+            return null;
+        }
     }
 
     /** El dia en curso ya armado no se reacomoda ({@code ALREADY_PLANNED}): no se ofrece un boton que va a fallar. */

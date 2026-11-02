@@ -71,7 +71,7 @@ class ConsultarRocasDelAprendizAdapter implements ConsultarRocasDelAprendizPort 
     public List<ObjetivoDeNoventaDias> objetivosDeNoventaDias(UserId aprendizId) {
         return finder.objetivosDeNoventaDias(aprendizId).stream()
                 .map(o -> new ObjetivoDeNoventaDias(o.eje(), o.objetivo(), o.meta(), o.avance(), o.unidad(),
-                        o.unidadAdelante(), o.lineaBase(), o.porcentaje()))
+                        o.unidadAdelante(), o.lineaBase(), o.porcentaje(), o.porConfirmar()))
                 .toList();
     }
 

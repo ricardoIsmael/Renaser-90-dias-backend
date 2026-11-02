@@ -27,8 +27,9 @@ public class ConsultarMiDiagnosticoHerramienta implements HerramientaAgente {
             "Devuelve el diagnostico inicial que la persona completo al entrar: como esta hoy en sus relaciones, su salud, sus emociones, su disciplina, su "
                     + "economia y su tiempo; que quiere conseguir en cada area, cual es su prioridad principal y su primera accion, y que le cuesta cuando no "
                     + "actua. Usala cuando pregunte por sus objetivos o metas, cuando se desanime o quiera dejar, o cuando quieras conectar un habito o una "
-                    + "accion con lo que ella misma escribio. Es informacion personal y sensible: usala con tacto, con sus palabras, y no la repitas "
-                    + "textual si no hace falta. Si no tiene diagnostico, lo dice.");
+                    + "accion con lo que ella misma escribio. Es informacion personal y sensible (ingresos, deudas, emociones): usala con tacto, con sus "
+                    + "palabras, y no la repitas textual si no hace falta; nunca nombres montos de su dinero y no los guardes en la memoria. Si no tiene "
+                    + "diagnostico, lo dice y sus objetivos los escribe ella en la pestana Plan.");
 
     private final ConsultarDiagnosticoDeLaPersonaPort diagnosticoPort;
 
@@ -55,7 +56,8 @@ public class ConsultarMiDiagnosticoHerramienta implements HerramientaAgente {
 
     static String texto(DiagnosticoDeLaPersona d) {
         if (!d.asignado()) {
-            return "La persona no tiene diagnostico: completo la ficha inicial estandar. No inventes lo que escribiria en uno.";
+            return "La persona no tiene diagnostico: completo la ficha inicial estandar. No inventes lo que escribiria en uno. Sus objetivos "
+                    + "los escribe ella misma en la pestana Plan (consultar_rocas con alcance noventa te dice si ya los tiene).";
         }
         if (d.secciones().isEmpty()) {
             return "La persona todavia no empezo su diagnostico.";
@@ -77,8 +79,9 @@ public class ConsultarMiDiagnosticoHerramienta implements HerramientaAgente {
 
     private static String nombreDelEje(String eje) {
         return switch (eje) {
-            case "CUERPO" -> "Salud y bienestar";
-            case "TRABAJO" -> "Riqueza y negocios";
+            // Los nombres de los ejes en Plan (spec 038), con el de la pregunta del diagnostico entre parentesis.
+            case "CUERPO" -> "Cuerpo (salud y bienestar)";
+            case "TRABAJO" -> "Negocio (riqueza, profesion o negocios)";
             case "RELACIONES" -> "Relaciones";
             default -> eje;
         };
