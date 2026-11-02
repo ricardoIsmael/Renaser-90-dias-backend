@@ -64,9 +64,9 @@ ALTER TABLE registros_habito
     ADD CONSTRAINT registros_habito_dispositivo_medicion_valido
         CHECK (dispositivo_medicion IS NULL OR dispositivo_medicion IN ('TELEFONO', 'RELOJ', 'OTRO')),
     ADD CONSTRAINT registros_habito_lectura_automatica_completa
-        CHECK ((origen_medicion = 'HEALTH_CONNECT') = (fuente_medicion IS NOT NULL)
-           AND (origen_medicion = 'HEALTH_CONNECT') = (dispositivo_medicion IS NOT NULL)
-           AND (origen_medicion = 'HEALTH_CONNECT') = (medicion_leida_en IS NOT NULL)),
+        CHECK ((origen_medicion IS NOT DISTINCT FROM 'HEALTH_CONNECT') = (fuente_medicion IS NOT NULL)
+           AND (origen_medicion IS NOT DISTINCT FROM 'HEALTH_CONNECT') = (dispositivo_medicion IS NOT NULL)
+           AND (origen_medicion IS NOT DISTINCT FROM 'HEALTH_CONNECT') = (medicion_leida_en IS NOT NULL)),
     ADD CONSTRAINT registros_habito_pasos_solo_automaticos
         CHECK (pasos_medidos IS NULL OR origen_medicion = 'HEALTH_CONNECT'),
     ADD CONSTRAINT registros_habito_por_revisar_solo_automaticos
