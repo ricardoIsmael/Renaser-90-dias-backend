@@ -161,14 +161,15 @@ class ArmadoDeLaSemana implements SemanaDeSeguimientoFinder {
             // La publicacion ES la entrega del post diario: sin archivo ni revision, con su hora.
             return new ObligacionDelDia(obligacion.registroId(), obligacion.titulo(), obligacion.estado().name(),
                     obligacion.requiereEvidencia(), ENTREGA_ENTREGADA, publicacion.creadaEn(), null, null,
-                    publicacion.id(), obligacion.respuestaTexto(), evidencias);
+                    publicacion.id(), obligacion.respuestaTexto(), evidencias, obligacion.medicion());
         }
         return new ObligacionDelDia(obligacion.registroId(), obligacion.titulo(), obligacion.estado().name(),
                 obligacion.requiereEvidencia(), estadoDeEntrega(obligacion, entrega),
                 entrega == null ? null : entrega.primeraEntregaEn(),
                 entrega == null ? null : entrega.estadoRevision().name(),
                 entrega == null ? null : entrega.evidenciaId(),
-                publicacion == null ? null : publicacion.id(), obligacion.respuestaTexto(), evidencias);
+                publicacion == null ? null : publicacion.id(), obligacion.respuestaTexto(), evidencias,
+                obligacion.medicion());
     }
 
     private static String estadoDeEntrega(ObligacionHabito obligacion, EntregaDeEvidencia entrega) {

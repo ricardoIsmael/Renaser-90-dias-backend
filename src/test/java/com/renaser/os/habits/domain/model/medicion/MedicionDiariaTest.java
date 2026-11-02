@@ -42,4 +42,39 @@ class MedicionDiariaTest {
     void ceroEsRepresentable() {
         assertThat(MedicionDiaria.manualSiHay(new BigDecimal("0.001")).valor()).isEqualByComparingTo("0.00");
     }
+
+    private static LecturaAutomatica lectura() {
+        return new LecturaAutomatica(7120, "Galaxy Watch", DispositivoDeMedicion.RELOJ,
+                java.time.Instant.parse("2026-11-04T22:10:00Z"), false);
+    }
+
+    @Test
+    @DisplayName("spec 037: una medición de Health Connect lleva su lectura y una manual no")
+    void laLecturaVaConHealthConnect() {
+        MedicionDiaria automatica = MedicionDiaria.automatica(new BigDecimal("5.4"), lectura());
+
+        assertThat(automatica.origen()).isEqualTo(OrigenMedicion.HEALTH_CONNECT);
+        assertThat(automatica.esAutomatica()).isTrue();
+        assertThat(automatica.lectura().fuente()).isEqualTo("Galaxy Watch");
+        assertThat(MedicionDiaria.manualSiHay(BigDecimal.ONE).esAutomatica()).isFalse();
+        assertThat(MedicionDiaria.manualSiHay(BigDecimal.ONE).lectura()).isNull();
+        assertThatThrownBy(() -> new MedicionDiaria(BigDecimal.ONE, OrigenMedicion.HEALTH_CONNECT))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new MedicionDiaria(BigDecimal.ONE, OrigenMedicion.MANUAL, lectura()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("spec 037: la lectura exige fuente de 1 a 60 caracteres y pasos que no sean negativos")
+    void laLecturaValidaSusCampos() {
+        java.time.Instant leida = java.time.Instant.parse("2026-11-04T22:10:00Z");
+        assertThatThrownBy(() -> new LecturaAutomatica(1, "  ", DispositivoDeMedicion.OTRO, leida, false))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new LecturaAutomatica(1, "x".repeat(61), DispositivoDeMedicion.OTRO, leida, false))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new LecturaAutomatica(-1, "Reloj", DispositivoDeMedicion.RELOJ, leida, false))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(new LecturaAutomatica(null, " Tu teléfono ", DispositivoDeMedicion.TELEFONO, leida, false).fuente())
+                .isEqualTo("Tu teléfono");
+    }
 }

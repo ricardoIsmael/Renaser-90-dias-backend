@@ -37,6 +37,8 @@ class RankingAgregadoServiceTest {
     private ConsultarRankingUseCase consultarRankingUseCase;
     @Mock
     private CelulaFinder celulaFinder;
+    @Mock
+    private com.renaser.os.points.api.MedicionAcumuladaFinder medicionAcumuladaFinder;
 
     private RankingAgregadoService service;
 
@@ -44,7 +46,7 @@ class RankingAgregadoServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new RankingAgregadoService(consultarRankingUseCase, celulaFinder);
+        service = new RankingAgregadoService(consultarRankingUseCase, celulaFinder, medicionAcumuladaFinder);
     }
 
     private static EntradaRanking entrada(String nombre) {

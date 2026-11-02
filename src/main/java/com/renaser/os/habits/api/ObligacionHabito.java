@@ -24,7 +24,16 @@ import java.util.UUID;
  */
 public record ObligacionHabito(UUID registroId, UserId participanteId, LocalDate fecha, int diaPrograma,
                                 String titulo, EstadoObligacion estado, boolean requiereEvidencia,
-                                boolean opcional, String claveSistema, String respuestaTexto) {
+                                boolean opcional, String claveSistema, String respuestaTexto,
+                                MedicionDeLaObligacion medicion) {
+
+    /** Sin medición: la forma de los llamadores anteriores a la spec 037. */
+    public ObligacionHabito(UUID registroId, UserId participanteId, LocalDate fecha, int diaPrograma, String titulo,
+                            EstadoObligacion estado, boolean requiereEvidencia, boolean opcional, String claveSistema,
+                            String respuestaTexto) {
+        this(registroId, participanteId, fecha, diaPrograma, titulo, estado, requiereEvidencia, opcional, claveSistema,
+                respuestaTexto, null);
+    }
 
     /**
      * La clave del POST DIARIO EN COMUNIDAD ({@code V24}). Vive en la API porque la necesitan dos módulos:
@@ -35,7 +44,7 @@ public record ObligacionHabito(UUID registroId, UserId participanteId, LocalDate
     /** Sin clave de sistema ni respuesta: la forma de los llamadores anteriores a E-628. */
     public ObligacionHabito(UUID registroId, UserId participanteId, LocalDate fecha, int diaPrograma, String titulo,
                             EstadoObligacion estado, boolean requiereEvidencia, boolean opcional) {
-        this(registroId, participanteId, fecha, diaPrograma, titulo, estado, requiereEvidencia, opcional, null, null);
+        this(registroId, participanteId, fecha, diaPrograma, titulo, estado, requiereEvidencia, opcional, null, null, null);
     }
 
     /** Si este hábito se cumple publicando en el Muro (el post diario): su evidencia es la publicación. */
