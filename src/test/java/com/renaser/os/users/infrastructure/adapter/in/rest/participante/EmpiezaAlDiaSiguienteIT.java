@@ -35,8 +35,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Spec 036 (D-309, 2026-11-02) de punta a punta sobre el Tomcat real: el programa empieza SIEMPRE al día siguiente y la
  * persona ya no elige. El reloj es el {@link RelojDePrueba} compartido (regla 03, E-649) y se fija alrededor de la
- * medianoche de Lima, donde la fecha de UTC y la de la persona difieren (regla 02): 04:59 UTC del 3 de noviembre son las
- * 23:59 del 2 en Lima, y 05:01 UTC son las 00:01 del 3.
+ * medianoche de Lima, donde la fecha de UTC y la de la persona difieren (regla 02): 04:59 UTC del 8 de octubre son las
+ * 23:59 del 7 en Lima, y 05:01 UTC son las 00:01 del 8.
  *
  * <p>Cubre lo que decide el servidor para la app nueva (sin cuerpo = mañana) y para el APK anterior (que manda la fecha
  * que vio: mañana si la guardó hoy; 400 y vuelve a leer si ya no lo es).
@@ -45,8 +45,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Import(TestcontainersConfiguration.class)
 class EmpiezaAlDiaSiguienteIT {
 
-    private static final Instant ONCE_Y_MEDIA_EN_LIMA = Instant.parse("2026-11-03T04:59:00Z"); // 23:59 del 2 en Lima
-    private static final Instant PASADA_LA_MEDIANOCHE_EN_LIMA = Instant.parse("2026-11-03T05:01:00Z"); // 00:01 del 3
+    private static final Instant ONCE_Y_MEDIA_EN_LIMA = Instant.parse("2026-10-08T04:59:00Z"); // 23:59 del 7 en Lima
+    private static final Instant PASADA_LA_MEDIANOCHE_EN_LIMA = Instant.parse("2026-10-08T05:01:00Z"); // 00:01 del 8 en Lima
     private static final String ACTIVAR = "/api/v1/onboarding/activate-program";
 
     @LocalServerPort
@@ -81,13 +81,13 @@ class EmpiezaAlDiaSiguienteIT {
 
         JsonNode antes = leer(pedir("GET", sesion, null));
         assertThat(antes.get("activated").asBoolean()).isFalse();
-        assertThat(antes.get("validStartDates")).extracting(JsonNode::asText).containsExactly("2026-11-03");
+        assertThat(antes.get("validStartDates")).extracting(JsonNode::asText).containsExactly("2026-10-08");
 
         JsonNode activada = leer(pedir("POST", sesion, null));
 
-        assertThat(activada.get("startDate").asText()).isEqualTo("2026-11-03");
+        assertThat(activada.get("startDate").asText()).isEqualTo("2026-10-08");
         assertThat(activada.get("programDay").asInt()).as("todavía no llegó: día 0").isZero();
-        assertThat(inicioGuardado(aprendiz)).isEqualTo("2026-11-03");
+        assertThat(inicioGuardado(aprendiz)).isEqualTo("2026-10-08");
     }
 
     @Test
@@ -98,10 +98,10 @@ class EmpiezaAlDiaSiguienteIT {
         String sesion = sesionDe(aprendiz);
 
         assertThat(leer(pedir("GET", sesion, null)).get("validStartDates")).extracting(JsonNode::asText)
-                .containsExactly("2026-11-04");
+                .containsExactly("2026-10-09");
         leer(pedir("POST", sesion, Map.of()));
 
-        assertThat(inicioGuardado(aprendiz)).isEqualTo("2026-11-04");
+        assertThat(inicioGuardado(aprendiz)).isEqualTo("2026-10-09");
     }
 
     @Test
@@ -110,18 +110,18 @@ class EmpiezaAlDiaSiguienteIT {
         UUID aprendiz = usuarioConFilaSinActivar("APRENDIZ");
         String sesion = sesionDe(aprendiz);
         String laQueSeVio = leer(pedir("GET", sesion, null)).get("validStartDates").get(0).asText();
-        assertThat(laQueSeVio).isEqualTo("2026-11-03");
+        assertThat(laQueSeVio).isEqualTo("2026-10-08");
 
         reloj.fijar(PASADA_LA_MEDIANOCHE_EN_LIMA);
         HttpResponse<String> rechazada = pedir("POST", sesion, Map.of("startDate", laQueSeVio));
 
         assertThat(rechazada.statusCode()).as(rechazada.body()).isEqualTo(400);
-        assertThat(rechazada.body()).contains("2026-11-04");
+        assertThat(rechazada.body()).contains("2026-10-09");
         assertThat(estaActivado(aprendiz)).as("no se activó con una fecha que ya no es mañana").isFalse();
 
         String laNueva = leer(pedir("GET", sesion, null)).get("validStartDates").get(0).asText();
         assertThat(leer(pedir("POST", sesion, Map.of("startDate", laNueva))).get("startDate").asText())
-                .isEqualTo("2026-11-04");
+                .isEqualTo("2026-10-09");
     }
 
     @Test
@@ -130,7 +130,7 @@ class EmpiezaAlDiaSiguienteIT {
         UUID aprendiz = usuarioConFilaSinActivar("APRENDIZ");
         String sesion = sesionDe(aprendiz);
 
-        for (String fecha : List.of("2026-11-02", "2026-11-05", "2026-11-06")) {
+        for (String fecha : List.of("2026-10-07", "2026-10-10", "2026-10-11")) {
             HttpResponse<String> respuesta = pedir("POST", sesion, Map.of("startDate", fecha));
             assertThat(respuesta.statusCode()).as(fecha + " " + respuesta.body()).isEqualTo(400);
         }
@@ -142,19 +142,19 @@ class EmpiezaAlDiaSiguienteIT {
     void activarDosVecesNoMueveLaFecha() throws Exception {
         UUID aprendiz = usuarioConFilaSinActivar("APRENDIZ");
         String sesion = sesionDe(aprendiz);
-        leer(pedir("POST", sesion, Map.of("startDate", "2026-11-03")));
+        leer(pedir("POST", sesion, Map.of("startDate", "2026-10-08")));
         Instant activadoEn = jdbcTemplate.queryForObject(
                 "SELECT programa_activado_en FROM renaser.participantes_programa WHERE usuario_id = ?",
                 java.sql.Timestamp.class, aprendiz).toInstant();
 
         reloj.fijar(PASADA_LA_MEDIANOCHE_EN_LIMA);
-        assertThat(leer(pedir("POST", sesion, null)).get("startDate").asText()).isEqualTo("2026-11-03");
-        assertThat(leer(pedir("POST", sesion, Map.of("startDate", "2026-11-03"))).get("startDate").asText())
-                .isEqualTo("2026-11-03");
-        assertThat(pedir("POST", sesion, Map.of("startDate", "2026-11-04")).statusCode())
+        assertThat(leer(pedir("POST", sesion, null)).get("startDate").asText()).isEqualTo("2026-10-08");
+        assertThat(leer(pedir("POST", sesion, Map.of("startDate", "2026-10-08"))).get("startDate").asText())
+                .isEqualTo("2026-10-08");
+        assertThat(pedir("POST", sesion, Map.of("startDate", "2026-10-09")).statusCode())
                 .as("otra fecha sobre un programa ya activado: 409").isEqualTo(409);
 
-        assertThat(inicioGuardado(aprendiz)).isEqualTo("2026-11-03");
+        assertThat(inicioGuardado(aprendiz)).isEqualTo("2026-10-08");
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT programa_activado_en FROM renaser.participantes_programa WHERE usuario_id = ?",
                 java.sql.Timestamp.class, aprendiz).toInstant()).isEqualTo(activadoEn);
@@ -170,8 +170,8 @@ class EmpiezaAlDiaSiguienteIT {
 
         JsonNode activada = leer(pedir("POST", sesionDe(aprendiz), null));
 
-        assertThat(activada.get("startDate").asText()).isEqualTo("2026-11-03");
-        assertThat(activada.get("expectedGraduationDate").asText()).isEqualTo("2027-11-03");
+        assertThat(activada.get("startDate").asText()).isEqualTo("2026-10-08");
+        assertThat(activada.get("expectedGraduationDate").asText()).isEqualTo("2027-10-08");
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT duracion_dias FROM renaser.participantes_programa WHERE usuario_id = ?",
                 Integer.class, aprendiz)).isEqualTo(365);
