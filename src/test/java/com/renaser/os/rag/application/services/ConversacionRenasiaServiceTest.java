@@ -823,21 +823,41 @@ class ConversacionRenasiaServiceTest {
         when(propuestasDelTurno.pendientesCreadasDesde(activo, CLOCK.now())).thenReturn(List.of(MEDITAR));
         when(propuestasDelTurno.evidenciasPedidasDesde(activo, CLOCK.now())).thenReturn(List.of(
                 new ConsultarPropuestasDelTurnoUseCase.PedidoDeEvidencia(registro, "JUGO VERDE", CLOCK.now(),
-                        finDelDia, true)));
+                        finDelDia, false)));
 
         List<EventoRenasia> eventos = service.preguntar(pregunta(activo)).collectList().block();
 
-        String respaldo = "\n\nFoto para registrar 'JUGO VERDE': si no ves el boton de la camara, subela desde Hoy.";
+        String respaldo = "\n\nFoto para registrar 'JUGO VERDE': si no ves el boton de la camara, subela desde Training.";
         assertThat(eventos).containsExactly(
                 new EventoRenasia.Texto("ok"),
                 new EventoRenasia.Texto("\n\nPropuesta: Meditar: de 06:00 a 07:00 desde manana"),
                 new EventoRenasia.Propuesta(MEDITAR.id(), MEDITAR.resumen(), MEDITAR.venceEn()),
                 new EventoRenasia.Texto(respaldo),
-                new EventoRenasia.Evidencia(registro, "JUGO VERDE", finDelDia, true),
+                new EventoRenasia.Evidencia(registro, "JUGO VERDE", finDelDia, false),
                 new EventoRenasia.Fin());
         ArgumentCaptor<MensajeRenasia> captor = ArgumentCaptor.forClass(MensajeRenasia.class);
         verify(saveMensajeRenasiaPort, times(2)).save(captor.capture());
         assertThat(captor.getAllValues().get(1).contenido()).endsWith(respaldo);
+    }
+
+    /** Spec 038: un ritual no se registra con foto sino escribiendo; el texto de respaldo (app sin la tarjeta, historial) lo dice. */
+    @Test
+    void laTarjetaDeUnRitualSeEscribeYSuRespaldoNoPideFoto() {
+        stubCaminoFeliz();
+        UUID registro = UUID.fromString("44444444-4444-4444-4444-444444444444");
+        Instant finDelDia = Instant.parse("2026-08-26T05:00:00Z");
+        when(propuestasDelTurno.evidenciasPedidasDesde(activo, CLOCK.now())).thenReturn(List.of(
+                new ConsultarPropuestasDelTurnoUseCase.PedidoDeEvidencia(registro, "RITUAL DE LA MAÑANA", CLOCK.now(),
+                        finDelDia, true)));
+
+        List<EventoRenasia> eventos = service.preguntar(pregunta(activo)).collectList().block();
+
+        assertThat(eventos).containsExactly(
+                new EventoRenasia.Texto("ok"),
+                new EventoRenasia.Texto("\n\nPara registrar 'RITUAL DE LA MAÑANA' cuenta como te sientes: si no ves el boton para escribir, "
+                        + "hazlo desde Training."),
+                new EventoRenasia.Evidencia(registro, "RITUAL DE LA MAÑANA", finDelDia, true),
+                new EventoRenasia.Fin());
     }
 
     /**

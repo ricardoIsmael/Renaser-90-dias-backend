@@ -20,9 +20,6 @@ import java.util.stream.Collectors;
  */
 final class TextoDelMapa {
 
-    /** Un dia de programa antes de este, no tener Mapa es lo esperado: se arma el dia 7. */
-    static final int DIA_DEL_MAPA = 7;
-
     private static final DateTimeFormatter FECHA =
             DateTimeFormatter.ofPattern("EEEE dd/MM/yyyy", Locale.forLanguageTag("es"));
 
@@ -37,14 +34,15 @@ final class TextoDelMapa {
                 retorno(mapa), "Usa sus palabras. No agregues metas, numeros ni hitos que no esten aca.");
     }
 
+    /**
+     * Spec 038: el Mapa de Renacimiento se retiro (spec 026). Nadie lo arma ya, asi que no tenerlo es lo normal y NUNCA se le invita a hacerlo: sus
+     * objetivos nacen de su diagnostico (consultar_mi_diagnostico) o los escribe en Plan, y se leen con consultar_rocas (noventa). El parametro se
+     * conserva porque la herramienta lo pasa, pero el texto no depende del dia.
+     */
     static String sinMapa(Optional<SituacionDelAprendiz> situacion) {
-        if (situacion.isPresent() && situacion.get().diaPrograma() < DIA_DEL_MAPA) {
-            return "Todavia no tiene Mapa de Renacimiento: se arma el dia " + DIA_DEL_MAPA + " del programa y hoy "
-                    + "es su dia " + situacion.get().diaPrograma() + ". No le inventes metas ni hitos.";
-        }
-        return "No tiene Mapa de Renacimiento guardado (no lo recorrio, o lo hizo antes de que se guardara en "
-                + "el servidor). No le inventes metas ni hitos: diselo en una linea e invitala a completar su "
-                + "Mapa de Renacimiento en la app.";
+        return "No tiene Mapa de Renacimiento guardado, y es lo normal: el Mapa se retiro y ya nadie lo arma. NO la invites a "
+                + "hacerlo. Sus objetivos nacen de su diagnostico (consultar_mi_diagnostico) o los escribe ella en la pestana Plan; "
+                + "para leerlos usa consultar_rocas con alcance noventa. No le inventes metas ni hitos.";
     }
 
     static String area(String clave) {
@@ -87,7 +85,8 @@ final class TextoDelMapa {
 
     private static String hitos(MapaDeLaPersona mapa, Optional<SituacionDelAprendiz> situacion) {
         Optional<ProximoHito> proximo = situacion.flatMap(s -> ProximoHito.para(s.diaPrograma()));
-        String cabeza = situacion.map(s -> "Hitos, pasos hacia la meta del dia 90 (hoy es su dia " + s.diaPrograma() + " de 90):")
+        String cabeza = situacion.map(s -> "Hitos, pasos hacia la meta del dia 90 (hoy es su dia " + s.diaPrograma() + " de "
+                        + s.duracionDias() + "):")
                 .orElse("Hitos, pasos hacia la meta del dia 90 (no se su dia del programa: no digas cual es el proximo):");
         String lineas = ProximoHito.DIAS_DE_HITO.stream()
                 .map(dia -> lineaDeHito(mapa.hitosDelDia(dia), dia, proximo, situacion))

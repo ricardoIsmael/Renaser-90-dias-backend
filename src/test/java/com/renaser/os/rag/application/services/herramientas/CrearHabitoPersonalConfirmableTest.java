@@ -36,7 +36,7 @@ class CrearHabitoPersonalConfirmableTest {
 
     private final GestionarPlanDeHabitosPort planPort = mock(GestionarPlanDeHabitosPort.class);
     private final CrearHabitoPersonalPort crearPort = mock(CrearHabitoPersonalPort.class);
-    private final CrearHabitoPersonalConfirmable confirmable = new CrearHabitoPersonalConfirmable(planPort, crearPort);
+    private final CrearHabitoPersonalConfirmable confirmable = new CrearHabitoPersonalConfirmable(planPort, crearPort, CategoriasDePrueba.ESCUELA);
 
     @BeforeEach
     void preparar() {
@@ -94,5 +94,24 @@ class CrearHabitoPersonalConfirmableTest {
 
         assertThat(resultado).isInstanceOf(ResultadoHerramienta.Fallo.class);
         verify(crearPort, never()).crear(any(), any());
+    }
+
+    @Test
+    @DisplayName("spec 038: en el Diplomado crea en SU categoria; una categoria que su formacion no tiene (o que ya desactivaron) no se crea")
+    void creaEnLaCategoriaDeSuFormacion() {
+        var delDiplomado = new CrearHabitoPersonalConfirmable(planPort, crearPort,
+                CategoriasDePrueba.de(CategoriasDePrueba.LAS_DEL_DIPLOMADO));
+        conPlan();
+
+        ResultadoHerramienta resultado = delDiplomado.aplicar(APRENDIZ, invocacion("nombre", "Leer casos",
+                "categoria", "DIPLOMADO_ESTUDIO_PROFUNDO", "hora", "07:30"));
+
+        verify(crearPort).crear(APRENDIZ, HabitoPersonalPedido.de("Leer casos",
+                new com.renaser.os.rag.domain.model.habitopersonal.CategoriaDelHabito("DIPLOMADO_ESTUDIO_PROFUNDO", "Estudio profundo"),
+                LocalTime.of(7, 30), null, null));
+        assertThat(((ResultadoHerramienta.Exito) resultado).contenido()).startsWith("Hábito 'Leer casos' creado en Estudio profundo,");
+
+        ResultadoHerramienta deOtraFormacion = delDiplomado.aplicar(APRENDIZ, invocacion("nombre", "Correr", "categoria", "CUERPO"));
+        assertThat(((ResultadoHerramienta.Fallo) deOtraFormacion).motivo()).contains("no trae un hábito válido");
     }
 }

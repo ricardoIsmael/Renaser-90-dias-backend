@@ -114,13 +114,15 @@ class PropuestasConObjetivoDelMapaTest {
     }
 
     @Test
-    @DisplayName("sin Mapa se propone igual y el modelo la invita a completarlo; si no se lee, sale como antes")
+    @DisplayName("sin Mapa se propone igual y NO se la invita a hacerlo (el Mapa se retiro, spec 038); si no se lee, sale como antes")
     void sinMapa() {
         ResultadoHerramienta resultado = agregarCorrer(id -> MapaDeLaPersona.sinMapa());
 
         assertThat(resumenPropuesto()).doesNotContain("Para tu objetivo");
         assertThat(((ResultadoHerramienta.Exito) resultado).contenido())
-                .contains("No tiene Mapa de Renacimiento: la propuesta va igual; invitala en una linea");
+                .doesNotContain("Mapa").doesNotContain("invitala").doesNotContain("completar");
+        assertThat(new MapaParaProponer(id -> MapaDeLaPersona.sinMapa(), EN_DIA_45).para(APRENDIZ, List.of("CUERPO")))
+                .isEqualTo(new MapaParaProponer.Vinculo("", ""));
 
         assertThat(new MapaParaProponer(id -> {
             throw new IllegalStateException("caida");

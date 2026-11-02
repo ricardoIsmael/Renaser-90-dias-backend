@@ -16,8 +16,11 @@ import java.util.Optional;
 
 /**
  * {@code consultar_mi_mapa} (R0, solo lectura, D-233): el Mapa de Renacimiento que la persona armo el
- * dia 7 — su prioridad, sus tres objetivos con el porque, los hitos 30/60/90 marcando el proximo, sus
- * acciones y su protocolo de retorno.
+ * dia 7: su prioridad, sus tres objetivos con el porque, los hitos 30/60/90 marcando el proximo, sus acciones y su
+ * protocolo de retorno.
+ *
+ * <p><b>Spec 038:</b> el Mapa se retiro (spec 026). La herramienta queda para quien lo armo antes; a quien no lo tiene
+ * le dice que es lo normal y lo manda al diagnostico o a Plan, sin invitarla nunca a hacerlo.
  *
  * <p>Es la fuente para conectar un habito o una accion con lo que la persona se propuso, con SUS
  * palabras. No decide nada: el Mapa lo lee {@code onboarding} y el dia de hoy (derivado de las fechas en
@@ -32,14 +35,14 @@ public class ConsultarMiMapaHerramienta implements HerramientaAgente {
     private static final Logger log = LoggerFactory.getLogger(ConsultarMiMapaHerramienta.class);
 
     private static final DefinicionHerramienta DEFINICION = DefinicionHerramienta.sinParametros(NOMBRE,
-            "Devuelve el Mapa de Renacimiento que la persona armo el dia 7: el area que prioriza, sus tres "
-                    + "objetivos de 90 dias (salud, negocio y dinero, relaciones) con la meta redactada, como "
-                    + "esta hoy y a donde quiere llegar al dia 90, con que lo evidencia y POR QUE lo eligio; "
-                    + "sus hitos de los dias 30, 60 y 90 marcando cual es el proximo y cuantos dias faltan; "
-                    + "las acciones que eligio para llegar; y su protocolo de retorno (su accion minima para "
-                    + "volver en menos de 24 h si se cae). Usala cuando pregunte por sus objetivos o metas, "
-                    + "como va, para que hace un habito o una accion, cual es su proximo hito, o cuando se "
-                    + "desanima o quiere dejar. Si no tiene Mapa, lo dice.");
+            "SOLO para quien armo su Mapa de Renacimiento antes de que se retirara (el Mapa ya no se arma: los "
+                    + "objetivos nuevos nacen del diagnostico, consultar_mi_diagnostico, o se escriben en Plan, "
+                    + "consultar_rocas con alcance noventa). Devuelve ese Mapa viejo: el area que prioriza, sus tres "
+                    + "objetivos con la meta redactada, como esta hoy y a donde quiere llegar, con que lo evidencia y POR "
+                    + "QUE lo eligio; sus hitos de los dias 30, 60 y 90 marcando cual es el proximo y cuantos dias faltan; "
+                    + "las acciones que eligio para llegar; y su protocolo de retorno (su accion minima para volver en "
+                    + "menos de 24 h si se cae). Si no tiene Mapa, lo dice y la manda al diagnostico o a Plan: nunca la "
+                    + "invita a hacer el Mapa.");
 
     private final ConsultarMapaDeRenacimientoPort mapaPort;
     private final ConsultarSituacionDelAprendizPort situacionPort;

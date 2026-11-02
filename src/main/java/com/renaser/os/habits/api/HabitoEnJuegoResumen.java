@@ -45,14 +45,26 @@ import java.util.UUID;
  * @param categoriaClave la dimension del habito, clave de {@code categorias_habito} (CUERPO, MENTE,
  *                       CONSCIENCIA, ESPIRITU), o {@code null} si el habito ya no existe (E-455).
  *                       Para decir "te faltan 27: Cuerpo 13, Mente 8..."
+ * @param habitoId       el id del habito (catalogo o propio) del que es este registro, o {@code null} si no se sabe (spec 038). Es lo que la app necesita
+ *                       para apagar las alarmas de ESE habito (issue #33) cuando SER lo cumple por una propuesta
+ * @param fecha          el dia del habito de este registro ({@code fechaEjecucion}, en la zona de la persona), o {@code null} (spec 038)
  */
 public record HabitoEnJuegoResumen(UUID registroId, String titulo, String estado, Integer puntosEnJuego,
                                     Integer puntosMaximos, Instant plazo, boolean exigeEvidencia,
                                     List<TramoPuntos> tramos, String claveSistema, String tituloDelPrograma,
-                                    LocalTime horaInicio, String categoriaClave) {
+                                    LocalTime horaInicio, String categoriaClave, UUID habitoId, java.time.LocalDate fecha) {
 
     public HabitoEnJuegoResumen {
         tramos = tramos == null ? List.of() : List.copyOf(tramos);
+    }
+
+    /** Sin el habito ni el dia (lo que habia antes de la spec 038). */
+    public HabitoEnJuegoResumen(UUID registroId, String titulo, String estado, Integer puntosEnJuego,
+                                Integer puntosMaximos, Instant plazo, boolean exigeEvidencia,
+                                List<TramoPuntos> tramos, String claveSistema, String tituloDelPrograma,
+                                LocalTime horaInicio, String categoriaClave) {
+        this(registroId, titulo, estado, puntosEnJuego, puntosMaximos, plazo, exigeEvidencia, tramos, claveSistema,
+                tituloDelPrograma, horaInicio, categoriaClave, null, null);
     }
 
     /** Sin hora ni dimension (lo que habia antes de E-455). */

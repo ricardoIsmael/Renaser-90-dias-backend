@@ -26,17 +26,31 @@ final class MapaEnElPrompt {
      * Sin Rocas Maestras (D-247, E-496): planificar objetivos esta cerrado hasta que la persona tenga sus tres objetivos de 90 dias, y la linea lo dice para
      * que el modelo ni lo intente. Desde la spec 026 el camino es escribirlos en Plan (o confirmar los que nacieron de su diagnostico): el Mapa se retiro.
      */
-    static final String SIN_OBJETIVOS = "Objetivos de 90 dias: todavia no los tiene escritos — no se puede planificar NINGUN objetivo "
-            + "(acciones del dia, plan de la semana): todo se rechaza. Si pide planificar su dia o sus objetivos, antes de preguntarle nada dile eso "
-            + "e invitala a escribirlos en la pestana Plan (o a confirmar los de su diagnostico). Sus habitos si se ajustan.\n";
+    static final String SIN_OBJETIVOS = sinObjetivos("90 días");
+
+    /**
+     * Spec 038: con el plazo de ESA persona («90 dias», «3 meses», «1 año»): la Escuela, el Diplomado y la Certificacion no tienen el mismo. Tu no los
+     * escribes ni los confirmas: los escribe o los confirma ella en Plan.
+     */
+    static String sinObjetivos(String plazoDelObjetivo) {
+        return "Objetivos de " + plazoDelObjetivo + ": todavia no los tiene escritos ni confirmados — no se puede planificar NINGUN objetivo "
+                + "(acciones del dia, plan de la semana): todo se rechaza. Si pide planificar su dia o sus objetivos, antes de preguntarle nada dile eso "
+                + "e invitala a abrir la pestana Plan: ahi escribe sus tres objetivos (o confirma los que nacieron de su diagnostico). Tu no puedes "
+                + "escribirlos ni confirmarlos. Sus habitos si se ajustan.\n";
+    }
 
     /** Vacio si no se sabe nada ({@code null}): la situacion queda como estaba. Lleva el diagnostico y, si hizo el Mapa antes de que se retirara, su prioridad y su proximo hito. */
     static String linea(ResumenDelMapa mapa, int diaPrograma) {
+        return linea(mapa, diaPrograma, "90 días");
+    }
+
+    /** Igual, diciendo los objetivos con el plazo de la persona (spec 038). */
+    static String linea(ResumenDelMapa mapa, int diaPrograma, String plazoDelObjetivo) {
         if (mapa == null) {
             return "";
         }
         if (mapa.objetivosBloqueados()) {
-            return SIN_OBJETIVOS + lineaDelDiagnostico(mapa);
+            return sinObjetivos(plazoDelObjetivo) + lineaDelDiagnostico(mapa);
         }
         return lineaDelDiagnostico(mapa) + lineaDelMapa(mapa);
     }

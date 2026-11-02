@@ -218,7 +218,7 @@ class AjustesDeRocasHerramientasTest {
 
         verify(proponer).proponer(APRENDIZ, invocacion(ProponerEditarObjetivoSemanalHerramienta.NOMBRE, "semana", "4",
                 "eje", "TRABAJO", "obstaculo", "Las reuniones", "autoevaluacionInicio", "6"),
-                "Cambiar el objetivo de Trabajo de la semana 4. obstaculo: Las reuniones; como arranca: 6/10. Lo que "
+                "Cambiar el objetivo de Negocio de la semana 4. obstaculo: Las reuniones; como arranca: 6/10. Lo que "
                         + "no se nombra queda como esta.");
     }
 
@@ -267,7 +267,7 @@ class AjustesDeRocasHerramientasTest {
 
         assertThat(resultado).isInstanceOf(ResultadoHerramienta.Exito.class);
         verify(proponer).proponer(APRENDIZ, invocacion(ProponerEditarObjetivoSemanalHerramienta.NOMBRE, "semana", "5",
-                "eje", "TRABAJO", "titulo", "Vender 3"), "Cambiar el objetivo de Trabajo de la semana 5. objetivo: "
+                "eje", "TRABAJO", "titulo", "Vender 3"), "Cambiar el objetivo de Negocio de la semana 5. objetivo: "
                 + "Vender 3. Lo que no se nombra queda como esta.");
     }
 
@@ -345,7 +345,7 @@ class AjustesDeRocasHerramientasTest {
                 "eje", "TRABAJO", "titulo", "Vender 3");
 
         assertThat(editarConfirmable.aplicar(APRENDIZ, guardada))
-                .isEqualTo(ResultadoHerramienta.exito("Objetivo de Trabajo de la semana 4 actualizado."));
+                .isEqualTo(ResultadoHerramienta.exito("Objetivo de Negocio de la semana 4 actualizado."));
 
         when(editar.editar(APRENDIZ, 4, "TRABAJO", cambio)).thenReturn(new EditarObjetivoSemanalPort.Resultado.Rechazado(
                 EditarObjetivoSemanalPort.Motivo.VENTANA_CERRADA));

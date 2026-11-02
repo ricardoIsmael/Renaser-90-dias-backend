@@ -2,10 +2,12 @@ package com.renaser.os.rag.application.services.herramientas;
 
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase;
 import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase.PropuestaCreada;
+import com.renaser.os.rag.application.ports.out.habitos.ConsultarCategoriasDeHabitoPort;
 import com.renaser.os.rag.application.ports.out.plan.CrearHabitoPersonalPort;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort.HabitoDelPlan;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort.PlanDelAprendiz;
+import com.renaser.os.rag.domain.model.habitopersonal.CategoriaDelHabito;
 import com.renaser.os.rag.domain.model.habitopersonal.HabitoPersonalPedido;
 import com.renaser.os.rag.domain.model.herramienta.DefinicionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
@@ -52,14 +54,15 @@ public class PropuestaDeCrearHabitoPersonal implements HerramientaAgente {
             "Propone crear un habito PROPIO nuevo en el plan de la persona. Usala solo si pide agregar o crear "
                     + "un habito que no tiene. NO lo crea: deja una propuesta y la persona tiene que tocar "
                     + "Confirmar en la app; nunca digas que ya quedo creado. La categoria es la dimension de "
-                    + "Training (Cuerpo, Mente, Emociones o Espiritu): si la persona no la dijo, NO llames todavia, "
-                    + "preguntasela primero en una frase. Hora, dias y meta solo si los dijo: nunca los inventes.",
+                    + "Training de SU formacion (Cuerpo, Mente...: cada formacion tiene las suyas): si la persona no la dijo, NO llames "
+                    + "todavia, preguntasela primero en una frase; si no existe en su formacion, la herramienta te dice cuales hay. Hora, "
+                    + "dias y meta solo si los dijo: nunca los inventes.",
             List.of(ParametroHerramienta.obligatorio(ArgumentosDeHabitoPersonal.NOMBRE, TipoParametroHerramienta.TEXTO,
                             "Como se llama el habito, corto y con las palabras de la persona (por ejemplo 'Leer 20 "
                                     + "minutos')."),
                     new ParametroHerramienta(ArgumentosDeHabitoPersonal.CATEGORIA, TipoParametroHerramienta.TEXTO,
-                            "'Cuerpo', 'Mente', 'Emociones' o 'Espiritu', la que eligio la persona. Si no la dijo, "
-                                    + "no llames la herramienta: preguntasela.", false),
+                            "El nombre de una categoria de la formacion de la persona (por ejemplo 'Cuerpo' o 'Mente'), la que "
+                                    + "eligio ella. Si no la dijo, no llames la herramienta: preguntasela.", false),
                     new ParametroHerramienta(ArgumentosDeHabitoPersonal.HORA, TipoParametroHerramienta.TEXTO,
                             "Hora del dia en HH:mm de 24 horas (por ejemplo 07:30). Omitela si no la dijo.", false),
                     new ParametroHerramienta(ArgumentosDeHabitoPersonal.DIAS, TipoParametroHerramienta.TEXTO,
@@ -71,12 +74,14 @@ public class PropuestaDeCrearHabitoPersonal implements HerramientaAgente {
     private final GestionarPlanDeHabitosPort planPort;
     private final CrearHabitoPersonalPort crearPort;
     private final ProponerAccionUseCase proponerAccion;
+    private final ConsultarCategoriasDeHabitoPort categoriasPort;
 
     public PropuestaDeCrearHabitoPersonal(GestionarPlanDeHabitosPort planPort, CrearHabitoPersonalPort crearPort,
-                                          ProponerAccionUseCase proponerAccion) {
+                                          ProponerAccionUseCase proponerAccion, ConsultarCategoriasDeHabitoPort categoriasPort) {
         this.planPort = planPort;
         this.crearPort = crearPort;
         this.proponerAccion = proponerAccion;
+        this.categoriasPort = categoriasPort;
     }
 
     @Override
@@ -86,9 +91,16 @@ public class PropuestaDeCrearHabitoPersonal implements HerramientaAgente {
 
     @Override
     public ResultadoHerramienta ejecutar(UserId actorId, InvocacionHerramienta invocacion) {
+        List<CategoriaDelHabito> categorias;
+        try {
+            categorias = categoriasPort.deLaFormacionDe(actorId);
+        } catch (RuntimeException falla) {
+            log.warn("[rag] la herramienta {} no pudo leer las categorias de la formacion", NOMBRE, falla);
+            return ResultadoHerramienta.fallo("No pude leer las categorias de habitos de su formacion en este momento.");
+        }
         HabitoPersonalPedido pedido;
         try {
-            pedido = ArgumentosDeHabitoPersonal.leer(invocacion, crearPort.ultimaHoraDeInicio());
+            pedido = ArgumentosDeHabitoPersonal.leer(invocacion, crearPort.ultimaHoraDeInicio(), categorias);
         } catch (PropuestaImposibleException motivo) {
             return ResultadoHerramienta.fallo(motivo.getMessage());
         }

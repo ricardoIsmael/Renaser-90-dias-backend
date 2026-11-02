@@ -76,7 +76,7 @@ class MapaEnElPromptTest {
         String sinMapa = GoogleGenAiRenasiaChatAdapter.formatearSituacion(DIA_23.conMapa(
                 ResumenDelMapa.de(MapaDeLaPersona.sinMapa(), 23).conRocasMaestras(false)));
         assertThat(sinMapa).contains(MapaEnElPrompt.SIN_OBJETIVOS).doesNotContain("Ir al Mapa");
-        assertThat(MapaEnElPrompt.SIN_OBJETIVOS).contains("no se puede planificar NINGUN objetivo").contains("escribirlos en la pestana Plan");
+        assertThat(MapaEnElPrompt.SIN_OBJETIVOS).contains("no se puede planificar NINGUN objetivo").contains("abrir la pestana Plan").contains("Tu no puedes escribirlos ni confirmarlos");
 
         assertThat(MapaEnElPrompt.linea(ResumenDelMapa.de(mapa("salud", List.of()), 23).conRocasMaestras(false), 23))
                 .isEqualTo(MapaEnElPrompt.SIN_OBJETIVOS);

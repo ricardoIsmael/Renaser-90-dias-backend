@@ -47,7 +47,7 @@ public class ConsultarResumenDelProgramaHerramienta implements HerramientaAgente
     static final int FASES_DEL_PROGRAMA = 4;
 
     private static final DefinicionHerramienta DEFINICION = DefinicionHerramienta.sinParametros(NOMBRE,
-            "Devuelve donde esta parado el aprendiz en su programa (de 90 dias o mas, segun su formacion): el dia (N de M) y la fase, "
+            "Devuelve donde esta parado el aprendiz en su programa (de 90 dias, 3 meses o 1 año, segun su formacion): el dia (N de M) y la fase, "
                     + "la fecha y la hora de ahora en su zona horaria, su coherencia de los ultimos 7 dias y su "
                     + "proximo evento del calendario, su racha actual de dias seguidos con al menos un habito "
                     + "cumplido (y su record) y sus puntos de liga. Usala cuando pregunte que dia u hora es para "

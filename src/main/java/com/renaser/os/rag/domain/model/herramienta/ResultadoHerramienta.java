@@ -18,11 +18,24 @@ public sealed interface ResultadoHerramienta {
         return new Exito(contenido);
     }
 
+    /** Un exito que ademas dice que habito se cumplio (spec 038): la app lo usa para apagar sus alarmas del dia y celebrar. */
+    static ResultadoHerramienta exito(String contenido, HabitoCumplido cumplido) {
+        return new Exito(contenido, cumplido);
+    }
+
     static ResultadoHerramienta fallo(String motivo) {
         return new Fallo(motivo);
     }
 
-    record Exito(String contenido) implements ResultadoHerramienta {
+    /**
+     * @param cumplido el habito que esta accion cumplio, o {@code null} si no cumplio ninguno (spec 038). No cambia lo que lee el modelo: solo
+     *                 viaja a la app en la respuesta de confirmar.
+     */
+    record Exito(String contenido, HabitoCumplido cumplido) implements ResultadoHerramienta {
+
+        public Exito(String contenido) {
+            this(contenido, null);
+        }
     }
 
     /**

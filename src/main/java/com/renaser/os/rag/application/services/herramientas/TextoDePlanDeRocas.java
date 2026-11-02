@@ -78,9 +78,9 @@ final class TextoDePlanDeRocas {
         return switch (motivo) {
             case FECHA_NO_PLANIFICABLE -> "Ese dia ya no se puede planificar. Elige uno que quede de la semana "
                     + "(si hoy es domingo, tambien el lunes).";
-            case SIN_OBJETIVO_SEMANAL -> "Primero tiene que armar su plan de la semana: las acciones del dia salen de ahi.";
-            case YA_PLANIFICADO -> "El dia en curso ya esta armado y no se reacomoda. Puede cambiar los que vienen.";
-            case DATOS_INVALIDOS -> "No se pudo guardar ese plan: revise que sean de 1 a 3 acciones por eje y que "
+            case SIN_OBJETIVO_SEMANAL -> "Primero arma tu plan de la semana: las acciones del dia salen de ahi.";
+            case YA_PLANIFICADO -> "Tu dia en curso ya esta armado y no se reacomoda. Puedes cambiar los dias que vienen.";
+            case DATOS_INVALIDOS -> "No se pudo guardar ese plan: revisa que sean de 1 a 3 acciones por eje y que "
                     + "los titulos no sean demasiado largos.";
             default -> rechazoComun(motivo);
         };
@@ -89,9 +89,9 @@ final class TextoDePlanDeRocas {
     /** Lo que se le dice cuando {@code rocks} rechaza el plan de la semana al confirmar. */
     static String rechazoDeLaSemana(Motivo motivo) {
         return switch (motivo) {
-            case YA_PLANIFICADO -> "Esa semana ya tiene objetivo en todos los ejes que pidio. Un objetivo ya "
+            case YA_PLANIFICADO -> "Esa semana ya tiene objetivo en todos los ejes que pediste. Un objetivo ya "
                     + "guardado no se pisa: se corrige editandolo, dentro de su ventana de edicion.";
-            case DATOS_INVALIDOS -> "No se pudo guardar: revise que haya un solo objetivo por eje y que los textos "
+            case DATOS_INVALIDOS -> "No se pudo guardar: revisa que haya un solo objetivo por eje y que los textos "
                     + "no sean demasiado largos.";
             default -> rechazoComun(motivo);
         };
@@ -101,8 +101,7 @@ final class TextoDePlanDeRocas {
         return switch (motivo) {
             case SIN_PROGRAMA -> "No encontre un programa activo para esta cuenta.";
             case ROCAS_BLOQUEADAS -> ROCAS_BLOQUEADAS;
-            default -> "No se pudo guardar el plan: la cuenta esta suspendida o todavia no tiene el programa de "
-                    + "rocas activo.";
+            default -> "No se pudo guardar el plan: tu cuenta esta suspendida o todavia no tienes tu programa activo.";
         };
     }
 
@@ -140,8 +139,17 @@ final class TextoDePlanDeRocas {
         return linea.toString();
     }
 
-    /** {@code CUERPO} -> {@code Cuerpo}. De paquete: tambien lo usa {@link TextoDeCierreDeSemana}. */
+    /**
+     * {@code CUERPO} -> {@code Cuerpo}. De paquete: tambien lo usa {@link TextoDeCierreDeSemana}.
+     *
+     * <p>Spec 038: el eje que {@code rocks} guarda como {@code TRABAJO} se llama <b>Negocio</b> en Plan y en toda la app (cambio de nombre del
+     * 2026-10-31): la tarjeta de la propuesta y lo que SER repite dicen Negocio, no «Trabajo». El argumento que recibe la herramienta
+     * sigue siendo {@code TRABAJO}: es el nombre interno, no lo que ve la persona.
+     */
     static String nombreDelEje(String eje) {
+        if ("TRABAJO".equalsIgnoreCase(eje)) {
+            return "Negocio";
+        }
         String minusculas = eje.toLowerCase(Locale.ROOT);
         return Character.toUpperCase(minusculas.charAt(0)) + minusculas.substring(1);
     }

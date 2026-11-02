@@ -158,10 +158,18 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
 
     /**
      * Lo que ve una app sin la tarjeta de la camara (y el historial) por cada pedido de foto
-     * (D-171). Sirve con y sin la tarjeta: quien no la tiene, sube la foto desde Hoy como siempre.
+     * (D-171). Sirve con y sin la tarjeta: quien no la tiene, sube la foto desde Training, donde estan sus habitos
+     * (spec 038: decia «desde Hoy», una pantalla que no registra habitos desde el 2026-10-05).
      */
     public static String textoDeEvidencia(String titulo) {
-        return "\n\nFoto para registrar '" + titulo + "': si no ves el boton de la camara, subela desde Hoy.";
+        return "\n\nFoto para registrar '" + titulo + "': si no ves el boton de la camara, subela desde Training.";
+    }
+
+    /**
+     * Spec 038: un ritual no se registra con foto sino escribiendo como se siente (decision del dueno, 2026-10-31).
+     */
+    public static String textoDeRitual(String titulo) {
+        return "\n\nPara registrar '" + titulo + "' cuenta como te sientes: si no ves el boton para escribir, hazlo desde Training.";
     }
 
     /**
@@ -173,7 +181,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
             return "\n\nFoto para registrar tu accion '" + pedido.titulo()
                     + "': si no ves el boton de la camara, subela desde Training.";
         }
-        return textoDeEvidencia(pedido.titulo());
+        return pedido.conPregunta() ? textoDeRitual(pedido.titulo()) : textoDeEvidencia(pedido.titulo());
     }
 
     private final UserSummaryFinder userSummaryFinder;

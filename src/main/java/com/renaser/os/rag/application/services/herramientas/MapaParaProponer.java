@@ -28,6 +28,9 @@ import java.util.stream.Collectors;
  * esta de su objetivo del Mapa; los habitos no pasan por aca (pedido del dueno: no se fuerzan a un objetivo).
  * Con el dia del programa, suma el proximo hito de esa area como guia ("Proximo hito, dia 60: 87 kg.").
  *
+ * <p><b>Spec 038: el Mapa ya no se arma.</b> Solo quien lo hizo antes de que se retirara tiene este vinculo; para el resto es vacio (nunca se le
+ * invita a "completar su Mapa", un camino que el servidor rechaza con 409 {@code MAPA_RETIRADO}).
+ *
  * <p>Nunca bloquea la propuesta: si el Mapa no se puede leer, sale como antes. Lo que no puede decidir el
  * codigo —si "correr 5 km" apunta de verdad a la meta de salud— se le dice al modelo en el resultado para
  * que, si no se relaciona, lo diga en una linea y sugiera como conectarlo.
@@ -62,8 +65,9 @@ public class MapaParaProponer {
     /** @param diaDeHoy dia del programa, o {@code null} si no se sabe (entonces sin proximo hito) */
     static Vinculo vinculo(MapaDeLaPersona mapa, List<String> ejes, Integer diaDeHoy) {
         if (!mapa.tieneMapa()) {
-            return new Vinculo("", "\nNo tiene Mapa de Renacimiento: la propuesta va igual; invitala en una linea a "
-                    + "completar su Mapa para conectar sus rocas con sus objetivos.");
+            // Spec 038: el Mapa se retiro (spec 026). Quien no lo hizo no tiene nada que "completar": sus objetivos nacen de su
+            // diagnostico o los escribe en Plan, asi que la propuesta sale sin ningun vinculo ni invitacion.
+            return new Vinculo("", "");
         }
         List<String> conObjetivo = ejes.stream()
                 .map(eje -> objetivoDelEje(mapa, eje, diaDeHoy)).flatMap(Optional::stream).toList();

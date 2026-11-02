@@ -32,7 +32,7 @@ final class LecturaDeAcademia {
         } catch (NoSuchElementException sinPrograma) {
             return ResultadoHerramienta.fallo("No encontre un programa activo para esta cuenta.");
         } catch (NotAuthorizedException sinAcceso) {
-            return ResultadoHerramienta.fallo("La cuenta esta suspendida o no sigue el programa de 90 dias: no "
+            return ResultadoHerramienta.fallo("La cuenta esta suspendida o no sigue su programa: no "
                     + "puedo consultar su academia.");
         } catch (RuntimeException falla) {
             log.warn("[rag] la herramienta {} no pudo leer de academy", herramienta, falla);

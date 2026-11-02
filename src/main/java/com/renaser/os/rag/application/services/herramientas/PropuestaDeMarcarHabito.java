@@ -64,7 +64,7 @@ public class PropuestaDeMarcarHabito {
         Optional<HabitoDelDia> habito = entregableDeHoy(actorId, registroId);
         if (habito.isEmpty()) {
             return ResultadoHerramienta.fallo("Ese habito no esta entre los que todavia puede entregar hoy: puede "
-                    + "que ya este hecho, que se le haya vencido el plazo o que no sea uno de los suyos.");
+                    + "que ya este hecho, que su dia ya haya cerrado (un dia cerrado no se registra) o que no sea uno de los suyos.");
         }
         if (habito.get().seRegistraConFoto()) {
             return ResultadoHerramienta.fallo("'" + habito.get().titulo() + "' exige evidencia: no se marca con "

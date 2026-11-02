@@ -49,6 +49,8 @@ class CrearHabitoPersonalPorPropuestaIT {
     @Autowired
     private ProponerAccionUseCase proponerAccion;
     @Autowired
+    private com.renaser.os.rag.application.ports.out.habitos.ConsultarCategoriasDeHabitoPort categoriasPort;
+    @Autowired
     private ResolverPropuestaUseCase resolver;
     @Autowired
     private GenerarTracksDelDiaUseCase generarTracks;
@@ -60,7 +62,7 @@ class CrearHabitoPersonalPorPropuestaIT {
 
     @BeforeEach
     void armar() {
-        herramienta = new PropuestaDeCrearHabitoPersonal(planPort, crearPort, proponerAccion);
+        herramienta = new PropuestaDeCrearHabitoPersonal(planPort, crearPort, proponerAccion, categoriasPort);
     }
 
     @AfterEach

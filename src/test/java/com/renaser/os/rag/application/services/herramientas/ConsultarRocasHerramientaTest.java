@@ -199,18 +199,37 @@ class ConsultarRocasHerramientaTest {
     }
 
     @Test
+    @DisplayName("noventa (spec 038): sin objetivos la manda a Plan o al diagnostico, nunca al Mapa; los del diagnostico salen POR CONFIRMAR en Plan")
+    void noventaSinObjetivosYPorConfirmar() {
+        when(puerto.objetivosDeNoventaDias(APRENDIZ)).thenReturn(List.of());
+
+        assertThat(texto(herramienta.ejecutar(APRENDIZ, conAlcance("noventa"))))
+                .startsWith("Todavia no tiene objetivos de 90 días.").contains("diagnostico").contains("pestana Plan")
+                .contains("No la mandes al Mapa").doesNotContain("no definio").doesNotContain("Rocas Maestras");
+
+        when(puerto.objetivosDeNoventaDias(APRENDIZ)).thenReturn(List.of(
+                new ObjetivoDeNoventaDias("CUERPO", "Bajar de peso", null, null, null, false, null, null, true),
+                new ObjetivoDeNoventaDias("RELACIONES", "Estar presente", null, null, null, false, null, null, false)));
+
+        assertThat(texto(herramienta.ejecutar(APRENDIZ, conAlcance("noventa"))))
+                .contains("- CUERPO | Bajar de peso | POR CONFIRMAR en Plan | sin meta numerica")
+                .contains("- RELACIONES | Estar presente | sin meta numerica")
+                .contains("POR CONFIRMAR nacieron de su diagnostico").contains("llevala a Plan");
+    }
+
+    @Test
     @DisplayName("noventa: el objetivo grande lleva el plazo de la persona (90 días, 3 meses o 1 año), no un 90 fijo")
     void noventaConElPlazoDeLaPersona() {
         when(puerto.objetivosDeNoventaDias(APRENDIZ)).thenReturn(List.of(
                 new ObjetivoDeNoventaDias("RELACIONES", "Estar presente", null, null, null, false, null, null)));
 
-        assertThat(texto(herramienta.ejecutar(APRENDIZ, conAlcance("noventa")))).startsWith("Objetivos de 90 días (Rocas Maestras), por eje:");
+        assertThat(texto(herramienta.ejecutar(APRENDIZ, conAlcance("noventa")))).startsWith("Objetivos de 90 días, por eje:");
 
         when(situacion.de(APRENDIZ)).thenReturn(Optional.of(new SituacionDelAprendiz(12, 2).conDuracion(365).conFormacion(Formacion.DIPLOMADO)));
-        assertThat(texto(herramienta.ejecutar(APRENDIZ, conAlcance("noventa")))).startsWith("Objetivos de 1 año (Rocas Maestras), por eje:");
+        assertThat(texto(herramienta.ejecutar(APRENDIZ, conAlcance("noventa")))).startsWith("Objetivos de 1 año, por eje:");
 
         when(situacion.de(APRENDIZ)).thenReturn(Optional.of(new SituacionDelAprendiz(12, 2).conDuracion(90).conFormacion(Formacion.DIPLOMADO)));
-        assertThat(texto(herramienta.ejecutar(APRENDIZ, conAlcance("noventa")))).startsWith("Objetivos de 3 meses (Rocas Maestras), por eje:");
+        assertThat(texto(herramienta.ejecutar(APRENDIZ, conAlcance("noventa")))).startsWith("Objetivos de 3 meses, por eje:");
 
         when(situacion.de(APRENDIZ)).thenThrow(new IllegalStateException("sin lectura"));
         assertThat(texto(herramienta.ejecutar(APRENDIZ, conAlcance("noventa")))).as("si la situación falla, el de siempre").startsWith("Objetivos de 90 días");

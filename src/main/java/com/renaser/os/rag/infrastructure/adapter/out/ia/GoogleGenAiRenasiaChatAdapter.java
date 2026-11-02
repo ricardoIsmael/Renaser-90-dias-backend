@@ -264,13 +264,13 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
      */
     static String formatearSituacion(SituacionDelAprendiz situacion) {
         if (situacion == null) {
-            return "(quien te escribe no esta cursando el programa de 90 dias: no tiene dia ni fase. "
+            return "(quien te escribe no esta cursando el programa: no tiene dia ni fase. "
                     + "No hables de su dia ni se lo preguntes.)";
         }
         String fecha = situacion.hoy() == null ? "" : situacion.hoy().format(FECHA_DE_HOY) + ", ";
         return "Hoy es " + fecha + "su dia " + situacion.diaPrograma() + " de " + situacion.duracionDias() + ", en la fase " + situacion.fase()
                 + " de 4.\n" + nombreDelObjetivoGrande(situacion.plazoDelObjetivo()) + tratoDe(situacion.trato()) + "\n"
-                + MapaEnElPrompt.linea(situacion.mapa(), situacion.diaPrograma())
+                + MapaEnElPrompt.linea(situacion.mapa(), situacion.diaPrograma(), situacion.plazoDelObjetivo())
                 + HabitosDeHoyEnElPrompt.texto(situacion.habitos());
     }
 
