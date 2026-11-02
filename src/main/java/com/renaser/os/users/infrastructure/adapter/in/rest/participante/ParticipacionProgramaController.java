@@ -126,13 +126,12 @@ public class ParticipacionProgramaController {
     }
 
     /**
-     * D-66: le dice a la app si tiene que mostrar la pantalla de "elegi tu Dia 1" y, si
-     * todavia no eligio, las fechas validas — sin esto la app tendria que adivinar la
-     * aritmetica de {@link #activateProgram} a ciegas (ver javadoc de
-     * {@link ConsultarActivacionProgramaUseCase}). Ruta bajo {@code /onboarding} porque
-     * asi la espera el cliente movil real (docs/GAPS_FRONTEND_BACKEND.md §7), aunque el
-     * agregado viva en `users` — mismo criterio que {@code /api/v1/mentor/activate-tracking}
-     * arriba.
+     * D-66: le dice a la app si tiene que mostrar el paso de activar el programa y, si todavia no lo activo, la fecha en
+     * que empieza — sin esto la app tendria que adivinar la aritmetica de {@link #activateProgram} a ciegas (ver javadoc de
+     * {@link ConsultarActivacionProgramaUseCase}). <b>Spec 036 (D-309):</b> es UNA fecha, mañana en la zona de la persona;
+     * ya no hay nada que elegir. Ruta bajo {@code /onboarding} porque asi la espera el cliente movil real
+     * (docs/GAPS_FRONTEND_BACKEND.md §7), aunque el agregado viva en `users` — mismo criterio que
+     * {@code /api/v1/mentor/activate-tracking} arriba.
      */
     @RequiresPermission(value = Permission.USE_APP, scope = "self por construccion: el endpoint no recibe traineeId")
     @GetMapping("/api/v1/onboarding/activate-program")
@@ -142,29 +141,30 @@ public class ParticipacionProgramaController {
     }
 
     /**
-     * D-66: elige el Dia 1 (hoy, +1, +2 o +3 en la zona del participante — nunca un
-     * default). Rechaza con 409 si el programa ya estaba activado (self-validating en
-     * el dominio, {@code ParticipacionPrograma.activarPrograma}) y con 400 si la fecha
-     * cae fuera de la ventana — el rango exacto lo devuelve el mensaje, la app no tiene
-     * que adivinarlo (aunque deberia haberlo consultado antes via el GET de arriba).
+     * Activa el programa: el Dia 1 es SIEMPRE MAÑANA en la zona del participante (spec 036, D-309, cambio de gerencia del
+     * 2026-11-02: la persona ya no elige). El cuerpo es opcional; si trae {@code startDate} tiene que ser mañana — la fecha
+     * que la app mostro— y si no lo es responde 400 con el mensaje del dominio (la app vuelve a leer la fecha y la muestra
+     * de nuevo; un APK anterior hace lo mismo con su ventana, E-594). Responde 409 si el programa ya estaba activado con otra
+     * fecha (self-validating en el dominio, {@code ParticipacionPrograma.activarPrograma}) y 200 sin cambios si ya estaba
+     * activado con esa misma fecha o sin fecha.
      *
      * <p><b>D-260: sin guard de rol, a proposito.</b> El personal (MENTOR, MENTOR_LEAD, ADMIN,
-     * ALCHEMIST) con la fila sin activar elige su Dia 1 por aca, con la misma regla que el aprendiz
-     * (la app lo abre desde «Elegir mi Dia 1»). Un guard de rol lo dejaria sin salida: no pasa por
+     * ALCHEMIST) con la fila sin activar activa su programa por aca, con la misma regla que el aprendiz
+     * (la app lo abre desde «Empezar mañana»). Un guard de rol lo dejaria sin salida: no pasa por
      * el onboarding y {@code POST /mentor/activate-tracking} responde 409 a quien ya tiene fila.
      * Lo cuida {@code ElegirDiaUnoDelPersonalIT}.
      *
-     * <p><b>D-261: tambien el personal SIN fila.</b> El GET le ofrece las mismas fechas y este POST
-     * le crea la fila ya activada con la fecha elegida (decision del dueño: «que elija el dia como
-     * los demas»). {@code POST /mentor/activate-tracking} (inicio hoy) queda igual para los APK
+     * <p><b>D-261: tambien el personal SIN fila.</b> El GET le ofrece la misma fecha y este POST
+     * le crea la fila ya activada (decision del dueño: «que lo haga como los demas»).
+     * {@code POST /mentor/activate-tracking} (inicio hoy) queda igual para los APK
      * 1.5.0 y anteriores. Lo cuida {@code ElegirDiaUnoDelPersonalSinFilaIT}.
      */
     @RequiresPermission(value = Permission.USE_APP, scope = "self por construccion: el endpoint no recibe traineeId")
     @PostMapping("/api/v1/onboarding/activate-program")
     public ActivarProgramaResponse activateProgram(@ActorAutenticado UserId actor,
-                                                    @RequestBody @Valid ActivarProgramaRequest request) {
+                                                    @RequestBody(required = false) @Valid ActivarProgramaRequest request) {
         var participacion = activateProgramUseCase.activarPrograma(
-                new ActivateProgramCommand(actor, request.startDate()));
+                new ActivateProgramCommand(actor, request == null ? null : request.startDate()));
         return ActivarProgramaResponse.from(participacion);
     }
 }

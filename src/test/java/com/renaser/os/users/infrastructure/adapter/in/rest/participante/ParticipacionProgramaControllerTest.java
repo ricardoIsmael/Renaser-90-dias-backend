@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
@@ -43,6 +44,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -245,16 +247,16 @@ class ParticipacionProgramaControllerTest {
     // ─── GET /api/v1/onboarding/activate-program (D-66) ────────────────────
 
     @Test
-    void estadoActivacionDevuelveLasTresFechasCuandoNoEstaActivado() throws Exception {
+    void estadoActivacionDevuelveSoloManianaCuandoNoEstaActivado() throws Exception {
         UserId actorId = UserId.of(UUID.randomUUID());
         LocalDate maniana = CLOCK.today().plusDays(1);
         when(consultarActivacionProgramaUseCase.consultarEstado(any())).thenReturn(
-                new EstadoActivacionPrograma(false, List.of(maniana, maniana.plusDays(1), maniana.plusDays(2))));
+                new EstadoActivacionPrograma(false, List.of(maniana)));
 
         mockMvc.perform(get("/api/v1/onboarding/activate-program").header("X-Actor-Id", actorId.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.activated").value(false))
-                .andExpect(jsonPath("$.validStartDates.length()").value(3))
+                .andExpect(jsonPath("$.validStartDates.length()").value(1))
                 .andExpect(jsonPath("$.validStartDates[0]").value(maniana.toString()));
     }
 
@@ -300,28 +302,40 @@ class ParticipacionProgramaControllerTest {
                 .andExpect(jsonPath("$.startDate").value(maniana.toString()));
     }
 
+    /** Spec 036: la persona ya no elige, asi que el cuerpo es opcional: sin el, o con {@code {}}, el programa empieza mañana. */
     @Test
-    void activateProgramSinStartDateDevuelve400YNoLlegaAlCasoDeUso() throws Exception {
+    void activateProgramSinCuerpoOSinStartDateLlegaAlCasoDeUsoSinFecha() throws Exception {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        LocalDate maniana = CLOCK.today().plusDays(1);
+        ParticipacionPrograma activada = ParticipacionPrograma.inscribirTraineeAprobado(actorId, CLOCK);
+        activada.activarPrograma(null, CLOCK);
+        when(activateProgramUseCase.activarPrograma(new ActivateProgramCommand(actorId, null))).thenReturn(activada);
+
         mockMvc.perform(post("/api/v1/onboarding/activate-program")
-                        .header("X-Actor-Id", UUID.randomUUID().toString())
+                        .header("X-Actor-Id", actorId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.programDay").value(0))
+                .andExpect(jsonPath("$.startDate").value(maniana.toString()));
+        mockMvc.perform(post("/api/v1/onboarding/activate-program")
+                        .header("X-Actor-Id", actorId.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
-                .andExpect(status().isBadRequest());
-
-        verifyNoInteractions(activateProgramUseCase);
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.startDate").value(maniana.toString()));
     }
 
     @Test
-    void activateProgramFueraDeLaVentanaDevuelve400() throws Exception {
+    void activateProgramConUnaFechaQueNoEsManianaDevuelve400ConElMensajeDelDominio() throws Exception {
         UserId actorId = UserId.of(UUID.randomUUID());
         when(activateProgramUseCase.activarPrograma(any()))
-                .thenThrow(new IllegalArgumentException("La fecha de inicio debe estar entre..."));
+                .thenThrow(new IllegalArgumentException("El programa empieza siempre mañana (2026-08-25, tu zona: America/Lima), recibida: 2026-09-03"));
 
         mockMvc.perform(post("/api/v1/onboarding/activate-program")
                         .header("X-Actor-Id", actorId.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"startDate\":\"" + CLOCK.today().plusDays(10) + "\"}"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string(containsString("empieza siempre mañana")));
     }
 
     @Test

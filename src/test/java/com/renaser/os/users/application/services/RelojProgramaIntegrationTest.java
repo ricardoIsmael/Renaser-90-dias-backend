@@ -104,23 +104,23 @@ class RelojProgramaIntegrationTest {
     }
 
     @Test
-    void activarConFechaFuturaNoAvanzaHastaQueLlegaYLuegoElCronLaAvanzaDiaADia() {
+    void activarSinFechaNoAvanzaHastaQueLlegaManianaYLuegoElCronLaAvanzaDiaADia() {
         FixedClock enElAlta = FixedClock.at(Instant.parse("2026-08-24T10:00:00Z"));
         UserId traineeId = crearTraineeConParticipacionPausada(enElAlta);
-        FixedClock fechaElegida = FixedClock.at(enElAlta.now().plusSeconds(2 * 86400)); // hoy + 2
+        FixedClock fechaElegida = FixedClock.at(enElAlta.now().plusSeconds(86400)); // mañana (spec 036: no se elige)
 
-        servicioEn(enElAlta).activarPrograma(new ActivateProgramCommand(traineeId, fechaElegida.today()));
+        servicioEn(enElAlta).activarPrograma(new ActivateProgramCommand(traineeId, null));
 
         ParticipacionPrograma pausadaTodavia = loadParticipacionProgramaPort.byParticipanteId(traineeId).orElseThrow();
         assertThat(pausadaTodavia.diaPrograma()).isZero(); // todavia no llego la fecha
         assertThat(pausadaTodavia.estaActivado()).isTrue(); // pero ya eligio: no esta PAUSADO
 
-        // Un dia antes de que llegue: el cron no debe hacer nada.
+        // El mismo dia del alta (la vispera de su Dia 1): el cron no debe hacer nada.
         FixedClock unDiaAntes = FixedClock.at(fechaElegida.now().minusSeconds(86400));
         servicioEn(unDiaAntes).avanzarParticipantesActivos();
         assertThat(loadParticipacionProgramaPort.byParticipanteId(traineeId).orElseThrow().diaPrograma()).isZero();
 
-        // Llega el dia elegido: el cron avanza a dia 1.
+        // Llega mañana: el cron avanza a dia 1.
         servicioEn(fechaElegida).avanzarParticipantesActivos();
         assertThat(loadParticipacionProgramaPort.byParticipanteId(traineeId).orElseThrow().diaPrograma())
                 .isEqualTo(1);

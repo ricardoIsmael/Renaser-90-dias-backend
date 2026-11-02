@@ -66,9 +66,6 @@ public final class ParticipacionPrograma {
     private static LocalDate hoyDelParticipante(Clock clock) {
         return clock.now().atZone(ZONA_POR_DEFECTO).toLocalDate();
     }
-    /** Maximo de dias tras firmar Terminos que el aprendiz puede esperar para elegir
-     * su Dia 1 (D-66): hoy, +1, +2 o +3 — 4 opciones, nunca "sin elegir". */
-    private static final int MAX_DIAS_ESPERA_ACTIVACION = 3;
     /** Primer extremo de {@link #fijarDia} (D-194): ni 0 ni el último día se fijan a mano. El último de cada persona es su duración − 1 (89 en 90 días, 364 en 365). */
     public static final int PRIMER_DIA_AJUSTABLE = 1;
     /** Mensaje del 409 de {@link #fijarDia} antes del Dia 1 (D-195); lo lee tal cual el panel. */
@@ -163,9 +160,9 @@ public final class ParticipacionPrograma {
 
     /**
      * D-261 (2026-10-07): el personal (MENTOR, MENTOR_LEAD, ADMIN, ALCHEMIST) que todavia no tiene
-     * fila elige su Dia 1 «como los demas» (decision del dueño). Arranca igual que el aprendiz
+     * fila activa su programa «como los demas» (decision del dueño). Arranca igual que el aprendiz
      * aprobado —reloj pausado, zona 'America/Lima', fase inicial, sin mentor ni celula, sin
-     * ajuste— y la activa {@link #activarPrograma} con la fecha elegida, con la misma regla.
+     * ajuste— y la activa {@link #activarPrograma} con la misma regla (spec 036: empieza mañana, no se elige).
      *
      * <p>Factoria propia y no {@link #inscribirTraineeAprobado} a secas porque el nombre dice
      * quien entra: el personal no pasa por la aprobacion de cuenta. La fila se arma en memoria
@@ -482,55 +479,59 @@ public final class ParticipacionPrograma {
     }
 
     /**
-     * Elige el Dia 1 del programa (D-66). <b>Corregido tras revision del dueño del
-     * proyecto:</b> la version original de esta regla ofrecia HOY como opcion; se
-     * descarto a favor de lo que el backend/frontend viejo ya hacia (`inicioPrograma.ts`,
-     * decision de producto 2026-08-10): el reloj del programa avanza a medianoche, asi
-     * que firmar Terminos de tarde y elegir "hoy" dejaria un Dia 1 de pocas horas, sin
-     * tiempo de completar los habitos de esa jornada. Por eso el rango valido es
-     * <b>[hoy+1, hoy+{@value #MAX_DIAS_ESPERA_ACTIVACION}]</b> — MAÑANA es la primera
-     * opcion, nunca hoy — siempre en SU zona horaria ({@link #timezone}, nunca UTC ni la
-     * del servidor). Como la fecha elegida nunca puede ser hoy, {@code diaPrograma}
-     * jamas se adelanta en el acto: siempre queda en 0 hasta que
+     * Activa el programa: el Dia 1 es SIEMPRE MAÑANA en la zona de la persona ({@link #timezone}, nunca UTC ni la del
+     * servidor). La persona ya no elige la fecha (spec 036, D-309, cambio de gerencia del 2026-11-02: «ahora iniciara al
+     * dia siguiente: el usuario no podra elegir»). Antes —D-66, D-84— elegia entre mañana, +2 y +3, y nunca hoy.
+     *
+     * <p>Nunca hoy, por la misma razon de siempre: el reloj del programa avanza a medianoche, asi que firmar Terminos de
+     * tarde y empezar "hoy" dejaria un Dia 1 de pocas horas, sin tiempo de completar los habitos de esa jornada. Como la
+     * fecha nunca es hoy, {@code diaPrograma} jamas se adelanta en el acto: queda en 0 hasta que
      * {@link #sincronizarDiaDelPrograma} (barrido del reloj) detecte que llego el dia.
      *
-     * <p>Idempotencia (distincion tecnica, no de negocio): reintentar con la MISMA
-     * fecha que ya esta activada es un no-op silencioso (200) — un timeout de red no
-     * puede convertirse en un error. Reactivar con una fecha DISTINTA es
-     * {@link IllegalStateException} (409): eso si reescribiria la historia del
-     * programa.
+     * <p>{@code fechaPedida} es opcional. Ausente significa "mañana". Si viene, tiene que SER mañana: es la fecha que la
+     * persona vio en pantalla, y si ya no lo es (dejo la pantalla abierta pasada la medianoche, o un APK anterior guardo
+     * sus fechas) se rechaza con {@link IllegalArgumentException} (400) en vez de activar con un dia distinto al que vio
+     * o de ignorarla en silencio: la app vuelve a leer la fecha y se la muestra de nuevo.
+     *
+     * <p>Idempotencia (distincion tecnica, no de negocio): reintentar sin fecha, o con la MISMA fecha que ya esta
+     * activada, es un no-op silencioso (200) — un timeout de red no puede convertirse en un error. Reactivar con una
+     * fecha DISTINTA es {@link IllegalStateException} (409): eso si reescribiria la historia del programa. Quien activo
+     * antes de este cambio con +2 o +3 conserva su fecha.
      */
-    public void activarPrograma(LocalDate fechaElegida, Clock clock) {
-        Objects.requireNonNull(fechaElegida, "fechaElegida es obligatoria");
+    public void activarPrograma(LocalDate fechaPedida, Clock clock) {
         if (estaActivado()) {
-            if (fechaElegida.equals(fechaInicio)) {
+            if (fechaPedida == null || fechaPedida.equals(fechaInicio)) {
                 return; // mismo pedido de nuevo (ej. reintento de red): no-op
             }
             throw new IllegalStateException(
                     "El programa ya fue activado el " + programaActivadoEn + ", no se puede reactivar");
         }
-        LocalDate hoy = hoyEnMiZona(clock);
-        LocalDate primeraOpcion = hoy.plusDays(1);
-        LocalDate limite = hoy.plusDays(MAX_DIAS_ESPERA_ACTIVACION);
-        if (fechaElegida.isBefore(primeraOpcion) || fechaElegida.isAfter(limite)) {
-            throw new IllegalArgumentException("La fecha de inicio debe estar entre " + primeraOpcion + " y "
-                    + limite + " (tu zona: " + timezone + "), recibida: " + fechaElegida);
+        LocalDate manana = inicioAlActivar(clock);
+        if (fechaPedida != null && !fechaPedida.equals(manana)) {
+            throw new IllegalArgumentException("El programa empieza siempre mañana (" + manana + ", tu zona: "
+                    + timezone + "), recibida: " + fechaPedida);
         }
-        this.fechaInicio = fechaElegida;
+        this.fechaInicio = manana;
         this.programaActivadoEn = clock.now();
         this.actualizadoEn = clock.now();
     }
 
     /**
-     * Las {@value #MAX_DIAS_ESPERA_ACTIVACION} fechas validas para {@link #activarPrograma}
-     * (mañana, +2, +3 en la zona del participante — NUNCA hoy) — para que la app sepa
-     * que botones ofrecer sin adivinar la aritmetica del servidor (mismo criterio
-     * documentado en `inicioPrograma.ts` del cliente movil: "quien manda es el
-     * servidor").
+     * El Dia 1 de quien activa ahora: mañana en SU zona. Es la unica regla; {@link #activarPrograma} la aplica y
+     * {@link #opcionesDeActivacion} la ofrece a la app.
+     */
+    public LocalDate inicioAlActivar(Clock clock) {
+        return hoyEnMiZona(clock).plusDays(1);
+    }
+
+    /**
+     * Las fechas que {@link #activarPrograma} acepta ahora mismo: UNA, mañana en la zona del participante (spec 036; antes
+     * eran tres). Sigue siendo una lista para que {@code GET /onboarding/activate-program} conserve su forma
+     * ({@code validStartDates}): el APK anterior, que dibuja la lista, ve una sola opcion y sigue funcionando, y la app
+     * nueva usa la primera. "Quien manda es el servidor" (`inicioPrograma.ts` del cliente movil).
      */
     public List<LocalDate> opcionesDeActivacion(Clock clock) {
-        LocalDate hoy = hoyEnMiZona(clock);
-        return List.of(hoy.plusDays(1), hoy.plusDays(2), hoy.plusDays(3));
+        return List.of(inicioAlActivar(clock));
     }
 
     /**

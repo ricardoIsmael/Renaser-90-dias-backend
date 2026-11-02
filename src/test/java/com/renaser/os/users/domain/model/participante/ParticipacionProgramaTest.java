@@ -103,8 +103,8 @@ class ParticipacionProgramaTest {
         assertThat(pausado.diaProgramaDerivado(CLOCK.today())).isZero();
 
         ParticipacionPrograma activadoParaDespues = traineePausado();
-        activadoParaDespues.activarPrograma(CLOCK.today().plusDays(2), CLOCK);
-        assertThat(activadoParaDespues.diaProgramaDerivado(CLOCK.today().plusDays(1))).isZero();
+        activadoParaDespues.activarPrograma(null, CLOCK);
+        assertThat(activadoParaDespues.diaProgramaDerivado(CLOCK.today())).isZero();
     }
 
     @Test
@@ -260,8 +260,7 @@ class ParticipacionProgramaTest {
         return ParticipacionPrograma.inscribirTraineeAprobado(UserId.of(UUID.randomUUID()), CLOCK);
     }
 
-    /** Corregido tras revision del dueño del proyecto: HOY queda fuera del rango — el
-     * reloj avanza a medianoche y firmar de tarde dejaria un Dia 1 de pocas horas. */
+    /** HOY nunca: el reloj avanza a medianoche y activar de tarde dejaria un Dia 1 de pocas horas. */
     @Test
     void activarProgramaRechazaEmpezarHoy() {
         ParticipacionPrograma p = traineePausado();
@@ -272,7 +271,7 @@ class ParticipacionProgramaTest {
     }
 
     @Test
-    void activarProgramaAceptaElBordeDeManiana() {
+    void activarProgramaConLaFechaDeManianaActivaConEsaFecha() {
         ParticipacionPrograma p = traineePausado();
 
         p.activarPrograma(CLOCK.today().plusDays(1), CLOCK);
@@ -284,33 +283,53 @@ class ParticipacionProgramaTest {
         assertThat(p.programaActivadoEn()).isEqualTo(CLOCK.now());
     }
 
+    /** Spec 036: la persona ya no elige, asi que sin fecha el programa empieza mañana. */
     @Test
-    void activarProgramaConUnaFechaFuturaDejaElDiaEnCeroHastaQueLlegue() {
+    void activarProgramaSinFechaEmpiezaManiana() {
         ParticipacionPrograma p = traineePausado();
 
-        p.activarPrograma(CLOCK.today().plusDays(2), CLOCK);
+        p.activarPrograma(null, CLOCK);
 
         assertThat(p.estaActivado()).isTrue();
-        assertThat(p.fechaInicio()).isEqualTo(CLOCK.today().plusDays(2));
+        assertThat(p.fechaInicio()).isEqualTo(CLOCK.today().plusDays(1));
         assertThat(p.diaPrograma()).isZero();
-        assertThat(p.diaProgramaAvanzadoEl()).isNull();
+        assertThat(p.programaActivadoEn()).isEqualTo(CLOCK.now());
+    }
+
+    /**
+     * Spec 036 (D-309): antes se podia empezar en +2 o +3. Ya no: cualquier fecha que no sea mañana se rechaza (400) y la
+     * fila queda sin activar. Es lo que protege al APK anterior de activar con una fecha que la persona no vio.
+     */
+    @Test
+    void activarProgramaRechazaCualquierFechaQueNoSeaManiana() {
+        for (int dias : new int[] {-1, 0, 2, 3, 4}) {
+            ParticipacionPrograma p = traineePausado();
+            LocalDate fecha = CLOCK.today().plusDays(dias);
+
+            assertThatThrownBy(() -> p.activarPrograma(fecha, CLOCK))
+                    .as("+%d dias", dias)
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("empieza siempre mañana")
+                    .hasMessageContaining(CLOCK.today().plusDays(1).toString());
+            assertThat(p.estaActivado()).isFalse();
+        }
     }
 
     /**
      * D-260 (pedido del dueño del 2026-10-07: «ese mismo día comienza, no debe descontar nada»), con el
-     * reloj en la madrugada UTC (regla 02): 03:00 UTC del 7 son las 22:00 del 6 en Lima. Las opciones
-     * se cuentan desde el 6 de Lima, y la elegida (el 7) es el Día 1 ese mismo día, sin ajuste: la
-     * víspera sigue en 0 y el día elegido entero (00:00 a 23:59 de Lima) es el 1. Vale igual para el
+     * reloj en la madrugada UTC (regla 02): 03:00 UTC del 7 son las 22:00 del 6 en Lima. «Mañana» se cuenta
+     * desde el 6 de Lima, es decir el 7, y es el Día 1 ese mismo día, sin ajuste: la
+     * víspera sigue en 0 y el día entero (00:00 a 23:59 de Lima) es el 1. Vale igual para el
      * personal, que llega a esta fila sin pasar por el onboarding.
      */
     @Test
-    void elDiaElegidoEnLaMadrugadaUtcEsElDiaUnoEnLimaSinDescontarNada() {
+    void elDiaDeManianaEnLaMadrugadaUtcEsElDiaUnoEnLimaSinDescontarNada() {
         FixedClock madrugadaUtc = FixedClock.at(Instant.parse("2026-10-07T03:00:00Z"));
         ParticipacionPrograma p = ParticipacionPrograma.inscribirTraineeAprobado(UserId.of(UUID.randomUUID()),
                 madrugadaUtc);
         LocalDate maniana = LocalDate.parse("2026-10-07");
 
-        assertThat(p.opcionesDeActivacion(madrugadaUtc)).first().isEqualTo(maniana);
+        assertThat(p.opcionesDeActivacion(madrugadaUtc)).containsExactly(maniana);
         p.activarPrograma(maniana, madrugadaUtc);
 
         assertThat(p.fechaInicio()).isEqualTo(maniana);
@@ -322,13 +341,66 @@ class ParticipacionProgramaTest {
     }
 
     /**
-     * D-261 (decisión del dueño del 2026-10-07: «que elija el día como los demás»): el personal sin
-     * fila arranca con el reloj pausado —no en el día 1 de hoy como {@code activarSeguimientoPersonal}—
-     * y elige con la misma regla. Madrugada UTC (regla 02): 03:00 UTC del 7 son las 22:00 del 6 en Lima,
-     * así que las fechas son 7, 8 y 9 de Lima, no 8, 9 y 10 del servidor.
+     * Regla 02 §3, el borde de la medianoche de Lima: 23:59 en Lima son las 04:59 UTC del día siguiente. Para la
+     * persona «hoy» todavía es el 2 y «mañana» el 3, aunque el calendario UTC ya diga 3. A las 00:01 de Lima (05:01 UTC)
+     * «mañana» ya es el 4.
      */
     @Test
-    void elPersonalSinFilaArrancaPausadoYEligeSuDiaUnoComoElAprendiz() {
+    void manianaSeCuentaDesdeLaMedianocheDeLimaYNoDesdeLaDeUtc() {
+        FixedClock lasOnceYMediaEnLima = FixedClock.at(Instant.parse("2026-11-03T04:59:00Z"));
+        FixedClock pasadaLaMedianocheEnLima = FixedClock.at(Instant.parse("2026-11-03T05:01:00Z"));
+
+        assertThat(traineePausado().opcionesDeActivacion(lasOnceYMediaEnLima))
+                .containsExactly(LocalDate.parse("2026-11-03"));
+        assertThat(traineePausado().opcionesDeActivacion(pasadaLaMedianocheEnLima))
+                .containsExactly(LocalDate.parse("2026-11-04"));
+
+        ParticipacionPrograma p = traineePausado();
+        p.activarPrograma(null, lasOnceYMediaEnLima);
+        assertThat(p.fechaInicio()).isEqualTo(LocalDate.parse("2026-11-03"));
+    }
+
+    /** Un viernes, un fin de mes y un fin de año: «mañana» es aritmética de calendario. */
+    @Test
+    void manianaCruzaElFinDeSemanaElFinDeMesYElFinDeAnio() {
+        record Caso(String hoyEnLima, String maniana) { }
+        for (Caso caso : new Caso[] {
+                new Caso("2026-11-06", "2026-11-07"), // viernes -> sábado
+                new Caso("2026-10-31", "2026-11-01"), // fin de mes
+                new Caso("2026-02-28", "2026-03-01"), // fin de febrero
+                new Caso("2026-12-31", "2027-01-01")}) { // fin de año
+            FixedClock alMediodiaEnLima = FixedClock.at(LocalDate.parse(caso.hoyEnLima()).atTime(12, 0)
+                    .atZone(ZoneId.of("America/Lima")).toInstant());
+            ParticipacionPrograma p = traineePausado();
+
+            p.activarPrograma(null, alMediodiaEnLima);
+
+            assertThat(p.fechaInicio()).as(caso.hoyEnLima()).isEqualTo(LocalDate.parse(caso.maniana()));
+        }
+    }
+
+    /** «Mañana» sale de la zona de la fila, no de Lima ni del servidor. */
+    @Test
+    void manianaSeCalculaEnLaZonaDeLaPersona() {
+        // 2026-11-02 18:00 UTC: en Tokio (UTC+9) ya es el 3 a las 03:00, así que su mañana es el 4; en Lima todavía es el 2.
+        FixedClock reloj = FixedClock.at(Instant.parse("2026-11-02T18:00:00Z"));
+        ParticipacionPrograma enTokio = ParticipacionPrograma.rehydrate(UserId.of(UUID.randomUUID()), null, null, 0,
+                FasePrograma.initial(), LocalDate.parse("2026-11-03"), null, ZoneId.of("Asia/Tokyo"), false, 0,
+                reloj.now(), reloj.now());
+
+        assertThat(enTokio.opcionesDeActivacion(reloj)).containsExactly(LocalDate.parse("2026-11-04"));
+        assertThat(traineePausado().opcionesDeActivacion(reloj)).containsExactly(LocalDate.parse("2026-11-03"));
+        enTokio.activarPrograma(null, reloj);
+        assertThat(enTokio.fechaInicio()).isEqualTo(LocalDate.parse("2026-11-04"));
+    }
+
+    /**
+     * D-261 (decisión del dueño del 2026-10-07): el personal sin fila arranca con el reloj pausado —no en el día 1 de
+     * hoy como {@code activarSeguimientoPersonal}— y empieza con la misma regla que el aprendiz: mañana. Madrugada UTC
+     * (regla 02): 03:00 UTC del 7 son las 22:00 del 6 en Lima, así que «mañana» es el 7 de Lima, no el 8 del servidor.
+     */
+    @Test
+    void elPersonalSinFilaArrancaPausadoYEmpiezaManianaComoElAprendiz() {
         FixedClock madrugadaUtc = FixedClock.at(Instant.parse("2026-10-07T03:00:00Z"));
         ParticipacionPrograma p = ParticipacionPrograma.inscribirPersonalSinActivar(UserId.of(UUID.randomUUID()),
                 madrugadaUtc);
@@ -339,38 +411,15 @@ class ParticipacionProgramaTest {
         assertThat(p.fase()).isEqualTo(FasePrograma.initial());
         assertThat(p.mentorId()).isNull();
         assertThat(p.celulaId()).isNull();
-        assertThat(p.opcionesDeActivacion(madrugadaUtc)).containsExactly(LocalDate.parse("2026-10-07"),
-                LocalDate.parse("2026-10-08"), LocalDate.parse("2026-10-09"));
+        assertThat(p.opcionesDeActivacion(madrugadaUtc)).containsExactly(LocalDate.parse("2026-10-07"));
 
-        p.activarPrograma(LocalDate.parse("2026-10-08"), madrugadaUtc);
+        p.activarPrograma(null, madrugadaUtc);
 
         assertThat(p.estaActivado()).isTrue();
-        assertThat(p.fechaInicio()).isEqualTo(LocalDate.parse("2026-10-08"));
+        assertThat(p.fechaInicio()).isEqualTo(LocalDate.parse("2026-10-07"));
         assertThat(p.diasAjuste()).isZero();
-        assertThat(p.diaVigente(FixedClock.at(Instant.parse("2026-10-08T04:59:00Z")))).isZero();
-        assertThat(p.diaVigente(FixedClock.at(Instant.parse("2026-10-08T05:00:00Z")))).isEqualTo(1);
-    }
-
-    @Test
-    void elPersonalSinFilaNoPuedeEmpezarHoyNiDespuesDeTresDias() {
-        FixedClock madrugadaUtc = FixedClock.at(Instant.parse("2026-10-07T03:00:00Z"));
-        ParticipacionPrograma p = ParticipacionPrograma.inscribirPersonalSinActivar(UserId.of(UUID.randomUUID()),
-                madrugadaUtc);
-
-        assertThatThrownBy(() -> p.activarPrograma(LocalDate.parse("2026-10-06"), madrugadaUtc))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> p.activarPrograma(LocalDate.parse("2026-10-10"), madrugadaUtc))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThat(p.estaActivado()).isFalse();
-    }
-
-    @Test
-    void activarProgramaAceptaElBordeDeTresDias() {
-        ParticipacionPrograma p = traineePausado();
-
-        p.activarPrograma(CLOCK.today().plusDays(3), CLOCK);
-
-        assertThat(p.fechaInicio()).isEqualTo(CLOCK.today().plusDays(3));
+        assertThat(p.diaVigente(FixedClock.at(Instant.parse("2026-10-07T04:59:00Z")))).isZero();
+        assertThat(p.diaVigente(FixedClock.at(Instant.parse("2026-10-07T05:00:00Z")))).isEqualTo(1);
     }
 
     @Test
@@ -378,14 +427,6 @@ class ParticipacionProgramaTest {
         ParticipacionPrograma p = traineePausado();
 
         assertThatThrownBy(() -> p.activarPrograma(CLOCK.today().minusDays(1), CLOCK))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
-    void activarProgramaRechazaMasDeTresDiasDeEspera() {
-        ParticipacionPrograma p = traineePausado();
-
-        assertThatThrownBy(() -> p.activarPrograma(CLOCK.today().plusDays(4), CLOCK))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -413,19 +454,28 @@ class ParticipacionProgramaTest {
         assertThat(p.programaActivadoEn()).isEqualTo(activadoEnOriginal); // no se toco nada
     }
 
+    /** Un reintento sin fecha tras activar de noche, ya pasada la medianoche, tampoco mueve nada. */
     @Test
-    void activarProgramaRechazaFechaElegidaNula() {
+    void activarProgramaSinFechaYaActivadoEsUnNoOpAunquePaseLaMedianoche() {
+        FixedClock lasOnceYMediaEnLima = FixedClock.at(Instant.parse("2026-11-03T04:59:00Z"));
+        FixedClock pasadaLaMedianoche = FixedClock.at(Instant.parse("2026-11-03T05:01:00Z"));
         ParticipacionPrograma p = traineePausado();
+        p.activarPrograma(null, lasOnceYMediaEnLima);
+        Instant activadoEnOriginal = p.programaActivadoEn();
 
-        assertThatThrownBy(() -> p.activarPrograma(null, CLOCK)).isInstanceOf(NullPointerException.class);
+        p.activarPrograma(null, pasadaLaMedianoche);
+        p.activarPrograma(LocalDate.parse("2026-11-03"), pasadaLaMedianoche); // la que se vio antes de la medianoche
+
+        assertThat(p.fechaInicio()).isEqualTo(LocalDate.parse("2026-11-03"));
+        assertThat(p.programaActivadoEn()).isEqualTo(activadoEnOriginal);
     }
 
     @Test
-    void opcionesDeActivacionDevuelveManianaYLosDosSiguientesSinIncluirHoy() {
+    void opcionesDeActivacionDevuelveSoloManiana() {
         ParticipacionPrograma p = traineePausado();
 
-        assertThat(p.opcionesDeActivacion(CLOCK)).containsExactly(CLOCK.today().plusDays(1),
-                CLOCK.today().plusDays(2), CLOCK.today().plusDays(3));
+        assertThat(p.opcionesDeActivacion(CLOCK)).containsExactly(CLOCK.today().plusDays(1));
+        assertThat(p.inicioAlActivar(CLOCK)).isEqualTo(CLOCK.today().plusDays(1));
     }
 
     // --- sincronizarDiaDelPrograma (barrido del reloj, V20) --------------
@@ -443,9 +493,9 @@ class ParticipacionProgramaTest {
     @Test
     void sincronizarNoTocaNadaSiLaFechaDeInicioNoLlego() {
         ParticipacionPrograma p = traineePausado();
-        p.activarPrograma(CLOCK.today().plusDays(2), CLOCK);
+        p.activarPrograma(null, CLOCK);
 
-        boolean cambio = p.sincronizarDiaDelPrograma(CLOCK.today().plusDays(1), CLOCK);
+        boolean cambio = p.sincronizarDiaDelPrograma(CLOCK.today(), CLOCK);
 
         assertThat(cambio).isFalse();
         assertThat(p.diaPrograma()).isZero();
@@ -454,13 +504,13 @@ class ParticipacionProgramaTest {
     @Test
     void sincronizarPoneDiaUnoElDiaQueLlegaLaFechaDeInicio() {
         ParticipacionPrograma p = traineePausado();
-        p.activarPrograma(CLOCK.today().plusDays(2), CLOCK);
+        p.activarPrograma(null, CLOCK);
 
-        boolean cambio = p.sincronizarDiaDelPrograma(CLOCK.today().plusDays(2), CLOCK);
+        boolean cambio = p.sincronizarDiaDelPrograma(CLOCK.today().plusDays(1), CLOCK);
 
         assertThat(cambio).isTrue();
         assertThat(p.diaPrograma()).isEqualTo(1);
-        assertThat(p.diaProgramaAvanzadoEl()).isEqualTo(CLOCK.today().plusDays(2));
+        assertThat(p.diaProgramaAvanzadoEl()).isEqualTo(CLOCK.today().plusDays(1));
     }
 
     @Test

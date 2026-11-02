@@ -24,6 +24,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -35,7 +36,11 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Dos HTTP reales coinciden en la base: una fecha distinta no puede recibir dos confirmaciones. */
+/**
+ * Dos HTTP reales coinciden en la base: una fecha distinta no puede recibir dos confirmaciones. Desde la spec 036 la única
+ * fecha válida es mañana, así que dos pedidos con fechas distintas dejan UNO activado (mañana) y el otro rechazado: 400 si
+ * llegó primero (no es mañana) o 409 si llegó después de que la fila ya estaba activada.
+ */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Import(TestcontainersConfiguration.class)
 class ActivacionProgramaConcurrenteIT {
@@ -76,8 +81,9 @@ class ActivacionProgramaConcurrenteIT {
         HttpResponse<String> consulta = http.send(pedido("GET", token, null), HttpResponse.BodyHandlers.ofString());
         assertThat(consulta.statusCode()).isEqualTo(200);
         var fechas = json.readTree(consulta.body()).get("validStartDates");
-        String primera = fechas.get(1).asText();
-        String segunda = mismaFecha ? primera : fechas.get(2).asText();
+        assertThat(fechas).as("spec 036: una sola fecha, mañana").hasSize(1);
+        String primera = fechas.get(0).asText();
+        String segunda = mismaFecha ? primera : LocalDate.parse(primera).plusDays(2).toString();
 
         // El candado externo fuerza el solapamiento real en SQL, sin sleeps para adivinarlo.
         // Con fila bloquea su UPDATE; sin fila bloquea el padre de la FK. La implementación
@@ -107,10 +113,17 @@ class ActivacionProgramaConcurrenteIT {
                 soltar.countDown();
                 candado.get(5, TimeUnit.SECONDS);
                 var respuestas = List.of(a.get(10, TimeUnit.SECONDS), b.get(10, TimeUnit.SECONDS));
-                assertThat(respuestas.stream().map(HttpResponse::statusCode).toList())
-                        .containsExactlyInAnyOrder(200, mismaFecha ? 200 : 409);
+                var codigos = respuestas.stream().map(HttpResponse::statusCode).toList();
+                if (mismaFecha) {
+                    assertThat(codigos).containsExactly(200, 200);
+                } else {
+                    assertThat(codigos.stream().filter(codigo -> codigo == 200)).hasSize(1);
+                    assertThat(codigos.stream().filter(codigo -> codigo != 200)).hasSize(1).allMatch(
+                            codigo -> codigo == 400 || codigo == 409);
+                }
                 for (var respuesta : respuestas) if (respuesta.statusCode() == 200) {
                     String guardada = json.readTree(respuesta.body()).get("startDate").asText();
+                    assertThat(guardada).isEqualTo(primera);
                     assertThat(jdbc.queryForObject("SELECT fecha_inicio::text FROM renaser.participantes_programa "
                             + "WHERE usuario_id = ?", String.class, usuario)).isEqualTo(guardada);
                 }

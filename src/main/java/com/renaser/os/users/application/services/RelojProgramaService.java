@@ -86,7 +86,7 @@ public class RelojProgramaService
      * `participantes_programa` se la crea {@code ApproveAccountRequestUseCase} al aprobar la
      * cuenta (CLAUDE.MD §5.3.3), y esto solo la activa.
      *
-     * <p><b>D-261:</b> al personal sin fila se la crea aca, ya con la fecha elegida — ver
+     * <p><b>D-261:</b> al personal sin fila se la crea aca, ya activada (spec 036: con inicio mañana) — ver
      * {@link #participacionOFilaNuevaDelPersonal}.
      */
     @Override
@@ -217,9 +217,9 @@ public class RelojProgramaService
 
     /**
      * La fila del actor, o —solo para el personal sin fila— una fila nueva sin activar, armada en
-     * memoria (D-261, decision del dueño 2026-10-07: «que elija el dia como los demas»). El GET la
-     * usa para ofrecer las mismas fechas que al aprendiz y no la guarda; el POST la guarda ya
-     * activada con la fecha elegida. Quien puede es quien tiene
+     * memoria (D-261, decision del dueño 2026-10-07: «que lo haga como los demas»). El GET la
+     * usa para ofrecer la misma fecha que al aprendiz y no la guarda; el POST la guarda ya
+     * activada con inicio mañana (spec 036). Quien puede es quien tiene
      * {@link Permission#TRACK_PROGRAM_AS_STAFF}, el mismo permiso que {@code POST
      * /mentor/activate-tracking} (MENTOR, MENTOR_LEAD, ADMIN, ALCHEMIST). Al aprendiz sin fila no
      * se le inventa una: sigue el 404 de siempre, porque su fila nace al aprobarse la cuenta.

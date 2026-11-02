@@ -7,9 +7,10 @@ import java.util.List;
 
 /**
  * {@code validStartDates} vacia cuando {@code activated} es {@code true} — no hay nada mas
- * que elegir (mismo criterio que {@code EstadoActivacionPrograma} en application).
+ * que activar (mismo criterio que {@code EstadoActivacionPrograma} en application). Mientras no esta activado trae UNA
+ * fecha: mañana en la zona de la persona (spec 036, D-309; antes eran tres a elegir).
  *
- * <p>{@code startDate} (D-84) es el Dia 1 ya elegido, {@code null} mientras no eligio. Se
+ * <p>{@code startDate} (D-84) es el Dia 1 ya activado, {@code null} mientras no activo. Se
  * agrega porque Plan necesita distinguir dos situaciones que hoy se ven idénticas — un plan
  * vacio — y que para el aprendiz son muy distintas: "todavia no elegiste cuando empezar" y
  * "ya elegiste, arrancas el 5 de septiembre".
