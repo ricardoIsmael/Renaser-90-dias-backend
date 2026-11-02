@@ -95,7 +95,7 @@ public class AgendaDelDiaFinderService implements AgendaDelDiaFinder {
                 vista.registro().estado().name(), enJuego != null ? enJuego.siCompletaAhora() : null,
                 enJuego != null ? enJuego.maximo() : null, enJuego != null ? enJuego.plazo() : null,
                 vista.exigeEvidencia(), tramosDe(enJuego), vista.claveSistema(), vista.tituloDelPrograma(),
-                vista.horaDisparo(), categoriaClave);
+                vista.horaDisparo(), categoriaClave, vista.registro().habitoId().value(), vista.registro().fechaEjecucion());
     }
 
     /**

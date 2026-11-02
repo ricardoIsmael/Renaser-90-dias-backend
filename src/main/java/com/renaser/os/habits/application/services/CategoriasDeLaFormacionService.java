@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.habits.api.CategoriasDeLaFormacionFinder;
 import com.renaser.os.habits.application.ports.in.categoria.ConsultarCategoriasDeMiFormacionUseCase;
 import com.renaser.os.habits.application.ports.out.categoria.LoadCategoriaHabitoPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
@@ -19,7 +20,7 @@ import java.util.Optional;
  * puede quien ve las tres. Una categoria sin habitos que le toquen hoy a la persona no se dibuja: eso lo resuelve la app con su lista de hoy.
  */
 @Service
-public class CategoriasDeLaFormacionService implements ConsultarCategoriasDeMiFormacionUseCase {
+public class CategoriasDeLaFormacionService implements ConsultarCategoriasDeMiFormacionUseCase, CategoriasDeLaFormacionFinder {
 
     private final LoadCategoriaHabitoPort loadPort;
     private final ConsultarProgresoParticipanteHabitsPort progresoPort;
@@ -41,6 +42,14 @@ public class CategoriasDeLaFormacionService implements ConsultarCategoriasDeMiFo
                 : formacionDeLaPersona(actorId, alcance);
         return new CategoriasDeLaFormacion(formacion,
                 formacion.map(loadPort::activasDe).orElse(List.of()));
+    }
+
+    /** Spec 038: lo mismo para otro modulo ({@code rag}), con la formacion que decide el servidor para esa persona. */
+    @Override
+    public List<CategoriaResumen> activasDe(UserId participanteId) {
+        return consultar(participanteId, null).categorias().stream()
+                .map(categoria -> new CategoriaResumen(categoria.clave(), categoria.nombre()))
+                .toList();
     }
 
     private Optional<Formacion> formacionDeLaPersona(UserId actorId, AlcanceDeFormacion alcance) {
