@@ -1169,3 +1169,15 @@ para todo lo que exige ese rol: rocks, radar, verdugo).
   en `RegistroRadar.NIVEL_ENERGIA_MIN/MAX`, fuera del paquete `rest` que cubrí; no lo leí.
 - El mensaje exacto que devuelve `evidence.revisar` si se llama sobre una evidencia que NO está en
   `REVISION_MANUAL` (la guarda vive en `Evidencia.revisarManualmente`, dominio que no leí en este alcance).
+
+---
+
+## Cerrar «Kilómetros diarios» con los pasos del teléfono (spec 037, D-310, 2026-11-02)
+
+`POST /api/v1/habit-tracks/{id}/auto-measurement` — solo el dueño del track. Cuerpo: `kilometros` (> 0), `pasos` (opcional, >= 0),
+`fuente` (1 a 60 caracteres), `dispositivo` (`TELEFONO` | `RELOJ` | `OTRO`), `leidoEn` (instante ISO). **200** = `RegistroHabitoResponse` con el
+campo nuevo `medicion` (`valor`, `origen`, `pasos`, `fuente`, `dispositivo`, `leidoEn`, `porRevisar`); idempotente (si ya lo cerró Health Connect,
+devuelve ese registro). Errores: `400` «Todavía no llegas a tu meta de 5 km.» (la meta es la de Administración o 5), más de 60 km o 150 000 pasos,
+lectura del futuro o de otro día; `403` no es el dueño; `404`; `409` el día ya terminó (D-259) o ya se registró con la captura. En
+`GET /habit-tracks/today` y `/day`, `medicion` suma `meta`, `origenDelDia` y `fuenteDelDia`. Detalle: `specs/037-pasos-y-km/contracts/api.md`.
+

@@ -1242,6 +1242,9 @@ negativo, los dos o ninguno, solo en COMPLETADO). **La unidad no se guarda en `h
 del hábito (`PoliticaHabito.unidadDeMedicion()`), el mismo lugar donde viven las demás reglas propias; una columna
 de unidad en el catálogo sería la misma regla en dos lugares (lección de V22). Por lo mismo no se agregó
 `meta_diaria`: el dueño definió «cualquier km > 0» y nadie la leería.
+> **Corregido 2026-11-02 (spec 037, D-310).** Esa última frase ya no es cierta: con la lectura automática de los pasos el
+> «cualquier km > 0» se cumpliría solo por existir, así que `V161` agrega `habitos.meta_medicion` (NULL = 5 km). **La captura con
+> número a mano no cambia**: sigue valiendo cualquier km > 0 hasta 100. Ver la sección 30.
 
 **Piezas:**
 
@@ -1534,3 +1537,25 @@ una fila por persona y fecha (`UNIQUE`), con la nota del día en `contenido_text
 - **Copiar** (`CopiarHabitoService`): hábito + horarios + guía (textos) + audiencia; no copia adjuntos de S3. La copia conserva la `clave_sistema`.
 - **API abierta de categorías:** `CodigoDeCategoria` (`CUERPO↔BODY`, …; el resto, la clave).
 - **Topes de día:** desbloqueo y huecos leen la duración de la persona; Audioterapia y Pastilla usan `ProgresoParticipanteHabits.diaEnEscalaBase()`.
+
+## 30. Los pasos del teléfono llenan «Kilómetros diarios» (spec 037, D-310) — 2026-11-02
+
+Pedido del dueño: «cómo hacemos que el celular cuente los pasos, tipo Pokémon GO». La app lee de **Health Connect** (Android 14 o más;
+el dueño descartó la Recording API y Android menor a 14, que se quedan con la captura) el agregado del día de pasos y distancia, sin contar
+lo escrito a mano ni los orígenes de método desconocido, y con la meta alcanzada ofrece «Registrar». Este módulo recibe la lectura y cierra el
+hábito; **no cuenta nada** ni toca el teléfono.
+
+- **Sin tablas.** `V161` (a) admite `HEALTH_CONNECT` en `registros_habito.origen_medicion`, (b) suma `pasos_medidos`, `fuente_medicion`,
+  `dispositivo_medicion` (TELEFONO | RELOJ | OTRO), `medicion_leida_en` y `medicion_por_revisar`, y (c) `habitos.meta_medicion`. Origen, fuente,
+  dispositivo y hora de lectura van juntos (CHECK). Dominio: `MedicionDiaria(valor, origen, lectura)` y `LecturaAutomatica`.
+- **`POST /habit-tracks/{id}/auto-measurement`** (`MedicionAutomaticaController`, solo el dueño): `MedicionAutomaticaService` lee el registro con
+  cerrojo, comprueba el hábito (`DAILY_KM`), la idempotencia, que la lectura sea de ese día en la zona de la persona y no del futuro, y la política
+  (`PoliticaKilometros.validarMedicionAutomatica`: meta, 60 km, 150 000 pasos); marca «por revisar» lo dudoso y completa por `RegistroService`
+  con el gesto `PROPIO_DEL_HABITO` (puntos, ventana, evento y D-259 intactos). Contrato en `specs/037-pasos-y-km/contracts/api.md`.
+- **Meta:** `MetaDeMedicionPort` (JDBC, `habitos.meta_medicion`; el agregado `Habito` no la conoce a propósito) y
+  `GET/PUT /admin/habits/{id}/measurement-goal`. La agenda de hoy suma a `medicion`: `meta`, `origenDelDia` y `fuenteDelDia`.
+- **Lectura del acompañamiento y del ranking:** `habits.api.MedicionDeLaObligacion` → `ObligacionDelDia.medicion`;
+  `MedicionAcumuladaFinder.conKilometrosAutomaticos` → `kilometrosAutomaticos` en `GET /ranking`.
+- **Por qué `PROPIO_DEL_HABITO` no es un bypass:** el DTO del endpoint genérico no puede producirlo y este camino trae su propia validación; el
+  gesto genérico (que exige foto y número escrito) sigue cerrando la captura.
+
