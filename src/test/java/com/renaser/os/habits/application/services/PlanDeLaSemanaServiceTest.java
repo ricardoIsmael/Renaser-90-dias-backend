@@ -16,6 +16,7 @@ import com.renaser.os.habits.domain.model.preferencia.CombinacionDeAlarma;
 import com.renaser.os.habits.domain.model.preferencia.FechaPropia;
 import com.renaser.os.habits.domain.model.preferencia.RecordatorioDelDia;
 import com.renaser.os.habits.domain.model.preferencia.SemanaCalendaria;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -221,6 +222,80 @@ class PlanDeLaSemanaServiceTest {
         service.guardar(ACTOR, habito.id(), SEMANA, List.of(CambioDeFecha.restablecer(LocalDate.of(2026, 11, 7))));
 
         verify(savePreferenciaPort).borrarParaFecha(ACTOR, habito.id(), LocalDate.of(2026, 11, 7));
+    }
+
+    // ---- semanas por venir, hasta el final del programa (2026-11-02) ---------------------------
+
+    /** Hoy es el dia 20 de un programa de 90: el dia 90 es el 2027-01-13 (hoy + 70). Una semana vale si su lunes no pasa de ese dia. */
+    private static final LocalDate ULTIMO_DIA_DEL_PROGRAMA = LocalDate.of(2027, 1, 13);
+
+    private void conPrograma(int diaPrograma, int duracionDias) {
+        when(progresoPort.deParticipante(ACTOR)).thenReturn(Optional.of(
+                new ProgresoParticipanteHabits(diaPrograma, "America/Lima", RolParticipante.TRAINEE, false, true, null,
+                        Formacion.POR_DEFECTO, duracionDias)));
+    }
+
+    @Test
+    void unaSemanaLejanaDentroDelProgramaSeLeeYSeGuarda() {
+        var lejana = SemanaCalendaria.desde(LocalDate.of(2027, 1, 4));
+        assertThat(lejana.lunes()).isBefore(ULTIMO_DIA_DEL_PROGRAMA);
+
+        assertThat(service.consultar(ACTOR, habito.id(), lejana)).hasSize(7);
+        service.guardar(ACTOR, habito.id(), lejana, List.of(mover(LocalDate.of(2027, 1, 9), 9)));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Collection<FechaPropia>> filas = ArgumentCaptor.forClass(Collection.class);
+        verify(savePreferenciaPort).guardarFechasPropias(eq(ACTOR), filas.capture());
+        assertThat(filas.getValue()).extracting(FechaPropia::fecha).containsExactly(LocalDate.of(2027, 1, 9));
+    }
+
+    @Test
+    void laUltimaSemanaDelProgramaSePuedeAunqueTermineAMitad() {
+        // El lunes 11 de enero es antes del dia 90 (13 de enero): la semana existe aunque el programa termine el miercoles.
+        var ultima = SemanaCalendaria.desde(LocalDate.of(2027, 1, 11));
+        assertThat(service.consultar(ACTOR, habito.id(), ultima)).hasSize(7);
+    }
+
+    @Test
+    void unaSemanaQueEmpiezaDespuesDelUltimoDiaDelProgramaSeRechazaSinEscribirNada() {
+        var fuera = SemanaCalendaria.desde(LocalDate.of(2027, 1, 18));
+        assertThat(fuera.lunes()).isAfter(ULTIMO_DIA_DEL_PROGRAMA);
+
+        assertThatThrownBy(() -> service.consultar(ACTOR, habito.id(), fuera)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> service.guardar(ACTOR, habito.id(), fuera, List.of(mover(LocalDate.of(2027, 1, 23), 9))))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(savePreferenciaPort, never()).guardarFechasPropias(any(), anyCollection());
+        verify(savePreferenciaPort, never()).borrarParaFecha(any(), any(), any());
+        // Ni siquiera se busca el habito: se rechaza antes.
+        verifyNoInteractions(catalogoAplicable);
+    }
+
+    @Test
+    void unProgramaDeUnAnioDejaPlanificarMuchoMasLejos() {
+        conPrograma(20, 365);
+        var enOctubre = SemanaCalendaria.desde(LocalDate.of(2027, 10, 4));
+        assertThat(service.consultar(ACTOR, habito.id(), enOctubre)).hasSize(7);
+
+        // El dia 365 es el 2027-11-03 (hoy + 345): el lunes 8 de noviembre ya no existe para esta persona.
+        assertThatThrownBy(() -> service.consultar(ACTOR, habito.id(), SemanaCalendaria.desde(LocalDate.of(2027, 11, 8))))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void laSemanaEnCursoYLasPasadasNuncaSeAcotan() {
+        // Una persona que ya paso del dia 90 sigue pudiendo leer la semana en curso y las anteriores.
+        conPrograma(95, 90);
+        assertThat(service.consultar(ACTOR, habito.id(), SEMANA)).hasSize(7);
+        assertThat(service.consultar(ACTOR, habito.id(), SemanaCalendaria.desde(LocalDate.of(2026, 10, 19)))).hasSize(7);
+        // Pero no se planifica una semana por venir: ya no tiene programa.
+        assertThatThrownBy(() -> service.consultar(ACTOR, habito.id(), SEMANA.siguiente())).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void sinDiaDeProgramaNoHayConQueAcotar() {
+        conPrograma(0, 90);
+        assertThat(service.consultar(ACTOR, habito.id(), SemanaCalendaria.desde(LocalDate.of(2027, 6, 7)))).hasSize(7);
     }
 
     // ---- volver al plan de siempre -------------------------------------------------------------

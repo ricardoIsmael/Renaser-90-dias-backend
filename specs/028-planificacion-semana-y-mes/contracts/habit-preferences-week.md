@@ -6,6 +6,7 @@ Compatibilidad: todo campo nuevo es opcional. Un APK anterior no manda ni lee na
 ## `GET /{habitId}/week?weekStart=YYYY-MM-DD`
 
 La semana (lunes a domingo) de UN hábito, ya resuelta: el plan de siempre con lo «solo esta semana» encima. `weekStart` debe ser lunes (400 si no). El hábito debe corresponderle a la persona (404 si no existe o no le corresponde).
+**Semanas por venir (2026-11-02, «Por semana»):** se acepta cualquier semana, la próxima o la de dentro de seis meses, mientras **su lunes caiga dentro del programa de la persona** (90 o 365 días, spec 022): `weekStart` ≤ `hoy + duración − díaDelPrograma`. Una semana que empieza después del último día del programa ⇒ **400** (en `GET` y en `PUT`, sin escribir nada). La semana en curso y las pasadas no se acotan, y sin día de programa (`diaPrograma < 1`) no hay con qué acotar.
 
 ```json
 {
@@ -52,7 +53,7 @@ Guarda **solo lo tocado** en varias fechas de una semana. Todo o nada. `204`.
 ```
 
 Reglas:
-- `weekStart` es lunes; cada `date` cae en esa semana y es **posterior a hoy** (400 si no). 400 si `days` está vacío, repite una fecha o mezcla `reset: true` con otros campos.
+- `weekStart` es lunes y cae dentro del programa (ver `GET`); cada `date` cae en esa semana y es **posterior a hoy** (400 si no). 400 si `days` está vacío, repite una fecha o mezcla `reset: true` con otros campos.
 - Un campo ausente no se toca (se conserva el de la fila que ya hubiera). `reminderEnabled` y `reminderMinutesList` van juntos (activo ⇒ al menos una antelación, 0 a 32767, sin repetir). `alarm`: los cuatro booleanos (sonido y vibración no pueden ser `false` a la vez; la voz necesita el sonido).
 - `triggerTime` respeta el tope del día (D-122). `limitTime` se acomoda como siempre.
 - Lo que queda igual a lo que ya rige ese día de la semana se guarda como «hereda». Una fila sin nada propio se borra.

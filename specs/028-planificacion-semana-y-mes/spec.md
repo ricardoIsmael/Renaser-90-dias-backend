@@ -22,6 +22,22 @@ planificación de cada mes, si lo desea.»
   formaciones: depende de la 022 (formaciones) y de la 023 (hábitos por formación).
 - **El dueño hizo todas las preguntas antes de implementar** y respondió el 2026-10-31 (ver la tabla de abajo).
 
+### Session 2026-11-02 (pedido del dueño, con la captura del editor de «Escritura libre nocturna»)
+
+Textual: «el de todas las semanas, si yo guardo el de semana debería de salir marcado, cuidado; y dice todas las semanas, ¿a qué? debería
+deslizar hacia la derecha y poder planificar ¿no?… y recuerda: mucho texto o entrada a veces no les conviene». Eligió: `Siempre | Por semana`,
+con `‹ Semana del 9 al 15 nov ›` y la fila de días. Lo que cambia (la regla del servidor y la app; sin tablas nuevas):
+
+- Los alcances se llaman **«Siempre»** (FR-001/FR-002, sin cambios de fondo) y **«Por semana»**. «Por semana» deja pasar de semana, con flechas o
+  deslizando la fila de días, **desde la semana en curso hasta la última del programa de la persona** (90 días, 3 meses o 1 año): ya no es
+  «solo esta semana» sino cualquier semana por venir. Cada cambio sigue valiendo únicamente para la semana que se ve (FR-003).
+- El servidor acepta cualquier semana por venir **cuyo lunes caiga dentro del programa** (400 después del último día; contrato
+  `habit-preferences-week.md`). La app lee cada semana una sola vez, al llegar a ella.
+- Lo ya guardado por semana **sale marcado** (FR-005): al abrir el hábito, si una semana por venir ya tiene cambios propios, el editor abre en
+  «Por semana» en esa semana, con sus días marcados y sus valores. Sin cambios propios abre en «Siempre».
+- Menos texto: el editor ya no lleva párrafos de ayuda; quedan los rótulos, la fila de días con su punto, y los botones. «Cómo suena» no se
+  dibuja cuando no hay aviso.
+
 ### Decisiones del dueño (2026-10-31, `decisiones-del-dueno-2026-10-31.md`, sección 028)
 
 | # | Decisión | Efecto en esta spec |
