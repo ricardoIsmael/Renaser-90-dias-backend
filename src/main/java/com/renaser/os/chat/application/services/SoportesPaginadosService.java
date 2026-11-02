@@ -120,7 +120,7 @@ public class SoportesPaginadosService implements ListarSoportesUseCase {
         Map<ConversacionId, String> nombresDeLaPagina = nombres.nombresDe(porId.values());
         return ids.stream().map(porId::get).filter(Objects::nonNull)
                 .map(c -> new ConversacionResumen(c, ultimos.get(c.id()), sinLeer.getOrDefault(c.id(), 0L),
-                        null, null, null, null, nombresDeLaPagina.get(c.id())))
+                        null, null, null, null, nombresDeLaPagina.get(c.id()), null))
                 .toList();
     }
 

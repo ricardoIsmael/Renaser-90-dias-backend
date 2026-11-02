@@ -93,6 +93,9 @@ class ConversacionServiceTest {
     /** D-212: cuándo cambió la foto propia de cada grupo de la lista. */
     @Mock
     private FotoPropiaDelGrupoFinder fotosDeGrupos;
+    /** Spec 035: la imagen de cada formación; sin stubbing no hay imagen (Optional vacío) y los chats usan la de la app. */
+    @Mock
+    private com.renaser.os.chat.application.ports.in.bienvenida.ConsultarImagenDeLaFormacionUseCase imagenesDeFormacion;
     @Mock
     private IdGenerator idGenerator;
     /** No necesita stubbing: TransactionTemplate.execute con getTransaction()==null solo
@@ -116,7 +119,7 @@ class ConversacionServiceTest {
         service = new ConversacionService(loadConversacionPort, saveConversacionPort, agregarParticipantePort,
                 esParticipantePort, new AccesoAChatsDeGrupo(pertenenciaVigentePort, gruposEnCursoPort, userSummaryFinder), marcarLeidoPort, anunciarLectura, contarNoLeidosPort,
                 loadMensajePort, listarUsuariosPort, userSummaryFinder, fotosDeGrupos,
-                new NombresDeLosChatsService(grupos -> java.util.Map.of(), userSummaryFinder, org.mockito.Mockito.mock(com.renaser.os.users.api.FormacionesFinder.class)), CLOCK, idGenerator, transactionManager, cuentasCerradas, new com.renaser.os.users.api.AlcanceDeFormacionSoloEscuela(), org.mockito.Mockito.mock(com.renaser.os.users.api.FormacionesFinder.class), new com.renaser.os.chat.application.services.VisibilidadPermisiva());
+                new NombresDeLosChatsService(grupos -> java.util.Map.of(), userSummaryFinder, org.mockito.Mockito.mock(com.renaser.os.users.api.FormacionesFinder.class)), CLOCK, idGenerator, transactionManager, cuentasCerradas, new com.renaser.os.users.api.AlcanceDeFormacionSoloEscuela(), org.mockito.Mockito.mock(com.renaser.os.users.api.FormacionesFinder.class), new com.renaser.os.chat.application.services.VisibilidadPermisiva(), imagenesDeFormacion);
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(userSummaryFinder.findById(activo)).thenReturn(
                 Optional.of(new UserSummary(activo, "Activo", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
@@ -186,7 +189,7 @@ class ConversacionServiceTest {
         var servicio = new ConversacionService(loadConversacionPort, saveConversacionPort, agregarParticipantePort,
                 esParticipantePort, new AccesoAChatsDeGrupo(pertenenciaVigentePort, gruposEnCursoPort, userSummaryFinder), marcarLeidoPort, anunciarLectura, contarNoLeidosPort,
                 loadMensajePort, listarUsuariosPort, userSummaryFinder, fotosDeGrupos,
-                new NombresDeLosChatsService(grupos -> java.util.Map.of(), userSummaryFinder, org.mockito.Mockito.mock(com.renaser.os.users.api.FormacionesFinder.class)), CLOCK, idGenerator, transactionManager, cuentasCerradas, delDiplomado, org.mockito.Mockito.mock(com.renaser.os.users.api.FormacionesFinder.class), new com.renaser.os.chat.application.services.VisibilidadPermisiva());
+                new NombresDeLosChatsService(grupos -> java.util.Map.of(), userSummaryFinder, org.mockito.Mockito.mock(com.renaser.os.users.api.FormacionesFinder.class)), CLOCK, idGenerator, transactionManager, cuentasCerradas, delDiplomado, org.mockito.Mockito.mock(com.renaser.os.users.api.FormacionesFinder.class), new com.renaser.os.chat.application.services.VisibilidadPermisiva(), imagenesDeFormacion);
         String claveEnElDiplomado = Conversacion.claveDirectaDe(activo, otroActivo, com.renaser.os.shared.domain.Formacion.DIPLOMADO);
         when(loadConversacionPort.porClaveDirecta(claveEnElDiplomado)).thenReturn(Optional.empty());
 
@@ -322,6 +325,36 @@ class ConversacionServiceTest {
         assertThat(fotos.get(aurora.id())).as("usa la foto de Renaser").isNull();
         assertThat(fotos.get(comunidad.id())).isNull();
         verify(fotosDeGrupos, times(1)).cambiadasEn(any());
+    }
+
+    /**
+     * Spec 035: la comunidad general y los grupos llevan desde cuándo es la imagen de SU formación, una consulta por formación (no por conversación); el
+     * soporte y los 1 a 1 no, y una formación sin imagen no trae nada.
+     */
+    @Test
+    void laListaTraeLaImagenDeLaFormacionDeLaComunidadYDeLosGruposUnaVezPorFormacion() {
+        Conversacion global = Conversacion.crearGlobal(ConversacionId.of(UUID.randomUUID()), "Diplomado Renaser Global", CLOCK.now(),
+                com.renaser.os.shared.domain.Formacion.DIPLOMADO);
+        Conversacion grupo = Conversacion.crearCelula(ConversacionId.of(UUID.randomUUID()), UUID.randomUUID(), CLOCK.now(),
+                com.renaser.os.shared.domain.Formacion.DIPLOMADO);
+        Conversacion escuela = Conversacion.crearGlobal(ConversacionId.of(UUID.randomUUID()), CLOCK.now());
+        Instant desde = Instant.parse("2026-11-02T15:00:00Z");
+        when(loadConversacionPort.misConversaciones(activo)).thenReturn(List.of(global, grupo, escuela));
+        when(loadMensajePort.ultimosPorConversacion(any())).thenReturn(Map.of());
+        when(contarNoLeidosPort.contarNoLeidos(eq(activo), any())).thenReturn(Map.of());
+        when(pertenenciaVigentePort.perteneceAlGrupo(any(), eq(activo))).thenReturn(true);
+        when(imagenesDeFormacion.vigente(com.renaser.os.shared.domain.Formacion.DIPLOMADO)).thenReturn(Optional.of(
+                new com.renaser.os.chat.application.ports.in.bienvenida.ConsultarImagenDeLaFormacionUseCase.ImagenDeLaFormacionVigente(
+                        "formaciones/imagenes/d", desde)));
+
+        Map<ConversacionId, Instant> imagenes = new java.util.HashMap<>();
+        service.listar(activo).forEach(r -> imagenes.put(r.conversacion().id(), r.imagenDeLaFormacionDesde()));
+
+        assertThat(imagenes.get(global.id())).isEqualTo(desde);
+        assertThat(imagenes.get(grupo.id())).isEqualTo(desde);
+        assertThat(imagenes.get(escuela.id())).as("la Escuela no tiene imagen: usa la de la app").isNull();
+        verify(imagenesDeFormacion, times(1)).vigente(com.renaser.os.shared.domain.Formacion.DIPLOMADO);
+        verify(imagenesDeFormacion, times(1)).vigente(com.renaser.os.shared.domain.Formacion.ESCUELA);
     }
 
     /**

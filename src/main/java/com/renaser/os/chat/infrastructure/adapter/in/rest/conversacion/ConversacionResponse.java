@@ -4,6 +4,7 @@ import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.TipoConversacion;
 
 import java.time.Instant;
+import java.util.Optional;
 
 /** {@code type} en ingles (CELL/DIRECT/GLOBAL/SUPPORT) — la app publicada nunca ve
  * `tipo_conversacion` en espanol; la traduccion (D-36) vive solo aca.
@@ -12,6 +13,9 @@ import java.time.Instant;
  * primer nombre del aprendiz), relativa a la API y pedida con la sesión; {@code null} en lo demás, que
  * usa la tarjeta sin nombre que la app ya trae. Es un campo nuevo: las versiones publicadas de la app
  * lo ignoran (sus esquemas de conversación son {@code passthrough}).
+ *
+ * <p><b>Spec 035.</b> La comunidad general y un grupo SIN foto propia traen la ruta de la imagen de su formación (la misma ruta y el mismo {@code ?v=}),
+ * solo si la formación tiene una; sin ella, {@code null} y la app usa el fénix y la tarjeta de siempre. Un grupo con foto propia conserva la suya.
  *
  * <p><b>Corregido 2026-09-27 (D-212).</b> Un GRUPO con foto propia también la trae:
  * {@code /api/v1/chat/conversations/{id}/foto?v=<milisegundos>}, con los de cuándo cambió para que el
@@ -28,20 +32,23 @@ public record ConversacionResponse(String id, String type, String celulaId, Stri
 
     /** Sin saber la foto propia de un grupo ni su nombre derivado (la respuesta de abrir un 1 a 1). */
     public static ConversacionResponse from(Conversacion c) {
-        return from(c, null, c.nombre());
+        return from(c, null, null, c.nombre());
     }
 
     /**
      * @param fotoDelGrupoCambiadaEn si es un grupo con foto propia, cuándo cambió (D-212); si no, {@code null}
+     * @param imagenDeLaFormacionDesde en la comunidad general y en un grupo sin foto propia, desde cuándo es la imagen de su formación (spec 035); si no
+     *                               tiene, {@code null} y la app usa la suya
      * @param nombre                 el que se muestra (D-221): en un grupo y en un soporte se deriva al leer
      *                               y NO es la columna {@code nombre}; en un 1 a 1, {@code null}. Un
      *                               {@code nombre} lleno en un grupo es nuevo: los APK publicados siguen
      *                               nombrándolo con el grupo de {@code /me/cells}, la app nueva usa este.
      */
-    public static ConversacionResponse from(Conversacion c, Instant fotoDelGrupoCambiadaEn, String nombre) {
+    public static ConversacionResponse from(Conversacion c, Instant fotoDelGrupoCambiadaEn, Instant imagenDeLaFormacionDesde,
+                                           String nombre) {
         return new ConversacionResponse(c.id().toString(), toWireTipo(c.tipo()),
                 c.celulaId() != null ? c.celulaId().toString() : null, nombre, c.creadoEn().toString(),
-                rutaDeLaFoto(c, fotoDelGrupoCambiadaEn),
+                rutaDeLaFoto(c, fotoDelGrupoCambiadaEn, imagenDeLaFormacionDesde),
                 c.aprendizDelSoporte().map(aprendiz -> aprendiz.value().toString()).orElse(null),
                 c.formacion().codigo());
     }
@@ -55,12 +62,19 @@ public record ConversacionResponse(String id, String type, String celulaId, Stri
         };
     }
 
-    private static String rutaDeLaFoto(Conversacion c, Instant fotoDelGrupoCambiadaEn) {
+    private static String rutaDeLaFoto(Conversacion c, Instant fotoDelGrupoCambiadaEn, Instant imagenDeLaFormacionDesde) {
         return switch (c.tipo()) {
             case SOPORTE -> FotosDelChatController.rutaDeLaFotoDelSoporte(c.id());
-            case CELULA -> fotoDelGrupoCambiadaEn != null
-                    ? FotosDelChatController.rutaDeLaFotoDelGrupo(c.id(), fotoDelGrupoCambiadaEn) : null;
+            case CELULA -> desdeCuando(fotoDelGrupoCambiadaEn, imagenDeLaFormacionDesde)
+                    .map(desde -> FotosDelChatController.rutaDeLaFotoDelGrupo(c.id(), desde)).orElse(null);
+            case GLOBAL -> imagenDeLaFormacionDesde == null ? null
+                    : FotosDelChatController.rutaDeLaFotoDelGrupo(c.id(), imagenDeLaFormacionDesde);
             default -> null;
         };
+    }
+
+    /** La foto propia del grupo manda; si no tiene, la imagen de su formación (spec 035). */
+    private static Optional<Instant> desdeCuando(Instant fotoDelGrupoCambiadaEn, Instant imagenDeLaFormacionDesde) {
+        return Optional.ofNullable(fotoDelGrupoCambiadaEn != null ? fotoDelGrupoCambiadaEn : imagenDeLaFormacionDesde);
     }
 }

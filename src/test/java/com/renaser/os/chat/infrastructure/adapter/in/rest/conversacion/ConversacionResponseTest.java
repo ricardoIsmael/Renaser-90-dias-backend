@@ -90,10 +90,34 @@ class ConversacionResponseTest {
         Conversacion grupo = Conversacion.crearCelula(ID, UUID.randomUUID(), AHORA);
         Instant cambiada = Instant.parse("2026-09-27T15:00:00.123Z");
 
-        assertThat(ConversacionResponse.from(grupo, cambiada, null).photoPath())
+        assertThat(ConversacionResponse.from(grupo, cambiada, null, null).photoPath())
                 .isEqualTo("/api/v1/chat/conversations/" + ID + "/foto?v=" + cambiada.toEpochMilli());
-        assertThat(ConversacionResponse.from(grupo, null, null).photoPath()).as("usa la foto de Renaser").isNull();
-        assertThat(ConversacionResponse.from(Conversacion.crearGlobal(ID, AHORA), cambiada, null).photoPath())
+        assertThat(ConversacionResponse.from(grupo, null, null, null).photoPath()).as("usa la foto de Renaser").isNull();
+        assertThat(ConversacionResponse.from(Conversacion.crearGlobal(ID, AHORA), cambiada, null, null).photoPath())
                 .as("la comunidad nunca").isNull();
+    }
+
+    /**
+     * Spec 035: la comunidad general y un grupo sin foto propia traen la ruta de la imagen de su formación (con su {@code ?v=}); un grupo con foto
+     * propia conserva la suya; el soporte y el 1 a 1 no cambian; y sin imagen de formación sigue todo igual.
+     */
+    @Test
+    @DisplayName("photoPath con la imagen de la formación: la comunidad y los grupos sin foto propia; la foto propia manda")
+    void laRutaDeLaImagenDeLaFormacion() {
+        Conversacion grupo = Conversacion.crearCelula(ID, UUID.randomUUID(), AHORA);
+        Conversacion global = Conversacion.crearGlobal(ID, AHORA);
+        Instant propia = Instant.parse("2026-09-27T15:00:00.123Z");
+        Instant formacion = Instant.parse("2026-11-02T15:00:00.456Z");
+
+        assertThat(ConversacionResponse.from(global, null, formacion, null).photoPath())
+                .isEqualTo("/api/v1/chat/conversations/" + ID + "/foto?v=" + formacion.toEpochMilli());
+        assertThat(ConversacionResponse.from(grupo, null, formacion, null).photoPath())
+                .isEqualTo("/api/v1/chat/conversations/" + ID + "/foto?v=" + formacion.toEpochMilli());
+        assertThat(ConversacionResponse.from(grupo, propia, formacion, null).photoPath())
+                .as("la foto propia del grupo manda").isEqualTo("/api/v1/chat/conversations/" + ID + "/foto?v=" + propia.toEpochMilli());
+        assertThat(ConversacionResponse.from(global, null, null, null).photoPath()).as("sin imagen de formación, la app usa el fénix").isNull();
+        assertThat(ConversacionResponse.from(Conversacion.crearDirecta(ID, Conversacion.claveDirectaDe(
+                UserId.of(UUID.randomUUID()), UserId.of(UUID.randomUUID())), AHORA), null, formacion, null).photoPath())
+                .as("un 1 a 1 nunca").isNull();
     }
 }

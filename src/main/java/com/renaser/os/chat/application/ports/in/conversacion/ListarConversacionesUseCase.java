@@ -38,9 +38,13 @@ public interface ListarConversacionesUseCase {
      * @param nombre                 el nombre que se muestra (D-221, {@code NombresDeLosChatsService}):
      *                               «Formación Renaser Global», «Luisa y sus aprendices», «María – Formación
      *                               Renaser». {@code null} en un 1 a 1, que se llama como la otra persona.
+     * @param imagenDeLaFormacionDesde en la comunidad general y en los grupos, desde cuándo es la imagen de SU formación (spec 035); {@code null} si la
+     *                               formación no tiene imagen (el chat usa la de la app) y en el soporte y los 1 a 1. Un grupo con foto propia
+     *                               la ignora: manda la suya.
      */
     record ConversacionResumen(Conversacion conversacion, Mensaje ultimoMensaje, long noLeidos,
                                 UserId otroParticipante, String otroParticipanteNombre,
-                                String otroParticipanteAvatar, Instant fotoDelGrupoCambiadaEn, String nombre) {
+                                String otroParticipanteAvatar, Instant fotoDelGrupoCambiadaEn, String nombre,
+                                Instant imagenDeLaFormacionDesde) {
     }
 }
