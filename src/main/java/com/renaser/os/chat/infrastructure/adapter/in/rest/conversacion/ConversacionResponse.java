@@ -17,6 +17,10 @@ import java.util.Optional;
  * <p><b>Spec 035.</b> La comunidad general y un grupo SIN foto propia traen la ruta de la imagen de su formación (la misma ruta y el mismo {@code ?v=}),
  * solo si la formación tiene una; sin ella, {@code null} y la app usa el fénix y la tarjeta de siempre. Un grupo con foto propia conserva la suya.
  *
+ * <p>{@code ownPhoto} (spec 035): solo en un GRUPO, si la foto de {@code photoPath} es la PROPIA del grupo (D-212). Con la imagen de la formación
+ * {@code photoPath} viene aunque el grupo no tenga foto propia, y quien puede cambiar la foto del grupo necesita saber cuál es (para ofrecer «Volver a la foto
+ * de Renaser» solo si hay una propia). {@code null} en lo demás; un cliente anterior lo ignora.
+ *
  * <p><b>Corregido 2026-09-27 (D-212).</b> Un GRUPO con foto propia también la trae:
  * {@code /api/v1/chat/conversations/{id}/foto?v=<milisegundos>}, con los de cuándo cambió para que el
  * teléfono baje la nueva. Sin foto propia, {@code null} como antes. La comunidad y los 1 a 1, nunca.
@@ -28,7 +32,7 @@ import java.util.Optional;
  * <p>{@code formation} (spec 024): el código de la formación de la conversación. La app de Administración rotula con él cada fila cuando lee
  * «Todas», y la del personal con varias formaciones lo usa para cambiar de formación activa al abrir un aviso. Un cliente anterior lo ignora. */
 public record ConversacionResponse(String id, String type, String celulaId, String nombre, String createdAt,
-                                   String photoPath, String supportTraineeId, String formation) {
+                                   String photoPath, String supportTraineeId, String formation, Boolean ownPhoto) {
 
     /** Sin saber la foto propia de un grupo ni su nombre derivado (la respuesta de abrir un 1 a 1). */
     public static ConversacionResponse from(Conversacion c) {
@@ -50,7 +54,7 @@ public record ConversacionResponse(String id, String type, String celulaId, Stri
                 c.celulaId() != null ? c.celulaId().toString() : null, nombre, c.creadoEn().toString(),
                 rutaDeLaFoto(c, fotoDelGrupoCambiadaEn, imagenDeLaFormacionDesde),
                 c.aprendizDelSoporte().map(aprendiz -> aprendiz.value().toString()).orElse(null),
-                c.formacion().codigo());
+                c.formacion().codigo(), c.tipo() == TipoConversacion.CELULA ? fotoDelGrupoCambiadaEn != null : null);
     }
 
     static String toWireTipo(TipoConversacion tipo) {

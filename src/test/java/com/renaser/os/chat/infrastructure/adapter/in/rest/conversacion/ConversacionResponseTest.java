@@ -119,5 +119,8 @@ class ConversacionResponseTest {
         assertThat(ConversacionResponse.from(Conversacion.crearDirecta(ID, Conversacion.claveDirectaDe(
                 UserId.of(UUID.randomUUID()), UserId.of(UUID.randomUUID())), AHORA), null, formacion, null).photoPath())
                 .as("un 1 a 1 nunca").isNull();
+        assertThat(ConversacionResponse.from(grupo, propia, formacion, null).ownPhoto()).as("la foto propia del grupo").isTrue();
+        assertThat(ConversacionResponse.from(grupo, null, formacion, null).ownPhoto()).as("la del grupo es la de la formación").isFalse();
+        assertThat(ConversacionResponse.from(global, null, formacion, null).ownPhoto()).as("solo los grupos tienen foto propia").isNull();
     }
 }
