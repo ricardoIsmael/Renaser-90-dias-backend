@@ -3,12 +3,14 @@ package com.renaser.os.onboarding.application.services;
 import com.renaser.os.onboarding.application.ports.in.estado.AceptarHitoOnboardingUseCase.AceptarHitoCommand;
 import com.renaser.os.onboarding.application.ports.in.estado.AvanzarEstadoUseCase.AvanzarEstadoCommand;
 import com.renaser.os.onboarding.application.ports.in.estado.CompletarOnboardingUseCase.CompletarOnboardingCommand;
+import com.renaser.os.onboarding.application.ports.in.terminos.RegistrarAceptacionDeTerminosUseCase;
 import com.renaser.os.onboarding.application.ports.out.actor.ConsultarActorPort;
 import com.renaser.os.onboarding.application.ports.out.actor.ConsultarActorPort.ActorOnboarding;
 import com.renaser.os.onboarding.application.ports.out.estado.LoadEstadoOnboardingPort;
 import com.renaser.os.onboarding.application.ports.out.estado.SaveEstadoOnboardingPort;
 import com.renaser.os.onboarding.domain.model.estado.EstadoOnboarding;
 import com.renaser.os.onboarding.domain.model.estado.HitoOnboarding;
+import com.renaser.os.onboarding.domain.model.pagos.Moneda;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -20,6 +22,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.UUID;
@@ -105,9 +108,44 @@ class EstadoOnboardingServiceTest {
         when(loadEstadoPort.deUsuario(usuarioId)).thenReturn(Optional.of(existente));
         when(saveEstadoPort.guardar(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        EstadoOnboarding resultado = service.aceptar(new AceptarHitoCommand(usuarioId, HitoOnboarding.TERMINOS, null));
+        when(aceptacionDeTerminos.registrar(any(), any())).thenReturn(RegistrarAceptacionDeTerminosUseCase.ResultadoDeLaAceptacion.sinCronograma());
+
+        EstadoOnboarding resultado = service.aceptar(new AceptarHitoCommand(usuarioId, HitoOnboarding.TERMINOS, null, null, null));
 
         assertThat(resultado.terminosAceptadosEn()).isEqualTo(CLOCK.now());
+        assertThat(resultado.pago().esConCronograma()).as("sin cronograma firmado no se confirma nada").isFalse();
+    }
+
+    @Test
+    @DisplayName("aceptar() de Términos con el cronograma firmado (spec 039): lo que decidió la aceptación se confirma en el MISMO estado, antes de guardar")
+    void aceptarTerminosConfirmaElCronogramaFirmado() {
+        when(actorPort.deActor(usuarioId)).thenReturn(Optional.of(new ActorOnboarding(usuarioId, false)));
+        EstadoOnboarding existente = EstadoOnboarding.iniciar(usuarioId, CLOCK);
+        existente.anotarConCronograma(Moneda.PEN, CLOCK);
+        when(loadEstadoPort.deUsuario(usuarioId)).thenReturn(Optional.of(existente));
+        when(saveEstadoPort.guardar(any())).thenAnswer(inv -> inv.getArgument(0));
+        UUID version = UUID.randomUUID();
+        when(aceptacionDeTerminos.registrar(usuarioId, new RegistrarAceptacionDeTerminosUseCase.PedidoDeAceptacion(version, LocalDate.parse("2026-08-25"), "huella-1")))
+                .thenReturn(new RegistrarAceptacionDeTerminosUseCase.ResultadoDeLaAceptacion(
+                        Optional.of(new RegistrarAceptacionDeTerminosUseCase.ConfirmacionDelCronograma("Ana Pérez", "huella-1"))));
+
+        EstadoOnboarding resultado = service.aceptar(new AceptarHitoCommand(usuarioId, HitoOnboarding.TERMINOS, version, LocalDate.parse("2026-08-25"), "huella-1"));
+
+        assertThat(resultado.pago().confirmadoNombre()).isEqualTo("Ana Pérez");
+        assertThat(resultado.pago().confirmadoHuella()).isEqualTo("huella-1");
+        assertThat(resultado.pago().confirmadoEn()).isEqualTo(CLOCK.now());
+    }
+
+    @Test
+    @DisplayName("aceptar() de otro hito no toca la aceptación de términos ni el cronograma")
+    void otroHitoNoRegistraTerminos() {
+        when(actorPort.deActor(usuarioId)).thenReturn(Optional.of(new ActorOnboarding(usuarioId, false)));
+        when(loadEstadoPort.deUsuario(usuarioId)).thenReturn(Optional.of(EstadoOnboarding.iniciar(usuarioId, CLOCK)));
+        when(saveEstadoPort.guardar(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.aceptar(new AceptarHitoCommand(usuarioId, HitoOnboarding.PACTO, null, null, "huella-1"));
+
+        verify(aceptacionDeTerminos, never()).registrar(any(), any());
     }
 
     @Test

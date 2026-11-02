@@ -6,6 +6,7 @@ import com.renaser.os.onboarding.application.ports.in.estado.AvanzarEstadoUseCas
 import com.renaser.os.onboarding.application.ports.in.estado.CompletarOnboardingUseCase;
 import com.renaser.os.onboarding.application.ports.in.estado.ObtenerEstadoOnboardingUseCase;
 import com.renaser.os.onboarding.application.ports.in.terminos.RegistrarAceptacionDeTerminosUseCase;
+import com.renaser.os.onboarding.application.ports.in.terminos.RegistrarAceptacionDeTerminosUseCase.PedidoDeAceptacion;
 import com.renaser.os.onboarding.application.ports.out.actor.ConsultarActorPort;
 import com.renaser.os.onboarding.application.ports.out.estado.LoadEstadoOnboardingPort;
 import com.renaser.os.onboarding.application.ports.out.estado.SaveEstadoOnboardingPort;
@@ -74,7 +75,9 @@ public class EstadoOnboardingService implements ObtenerEstadoOnboardingUseCase, 
         estado.aceptarHito(command.hito(), clock);
         if (command.hito() == HitoOnboarding.TERMINOS) {
             // Spec 027: la constancia de QUÉ versión aceptó va en la misma transacción que el hito; si no se puede dejar, tampoco queda aceptado.
-            aceptacionDeTerminos.registrar(command.usuarioId(), command.versionDeTerminosId());
+            // Spec 039: con ella queda lo que se le mostró en «Mi aceptación» y, si firmó su cronograma de pagos, su confirmación (la de la spec 032) en este mismo estado.
+            aceptacionDeTerminos.registrar(command.usuarioId(), new PedidoDeAceptacion(command.versionDeTerminosId(), command.inicioVisto(), command.huellaDelCronograma()))
+                    .cronograma().ifPresent(confirmacion -> estado.confirmarCronograma(confirmacion.nombre(), confirmacion.huella(), clock));
         }
         return saveEstadoPort.guardar(estado);
     }

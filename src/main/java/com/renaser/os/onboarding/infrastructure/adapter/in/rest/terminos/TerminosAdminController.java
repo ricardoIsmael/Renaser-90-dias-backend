@@ -27,6 +27,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -84,10 +85,12 @@ public class TerminosAdminController {
         }
     }
 
-    public record ConstanciaResponse(String formation, int number, Instant acceptedAt, String signatureUrl) {
+    /** {@code program}, {@code startDate} y {@code endDate}: lo que se le mostró en «Mi aceptación» al aceptar (spec 039); nulos en lo aceptado antes. */
+    public record ConstanciaResponse(String formation, int number, Instant acceptedAt, String signatureUrl, String program, LocalDate startDate, LocalDate endDate,
+                                     boolean scheduleSigned) {
 
         static ConstanciaResponse from(ConstanciaDeUnaPersona c) {
-            return new ConstanciaResponse(c.formacion().codigo(), c.numero(), c.aceptadaEn(), c.firmaUrl());
+            return new ConstanciaResponse(c.formacion().codigo(), c.numero(), c.aceptadaEn(), c.firmaUrl(), c.programa(), c.inicio(), c.fin(), c.cronogramaFirmado());
         }
     }
 

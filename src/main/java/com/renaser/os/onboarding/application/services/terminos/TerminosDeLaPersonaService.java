@@ -1,8 +1,11 @@
 package com.renaser.os.onboarding.application.services.terminos;
 
+import com.renaser.os.onboarding.application.ports.in.pagos.CronogramaParaFirmarUseCase;
+import com.renaser.os.onboarding.application.ports.in.pagos.CronogramaParaFirmarUseCase.CronogramaParaFirmar;
 import com.renaser.os.onboarding.application.ports.in.terminos.ObtenerTerminosUseCase;
 import com.renaser.os.onboarding.application.ports.out.terminos.AceptacionesDeTerminosPort;
 import com.renaser.os.onboarding.application.ports.out.terminos.AceptacionesDeTerminosPort.Aceptacion;
+import com.renaser.os.onboarding.application.ports.out.terminos.AceptacionesDeTerminosPort.LoMostrado;
 import com.renaser.os.onboarding.application.ports.out.terminos.TerminosPort;
 import com.renaser.os.onboarding.domain.model.terminos.ContenidoDeTerminos;
 import com.renaser.os.onboarding.domain.model.terminos.QuePideLaAceptacion;
@@ -32,15 +35,20 @@ class TerminosDeLaPersonaService implements ObtenerTerminosUseCase {
     private final FormacionesFinder catalogo;
     private final ParticipacionProgramaFinder participaciones;
     private final FirmaDeLaAceptacion firmas;
+    private final ArmadorDelAcuerdo acuerdos;
+    private final CronogramaParaFirmarUseCase cronogramas;
 
     TerminosDeLaPersonaService(TerminosPort terminos, AceptacionesDeTerminosPort aceptaciones, AlcanceDeFormacionFinder formaciones,
-                               FormacionesFinder catalogo, ParticipacionProgramaFinder participaciones, FirmaDeLaAceptacion firmas) {
+                               FormacionesFinder catalogo, ParticipacionProgramaFinder participaciones, FirmaDeLaAceptacion firmas, ArmadorDelAcuerdo acuerdos,
+                               CronogramaParaFirmarUseCase cronogramas) {
         this.terminos = terminos;
         this.aceptaciones = aceptaciones;
         this.formaciones = formaciones;
         this.catalogo = catalogo;
         this.participaciones = participaciones;
         this.firmas = firmas;
+        this.acuerdos = acuerdos;
+        this.cronogramas = cronogramas;
     }
 
     @Override
@@ -53,7 +61,21 @@ class TerminosDeLaPersonaService implements ObtenerTerminosUseCase {
         Optional<String> nota = pide == QuePideLaAceptacion.NUEVA_VERSION ? ReglasDeTerminos.notaDelCambio(vigente, publicadas, ultima.orElse(0))
                 : Optional.empty();
         String nombre = catalogo.de(formacion).nombre();
-        return new TerminosParaLaPersona(formacion, nombre, vigente.map(v -> conMarcadores(v, nombre, persona)), pide, ultima, nota);
+        Optional<AcuerdoDeLaPersona> acuerdo = vigente.map(v -> acuerdoDe(persona, formacion, pide));
+        return new TerminosParaLaPersona(formacion, nombre, vigente.map(v -> conMarcadores(v, nombre, persona)), pide, ultima, nota, acuerdo);
+    }
+
+    /**
+     * «Mi aceptación» (spec 039). El cronograma se ofrece para firmar SOLO en el primer ingreso —quien entra a la app aceptado con cronograma— y mientras no lo tenga ya
+     * confirmado: a quien ya estaba dentro, o vuelve a aceptar un texto nuevo, se le sigue pidiendo en «Mi ingreso» (spec 032).
+     */
+    private AcuerdoDeLaPersona acuerdoDe(UserId persona, Formacion formacion, QuePideLaAceptacion pide) {
+        AcuerdoDeLaPersona acuerdo = acuerdos.armar(persona, formacion);
+        if (pide != QuePideLaAceptacion.PRIMERA_VEZ) {
+            return acuerdo;
+        }
+        Optional<CronogramaParaFirmar> cronograma = cronogramas.de(persona).filter(c -> !c.yaConfirmado());
+        return acuerdo.conCronograma(cronograma);
     }
 
     @Override
@@ -62,7 +84,13 @@ class TerminosDeLaPersonaService implements ObtenerTerminosUseCase {
         List<Aceptacion> suyas = aceptaciones.delUsuario(persona);
         Optional<Aceptacion> ultima = suyas.stream().filter(a -> a.formacion() == formacion).findFirst().or(() -> suyas.stream().findFirst());
         return ultima.flatMap(a -> terminos.porId(a.versionId()).map(v -> new TerminosAceptados(conMarcadores(v, catalogo.de(v.formacion()).nombre(), persona),
-                a.aceptadaEn(), firmas.urlDe(a.firmaMediaId()))));
+                a.aceptadaEn(), firmas.urlDe(a.firmaMediaId()), loMostrado(a))));
+    }
+
+    /** Lo que se le mostró en «Mi aceptación» al aceptar; vacío en lo aceptado antes de la spec 039. */
+    private static Optional<AcuerdoAceptado> loMostrado(Aceptacion aceptacion) {
+        LoMostrado mostrado = aceptacion.mostrado();
+        return mostrado.hayAlgo() ? Optional.of(new AcuerdoAceptado(mostrado.programa(), mostrado.inicio(), mostrado.fin(), mostrado.cronogramaFirmado())) : Optional.empty();
     }
 
     /** La formación de los términos de la persona: la suya (la activa, si es personal); Administración y Alquimista, que no tienen una, firman los de la Escuela. */

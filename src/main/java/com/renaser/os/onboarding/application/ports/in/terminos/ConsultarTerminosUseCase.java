@@ -5,6 +5,7 @@ import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -42,7 +43,14 @@ public interface ConsultarTerminosUseCase {
     record Persona(UserId id, String nombre) {
     }
 
-    /** @param firmaUrl enlace de lectura de la firma, que vence a los 15 minutos; {@code null} si el archivo ya no está */
-    record ConstanciaDeUnaPersona(Formacion formacion, int numero, Instant aceptadaEn, String firmaUrl) {
+    /**
+     * @param firmaUrl         enlace de lectura de la firma, que vence a los 15 minutos; {@code null} si el archivo ya no está
+     * @param programa         lo que se le mostró en «Mi aceptación» al aceptar (spec 039); {@code null} en lo aceptado antes
+     * @param inicio           idem; {@code null} también si no tenía un programa que mostrar
+     * @param fin              idem
+     * @param cronogramaFirmado si firmó su cronograma de pagos junto con los términos
+     */
+    record ConstanciaDeUnaPersona(Formacion formacion, int numero, Instant aceptadaEn, String firmaUrl, String programa, LocalDate inicio, LocalDate fin,
+                                  boolean cronogramaFirmado) {
     }
 }

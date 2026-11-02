@@ -87,7 +87,8 @@ class ConsultaDeTerminosService implements ConsultarTerminosUseCase {
     @Override
     public List<ConstanciaDeUnaPersona> constanciaDe(UserId actor, UserId persona) {
         guardia.exigirAdministracion(actor);
-        return aceptaciones.delUsuario(persona).stream().map(a -> new ConstanciaDeUnaPersona(a.formacion(), a.numero(), a.aceptadaEn(), firmas.urlDe(a.firmaMediaId()).orElse(null)))
+        return aceptaciones.delUsuario(persona).stream().map(a -> new ConstanciaDeUnaPersona(a.formacion(), a.numero(), a.aceptadaEn(), firmas.urlDe(a.firmaMediaId()).orElse(null), a.mostrado().programa(),
+                a.mostrado().inicio(), a.mostrado().fin(), a.mostrado().cronogramaFirmado()))
                 .toList();
     }
 
