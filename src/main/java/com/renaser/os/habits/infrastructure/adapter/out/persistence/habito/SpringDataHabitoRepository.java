@@ -18,6 +18,9 @@ interface SpringDataHabitoRepository extends JpaRepository<HabitoJpaEntity, UUID
 
     List<HabitoJpaEntity> findByAmbitoOrderByOrdenAscTituloAsc(AmbitoHabitoJpa ambito);
 
+    /** H-04: el catalogo activo de una formacion, en el orden del catalogo (el indice `habitos_formacion_catalogo_idx` de la V134). */
+    List<HabitoJpaEntity> findByAmbitoAndFormacionAndActivoTrueOrderByOrdenAscTituloAsc(AmbitoHabitoJpa ambito, String formacion);
+
     /**
      * Los habitos PERSONAL comparten {@code orden = 0}, asi que en la practica se ordenan por
      * titulo — y van detras del catalogo porque quien los concatena los agrega despues

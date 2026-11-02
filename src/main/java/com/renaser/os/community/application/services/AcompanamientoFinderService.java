@@ -24,6 +24,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -253,12 +254,12 @@ class AcompanamientoFinderService implements AcompanamientoFinder, MentorVigente
     @Override
     @Transactional(readOnly = true)
     public List<GrupoConAprendices> gruposOperativos(Instant instante) {
+        List<Celula> enCurso = loadCelulaPort.todas().stream().filter(celula -> vigencia.enCurso(celula, instante)).toList();
+        // H-04c: las asignaciones de todos los grupos en UNA consulta, no una por grupo (1 + C).
+        Map<CelulaId, List<AsignacionCelula>> asignaciones = loadAsignacionesPort.porCelulas(enCurso.stream().map(Celula::id).toList());
         List<GrupoConAprendices> operativos = new java.util.ArrayList<>();
-        for (Celula celula : loadCelulaPort.todas()) {
-            if (!vigencia.enCurso(celula, instante)) {
-                continue;
-            }
-            List<AsignacionCelula> vigentes = asignacionesDe(celula.id().value()).stream()
+        for (Celula celula : enCurso) {
+            List<AsignacionCelula> vigentes = asignaciones.getOrDefault(celula.id(), List.of()).stream()
                     .filter(a -> a.vigenteEn(instante))
                     .toList();
             UserId mentor = vigentes.stream()

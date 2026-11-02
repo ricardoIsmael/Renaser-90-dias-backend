@@ -43,6 +43,12 @@ class HabitoPersistenceAdapter implements LoadHabitoPort, SaveHabitoPort {
     }
 
     @Override
+    public List<Habito> catalogoActivoDeFormacion(com.renaser.os.shared.domain.Formacion formacion) {
+        return repository.findByAmbitoAndFormacionAndActivoTrueOrderByOrdenAscTituloAsc(AmbitoHabitoJpa.SISTEMA, formacion.codigo()).stream()
+                .map(mapper::toDomain).toList();
+    }
+
+    @Override
     public List<Habito> catalogoCompleto() {
         return repository.findByAmbitoOrderByOrdenAscTituloAsc(AmbitoHabitoJpa.SISTEMA).stream().map(mapper::toDomain).toList();
     }

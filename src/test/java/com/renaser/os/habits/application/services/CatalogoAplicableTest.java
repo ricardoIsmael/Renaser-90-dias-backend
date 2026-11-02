@@ -32,6 +32,9 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /** Spec 001 (D-264): el filtro único de hábitos globales por rol, con vigencia estricta en la zona de la persona. */
@@ -58,6 +61,7 @@ class CatalogoAplicableTest {
 
     @BeforeEach
     void preparar() {
+        CatalogoAplicableDePrueba.responderElCatalogoPorFormacion(loadHabitoPort);
         catalogo = new CatalogoAplicable(loadHabitoPort, audiencias, historialDeRolPort);
         when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(paraTodos, deMentores));
         lenient().when(historialDeRolPort.de(any())).thenReturn(HistorialDeRol.vacio());
@@ -136,6 +140,20 @@ class CatalogoAplicableTest {
                 .containsExactly(paraTodos, deMentores);
         assertThat(catalogo.globalesPara(PERSONA, progresoEn(Formacion.CERTIFICACION), DIA_DEL_CAMBIO))
                 .containsExactly(delaCertificacion);
+    }
+
+    @Test
+    @DisplayName("H-04: lo que le toca se pide a la consulta por formación (no se lee el catálogo de las tres para filtrar), y solo se leen las audiencias de esos hábitos")
+    void pideElCatalogoDeSuFormacion() {
+        Habito delDiplomado = habitoEn("Estudio del día", Formacion.DIPLOMADO);
+        when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(paraTodos, delDiplomado));
+
+        assertThat(catalogo.globalesPara(PERSONA, progresoEn(Formacion.DIPLOMADO), DIA_DEL_CAMBIO)).containsExactly(delDiplomado);
+
+        // La unica pregunta al catalogo es la de SU formacion (en la base, una consulta filtrada con `habitos_formacion_catalogo_idx`); leer el catalogo entero
+        // queda para la vista de quien acompaña (`globalesQueNoLeTocan`), que sí necesita los de las otras formaciones.
+        verify(loadHabitoPort, times(1)).catalogoActivoDeFormacion(Formacion.DIPLOMADO);
+        verify(loadHabitoPort, never()).catalogoActivoDeFormacion(Formacion.ESCUELA);
     }
 
     @Test

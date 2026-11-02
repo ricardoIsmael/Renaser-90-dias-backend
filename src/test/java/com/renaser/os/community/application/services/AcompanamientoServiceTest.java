@@ -627,6 +627,44 @@ class AcompanamientoServiceTest {
         assertThat(amanecer.aprendices()).containsExactlyInAnyOrder(ANA, LUIS);
     }
 
+    @Test
+    @DisplayName("H-04c: los grupos operativos leen las asignaciones de TODOS los grupos en una sola lectura, no una por grupo (1 + C)")
+    void gruposOperativosLeenLasAsignacionesEnUnaSolaLectura() {
+        escenarioBase();
+        var lecturasPorGrupo = new java.util.concurrent.atomic.AtomicInteger();
+        var lecturasEnLote = new java.util.concurrent.atomic.AtomicInteger();
+        LoadAsignacionesPort contador = new LoadAsignacionesPort() {
+            @Override
+            public List<AsignacionCelula> porUsuario(UserId usuarioId) {
+                return cargaAsignaciones.porUsuario(usuarioId);
+            }
+
+            @Override
+            public List<AsignacionCelula> porCelula(CelulaId celulaId) {
+                lecturasPorGrupo.incrementAndGet();
+                return cargaAsignaciones.porCelula(celulaId);
+            }
+
+            @Override
+            public java.util.Map<CelulaId, List<AsignacionCelula>> porCelulas(java.util.Collection<CelulaId> celulaIds) {
+                lecturasEnLote.incrementAndGet();
+                return cargaAsignaciones.porCelulas(celulaIds);
+            }
+
+            @Override
+            public Optional<AsignacionCelula> porClaveOperacion(String claveOperacion) {
+                return cargaAsignaciones.porClaveOperacion(claveOperacion);
+            }
+        };
+
+        var operativos = new AcompanamientoFinderService(contador, cargaCelulas, cargaPolitica,
+                new com.renaser.os.users.api.AlcanceDeFormacionPermisivo()).gruposOperativos(AHORA);
+
+        assertThat(operativos).extracting(g -> g.nombre()).containsExactlyInAnyOrder("Grupo Amanecer", "Grupo Ajeno");
+        assertThat(lecturasEnLote.get()).isEqualTo(1);
+        assertThat(lecturasPorGrupo.get()).isZero();
+    }
+
     // ── D-240 ────────────────────────────────────────────────────────────────
 
     @Test

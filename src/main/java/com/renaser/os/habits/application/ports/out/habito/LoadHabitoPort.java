@@ -18,6 +18,15 @@ public interface LoadHabitoPort {
 
     List<Habito> catalogoActivo();
 
+    /**
+     * El catalogo activo de UNA formacion, filtrado en la consulta y no despues (auditoria de consultas del 2026-11-02, H-04): cada generacion de jornada,
+     * {@code GET /habit-preferences}, plan de semana y «Mis habitos» leian el catalogo de las tres formaciones para quedarse con una. Apoyada en
+     * {@code habitos_formacion_catalogo_idx} (V134). El cuerpo por defecto filtra el catalogo entero (para los dobles de prueba); el adaptador real lo sobreescribe.
+     */
+    default List<Habito> catalogoActivoDeFormacion(com.renaser.os.shared.domain.Formacion formacion) {
+        return catalogoActivo().stream().filter(habito -> habito.esDeFormacion(formacion)).toList();
+    }
+
     /** Catalogo SISTEMA completo (activos e inactivos) — panel admin, hueco #11. */
     List<Habito> catalogoCompleto();
 

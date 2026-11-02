@@ -51,7 +51,8 @@ public class CatalogoAplicable {
 
     /** Los hábitos globales activos que aplican a la persona el día local {@code dia}, en el orden del catálogo. */
     public List<Habito> globalesPara(UserId persona, ProgresoParticipanteHabits progreso, LocalDate dia) {
-        return separar(persona, progreso, dia).get(true);
+        // H-04: aqui solo importan los de SU formacion; se piden asi desde la consulta (y las audiencias, solo de esos) en vez de leer las tres y filtrar.
+        return separar(persona, progreso, dia, loadHabitoPort.catalogoActivoDeFormacion(progreso.formacion())).get(true);
     }
 
     /**
@@ -69,11 +70,11 @@ public class CatalogoAplicable {
      * del catálogo y solo tiene que sacar estos (FR-013).
      */
     public Set<HabitoId> globalesQueNoLeTocan(UserId persona, ProgresoParticipanteHabits progreso, LocalDate dia) {
-        return separar(persona, progreso, dia).get(false).stream().map(Habito::id).collect(Collectors.toSet());
+        // Los que NO le tocan incluyen los de otras formaciones: aqui si hace falta el catalogo entero.
+        return separar(persona, progreso, dia, loadHabitoPort.catalogoActivo()).get(false).stream().map(Habito::id).collect(Collectors.toSet());
     }
 
-    private Map<Boolean, List<Habito>> separar(UserId persona, ProgresoParticipanteHabits progreso, LocalDate dia) {
-        List<Habito> activos = loadHabitoPort.catalogoActivo();
+    private Map<Boolean, List<Habito>> separar(UserId persona, ProgresoParticipanteHabits progreso, LocalDate dia, List<Habito> activos) {
         if (activos.isEmpty()) {
             return Map.of(true, List.of(), false, List.of());
         }
