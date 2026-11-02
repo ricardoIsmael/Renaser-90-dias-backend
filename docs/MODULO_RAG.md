@@ -1618,6 +1618,12 @@ idea! ✨ ¿Lo pones en Cuerpo, Mente, Emociones o Espíritu? ¿Y a qué hora?»
 dejé la propuesta abajo para que la confirmes 🙌» → la persona toca Confirmar → «Hábito 'Leer 20
 minutos' creado en Mente, a las 21:00, todos los días. Ya lo ves en Training.»
 
+### D-311 — SER al día con la lógica nueva y para las tres formaciones (2026-11-02, spec 038)
+
+> **Corregido 2026-11-02 (spec 038, D-311).** El Mapa de Renacimiento **se retiró** (spec 026): SER ya no lo ofrece. `consultar_mi_mapa` queda solo para quien lo armó
+> antes y, sin Mapa, responde que es lo normal y manda a `consultar_mi_diagnostico` y a Plan; `MapaParaProponer` es vacío sin Mapa; el prompt tiene la sección «Su diagnóstico y
+> sus objetivos». Lo de abajo (D-233) describe cómo se leía el Mapa y sigue valiendo **solo** para esas personas. Ver `specs/038-ser-al-dia/`.
+
 ### D-233 — SER conoce el Mapa de Renacimiento de cada persona (2026-09-30)
 
 Pedido del dueño (30-09): que SER sepa, por persona, cuáles son SUS objetivos del Mapa de
