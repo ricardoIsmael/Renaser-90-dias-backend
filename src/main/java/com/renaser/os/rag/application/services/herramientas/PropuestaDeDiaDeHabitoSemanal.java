@@ -10,6 +10,7 @@ import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ParametroHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.TipoParametroHerramienta;
+import com.renaser.os.shared.domain.TituloEnTipoOracion;
 import com.renaser.os.shared.domain.UserId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -130,7 +131,7 @@ public class PropuestaDeDiaDeHabitoSemanal implements HerramientaAgente {
 
     /** Lo que ve la persona junto a los botones. Dice "anotar" a proposito: ver D-H3 en el javadoc. */
     static String resumenDe(HabitoSemanal habito, LocalDate fecha) {
-        String resumen = "Anotar el " + FechaDelPlan.legible(fecha) + " como tu dia de '" + habito.titulo()
+        String resumen = "Anotar el " + FechaDelPlan.legible(fecha) + " como tu dia de '" + TituloEnTipoOracion.de(habito.titulo())
                 + "' esta semana";
         return habito.diaElegido() == null ? resumen
                 : resumen + " (en lugar del " + FechaDelPlan.legible(habito.diaElegido()) + ")";

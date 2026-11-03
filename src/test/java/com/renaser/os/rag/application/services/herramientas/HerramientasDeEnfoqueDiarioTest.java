@@ -220,6 +220,20 @@ class HerramientasDeEnfoqueDiarioTest {
         verify(enfoque, never()).iniciarSantuario(any(), any());
     }
 
+    // issue #71
+    @Test
+    @DisplayName("santuario: el título del catálogo en MAYÚSCULAS se lee en tipo oración en la tarjeta")
+    void santuarioEnTipoOracion() {
+        when(enfoque.santuariosDeHoy(APRENDIZ)).thenReturn(List.of(
+                new SantuarioDeHoy(LIMA, REGISTRO, "SANTUARIO DE LA NOCHE", true, NOCHE_EN_LIMA.minusSeconds(60))));
+
+        proponerSantuario(NOCHE_EN_LIMA);
+
+        verify(proponerAccion).proponer(APRENDIZ, new InvocacionHerramienta(PropuestaDeIniciarSantuario.NOMBRE,
+                Map.of(PropuestaDeIniciarSantuario.ARGUMENTO_REGISTRO_ID, REGISTRO.toString())),
+                "Iniciar tu Santuario 'Santuario de la noche' ahora");
+    }
+
     @Test
     @DisplayName("santuario confirmado: inicia por el puerto; si no es la hora, Fallo legible")
     void confirmarSantuario() {
@@ -259,6 +273,21 @@ class HerramientasDeEnfoqueDiarioTest {
                         PropuestaDeIniciarDiaSinCelular.ARGUMENTO_HORAS_OBJETIVO, "12")),
                 "Empezar ahora tu 'Dia sin celular' con meta de 12 horas");
         verify(enfoque, never()).iniciarDiaSinCelular(any(), any(), anyInt());
+    }
+
+    // issue #71
+    @Test
+    @DisplayName("sin celular: el título del catálogo en MAYÚSCULAS se lee en tipo oración en la tarjeta")
+    void sinCelularEnTipoOracion() {
+        when(enfoque.diaSinCelularDeHoy(APRENDIZ)).thenReturn(new DiaSinCelularDeHoy(LIMA, REGISTRO,
+                "DÍA SIN CELULAR", true, null, null, List.of(3, 6, 9, 12, 15, 18, 21, 24)));
+
+        proponerSinCelular(" 12 ");
+
+        verify(proponerAccion).proponer(APRENDIZ, new InvocacionHerramienta(PropuestaDeIniciarDiaSinCelular.NOMBRE,
+                Map.of(PropuestaDeIniciarDiaSinCelular.ARGUMENTO_REGISTRO_ID, REGISTRO.toString(),
+                        PropuestaDeIniciarDiaSinCelular.ARGUMENTO_HORAS_OBJETIVO, "12")),
+                "Empezar ahora tu 'Día sin celular' con meta de 12 horas");
     }
 
     @Test
