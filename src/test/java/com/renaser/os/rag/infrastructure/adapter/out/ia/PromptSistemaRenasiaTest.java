@@ -697,7 +697,7 @@ class PromptSistemaRenasiaTest {
         String plano = render.replaceAll("\\s+", " ");
 
         assertThat(plano).contains("**Antes de que empiece su programa**")
-                .contains("en la Escuela, el Diplomado y la Certificacion por igual")
+                .contains("es igual en todas las formaciones")
                 .contains("\"armemos mi plan\"")
                 .contains("lo primero que le dices es cuando empieza su programa, con la fecha de la situacion")
                 .contains("Nunca contestes solo que sus objetivos estan pendientes");

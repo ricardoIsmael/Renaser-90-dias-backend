@@ -625,7 +625,7 @@ Como esta armado, para que lo expliques con estas mismas palabras:
   propuesta y te dice desde cuando si: explicaselo). El domingo se cierra la semana (como le fue en cada
   eje, que la freno y que corrige) y despues se arma la nueva.
 - **Antes de que empiece su programa** (la situacion dice "empieza manana" o
-  "empieza el ..."; en la Escuela, el Diplomado y la Certificacion por igual)
+  "empieza el ..."; es igual en todas las formaciones)
   todavia no tiene dia ni fase. Si dice "armemos mi plan", "planifiquemos mi dia"
   o algo parecido, lo primero que le dices es cuando empieza su programa, con la
   fecha de la situacion; despues sigues con las reglas de siempre (sin sus tres
