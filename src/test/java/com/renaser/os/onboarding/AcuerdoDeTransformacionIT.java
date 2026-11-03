@@ -59,6 +59,8 @@ class AcuerdoDeTransformacionIT {
     private static final String HITOS = "/api/v1/onboarding/milestones";
     private static final String PAGOS = "/api/v1/admin/pagos/personas/";
     private static final String SCRIPT = "db/migration/V162__acuerdo_de_transformacion.sql";
+    /** V165 (2026-11-03): la V162 ya no pide volver a firmar; se corre detrás, como Flyway. */
+    private static final String SCRIPT_V165 = "db/migration/V165__los_que_ya_aceptaron_no_vuelven_a_firmar.sql";
 
     /** Cómo empieza cada una de las 23 cláusulas del texto del dueño (el primer párrafo). */
     private static final List<String> INICIOS_DE_LAS_CLAUSULAS = List.of(
@@ -123,14 +125,14 @@ class AcuerdoDeTransformacionIT {
 
     // spec 039 FR-002
     @Test
-    @DisplayName("V162 publica el texto del dueño en las tres formaciones: la Escuela pasa a la versión 2 (pide aceptar de nuevo) y el Diplomado y la Certificación quedan con la 1")
+    @DisplayName("V162 publica el texto del dueño en las tres formaciones: la Escuela pasa a la versión 2 (desde V165 no pide aceptar de nuevo) y el Diplomado y la Certificación quedan con la 1")
     void v162PublicaElTextoEnLasTresFormaciones() {
         assertThat(jdbc.queryForList("SELECT formacion || ':' || numero FROM renaser.terminos_versiones WHERE estado = 'PUBLICADA' ORDER BY formacion, numero", String.class))
                 .containsExactly("CERTIFICACION:1", "DIPLOMADO:1", "ESCUELA:1", "ESCUELA:2");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM renaser.terminos_versiones WHERE estado = 'BORRADOR'", Integer.class))
                 .as("el borrador copia de la spec 027 ya no sirve").isZero();
         assertThat(jdbc.queryForObject("SELECT pide_nueva_aceptacion FROM renaser.terminos_versiones WHERE formacion = 'ESCUELA' AND numero = 2", Boolean.class))
-                .as("quien ya estaba dentro lo acepta de nuevo").isTrue();
+                .as("V165 (decisión del dueño 2026-11-03): quien ya estaba dentro no vuelve a firmar").isFalse();
         assertThat(jdbc.queryForObject("SELECT bool_or(pide_nueva_aceptacion) FROM renaser.terminos_versiones WHERE numero = 1 AND formacion <> 'ESCUELA'", Boolean.class))
                 .as("la primera versión de una formación nunca pide aceptar de nuevo").isFalse();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM renaser.terminos_versiones WHERE id::text LIKE '00000000-0000-4000-8000-0000000162%' AND publicada_por IS NULL "
@@ -431,6 +433,10 @@ class AcuerdoDeTransformacionIT {
     @Test
     @DisplayName("volver a aceptar (ya estaba dentro): bloquea, trae su programa y fechas reales (ya empezó) y NO ofrece el cronograma aunque tenga uno; firmar no lo confirma")
     void volverAAceptar() throws Exception {
+        // Desde V165 la versión de la V162 no pide aceptar de nuevo; esta prueba simula una versión futura que sí lo pide.
+        jdbc.execute("ALTER TABLE renaser.terminos_versiones DISABLE TRIGGER terminos_versiones_constancia");
+        jdbc.update("UPDATE renaser.terminos_versiones SET pide_nueva_aceptacion = true WHERE formacion = 'ESCUELA' AND numero = 2");
+        jdbc.execute("ALTER TABLE renaser.terminos_versiones ENABLE TRIGGER terminos_versiones_constancia");
         UUID beto = aprendiz("ESCUELA", 90, "Beto Quispe", true);
         String sesion = sesionDe(beto);
         asignarPago(cronograma("PEN", "2026-11-15", 500), beto);
@@ -458,6 +464,21 @@ class AcuerdoDeTransformacionIT {
         assertThat(json.readTree(ok(enviar("GET", "/api/v1/me/ingreso", sesion, null))).get("payments").get("confirmation").get("state").asText()).isEqualTo("NOT_YET");
     }
 
+    // decisión del dueño 2026-11-03 (V165)
+    @Test
+    @DisplayName("V165: quien ya había aceptado la versión anterior NO vuelve a firmar el Acuerdo de transformación")
+    void quienYaAceptoNoVuelveAFirmar() throws Exception {
+        UUID ana = aprendiz("ESCUELA", 90, "Ana Ya Firmó", true);
+        String sesion = sesionDe(ana);
+        jdbc.update("INSERT INTO renaser.aceptaciones_de_terminos (id, usuario_id, version_id, aceptada_en) VALUES (gen_random_uuid(), ?, ?::uuid, now())", ana,
+                jdbc.queryForObject("SELECT id::text FROM renaser.terminos_versiones WHERE formacion = 'ESCUELA' AND numero = 1", String.class));
+
+        JsonNode mios = json.readTree(ok(enviar("GET", TERMINOS, sesion, null)));
+
+        assertThat(mios.get("pending").asText()).isEqualTo("NONE");
+        assertThat(mios.get("blocks").asBoolean()).isFalse();
+    }
+
     @Test
     @DisplayName("el personal sin programa firma con su nombre y el programa de su formación, sin fechas: no se le promete un inicio")
     void elPersonalSinProgramaNoTieneFechas() throws Exception {
@@ -477,7 +498,8 @@ class AcuerdoDeTransformacionIT {
 
     /** Corre la V162 tal cual la corre Flyway, sobre una conexión propia, y deja el {@code search_path} como estaba. */
     private void correrLaV162() throws Exception {
-        String script = new String(new ClassPathResource(SCRIPT).getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        String script = new String(new ClassPathResource(SCRIPT).getInputStream().readAllBytes(), StandardCharsets.UTF_8)
+                + "\n" + new String(new ClassPathResource(SCRIPT_V165).getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         jdbc.execute((ConnectionCallback<Void>) conexion -> {
             try (Statement sentencia = conexion.createStatement()) {
                 String anterior;
