@@ -28,12 +28,23 @@ class RocaMensualPersistenceAdapter implements LoadRocaMensualPort, GuardarRocaM
 
     @Override
     public Optional<RocaMensual> deMaestraYMes(RocaMaestraId rocaMaestraId, int numeroMes) {
-        return repository.findByRocaMaestraIdAndNumeroMes(rocaMaestraId.value(), (short) numeroMes)
+        return repository.findByRocaMaestraIdAndNumeroMes(rocaMaestraId.value(), aCorto(numeroMes))
                 .map(mapper::toDomain);
     }
 
     @Override
     public RocaMensual guardar(RocaMensual rocaMensual) {
         return mapper.toDomain(repository.save(mapper.toEntity(rocaMensual)));
+    }
+
+    /**
+     * El número llega de un pedido y la columna es {@code smallint}: un valor fuera de rango se rechaza en vez de truncarse en
+     * silencio al convertirlo (CodeQL java/tainted-numeric-cast). Ninguno válido pasa de unas decenas.
+     */
+    private static short aCorto(int numero) {
+        if (numero < 0 || numero > Short.MAX_VALUE) {
+            throw new IllegalArgumentException("Número fuera de rango: " + numero);
+        }
+        return (short) numero;
     }
 }
