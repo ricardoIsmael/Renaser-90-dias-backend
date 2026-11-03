@@ -17,11 +17,12 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * El cronograma de pagos de una persona (spec 032): una moneda y de 1 a {@value #MAXIMO_DE_CUOTAS} cuotas con fecha fija. No es una tabla propia: la moneda vive en
+ * El cronograma de pagos de una persona (spec 032): una moneda y de 0 a {@value #MAXIMO_DE_CUOTAS} cuotas con fecha fija. No es una tabla propia: la moneda vive en
  * el estado de ingreso de la persona y las cuotas en {@code cuotas_de_pago}; esta clase solo reúne las reglas que las atraviesan.
  *
  * <p>Las reglas del dueño (2026-11-01): lo pagado no se toca (una cuota pagada no se edita ni se quita), Administración ajusta a mano lo pendiente y <b>nada se recalcula
- * solo</b>. Debe quedar al menos una cuota; para quitar el cronograma entero se elige «sin cronograma».
+ * solo</b>. Un cronograma <b>nuevo</b> puede nacer sin cuotas (D-315, decisión del dueño del 2026-11-02: los pagos son asíncronos, Administración las registra después
+ * desde la ficha); pero una vez que tiene cuotas, quitar una nunca lo deja vacío —debe quedar al menos una—: para quitar el cronograma entero se elige «sin cronograma».
  */
 public final class CronogramaDePagos {
 
@@ -40,15 +41,16 @@ public final class CronogramaDePagos {
     }
 
     /**
-     * Un cronograma nuevo.
+     * Un cronograma nuevo. Puede nacer sin cuotas (D-315): la persona queda «con cronograma» y Administración las registra después.
      *
-     * @throws IllegalArgumentException (400) si no lleva de 1 a {@value #MAXIMO_DE_CUOTAS} cuotas
+     * @throws IllegalArgumentException (400) si lleva más de {@value #MAXIMO_DE_CUOTAS} cuotas
      */
     public static CronogramaDePagos nuevo(Moneda moneda, List<Cuota> cuotas) {
-        if (cuotas == null || cuotas.isEmpty() || cuotas.size() > MAXIMO_DE_CUOTAS) {
-            throw new IllegalArgumentException("Un cronograma lleva de 1 a " + MAXIMO_DE_CUOTAS + " cuotas");
+        List<Cuota> lasCuotas = cuotas == null ? List.of() : cuotas;
+        if (lasCuotas.size() > MAXIMO_DE_CUOTAS) {
+            throw new IllegalArgumentException("Un cronograma lleva hasta " + MAXIMO_DE_CUOTAS + " cuotas");
         }
-        return new CronogramaDePagos(moneda, cuotas);
+        return new CronogramaDePagos(moneda, lasCuotas);
     }
 
     /** Solo para el servicio: el cronograma que ya está guardado. */

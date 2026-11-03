@@ -15989,6 +15989,6 @@ De las 78 tablas que compara la prueba, solo esa. A «la otra persona» no se le
 
 **Causa real.** No hay una rama por formación: las dos recibían «Su programa de … empieza mañana (…)» y después la misma línea de «sin objetivos» (`MapaEnElPrompt.sinObjetivos`), que ordena «si pide planificar su día o sus objetivos, antes de preguntarle nada dile eso e invítala a abrir la pestaña Plan». En la Escuela era lo último y más directivo del bloque (el nombre del objetivo grande solo se agrega fuera de los 90 días); el modelo repetía eso y omitía el inicio. La línea de objetivos se escribió para quien ya está en curso y no conocía el día 0 de la spec 036.
 
-**Solución.** Con el programa por empezar, la línea de objetivos y el motivo de la herramienta mandan decir primero cuándo empieza el programa (las tres formaciones por igual); regla equivalente en el prompt. Ver D-315.
+**Solución.** Con el programa por empezar, la línea de objetivos y el motivo de la herramienta mandan decir primero cuándo empieza el programa (las tres formaciones por igual); regla equivalente en el prompt. Ver D-316.
 
 **Cómo evitar que vuelva a pasar.** Cada texto de SER que dé una orden «antes de todo» se revisa también contra el día 0 (`SituacionAntesDelDiaUnoEnElPromptTest` cubre las cuatro formaciones y compara el texto de la Escuela con el del Diplomado). Lo que el modelo diga de verdad solo se confirma con el chat real: la prueba fija el texto que recibe, no su respuesta.

@@ -159,7 +159,7 @@ class CronogramaDePagosIT {
     }
 
     @Test
-    @DisplayName("un cronograma inválido es 400 y no cambia nada: sin moneda, sin cuotas, monto cero, tres decimales, una fecha de otro siglo")
+    @DisplayName("un cronograma inválido es 400 y no cambia nada: sin moneda, monto cero, tres decimales, una fecha de otro siglo")
     void cronogramaInvalido() throws Exception {
         Cuenta ana = cuenta("ADMIN", null);
         Cuenta persona = cuenta("APRENDIZ", "ESCUELA");
@@ -167,7 +167,6 @@ class CronogramaDePagosIT {
         List<Map<String, Object>> invalidos = List.of(
                 Map.of("mode", "SCHEDULE", "installments", List.of(cuota("2026-11-15", 10))),
                 Map.of("mode", "SCHEDULE", "currency", "EUR", "installments", List.of(cuota("2026-11-15", 10))),
-                Map.of("mode", "SCHEDULE", "currency", "PEN", "installments", List.of()),
                 Map.of("mode", "SCHEDULE", "currency", "PEN", "installments", List.of(cuota("2026-11-15", 0))),
                 Map.of("mode", "SCHEDULE", "currency", "PEN", "installments", List.of(Map.of("dueDate", "2026-11-15", "amount", 10.123))),
                 Map.of("mode", "SCHEDULE", "currency", "PEN", "installments", List.of(cuota("2999-11-15", 10))),
@@ -177,6 +176,34 @@ class CronogramaDePagosIT {
         }
         assertThat(ok(pedir("GET", ADMIN + persona.id, ana.token, null)).get("payments").isNull()).isTrue();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM renaser.cuotas_de_pago WHERE usuario_id = ?", Integer.class, persona.id)).isZero();
+    }
+
+    // decisión 2026-11-02 pagos fuera de términos
+    @Test
+    @DisplayName("«con cronograma» sin cuotas es válido (200): queda con su moneda y sin cuotas; la persona lo ve sin cuotas y sin nada que confirmar, y Administración las registra después")
+    void cronogramaSinCuotasSeLlenaDespues() throws Exception {
+        Cuenta ana = cuenta("ADMIN", null);
+        Cuenta persona = cuenta("APRENDIZ", "ESCUELA");
+
+        JsonNode vacio = ok(pedir("PUT", ADMIN + persona.id, ana.token, Map.of("mode", "SCHEDULE", "currency", "PEN", "installments", List.of())));
+        assertThat(vacio.get("payments").get("mode").asText()).isEqualTo("SCHEDULE");
+        assertThat(vacio.get("payments").get("currency").asText()).isEqualTo("PEN");
+        assertThat(vacio.get("payments").get("installments")).isEmpty();
+
+        JsonNode suyo = ok(pedir("GET", MIO, persona.token, null));
+        assertThat(suyo.get("payments").get("installments")).isEmpty();
+        assertThat(suyo.get("steps")).anySatisfy(paso -> {
+            assertThat(paso.get("key").asText()).isEqualTo("PAYMENTS");
+            assertThat(paso.get("done").asBoolean()).as("sin cuotas no hay nada pagado").isFalse();
+        });
+        assertThat(pedir("POST", MIO + "/cronograma/confirmacion", persona.token, Map.of("name", "Beto", "reviewed", true)).statusCode()).isEqualTo(409);
+
+        JsonNode conUna = ok(pedir("POST", ADMIN + persona.id + "/cuotas", ana.token, cuota("2026-12-15", 500)));
+        assertThat(conUna.get("payments").get("installments")).hasSize(1);
+        assertThat(ok(pedir("POST", MIO + "/cronograma/confirmacion", persona.token, Map.of("name", "Beto", "reviewed", true)))
+                .get("payments").get("confirmation").get("state").asText()).isEqualTo("CONFIRMED");
+        assertThat(pedir("DELETE", ADMIN + persona.id + "/cuotas/" + idsDeLasCuotas(conUna).get(0), ana.token, null).statusCode())
+                .as("una vez que hay cuotas, la última no se quita").isEqualTo(409);
     }
 
     // ------------------------------------------------------------------------------------------ quién puede

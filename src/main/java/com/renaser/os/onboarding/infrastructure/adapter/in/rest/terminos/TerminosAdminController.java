@@ -86,11 +86,10 @@ public class TerminosAdminController {
     }
 
     /** {@code program}, {@code startDate} y {@code endDate}: lo que se le mostró en «Mi aceptación» al aceptar (spec 039); nulos en lo aceptado antes. */
-    public record ConstanciaResponse(String formation, int number, Instant acceptedAt, String signatureUrl, String program, LocalDate startDate, LocalDate endDate,
-                                     boolean scheduleSigned) {
+    public record ConstanciaResponse(String formation, int number, Instant acceptedAt, String signatureUrl, String program, LocalDate startDate, LocalDate endDate) {
 
         static ConstanciaResponse from(ConstanciaDeUnaPersona c) {
-            return new ConstanciaResponse(c.formacion().codigo(), c.numero(), c.aceptadaEn(), c.firmaUrl(), c.programa(), c.inicio(), c.fin(), c.cronogramaFirmado());
+            return new ConstanciaResponse(c.formacion().codigo(), c.numero(), c.aceptadaEn(), c.firmaUrl(), c.programa(), c.inicio(), c.fin());
         }
     }
 

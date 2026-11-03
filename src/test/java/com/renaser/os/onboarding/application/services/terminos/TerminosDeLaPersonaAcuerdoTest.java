@@ -1,7 +1,6 @@
 package com.renaser.os.onboarding.application.services.terminos;
 
-import com.renaser.os.onboarding.application.ports.in.pagos.CronogramaParaFirmarUseCase;
-import com.renaser.os.onboarding.application.ports.in.pagos.CronogramaParaFirmarUseCase.CronogramaParaFirmar;
+import com.renaser.os.onboarding.application.ports.in.terminos.ObtenerTerminosUseCase.AcuerdoAceptado;
 import com.renaser.os.onboarding.application.ports.in.terminos.ObtenerTerminosUseCase.AcuerdoDeLaPersona;
 import com.renaser.os.onboarding.application.ports.in.terminos.ObtenerTerminosUseCase.TerminosAceptados;
 import com.renaser.os.onboarding.application.ports.in.terminos.ObtenerTerminosUseCase.TerminosParaLaPersona;
@@ -9,7 +8,6 @@ import com.renaser.os.onboarding.application.ports.out.terminos.AceptacionesDeTe
 import com.renaser.os.onboarding.application.ports.out.terminos.AceptacionesDeTerminosPort.Aceptacion;
 import com.renaser.os.onboarding.application.ports.out.terminos.AceptacionesDeTerminosPort.LoMostrado;
 import com.renaser.os.onboarding.application.ports.out.terminos.TerminosPort;
-import com.renaser.os.onboarding.domain.model.pagos.Moneda;
 import com.renaser.os.onboarding.domain.model.terminos.ContenidoDeTerminos;
 import com.renaser.os.onboarding.domain.model.terminos.QuePideLaAceptacion;
 import com.renaser.os.onboarding.domain.model.terminos.VersionDeTerminos;
@@ -37,9 +35,9 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 /**
- * Cuándo la lectura de los términos trae «Mi aceptación» y cuándo trae además el cronograma para firmar (spec 039): el cronograma SOLO en el primer ingreso, y solo si no lo
- // spec 039 FR-006
- * tiene ya confirmado; quien ya estaba dentro y vuelve a aceptar un texto nuevo lo ve sin esa sección (se le sigue pidiendo en «Mi ingreso»).
+ * Qué trae la lectura de los términos (spec 039): «Mi aceptación» con el nombre, el programa y las fechas —en el primer ingreso y al volver a aceptar un texto nuevo—.
+ * <b>Nunca el cronograma de pagos</b> (D-315, decisión del dueño del 2026-11-02): no se muestra ni se firma con los términos; la persona lo ve y lo confirma en «Mi ingreso»
+ * (spec 032), tenga o no cuotas. Sin Spring: los puertos son simulados.
  */
 @ExtendWith(MockitoExtension.class)
 class TerminosDeLaPersonaAcuerdoTest {
@@ -60,19 +58,16 @@ class TerminosDeLaPersonaAcuerdoTest {
     private FirmaDeLaAceptacion firmas;
     @Mock
     private ArmadorDelAcuerdo acuerdos;
-    @Mock
-    private CronogramaParaFirmarUseCase cronogramas;
 
     private TerminosDeLaPersonaService servicio;
     private UserId persona;
     private VersionDeTerminos v1;
     private VersionDeTerminos v2;
-    private final AcuerdoDeLaPersona base = new AcuerdoDeLaPersona("Ana Pérez", "Formación RENASER · 90 días", LocalDate.parse("2026-11-04"), LocalDate.parse("2027-02-01"), false,
-            Optional.empty());
+    private final AcuerdoDeLaPersona base = new AcuerdoDeLaPersona("Ana Pérez", "Formación RENASER · 90 días", LocalDate.parse("2026-11-04"), LocalDate.parse("2027-02-01"), false);
 
     @BeforeEach
     void preparar() {
-        servicio = new TerminosDeLaPersonaService(terminos, aceptaciones, formaciones, catalogo, participaciones, firmas, acuerdos, cronogramas);
+        servicio = new TerminosDeLaPersonaService(terminos, aceptaciones, formaciones, catalogo, participaciones, firmas, acuerdos);
         persona = UserId.of(UUID.randomUUID());
         ContenidoDeTerminos contenido = new ContenidoDeTerminos("Términos y condiciones", "Intro", List.of("Una", "Dos"), "He leído y acepto");
         v1 = VersionDeTerminos.borrador(UUID.randomUUID(), Formacion.ESCUELA, contenido, null, AHORA).publicada(1, null, false, null, AHORA);
@@ -83,53 +78,45 @@ class TerminosDeLaPersonaAcuerdoTest {
         lenient().when(acuerdos.armar(persona, Formacion.ESCUELA)).thenReturn(base);
     }
 
-    private static CronogramaParaFirmar cronograma(boolean yaConfirmado) {
-        return new CronogramaParaFirmar(Moneda.PEN, List.of(), "huella-1", yaConfirmado);
-    }
-
-    // spec 039 FR-003, FR-006
+    // spec 039 FR-003; decisión 2026-11-02 pagos fuera de términos
     @Test
-    @DisplayName("primer ingreso con cronograma sin confirmar: «Mi aceptación» trae el cronograma para firmar")
-    void primerIngresoConCronograma() {
+    @DisplayName("primer ingreso: «Mi aceptación» con el nombre, el programa y las fechas; sin ningún cronograma de pagos")
+    void primerIngreso() {
         when(terminos.vigente(Formacion.ESCUELA)).thenReturn(Optional.of(v1));
         when(terminos.publicadas(Formacion.ESCUELA)).thenReturn(List.of(v1));
         when(aceptaciones.ultimaAceptada(persona, Formacion.ESCUELA)).thenReturn(Optional.empty());
         when(aceptaciones.aceptoAlgunaVez(persona)).thenReturn(false);
-        when(cronogramas.de(persona)).thenReturn(Optional.of(cronograma(false)));
 
         TerminosParaLaPersona terminosDeAna = servicio.para(persona);
 
         assertThat(terminosDeAna.pide()).isEqualTo(QuePideLaAceptacion.PRIMERA_VEZ);
         AcuerdoDeLaPersona acuerdo = terminosDeAna.acuerdo().orElseThrow();
         assertThat(acuerdo.participante()).isEqualTo("Ana Pérez");
-        assertThat(acuerdo.cronograma()).hasValueSatisfying(c -> assertThat(c.huella()).isEqualTo("huella-1"));
+        assertThat(acuerdo.programa()).isEqualTo("Formación RENASER · 90 días");
+        assertThat(acuerdo.inicio()).isEqualTo(LocalDate.parse("2026-11-04"));
+        assertThat(acuerdo.fin()).isEqualTo(LocalDate.parse("2027-02-01"));
     }
 
-    // spec 039 FR-006
+    // decisión 2026-11-02 pagos fuera de términos
     @Test
-    @DisplayName("primer ingreso sin cronograma, con «pagó completo» o con el cronograma ya confirmado: «Mi aceptación» sin cronograma")
-    void primerIngresoSinNadaQueFirmar() {
-        when(terminos.vigente(Formacion.ESCUELA)).thenReturn(Optional.of(v1));
-        when(terminos.publicadas(Formacion.ESCUELA)).thenReturn(List.of(v1));
-        when(aceptaciones.ultimaAceptada(persona, Formacion.ESCUELA)).thenReturn(Optional.empty());
-        when(aceptaciones.aceptoAlgunaVez(persona)).thenReturn(false);
-
-        when(cronogramas.de(persona)).thenReturn(Optional.empty());
-        assertThat(servicio.para(persona).acuerdo().orElseThrow().cronograma()).as("sin cronograma").isEmpty();
-
-        when(cronogramas.de(persona)).thenReturn(Optional.of(cronograma(true)));
-        assertThat(servicio.para(persona).acuerdo().orElseThrow().cronograma()).as("ya confirmado").isEmpty();
+    @DisplayName("el acuerdo que lee la firma no puede llevar cronograma: ni su componente existe, así que nadie lo puede volver a firmar con los términos")
+    void elAcuerdoNoLlevaCronograma() {
+        assertThat(AcuerdoDeLaPersona.class.getRecordComponents()).extracting(c -> c.getName().toLowerCase())
+                .noneMatch(nombre -> nombre.contains("cronograma") || nombre.contains("schedule") || nombre.contains("huella"));
+        assertThat(AcuerdoAceptado.class.getRecordComponents()).extracting(c -> c.getName().toLowerCase())
+                .noneMatch(nombre -> nombre.contains("cronograma") || nombre.contains("schedule") || nombre.contains("huella"));
     }
 
+    // decisión 2026-11-02 pagos fuera de términos
     @Test
-    @DisplayName("quien ya estaba dentro y vuelve a aceptar (versión nueva): «Mi aceptación» con su programa real y SIN la sección del cronograma, aunque tenga uno")
+    @DisplayName("quien ya estaba dentro y vuelve a aceptar (versión nueva): «Mi aceptación» con su programa real")
     void volverAAceptar() {
         when(terminos.vigente(Formacion.ESCUELA)).thenReturn(Optional.of(v2));
         when(terminos.publicadas(Formacion.ESCUELA)).thenReturn(List.of(v1, v2));
         when(aceptaciones.ultimaAceptada(persona, Formacion.ESCUELA)).thenReturn(Optional.of(1));
         when(aceptaciones.aceptoAlgunaVez(persona)).thenReturn(true);
         when(acuerdos.armar(persona, Formacion.ESCUELA)).thenReturn(new AcuerdoDeLaPersona("Ana Pérez", "Formación RENASER · 90 días", LocalDate.parse("2026-10-26"),
-                LocalDate.parse("2027-01-23"), true, Optional.empty()));
+                LocalDate.parse("2027-01-23"), true));
 
         TerminosParaLaPersona terminosDeAna = servicio.para(persona);
 
@@ -139,9 +126,9 @@ class TerminosDeLaPersonaAcuerdoTest {
         AcuerdoDeLaPersona acuerdo = terminosDeAna.acuerdo().orElseThrow();
         assertThat(acuerdo.empezado()).isTrue();
         assertThat(acuerdo.inicio()).isEqualTo(LocalDate.parse("2026-10-26"));
-        assertThat(acuerdo.cronograma()).isEmpty();
     }
 
+    // decisión 2026-11-02 pagos fuera de términos
     @Test
     @DisplayName("una formación sin términos publicados no trae «Mi aceptación»")
     void sinTerminos() {
@@ -153,11 +140,12 @@ class TerminosDeLaPersonaAcuerdoTest {
         assertThat(servicio.para(persona).acuerdo()).isEmpty();
     }
 
+    // decisión 2026-11-02 pagos fuera de términos
     @Test
-    @DisplayName("releer lo aceptado trae lo que se le mostró (programa, fechas y si firmó el cronograma); en lo anterior a la spec 039, nada")
+    @DisplayName("releer lo aceptado trae lo que se le mostró (programa y fechas); en lo anterior a la spec 039, nada")
     void releerLoAceptado() {
         Aceptacion nueva = new Aceptacion(v2.id(), Formacion.ESCUELA, 2, AHORA, null,
-                new LoMostrado("Formación RENASER · 90 días", LocalDate.parse("2026-11-04"), LocalDate.parse("2027-02-01"), "huella-1"));
+                new LoMostrado("Formación RENASER · 90 días", LocalDate.parse("2026-11-04"), LocalDate.parse("2027-02-01")));
         Aceptacion vieja = new Aceptacion(v1.id(), Formacion.ESCUELA, 1, AHORA.minusSeconds(86_400), null, LoMostrado.NADA);
         when(terminos.porId(v2.id())).thenReturn(Optional.of(v2));
         when(terminos.porId(v1.id())).thenReturn(Optional.of(v1));
@@ -169,7 +157,6 @@ class TerminosDeLaPersonaAcuerdoTest {
             assertThat(a.programa()).isEqualTo("Formación RENASER · 90 días");
             assertThat(a.inicio()).isEqualTo(LocalDate.parse("2026-11-04"));
             assertThat(a.fin()).isEqualTo(LocalDate.parse("2027-02-01"));
-            assertThat(a.cronogramaFirmado()).isTrue();
         });
 
         when(aceptaciones.delUsuario(persona)).thenReturn(List.of(vieja));

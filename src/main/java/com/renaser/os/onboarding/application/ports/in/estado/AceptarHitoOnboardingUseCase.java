@@ -18,13 +18,11 @@ public interface AceptarHitoOnboardingUseCase {
      *                            ella. {@code null} (los demás hitos y una app anterior) = la vigente de su formación; si ya no es la vigente, es 409.
      * @param inicioVisto         solo para {@link HitoOnboarding#TERMINOS} (spec 039): el inicio de su programa que vio en «Mi aceptación». {@code null} = no se compara; si
      *                            ya no es el de ahora (pasó la medianoche), es 409.
-     * @param huellaDelCronograma solo para {@link HitoOnboarding#TERMINOS} (spec 039): la huella del cronograma de pagos que vio y aceptó al firmar. {@code null} = no firma
-     *                            ninguno; si ya no es la vigente, es 409; si coincide, queda confirmado el cronograma (la confirmación de la spec 032).
      */
-    record AceptarHitoCommand(@NotNull UserId usuarioId, @NotNull HitoOnboarding hito, UUID versionDeTerminosId, LocalDate inicioVisto, String huellaDelCronograma) {
+    record AceptarHitoCommand(@NotNull UserId usuarioId, @NotNull HitoOnboarding hito, UUID versionDeTerminosId, LocalDate inicioVisto) {
 
         public AceptarHitoCommand {
-            SelfValidating.validateConstructorArgs(AceptarHitoCommand.class, usuarioId, hito, versionDeTerminosId, inicioVisto, huellaDelCronograma);
+            SelfValidating.validateConstructorArgs(AceptarHitoCommand.class, usuarioId, hito, versionDeTerminosId, inicioVisto);
         }
     }
 }

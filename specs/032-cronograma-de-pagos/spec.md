@@ -24,6 +24,12 @@ Yo → Alarmas).
 **Se apoya en**: 022 (formaciones y duración), 025 (hoja «Aceptar»), 026 (la marca del diagnóstico en `estado_onboarding`, `FichaAlAceptar`), 027 (términos = «Acuerdo») y la Caja Renaser
 (patrón de «lo opera Administración, lo ve la persona»).
 
+> **Corregido 2026-11-02 (D-315, decisión del dueño: «los pagos son asíncronos»).** (1) Al aceptar una solicitud «Con cronograma» las **cuotas son opcionales**: solo la moneda es
+> obligatoria; la persona queda «con cronograma» sin cuotas y Administración las registra después desde la ficha («Agregar una cuota» / «Armar las cuotas»). Un cronograma sin cuotas
+> lleva de 0 a 60 (`CronogramaDePagos.nuevo`); una vez con cuotas, la última no se quita. (2) «Mi ingreso» sin cuotas dice «Tu cronograma de pagos aparecerá aquí cuando
+> Administración lo registre.» (sin lista ni confirmación), el paso de Pagos no está hecho y confirmar es 409. (3) La confirmación del cronograma es **solo** de «Mi ingreso»: la
+> firma de los términos (spec 039) ya no la hace ni la ofrece.
+
 ## Contexto
 
 - **No existía nada de pagos.** Quien lleva los cobros lo hacía fuera de la app (WhatsApp, hoja de cálculo). Las specs 022 y 025 los dejaron fuera de alcance a propósito; esta spec los pide.

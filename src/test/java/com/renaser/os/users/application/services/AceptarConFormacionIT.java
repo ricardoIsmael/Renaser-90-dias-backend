@@ -448,6 +448,46 @@ class AceptarConFormacionIT {
         assertThat(ficha.get("payments").get("currency").asText()).isEqualTo("USD");
     }
 
+    // decisión 2026-11-02 pagos fuera de términos
+    @Test
+    @DisplayName("aceptar «con cronograma» SIN cuotas es válido (los pagos son asíncronos): queda con cronograma y su moneda, sin cuotas; Administración las agrega después en su ficha y la persona las ve en «Mi ingreso»")
+    void aceptarConCronogramaSinCuotas() throws Exception {
+        UUID admin = usuario("ADMIN");
+        String sesion = sesionDe(admin);
+        Solicitud conListaVacia = solicitud("Ana Sin Cuotas Todavia");
+        Solicitud sinLista = solicitud("Beto Sin Lista");
+
+        assertThat(aprobar(conListaVacia.id(), sesion, Map.of("formations", List.of("ESCUELA"), "payment",
+                Map.of("mode", "SCHEDULE", "currency", "PEN", "installments", List.of()))).statusCode()).isEqualTo(204);
+        assertThat(aprobar(sinLista.id(), sesion, Map.of("formations", List.of("ESCUELA"), "payment", Map.of("mode", "SCHEDULE", "currency", "USD"))).statusCode()).isEqualTo(204);
+
+        assertThat(jdbc.queryForMap("SELECT pago_modalidad, pago_moneda, cronograma_confirmado_en FROM renaser.estado_onboarding WHERE usuario_id = ?", conListaVacia.usuario()))
+                .containsEntry("pago_modalidad", "CON_CRONOGRAMA").containsEntry("pago_moneda", "PEN").containsEntry("cronograma_confirmado_en", null);
+        assertThat(contar("cuotas_de_pago", conListaVacia.usuario())).isZero();
+        assertThat(jdbc.queryForObject("SELECT pago_moneda FROM renaser.estado_onboarding WHERE usuario_id = ?", String.class, sinLista.usuario())).isEqualTo("USD");
+        assertThat(contar("cuotas_de_pago", sinLista.usuario())).isZero();
+
+        // La persona: hay un pago anotado (la fila de Yo existe), sin cuotas; el paso de Pagos no está hecho y no hay nada que confirmar.
+        String suya = sesionDe(conListaVacia.usuario());
+        JsonNode antes = json.readTree(enviar("GET", "/api/v1/me/ingreso", suya, null).body());
+        assertThat(antes.get("payments").get("mode").asText()).isEqualTo("SCHEDULE");
+        assertThat(antes.get("payments").get("installments")).isEmpty();
+        assertThat(antes.get("steps")).anySatisfy(paso -> {
+            assertThat(paso.get("key").asText()).isEqualTo("PAYMENTS");
+            assertThat(paso.get("done").asBoolean()).isFalse();
+        });
+        assertThat(enviar("POST", "/api/v1/me/ingreso/cronograma/confirmacion", suya, Map.of("name", "Ana", "reviewed", true)).statusCode())
+                .as("sin cuotas no hay nada que confirmar").isEqualTo(409);
+
+        // Administración las llena después, desde la ficha: la primera cuota y listo.
+        JsonNode ficha = json.readTree(enviar("POST", "/api/v1/admin/pagos/personas/" + conListaVacia.usuario() + "/cuotas", sesion, cuotaDePago("2026-12-15", 500)).body());
+        assertThat(ficha.get("payments").get("currency").asText()).isEqualTo("PEN");
+        assertThat(ficha.get("payments").get("installments")).hasSize(1);
+        JsonNode despues = json.readTree(enviar("GET", "/api/v1/me/ingreso", suya, null).body());
+        assertThat(despues.get("payments").get("installments")).extracting(c -> c.get("dueDate").asText()).containsExactly("2026-12-15");
+        assertThat(enviar("POST", "/api/v1/me/ingreso/cronograma/confirmacion", suya, Map.of("name", "Ana", "reviewed", true)).statusCode()).isEqualTo(200);
+    }
+
     @Test
     @DisplayName("spec 032: aceptar «sin cronograma (pagó completo)» anota la modalidad sin cuotas; vale para cualquier rol, también para un mentor con cronograma")
     void aceptarSinCronogramaYConRolDePersonal() throws Exception {
@@ -488,7 +528,6 @@ class AceptarConFormacionIT {
         Solicitud solicitud = solicitud("Pago Raro");
         List<Map<String, Object>> invalidos = List.of(
                 Map.of("mode", "SCHEDULE", "installments", List.of(cuotaDePago("2026-11-15", 10))),
-                Map.of("mode", "SCHEDULE", "currency", "PEN", "installments", List.of()),
                 Map.of("mode", "SCHEDULE", "currency", "PEN", "installments", List.of(cuotaDePago("2026-11-15", 0))),
                 Map.of("mode", "ALGO"));
         for (Map<String, Object> pago : invalidos) {

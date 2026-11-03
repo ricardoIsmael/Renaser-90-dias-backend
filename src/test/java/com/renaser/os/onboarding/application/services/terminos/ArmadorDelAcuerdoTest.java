@@ -53,7 +53,6 @@ class ArmadorDelAcuerdoTest {
         assertThat(acuerdo.inicio()).isEqualTo(LocalDate.parse("2026-11-03"));
         assertThat(acuerdo.fin()).isEqualTo(LocalDate.parse("2027-01-31"));
         assertThat(acuerdo.empezado()).isFalse();
-        assertThat(acuerdo.cronograma()).as("el cronograma lo agrega quien sabe si es el primer ingreso").isEmpty();
     }
 
     // spec 039 FR-004, SC-004

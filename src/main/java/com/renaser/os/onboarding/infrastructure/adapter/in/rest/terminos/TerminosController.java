@@ -1,6 +1,5 @@
 package com.renaser.os.onboarding.infrastructure.adapter.in.rest.terminos;
 
-import com.renaser.os.onboarding.application.ports.in.pagos.CronogramaParaFirmarUseCase.CronogramaParaFirmar;
 import com.renaser.os.onboarding.application.ports.in.terminos.ObtenerTerminosUseCase;
 import com.renaser.os.onboarding.application.ports.in.terminos.ObtenerTerminosUseCase.AcuerdoAceptado;
 import com.renaser.os.onboarding.application.ports.in.terminos.ObtenerTerminosUseCase.AcuerdoDeLaPersona;
@@ -18,11 +17,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.List;
-import java.util.UUID;
 
 /**
  * Los términos y condiciones que le tocan a la persona (spec 027, FR-010, FR-022, FR-023): los vigentes de su formación y lo que debe hacer con ellos. La
@@ -48,25 +44,14 @@ public class TerminosController {
 
         /**
          * «Mi aceptación» del Acuerdo de transformación (spec 039), llena por el sistema: el nombre completo del perfil, el programa («Formación RENASER · 90 días») y sus
-         * fechas ({@code null} si no hay un programa que prometerle). {@code schedule} solo en el primer ingreso de quien tiene un cronograma por firmar.
+         * fechas ({@code null} si no hay un programa que prometerle). Nunca lleva el cronograma de pagos (D-315, decisión del dueño del 2026-11-02): no se muestra ni se
+         * firma con los términos; la persona lo ve y lo confirma en «Mi ingreso» (spec 032).
          */
-        public record Agreement(String participantName, String program, LocalDate startDate, LocalDate endDate, boolean started, Schedule schedule) {
+        public record Agreement(String participantName, String program, LocalDate startDate, LocalDate endDate, boolean started) {
 
             static Agreement from(AcuerdoDeLaPersona a) {
-                return new Agreement(a.participante(), a.programa(), a.inicio(), a.fin(), a.empezado(), a.cronograma().map(Schedule::from).orElse(null));
+                return new Agreement(a.participante(), a.programa(), a.inicio(), a.fin(), a.empezado());
             }
-        }
-
-        /** El cronograma a firmar con la forma de «Mi ingreso» ({@code dueDate}, {@code amount}, {@code status}) y su huella. */
-        public record Schedule(String currency, List<Installment> installments, String fingerprint) {
-
-            static Schedule from(CronogramaParaFirmar c) {
-                return new Schedule(c.moneda().name(), c.cuotas().stream().map(q -> new Installment(q.id(), q.venceEl(), q.monto(), q.pagada() ? "PAID" : "PENDING")).toList(),
-                        c.huella());
-            }
-        }
-
-        public record Installment(UUID id, LocalDate dueDate, BigDecimal amount, String status) {
         }
 
         static TerminosDeMiFormacionResponse from(TerminosParaLaPersona t) {
@@ -94,11 +79,11 @@ public class TerminosController {
         }
     }
 
-    /** Lo que se le mostró en «Mi aceptación» cuando aceptó (spec 039); {@code null} en lo aceptado antes. {@code scheduleSigned}: firmó su cronograma con los términos. */
-    public record AcceptedAgreement(String program, LocalDate startDate, LocalDate endDate, boolean scheduleSigned) {
+    /** Lo que se le mostró en «Mi aceptación» cuando aceptó (spec 039); {@code null} en lo aceptado antes. */
+    public record AcceptedAgreement(String program, LocalDate startDate, LocalDate endDate) {
 
         static AcceptedAgreement from(AcuerdoAceptado a) {
-            return new AcceptedAgreement(a.programa(), a.inicio(), a.fin(), a.cronogramaFirmado());
+            return new AcceptedAgreement(a.programa(), a.inicio(), a.fin());
         }
     }
 

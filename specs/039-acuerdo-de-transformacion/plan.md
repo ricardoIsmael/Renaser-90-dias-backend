@@ -1,5 +1,15 @@
 # Implementation Plan: Acuerdo de transformación
 
+> **Corregido 2026-11-02 (D-315, decisión del dueño): el cronograma de pagos NO va en los términos.** Textual: «lo de los pagos no debe de salir en términos y condiciones
+> ya que será asíncrono bro, eso saldrá luego que el administrador lo llene». Lo que dice este plan de **firmar el cronograma en el mismo acto** (la historia 2, FR-006,
+> FR-008, FR-009, SC-002, el supuesto 6, la sección «Mi cronograma de pagos» y la casilla de la cláusula 19, `agreement.schedule`, `scheduleFingerprint`, `scheduleSigned`,
+> `cronograma_huella` y el 409 «Tu cronograma cambió mientras leías») **ya no rige**. Ahora: los términos y la firma no muestran ni exigen el cronograma, ni en el primer ingreso
+> ni al volver a aceptar; «Mi aceptación» (nombre, programa y fechas) **se queda igual**; la persona lo ve y lo confirma en Yo → «Mi ingreso» (spec 032) cuando Administración
+> lo registre, y al aceptar «Con cronograma» las cuotas son opcionales. Las 23 cláusulas no cambian (la 19 sigue hablando del acuerdo de pagos). El servidor ya no manda
+> `schedule` ni lee `scheduleFingerprint` (un cliente que lo mande no falla: se ignora); la columna `aceptaciones_de_terminos.cronograma_huella` se deja sin borrar y sin
+> usar. Ver D-315 en `docs/MODULOS_A_AVANZAR.md`.
+
+
 **Branch**: `039-acuerdo-de-transformacion` (backend y app) | **Date**: 2026-11-02 | **Spec**: [spec.md](./spec.md)
 
 ## Summary

@@ -38,20 +38,15 @@ public interface AceptacionesDeTerminosPort {
     /**
      * Lo que se le mostró a la persona en «Mi aceptación» al aceptar (spec 039): constancia de QUÉ firmó además de qué texto. Todo es opcional: lo anterior a esta spec
      * no lo guardó, y quien no tiene un programa que mostrar (personal sin activar) no tiene fechas.
-     *
-     * @param cronogramaHuella la huella del cronograma que firmó junto con los términos; {@code null} si no lo firmó
+     * El cronograma de pagos no es parte de esto (D-315, decisión del dueño del 2026-11-02): no se firma con los términos.
      */
-    record LoMostrado(String programa, LocalDate inicio, LocalDate fin, String cronogramaHuella) {
+    record LoMostrado(String programa, LocalDate inicio, LocalDate fin) {
 
         /** Nada que guardar: una aceptación anterior a la spec 039. */
-        public static final LoMostrado NADA = new LoMostrado(null, null, null, null);
-
-        public boolean cronogramaFirmado() {
-            return cronogramaHuella != null;
-        }
+        public static final LoMostrado NADA = new LoMostrado(null, null, null);
 
         public boolean hayAlgo() {
-            return programa != null || inicio != null || fin != null || cronogramaHuella != null;
+            return programa != null || inicio != null || fin != null;
         }
     }
 

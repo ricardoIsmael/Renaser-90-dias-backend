@@ -24,7 +24,7 @@ import java.util.List;
 import java.util.NoSuchElementException;
 
 /**
- * Yo → «Mi ingreso» (spec 032): lo de quien tiene la sesión, nunca lo de otra persona (ninguna operación recibe un id). Sin pago anotado no hay nada que mostrar. La confirmación
+ * Yo → «Mi ingreso» (spec 032): lo de quien tiene la sesión, nunca lo de otra persona (ninguna operación recibe un id). Sin pago anotado no hay nada que mostrar; con cronograma y sin cuotas todavía (D-315) se muestra, pero sin nada que confirmar. La confirmación
  * del cronograma nunca bloquea nada: solo deja constancia de que la persona lo revisó.
  */
 @Service
@@ -63,7 +63,12 @@ public class MiIngresoService implements MiIngresoUseCase {
         }
         EstadoOnboarding estado = cargarEstado.deUsuario(persona).filter(e -> e.pago().esConCronograma())
                 .orElseThrow(() -> new IllegalStateException("No tienes un cronograma de pagos que confirmar"));
-        String huella = armador.cronogramaDe(persona, estado.pago()).huella();
+        var cronograma = armador.cronogramaDe(persona, estado.pago());
+        if (cronograma.cuotas().isEmpty()) {
+            // D-315: Administración las registra después; mientras no haya cuotas no hay nada que revisar ni confirmar.
+            throw new IllegalStateException("Todavía no tienes cuotas registradas que confirmar");
+        }
+        String huella = cronograma.huella();
         if (estado.pago().confirmacion(huella) != EstadoDeConfirmacion.CONFIRMADA) {
             estado.confirmarCronograma(pedido.nombre(), huella, clock);
             guardarEstado.guardar(estado);
@@ -91,9 +96,13 @@ public class MiIngresoService implements MiIngresoUseCase {
         return pasos;
     }
 
-    /** El paso de Pagos está hecho si pagó completo o si todas sus cuotas figuran pagadas. */
+    /**
+     * El paso de Pagos está hecho si pagó completo o si todas sus cuotas figuran pagadas. «Con cronograma» sin ninguna cuota todavía (D-315) NO está hecho: no hay nada
+     * pagado (un {@code allMatch} sobre una lista vacía diría que sí).
+     */
     private static boolean pagosAlDia(PagoAnotado pagos) {
-        return pagos.modalidad() == ModalidadDePago.SIN_CRONOGRAMA || pagos.cuotas().stream().allMatch(cuota -> cuota.cuota().pagada());
+        return pagos.modalidad() == ModalidadDePago.SIN_CRONOGRAMA
+                || (!pagos.cuotas().isEmpty() && pagos.cuotas().stream().allMatch(cuota -> cuota.cuota().pagada()));
     }
 
     /** Suspendida → 403; inexistente → 404. */

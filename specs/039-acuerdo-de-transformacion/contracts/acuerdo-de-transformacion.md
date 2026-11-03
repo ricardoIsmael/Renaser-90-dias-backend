@@ -1,5 +1,8 @@
 # Contrato: Acuerdo de transformación (spec 039, D-312)
 
+> **Corregido 2026-11-02 (D-315):** `agreement.schedule`, `scheduleFingerprint` (pedido), `scheduleSigned` (releer y constancia) y el 409 del cronograma **ya no existen**: el cronograma de pagos no va en los términos. Un cliente que mande `scheduleFingerprint` no falla (se ignora). El resto del contrato no cambia.
+
+
 Todo es **aditivo**. Un cliente anterior ignora lo nuevo y un servidor anterior no lo manda: la app no dibuja entonces «Mi aceptación» ni el cronograma.
 
 ## `GET /api/v1/onboarding/terms`  (suma `agreement`)

@@ -28,7 +28,7 @@ Base: `/api/v1/admin/pagos/personas/{personaId}`. Todas devuelven `{ "personName
 | Verbo y ruta | Cuerpo | Efecto | Errores |
 |---|---|---|---|
 | `GET` | — | lee el pago de la persona | 404 persona |
-| `PUT` | `{ "mode": "NONE" }` o `{ "mode": "SCHEDULE", "currency": "PEN", "installments": [ { "dueDate", "amount" } ] }` | anota «sin cronograma» o arma el cronograma entero (reemplaza el anterior) | 400 inválido; 409 si ya hay cuotas pagadas |
+| `PUT` | `{ "mode": "NONE" }` o `{ "mode": "SCHEDULE", "currency": "PEN", "installments": [ { "dueDate", "amount" } ] }` | anota «sin cronograma» o arma el cronograma entero (reemplaza el anterior). Desde D-315 `installments` puede ir vacío u omitido (0 a 60): «con cronograma» sin cuotas todavía, que se llenan con `POST /cuotas` | 400 inválido (moneda, monto, fecha, más de 60); 409 si ya hay cuotas pagadas |
 | `POST /cuotas` | `{ "dueDate", "amount" }` | suma una cuota pendiente | 409 sin cronograma o con 60 |
 | `PUT /cuotas/{cuotaId}` | `{ "dueDate", "amount" }` | cambia una cuota pendiente | 404 cuota ajena; 409 pagada |
 | `DELETE /cuotas/{cuotaId}` | — | quita una cuota pendiente | 404; 409 pagada o última |

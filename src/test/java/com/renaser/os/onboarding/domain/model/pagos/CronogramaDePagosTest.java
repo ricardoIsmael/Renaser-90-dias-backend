@@ -29,17 +29,32 @@ class CronogramaDePagosTest {
         return CronogramaDePagos.nuevo(Moneda.USD, List.of(cuota("2026-12-15", "1000"), cuota("2026-10-15", "1000"), cuota("2026-11-15", "1000")));
     }
 
+    // decisión 2026-11-02 pagos fuera de términos
     @Test
-    @DisplayName("lleva de 1 a 60 cuotas: ninguna o 61 es un error de quien lo arma (400)")
-    void deUnaASesenta() {
-        assertThatThrownBy(() -> CronogramaDePagos.nuevo(Moneda.PEN, List.of())).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("1 a 60");
-        assertThatThrownBy(() -> CronogramaDePagos.nuevo(Moneda.PEN, null)).isInstanceOf(IllegalArgumentException.class);
+    @DisplayName("lleva de 0 a 60 cuotas: puede nacer sin cuotas (Administración las registra después) pero 61 es un error de quien lo arma (400)")
+    void deCeroASesenta() {
+        assertThat(CronogramaDePagos.nuevo(Moneda.PEN, List.of()).cuotas()).isEmpty();
+        assertThat(CronogramaDePagos.nuevo(Moneda.PEN, null).cuotas()).isEmpty();
         List<Cuota> sesentaYUna = new ArrayList<>();
         for (int i = 0; i < 61; i++) {
             sesentaYUna.add(cuota("2026-11-15", "10"));
         }
-        assertThatThrownBy(() -> CronogramaDePagos.nuevo(Moneda.PEN, sesentaYUna)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> CronogramaDePagos.nuevo(Moneda.PEN, sesentaYUna)).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("hasta 60");
         assertThat(CronogramaDePagos.nuevo(Moneda.PEN, sesentaYUna.subList(0, 60)).cuotas()).hasSize(60);
+    }
+
+    // decisión 2026-11-02 pagos fuera de términos
+    @Test
+    @DisplayName("un cronograma sin cuotas todavía acepta agregar la primera, y una vez que tiene cuotas la última no se quita")
+    void sinCuotasSePuedeLlenarDespues() {
+        CronogramaDePagos vacio = CronogramaDePagos.nuevo(Moneda.USD, List.of());
+        assertThat(vacio.hayPagadas()).isFalse();
+        assertThat(vacio.todasPagadas()).as("sin cuotas no hay nada pagado").isFalse();
+
+        Cuota primera = vacio.agregar(cuota("2026-11-15", "300"));
+
+        assertThat(vacio.cuotas()).containsExactly(primera);
+        assertThatThrownBy(() -> vacio.quitar(primera.id())).isInstanceOf(IllegalStateException.class).hasMessageContaining("al menos una cuota");
     }
 
     @Test
