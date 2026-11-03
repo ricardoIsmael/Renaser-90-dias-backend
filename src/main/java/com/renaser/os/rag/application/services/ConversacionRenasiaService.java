@@ -42,6 +42,7 @@ import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.RateLimitExceededException;
+import com.renaser.os.shared.domain.TituloEnTipoOracion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
@@ -160,21 +161,26 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
      * Lo que ve una app sin la tarjeta de la camara (y el historial) por cada pedido de foto
      * (D-171). Sirve con y sin la tarjeta: quien no la tiene, sube la foto desde Training, donde estan sus habitos
      * (spec 038: decia «desde Hoy», una pantalla que no registra habitos desde el 2026-10-05).
+     *
+     * <p>Issue #65: el titulo del catalogo llega en MAYUSCULAS y la persona lo lee: se muestra en tipo oracion, con la misma regla que la app
+     * ({@link TituloEnTipoOracion}). Solo cambia lo que se lee en este texto; el evento y lo guardado siguen con el titulo del catalogo.
      */
     public static String textoDeEvidencia(String titulo) {
-        return "\n\nFoto para registrar '" + titulo + "': si no ves el botón de la cámara, súbela desde Training.";
+        return "\n\nFoto para registrar '" + TituloEnTipoOracion.de(titulo) + "': si no ves el botón de la cámara, súbela desde Training.";
     }
 
     /**
      * Spec 038: un ritual no se registra con foto sino escribiendo como se siente (decision del dueno, 2026-10-31).
+     * Issue #65: su titulo («RITUAL TIERRA - AGUA - FUEGO (noche)») se lee en tipo oracion, como en la app.
      */
     public static String textoDeRitual(String titulo) {
-        return "\n\nPara registrar '" + titulo + "' cuenta cómo te sientes: si no ves el botón para escribir, hazlo desde Training.";
+        return "\n\nPara registrar '" + TituloEnTipoOracion.de(titulo) + "' cuenta cómo te sientes: si no ves el botón para escribir, hazlo desde Training.";
     }
 
     /**
      * D-178: el de una accion del dia (roca) dice "tu accion" y manda a Training, que es donde la app
-     * las completa (VIDA Y NEGOCIO); Hoy no las registra. El de un habito queda igual que en D-171.
+     * las completa (VIDA Y NEGOCIO); Hoy no las registra. El de un habito queda igual que en D-171 (con el titulo en tipo oracion, issue #65). El titulo de
+     * una accion lo escribio la persona: no se toca.
      */
     public static String textoDeEvidencia(PedidoDeEvidencia pedido) {
         if (pedido.destino() == DestinoDeEvidencia.ROCA) {

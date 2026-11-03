@@ -320,7 +320,7 @@ class ConversacionEnVivoServiceTest {
 
         assertThat(salida.eventos).contains(new EventoDeVozEnVivo.Evidencia(registro, "JUGO VERDE", finDelDia, false));
         assertThat(guardados(2).get(1).contenido()).isEqualTo("Te deje abajo el boton para sacarle foto."
-                + "\n\nFoto para registrar 'JUGO VERDE': si no ves el botón de la cámara, súbela desde Training.");
+                + "\n\nFoto para registrar 'Jugo verde': si no ves el botón de la cámara, súbela desde Training.");
     }
 
     @Test

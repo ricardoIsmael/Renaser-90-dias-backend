@@ -582,7 +582,7 @@ class PromptSistemaRenasiaTest {
                 .contains("duda de seguir con el programa: llama\n  consultar_mi_diagnostico")
                 .contains("Antes de proponer un objetivo de la semana o acciones del dia, mira sus\n  objetivos")
                 .contains("Esa regla es para\n  los objetivos (acciones del dia), no para los habitos")
-                .contains("(abrir Plan y escribir sus tres objetivos, o confirmar los de su\n  diagnostico)")
+                .contains("(abrir Plan y escribir sus tres objetivos; solo si la situacion dice que\n  completo su diagnostico, tambien puede confirmar los que nacieron de el)")
                 .contains("una vez confirmado en Plan queda\n  fijo, ni tu ni una herramienta lo cambian")
                 .contains("lo\n  puede reescribir en Plan una sola vez")
                 .contains("Nunca inventes metas, numeros ni hitos")
@@ -700,7 +700,10 @@ class PromptSistemaRenasiaTest {
                 .contains("es igual en todas las formaciones")
                 .contains("\"armemos mi plan\"")
                 .contains("lo primero que le dices es cuando empieza su programa, con la fecha de la situacion")
-                .contains("Nunca contestes solo que sus objetivos estan pendientes");
+                .contains("Nunca contestes solo que sus objetivos estan pendientes")
+                // issue #65: las herramientas tambien lo dicen, y sin diagnostico no se habla de uno.
+                .contains("Las herramientas de objetivos y de plan tambien te lo dicen al principio de su resultado")
+                .contains("Sin diagnostico en la situacion, nunca le hables de uno");
         // Va en la seccion de los objetivos, no suelta.
         assertThat(render.indexOf("**Antes de que empiece su programa**")).isGreaterThan(render.indexOf("## Tus objetivos: el plan de la semana"));
     }

@@ -99,7 +99,11 @@ class MapaEnElPromptTest {
         assertThat(MapaEnElPrompt.linea(base.conDiagnostico(new com.renaser.os.rag.domain.model.mapa.ResumenDelDiagnostico(true, null)), 23))
                 .doesNotContain("prioridad");
         assertThat(MapaEnElPrompt.linea(base.conRocasMaestras(false).conDiagnostico(new com.renaser.os.rag.domain.model.mapa.ResumenDelDiagnostico(true, "TRABAJO")), 23))
-                .startsWith(MapaEnElPrompt.SIN_OBJETIVOS).contains("Negocio y dinero");
+                .startsWith(MapaEnElPrompt.sinObjetivos("90 días", false, true)).contains("Negocio y dinero")
+                .contains("confirma los que nacieron de su diagnostico");
+        // issue #65: con el diagnostico asignado pero sin terminar no nacio ningun objetivo de el: solo «escribelos en Plan».
+        assertThat(MapaEnElPrompt.linea(base.conRocasMaestras(false).conDiagnostico(new com.renaser.os.rag.domain.model.mapa.ResumenDelDiagnostico(false, null)), 23))
+                .startsWith(MapaEnElPrompt.SIN_OBJETIVOS).doesNotContain("confirma los que nacieron");
         assertThat(MapaEnElPrompt.linea(base.conDiagnostico(null), 23)).isEmpty();
     }
 }

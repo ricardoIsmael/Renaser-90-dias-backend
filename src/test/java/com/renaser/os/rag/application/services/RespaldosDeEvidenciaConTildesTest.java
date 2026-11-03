@@ -28,7 +28,7 @@ class RespaldosDeEvidenciaConTildesTest {
     void fotoDeUnHabito() {
         String texto = ConversacionRenasiaService.textoDeEvidencia("JUGO VERDE");
 
-        assertThat(texto).isEqualTo("\n\nFoto para registrar 'JUGO VERDE': si no ves el botón de la cámara, súbela desde Training.");
+        assertThat(texto).isEqualTo("\n\nFoto para registrar 'Jugo verde': si no ves el botón de la cámara, súbela desde Training.");
         assertThat(texto).doesNotContain(SIN_TILDES);
     }
 
@@ -38,19 +38,38 @@ class RespaldosDeEvidenciaConTildesTest {
     void ritual() {
         String texto = ConversacionRenasiaService.textoDeRitual("RITUAL TIERRA - AGUA - FUEGO (mañana)");
 
-        assertThat(texto).isEqualTo("\n\nPara registrar 'RITUAL TIERRA - AGUA - FUEGO (mañana)' cuenta cómo te sientes: "
+        assertThat(texto).isEqualTo("\n\nPara registrar 'Ritual tierra - agua - fuego (mañana)' cuenta cómo te sientes: "
                 + "si no ves el botón para escribir, hazlo desde Training.");
         assertThat(texto).doesNotContain("cuenta como te sientes").doesNotContain("boton");
     }
 
+    // issue #65
+    @Test
+    @DisplayName("el título del hábito va en tipo oración, como en la app: «RITUAL TIERRA - AGUA - FUEGO (noche)» se lee «Ritual tierra - agua - fuego (noche)»")
+    void elTituloDelHabitoVaEnTipoOracion() {
+        assertThat(ConversacionRenasiaService.textoDeRitual("RITUAL TIERRA - AGUA - FUEGO (noche)"))
+                .contains("'Ritual tierra - agua - fuego (noche)'").doesNotContain("RITUAL");
+        assertThat(ConversacionRenasiaService.textoDeEvidencia("AGUA TIBIA CON LIMÓN")).contains("'Agua tibia con limón'");
+        // Un título que ya trae minúsculas (el que la persona puso al renombrar, «Clase diaria») se deja tal cual, y las siglas se quedan.
+        assertThat(ConversacionRenasiaService.textoDeEvidencia("Clase diaria")).contains("'Clase diaria'");
+        assertThat(ConversacionRenasiaService.textoDeEvidencia("MEDITAR CON SER")).contains("'Meditar con SER'");
+        // Por el pedido (lo que usan el chat y la voz en vivo): el hábito en tipo oración, el ritual también.
+        assertThat(ConversacionRenasiaService.textoDeEvidencia(pedido("RITUAL DE LA NOCHE", true, DestinoDeEvidencia.HABITO)))
+                .contains("'Ritual de la noche'");
+        assertThat(ConversacionRenasiaService.textoDeEvidencia(pedido("JUGO VERDE", false, DestinoDeEvidencia.HABITO)))
+                .contains("'Jugo verde'");
+    }
+
     // issue #63
     @Test
-    @DisplayName("la foto de una acción del día dice «acción», «botón», «cámara» y «súbela»")
+    @DisplayName("la foto de una acción del día dice «acción», «botón», «cámara» y «súbela», y su título (lo escribió la persona) no se toca")
     void accionDelDia() {
         String texto = ConversacionRenasiaService.textoDeEvidencia(pedido("Llamar a 3 clientes", false, DestinoDeEvidencia.ROCA));
 
         assertThat(texto).isEqualTo("\n\nFoto para registrar tu acción 'Llamar a 3 clientes': si no ves el botón de la cámara, súbela desde Training.");
         assertThat(texto).doesNotContain(SIN_TILDES);
+        assertThat(ConversacionRenasiaService.textoDeEvidencia(pedido("LLAMAR A 3 CLIENTES", false, DestinoDeEvidencia.ROCA)))
+                .contains("tu acción 'LLAMAR A 3 CLIENTES'");
     }
 
     // issue #63
