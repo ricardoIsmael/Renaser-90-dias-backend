@@ -27,8 +27,25 @@ class UltimaComidaOpcionalIT {
     @Autowired
     private JdbcTemplate jdbc;
 
+    /**
+     * Corre el SQL de la migracion en UNA conexion y le devuelve su search_path: la migracion empieza con {@code SET search_path TO renaser, public}
+     * (regla de las migraciones) y un SET de sesion se queda en la conexion del pool, donde lo heredarian las pruebas siguientes.
+     */
+    private void correrLaMigracion(String sql) {
+        jdbc.execute((org.springframework.jdbc.core.ConnectionCallback<Void>) con -> {
+            try (var st = con.createStatement()) {
+                try {
+                    st.execute(sql);
+                } finally {
+                    st.execute("RESET search_path");
+                }
+            }
+            return null;
+        });
+    }
+
     private String exigencia(UUID habito) {
-        return jdbc.queryForObject("SELECT exigencia_evidencia::text FROM habitos WHERE id = ?", String.class, habito);
+        return jdbc.queryForObject("SELECT exigencia_evidencia::text FROM renaser.habitos WHERE id = ?", String.class, habito);
     }
 
     // spec 038 FR-008
@@ -44,13 +61,13 @@ class UltimaComidaOpcionalIT {
     void esIdempotente() throws Exception {
         String sql = new ClassPathResource("db/migration/V160__ultima_comida_es_de_evidencia_opcional.sql")
                 .getContentAsString(StandardCharsets.UTF_8);
-        var antes = jdbc.queryForObject("SELECT actualizado_en FROM habitos WHERE id = ?", java.sql.Timestamp.class, ULTIMA_COMIDA);
+        var antes = jdbc.queryForObject("SELECT actualizado_en FROM renaser.habitos WHERE id = ?", java.sql.Timestamp.class, ULTIMA_COMIDA);
 
-        jdbc.execute(sql);
-        jdbc.execute(sql);
+        correrLaMigracion(sql);
+        correrLaMigracion(sql);
 
         assertThat(exigencia(ULTIMA_COMIDA)).isEqualTo("OPCIONAL");
-        assertThat(jdbc.queryForObject("SELECT actualizado_en FROM habitos WHERE id = ?", java.sql.Timestamp.class, ULTIMA_COMIDA))
+        assertThat(jdbc.queryForObject("SELECT actualizado_en FROM renaser.habitos WHERE id = ?", java.sql.Timestamp.class, ULTIMA_COMIDA))
                 .isEqualTo(antes);
     }
 }

@@ -47,31 +47,48 @@ class DescripcionesDeHabitosParaSerIT {
         return new ClassPathResource(MIGRACION).getContentAsString(StandardCharsets.UTF_8);
     }
 
+    /**
+     * Corre el SQL de la migracion en UNA conexion y le devuelve su search_path: la migracion empieza con {@code SET search_path TO renaser, public}
+     * (regla de las migraciones) y un SET de sesion se queda en la conexion del pool, donde lo heredarian las pruebas siguientes.
+     */
+    private void correrLaMigracion(String sql) {
+        jdbc.execute((org.springframework.jdbc.core.ConnectionCallback<Void>) con -> {
+            try (var st = con.createStatement()) {
+                try {
+                    st.execute(sql);
+                } finally {
+                    st.execute("RESET search_path");
+                }
+            }
+            return null;
+        });
+    }
+
     private String descripcionPorClave(String clave) {
-        return jdbc.queryForObject("SELECT descripcion FROM habitos WHERE clave_sistema = ? AND formacion = 'ESCUELA'", String.class, clave);
+        return jdbc.queryForObject("SELECT descripcion FROM renaser.habitos WHERE clave_sistema = ? AND formacion = 'ESCUELA'", String.class, clave);
     }
 
     private String descripcionPorId(UUID id) {
-        return jdbc.queryForObject("SELECT descripcion FROM habitos WHERE id = ?", String.class, id);
+        return jdbc.queryForObject("SELECT descripcion FROM renaser.habitos WHERE id = ?", String.class, id);
     }
 
     private Timestamp actualizadoEnPorClave(String clave) {
-        return jdbc.queryForObject("SELECT actualizado_en FROM habitos WHERE clave_sistema = ? AND formacion = 'ESCUELA'", Timestamp.class, clave);
+        return jdbc.queryForObject("SELECT actualizado_en FROM renaser.habitos WHERE clave_sistema = ? AND formacion = 'ESCUELA'", Timestamp.class, clave);
     }
 
     /** Deja el catalogo como lo sembraron V4 y V84, antes de que V164 lo tocara. */
     private void volverALosTextosOriginales() {
-        jdbc.update("UPDATE habitos SET descripcion = ? WHERE formacion = 'ESCUELA' AND clave_sistema IN ('RITUAL_MORNING', 'RITUAL_MIDDAY', 'RITUAL_NIGHT')", RITUAL_ORIGINAL);
-        jdbc.update("UPDATE habitos SET descripcion = ? WHERE id = ?", ULTIMA_COMIDA_ORIGINAL, ULTIMA_COMIDA);
-        jdbc.update("UPDATE habitos SET descripcion = ? WHERE formacion = 'ESCUELA' AND clave_sistema = 'DAILY_KM'", KM_ORIGINAL);
-        jdbc.update("UPDATE roles SET descripcion = ? WHERE clave = 'APRENDIZ'", APRENDIZ_ORIGINAL);
+        jdbc.update("UPDATE renaser.habitos SET descripcion = ? WHERE formacion = 'ESCUELA' AND clave_sistema IN ('RITUAL_MORNING', 'RITUAL_MIDDAY', 'RITUAL_NIGHT')", RITUAL_ORIGINAL);
+        jdbc.update("UPDATE renaser.habitos SET descripcion = ? WHERE id = ?", ULTIMA_COMIDA_ORIGINAL, ULTIMA_COMIDA);
+        jdbc.update("UPDATE renaser.habitos SET descripcion = ? WHERE formacion = 'ESCUELA' AND clave_sistema = 'DAILY_KM'", KM_ORIGINAL);
+        jdbc.update("UPDATE renaser.roles SET descripcion = ? WHERE clave = 'APRENDIZ'", APRENDIZ_ORIGINAL);
     }
 
     /** Las demas pruebas comparten esta base: lo que dejan es el estado que deja la migracion. */
     @AfterEach
     void dejarElEstadoQueDejaLaMigracion() throws Exception {
         volverALosTextosOriginales();
-        jdbc.execute(sqlDeLaMigracion());
+        correrLaMigracion(sqlDeLaMigracion());
     }
 
     // issue #62
@@ -86,7 +103,7 @@ class DescripcionesDeHabitosParaSerIT {
                 .doesNotContain("Foto de la última comida");
         assertThat(descripcionPorClave("DAILY_KM")).contains("Health Connect").contains("se cuentan solos")
                 .contains("captura de tu app de actividad");
-        assertThat(jdbc.queryForObject("SELECT descripcion FROM roles WHERE clave = 'APRENDIZ'", String.class))
+        assertThat(jdbc.queryForObject("SELECT descripcion FROM renaser.roles WHERE clave = 'APRENDIZ'", String.class))
                 .isEqualTo("Participante de un programa de Renaser").doesNotContain("90");
     }
 
@@ -104,12 +121,12 @@ class DescripcionesDeHabitosParaSerIT {
         volverALosTextosOriginales();
         String delDueno = "Ritual de la mañana: agua, tierra y fuego, como lo explica el dueño.";
         String kmDelDueno = "Camina o corre y cuéntanos cuántos km hiciste.";
-        jdbc.update("UPDATE habitos SET descripcion = ? WHERE formacion = 'ESCUELA' AND clave_sistema = 'RITUAL_MORNING'", delDueno);
-        jdbc.update("UPDATE habitos SET descripcion = ? WHERE formacion = 'ESCUELA' AND clave_sistema = 'DAILY_KM'", kmDelDueno);
+        jdbc.update("UPDATE renaser.habitos SET descripcion = ? WHERE formacion = 'ESCUELA' AND clave_sistema = 'RITUAL_MORNING'", delDueno);
+        jdbc.update("UPDATE renaser.habitos SET descripcion = ? WHERE formacion = 'ESCUELA' AND clave_sistema = 'DAILY_KM'", kmDelDueno);
         Timestamp antesRitual = actualizadoEnPorClave("RITUAL_MORNING");
         Timestamp antesKm = actualizadoEnPorClave("DAILY_KM");
 
-        jdbc.execute(sqlDeLaMigracion());
+        correrLaMigracion(sqlDeLaMigracion());
 
         // Lo editado queda exactamente como estaba, y su fecha de actualizacion no se mueve.
         assertThat(descripcionPorClave("RITUAL_MORNING")).isEqualTo(delDueno);
@@ -127,14 +144,14 @@ class DescripcionesDeHabitosParaSerIT {
     @DisplayName("V164 es idempotente: volver a correrla no cambia nada ni mueve la fecha de lo ya actualizado")
     void esIdempotente() throws Exception {
         volverALosTextosOriginales();
-        jdbc.execute(sqlDeLaMigracion());
+        correrLaMigracion(sqlDeLaMigracion());
         String ritual = descripcionPorClave("RITUAL_MORNING");
         String km = descripcionPorClave("DAILY_KM");
         String comida = descripcionPorId(ULTIMA_COMIDA);
         Timestamp antes = actualizadoEnPorClave("RITUAL_MORNING");
 
-        jdbc.execute(sqlDeLaMigracion());
-        jdbc.execute(sqlDeLaMigracion());
+        correrLaMigracion(sqlDeLaMigracion());
+        correrLaMigracion(sqlDeLaMigracion());
 
         assertThat(descripcionPorClave("RITUAL_MORNING")).isEqualTo(ritual);
         assertThat(descripcionPorClave("DAILY_KM")).isEqualTo(km);
