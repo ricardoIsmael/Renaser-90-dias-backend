@@ -184,7 +184,7 @@ class PlanDeLaSemanaServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
 
         verify(savePreferenciaPort, never()).guardarFechasPropias(any(), anyCollection());
-        verify(savePreferenciaPort, never()).borrarParaFecha(any(), any(), any());
+        verify(savePreferenciaPort, never()).borrarParaFechas(any(), anyCollection());
     }
 
     @Test
@@ -210,7 +210,7 @@ class PlanDeLaSemanaServiceTest {
 
         service.guardar(ACTOR, habito.id(), SEMANA, List.of(mover(LocalDate.of(2026, 11, 7), 7)));
 
-        verify(savePreferenciaPort).borrarParaFecha(ACTOR, habito.id(), LocalDate.of(2026, 11, 7));
+        verify(savePreferenciaPort).borrarParaFechas(ACTOR, List.of(new SavePreferenciaHorarioPort.FechaABorrar(habito.id(), LocalDate.of(2026, 11, 7))));
     }
 
     @Test
@@ -221,7 +221,7 @@ class PlanDeLaSemanaServiceTest {
 
         service.guardar(ACTOR, habito.id(), SEMANA, List.of(CambioDeFecha.restablecer(LocalDate.of(2026, 11, 7))));
 
-        verify(savePreferenciaPort).borrarParaFecha(ACTOR, habito.id(), LocalDate.of(2026, 11, 7));
+        verify(savePreferenciaPort).borrarParaFechas(ACTOR, List.of(new SavePreferenciaHorarioPort.FechaABorrar(habito.id(), LocalDate.of(2026, 11, 7))));
     }
 
     // ---- semanas por venir, hasta el final del programa (2026-11-02) ---------------------------
@@ -266,7 +266,7 @@ class PlanDeLaSemanaServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
 
         verify(savePreferenciaPort, never()).guardarFechasPropias(any(), anyCollection());
-        verify(savePreferenciaPort, never()).borrarParaFecha(any(), any(), any());
+        verify(savePreferenciaPort, never()).borrarParaFechas(any(), anyCollection());
         // Ni siquiera se busca el habito: se rechaza antes.
         verifyNoInteractions(catalogoAplicable);
     }

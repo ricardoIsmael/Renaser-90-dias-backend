@@ -239,7 +239,7 @@ class RepeticionDeSemanaServiceTest {
         assertThatThrownBy(() -> service.repetir(ACTOR, MODELO, DESTINO, false)).isInstanceOf(IllegalStateException.class);
 
         verify(savePreferenciaPort, never()).guardarFechasPropias(any(), anyCollection());
-        verify(savePreferenciaPort, never()).borrarParaFecha(any(), any(), any());
+        verify(savePreferenciaPort, never()).borrarParaFechas(any(), anyCollection());
     }
 
     @Test
@@ -250,7 +250,7 @@ class RepeticionDeSemanaServiceTest {
         var resultado = service.repetir(ACTOR, MODELO, DESTINO, true);
 
         verify(savePreferenciaPort).guardarFechasPropias(eq(ACTOR), anyCollection());
-        verify(savePreferenciaPort).borrarParaFecha(ACTOR, gimnasio.id(), LocalDate.of(2026, 11, 6));
+        verify(savePreferenciaPort).borrarParaFechas(ACTOR, List.of(new SavePreferenciaHorarioPort.FechaABorrar(gimnasio.id(), LocalDate.of(2026, 11, 6))));
         assertThat(resultado.diasCopiados()).isEqualTo(1);
         assertThat(resultado.diasQueVuelvenAlPlan()).isEqualTo(1);
     }
