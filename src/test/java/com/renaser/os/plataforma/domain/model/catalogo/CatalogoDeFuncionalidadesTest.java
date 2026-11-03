@@ -32,6 +32,18 @@ class CatalogoDeFuncionalidadesTest {
                 .containsExactlyInAnyOrderElementsOf(CLAVES_DE_LA_SPEC);
     }
 
+    // issue #62
+    @Test
+    @DisplayName("issue #62: la entrada dia_uno conserva su clave y ya no dice que se elige el Día 1 (spec 036: empieza al día siguiente)")
+    void diaUnoYaNoSeElige() {
+        DefinicionDeFuncionalidad diaUno = catalogo.definicion("dia_uno").orElseThrow();
+
+        assertThat(diaUno.clave()).isEqualTo("dia_uno");
+        assertThat(diaUno.nombre()).isEqualTo("Empezar mi programa");
+        assertThat(diaUno.descripcion()).isEqualTo("Activar el programa propio; empieza al día siguiente.");
+        assertThat(diaUno.nombre() + " " + diaUno.descripcion()).doesNotContain("Elegir");
+    }
+
     @Test
     @DisplayName("las críticas son exactamente las siete del contrato §3")
     void lasCriticasSonLasDelContrato() {

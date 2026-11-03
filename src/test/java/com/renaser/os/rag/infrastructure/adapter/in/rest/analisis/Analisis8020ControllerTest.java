@@ -108,12 +108,12 @@ class Analisis8020ControllerTest {
     }
 
     @Test
-    @DisplayName("un periodo que no es SEMANA ni MES o un periodo que no llega, es 400; sin Día 1, 404")
+    @DisplayName("un periodo que no es SEMANA ni MES o un periodo que no llega, es 400; sin el programa activado, 404")
     void errores() throws Exception {
         pedir("?periodo=DIA").andExpect(status().isBadRequest());
         doThrow(new IllegalArgumentException("Ese periodo todavía no llega")).when(consultar).deLaPersona(any());
         pedir("?inicio=2027-01-04").andExpect(status().isBadRequest());
-        doThrow(new NoSuchElementException("Todavía no eligió su Día 1")).when(consultar).deLaPersona(any());
+        doThrow(new NoSuchElementException("Todavía no activó su programa")).when(consultar).deLaPersona(any());
         pedir("").andExpect(status().isNotFound());
     }
 }

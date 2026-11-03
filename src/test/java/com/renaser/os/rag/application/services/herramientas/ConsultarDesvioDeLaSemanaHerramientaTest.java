@@ -114,6 +114,7 @@ class ConsultarDesvioDeLaSemanaHerramientaTest {
         verify(vencidos).vencidosEntre(APRENDIZ, LUNES, LocalDate.of(2026, 9, 23));
     }
 
+    // issue #62: el texto ya no habla de elegir el Dia 1
     @Test
     @DisplayName("D-203: sin Dia 1 elegido la semana 1 va sin fechas, no hay dias terminados ni se consultan vencidos")
     void sinDiaUnoNoHayFechas() {
@@ -126,7 +127,7 @@ class ConsultarDesvioDeLaSemanaHerramientaTest {
         String texto = texto(herramienta.ejecutar(APRENDIZ, InvocacionHerramienta.sinArgumentos(
                 ConsultarDesvioDeLaSemanaHerramienta.NOMBRE)));
 
-        assertThat(texto).contains("Semana 1 del programa (todavia sin fechas: no eligio su Dia 1), hoy es jueves "
+        assertThat(texto).contains("Semana 1 del programa (todavia sin fechas: aun no activo su programa, que empieza al dia siguiente de confirmarlo), hoy es jueves "
                         + "2026-09-24. Dias ya terminados: ninguno todavia.")
                 .doesNotContain("null");
         verifyNoInteractions(vencidos);

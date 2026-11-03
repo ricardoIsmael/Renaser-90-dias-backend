@@ -125,4 +125,47 @@ class PropuestasSinProgramaActivadoTest {
         ConsultarSituacionDelAprendizPort quePeta = participanteId -> { throw new IllegalStateException("base caida"); };
         assertThat(new CompuertaParaProponer(libre, quePeta).bloqueoPorProgramaSinActivar(APRENDIZ)).isEmpty();
     }
+
+    private static CompuertaParaProponer sinObjetivosCon(Optional<SituacionDelAprendiz> situacion) {
+        ConsultarCompuertaDeRocasPort sinMaestras = new ConsultarCompuertaDeRocasPort() {
+            @Override
+            public boolean rocasMaestrasCompletas(UserId aprendizId) {
+                return false;
+            }
+
+            @Override
+            public List<String> ejesSinObjetivoSemanal(UserId aprendizId, LocalDate fecha) {
+                return List.of("CUERPO", "TRABAJO", "RELACIONES");
+            }
+        };
+        return new CompuertaParaProponer(sinMaestras, participanteId -> situacion);
+    }
+
+    /**
+     * Issue #63: a «Armemos mi plan» en el dia 0 de la Escuela, SER decia «tus objetivos de 90 dias estan pendientes» y no que su programa empieza manana. El motivo que
+     * recibe el modelo cuando no hay objetivos dice PRIMERO que su programa todavia no empieza, sea cual sea su formacion.
+     */
+    // issue #63
+    @Test
+    @DisplayName("issue #63: sin objetivos y con el programa por empezar, el motivo manda decir cuando empieza antes de lo de los objetivos")
+    void sinObjetivosEnElDiaCeroElMotivoDiceCuandoEmpieza() {
+        for (SituacionDelAprendiz dia0 : List.of(diaCero(MANANA), diaCero(MANANA).conDuracion(365).conFormacion(com.renaser.os.shared.domain.Formacion.DIPLOMADO))) {
+            Optional<String> motivo = sinObjetivosCon(Optional.of(dia0)).bloqueoDeObjetivos(APRENDIZ);
+
+            assertThat(motivo).hasValueSatisfying(texto -> assertThat(texto)
+                    .startsWith(CompuertaParaProponer.sinObjetivos(dia0.plazoDelObjetivo()))
+                    .endsWith(CompuertaParaProponer.PROGRAMA_POR_EMPEZAR)
+                    .contains("Su programa todavía no empieza (es el día 0)").contains("dile cuándo empieza"));
+        }
+    }
+
+    // issue #63
+    @Test
+    @DisplayName("issue #63: con el programa en curso, o sin poder leer la situación, el motivo es el de siempre")
+    void conElProgramaEnCursoElMotivoNoCambia() {
+        assertThat(sinObjetivosCon(Optional.of(new SituacionDelAprendiz(7, 1, HOY))).bloqueoDeObjetivos(APRENDIZ))
+                .contains(CompuertaParaProponer.SIN_OBJETIVOS);
+        assertThat(sinObjetivosCon(Optional.empty()).bloqueoDeObjetivos(APRENDIZ)).contains(CompuertaParaProponer.SIN_OBJETIVOS);
+        assertThat(CompuertaParaProponer.SIN_OBJETIVOS).doesNotContain("todavía no empieza");
+    }
 }

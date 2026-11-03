@@ -378,7 +378,7 @@ class PromptSistemaRenasiaTest {
         // Ante "me duele el pecho" dio alternativas antes del 106.
         assertThat(render).contains("llame ya al 106 (SAMU)");
         // Contesto de memoria lo que dependia de datos; confundio rocas con habitos; no nombro Cancelar.
-        assertThat(render).contains("se vuelve a consultar cada vez").contains("Las rocas (consultar_rocas) no son habitos")
+        assertThat(render).contains("se vuelve a consultar cada vez").contains("Las acciones y los objetivos (consultar_rocas) no son habitos")
                 .contains("toque Cancelar en su tarjeta").contains("puede estar pausado o apagado");
     }
 
@@ -671,5 +671,37 @@ class PromptSistemaRenasiaTest {
                 .doesNotContain("Health Connect");
         // Va junto a los habitos que piden evidencia, antes de que expliquen que por el chat no entran archivos.
         assertThat(render.indexOf("**Kilometros diarios se miden solos")).isGreaterThan(render.indexOf("## Habitos que piden evidencia"));
+    }
+
+    // issue #62
+    @Test
+    @DisplayName("issue #62: SER no le dice «roca» a la persona; la app habla de acciones y objetivos")
+    void noHablaDeRocas() {
+        String render = renderizar("(vacio)");
+
+        assertThat(render.replaceAll("\\s+", " ")).contains("**Nunca digas \"roca\".**")
+                .contains("las del dia se llaman acciones, y las de la semana, el mes y el programa, objetivos")
+                .contains("tu di \"accion\" y \"objetivo\"");
+        // La palabra solo queda en los nombres de herramienta (consultar_rocas, roca_id) y en la propia regla que la prohibe.
+        String sinNombresDeHerramienta = render.replace("consultar_rocas", "").replace("roca_id", "");
+        assertThat(sinNombresDeHerramienta.lines().filter(l -> l.toLowerCase().matches(".*\\broca(s)?\\b.*")).toList())
+                .as("las unicas lineas que nombran la roca son las que la prohiben")
+                .allMatch(l -> l.contains("Nunca digas \"roca\"") || l.contains("dice \"roca\""), "linea con «roca»");
+    }
+
+    // issue #63
+    @Test
+    @DisplayName("issue #63: antes de que empiece su programa, ante «armemos mi plan» SER dice primero cuando empieza, en las tres formaciones")
+    void antesDeEmpezarDiceCuandoEmpieza() {
+        String render = renderizar("(vacio)");
+        String plano = render.replaceAll("\\s+", " ");
+
+        assertThat(plano).contains("**Antes de que empiece su programa**")
+                .contains("en la Escuela, el Diplomado y la Certificacion por igual")
+                .contains("\"armemos mi plan\"")
+                .contains("lo primero que le dices es cuando empieza su programa, con la fecha de la situacion")
+                .contains("Nunca contestes solo que sus objetivos estan pendientes");
+        // Va en la seccion de los objetivos, no suelta.
+        assertThat(render.indexOf("**Antes de que empiece su programa**")).isGreaterThan(render.indexOf("## Tus objetivos: el plan de la semana"));
     }
 }

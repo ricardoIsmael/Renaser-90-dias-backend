@@ -23,7 +23,7 @@ public interface Analisis8020Finder {
 
     /**
      * @param inicio el primer día del periodo (el que devolvió {@code anterior}/{@code siguiente}); {@code null} = el periodo en curso
-     * @throws java.util.NoSuchElementException si la persona todavía no eligió su Día 1 o su programa no llegó a empezar
+     * @throws java.util.NoSuchElementException si la persona todavía no activó su programa o este no llegó a empezar
      * @throws IllegalArgumentException si ningún periodo empieza ese día o si todavía no llega
      */
     VistaDelAnalisis de(UserId personaId, Tipo tipo, LocalDate inicio);

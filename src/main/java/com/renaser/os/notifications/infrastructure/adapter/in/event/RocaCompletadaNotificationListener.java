@@ -21,8 +21,9 @@ class RocaCompletadaNotificationListener {
     @ApplicationModuleListener
     void on(RocaCompletadaEvent event) {
         // C-7: rocaId es la clave de deduplicacion si el outbox reentrega este evento.
+        // Issue #62: la app no dice «roca» (son «acciones» de los objetivos) y SER lee este texto con consultar_notificaciones.
         emitirNotificacionUseCase.emitir(new EmitirNotificacionCommand(event.participanteId(),
-                TipoNotificacion.HITO_PROGRAMA, "Roca completada", "Completaste una Roca Diaria.", null,
+                TipoNotificacion.HITO_PROGRAMA, "Acción cumplida", "Cumpliste una acción de tus objetivos.", null,
                 event.rocaId()));
     }
 }

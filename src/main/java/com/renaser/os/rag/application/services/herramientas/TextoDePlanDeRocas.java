@@ -60,11 +60,11 @@ final class TextoDePlanDeRocas {
     }
 
     /**
-     * "(2026-09-21 al 2026-09-27)". Sin Dia 1 elegido {@code rocks} manda la semana 1 sin fechas, y aca se
+     * "(2026-09-21 al 2026-09-27)". Sin el programa activado {@code rocks} manda la semana 1 sin fechas, y aca se
      * dice eso en vez de inventar un rango (D-203, D-201): antes salia de la fecha provisional del alta.
      */
     static String rangoDeLaSemana(LocalDate inicio, LocalDate fin) {
-        return inicio == null || fin == null ? "(todavia sin fechas: no eligio su Dia 1)"
+        return inicio == null || fin == null ? "(todavia sin fechas: aun no activo su programa, que empieza al dia siguiente de confirmarlo)"
                 : "(" + inicio + " al " + fin + ")";
     }
 
