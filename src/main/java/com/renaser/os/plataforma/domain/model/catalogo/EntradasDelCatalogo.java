@@ -52,7 +52,8 @@ final class EntradasDelCatalogo {
         return List.of(
                 critica("registro", "Acceso", "Solicitar acceso", "El alta pública: «Solicitar acceso» y la verificación del correo.", NADIE, NO_APLICA),
                 normal("onboarding", "Programa", "Onboarding", "Ficha inicial, términos, pacto y cuestionario.", TODOS, NO_APLICA),
-                normal("dia_uno", "Programa", "Elegir mi Día 1", "Elegir el Día 1 y activar el programa propio.", TODOS, NO_APLICA),
+                // Issue #62: la clave `dia_uno` NO cambia (hay interruptores y despliegues guardados con ella); solo lo que lee Soporte TI. Ya no se elige el Día 1 (spec 036).
+                normal("dia_uno", "Programa", "Empezar mi programa", "Activar el programa propio; empieza al día siguiente.", TODOS, NO_APLICA),
                 normal("radar", "Programa", "Código Renaser", "El Código Renaser diario.", TODOS, NO_APLICA),
                 // Spec 034 (D-299): nace apagada para quien acompaña y la decide Administración; apagada se esconde.
                 oculta(ClavesDeFuncionalidad.RADAR_EN_FICHAS, "Programa", "Código Renaser en las fichas", "Que el mentor, la guía y el líder vean el Código Renaser de los aprendices en sus fichas.", ACOMPANAMIENTO),
