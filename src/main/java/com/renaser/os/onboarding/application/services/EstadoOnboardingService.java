@@ -75,9 +75,8 @@ public class EstadoOnboardingService implements ObtenerEstadoOnboardingUseCase, 
         estado.aceptarHito(command.hito(), clock);
         if (command.hito() == HitoOnboarding.TERMINOS) {
             // Spec 027: la constancia de QUÉ versión aceptó va en la misma transacción que el hito; si no se puede dejar, tampoco queda aceptado.
-            // Spec 039: con ella queda lo que se le mostró en «Mi aceptación» y, si firmó su cronograma de pagos, su confirmación (la de la spec 032) en este mismo estado.
-            aceptacionDeTerminos.registrar(command.usuarioId(), new PedidoDeAceptacion(command.versionDeTerminosId(), command.inicioVisto(), command.huellaDelCronograma()))
-                    .cronograma().ifPresent(confirmacion -> estado.confirmarCronograma(confirmacion.nombre(), confirmacion.huella(), clock));
+            // Spec 039: con ella queda lo que se le mostró en «Mi aceptación». El cronograma de pagos no se firma aquí (D-315): se confirma en «Mi ingreso» (spec 032).
+            aceptacionDeTerminos.registrar(command.usuarioId(), new PedidoDeAceptacion(command.versionDeTerminosId(), command.inicioVisto()));
         }
         return saveEstadoPort.guardar(estado);
     }

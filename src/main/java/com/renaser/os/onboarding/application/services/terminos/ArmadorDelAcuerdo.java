@@ -31,12 +31,12 @@ class ArmadorDelAcuerdo {
         this.programas = programas;
     }
 
-    /** Sin cronograma: ese lo agrega quien lee los términos, que sabe si es el primer ingreso. */
+    /** Sin cronograma de pagos: no va en los términos (D-315). */
     AcuerdoDeLaPersona armar(UserId persona, Formacion formacion) {
         String nombre = actores.deActor(persona).map(ActorOnboarding::nombre).map(String::trim).orElse("");
         Optional<FechasDelPrograma> fechas = programas.de(persona).filter(f -> f.inicio() != null);
         Integer duracion = fechas.map(FechasDelPrograma::duracionDias).orElse(null);
         return new AcuerdoDeLaPersona(nombre, ProgramaDelAcuerdo.etiqueta(formacion, duracion), fechas.map(FechasDelPrograma::inicio).orElse(null),
-                fechas.map(FechasDelPrograma::fin).orElse(null), fechas.map(FechasDelPrograma::activado).orElse(false), Optional.empty());
+                fechas.map(FechasDelPrograma::fin).orElse(null), fechas.map(FechasDelPrograma::activado).orElse(false));
     }
 }

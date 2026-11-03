@@ -48,9 +48,7 @@ public interface ConsultarTerminosUseCase {
      * @param programa         lo que se le mostró en «Mi aceptación» al aceptar (spec 039); {@code null} en lo aceptado antes
      * @param inicio           idem; {@code null} también si no tenía un programa que mostrar
      * @param fin              idem
-     * @param cronogramaFirmado si firmó su cronograma de pagos junto con los términos
      */
-    record ConstanciaDeUnaPersona(Formacion formacion, int numero, Instant aceptadaEn, String firmaUrl, String programa, LocalDate inicio, LocalDate fin,
-                                  boolean cronogramaFirmado) {
+    record ConstanciaDeUnaPersona(Formacion formacion, int numero, Instant aceptadaEn, String firmaUrl, String programa, LocalDate inicio, LocalDate fin) {
     }
 }

@@ -1,5 +1,8 @@
 # Tasks: Acuerdo de transformación (spec 039)
 
+> **Corregido 2026-11-02 (D-315):** T006/T007/T101/T102 se hicieron con el cronograma en la firma; el dueño lo sacó de los términos (los pagos son asíncronos). Se quitaron `CronogramaParaFirmarUseCase`/`Service`, `scheduleFingerprint`, `MiCronogramaDePagos` y la huella de la aceptación; ver `spec.md`.
+
+
 Un commit por pieza. `[x]` = escrita; la verificación completa (`./mvnw verify`, Jest, `tsc`) está encolada y no corrió con el emulador prendido.
 
 ## Backend

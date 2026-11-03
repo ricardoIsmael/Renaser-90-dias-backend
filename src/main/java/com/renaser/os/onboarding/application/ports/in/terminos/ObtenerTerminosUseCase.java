@@ -1,6 +1,5 @@
 package com.renaser.os.onboarding.application.ports.in.terminos;
 
-import com.renaser.os.onboarding.application.ports.in.pagos.CronogramaParaFirmarUseCase.CronogramaParaFirmar;
 import com.renaser.os.onboarding.domain.model.terminos.QuePideLaAceptacion;
 import com.renaser.os.onboarding.domain.model.terminos.VersionDeTerminos;
 import com.renaser.os.shared.domain.Formacion;
@@ -38,13 +37,9 @@ public interface ObtenerTerminosUseCase {
      * @param inicio       el que tiene si ya activó; si no, el que tendrá (mañana en su zona); {@code null} si no hay un programa que prometerle
      * @param fin          el último día de su programa; {@code null} cuando {@code inicio} lo es
      * @param empezado     si ya activó su programa
-     * @param cronograma   el cronograma a firmar junto con los términos: solo en el primer ingreso de quien tiene uno sin confirmar
+     *                     <p>Nunca trae el cronograma de pagos (D-315, decisión del dueño del 2026-11-02): no se muestra ni se firma con los términos.
      */
-    record AcuerdoDeLaPersona(String participante, String programa, LocalDate inicio, LocalDate fin, boolean empezado, Optional<CronogramaParaFirmar> cronograma) {
-
-        public AcuerdoDeLaPersona conCronograma(Optional<CronogramaParaFirmar> cronogramaAFirmar) {
-            return new AcuerdoDeLaPersona(participante, programa, inicio, fin, empezado, cronogramaAFirmar);
-        }
+    record AcuerdoDeLaPersona(String participante, String programa, LocalDate inicio, LocalDate fin, boolean empezado) {
     }
 
     /**
@@ -54,7 +49,6 @@ public interface ObtenerTerminosUseCase {
     record TerminosAceptados(VersionDeTerminos version, Instant aceptadaEn, Optional<String> firmaUrl, Optional<AcuerdoAceptado> acuerdo) {
     }
 
-    /** @param cronogramaFirmado si firmó su cronograma de pagos junto con los términos */
-    record AcuerdoAceptado(String programa, LocalDate inicio, LocalDate fin, boolean cronogramaFirmado) {
+    record AcuerdoAceptado(String programa, LocalDate inicio, LocalDate fin) {
     }
 }

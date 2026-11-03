@@ -1,16 +1,12 @@
 package com.renaser.os.onboarding.application.services.terminos;
 
-import com.renaser.os.onboarding.application.ports.in.pagos.CronogramaParaFirmarUseCase;
-import com.renaser.os.onboarding.application.ports.in.pagos.CronogramaParaFirmarUseCase.CronogramaParaFirmar;
 import com.renaser.os.onboarding.application.ports.in.terminos.ObtenerTerminosUseCase.AcuerdoDeLaPersona;
 import com.renaser.os.onboarding.application.ports.in.terminos.RegistrarAceptacionDeTerminosUseCase.PedidoDeAceptacion;
-import com.renaser.os.onboarding.application.ports.in.terminos.RegistrarAceptacionDeTerminosUseCase.ResultadoDeLaAceptacion;
 import com.renaser.os.onboarding.application.ports.out.media.LoadMediaPort;
 import com.renaser.os.onboarding.application.ports.out.respuesta.LeerRespuestasPorClavePort;
 import com.renaser.os.onboarding.application.ports.out.terminos.AceptacionesDeTerminosPort;
 import com.renaser.os.onboarding.application.ports.out.terminos.AceptacionesDeTerminosPort.LoMostrado;
 import com.renaser.os.onboarding.application.ports.out.terminos.TerminosPort;
-import com.renaser.os.onboarding.domain.model.pagos.Moneda;
 import com.renaser.os.onboarding.domain.model.terminos.ContenidoDeTerminos;
 import com.renaser.os.onboarding.domain.model.terminos.VersionDeTerminos;
 import com.renaser.os.shared.domain.FixedClock;
@@ -42,8 +38,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * La constancia de la aceptación con lo que se le mostró (spec 039): guarda el programa, el inicio y el fin; rechaza un inicio vencido; y confirma el cronograma si la
- * persona firmó el vigente (y solo ese). Sin Spring: los puertos son simulados y las reglas son las del servicio.
+ * La constancia de la aceptación con lo que se le mostró (spec 039): guarda el programa, el inicio y el fin y rechaza un inicio vencido. El cronograma de pagos NO
+ * interviene (D-315, decisión del dueño del 2026-11-02: no se firma con los términos): el servicio ni siquiera lo conoce. Sin Spring: los puertos son simulados.
  */
 @ExtendWith(MockitoExtension.class)
 class AceptacionDeTerminosServiceTest {
@@ -65,8 +61,6 @@ class AceptacionDeTerminosServiceTest {
     @Mock
     private ArmadorDelAcuerdo acuerdos;
     @Mock
-    private CronogramaParaFirmarUseCase cronogramas;
-    @Mock
     private IdGenerator ids;
 
     private AceptacionDeTerminosService servicio;
@@ -75,7 +69,7 @@ class AceptacionDeTerminosServiceTest {
 
     @BeforeEach
     void preparar() {
-        servicio = new AceptacionDeTerminosService(terminos, aceptaciones, formaciones, respuestas, medias, acuerdos, cronogramas, ids, CLOCK);
+        servicio = new AceptacionDeTerminosService(terminos, aceptaciones, formaciones, respuestas, medias, acuerdos, ids, CLOCK);
         persona = UserId.of(UUID.randomUUID());
         vigente = VersionDeTerminos.borrador(UUID.randomUUID(), Formacion.ESCUELA, new ContenidoDeTerminos("Términos", "Intro", List.of("Uno"), "Acepto"), null,
                 CLOCK.now()).publicada(2, "Nuevo Acuerdo de transformación", true, null, CLOCK.now());
@@ -86,7 +80,7 @@ class AceptacionDeTerminosServiceTest {
     }
 
     private void conAcuerdo(String participante, LocalDate inicio, LocalDate fin) {
-        when(acuerdos.armar(persona, Formacion.ESCUELA)).thenReturn(new AcuerdoDeLaPersona(participante, "Formación RENASER · 90 días", inicio, fin, false, Optional.empty()));
+        when(acuerdos.armar(persona, Formacion.ESCUELA)).thenReturn(new AcuerdoDeLaPersona(participante, "Formación RENASER · 90 días", inicio, fin, false));
     }
 
     private LoMostrado loGuardado() {
@@ -95,21 +89,15 @@ class AceptacionDeTerminosServiceTest {
         return mostrado.getValue();
     }
 
-    private static CronogramaParaFirmar cronograma(String huella, boolean yaConfirmado) {
-        return new CronogramaParaFirmar(Moneda.PEN, List.of(), huella, yaConfirmado);
-    }
-
-    // spec 039 FR-007
+    // spec 039 FR-007; decisión 2026-11-02 pagos fuera de términos
     @Test
-    @DisplayName("la constancia guarda lo que se le mostró: programa, inicio y fin; sin cronograma firmado no hay huella ni confirmación")
+    @DisplayName("la constancia guarda lo que se le mostró: programa, inicio y fin")
     void guardaLoMostrado() {
         conAcuerdo("Ana María Pérez Soto", INICIO, FIN);
 
-        ResultadoDeLaAceptacion resultado = servicio.registrar(persona, new PedidoDeAceptacion(vigente.id(), INICIO, null));
+        servicio.registrar(persona, new PedidoDeAceptacion(vigente.id(), INICIO));
 
-        assertThat(loGuardado()).isEqualTo(new LoMostrado("Formación RENASER · 90 días", INICIO, FIN, null));
-        assertThat(resultado.cronograma()).isEmpty();
-        verify(cronogramas, never()).de(any());
+        assertThat(loGuardado()).isEqualTo(new LoMostrado("Formación RENASER · 90 días", INICIO, FIN));
     }
 
     // spec 039 FR-009, FR-011
@@ -120,7 +108,7 @@ class AceptacionDeTerminosServiceTest {
 
         servicio.registrar(persona, PedidoDeAceptacion.deLaVersion(null));
 
-        assertThat(loGuardado()).isEqualTo(new LoMostrado("Formación RENASER · 90 días", INICIO, FIN, null));
+        assertThat(loGuardado()).isEqualTo(new LoMostrado("Formación RENASER · 90 días", INICIO, FIN));
     }
 
     // spec 039 FR-007
@@ -129,7 +117,7 @@ class AceptacionDeTerminosServiceTest {
     void inicioVencido() {
         conAcuerdo("Ana María Pérez Soto", LocalDate.parse("2026-11-04"), LocalDate.parse("2027-02-01"));
 
-        assertThatThrownBy(() -> servicio.registrar(persona, new PedidoDeAceptacion(vigente.id(), INICIO, null)))
+        assertThatThrownBy(() -> servicio.registrar(persona, new PedidoDeAceptacion(vigente.id(), INICIO)))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("Pasó la medianoche");
 
         verify(aceptaciones, never()).registrar(any(), any(), any(), any(), any(), any());
@@ -138,83 +126,19 @@ class AceptacionDeTerminosServiceTest {
     @Test
     @DisplayName("una versión que dejó de ser la vigente sigue siendo 409 (spec 027)")
     void versionVencida() {
-        assertThatThrownBy(() -> servicio.registrar(persona, new PedidoDeAceptacion(UUID.randomUUID(), null, null)))
+        assertThatThrownBy(() -> servicio.registrar(persona, new PedidoDeAceptacion(UUID.randomUUID(), null)))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("Los términos cambiaron");
 
         verify(aceptaciones, never()).registrar(any(), any(), any(), any(), any(), any());
     }
 
-    // spec 039 FR-008, SC-002
     @Test
-    @DisplayName("con la huella del cronograma vigente: queda la huella en la constancia y se devuelve qué confirmar, con el nombre completo del perfil")
-    void firmaElCronograma() {
-        conAcuerdo("Ana María Pérez Soto", INICIO, FIN);
-        when(cronogramas.de(persona)).thenReturn(Optional.of(cronograma("huella-1", false)));
-
-        ResultadoDeLaAceptacion resultado = servicio.registrar(persona, new PedidoDeAceptacion(vigente.id(), INICIO, "huella-1"));
-
-        assertThat(loGuardado().cronogramaHuella()).isEqualTo("huella-1");
-        assertThat(resultado.cronograma()).hasValueSatisfying(c -> {
-            assertThat(c.nombre()).isEqualTo("Ana María Pérez Soto");
-            assertThat(c.huella()).isEqualTo("huella-1");
-        });
-    }
-
-    // spec 039 FR-008
-    @Test
-    @DisplayName("Administración cambió el cronograma mientras leía: 409, no queda constancia ni confirmación")
-    void cronogramaCambiado() {
-        conAcuerdo("Ana María Pérez Soto", INICIO, FIN);
-        when(cronogramas.de(persona)).thenReturn(Optional.of(cronograma("huella-nueva", false)));
-
-        assertThatThrownBy(() -> servicio.registrar(persona, new PedidoDeAceptacion(vigente.id(), INICIO, "huella-1")))
-                .isInstanceOf(IllegalStateException.class).hasMessageContaining("Tu cronograma cambió");
-
-        verify(aceptaciones, never()).registrar(any(), any(), any(), any(), any(), any());
-    }
-
-    @Test
-    @DisplayName("le quitaron el cronograma mientras leía (ahora «pagó completo»): 409")
-    void cronogramaQuitado() {
-        conAcuerdo("Ana María Pérez Soto", INICIO, FIN);
-        when(cronogramas.de(persona)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> servicio.registrar(persona, new PedidoDeAceptacion(vigente.id(), INICIO, "huella-1"))).isInstanceOf(IllegalStateException.class);
-
-        verify(aceptaciones, never()).registrar(any(), any(), any(), any(), any(), any());
-    }
-
-    @Test
-    @DisplayName("si ya lo había confirmado con esa misma huella (otro teléfono, «Mi ingreso») la constancia lo anota y no se confirma de nuevo")
-    void yaConfirmado() {
-        conAcuerdo("Ana María Pérez Soto", INICIO, FIN);
-        when(cronogramas.de(persona)).thenReturn(Optional.of(cronograma("huella-1", true)));
-
-        ResultadoDeLaAceptacion resultado = servicio.registrar(persona, new PedidoDeAceptacion(vigente.id(), INICIO, "huella-1"));
-
-        assertThat(loGuardado().cronogramaHuella()).isEqualTo("huella-1");
-        assertThat(resultado.cronograma()).isEmpty();
-    }
-
-    @Test
-    @DisplayName("el nombre de la confirmación respeta el tope de 120 letras de la spec 032")
-    void nombreLargo() {
-        conAcuerdo("Ana ".repeat(60).trim(), INICIO, FIN);
-        when(cronogramas.de(persona)).thenReturn(Optional.of(cronograma("huella-1", false)));
-
-        ResultadoDeLaAceptacion resultado = servicio.registrar(persona, new PedidoDeAceptacion(vigente.id(), INICIO, "huella-1"));
-
-        assertThat(resultado.cronograma().orElseThrow().nombre().length()).isLessThanOrEqualTo(120);
-    }
-
-    @Test
-    @DisplayName("una formación sin términos publicados no deja constancia ni confirma nada")
+    @DisplayName("una formación sin términos publicados no deja constancia")
     void sinTerminosPublicados() {
         when(terminos.vigente(Formacion.ESCUELA)).thenReturn(Optional.empty());
 
-        ResultadoDeLaAceptacion resultado = servicio.registrar(persona, new PedidoDeAceptacion(null, INICIO, "huella-1"));
+        servicio.registrar(persona, new PedidoDeAceptacion(null, INICIO));
 
-        assertThat(resultado.cronograma()).isEmpty();
         verify(aceptaciones, never()).registrar(any(), any(), any(), any(), any(), any());
     }
 }

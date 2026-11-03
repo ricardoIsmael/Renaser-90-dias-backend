@@ -1,7 +1,5 @@
 package com.renaser.os.onboarding.application.services.terminos;
 
-import com.renaser.os.onboarding.application.ports.in.pagos.CronogramaParaFirmarUseCase;
-import com.renaser.os.onboarding.application.ports.in.pagos.CronogramaParaFirmarUseCase.CronogramaParaFirmar;
 import com.renaser.os.onboarding.application.ports.in.terminos.ObtenerTerminosUseCase;
 import com.renaser.os.onboarding.application.ports.out.terminos.AceptacionesDeTerminosPort;
 import com.renaser.os.onboarding.application.ports.out.terminos.AceptacionesDeTerminosPort.Aceptacion;
@@ -36,11 +34,9 @@ class TerminosDeLaPersonaService implements ObtenerTerminosUseCase {
     private final ParticipacionProgramaFinder participaciones;
     private final FirmaDeLaAceptacion firmas;
     private final ArmadorDelAcuerdo acuerdos;
-    private final CronogramaParaFirmarUseCase cronogramas;
 
     TerminosDeLaPersonaService(TerminosPort terminos, AceptacionesDeTerminosPort aceptaciones, AlcanceDeFormacionFinder formaciones,
-                               FormacionesFinder catalogo, ParticipacionProgramaFinder participaciones, FirmaDeLaAceptacion firmas, ArmadorDelAcuerdo acuerdos,
-                               CronogramaParaFirmarUseCase cronogramas) {
+                               FormacionesFinder catalogo, ParticipacionProgramaFinder participaciones, FirmaDeLaAceptacion firmas, ArmadorDelAcuerdo acuerdos) {
         this.terminos = terminos;
         this.aceptaciones = aceptaciones;
         this.formaciones = formaciones;
@@ -48,7 +44,6 @@ class TerminosDeLaPersonaService implements ObtenerTerminosUseCase {
         this.participaciones = participaciones;
         this.firmas = firmas;
         this.acuerdos = acuerdos;
-        this.cronogramas = cronogramas;
     }
 
     @Override
@@ -61,21 +56,16 @@ class TerminosDeLaPersonaService implements ObtenerTerminosUseCase {
         Optional<String> nota = pide == QuePideLaAceptacion.NUEVA_VERSION ? ReglasDeTerminos.notaDelCambio(vigente, publicadas, ultima.orElse(0))
                 : Optional.empty();
         String nombre = catalogo.de(formacion).nombre();
-        Optional<AcuerdoDeLaPersona> acuerdo = vigente.map(v -> acuerdoDe(persona, formacion, pide));
+        Optional<AcuerdoDeLaPersona> acuerdo = vigente.map(v -> acuerdoDe(persona, formacion));
         return new TerminosParaLaPersona(formacion, nombre, vigente.map(v -> conMarcadores(v, nombre, persona)), pide, ultima, nota, acuerdo);
     }
 
     /**
-     * «Mi aceptación» (spec 039). El cronograma se ofrece para firmar SOLO en el primer ingreso —quien entra a la app aceptado con cronograma— y mientras no lo tenga ya
-     * confirmado: a quien ya estaba dentro, o vuelve a aceptar un texto nuevo, se le sigue pidiendo en «Mi ingreso» (spec 032).
+     * «Mi aceptación» (spec 039): el nombre, el programa y las fechas. El cronograma de pagos no va (D-315, decisión del dueño del 2026-11-02): es asíncrono, lo llena
+     * Administración después y la persona lo ve y lo confirma en «Mi ingreso» (spec 032), en el primer ingreso, al volver a aceptar o cuando sea.
      */
-    private AcuerdoDeLaPersona acuerdoDe(UserId persona, Formacion formacion, QuePideLaAceptacion pide) {
-        AcuerdoDeLaPersona acuerdo = acuerdos.armar(persona, formacion);
-        if (pide != QuePideLaAceptacion.PRIMERA_VEZ) {
-            return acuerdo;
-        }
-        Optional<CronogramaParaFirmar> cronograma = cronogramas.de(persona).filter(c -> !c.yaConfirmado());
-        return acuerdo.conCronograma(cronograma);
+    private AcuerdoDeLaPersona acuerdoDe(UserId persona, Formacion formacion) {
+        return acuerdos.armar(persona, formacion);
     }
 
     @Override
@@ -90,7 +80,7 @@ class TerminosDeLaPersonaService implements ObtenerTerminosUseCase {
     /** Lo que se le mostró en «Mi aceptación» al aceptar; vacío en lo aceptado antes de la spec 039. */
     private static Optional<AcuerdoAceptado> loMostrado(Aceptacion aceptacion) {
         LoMostrado mostrado = aceptacion.mostrado();
-        return mostrado.hayAlgo() ? Optional.of(new AcuerdoAceptado(mostrado.programa(), mostrado.inicio(), mostrado.fin(), mostrado.cronogramaFirmado())) : Optional.empty();
+        return mostrado.hayAlgo() ? Optional.of(new AcuerdoAceptado(mostrado.programa(), mostrado.inicio(), mostrado.fin())) : Optional.empty();
     }
 
     /** La formación de los términos de la persona: la suya (la activa, si es personal); Administración y Alquimista, que no tienen una, firman los de la Escuela. */
