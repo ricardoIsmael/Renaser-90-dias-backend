@@ -100,11 +100,12 @@ public class SecurityConfig {
             throws Exception {
         http.securityMatcher("/api/v1/**")
                 .cors(Customizer.withDefaults())
-                // Sigue deshabilitado: la sesion todavia no es el mecanismo de auth EXIGIDO en
-                // ningun endpoint (X-Actor-Id sigue siendo lo que se valida, hasta la fase 4). El
-                // esquema de CSRF para cuando la cookie sea obligatoria queda pendiente y ya
-                // documentado (docs/MODULO_AUTH.md §5.2, D-31) — no se activa a medias.
-                .csrf(csrf -> csrf.disable())
+                // CSRF solo existe cuando el navegador manda la sesion solo, en una cookie. Aca la sesion
+                // viaja en la cabecera X-Auth-Token (httpSessionIdResolver), que el navegador nunca manda
+                // por su cuenta: se exige el token CSRF solo a un pedido que trae la cookie de sesion
+                // (`SESSION`), que hoy no existe. Si algun dia la sesion pasa a cookie, ya queda protegida
+                // sin tocar nada (antes estaba apagado del todo: CodeQL java/spring-disabled-csrf-protection).
+                .csrf(csrf -> csrf.requireCsrfProtectionMatcher(SecurityConfig::traeCookieDeSesion))
                 .securityContext(ctx -> ctx.securityContextRepository(securityContextRepository))
                 .authorizeHttpRequests(auth -> auth
                         // ---------------------------------------------------------------------
@@ -335,5 +336,15 @@ public class SecurityConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/v1/**", config);
         return source;
+    }
+
+    /** ¿El pedido trae la cookie de sesion de Spring Session? Solo ese caso necesita CSRF (ver {@code apiFilterChain}). */
+    static boolean traeCookieDeSesion(jakarta.servlet.http.HttpServletRequest request) {
+        jakarta.servlet.http.Cookie[] cookies = request.getCookies();
+        if (cookies == null) return false;
+        for (jakarta.servlet.http.Cookie cookie : cookies) {
+            if ("SESSION".equals(cookie.getName())) return true;
+        }
+        return false;
     }
 }
