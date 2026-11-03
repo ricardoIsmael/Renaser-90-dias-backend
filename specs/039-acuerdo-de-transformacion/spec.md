@@ -83,7 +83,7 @@ La persona relee en Yo → Mi onboarding → Términos lo que aceptó (texto, fi
 - **FR-005** Inicio: la regla de la spec 036 (mañana en la zona de la persona) o, si ya activó, la fecha que tiene. Fin: `ultimaFechaDelPrograma` (inicio + duración − 1 + ajuste); nunca «90 días» escritos a mano.
 - **FR-006** El cronograma se ofrece para firmar **solo** si es el primer ingreso (`FIRST_TIME`), la persona tiene cronograma y no lo tiene ya confirmado con lo vigente.
 - **FR-007** Al aceptar (`POST /onboarding/milestones`, hito `TERMINOS`), el servidor guarda con la constancia lo que se mostró: programa, inicio y fin (y la huella del cronograma si lo firmó). Si el inicio que la persona vio ya no es el de ahora, 409.
-- **FR-008** Si el pedido trae la huella del cronograma, el servidor la compara con la vigente (409 si cambió) y confirma el cronograma con la confirmación de la spec 032 en la misma transacción.
+- **FR-008** Si el pedido trae la huella del cronograma, el servidor la compara con la vigente (409 si cambió) y confirma el cronograma con la confirmación de la spec 032 en la misma transacción. [sin prueba automática: ya no rige (D-315): el cronograma salió de los términos; lo que rige ahora —la firma no lo trae, no lo confirma y se ignora una huella que mande un cliente de la spec 039— lo prueban `AcuerdoDeTransformacionIT` «con cronograma y con cuotas…» y «una app de la spec 039 que todavía manda scheduleFingerprint…»]
 - **FR-009** Sin la huella (una app anterior, quien ya estaba dentro, sin cronograma) no se confirma nada.
 - **FR-010** El editor de Administración (spec 027) muestra y deja editar las 23 cláusulas, incluidos los dos párrafos de una cláusula.
 - **FR-011** Compatibilidad: todo es aditivo. Una app anterior contra el servidor nuevo lee el texto nuevo y acepta como siempre (sin bloque ni cronograma). La app nueva contra un servidor anterior no tiene `agreement`: no dibuja el bloque.
@@ -108,6 +108,6 @@ La persona relee en Yo → Mi onboarding → Términos lo que aceptó (texto, fi
 ## Success Criteria
 
 - **SC-001** El texto de cada formación coincide con el del dueño en sus 23 cláusulas y nadie ve un marcador entre corchetes ni llaves.
-- **SC-002** Con cronograma, una sola firma deja la aceptación y la confirmación; «Mi ingreso» lo refleja sin pedir nada más.
+- **SC-002** Con cronograma, una sola firma deja la aceptación y la confirmación; «Mi ingreso» lo refleja sin pedir nada más. [sin prueba automática: ya no rige (D-315): el cronograma se confirma en Yo → «Mi ingreso» (spec 032), no al firmar los términos; ver las pruebas de FR-008]
 - **SC-003** Las fechas de «Mi aceptación» y de «Tu programa empieza mañana» son las mismas.
 - **SC-004** Para 90 días, 3 meses y 1 año el fin es inicio + 89, + 89 y + 364 días.
