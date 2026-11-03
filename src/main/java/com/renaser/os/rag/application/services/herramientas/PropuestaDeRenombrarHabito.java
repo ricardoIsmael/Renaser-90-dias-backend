@@ -14,6 +14,7 @@ import com.renaser.os.rag.domain.model.herramienta.TipoParametroHerramienta;
 import com.renaser.os.rag.domain.model.renombre.MotivoDeRenombre;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
+import com.renaser.os.shared.domain.TituloEnTipoOracion;
 import com.renaser.os.shared.domain.UserId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -141,7 +142,7 @@ public class PropuestaDeRenombrarHabito implements HerramientaAgente {
             return ResultadoHerramienta.fallo("Ese motivo no lo escribio la persona. No propongas todavia: preguntale "
                     + "en una frase por que le quiere cambiar el nombre, y vuelve a llamar con sus palabras.");
         }
-        String resumen = "Cambiar el nombre de '" + ficha.get().tituloVisible() + "' a '" + pedido.nombre() + "'";
+        String resumen = "Cambiar el nombre de '" + ficha.get().tituloParaLeer() + "' a '" + pedido.nombre() + "'";
         return proponer(actorId, new InvocacionHerramienta(NOMBRE, Map.of(ARGUMENTO_HABITO_ID,
                 pedido.habitoId().toString(), ARGUMENTO_ACCION, ACCION_RENOMBRAR, ARGUMENTO_NOMBRE, pedido.nombre(),
                 ARGUMENTO_MOTIVO, pedido.motivo())), resumen);
@@ -164,7 +165,7 @@ public class PropuestaDeRenombrarHabito implements HerramientaAgente {
                     + "programa: no hay nada que devolver.");
         }
         String resumen = "Volver a llamar '" + ficha.get().tituloPersonal() + "' por su nombre del programa, '"
-                + ficha.get().tituloDelPrograma() + "'";
+                + TituloEnTipoOracion.de(ficha.get().tituloDelPrograma()) + "'";
         return proponer(actorId, new InvocacionHerramienta(NOMBRE, Map.of(ARGUMENTO_HABITO_ID, habitoId.toString(),
                 ARGUMENTO_ACCION, ACCION_ORIGINAL)), resumen);
     }

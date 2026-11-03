@@ -10,6 +10,7 @@ import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ParametroHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.TipoParametroHerramienta;
+import com.renaser.os.shared.domain.TituloEnTipoOracion;
 import com.renaser.os.shared.domain.UserId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -165,12 +166,12 @@ public class PropuestaDePausarHabito implements HerramientaAgente {
     /** Lo que ve la persona junto a los botones: el cambio exacto, en sus fechas. */
     static String resumenDe(HabitoDelPlan habito, Pedido pedido) {
         if (!pedido.pausar()) {
-            return "Reactivar '" + habito.titulo() + "' en tu plan";
+            return "Reactivar '" + TituloEnTipoOracion.de(habito.titulo()) + "' en tu plan";
         }
         if (habito.pausadoHoy()) {
-            return "Cambiar la pausa de '" + habito.titulo() + "': ahora " + finDe(pedido.hasta());
+            return "Cambiar la pausa de '" + TituloEnTipoOracion.de(habito.titulo()) + "': ahora " + finDe(pedido.hasta());
         }
-        return "Pausar '" + habito.titulo() + "' desde hoy " + finDe(pedido.hasta())
+        return "Pausar '" + TituloEnTipoOracion.de(habito.titulo()) + "' desde hoy " + finDe(pedido.hasta())
                 + " (si hoy lo tenias pendiente, sale de tu dia)";
     }
 

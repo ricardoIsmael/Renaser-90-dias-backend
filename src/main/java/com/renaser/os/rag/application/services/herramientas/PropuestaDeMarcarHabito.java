@@ -7,6 +7,7 @@ import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPo
 import com.renaser.os.rag.domain.model.herramienta.CatalogoHerramientasAgente;
 import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta;
+import com.renaser.os.shared.domain.TituloEnTipoOracion;
 import com.renaser.os.shared.domain.UserId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -96,7 +97,7 @@ public class PropuestaDeMarcarHabito {
 
     /** Lo que ve la persona junto a los botones. */
     static String resumenDe(HabitoDelDia habito) {
-        return "Marcar '" + habito.titulo() + "' como hecho (+" + habito.puntosEnJuego()
+        return "Marcar '" + TituloEnTipoOracion.de(habito.titulo()) + "' como hecho (+" + habito.puntosEnJuego()
                 + " puntos si lo confirmas ahora)";
     }
 

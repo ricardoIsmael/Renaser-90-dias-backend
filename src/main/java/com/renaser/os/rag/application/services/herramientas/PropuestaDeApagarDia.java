@@ -9,6 +9,7 @@ import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ParametroHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.TipoParametroHerramienta;
+import com.renaser.os.shared.domain.TituloEnTipoOracion;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -122,9 +123,9 @@ public class PropuestaDeApagarDia implements HerramientaAgente {
     static String resumenDe(DiaPedido pedido, HorarioDeHabito habito, boolean esHoy) {
         String dia = (esHoy ? "hoy, " : "el ") + ArgumentosDeHorario.texto(pedido.fecha());
         if (pedido.apagar()) {
-            return "Apagar '" + habito.titulo() + "' solo " + dia + ": ese dia no se le va a pedir.";
+            return "Apagar '" + TituloEnTipoOracion.de(habito.titulo()) + "' solo " + dia + ": ese dia no se le va a pedir.";
         }
-        return "Volver a activar '" + habito.titulo() + "' " + dia + ", con su horario de ese dia.";
+        return "Volver a activar '" + TituloEnTipoOracion.de(habito.titulo()) + "' " + dia + ", con su horario de ese dia.";
     }
 
     /** Los argumentos ya leidos, y su forma canonica: la que se guarda y se ejecuta al confirmar. */

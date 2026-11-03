@@ -1,5 +1,7 @@
 package com.renaser.os.notifications.domain.model.habito;
 
+import com.renaser.os.shared.domain.TituloEnTipoOracion;
+
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -58,9 +60,12 @@ public record AvisoDeHabito(String tipoAviso, String tituloHabito, long minutosQ
     /**
      * Los puntos en juego van en el texto por pedido explicito del dueno («al mencionar un habito, decir
      * cuantos puntos se ganan o se pierden»). El numero lo calcula `habits` y este modulo no lo recalcula.
+     *
+     * <p><b>El titulo se lee en tipo oracion (issue #71).</b> El catalogo lo trae casi siempre en MAYUSCULAS («ULTIMA COMIDA DEL DIA»); en el push y en
+     * la bandeja se lee «Ultima comida del dia», como en la app ({@link TituloEnTipoOracion}). El evento y la etiqueta siguen con el titulo tal cual.
      */
     public String cuerpo() {
-        return tituloHabito + cuando() + ". En juego: " + puntosEnJuego + " puntos.";
+        return TituloEnTipoOracion.de(tituloHabito) + cuando() + ". En juego: " + puntosEnJuego + " puntos.";
     }
 
     /**

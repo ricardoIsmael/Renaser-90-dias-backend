@@ -43,6 +43,32 @@ class AvisoDeHabitoTest {
         assertThat(porVencer(A_LAS_22_30_EN_LIMA, LIMA).titulo()).isEqualTo("Se te vence un hábito");
     }
 
+    // ─── El título se lee en tipo oración (issue #71) ──────────────────────────────────────
+
+    @Test
+    @DisplayName("issue #71: el título del catálogo en MAYÚSCULAS se lee en tipo oración, en el inicio y en el vencimiento")
+    void elTituloEnMayusculasSeLeeEnTipoOracion() {
+        var inicio = new AvisoDeHabito("INICIO", "ÚLTIMA COMIDA DEL DÍA", 10, 8, HABITO, EMITIDO, A_LAS_21_EN_LIMA, LIMA, null);
+        var vence = new AvisoDeHabito("POR_VENCER", "RITUAL TIERRA - AGUA - FUEGO (noche)", 25, 8, HABITO, EMITIDO, A_LAS_22_30_EN_LIMA, LIMA, null);
+
+        assertThat(inicio.cuerpo()).isEqualTo("Última comida del día: te toca a las 21:00. En juego: 8 puntos.");
+        assertThat(vence.cuerpo()).isEqualTo("Ritual tierra - agua - fuego (noche) vence a las 22:30. En juego: 8 puntos.");
+        // Los eventos viejos del outbox (sin momento) dicen minutos: el título también va en tipo oración.
+        assertThat(new AvisoDeHabito("POR_VENCER", "ÚLTIMA COMIDA DEL DÍA", 25, 8, HABITO, EMITIDO, null, null, null).cuerpo())
+                .isEqualTo("Última comida del día vence en 25 min. En juego: 8 puntos.");
+        // La etiqueta no depende del título: el aviso del teléfono y el del servidor siguen reemplazándose entre sí.
+        assertThat(vence.etiqueta()).isEqualTo("habito-" + HABITO + "-por-vencer");
+    }
+
+    @Test
+    @DisplayName("issue #71: un título con minúsculas (Clase diaria, el que la persona puso) y las siglas se dejan como están")
+    void unTituloConMinusculasNoCambia() {
+        assertThat(new AvisoDeHabito("INICIO", "Clase diaria", 10, 8, HABITO, EMITIDO, A_LAS_21_EN_LIMA, LIMA, null).cuerpo())
+                .startsWith("Clase diaria: te toca");
+        assertThat(new AvisoDeHabito("INICIO", "HABLAR CON SER", 10, 8, HABITO, EMITIDO, A_LAS_21_EN_LIMA, LIMA, null).cuerpo())
+                .startsWith("Hablar con SER: te toca");
+    }
+
     // ─── La hora del habito, en la zona del programa (FR-012) ──────────────────────────────
 
     @Test

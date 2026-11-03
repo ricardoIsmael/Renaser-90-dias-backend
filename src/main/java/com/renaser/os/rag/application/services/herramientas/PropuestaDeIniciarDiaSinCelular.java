@@ -10,6 +10,7 @@ import com.renaser.os.rag.domain.model.herramienta.ParametroHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.TipoParametroHerramienta;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.TituloEnTipoOracion;
 import com.renaser.os.shared.domain.UserId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -84,7 +85,7 @@ public class PropuestaDeIniciarDiaSinCelular implements HerramientaAgente {
         if (impedimento.isPresent()) {
             return ResultadoHerramienta.fallo(impedimento.get());
         }
-        String resumen = "Empezar ahora tu '" + dia.titulo() + "' con meta de " + horas + " horas";
+        String resumen = "Empezar ahora tu '" + TituloEnTipoOracion.de(dia.titulo()) + "' con meta de " + horas + " horas";
         PropuestaCreada creada;
         try {
             creada = proponerAccion.proponer(actorId, new InvocacionHerramienta(NOMBRE, Map.of(ARGUMENTO_REGISTRO_ID,
