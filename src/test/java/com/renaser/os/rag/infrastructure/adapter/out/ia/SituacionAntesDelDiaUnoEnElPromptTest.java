@@ -1,6 +1,8 @@
 package com.renaser.os.rag.infrastructure.adapter.out.ia;
 
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz;
+import com.renaser.os.rag.domain.model.mapa.MapaDeLaPersona;
+import com.renaser.os.rag.domain.model.mapa.ResumenDelMapa;
 import com.renaser.os.shared.domain.Formacion;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -93,5 +95,57 @@ class SituacionAntesDelDiaUnoEnElPromptTest {
     void desdeElDiaUnoNoCambia() {
         assertThat(GoogleGenAiRenasiaChatAdapter.formatearSituacion(new SituacionDelAprendiz(1, 1, MANANA).conDiaUno(MANANA)))
                 .contains("su dia 1 de 90, en la fase 1 de 4").doesNotContain("empieza");
+    }
+
+    private static SituacionDelAprendiz sinObjetivosEnElDiaCero(Formacion formacion, int dias) {
+        return diaCero(formacion, dias, MANANA).conMapa(ResumenDelMapa.de(MapaDeLaPersona.sinMapa(), 0).conRocasMaestras(false));
+    }
+
+    /**
+     * Issue #63: en el E2E del 02/11 la Escuela contestaba «tus objetivos de 90 dias estan pendientes» a «Armemos mi plan» sin decir que su programa empieza manana, y el
+     * Diplomado si lo decia. No hay ninguna rama por formacion en este camino: la linea de los objetivos mandaba a Plan «antes de preguntarle nada» y en la Escuela no habia
+     * nada mas (solo el Diplomado, de 3 meses o 1 año, lleva ademas la linea del nombre de su objetivo grande). Ahora esa linea, en el dia 0, manda decir PRIMERO cuando empieza.
+     */
+    // issue #63
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("formaciones")
+    @DisplayName("issue #63: en el dia 0 sin objetivos, la linea de objetivos manda decir primero cuando empieza el programa, igual en las tres formaciones")
+    void sinObjetivosEnElDiaCeroDicePrimeroCuandoEmpieza(String nombre, Formacion formacion, int dias, String plazo) {
+        String situacion = GoogleGenAiRenasiaChatAdapter.formatearSituacion(sinObjetivosEnElDiaCero(formacion, dias));
+
+        assertThat(situacion).as(nombre).contains("Su programa de " + plazo + " empieza manana (martes 3 de noviembre).")
+                .contains("Objetivos de " + plazo + ": todavia no los tiene escritos ni confirmados")
+                .contains("dile PRIMERO cuando empieza su programa (la fecha de arriba; nunca contestes solo que sus objetivos estan pendientes) y despues eso, "
+                        + "e invitala a abrir la pestana Plan")
+                .contains("no se puede planificar NINGUN objetivo").contains("Tu no puedes escribirlos ni confirmarlos");
+        // La fecha de inicio viene ANTES de la linea que la manda decir, y no se habla de dia ni de fase.
+        assertThat(situacion.indexOf("empieza manana")).isLessThan(situacion.indexOf("Objetivos de"));
+        assertThat(situacion).doesNotContain("su dia 0").doesNotContain("en la fase");
+    }
+
+    // issue #63
+    @Test
+    @DisplayName("issue #63: la Escuela y el Diplomado reciben la misma regla del dia 0 (solo cambia el plazo)")
+    void laEscuelaDiceLoMismoQueElDiplomado() {
+        String escuela = GoogleGenAiRenasiaChatAdapter.formatearSituacion(sinObjetivosEnElDiaCero(Formacion.ESCUELA, 90));
+        String diplomado = GoogleGenAiRenasiaChatAdapter.formatearSituacion(sinObjetivosEnElDiaCero(Formacion.DIPLOMADO, 365));
+
+        String objetivosDeLaEscuela = escuela.lines().filter(l -> l.startsWith("Objetivos de ")).findFirst().orElseThrow();
+        String objetivosDelDiplomado = diplomado.lines().filter(l -> l.startsWith("Objetivos de ")).findFirst().orElseThrow();
+        assertThat(objetivosDeLaEscuela.replace("90 días", "PLAZO")).isEqualTo(objetivosDelDiplomado.replace("1 año", "PLAZO"));
+        assertThat(escuela).contains("dile PRIMERO cuando empieza su programa");
+        assertThat(diplomado).contains("dile PRIMERO cuando empieza su programa");
+    }
+
+    // issue #63
+    @Test
+    @DisplayName("issue #63: desde el dia 1 la linea de objetivos sin escribir es la de siempre, sin la regla del dia 0")
+    void desdeElDiaUnoLaLineaDeObjetivosNoCambia() {
+        SituacionDelAprendiz dia5 = new SituacionDelAprendiz(5, 1, MANANA).conDiaUno(HOY)
+                .conMapa(ResumenDelMapa.de(MapaDeLaPersona.sinMapa(), 5).conRocasMaestras(false));
+
+        assertThat(GoogleGenAiRenasiaChatAdapter.formatearSituacion(dia5)).contains(MapaEnElPrompt.SIN_OBJETIVOS).doesNotContain("PRIMERO");
+        assertThat(MapaEnElPrompt.sinObjetivos("90 días")).isEqualTo(MapaEnElPrompt.sinObjetivos("90 días", false))
+                .contains("antes de preguntarle nada dile eso e invitala a abrir la pestana Plan");
     }
 }

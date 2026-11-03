@@ -36,6 +36,13 @@ public class CompuertaParaProponer {
     /** El aviso con el plazo de siempre (90 días); cada persona recibe el suyo con {@link #sinObjetivos(String)}. */
     static final String SIN_OBJETIVOS = sinObjetivos("90 días");
 
+    /**
+     * Issue #63: antes de que empiece su programa (dia 0), el motivo por el que no se puede armar el plan es PRIMERO que su programa todavia no empieza. Sin esto
+     * el modelo repetia solo «tus objetivos de 90 dias estan pendientes» (la Escuela) y no decia cuando empieza. Vale igual para las tres formaciones.
+     */
+    static final String PROGRAMA_POR_EMPEZAR = " Su programa todavía no empieza (es el día 0): antes de lo de los objetivos, dile cuándo empieza (la fecha "
+            + "está en «Donde esta la persona ahora mismo»); no contestes solo que sus objetivos están pendientes.";
+
     /** «Sus tres objetivos de 90 días» (o «de 3 meses», «de 1 año»): el plazo es el del programa de ESA persona. */
     static String sinObjetivos(String plazoDelObjetivo) {
         return SIN_PROPUESTA + "todavía no tiene escritos sus tres objetivos de " + plazoDelObjetivo + ", y sin ellos no se "
@@ -72,11 +79,21 @@ public class CompuertaParaProponer {
         }
     }
 
+    /** Su programa todavia no tiene dia (dia 0). Best-effort: sin lectura de la situacion, {@code false} y el texto sale como antes. */
+    private boolean programaPorEmpezar(UserId actorId) {
+        try {
+            return situacion.de(actorId).map(SituacionDelAprendiz::programaPorEmpezar).orElse(false);
+        } catch (RuntimeException falla) {
+            log.info("[rag] la propuesta sale sin saber si su programa ya empezó: {}", falla.toString());
+            return false;
+        }
+    }
+
     /** Para el plan de la semana y los cambios a sus objetivos: solo hace falta la llave (las Rocas Maestras). */
     public Optional<String> bloqueoDeObjetivos(UserId actorId) {
         try {
             return compuertaPort.rocasMaestrasCompletas(actorId) ? Optional.empty()
-                    : Optional.of(sinObjetivos(PlazoDelObjetivoDeLaPersona.de(situacion, actorId)));
+                    : Optional.of(sinObjetivos(PlazoDelObjetivoDeLaPersona.de(situacion, actorId)) + (programaPorEmpezar(actorId) ? PROGRAMA_POR_EMPEZAR : ""));
         } catch (RuntimeException falla) {
             log.info("[rag] la propuesta sale sin consultar la compuerta de rocas: {}", falla.toString());
             return Optional.empty();

@@ -15982,3 +15982,13 @@ De las 78 tablas que compara la prueba, solo esa. A «la otra persona» no se le
 **Solución.** `V164`: llave en `ON DELETE CASCADE` y las descripciones actualizadas solo si siguen siendo las originales (comparación exacta; no pisa lo que el dueño editó en el panel). Ver D-314.
 
 **Cómo evitar que vuelva a pasar.** Cuando una regla de producto cambia cómo se registra un hábito, se busca también la `descripcion` del catálogo (SER la entrega tal cual) y no solo la lógica y el prompt. `DescripcionesDeHabitosParaSerIT` fija el texto y que la migración sea condicional e idempotente; `PgVectorNativoAdapterTest` fija que borrar la lección o el curso borra su transcripción. **Pendiente de producción:** los fragmentos que ya hayan quedado con `leccion_id IS NULL` por un borrado anterior no se pueden distinguir del material general cargado a propósito; se revisan con el bloque 1 de la consulta de solo lectura del informe antes de desplegar.
+
+## E-663 · A «Armemos mi plan» en el día 0 de la Escuela, SER decía «tus objetivos de 90 días están pendientes» y no que su programa empieza mañana (backend, issue #63, 02/11)
+
+**Síntoma literal** (E2E del 02/11, mensajes de SER en la base local): «Todavía no puedes planificar tu día porque tus objetivos de 90 días están pendientes. Entra a la pestaña Plan para escribirlos o confirmar los de tu diagnóstico…». El Diplomado, en la misma situación, contestaba «Tu programa de 1 año empieza mañana, martes 3 de noviembre.». Ambas cuentas estaban activadas, en el día 0, sin objetivos escritos.
+
+**Causa real.** No hay una rama por formación: las dos recibían «Su programa de … empieza mañana (…)» y después la misma línea de «sin objetivos» (`MapaEnElPrompt.sinObjetivos`), que ordena «si pide planificar su día o sus objetivos, antes de preguntarle nada dile eso e invítala a abrir la pestaña Plan». En la Escuela era lo último y más directivo del bloque (el nombre del objetivo grande solo se agrega fuera de los 90 días); el modelo repetía eso y omitía el inicio. La línea de objetivos se escribió para quien ya está en curso y no conocía el día 0 de la spec 036.
+
+**Solución.** Con el programa por empezar, la línea de objetivos y el motivo de la herramienta mandan decir primero cuándo empieza el programa (las tres formaciones por igual); regla equivalente en el prompt. Ver D-315.
+
+**Cómo evitar que vuelva a pasar.** Cada texto de SER que dé una orden «antes de todo» se revisa también contra el día 0 (`SituacionAntesDelDiaUnoEnElPromptTest` cubre las cuatro formaciones y compara el texto de la Escuela con el del Diplomado). Lo que el modelo diga de verdad solo se confirma con el chat real: la prueba fija el texto que recibe, no su respuesta.

@@ -1,5 +1,7 @@
 package com.renaser.os.rag.domain.model.aviso;
 
+import com.renaser.os.shared.domain.TituloEnTipoOracion;
+
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
@@ -19,6 +21,10 @@ import java.util.Set;
  * tipos pasan y la redaccion quedaron <b>por decidir</b> en §5.1. Mismo criterio que
  * {@code MensajeDeApoyo}: una plantilla vacia apaga ese tipo, en vez de mostrar un texto que nadie
  * aprobo.
+ *
+ * <p><b>El título se muestra en tipo oración (issue #63).</b> {@code {habito}} lleva el título del catálogo, que casi siempre llega en MAYÚSCULAS
+ * («ÚLTIMA COMIDA DEL DÍA»); en el panel de SER se lee «Última comida del día», como en la app ({@link TituloEnTipoOracion}: solo si llega todo en
+ * mayúsculas, lo de entre paréntesis no cuenta y SER, IA y TV se quedan como siglas). El evento y el push de respaldo siguen con el título tal cual.
  *
  * <p>Marcadores reconocidos: {@code {habito}}, {@code {hora}} (HH:mm en la zona del aprendiz),
  * {@code {puntos}} y {@code {minutos}}. Uno que la plantilla no use simplemente no aparece; uno
@@ -58,7 +64,7 @@ public record AvisosEnChat(boolean activo, Set<String> tipos, Map<String, String
                 .replace("{hora}", HORA.format(datos.hora()))
                 .replace("{puntos}", String.valueOf(datos.puntos()))
                 .replace("{minutos}", String.valueOf(datos.minutos()))
-                .replace("{habito}", datos.habito())
+                .replace("{habito}", TituloEnTipoOracion.de(datos.habito()))
                 .strip());
     }
 
