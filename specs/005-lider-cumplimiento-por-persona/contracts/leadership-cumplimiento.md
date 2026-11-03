@@ -135,6 +135,11 @@ Es la misma forma que `TablaDelSemaforoResponse` (contrato del semáforo §4.3),
   propio programa en el grupo; va con su `etiqueta`. `porcentaje` es de la semana, 1 decimal, null si ningún día se midió.
 - `mentor` es `null` en un grupo sin mentor vigente y cuando la persona **es** el mentor del grupo: ahí la app esconde
   «Avisar a su mentor».
+
+> **Ampliado 2026-11-03 (D-318, issue #74).** Quien lleva su propio programa (un mentor o una guía de aprendiz que ya lo activó) llega con
+> sus **siete días de verdad** —hábitos, evidencias, `respuestaTexto`, acciones—, igual que un aprendiz; solo `color` es `NO_SE_MIDE`. Esto
+> ya valía por esta ruta para el mentor **de ese grupo**; desde D-318 también por `GET /leadership/people/{id}/week` (sin grupo; `grupoId`
+> y `mentor` en `null`) y por la ficha del mentor, que dice `haceSuPrograma`. Ver `specs/021-lider-ve-a-todos/spec.md`.
 - `obligaciones[]` tiene la forma de `…/weekly-progress` (§8) más `respuestaTexto`, `evidencias[]` y `publicacionId`.
   `evidencias[].tipo`: `FOTO`, `VIDEO`, `AUDIO`, `TEXTO`, `CAPTURA`. Cada una se abre con §3.
 - **Efecto**: registra una `ConsultaDeFicha` por llamada, con el rol de quien consulta. El cambio de semana es otra

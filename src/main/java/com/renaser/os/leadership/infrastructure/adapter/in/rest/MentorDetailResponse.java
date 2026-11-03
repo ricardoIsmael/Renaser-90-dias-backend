@@ -11,16 +11,20 @@ import java.util.List;
  * {@code GET /api/v1/leadership/mentors/{id}}: la ficha de un mentor.
  *
  * @param profile null si todavía no tiene perfil de mentor
+ * @param haceSuPrograma D-318: true si el mentor o la guía lleva su propio programa y ya lo activó, así que
+ *                     {@code GET /leadership/people/{id}/week} le abre sus días y evidencias. Aditivo: una app anterior lo
+ *                     ignora
  */
 public record MentorDetailResponse(MentorIndicatorsResponse mentor, boolean accountActive, ProfileResponse profile,
                                    String month, String timezone, Instant cutoffAt, LocalDate semaforoFrom,
-                                   LocalDate semaforoTo, List<ObservationResponse> recentObservations) {
+                                   LocalDate semaforoTo, List<ObservationResponse> recentObservations,
+                                   boolean haceSuPrograma) {
 
     static MentorDetailResponse from(FichaDeMentor ficha) {
         return new MentorDetailResponse(MentorIndicatorsResponse.from(ficha.indicadores(), true), ficha.cuentaActiva(),
                 ProfileResponse.from(ficha.perfil()), ficha.mes(), ficha.zona(), ficha.corteEn(),
                 ficha.semaforoDesde(), ficha.semaforoHasta(),
-                ficha.ultimasObservaciones().stream().map(ObservationResponse::from).toList());
+                ficha.ultimasObservaciones().stream().map(ObservationResponse::from).toList(), ficha.haceSuPrograma());
     }
 
     /**

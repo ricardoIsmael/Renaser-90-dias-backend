@@ -97,7 +97,8 @@ class PersonasDelGrupo {
     /**
      * Una persona del grupo con su perfil y su programa: lo que la ficha necesita para pedir su semana.
      *
-     * @param acompanante true si es quien acompaña el grupo (su mentor o su guía) y lleva su propio programa: sin color
+     * @param acompanante true si es quien acompaña el grupo (su mentor o su guía) y lleva su propio programa, o un mentor o
+     *                    guía al que el líder abre sin grupo (D-318): sin color, pero con sus días de verdad
      */
     record Miembro(UserSummary perfil, ParticipacionPrograma participacion, boolean acompanante) {
     }

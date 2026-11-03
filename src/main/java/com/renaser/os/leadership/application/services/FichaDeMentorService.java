@@ -15,6 +15,10 @@ import java.util.List;
 /**
  * La ficha de un mentor (SDD 002, RL-06/RL-07/RL-08; D-241): lo mismo que su fila del padrón, su perfil
  * y lo último que el líder le dijo. Ningún aprendiz con nombre.
+ *
+ * <p>D-318: dice además si el mentor hace su propio programa ({@code haceSuPrograma}), para que la app ofrezca abrir sus
+ * días y evidencias. La respuesta sale de la misma regla que los abre ({@link PersonasDelPrograma#sePuedenVerSusDias}),
+ * así que la fila nunca aparece para llevar a un 404.
  */
 @Service
 public class FichaDeMentorService implements ConsultarFichaDeMentorUseCase {
@@ -24,13 +28,15 @@ public class FichaDeMentorService implements ConsultarFichaDeMentorUseCase {
     private final AccesoDeLiderazgo acceso;
     private final IndicadoresDeMentores indicadores;
     private final LeerObservacionesPort observaciones;
+    private final PersonasDelPrograma programa;
     private final Clock clock;
 
     FichaDeMentorService(AccesoDeLiderazgo acceso, IndicadoresDeMentores indicadores,
-                         LeerObservacionesPort observaciones, Clock clock) {
+                         LeerObservacionesPort observaciones, PersonasDelPrograma programa, Clock clock) {
         this.acceso = acceso;
         this.indicadores = indicadores;
         this.observaciones = observaciones;
+        this.programa = programa;
         this.clock = clock;
     }
 
@@ -44,6 +50,7 @@ public class FichaDeMentorService implements ConsultarFichaDeMentorUseCase {
         return new FichaDeMentor(lectura.indicadores().getFirst(), mentor.estado() == UserStatus.ACTIVE,
                 mentor.perfil(), mes.mes().toString(), mes.zona().getId(), mes.corte(),
                 medicion == null ? null : medicion.desde(), medicion == null ? null : medicion.hasta(),
-                observaciones.deMentor(mentorId, null, ULTIMAS_OBSERVACIONES));
+                observaciones.deMentor(mentorId, null, ULTIMAS_OBSERVACIONES),
+                programa.sePuedenVerSusDias(actorId, mentorId, clock.now()));
     }
 }

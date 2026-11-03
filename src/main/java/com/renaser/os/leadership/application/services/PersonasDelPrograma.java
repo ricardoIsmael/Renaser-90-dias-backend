@@ -36,9 +36,14 @@ import java.util.UUID;
  * cuenta activa que está en el programa y no es una cuenta de prueba. Es el mismo criterio de «se muestra» de
  * {@link PersonasDelGrupo} (spec 005, FR-002 y SC-006), pero sin exigir que la persona esté en un grupo con mentor.
  *
- * <p>Una persona que no existe, que no es aprendiz, que está suspendida o es de prueba es 404, y la respuesta no
- * distingue cuál: el id de una cuenta que no se muestra no se confirma. Va DESPUÉS del guard de rol, como en el grupo
- * (RL-08). Todo entra por APIs públicas.
+ * <p><b>También el mentor y la guía de aprendiz con programa propio</b> (D-318, pedido del dueño del 2026-11-03): para
+ * abrir {@link #mirar} su semana, su Radar, sus huecos y sus cierres, pero SOLO si ya activó su programa (eligió su
+ * Día 1). Se miran sin grupo —no son aprendices de ninguno— y sin «mentor a quien avisar»: ellos son el mentor. No
+ * entran a {@link #listar} ni a {@link #alumnos}: la lista sigue siendo de aprendices.
+ *
+ * <p>Una persona que no existe, que no es aprendiz ni mentor o guía con su programa activado, que está suspendida o
+ * es de prueba es 404, y la respuesta no distingue cuál: el id de una cuenta que no se muestra no se confirma. Va
+ * DESPUÉS del guard de rol, como en el grupo (RL-08). Todo entra por APIs públicas.
  */
 @Component
 class PersonasDelPrograma {
@@ -58,13 +63,28 @@ class PersonasDelPrograma {
         this.pruebas = pruebas;
     }
 
-    /** La persona y el grupo con que se la mira; 404 si no es un aprendiz del programa que se muestre. */
+    /**
+     * La persona y el grupo con que se la mira; 404 si no es un aprendiz del programa que se muestre, ni un mentor o una
+     * guía de aprendiz que ya activó el suyo (D-318).
+     */
     Mirada mirar(UserId actor, UserId personaId, Instant ahora) {
         UserSummary perfil = usuarios.findById(personaId).filter(this::seMuestra).orElseThrow(PersonasDelPrograma::noEncontrada);
+        boolean acompanante = UserRole.ROLES_QUE_ACTUAN_COMO_MENTOR.contains(perfil.role());
+        if (!acompanante && perfil.role() != UserRole.TRAINEE) {
+            throw noEncontrada();
+        }
         ParticipacionPrograma participacion = participaciones.deParticipante(personaId)
-                .filter(ParticipacionPrograma::inscrito).orElseThrow(PersonasDelPrograma::noEncontrada);
+                .filter(ParticipacionPrograma::inscrito)
+                // Al aprendiz se lo ve aunque no haya elegido su Día 1 (sale «sin datos»); al mentor, solo con su programa activado.
+                .filter(programa -> !acompanante || programa.activado())
+                .orElseThrow(PersonasDelPrograma::noEncontrada);
         // Spec 022: una persona de otra formación se responde como si no existiera (404).
         formaciones.exigirQueLaVea(actor, participacion.formacion());
+        if (acompanante) {
+            // No es aprendiz de ningún grupo: sin grupo no hay «mentor a quien avisar» (él es el mentor), y la consulta
+            // se registra con el grupo y el mentor en NULL, como la de quien no tiene grupo (V124).
+            return new Mirada(new Miembro(perfil, participacion, true), null);
+        }
         GrupoDeLaPersona grupo = GrupoDeLaPersona.elegir(gruposDe(Set.of(personaId), ahora).getOrDefault(personaId, List.of()),
                 participacion.celulaId()).orElse(null);
         return new Mirada(new Miembro(perfil, participacion, false), grupo);
@@ -164,8 +184,22 @@ class PersonasDelPrograma {
         return porPersona;
     }
 
+    /**
+     * ¿Se le pueden ver los días a este mentor o guía de aprendiz? Exactamente la regla de {@link #mirar}, sin lanzar: la
+     * ficha del mentor la usa para ofrecer «Sus días y evidencias» solo cuando el servidor los va a abrir.
+     */
+    boolean sePuedenVerSusDias(UserId actor, UserId personaId, Instant ahora) {
+        try {
+            mirar(actor, personaId, ahora);
+            return true;
+        } catch (NoSuchElementException e) {
+            return false;
+        }
+    }
+
+    /** Cuenta activa y que no sea de prueba; el rol se decide aparte, en {@link #mirar}. */
     private boolean seMuestra(UserSummary perfil) {
-        return perfil.role() == UserRole.TRAINEE && perfil.status().allowsAccess() && !pruebas.esDePrueba(perfil.id());
+        return perfil.status().allowsAccess() && !pruebas.esDePrueba(perfil.id());
     }
 
     /** Un alumno que se muestra y el grupo con que se lo mira; {@code grupo} es null si no está en ninguno (spec 029). */

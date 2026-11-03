@@ -58,6 +58,44 @@ class FichaYObservacionesServiceTest {
     }
 
     @Test
+    @DisplayName("D-318: la ficha dice si el mentor hace su programa; solo con el programa activado, y lo mismo para una guia")
+    void fichaDiceSiHaceSuPrograma() {
+        assertThat(banco.ficha().ficha(LIDER, LUISA).haceSuPrograma()).as("sin fila de programa").isFalse();
+
+        banco.programaPropio(LUISA, UserRole.MENTOR, false);
+        assertThat(banco.ficha().ficha(LIDER, LUISA).haceSuPrograma()).as("eligio ningun Dia 1").isFalse();
+
+        banco.programaPropio(LUISA, UserRole.MENTOR, true);
+        assertThat(banco.ficha().ficha(LIDER, LUISA).haceSuPrograma()).isTrue();
+
+        UserId guia = UserId.of(UUID.randomUUID());
+        banco.usuario(guia, "Gabriela Guia", UserRole.TRAINEE_GUIDE, UserStatus.ACTIVE);
+        banco.programaPropio(guia, UserRole.TRAINEE_GUIDE, true);
+        assertThat(banco.ficha().ficha(LIDER, guia).haceSuPrograma()).isTrue();
+    }
+
+    @Test
+    @DisplayName("D-318: un mentor de prueba no ofrece sus dias aunque tenga programa; la ficha igual se abre")
+    void fichaNoOfreceDiasDeUnaCuentaDePrueba() {
+        banco.programaPropio(LUISA, UserRole.MENTOR, true);
+        banco.cuentaDePrueba(LUISA);
+
+        assertThat(banco.ficha().ficha(LIDER, LUISA).haceSuPrograma()).isFalse();
+    }
+
+    @Test
+    @DisplayName("D-318: un mentor suspendido no ofrece sus dias aunque tenga programa; la ficha igual se abre")
+    void fichaNoOfreceDiasDeUnaCuentaSuspendida() {
+        banco.programaPropio(LUISA, UserRole.MENTOR, true);
+        banco.usuario(LUISA, "Luisa Rojas", UserRole.MENTOR, UserStatus.SUSPENDED);
+
+        FichaDeMentor suspendida = banco.ficha().ficha(LIDER, LUISA);
+
+        assertThat(suspendida.cuentaActiva()).isFalse();
+        assertThat(suspendida.haceSuPrograma()).isFalse();
+    }
+
+    @Test
     @DisplayName("RL-08: un id que no es de un mentor (un aprendiz, uno que no existe) es 404, no una ficha vacia")
     void fichaDeNoMentor() {
         assertThatThrownBy(() -> banco.ficha().ficha(LIDER, ANA)).isInstanceOf(NoSuchElementException.class);

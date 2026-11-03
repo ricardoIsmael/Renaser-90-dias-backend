@@ -260,6 +260,68 @@ class PersonasDelProgramaControllerTest {
         });
     }
 
+    // ── D-318: el mentor y la guía con programa propio ──────────────────────
+
+    @Test
+    @DisplayName("D-318 week: la mentora con su programa activado se abre sin grupo, con rol, «NO_SE_MIDE», sus 7 días y sin a quién avisar; deja su consulta con el grupo en null")
+    void semanaDeLaMentora() throws Exception {
+        banco.programa(MENTORA, UserRole.MENTOR, java.time.LocalDate.of(2026, 9, 1), true);
+        banco.vigente(MENTORA, ventanaPareja(DESDE_VIGENTE, false, 85));
+
+        pedir(de(MENTORA, "week"), LIDER)
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", containsString("no-store")))
+                .andExpect(jsonPath("$.personaId").value(MENTORA.toString()))
+                .andExpect(jsonPath("$.rol").value("MENTOR"))
+                .andExpect(jsonPath("$.color").value("NO_SE_MIDE"))
+                .andExpect(jsonPath("$.etiqueta").value("No se mide en el semáforo"))
+                .andExpect(jsonPath("$.porcentaje").value(85.0))
+                .andExpect(jsonPath("$.grupoId").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.mentor").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.puedeAvisarAlMentor").value(false))
+                .andExpect(jsonPath("$.dias.length()").value(7));
+        assertThat(banco.consultas).singleElement().satisfies(c -> {
+            assertThat(c.personaId()).isEqualTo(MENTORA);
+            assertThat(c.grupoId()).isNull();
+            assertThat(c.mentorId()).isNull();
+        });
+    }
+
+    @Test
+    @DisplayName("D-318: la guía de aprendiz con su programa activado también; sin él, 404 en las cuatro rutas")
+    void laGuiaSeAbreSoloConSuPrograma() throws Exception {
+        for (String ruta : rutasDeUnaPersona(GUIA)) {
+            pedir(ruta, LIDER).andExpect(status().isNotFound());
+        }
+        banco.programa(GUIA, UserRole.TRAINEE_GUIDE, java.time.LocalDate.of(2026, 9, 1), false);
+        for (String ruta : rutasDeUnaPersona(GUIA)) {
+            pedir(ruta, LIDER).andExpect(status().isNotFound());
+        }
+        assertThat(banco.consultas).isEmpty();
+
+        banco.programa(GUIA, UserRole.TRAINEE_GUIDE, java.time.LocalDate.of(2026, 9, 1), true);
+        banco.vigente(GUIA, ventanaPareja(DESDE_VIGENTE, false, 60));
+        pedir(de(GUIA, "week"), ADMIN).andExpect(status().isOk()).andExpect(jsonPath("$.rol").value("TRAINEE_GUIDE"));
+        pedir(de(GUIA, "radar"), LIDER).andExpect(status().isOk());
+        pedir(de(GUIA, "huecos"), LIDER).andExpect(status().isOk());
+        pedir(de(GUIA, "cierres"), ALQUIMISTA).andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("D-318: un MENTOR o una guía que pide los días de otro mentor recibe 403 en las cuatro rutas, aunque ese mentor tenga programa; no se lee ni registra nada")
+    void unMentorNoVeLosDiasDeOtroMentor() throws Exception {
+        banco.programa(MENTORA, UserRole.MENTOR, java.time.LocalDate.of(2026, 9, 1), true);
+
+        for (UserId actor : List.of(OTRO_MENTOR, GUIA)) {
+            for (String ruta : rutasDeUnaPersona(MENTORA)) {
+                pedir(ruta, actor).andExpect(status().isForbidden());
+            }
+        }
+        assertThat(banco.consultas).isEmpty();
+        assertThat(banco.lecturasDelRadar).isEmpty();
+        assertThat(banco.ventanasPedidasALaSemana).isEmpty();
+    }
+
     // ── autorización negativa ───────────────────────────────────────────────
 
     private List<String> rutasDeUnaPersona(UserId persona) {
@@ -299,7 +361,7 @@ class PersonasDelProgramaControllerTest {
     }
 
     @Test
-    @DisplayName("una cuenta de prueba, una suspendida, quien no es aprendiz y un id que no existe son 404 en las cuatro rutas, sin leer ni registrar")
+    @DisplayName("una cuenta de prueba, una suspendida, una mentora sin programa propio, el personal que no es mentor y un id que no existe son 404 en las cuatro rutas, sin leer ni registrar")
     void personaQueNoSeMuestra() throws Exception {
         banco.aprendizSinGrupo(id("b4"), "Suspendida");
         banco.usuario(id("b4"), "Suspendida", UserRole.TRAINEE, UserStatus.SUSPENDED);

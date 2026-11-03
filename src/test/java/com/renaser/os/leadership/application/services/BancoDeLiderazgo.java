@@ -14,7 +14,11 @@ import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.support.api.AtencionDeTicketsFinder;
+import com.renaser.os.users.api.CuentasDePruebaFinder;
+import com.renaser.os.users.api.FasePrograma;
 import com.renaser.os.users.api.FichaDeMentorFinder;
+import com.renaser.os.users.api.ParticipacionPrograma;
+import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
@@ -32,6 +36,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -45,6 +50,9 @@ public class BancoDeLiderazgo {
 
     private final Map<UserId, UserSummary> usuarios = new LinkedHashMap<>();
     private final Map<UserId, FichaDeMentorFinder.PerfilDeMentor> perfiles = new HashMap<>();
+    /** D-318: los mentores y guías que llevan su propio programa (activado o no); el resto no tiene fila. */
+    private final Map<UserId, ParticipacionPrograma> programasPropios = new HashMap<>();
+    private final Set<UserId> cuentasDePrueba = new java.util.HashSet<>();
     private final List<GrupoMedido> grupos = new ArrayList<>();
     private final Map<UserId, SemaforoResumido> semaforoPorMentor = new HashMap<>();
     private final Map<UserId, EvaluacionDeMentorFinder.EvaluacionDeMentor> evaluaciones = new HashMap<>();
@@ -106,8 +114,71 @@ public class BancoDeLiderazgo {
 
         @Override
         public Optional<FichaDeMentor> mentor(UserId usuarioId) {
-            return Optional.ofNullable(usuarios.get(usuarioId)).filter(u -> u.role() == UserRole.MENTOR)
+            return Optional.ofNullable(usuarios.get(usuarioId))
+                    .filter(u -> UserRole.ROLES_QUE_ACTUAN_COMO_MENTOR.contains(u.role()))
                     .map(u -> new FichaDeMentor(u.id(), u.fullName(), null, u.status(), perfiles.get(u.id())));
+        }
+    };
+
+    /** D-318: lo que {@code users} diría del programa propio de cada mentor o guía; quien no tiene fila no está inscrito. */
+    private final ParticipacionProgramaFinder participaciones = new ParticipacionProgramaFinder() {
+        @Override
+        public Optional<ParticipacionPrograma> deParticipante(UserId id) {
+            if (!usuarios.containsKey(id)) {
+                return Optional.empty();
+            }
+            return Optional.of(programasPropios.getOrDefault(id, new ParticipacionPrograma(id, false, 0, null,
+                    java.time.ZoneId.of("America/Lima"), FasePrograma.PHASE_3_ALCHEMIST_WARRIOR, null, null,
+                    usuarios.get(id).role(), false, false)));
+        }
+
+        @Override
+        public List<UserId> miembrosActivosDeCelula(UUID celulaId) {
+            return List.of();
+        }
+
+        @Override
+        public List<UserId> miembrosDeCelula(UUID celulaId) {
+            return List.of();
+        }
+
+        @Override
+        public List<UserId> usuariosActivosConRol(Set<UserRole> roles) {
+            return List.of();
+        }
+
+        @Override
+        public List<UsuarioConDiaPrograma> usuariosActivosConDiaPrograma(Set<UserRole> roles) {
+            return List.of();
+        }
+
+        @Override
+        public List<UserId> participantesInscritosActivos() {
+            return List.of();
+        }
+
+        @Override
+        public int contarMiembrosDeCelula(UUID celulaId) {
+            return 0;
+        }
+    };
+
+    private final CuentasDePruebaFinder pruebas = new CuentasDePruebaFinder() {
+        @Override
+        public boolean esCuentaDePrueba(UserId id) {
+            return cuentasDePrueba.contains(id);
+        }
+
+        @Override
+        public Set<UserId> entre(Collection<UserId> ids) {
+            Set<UserId> deLaPrueba = new java.util.HashSet<>(ids);
+            deLaPrueba.retainAll(cuentasDePrueba);
+            return deLaPrueba;
+        }
+
+        @Override
+        public Set<UserId> todas() {
+            return Set.copyOf(cuentasDePrueba);
         }
     };
 
@@ -268,10 +339,23 @@ public class BancoDeLiderazgo {
     /** El banco de las pruebas del controller es un bean compartido: cada prueba arma sus grupos desde cero. */
     public void limpiarGrupos() {
         grupos.clear();
+        programasPropios.clear();
+        cuentasDePrueba.clear();
     }
 
     public void usuario(UserId id, String nombre, UserRole rol, UserStatus estado) {
         usuarios.put(id, new UserSummary(id, nombre, null, rol, estado));
+    }
+
+    /** D-318: el mentor o la guía lleva su propio programa; {@code activado} = ya eligió su Día 1. */
+    public void programaPropio(UserId id, UserRole rol, boolean activado) {
+        programasPropios.put(id, new ParticipacionPrograma(id, true, activado ? 40 : 0, LocalDate.of(2026, 8, 17),
+                java.time.ZoneId.of("America/Lima"), FasePrograma.PHASE_3_ALCHEMIST_WARRIOR, null, null, rol, false,
+                activado));
+    }
+
+    public void cuentaDePrueba(UserId id) {
+        cuentasDePrueba.add(id);
     }
 
     public void perfil(UserId mentor, String nivel, String estadoOperativo) {
@@ -312,8 +396,13 @@ public class BancoDeLiderazgo {
         return new PadronDeMentoresService(acceso(), fichas, indicadores(), reloj);
     }
 
+    PersonasDelPrograma programa() {
+        return new PersonasDelPrograma(acompanamiento, participaciones, usuariosFinder, pruebas,
+                new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
+    }
+
     public FichaDeMentorService ficha() {
-        return new FichaDeMentorService(acceso(), indicadores(), almacen, reloj);
+        return new FichaDeMentorService(acceso(), indicadores(), almacen, programa(), reloj);
     }
 
     public ObservacionesDeMentorService observacionesService() {
