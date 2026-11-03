@@ -40,8 +40,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * El Acuerdo de transformación (spec 039, D-312) de punta a punta con Postgres, sesión real y el {@link RelojDePrueba} compartido (regla 03): la migración V162 con el
- * texto del dueño en las tres formaciones (y su idempotencia), «Mi aceptación» con las fechas de la spec 036, lo que la constancia guarda de lo que se mostró, y la firma
- * del cronograma de pagos con la misma confirmación de la spec 032.
+ * texto del dueño en las tres formaciones (y su idempotencia), «Mi aceptación» con las fechas de la spec 036 y lo que la constancia guarda de lo que se mostró.
+ *
+ * <p><b>D-315 (decisión del dueño, 2026-11-02):</b> el cronograma de pagos ya NO se firma con los términos —los pagos son asíncronos—: la lectura no trae {@code schedule},
+ * aceptar no confirma nada del cronograma y «Mi ingreso» lo sigue pidiendo como en la spec 032, tenga o no cuotas la persona.
  *
  * <p>La base de las pruebas de edición de la spec 027 es la que dejó la V149; aquí se parte de ella y se corre la V162 encima, tal cual la corre Flyway. Las cuentas que
  * se siembran se borran al terminar (con ellas, sus cuotas y sus aceptaciones) y los términos vuelven a esa base. El reloj se fija en la medianoche de Lima: las 04:59 UTC del
@@ -242,7 +244,7 @@ class AcuerdoDeTransformacionIT {
         assertThat(acuerdo.get("startDate").asText()).isEqualTo("2026-11-03");
         assertThat(acuerdo.get("endDate").asText()).isEqualTo("2027-01-31");
         assertThat(acuerdo.get("started").asBoolean()).isFalse();
-        assertThat(acuerdo.get("schedule").isNull()).as("pagó completo: la firma de siempre, sin cronograma").isTrue();
+        assertThat(acuerdo.has("schedule")).as("el cronograma de pagos no va en los términos").isFalse();
         // Las fechas de «Mi aceptación» son las de «Tu programa empieza mañana» (spec 036).
         assertThat(json.readTree(ok(enviar("GET", "/api/v1/onboarding/activate-program", sesion, null))).get("validStartDates").get(0).asText())
                 .isEqualTo(acuerdo.get("startDate").asText());
@@ -271,12 +273,12 @@ class AcuerdoDeTransformacionIT {
         assertThat(releido.get("agreement").get("program").asText()).isEqualTo("Formación RENASER · 90 días");
         assertThat(releido.get("agreement").get("startDate").asText()).isEqualTo("2026-11-03");
         assertThat(releido.get("agreement").get("endDate").asText()).isEqualTo("2027-01-31");
-        assertThat(releido.get("agreement").get("scheduleSigned").asBoolean()).isFalse();
+        assertThat(releido.get("agreement").has("scheduleSigned")).isFalse();
 
         JsonNode deAdministracion = json.readTree(ok(enviar("GET", "/api/v1/admin/terms/people/" + ana, sesionDe(usuario("ADMIN", "Ana Admin")), null)));
         assertThat(deAdministracion.get(0).get("program").asText()).isEqualTo("Formación RENASER · 90 días");
         assertThat(deAdministracion.get(0).get("startDate").asText()).isEqualTo("2026-11-03");
-        assertThat(deAdministracion.get(0).get("scheduleSigned").asBoolean()).isFalse();
+        assertThat(deAdministracion.get(0).has("scheduleSigned")).isFalse();
     }
 
     // spec 039 FR-004, SC-004
@@ -322,68 +324,75 @@ class AcuerdoDeTransformacionIT {
 
     // ── La persona: con cronograma ──────────────────────────────────────────────────────────────────────────────────
 
-    // spec 039 FR-008, SC-002
+    // decisión 2026-11-02 pagos fuera de términos
     @Test
-    @DisplayName("con cronograma: debajo de «Mi aceptación» llega el cronograma (moneda, cuotas y huella); al firmar queda confirmado con la MISMA confirmación de «Mi ingreso»")
-    void conCronogramaSeFirmaConLoMismo() throws Exception {
+    @DisplayName("con cronograma y con cuotas: la firma NO lo trae (ni schedule ni huella) y aceptar no lo confirma; «Mi ingreso» lo sigue pidiendo")
+    void conCronogramaLaFirmaNoLoTrae() throws Exception {
         UUID ana = aprendiz("ESCUELA", 90, "Ana María Pérez Soto", false);
         String sesion = sesionDe(ana);
         asignarPago(cronograma("PEN", "2026-11-15", 500, "2026-12-15", 500), ana);
+
         JsonNode mios = json.readTree(ok(enviar("GET", TERMINOS, sesion, null)));
-        JsonNode cronograma = mios.get("agreement").get("schedule");
-        assertThat(cronograma.get("currency").asText()).isEqualTo("PEN");
-        assertThat(cronograma.get("installments")).hasSize(2);
-        assertThat(cronograma.get("installments").get(0).get("dueDate").asText()).isEqualTo("2026-11-15");
-        assertThat(cronograma.get("installments").get(0).get("amount").decimalValue()).isEqualByComparingTo("500");
-        String huella = cronograma.get("fingerprint").asText();
-        assertThat(huella).isNotBlank();
+
+        JsonNode acuerdo = mios.get("agreement");
+        assertThat(acuerdo.get("program").asText()).isEqualTo("Formación RENASER · 90 días");
+        assertThat(acuerdo.get("startDate").asText()).isEqualTo("2026-11-03");
+        assertThat(acuerdo.has("schedule")).as("aunque tenga cuotas, los términos no las muestran").isFalse();
+        assertThat(mios.toString()).doesNotContain("fingerprint", "installments");
+
+        ok(enviar("POST", HITOS, sesion, Map.of("milestone", "TERMINOS", "termsVersionId", mios.get("version").get("id").asText(), "agreementStartDate", "2026-11-03")));
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM renaser.aceptaciones_de_terminos WHERE usuario_id = ?", Integer.class, ana)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT cronograma_huella IS NULL FROM renaser.aceptaciones_de_terminos WHERE usuario_id = ?", Boolean.class, ana)).isTrue();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM renaser.estado_onboarding WHERE usuario_id = ? AND cronograma_confirmado_en IS NOT NULL", Integer.class, ana))
+                .as("firmar los términos no confirma el cronograma").isZero();
         assertThat(json.readTree(ok(enviar("GET", "/api/v1/me/ingreso", sesion, null))).get("payments").get("confirmation").get("state").asText())
-                .as("antes de firmar, «Mi ingreso» lo pide").isEqualTo("NOT_YET");
-
-        ok(enviar("POST", HITOS, sesion, Map.of("milestone", "TERMINOS", "termsVersionId", mios.get("version").get("id").asText(), "agreementStartDate", "2026-11-03",
-                "scheduleFingerprint", huella)));
-
-        Map<String, Object> estado = jdbc.queryForMap("SELECT cronograma_confirmado_en, cronograma_confirmado_nombre, cronograma_confirmado_huella FROM renaser.estado_onboarding "
-                + "WHERE usuario_id = ?", ana);
-        assertThat(estado.get("cronograma_confirmado_en")).isNotNull();
-        assertThat(estado.get("cronograma_confirmado_nombre")).as("el nombre completo del perfil").isEqualTo("Ana María Pérez Soto");
-        assertThat(estado.get("cronograma_confirmado_huella")).isEqualTo(huella);
-        assertThat(jdbc.queryForObject("SELECT cronograma_huella FROM renaser.aceptaciones_de_terminos WHERE usuario_id = ?", String.class, ana)).isEqualTo(huella);
-        JsonNode miIngreso = json.readTree(ok(enviar("GET", "/api/v1/me/ingreso", sesion, null)));
-        assertThat(miIngreso.get("payments").get("confirmation").get("state").asText()).as("«Mi ingreso» ya no lo vuelve a pedir").isEqualTo("CONFIRMED");
-        assertThat(miIngreso.get("payments").get("confirmation").get("name").asText()).isEqualTo("Ana María Pérez Soto");
-        assertThat(json.readTree(ok(enviar("GET", TERMINOS + "/accepted", sesion, null))).get("agreement").get("scheduleSigned").asBoolean()).isTrue();
+                .as("«Mi ingreso» lo sigue pidiendo").isEqualTo("NOT_YET");
     }
 
-    // spec 039 FR-008
+    // decisión 2026-11-02 pagos fuera de términos
     @Test
-    @DisplayName("Administración cambió el cronograma mientras leía: 409, no queda aceptación ni confirmación; con la huella nueva sí")
-    void elCronogramaCambioMientrasLeia() throws Exception {
+    @DisplayName("con cronograma pero sin cuotas todavía: se firma igual, sin ningún cronograma; Administración lo llena después y ahí recién «Mi ingreso» lo muestra")
+    void conCronogramaSinCuotasSeFirmaIgual() throws Exception {
+        UUID ana = aprendiz("ESCUELA", 90, "Ana María Pérez Soto", false);
+        String sesion = sesionDe(ana);
+        asignarPago(cronograma("PEN"), ana);
+        JsonNode mios = json.readTree(ok(enviar("GET", TERMINOS, sesion, null)));
+        assertThat(mios.get("agreement").has("schedule")).isFalse();
+
+        ok(enviar("POST", HITOS, sesion, Map.of("milestone", "TERMINOS", "termsVersionId", mios.get("version").get("id").asText(), "agreementStartDate", "2026-11-03")));
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM renaser.aceptaciones_de_terminos WHERE usuario_id = ?", Integer.class, ana)).isEqualTo(1);
+        JsonNode antes = json.readTree(ok(enviar("GET", "/api/v1/me/ingreso", sesion, null)));
+        assertThat(antes.get("payments").get("mode").asText()).isEqualTo("SCHEDULE");
+        assertThat(antes.get("payments").get("installments")).isEmpty();
+
+        ok(enviar("POST", PAGOS + ana + "/cuotas", sesionDe(usuario("ADMIN", "Ana Admin")), Map.of("dueDate", "2026-12-15", "amount", 500)));
+        JsonNode despues = json.readTree(ok(enviar("GET", "/api/v1/me/ingreso", sesion, null)));
+        assertThat(despues.get("payments").get("installments")).hasSize(1);
+        assertThat(despues.get("payments").get("confirmation").get("state").asText()).isEqualTo("NOT_YET");
+    }
+
+    // decisión 2026-11-02 pagos fuera de términos
+    @Test
+    @DisplayName("una app de la spec 039 que todavía manda scheduleFingerprint: el campo se ignora, la aceptación es la de siempre y no se confirma ni se rechaza nada por el cronograma")
+    void laHuellaDeUnaAppViejaSeIgnora() throws Exception {
         UUID ana = aprendiz("ESCUELA", 90, "Ana María Pérez Soto", false);
         String sesion = sesionDe(ana);
         asignarPago(cronograma("PEN", "2026-11-15", 500), ana);
-        JsonNode mios = json.readTree(ok(enviar("GET", TERMINOS, sesion, null)));
-        String huellaVieja = mios.get("agreement").get("schedule").get("fingerprint").asText();
-        asignarPago(cronograma("PEN", "2026-11-15", 500, "2026-12-15", 500), ana);
+        String version = json.readTree(ok(enviar("GET", TERMINOS, sesion, null))).get("version").get("id").asText();
 
-        HttpResponse<String> rechazada = enviar("POST", HITOS, sesion, Map.of("milestone", "TERMINOS", "termsVersionId", mios.get("version").get("id").asText(),
-                "scheduleFingerprint", huellaVieja));
+        // Ni una huella cualquiera ni la de un cronograma que ya cambió hacen fallar: ya no se compara ninguna.
+        ok(enviar("POST", HITOS, sesion, Map.of("milestone", "TERMINOS", "termsVersionId", version, "scheduleFingerprint", "una-huella-cualquiera")));
 
-        assertThat(rechazada.statusCode()).as(rechazada.body()).isEqualTo(409);
-        assertThat(rechazada.body()).contains("Tu cronograma cambió");
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM renaser.aceptaciones_de_terminos WHERE usuario_id = ?", Integer.class, ana)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM renaser.aceptaciones_de_terminos WHERE usuario_id = ?", Integer.class, ana)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT cronograma_huella IS NULL FROM renaser.aceptaciones_de_terminos WHERE usuario_id = ?", Boolean.class, ana)).isTrue();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM renaser.estado_onboarding WHERE usuario_id = ? AND cronograma_confirmado_en IS NOT NULL", Integer.class, ana)).isZero();
-
-        JsonNode releido = json.readTree(ok(enviar("GET", TERMINOS, sesion, null)));
-        String huellaNueva = releido.get("agreement").get("schedule").get("fingerprint").asText();
-        assertThat(huellaNueva).isNotEqualTo(huellaVieja);
-        ok(enviar("POST", HITOS, sesion, Map.of("milestone", "TERMINOS", "termsVersionId", releido.get("version").get("id").asText(), "scheduleFingerprint", huellaNueva)));
-        assertThat(jdbc.queryForObject("SELECT cronograma_confirmado_huella FROM renaser.estado_onboarding WHERE usuario_id = ?", String.class, ana)).isEqualTo(huellaNueva);
     }
 
-    // spec 039 FR-009, FR-011
+    // spec 039 FR-009, FR-011; decisión 2026-11-02 pagos fuera de términos
     @Test
-    @DisplayName("aceptar sin la huella (una app anterior) con un cronograma asignado no lo confirma: «Mi ingreso» lo sigue pidiendo")
+    @DisplayName("aceptar como una app anterior (sin inicio visto) con un cronograma asignado no lo confirma: «Mi ingreso» lo sigue pidiendo")
     void sinLaHuellaNoSeConfirmaNada() throws Exception {
         UUID ana = aprendiz("ESCUELA", 90, "Ana María Pérez Soto", false);
         String sesion = sesionDe(ana);
@@ -397,15 +406,18 @@ class AcuerdoDeTransformacionIT {
         assertThat(json.readTree(ok(enviar("GET", "/api/v1/me/ingreso", sesion, null))).get("payments").get("confirmation").get("state").asText()).isEqualTo("NOT_YET");
     }
 
+    // decisión 2026-11-02 pagos fuera de términos
     @Test
-    @DisplayName("si Administración cambia el cronograma DESPUÉS de firmado, «Mi ingreso» pide confirmarlo de nuevo, sin volver a firmar los términos")
-    void despuesDeFirmadoVaLaReglaDeLa032() throws Exception {
+    @DisplayName("el cronograma se confirma en «Mi ingreso» (spec 032), no al firmar; y si Administración lo cambia después, se vuelve a pedir sin volver a firmar los términos")
+    void elCronogramaSeConfirmaEnMiIngreso() throws Exception {
         UUID ana = aprendiz("ESCUELA", 90, "Ana María Pérez Soto", false);
         String sesion = sesionDe(ana);
         asignarPago(cronograma("PEN", "2026-11-15", 500), ana);
         JsonNode mios = json.readTree(ok(enviar("GET", TERMINOS, sesion, null)));
-        ok(enviar("POST", HITOS, sesion, Map.of("milestone", "TERMINOS", "termsVersionId", mios.get("version").get("id").asText(),
-                "scheduleFingerprint", mios.get("agreement").get("schedule").get("fingerprint").asText())));
+        ok(enviar("POST", HITOS, sesion, Map.of("milestone", "TERMINOS", "termsVersionId", mios.get("version").get("id").asText(), "agreementStartDate", "2026-11-03")));
+
+        JsonNode confirmado = json.readTree(ok(enviar("POST", "/api/v1/me/ingreso/cronograma/confirmacion", sesion, Map.of("name", "Ana María Pérez Soto", "reviewed", true))));
+        assertThat(confirmado.get("payments").get("confirmation").get("state").asText()).isEqualTo("CONFIRMED");
 
         ok(enviar("POST", PAGOS + ana + "/cuotas", sesionDe(usuario("ADMIN", "Ana Admin")), Map.of("dueDate", "2026-12-15", "amount", 500)));
 
@@ -436,7 +448,7 @@ class AcuerdoDeTransformacionIT {
         assertThat(acuerdo.get("startDate").asText()).isEqualTo("2026-10-26");
         assertThat(acuerdo.get("endDate").asText()).isEqualTo("2027-01-23");
         assertThat(acuerdo.get("program").asText()).isEqualTo("Formación RENASER · 90 días");
-        assertThat(acuerdo.get("schedule").isNull()).as("a quien ya estaba dentro se le pide en «Mi ingreso»").isTrue();
+        assertThat(acuerdo.has("schedule")).as("a quien ya estaba dentro se le pide en «Mi ingreso»").isFalse();
 
         ok(enviar("POST", HITOS, sesion, Map.of("milestone", "TERMINOS", "termsVersionId", mios.get("version").get("id").asText(), "agreementStartDate", "2026-10-26")));
 
@@ -458,7 +470,7 @@ class AcuerdoDeTransformacionIT {
         assertThat(acuerdo.get("program").asText()).isEqualTo("Formación RENASER");
         assertThat(acuerdo.get("startDate").isNull()).isTrue();
         assertThat(acuerdo.get("endDate").isNull()).isTrue();
-        assertThat(acuerdo.get("schedule").isNull()).isTrue();
+        assertThat(acuerdo.has("schedule")).isFalse();
     }
 
     // ── Semilla y pedidos ───────────────────────────────────────────────────────────────────────────────────────────

@@ -111,6 +111,37 @@ class MiIngresoServiceTest {
         assertThat(ingreso.pasos()).extracting(MiIngreso.Paso::hecho).containsExactly(false, false);
     }
 
+    // decisión 2026-11-02 pagos fuera de términos
+    @Test
+    @DisplayName("«Con cronograma» sin cuotas todavía: se muestra (con su moneda) sin cuotas ni nada que confirmar, y Pagos NO está hecho")
+    void conCronogramaSinCuotas() {
+        admin.asignar(administracion, persona, new PedidoDeCronograma(true, "PEN", List.of()));
+
+        MiIngreso ingreso = miIngreso.ver(persona);
+
+        assertThat(ingreso.pagos()).as("la fila de Yo existe: hay un pago anotado").isNotNull();
+        assertThat(ingreso.pagos().modalidad()).isEqualTo(ModalidadDePago.CON_CRONOGRAMA);
+        assertThat(ingreso.pagos().cuotas()).isEmpty();
+        assertThat(ingreso.pasos()).as("un allMatch sobre una lista vacía no puede dar «hecho»").extracting(MiIngreso.Paso::hecho).containsExactly(false, false);
+    }
+
+    // decisión 2026-11-02 pagos fuera de términos
+    @Test
+    @DisplayName("sin cuotas no hay nada que confirmar (409) y no queda confirmación; en cuanto Administración registra una, se confirma como siempre")
+    void noSeConfirmaUnCronogramaVacio() {
+        admin.asignar(administracion, persona, new PedidoDeCronograma(true, "PEN", List.of()));
+
+        assertThatThrownBy(() -> miIngreso.confirmar(persona, new ConfirmacionPedida("Beto", true))).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Todavía no tienes cuotas");
+        assertThat(estados.filas.get(persona).pago().confirmadoEn()).isNull();
+
+        admin.agregarCuota(administracion, persona, cuota("2026-11-15"));
+        MiIngreso ingreso = miIngreso.confirmar(persona, new ConfirmacionPedida("Beto", true));
+
+        assertThat(ingreso.pagos().confirmacion()).isEqualTo(EstadoDeConfirmacion.CONFIRMADA);
+        assertThat(ingreso.pagos().cuotas()).hasSize(1);
+    }
+
     @Test
     @DisplayName("el paso de Pagos queda hecho cuando todas las cuotas figuran pagadas")
     void pagosHechos() {

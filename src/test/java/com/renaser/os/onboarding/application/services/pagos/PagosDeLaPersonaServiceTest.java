@@ -128,8 +128,41 @@ class PagosDeLaPersonaServiceTest {
         assertThat(vista.pago().confirmacion()).isEqualTo(EstadoDeConfirmacion.SIN_CONFIRMAR);
     }
 
+    // decisión 2026-11-02 pagos fuera de términos
     @Test
-    @DisplayName("un cronograma inválido (sin moneda, sin cuotas, monto cero, una cuota nula) es 400 y no deja nada a medias ni borra el anterior")
+    @DisplayName("«Con cronograma» sin cuotas es válido (los pagos son asíncronos): queda con su moneda y ninguna cuota, y Administración las agrega después")
+    void conCronogramaSinCuotas() {
+        for (PedidoDeCronograma sinCuotas : List.of(new PedidoDeCronograma(true, "PEN", List.of()), new PedidoDeCronograma(true, "PEN", null))) {
+            VistaDePagos vista = servicio.asignar(admin, persona, sinCuotas);
+
+            assertThat(vista.pago().modalidad()).isEqualTo(ModalidadDePago.CON_CRONOGRAMA);
+            assertThat(vista.pago().moneda()).isEqualTo(Moneda.PEN);
+            assertThat(vista.pago().cuotas()).isEmpty();
+            assertThat(vista.pago().confirmacion()).isEqualTo(EstadoDeConfirmacion.SIN_CONFIRMAR);
+        }
+
+        // después, desde la ficha: la primera cuota y las demás
+        VistaDePagos primera = servicio.agregarCuota(admin, persona, cuota("2026-11-15", "500"));
+        assertThat(primera.pago().cuotas()).hasSize(1);
+        VistaDePagos dos = servicio.agregarCuota(admin, persona, cuota("2026-12-15", "500"));
+        assertThat(dos.pago().cuotas()).hasSize(2);
+        assertThat(dos.pago().moneda()).as("la moneda que se eligió al aceptar se conserva").isEqualTo(Moneda.PEN);
+    }
+
+    // decisión 2026-11-02 pagos fuera de términos
+    @Test
+    @DisplayName("armar el cronograma completo después (reemplazar el vacío) funciona igual que hoy")
+    void armarElCronogramaDespues() {
+        servicio.asignar(admin, persona, new PedidoDeCronograma(true, "USD", List.of()));
+
+        VistaDePagos vista = servicio.asignar(admin, persona, tresCuotasMensuales());
+
+        assertThat(vista.pago().cuotas()).hasSize(3);
+        assertThat(vista.pago().moneda()).isEqualTo(Moneda.USD);
+    }
+
+    @Test
+    @DisplayName("un cronograma inválido (sin moneda, monto cero, una cuota nula, 61 cuotas) es 400 y no deja nada a medias ni borra el anterior")
     void invalidoNoDejaNadaAMedias() {
         servicio.asignar(admin, persona, tresCuotasMensuales());
         int escrituras = cuotas.escrituras;
@@ -137,9 +170,8 @@ class PagosDeLaPersonaServiceTest {
         List<PedidoDeCronograma> invalidos = List.of(
                 new PedidoDeCronograma(true, null, List.of(cuota("2026-11-15", "10"))),
                 new PedidoDeCronograma(true, "EUR", List.of(cuota("2026-11-15", "10"))),
-                new PedidoDeCronograma(true, "PEN", List.of()),
-                new PedidoDeCronograma(true, "PEN", null),
                 new PedidoDeCronograma(true, "PEN", List.of(cuota("2026-11-15", "0"))),
+                new PedidoDeCronograma(true, "PEN", java.util.Collections.nCopies(61, cuota("2026-11-15", "10"))),
                 new PedidoDeCronograma(true, "PEN", java.util.Arrays.asList(cuota("2026-11-15", "10"), null)));
         for (PedidoDeCronograma invalido : invalidos) {
             assertThatThrownBy(() -> servicio.asignar(admin, persona, invalido)).as("%s", invalido).isInstanceOf(IllegalArgumentException.class);
