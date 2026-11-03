@@ -10,6 +10,7 @@ import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ParametroHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.TipoParametroHerramienta;
+import com.renaser.os.shared.domain.TituloEnTipoOracion;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -110,7 +111,7 @@ public class PropuestaDeHorarioPorDiaDeSemana implements HerramientaAgente {
         if (pedido.accion() == Accion.FIJAR) {
             HorariosParaProponer.requireQueCambie(habito, pedido.horaInicio(), pedido.horaLimite());
             HorariosParaProponer.requireCupo(proxima.cuota());
-            return "Fijar '" + habito.titulo() + "' " + dias + " a "
+            return "Fijar '" + TituloEnTipoOracion.de(habito.titulo()) + "' " + dias + " a "
                     + HorariosParaProponer.franjaPedida(pedido.horaInicio(), pedido.horaLimite())
                     + " (hasta ahora ese dia: " + HorariosParaProponer.franja(habito.horaDisparo(), habito.horaLimite())
                     + "), desde el "
@@ -121,9 +122,9 @@ public class PropuestaDeHorarioPorDiaDeSemana implements HerramientaAgente {
             if (habito.obligatorio()) {
                 throw new PropuestaImposibleException(LoQueSiSePuede.obligatorio(habito.titulo()));
             }
-            return "Apagar '" + habito.titulo() + "' " + dias + ", todas las semanas, hasta que lo vuelva a activar.";
+            return "Apagar '" + TituloEnTipoOracion.de(habito.titulo()) + "' " + dias + ", todas las semanas, hasta que lo vuelva a activar.";
         }
-        return "Quitar lo propio de " + dias + " en '" + habito.titulo() + "' (hora propia o apagado): esos dias "
+        return "Quitar lo propio de " + dias + " en '" + TituloEnTipoOracion.de(habito.titulo()) + "' (hora propia o apagado): esos dias "
                 + "vuelve a su horario general.";
     }
 }

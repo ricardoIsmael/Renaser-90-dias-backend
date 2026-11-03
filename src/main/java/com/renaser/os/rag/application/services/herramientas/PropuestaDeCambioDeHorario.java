@@ -9,6 +9,7 @@ import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ParametroHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.TipoParametroHerramienta;
+import com.renaser.os.shared.domain.TituloEnTipoOracion;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -110,10 +111,10 @@ public class PropuestaDeCambioDeHorario implements HerramientaAgente {
         String deA = "de " + HorariosParaProponer.franja(actual.horaDisparo(), actual.horaLimite()) + " a "
                 + HorariosParaProponer.franjaPedida(cambio.horaInicio(), cambio.horaLimite());
         if (cambio.fecha() == null) {
-            return "Cambiar '" + actual.titulo() + "' " + deA + " como horario general, desde el "
+            return "Cambiar '" + TituloEnTipoOracion.de(actual.titulo()) + "' " + deA + " como horario general, desde el "
                     + ArgumentosDeHorario.texto(rigeDesde) + " (hoy sigue igual).";
         }
-        return "Cambiar '" + actual.titulo() + "' solo el " + ArgumentosDeHorario.texto(rigeDesde) + ", " + deA
+        return "Cambiar '" + TituloEnTipoOracion.de(actual.titulo()) + "' solo el " + ArgumentosDeHorario.texto(rigeDesde) + ", " + deA
                 + " (los demas dias no cambian).";
     }
 

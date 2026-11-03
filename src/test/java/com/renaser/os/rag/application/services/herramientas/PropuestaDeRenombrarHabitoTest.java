@@ -85,7 +85,7 @@ class PropuestaDeRenombrarHabitoTest {
         ResultadoHerramienta resultado = herramienta.ejecutar(APRENDIZ,
                 invocacion(" " + JUGO + " ", " Renombrar ", "  Batido de papaya ", " me cae mal el apio "));
 
-        String resumen = "Cambiar el nombre de 'JUGO VERDE' a 'Batido de papaya'";
+        String resumen = "Cambiar el nombre de 'Jugo verde' a 'Batido de papaya'"; // issue #71: el título del catálogo se lee en tipo oración
         verify(proponerAccion).proponer(APRENDIZ,
                 invocacion(JUGO.toString(), "renombrar", "Batido de papaya", "me cae mal el apio"), resumen);
         verify(planPort, never()).renombrar(any(), any(), any(), any());
@@ -100,7 +100,7 @@ class PropuestaDeRenombrarHabitoTest {
 
         herramienta.ejecutar(APRENDIZ, invocacion(AGUA.toString(), "volver_al_original", "algo", "algo"));
         verify(proponerAccion).proponer(APRENDIZ, invocacion(AGUA.toString(), "volver_al_original", null, null),
-                "Volver a llamar 'Agua tibia sola' por su nombre del programa, 'AGUA TIBIA CON LIMÓN'");
+                "Volver a llamar 'Agua tibia sola' por su nombre del programa, 'Agua tibia con limón'");
 
         ResultadoHerramienta sinRenombre = herramienta.ejecutar(APRENDIZ,
                 invocacion(JUGO.toString(), "volver_al_original", null, null));

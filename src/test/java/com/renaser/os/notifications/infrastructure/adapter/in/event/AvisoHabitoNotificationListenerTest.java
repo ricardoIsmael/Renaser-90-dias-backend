@@ -247,6 +247,20 @@ class AvisoHabitoNotificationListenerTest {
     }
 
     @Test
+    @DisplayName("issue #71: el título del catálogo en MAYÚSCULAS sale en tipo oración en el push y en la bandeja; el título del evento no se toca")
+    void elTituloDelCatalogoSaleEnTipoOracion() {
+        var evento = new AvisoHabitoDebidoEvent(UUID.randomUUID(), UserId.of(UUID.randomUUID()), "ÚLTIMA COMIDA DEL DÍA", "POR_VENCER", 10, 10,
+                UUID.randomUUID(), null, null, EMITIDO, HABITO, "BODY", A_LAS_21_EN_LIMA, "America/Lima", null);
+
+        listener().on(evento);
+
+        EmitirNotificacionCommand comando = comandoEmitido();
+        assertThat(comando.titulo()).isEqualTo("Se te vence un hábito");
+        assertThat(comando.cuerpo()).isEqualTo("Última comida del día vence a las 21:00. En juego: 10 puntos.");
+        assertThat(evento.tituloHabito()).isEqualTo("ÚLTIMA COMIDA DEL DÍA");
+    }
+
+    @Test
     @DisplayName("FR-014: el push de un habito lleva la etiqueta habito-{id}-inicio / -por-vencer")
     void etiquetaDelPush() {
         listener().on(aviso("INICIO", true, 10));

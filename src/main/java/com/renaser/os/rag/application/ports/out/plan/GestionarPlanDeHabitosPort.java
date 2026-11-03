@@ -1,5 +1,6 @@
 package com.renaser.os.rag.application.ports.out.plan;
 
+import com.renaser.os.shared.domain.TituloEnTipoOracion;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.LocalDate;
@@ -100,6 +101,15 @@ public interface GestionarPlanDeHabitosPort {
         /** Como lo ve la persona en la app: su nombre propio si le puso uno. */
         public String tituloVisible() {
             return tituloPersonal != null ? tituloPersonal : tituloDelPrograma;
+        }
+
+        /**
+         * Lo que se LEE en un texto para la persona (una tarjeta de propuesta, issue #71): su nombre propio tal cual lo escribio, o el del programa en
+         * tipo oracion ({@link TituloEnTipoOracion}: el catalogo lo trae en MAYUSCULAS). {@link #tituloVisible} sigue siendo el valor sin tocar, para
+         * comparar y para lo que le llega al modelo.
+         */
+        public String tituloParaLeer() {
+            return tituloPersonal != null ? tituloPersonal : TituloEnTipoOracion.de(tituloDelPrograma);
         }
 
         public boolean renombrado() {

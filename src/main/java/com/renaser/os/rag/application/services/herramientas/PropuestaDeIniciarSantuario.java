@@ -10,6 +10,7 @@ import com.renaser.os.rag.domain.model.herramienta.ParametroHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.TipoParametroHerramienta;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.TituloEnTipoOracion;
 import com.renaser.os.shared.domain.UserId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -114,7 +115,7 @@ public class PropuestaDeIniciarSantuario implements HerramientaAgente {
                     + "desde las " + momento.horaDe(santuario.iniciableDesde()) + " (faltan "
                     + momento.faltaPara(santuario.iniciableDesde()) + ").");
         }
-        String resumen = "Iniciar tu Santuario '" + santuario.titulo() + "' ahora";
+        String resumen = "Iniciar tu Santuario '" + TituloEnTipoOracion.de(santuario.titulo()) + "' ahora";
         PropuestaCreada creada;
         try {
             creada = proponerAccion.proponer(actorId, new InvocacionHerramienta(NOMBRE,
