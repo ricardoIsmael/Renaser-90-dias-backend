@@ -1,6 +1,7 @@
 package com.renaser.os.rag.application.services.herramientas;
 
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarCompuertaDeRocasPort;
+import com.renaser.os.rag.domain.model.diagnostico.DiagnosticoDeLaPersona;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.LocalDate;
@@ -36,7 +37,7 @@ final class CompuertasDePrueba {
             public List<String> ejesSinObjetivoSemanal(UserId aprendizId, LocalDate fecha) {
                 return List.of("CUERPO", "TRABAJO", "RELACIONES");
             }
-        }, situacion);
+        }, situacion, participanteId -> DiagnosticoDeLaPersona.ninguno());
     }
 
     private static CompuertaParaProponer compuerta(boolean maestras, List<String> sinSemanal) {
@@ -51,6 +52,6 @@ final class CompuertasDePrueba {
                 return sinSemanal;
             }
         };
-        return new CompuertaParaProponer(port, participanteId -> java.util.Optional.empty());
+        return new CompuertaParaProponer(port, participanteId -> java.util.Optional.empty(), participanteId -> DiagnosticoDeLaPersona.ninguno());
     }
 }

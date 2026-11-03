@@ -11,6 +11,7 @@ import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizP
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort.PlanDeManana;
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort.RocasDelDia;
 import com.renaser.os.rag.application.ports.out.rocas.PlanificarRocasPort;
+import com.renaser.os.rag.domain.model.diagnostico.DiagnosticoDeLaPersona;
 import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta;
 import com.renaser.os.shared.domain.UserId;
@@ -75,7 +76,7 @@ class PropuestasSinProgramaActivadoTest {
             }
         };
         ConsultarSituacionDelAprendizPort puerto = participanteId -> situacion;
-        return new CompuertaParaProponer(libre, puerto);
+        return new CompuertaParaProponer(libre, puerto, participanteId -> DiagnosticoDeLaPersona.ninguno());
     }
 
     private ResultadoHerramienta planDelDia(CompuertaParaProponer compuerta) {
@@ -123,7 +124,7 @@ class PropuestasSinProgramaActivadoTest {
         assertThat(conSituacion(Optional.of(new SituacionDelAprendiz(7, 1, HOY))).bloqueoPorProgramaSinActivar(APRENDIZ)).isEmpty();
         ConsultarCompuertaDeRocasPort libre = mock(ConsultarCompuertaDeRocasPort.class);
         ConsultarSituacionDelAprendizPort quePeta = participanteId -> { throw new IllegalStateException("base caida"); };
-        assertThat(new CompuertaParaProponer(libre, quePeta).bloqueoPorProgramaSinActivar(APRENDIZ)).isEmpty();
+        assertThat(new CompuertaParaProponer(libre, quePeta, participanteId -> DiagnosticoDeLaPersona.ninguno()).bloqueoPorProgramaSinActivar(APRENDIZ)).isEmpty();
     }
 
     private static CompuertaParaProponer sinObjetivosCon(Optional<SituacionDelAprendiz> situacion) {
@@ -138,24 +139,24 @@ class PropuestasSinProgramaActivadoTest {
                 return List.of("CUERPO", "TRABAJO", "RELACIONES");
             }
         };
-        return new CompuertaParaProponer(sinMaestras, participanteId -> situacion);
+        return new CompuertaParaProponer(sinMaestras, participanteId -> situacion, participanteId -> DiagnosticoDeLaPersona.ninguno());
     }
 
     /**
-     * Issue #63: a «Armemos mi plan» en el dia 0 de la Escuela, SER decia «tus objetivos de 90 dias estan pendientes» y no que su programa empieza manana. El motivo que
-     * recibe el modelo cuando no hay objetivos dice PRIMERO que su programa todavia no empieza, sea cual sea su formacion.
+     * Issue #63 y #65: a «Armemos mi plan» en el dia 0 de la Escuela, SER decia «tus objetivos de 90 dias estan pendientes» y no que su programa empieza manana.
+     * El motivo que recibe el modelo cuando no hay objetivos abre con la fecha de inicio y la orden de decirla primero, sea cual sea su formacion
+     * (los detalles por formacion y con o sin diagnostico estan en {@code ProgramaPorEmpezarEnLasHerramientasTest}).
      */
-    // issue #63
+    // issue #63, issue #65
     @Test
-    @DisplayName("issue #63: sin objetivos y con el programa por empezar, el motivo manda decir cuando empieza antes de lo de los objetivos")
+    @DisplayName("issue #63: sin objetivos y con el programa por empezar, el motivo abre diciendo cuando empieza, antes de lo de los objetivos")
     void sinObjetivosEnElDiaCeroElMotivoDiceCuandoEmpieza() {
         for (SituacionDelAprendiz dia0 : List.of(diaCero(MANANA), diaCero(MANANA).conDuracion(365).conFormacion(com.renaser.os.shared.domain.Formacion.DIPLOMADO))) {
             Optional<String> motivo = sinObjetivosCon(Optional.of(dia0)).bloqueoDeObjetivos(APRENDIZ);
 
             assertThat(motivo).hasValueSatisfying(texto -> assertThat(texto)
-                    .startsWith(CompuertaParaProponer.sinObjetivos(dia0.plazoDelObjetivo()))
-                    .endsWith(CompuertaParaProponer.PROGRAMA_POR_EMPEZAR)
-                    .contains("Su programa todavía no empieza (es el día 0)").contains("dile cuándo empieza"));
+                    .startsWith("Su programa empieza mañana (martes 3 de noviembre). Todavía no tiene día ni fase. Díselo antes de cualquier otra cosa.\n")
+                    .endsWith(CompuertaParaProponer.sinObjetivos(dia0.plazoDelObjetivo())));
         }
     }
 
@@ -166,6 +167,6 @@ class PropuestasSinProgramaActivadoTest {
         assertThat(sinObjetivosCon(Optional.of(new SituacionDelAprendiz(7, 1, HOY))).bloqueoDeObjetivos(APRENDIZ))
                 .contains(CompuertaParaProponer.SIN_OBJETIVOS);
         assertThat(sinObjetivosCon(Optional.empty()).bloqueoDeObjetivos(APRENDIZ)).contains(CompuertaParaProponer.SIN_OBJETIVOS);
-        assertThat(CompuertaParaProponer.SIN_OBJETIVOS).doesNotContain("todavía no empieza");
+        assertThat(CompuertaParaProponer.SIN_OBJETIVOS).doesNotContain("Su programa empieza");
     }
 }

@@ -41,14 +41,26 @@ final class MapaEnElPrompt {
      * preguntarle nada» y era lo unico que el modelo repetia: en la Escuela contestaba «tus objetivos de 90 dias estan pendientes» a «Armemos mi plan» sin decir
      * que su programa empieza manana. Con {@code programaPorEmpezar} le manda decir PRIMERO cuando empieza, y despues lo de los objetivos. No depende de la
      * formacion: el plazo es lo unico que cambia. (Solo el Diplomado lleva ademas la linea del nombre de su objetivo grande; por eso el Diplomado lo decia y la Escuela no.)
+     * Sin diagnostico: solo «escribelos en Plan» (issue #65).
      */
     static String sinObjetivos(String plazoDelObjetivo, boolean programaPorEmpezar) {
+        return sinObjetivos(plazoDelObjetivo, programaPorEmpezar, false);
+    }
+
+    /**
+     * Issue #65: con un diagnostico terminado los objetivos nacieron de el y los confirma en Plan; sin diagnostico (la ficha estandar de la Escuela, por
+     * ejemplo) solo los escribe ella en Plan y la linea NO nombra ningun diagnostico: SER le decia «confirma los de tu diagnostico» a quien nunca lo tuvo.
+     */
+    static String sinObjetivos(String plazoDelObjetivo, boolean programaPorEmpezar, boolean nacenDeSuDiagnostico) {
         String queDecirPrimero = programaPorEmpezar
                 ? "dile PRIMERO cuando empieza su programa (la fecha de arriba; nunca contestes solo que sus objetivos estan pendientes) y despues eso, "
                 : "dile eso ";
+        String ahi = nacenDeSuDiagnostico
+                ? "ahi escribe sus tres objetivos (o confirma los que nacieron de su diagnostico). "
+                : "ahi escribe sus tres objetivos (\"Escribelos en Plan\"). ";
         return "Objetivos de " + plazoDelObjetivo + ": todavia no los tiene escritos ni confirmados — no se puede planificar NINGUN objetivo "
                 + "(acciones del dia, plan de la semana): todo se rechaza. Si pide planificar su dia o sus objetivos, antes de preguntarle nada "
-                + queDecirPrimero + "e invitala a abrir la pestana Plan: ahi escribe sus tres objetivos (o confirma los que nacieron de su diagnostico). "
+                + queDecirPrimero + "e invitala a abrir la pestana Plan: " + ahi
                 + "Tu no puedes escribirlos ni confirmarlos. Sus habitos si se ajustan.\n";
     }
 
@@ -63,7 +75,8 @@ final class MapaEnElPrompt {
             return "";
         }
         if (mapa.objetivosBloqueados()) {
-            return sinObjetivos(plazoDelObjetivo, diaPrograma < 1) + lineaDelDiagnostico(mapa);
+            ResumenDelDiagnostico d = mapa.diagnostico();
+            return sinObjetivos(plazoDelObjetivo, diaPrograma < 1, d != null && d.completado()) + lineaDelDiagnostico(mapa);
         }
         return lineaDelDiagnostico(mapa) + lineaDelMapa(mapa);
     }

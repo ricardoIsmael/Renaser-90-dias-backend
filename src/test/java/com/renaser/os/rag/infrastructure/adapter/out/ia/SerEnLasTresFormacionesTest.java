@@ -9,6 +9,7 @@ import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizP
 import com.renaser.os.rag.application.services.herramientas.CompuertaParaProponer;
 import com.renaser.os.rag.application.services.herramientas.ConsultarMiMapaHerramienta;
 import com.renaser.os.rag.application.services.herramientas.ConsultarRocasHerramienta;
+import com.renaser.os.rag.domain.model.diagnostico.DiagnosticoDeLaPersona;
 import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta;
 import com.renaser.os.rag.domain.model.mapa.MapaDeLaPersona;
@@ -87,7 +88,7 @@ class SerEnLasTresFormacionesTest {
     void losObjetivosConSuPlazo(String nombre, Formacion formacion, int dias, String plazo, String objetivoNombrado) {
         ConsultarSituacionDelAprendizPort situacionPort = persona -> Optional.of(situacion(formacion, dias));
         ConsultarRocasDelAprendizPort rocas = mock(ConsultarRocasDelAprendizPort.class);
-        ConsultarRocasHerramienta consultarRocas = new ConsultarRocasHerramienta(rocas, situacionPort);
+        ConsultarRocasHerramienta consultarRocas = new ConsultarRocasHerramienta(rocas, situacionPort, persona -> DiagnosticoDeLaPersona.ninguno());
         InvocacionHerramienta noventa = new InvocacionHerramienta(ConsultarRocasHerramienta.NOMBRE, Map.of("alcance", "noventa"));
 
         when(rocas.objetivosDeNoventaDias(PERSONA)).thenReturn(List.of(
@@ -103,7 +104,7 @@ class SerEnLasTresFormacionesTest {
         // La compuerta (antes de proponer un plan) y la linea de la situacion dicen el mismo plazo y la misma salida.
         ConsultarCompuertaDeRocasPort sinRocas = mock(ConsultarCompuertaDeRocasPort.class);
         when(sinRocas.rocasMaestrasCompletas(PERSONA)).thenReturn(false);
-        String compuerta = new CompuertaParaProponer(sinRocas, situacionPort).bloqueoDeObjetivos(PERSONA).orElseThrow();
+        String compuerta = new CompuertaParaProponer(sinRocas, situacionPort, persona -> DiagnosticoDeLaPersona.ninguno()).bloqueoDeObjetivos(PERSONA).orElseThrow();
         assertThat(compuerta).as(nombre).contains("sus tres objetivos de " + plazo).contains("pestaña Plan").doesNotContain("Mapa");
 
         String linea = GoogleGenAiRenasiaChatAdapter.formatearSituacion(

@@ -179,7 +179,7 @@ class PropuestasConRocasBloqueadasTest {
                     public List<String> ejesSinObjetivoSemanal(UserId aprendizId, LocalDate fecha) {
                         throw new IllegalStateException("rocks caido");
                     }
-                }, participanteId -> java.util.Optional.empty());
+                }, participanteId -> java.util.Optional.empty(), participanteId -> com.renaser.os.rag.domain.model.diagnostico.DiagnosticoDeLaPersona.ninguno());
 
         assertThat(agregarAccion(caida)).isInstanceOf(ResultadoHerramienta.Exito.class);
     }

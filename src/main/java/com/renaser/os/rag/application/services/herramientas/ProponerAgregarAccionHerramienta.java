@@ -190,7 +190,7 @@ public class ProponerAgregarAccionHerramienta implements HerramientaAgente {
         if (AvisoDePropuesta.yaEstaba(creada)) {
             return AvisoDePropuesta.yaEstabaPendiente(creada);
         }
-        return ResultadoHerramienta.exito("Propuesta creada: " + resumen + TextoDePlanDeRocas.NO_ESTA_HECHO
+        return ResultadoHerramienta.exito(compuerta.inicioDelPrograma(actorId) + "Propuesta creada: " + resumen + TextoDePlanDeRocas.NO_ESTA_HECHO
                 + vinculo.paraElModelo());
     }
 }

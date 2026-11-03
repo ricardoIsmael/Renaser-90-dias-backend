@@ -1,8 +1,10 @@
 package com.renaser.os.rag.application.services.herramientas;
 
+import com.renaser.os.rag.application.ports.out.diagnostico.ConsultarDiagnosticoDeLaPersonaPort;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz;
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarCompuertaDeRocasPort;
+import com.renaser.os.rag.application.services.InicioDelPrograma;
 import com.renaser.os.shared.domain.UserId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,21 +35,25 @@ public class CompuertaParaProponer {
 
     static final String SIN_PROPUESTA = "No se creó ninguna propuesta: ";
 
-    /** El aviso con el plazo de siempre (90 días); cada persona recibe el suyo con {@link #sinObjetivos(String)}. */
+    /** El aviso con el plazo de siempre (90 días) y para quien no tiene diagnóstico; cada persona recibe el suyo con {@link #sinObjetivos(String, boolean)}. */
     static final String SIN_OBJETIVOS = sinObjetivos("90 días");
 
-    /**
-     * Issue #63: antes de que empiece su programa (dia 0), el motivo por el que no se puede armar el plan es PRIMERO que su programa todavia no empieza. Sin esto
-     * el modelo repetia solo «tus objetivos de 90 dias estan pendientes» (la Escuela) y no decia cuando empieza. Vale igual para las tres formaciones.
-     */
-    static final String PROGRAMA_POR_EMPEZAR = " Su programa todavía no empieza (es el día 0): antes de lo de los objetivos, dile cuándo empieza (la fecha "
-            + "está en «Donde esta la persona ahora mismo»); no contestes solo que sus objetivos están pendientes.";
-
-    /** «Sus tres objetivos de 90 días» (o «de 3 meses», «de 1 año»): el plazo es el del programa de ESA persona. */
+    /** «Sus tres objetivos de 90 días» (o «de 3 meses», «de 1 año»): el plazo es el del programa de ESA persona. Sin diagnóstico: solo «escríbelos en Plan». */
     static String sinObjetivos(String plazoDelObjetivo) {
+        return sinObjetivos(plazoDelObjetivo, false);
+    }
+
+    /**
+     * Issue #65: el camino a los objetivos depende de lo que la persona tiene. Con un diagnóstico terminado, los objetivos nacieron de él y los confirma en
+     * Plan (o los escribe ella). Sin diagnóstico, solo los escribe ella en Plan y el texto no nombra ninguno: SER decía «confirma los de tu diagnóstico» a
+     * una cuenta de la Escuela que nunca lo tuvo.
+     */
+    static String sinObjetivos(String plazoDelObjetivo, boolean nacenDeSuDiagnostico) {
+        String camino = nacenDeSuDiagnostico
+                ? "Invítala a escribirlos en la pestaña Plan (o a confirmar los que nacieron de su diagnóstico). "
+                : "Invítala a escribirlos en la pestaña Plan («Escríbelos en Plan»). ";
         return SIN_PROPUESTA + "todavía no tiene escritos sus tres objetivos de " + plazoDelObjetivo + ", y sin ellos no se "
-                + "pueden planificar objetivos. Invítala a escribirlos en la pestaña Plan (o a confirmar los que nacieron de su "
-                + "diagnóstico). No le propongas otro plan ni otra acción de objetivos hasta que los tenga (sus hábitos sí se pueden ajustar).";
+                + "pueden planificar objetivos. " + camino + "No le propongas otro plan ni otra acción de objetivos hasta que los tenga (sus hábitos sí se pueden ajustar).";
     }
 
     /**
@@ -60,10 +66,13 @@ public class CompuertaParaProponer {
 
     private final ConsultarCompuertaDeRocasPort compuertaPort;
     private final ConsultarSituacionDelAprendizPort situacion;
+    private final ConsultarDiagnosticoDeLaPersonaPort diagnostico;
 
-    public CompuertaParaProponer(ConsultarCompuertaDeRocasPort compuertaPort, ConsultarSituacionDelAprendizPort situacion) {
+    public CompuertaParaProponer(ConsultarCompuertaDeRocasPort compuertaPort, ConsultarSituacionDelAprendizPort situacion,
+                                 ConsultarDiagnosticoDeLaPersonaPort diagnostico) {
         this.compuertaPort = compuertaPort;
         this.situacion = situacion;
+        this.diagnostico = diagnostico;
     }
 
     /**
@@ -79,21 +88,39 @@ public class CompuertaParaProponer {
         }
     }
 
-    /** Su programa todavia no tiene dia (dia 0). Best-effort: sin lectura de la situacion, {@code false} y el texto sale como antes. */
-    private boolean programaPorEmpezar(UserId actorId) {
+    /** Una sola lectura de la situacion por pregunta. Best-effort: si falla, vacia y el texto sale como antes. */
+    private Optional<SituacionDelAprendiz> situacionDe(UserId actorId) {
         try {
-            return situacion.de(actorId).map(SituacionDelAprendiz::programaPorEmpezar).orElse(false);
+            return situacion.de(actorId);
         } catch (RuntimeException falla) {
-            log.info("[rag] la propuesta sale sin saber si su programa ya empezó: {}", falla.toString());
-            return false;
+            log.info("[rag] la propuesta sale sin leer la situacion de la persona: {}", falla.toString());
+            return Optional.empty();
         }
+    }
+
+    private static String inicioDe(Optional<SituacionDelAprendiz> situacionDeLaPersona) {
+        return situacionDeLaPersona.flatMap(InicioDelPrograma::de).map(inicio -> inicio.paraLasHerramientas() + "\n").orElse("");
+    }
+
+    /**
+     * Issue #65: la linea que abre el resultado de una herramienta de plan u objetivos mientras el programa de la persona no empezo («Su programa empieza
+     * mañana (martes 3 de noviembre). … Díselo antes de cualquier otra cosa.»), seguida de un salto de linea; vacia si ya empezo, si todavia no lo activo (sin
+     * Dia 1 no hay fecha) o si no se puede saber. Lo dice el texto de la herramienta y no solo el prompt: el modelo lee SIEMPRE lo que la herramienta devuelve,
+     * pero no siempre se acuerda de lo que el prompt le pide. La calcula {@link InicioDelPrograma}, la misma cuenta que el prompt.
+     */
+    public String inicioDelPrograma(UserId actorId) {
+        return inicioDe(situacionDe(actorId));
     }
 
     /** Para el plan de la semana y los cambios a sus objetivos: solo hace falta la llave (las Rocas Maestras). */
     public Optional<String> bloqueoDeObjetivos(UserId actorId) {
         try {
-            return compuertaPort.rocasMaestrasCompletas(actorId) ? Optional.empty()
-                    : Optional.of(sinObjetivos(PlazoDelObjetivoDeLaPersona.de(situacion, actorId)) + (programaPorEmpezar(actorId) ? PROGRAMA_POR_EMPEZAR : ""));
+            if (compuertaPort.rocasMaestrasCompletas(actorId)) {
+                return Optional.empty();
+            }
+            Optional<SituacionDelAprendiz> deLaPersona = situacionDe(actorId);
+            return Optional.of(inicioDe(deLaPersona) + sinObjetivos(PlazoDelObjetivoDeLaPersona.de(deLaPersona),
+                    ObjetivosDelDiagnosticoDeLaPersona.nacieronDeSuDiagnostico(diagnostico, actorId)));
         } catch (RuntimeException falla) {
             log.info("[rag] la propuesta sale sin consultar la compuerta de rocas: {}", falla.toString());
             return Optional.empty();
@@ -109,7 +136,7 @@ public class CompuertaParaProponer {
         try {
             List<String> faltan = compuertaPort.ejesSinObjetivoSemanal(actorId, fecha).stream()
                     .filter(ejes::contains).toList();
-            return faltan.isEmpty() ? Optional.empty() : Optional.of(sinObjetivoSemanal(faltan, fecha));
+            return faltan.isEmpty() ? Optional.empty() : Optional.of(inicioDelPrograma(actorId) + sinObjetivoSemanal(faltan, fecha));
         } catch (RuntimeException falla) {
             log.info("[rag] la propuesta sale sin consultar los objetivos semanales: {}", falla.toString());
             return Optional.empty();

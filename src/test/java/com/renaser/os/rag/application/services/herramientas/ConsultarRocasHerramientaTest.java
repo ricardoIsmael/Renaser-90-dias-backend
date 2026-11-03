@@ -1,5 +1,6 @@
 package com.renaser.os.rag.application.services.herramientas;
 
+import com.renaser.os.rag.application.ports.out.diagnostico.ConsultarDiagnosticoDeLaPersonaPort;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz;
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort;
@@ -15,6 +16,7 @@ import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizP
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort.RocaDelDia;
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort.RocasDeLaSemana;
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort.RocasDelDia;
+import com.renaser.os.rag.domain.model.diagnostico.DiagnosticoDeLaPersona;
 import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta;
 import com.renaser.os.shared.domain.Formacion;
@@ -53,7 +55,8 @@ class ConsultarRocasHerramientaTest {
 
     private final ConsultarRocasDelAprendizPort puerto = mock(ConsultarRocasDelAprendizPort.class);
     private final ConsultarSituacionDelAprendizPort situacion = mock(ConsultarSituacionDelAprendizPort.class);
-    private final ConsultarRocasHerramienta herramienta = new ConsultarRocasHerramienta(puerto, situacion);
+    private final ConsultarDiagnosticoDeLaPersonaPort diagnostico = mock(ConsultarDiagnosticoDeLaPersonaPort.class);
+    private final ConsultarRocasHerramienta herramienta = new ConsultarRocasHerramienta(puerto, situacion, diagnostico);
 
     @Test
     @DisplayName("sin alcance es hoy: rocas con franja, estado, evidencia, Pareto y el plan de manana")
@@ -204,6 +207,7 @@ class ConsultarRocasHerramientaTest {
     @DisplayName("noventa (spec 038): sin objetivos la manda a Plan o al diagnostico, nunca al Mapa; los del diagnostico salen POR CONFIRMAR en Plan")
     void noventaSinObjetivosYPorConfirmar() {
         when(puerto.objetivosDeNoventaDias(APRENDIZ)).thenReturn(List.of());
+        when(diagnostico.de(APRENDIZ)).thenReturn(new DiagnosticoDeLaPersona(true, true, "CUERPO", List.of()));
 
         assertThat(texto(herramienta.ejecutar(APRENDIZ, conAlcance("noventa"))))
                 .startsWith("Todavia no tiene objetivos de 90 días.").contains("diagnostico").contains("pestana Plan")

@@ -36,11 +36,17 @@ final class TextoDeObjetivos {
         return texto.toString();
     }
 
-    static String noventa(List<ObjetivoDeNoventaDias> objetivos, String plazoDelObjetivo) {
+    /**
+     * Issue #65: sin objetivos, el camino depende de si la persona tiene un diagnostico terminado. Con el, sus objetivos nacen de el y los confirma en Plan;
+     * sin el (la ficha estandar) los escribe ella en Plan y el texto NO nombra ningun diagnostico, para que SER no la mande a confirmar algo que no existe.
+     */
+    static String noventa(List<ObjetivoDeNoventaDias> objetivos, String plazoDelObjetivo, boolean nacenDeSuDiagnostico) {
         if (objetivos.isEmpty()) {
-            return "Todavia no tiene objetivos de " + plazoDelObjetivo + ". Nacen de su diagnostico (consultar_mi_diagnostico dice si lo hizo) o los "
-                    + "escribe ella misma en la pestana Plan, en el eje que quiera (Cuerpo, Negocio, Relaciones). Tu no los puedes escribir: llevala a "
-                    + "Plan. No la mandes al Mapa de Renacimiento, que ya no existe.";
+            String origen = nacenDeSuDiagnostico
+                    ? "Nacen de su diagnostico (consultar_mi_diagnostico dice si lo hizo) o los escribe ella misma en la pestana Plan, en el eje que quiera "
+                    : "Los escribe ella misma en la pestana Plan (\"Escribelos en Plan\"), en el eje que quiera ";
+            return "Todavia no tiene objetivos de " + plazoDelObjetivo + ". " + origen
+                    + "(Cuerpo, Negocio, Relaciones). Tu no los puedes escribir: llevala a Plan. No la mandes al Mapa de Renacimiento, que ya no existe.";
         }
         StringBuilder texto = new StringBuilder("Objetivos de ").append(plazoDelObjetivo).append(", por eje:\n");
         objetivos.forEach(objetivo -> texto.append(lineaDe(objetivo)).append('\n'));
