@@ -4,6 +4,7 @@ import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.SaveHabitoPort;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
 
@@ -42,6 +43,12 @@ class HabitoPersistenceAdapter implements LoadHabitoPort, SaveHabitoPort {
     }
 
     @Override
+    public List<Habito> catalogoActivoDeFormacion(com.renaser.os.shared.domain.Formacion formacion) {
+        return repository.findByAmbitoAndFormacionAndActivoTrueOrderByOrdenAscTituloAsc(AmbitoHabitoJpa.SISTEMA, formacion.codigo()).stream()
+                .map(mapper::toDomain).toList();
+    }
+
+    @Override
     public List<Habito> catalogoCompleto() {
         return repository.findByAmbitoOrderByOrdenAscTituloAsc(AmbitoHabitoJpa.SISTEMA).stream().map(mapper::toDomain).toList();
     }
@@ -54,8 +61,8 @@ class HabitoPersistenceAdapter implements LoadHabitoPort, SaveHabitoPort {
     }
 
     @Override
-    public Optional<Habito> porClaveSistema(String claveSistema) {
-        return repository.findByClaveSistema(claveSistema).map(mapper::toDomain);
+    public Optional<Habito> porClaveSistema(String claveSistema, Formacion formacion) {
+        return repository.findByClaveSistemaAndFormacion(claveSistema, formacion.codigo()).map(mapper::toDomain);
     }
 
     @Override

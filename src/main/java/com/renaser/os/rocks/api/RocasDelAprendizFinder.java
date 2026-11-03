@@ -37,6 +37,12 @@ public interface RocasDelAprendizFinder {
     /** Los objetivos semanales de la semana de programa en curso. */
     RocasDeLaSemana deLaSemana(UserId aprendizId);
 
+    /**
+     * La última semana del programa de ESTA persona: 13 en uno de 90 días, 53 en el de 365 (spec 026). Quien propone «la semana siguiente» no puede pedir una
+     * más allá de ésta. Mismas excepciones que el resto cuando no tiene el programa de rocas disponible.
+     */
+    int ultimaSemanaDelPrograma(UserId aprendizId);
+
     /** El objetivo del mes en curso, uno por eje con Roca Maestra definida. */
     List<ObjetivoDelMesDelEje> delMes(UserId aprendizId);
 
@@ -139,9 +145,16 @@ public interface RocasDelAprendizFinder {
      * @param avance         el valor que lleva hoy (con linea base) o lo acumulado (sin ella)
      * @param unidadAdelante la moneda va delante ({@code S/ 1500}), la unidad fisica detras ({@code 75 kg})
      * @param porcentaje     cuanto del camino recorrio, 0-100 ({@code MetaCuantitativa.porcentaje})
+     * @param porConfirmar   nacio del diagnostico y la persona todavia no lo confirmo en Plan (spec 026, 038): lo puede reescribir una vez
      */
     record ObjetivoDeNoventaDias(String eje, String objetivo, BigDecimal meta, BigDecimal avance, String unidad,
-                                 boolean unidadAdelante, BigDecimal lineaBase, Integer porcentaje) {
+                                 boolean unidadAdelante, BigDecimal lineaBase, Integer porcentaje, boolean porConfirmar) {
+
+        /** Sin saber si esta por confirmar: un objetivo ya confirmado. */
+        public ObjetivoDeNoventaDias(String eje, String objetivo, BigDecimal meta, BigDecimal avance, String unidad,
+                                     boolean unidadAdelante, BigDecimal lineaBase, Integer porcentaje) {
+            this(eje, objetivo, meta, avance, unidad, unidadAdelante, lineaBase, porcentaje, false);
+        }
     }
 
     record CierreDeLaSemanaAnterior(int numeroSemana, List<CierreDelEje> ejes) {

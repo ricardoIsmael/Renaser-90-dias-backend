@@ -1,5 +1,6 @@
 package com.renaser.os.chat.application.services;
 
+import com.renaser.os.chat.application.ports.in.bienvenida.ConsultarImagenDeLaFormacionUseCase;
 import com.renaser.os.chat.application.ports.in.conversacion.AutorizarAccesoAConversacionUseCase;
 import com.renaser.os.chat.application.ports.in.conversacion.VerFotosDelChatUseCase;
 import com.renaser.os.chat.application.ports.out.bienvenida.TarjetaConNombrePort;
@@ -11,6 +12,7 @@ import com.renaser.os.chat.domain.model.conversacion.FotoDeIntegrantes;
 import com.renaser.os.chat.domain.model.conversacion.PrimerNombre;
 import com.renaser.os.chat.domain.model.conversacion.TipoConversacion;
 import com.renaser.os.community.api.FotoPropiaDelGrupoFinder;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserStatus;
@@ -37,6 +39,10 @@ import java.util.UUID;
  * Las fotos del chat que sirve el backend: la tarjeta con nombre del soporte (D-205), la de cada
  * integrante de un grupo o de un soporte (D-206) y la foto propia de un grupo (D-212), que guarda
  * {@code community} y se lee de su contrato público.
+ *
+ * <p><b>De la formación de la conversación</b> (spec 035): las tarjetas con nombre (la del soporte y las de los integrantes) se dibujan sobre
+ * la portada de la formación de la CONVERSACIÓN que se mira, y la comunidad general y los grupos sin foto propia muestran la imagen de su formación
+ * ({@link ConsultarImagenDeLaFormacionUseCase}). Como todo lo demás, solo la sirve a quien puede ver la conversación: la de otra formación es un 404.
  *
  * <p><b>El orden importa.</b> Cuenta activa (403), la conversación existe (404), quien pide puede verla
  * (403) y recién entonces si es del tipo que corresponde y, para un integrante, si lo es (404): así, a
@@ -72,12 +78,20 @@ public class FotosDelChatService implements VerFotosDelChatUseCase {
     private final TarjetaConNombrePort tarjetaPort;
     private final FotoPropiaDelGrupoFinder fotosDeGrupos;
     private final FotoDeIntegrantes modo;
+    /** Spec 035: la imagen de la formación, para la comunidad general y los grupos sin foto propia. */
+    private final ConsultarImagenDeLaFormacionUseCase imagenesDeFormacion;
+    /** Spec 024: la conversación de otra formación es como si no existiera (404). */
+    private final VisibilidadPorFormacion visibilidad;
 
     public FotosDelChatService(LoadConversacionPort loadConversacionPort,
                                AutorizarAccesoAConversacionUseCase autorizarAcceso,
                                UserSummaryFinder userSummaryFinder, TarjetaConNombrePort tarjetaPort,
                                FotoPropiaDelGrupoFinder fotosDeGrupos,
-                               @Value("${renaser.chat.foto-de-integrantes:TARJETA}") String modo) {
+                               @Value("${renaser.chat.foto-de-integrantes:TARJETA}") String modo,
+                               VisibilidadPorFormacion visibilidad,
+                               ConsultarImagenDeLaFormacionUseCase imagenesDeFormacion) {
+        this.imagenesDeFormacion = imagenesDeFormacion;
+        this.visibilidad = visibilidad;
         this.loadConversacionPort = loadConversacionPort;
         this.autorizarAcceso = autorizarAcceso;
         this.userSummaryFinder = userSummaryFinder;
@@ -88,24 +102,31 @@ public class FotosDelChatService implements VerFotosDelChatUseCase {
     }
 
     /**
-     * El soporte, la tarjeta de su aprendiz; un grupo, su foto propia si la tiene (D-212). Un grupo que usa
-     * la de Renaser da 404, como antes, y la app muestra la tarjeta que trae.
+     * El soporte, la tarjeta de su aprendiz sobre la portada de su formación; un grupo, su foto propia si la tiene (D-212) o, si no, la imagen de su
+     * formación (spec 035); la comunidad general, la imagen de su formación. Si no hay ninguna da 404, como antes, y la app muestra la que trae.
      */
     @Override
     public FotoDelChat fotoDeLaConversacion(UserId actorId, ConversacionId conversacionId) {
         Conversacion conversacion = laQuePuedeVer(actorId, conversacionId);
         return switch (conversacion.tipo()) {
             case SOPORTE -> tarjetaDe(conversacion.aprendizDelSoporte().orElseThrow(() -> new NoSuchElementException(
-                    "El soporte no tiene aprendiz reconocible: " + conversacionId)));
+                    "El soporte no tiene aprendiz reconocible: " + conversacionId)), conversacion.formacion());
             case CELULA -> fotoPropiaDe(conversacion);
-            default -> throw new NoSuchElementException("La comunidad y los 1 a 1 no tienen foto propia");
+            case GLOBAL -> imagenDeLaFormacion(conversacion.formacion());
+            default -> throw new NoSuchElementException("Un 1 a 1 no tiene foto propia");
         };
     }
 
     private FotoDelChat fotoPropiaDe(Conversacion grupo) {
         return fotosDeGrupos.fotoDe(grupo.celulaId())
                 .map(foto -> new FotoDelChat(foto.jpeg(), huellaDe(foto.jpeg())))
-                .orElseThrow(() -> new NoSuchElementException("El grupo usa la foto de Renaser"));
+                .orElseGet(() -> imagenDeLaFormacion(grupo.formacion()));
+    }
+
+    private FotoDelChat imagenDeLaFormacion(Formacion formacion) {
+        return imagenesDeFormacion.servir(formacion)
+                .map(imagen -> new FotoDelChat(imagen.jpeg(), imagen.huella()))
+                .orElseThrow(() -> new NoSuchElementException("La formación " + formacion + " no tiene imagen: se usa la de la app"));
     }
 
     @Override
@@ -115,7 +136,7 @@ public class FotosDelChatService implements VerFotosDelChatUseCase {
                 || !autorizarAcceso.puedeVer(conversacionId, integranteId)) {
             throw new NoSuchElementException("No es integrante de un grupo o soporte que puedas ver");
         }
-        return tarjetaDe(integranteId);
+        return tarjetaDe(integranteId, conversacion.formacion());
     }
 
     @Override
@@ -150,6 +171,7 @@ public class FotosDelChatService implements VerFotosDelChatUseCase {
         requireActivo(actorId);
         Conversacion conversacion = loadConversacionPort.porId(conversacionId)
                 .orElseThrow(() -> new NoSuchElementException("Conversacion no encontrada: " + conversacionId));
+        visibilidad.exigirQueLaVea(conversacion, actorId);
         if (!autorizarAcceso.puedeVer(conversacionId, actorId)) {
             throw new NotAuthorizedException("No eres participante de esta conversación");
         }
@@ -157,9 +179,9 @@ public class FotosDelChatService implements VerFotosDelChatUseCase {
     }
 
     /** Sin cuenta (se dio de baja y la conversación quedó), la tarjeta va sin nombre: es la del programa. */
-    private FotoDelChat tarjetaDe(UserId persona) {
+    private FotoDelChat tarjetaDe(UserId persona, Formacion formacion) {
         String nombre = userSummaryFinder.findById(persona).map(u -> PrimerNombre.de(u.fullName())).orElse("");
-        TarjetaConNombre tarjeta = tarjetaPort.tarjetaDe(nombre);
+        TarjetaConNombre tarjeta = tarjetaPort.tarjetaDe(nombre, formacion);
         return new FotoDelChat(tarjeta.jpeg(), tarjeta.huella());
     }
 

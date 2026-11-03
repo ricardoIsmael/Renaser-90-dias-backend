@@ -18,4 +18,7 @@ public interface EtapaOnboardingPort {
 
     /** Idempotente: marcar dos veces la misma etapa no cambia la fecha original. */
     void marcarCompletada(UserId participanteId, String flujo);
+
+    /** Cuándo se completó esa etapa; vacío si todavía no. */
+    java.util.Optional<java.time.Instant> completadaEn(UserId participanteId, String flujo);
 }

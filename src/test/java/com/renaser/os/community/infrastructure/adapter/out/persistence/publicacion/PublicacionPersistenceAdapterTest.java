@@ -1,5 +1,6 @@
 package com.renaser.os.community.infrastructure.adapter.out.persistence.publicacion;
 
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.community.domain.model.publicacion.MediaPublicacion;
 import com.renaser.os.community.domain.model.publicacion.Publicacion;
@@ -77,7 +78,7 @@ class PublicacionPersistenceAdapterTest {
         crearPublicacion("general", Instant.parse("2026-08-21T10:00:00Z"));
         crearPublicacion("logros", Instant.parse("2026-08-22T10:00:00Z"));
 
-        List<Publicacion> pagina = adapter.feed(null, 10, null);
+        List<Publicacion> pagina = adapter.feed(null, 10, null, AlcanceDeFormacion.todas());
 
         assertThat(pagina).hasSize(3);
         assertThat(pagina).extracting(p -> p.creadoEn())
@@ -91,7 +92,7 @@ class PublicacionPersistenceAdapterTest {
         crearPublicacion(null, Instant.parse("2026-08-21T10:00:00Z"));
         crearPublicacion(null, Instant.parse("2026-08-22T10:00:00Z"));
 
-        List<Publicacion> pagina = adapter.feed(Instant.parse("2026-08-22T10:00:00Z"), 10, null);
+        List<Publicacion> pagina = adapter.feed(Instant.parse("2026-08-22T10:00:00Z"), 10, null, AlcanceDeFormacion.todas());
 
         assertThat(pagina).hasSize(2);
         assertThat(pagina).extracting(p -> p.creadoEn())
@@ -104,7 +105,7 @@ class PublicacionPersistenceAdapterTest {
         crearPublicacion("logros", Instant.parse("2026-08-21T10:00:00Z"));
         crearPublicacion("general", Instant.parse("2026-08-22T10:00:00Z"));
 
-        List<Publicacion> pagina = adapter.feed(null, 10, "general");
+        List<Publicacion> pagina = adapter.feed(null, 10, "general", AlcanceDeFormacion.todas());
 
         assertThat(pagina).hasSize(2);
         assertThat(pagina).allMatch(p -> "general".equals(p.categoriaClave()));
@@ -117,7 +118,7 @@ class PublicacionPersistenceAdapterTest {
         crearPublicacion("logros", Instant.parse("2026-08-22T10:00:00Z"));
         crearPublicacion("general", Instant.parse("2026-08-23T10:00:00Z"));
 
-        List<Publicacion> pagina = adapter.feed(Instant.parse("2026-08-23T10:00:00Z"), 10, "general");
+        List<Publicacion> pagina = adapter.feed(Instant.parse("2026-08-23T10:00:00Z"), 10, "general", AlcanceDeFormacion.todas());
 
         assertThat(pagina).hasSize(2);
         assertThat(pagina).allMatch(p -> "general".equals(p.categoriaClave()));
@@ -132,7 +133,7 @@ class PublicacionPersistenceAdapterTest {
         oculta.ocultar(Instant.parse("2026-08-21T11:00:00Z"));
         adapter.save(oculta);
 
-        List<Publicacion> pagina = adapter.feedOculto(null, 10);
+        List<Publicacion> pagina = adapter.feedOculto(null, 10, AlcanceDeFormacion.todas());
 
         assertThat(pagina).hasSize(1);
         assertThat(pagina.get(0).id()).isEqualTo(oculta.id());
@@ -148,7 +149,7 @@ class PublicacionPersistenceAdapterTest {
         oculta2.ocultar(Instant.parse("2026-08-21T11:00:00Z"));
         adapter.save(oculta2);
 
-        List<Publicacion> pagina = adapter.feedOculto(Instant.parse("2026-08-21T10:00:00Z"), 10);
+        List<Publicacion> pagina = adapter.feedOculto(Instant.parse("2026-08-21T10:00:00Z"), 10, AlcanceDeFormacion.todas());
 
         assertThat(pagina).hasSize(1);
         assertThat(pagina.get(0).id()).isEqualTo(oculta1.id());
@@ -207,7 +208,7 @@ class PublicacionPersistenceAdapterTest {
         publicada.ocultar(Instant.parse("2026-08-24T16:00:00Z"));
         adapter.save(publicada);
 
-        assertThat(adapter.feed(null, 10, null)).isEmpty(); // el feed ya no la muestra
+        assertThat(adapter.feed(null, 10, null, AlcanceDeFormacion.todas())).isEmpty(); // el feed ya no la muestra
         assertThat(adapter.existeDeAutorEntre(autorId, desde, hasta)).isTrue(); // el habito si
     }
 

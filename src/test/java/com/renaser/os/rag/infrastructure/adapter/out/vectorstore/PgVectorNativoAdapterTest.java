@@ -186,4 +186,65 @@ class PgVectorNativoAdapterTest {
         assertThat(resultado.get(0).leccionId()).isNull();
         assertThat(resultado.get(0).contenido()).isEqualTo("material general sin leccion");
     }
+
+    private List<String> contenidos(List<FragmentoRelevante> fragmentos) {
+        return fragmentos.stream().map(FragmentoRelevante::contenido).toList();
+    }
+
+    private long fragmentosDe(String contenido) {
+        return ((Number) entityManager.createNativeQuery("SELECT count(*) FROM renaser.base_conocimiento WHERE contenido = :contenido")
+                .setParameter("contenido", contenido).getSingleResult()).longValue();
+    }
+
+    /**
+     * Issue #62 (V164): la llave {@code leccion_id} era {@code ON DELETE SET NULL}, asi que borrar una leccion de la Escuela dejaba su transcripcion con
+     * {@code leccion_id IS NULL}, que el filtro trata como material general y ve CUALQUIER formacion. Ahora la transcripcion se borra con su leccion; el material
+     * general cargado a proposito (sin leccion desde el principio) sigue siendo visible para todos.
+     */
+    // issue #62
+    @Test
+    void borrarUnaLeccionBorraSuTranscripcionYNuncaLaVuelveMaterialGeneral() {
+        String leccionQueSeBorra = crearLeccion();
+        String otraLeccion = crearLeccion();
+        String borrada = "transcripcion de la leccion que se borra";
+        String deOtra = "transcripcion de otra leccion";
+        String general = "material general cargado a proposito";
+        adapter.save(ChunkConocimiento.indexar(nuevoId(), "TRANSCRIPCION_CLASE", "texto", "doc-1", leccionQueSeBorra, borrada,
+                vectorConComponentes(0, 1.0f, -1, 0f), Map.of(), CLOCK));
+        adapter.save(ChunkConocimiento.indexar(nuevoId(), "TRANSCRIPCION_CLASE", "texto", "doc-2", otraLeccion, deOtra,
+                vectorConComponentes(0, 0.9f, 1, 0.1f), Map.of(), CLOCK));
+        adapter.save(ChunkConocimiento.indexar(nuevoId(), "DOCUMENTO_LIBRE", null, "doc-3", null, general,
+                vectorConComponentes(0, 0.8f, 2, 0.2f), Map.of(), CLOCK));
+
+        entityManager.createNativeQuery("DELETE FROM renaser.lecciones WHERE id = :id").setParameter("id", leccionQueSeBorra).executeUpdate();
+        entityManager.flush();
+        entityManager.clear();
+        when(embeddingPort.generar(eq(CONSULTA))).thenReturn(vectorConComponentes(0, 1.0f, -1, 0f));
+
+        assertThat(fragmentosDe(borrada)).as("no queda huerfana con leccion_id NULL").isZero();
+        assertThat(contenidos(adapter.buscarSimilares(CONSULTA, 50, FiltroLecciones.sinFiltro())))
+                .doesNotContain(borrada).contains(deOtra, general);
+        // Quien tiene OTRA formacion (otro conjunto de lecciones visibles) nunca ve la transcripcion que se borro, ni como «material general».
+        assertThat(contenidos(adapter.buscarSimilares(CONSULTA, 50, FiltroLecciones.soloVisibles(Set.of(otraLeccion)))))
+                .doesNotContain(borrada).contains(deOtra, general);
+        assertThat(contenidos(adapter.buscarSimilares(CONSULTA, 50, FiltroLecciones.soloVisibles(Set.of()))))
+                .doesNotContain(borrada, deOtra).contains(general);
+    }
+
+    // issue #62
+    @Test
+    void borrarUnCursoBorraLasTranscripcionesDeTodasSusLecciones() {
+        String leccion = crearLeccion();
+        String transcripcion = "transcripcion de una leccion de un curso que se borra";
+        adapter.save(ChunkConocimiento.indexar(nuevoId(), "TRANSCRIPCION_CLASE", "texto", "doc-1", leccion, transcripcion,
+                vectorConComponentes(0, 1.0f, -1, 0f), Map.of(), CLOCK));
+        String cursoId = (String) entityManager.createNativeQuery("SELECT curso_id FROM renaser.lecciones WHERE id = :id")
+                .setParameter("id", leccion).getSingleResult();
+
+        entityManager.createNativeQuery("DELETE FROM renaser.cursos WHERE id = :id").setParameter("id", cursoId).executeUpdate();
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(fragmentosDe(transcripcion)).isZero();
+    }
 }

@@ -64,6 +64,9 @@ public class PresenciaService implements ConsultarPresenciaUseCase, RegistrarPre
     private final AccesoAChatsDeGrupo accesoAChatsDeGrupo;
     private final UserSummaryFinder userSummaryFinder;
 
+    /** Spec 024: la regla única de quién ve cada conversación por formación. */
+    private final VisibilidadPorFormacion visibilidad;
+
     public PresenciaService(PresenciaPort presenciaPort,
                             PublicarPresenciaFanoutPort publicarPresenciaFanoutPort,
                             ConversacionesDeUsuarioPort conversacionesDeUsuarioPort,
@@ -71,7 +74,8 @@ public class PresenciaService implements ConsultarPresenciaUseCase, RegistrarPre
                             LoadConversacionPort loadConversacionPort,
                             EsParticipantePort esParticipantePort,
                             AccesoAChatsDeGrupo accesoAChatsDeGrupo,
-                            UserSummaryFinder userSummaryFinder) {
+                            UserSummaryFinder userSummaryFinder, VisibilidadPorFormacion visibilidad) {
+        this.visibilidad = visibilidad;
         this.presenciaPort = presenciaPort;
         this.publicarPresenciaFanoutPort = publicarPresenciaFanoutPort;
         this.conversacionesDeUsuarioPort = conversacionesDeUsuarioPort;
@@ -156,6 +160,8 @@ public class PresenciaService implements ConsultarPresenciaUseCase, RegistrarPre
      * pero es informacion del mismo grupo y se cuida igual.
      */
     private void requireParticipante(Conversacion conversacion, UserId usuarioId) {
+        // Spec 024: saber quien esta en linea en una conversacion de otra formacion tampoco se puede.
+        visibilidad.exigirQueLaVea(conversacion, usuarioId);
         if (autorizado(conversacion, usuarioId)) {
             return;
         }

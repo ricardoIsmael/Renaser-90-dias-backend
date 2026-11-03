@@ -72,16 +72,16 @@ class ElegirDiaUnoDelPersonalIT {
         usuarios.reversed().forEach(id -> jdbcTemplate.update("DELETE FROM renaser.usuarios WHERE id = ?", id));
     }
 
-    @ParameterizedTest(name = "{0} con la fila sin activar elige su Día 1 y el programa empieza ese día")
+    @ParameterizedTest(name = "{0} con la fila sin activar empieza su programa mañana")
     @ValueSource(strings = {"MENTOR", "LIDER_MENTORES", "ADMIN", "ALQUIMISTA"})
-    void elPersonalConFilaSinActivarEligeSuDiaUno(String rol) throws Exception {
+    void elPersonalConFilaSinActivarEmpiezaSuProgramaManiana(String rol) throws Exception {
         UUID persona = usuario(rol, "ACTIVO");
         filaSinActivar(persona);
         String sesion = sesionDe(persona);
 
         JsonNode antes = leer(pedir("GET", ACTIVAR, sesion, null));
         assertThat(antes.get("activated").asBoolean()).isFalse();
-        assertThat(antes.get("validStartDates")).hasSize(3);
+        assertThat(antes.get("validStartDates")).as("spec 036: una sola fecha, mañana").hasSize(1);
         // Por qué la invitación de Hoy no aparecía: ya tiene fila, así que no «puede empezar».
         assertThat(leer(pedir("GET", CONTEXTO, sesion, null)).at("/capabilities/canStartProgram").asBoolean())
                 .isFalse();
@@ -103,13 +103,14 @@ class ElegirDiaUnoDelPersonalIT {
         assertThat(((Number) fila.get("dia")).intValue()).as("todavía no llegó: día 0, como el aprendiz").isZero();
     }
 
+    // spec 036 FR-006
     @Test
-    @DisplayName("el aprendiz sigue igual: con la fila sin activar elige su Día 1 por el mismo endpoint")
+    @DisplayName("el aprendiz sigue igual: con la fila sin activar empieza mañana por el mismo endpoint")
     void elAprendizSigueIgual() throws Exception {
         UUID aprendiz = usuario("APRENDIZ", "ACTIVO");
         filaSinActivar(aprendiz);
         String sesion = sesionDe(aprendiz);
-        String elegida = leer(pedir("GET", ACTIVAR, sesion, null)).get("validStartDates").get(2).asText();
+        String elegida = leer(pedir("GET", ACTIVAR, sesion, null)).get("validStartDates").get(0).asText();
 
         HttpResponse<String> activada = pedir("POST", ACTIVAR, sesion, Map.of("startDate", elegida));
 

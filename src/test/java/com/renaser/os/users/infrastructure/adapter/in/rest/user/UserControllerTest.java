@@ -1,5 +1,7 @@
 package com.renaser.os.users.infrastructure.adapter.in.rest.user;
 
+import com.renaser.os.users.infrastructure.adapter.in.rest.formacion.SesionConFormacionDePrueba;
+import org.springframework.context.annotation.Import;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -41,6 +43,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(UserController.class)
 @AutoConfigureMockMvc(addFilters = false)
+@Import(SesionConFormacionDePrueba.class)
 class UserControllerTest {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-08-26T10:00:00Z"));

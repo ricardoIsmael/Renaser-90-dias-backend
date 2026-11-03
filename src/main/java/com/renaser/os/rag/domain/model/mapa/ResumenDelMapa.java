@@ -11,12 +11,18 @@ package com.renaser.os.rag.domain.model.mapa;
  *                    despues del 90, o sin dia de programa)
  * @param hito        lo que escribio para ese hito en el area que manda (o en la primera que lo tenga);
  *                    {@code null} si no escribio nada para ese dia
+ * @param diagnostico el diagnostico de la persona (spec 026), o {@code null} si no lo tiene o no se pudo leer
  * @param rocasMaestrasCompletas si {@code rocks} tiene sus tres objetivos de 90 dias, la llave para planificar
  *                    (D-247): {@code false} = toda propuesta de objetivos fallaria; {@code null} = no se sabe.
  *                    Va aparte de {@code tieneMapa}: puede haber Mapa respondido y la activacion sin crearlas
  */
 public record ResumenDelMapa(boolean tieneMapa, String prioridad, ProximoHito proximo, MapaDeLaPersona.Hito hito,
-                             Boolean rocasMaestrasCompletas) {
+                             Boolean rocasMaestrasCompletas, ResumenDelDiagnostico diagnostico) {
+
+    /** Sin diagnostico: la firma de antes de la spec 026. */
+    public ResumenDelMapa(boolean tieneMapa, String prioridad, ProximoHito proximo, MapaDeLaPersona.Hito hito, Boolean rocasMaestrasCompletas) {
+        this(tieneMapa, prioridad, proximo, hito, rocasMaestrasCompletas, null);
+    }
 
     public static ResumenDelMapa de(MapaDeLaPersona mapa, int diaDeHoy) {
         if (!mapa.tieneMapa()) {
@@ -29,7 +35,12 @@ public record ResumenDelMapa(boolean tieneMapa, String prioridad, ProximoHito pr
 
     /** El mismo resumen sabiendo si tiene sus Rocas Maestras ({@code null} si no se pudo saber). */
     public ResumenDelMapa conRocasMaestras(Boolean completas) {
-        return new ResumenDelMapa(tieneMapa, prioridad, proximo, hito, completas);
+        return new ResumenDelMapa(tieneMapa, prioridad, proximo, hito, completas, diagnostico);
+    }
+
+    /** El mismo resumen con lo que sabemos de su diagnostico ({@code null} si no tiene o no se pudo leer). */
+    public ResumenDelMapa conDiagnostico(ResumenDelDiagnostico resumen) {
+        return new ResumenDelMapa(tieneMapa, prioridad, proximo, hito, rocasMaestrasCompletas, resumen);
     }
 
     /** Sin las Rocas Maestras, sabido: no se puede planificar ningun objetivo. */

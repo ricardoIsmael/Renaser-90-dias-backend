@@ -61,6 +61,7 @@ public final class ReglaDelResumenDeConsultas {
     public static Optional<Resumen> resumir(DiaDelMentor dia, List<ConsultaDeFicha> consultas) {
         UserId mentor = dia.mentorId();
         List<ConsultaDeFicha> validas = consultas.stream()
+                .filter(c -> c.tipo() == TipoDeConsulta.SEMANA)
                 .filter(c -> c.rolConsultor() == UserRole.MENTOR_LEAD)
                 .filter(c -> mentor.equals(c.mentorId()))
                 .filter(c -> !mentor.equals(c.consultorId()) && !mentor.equals(c.personaId()))

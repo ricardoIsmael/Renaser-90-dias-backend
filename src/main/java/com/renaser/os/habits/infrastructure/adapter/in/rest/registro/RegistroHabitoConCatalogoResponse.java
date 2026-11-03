@@ -73,14 +73,21 @@ public record RegistroHabitoConCatalogoResponse(String id, UUID habitoId, LocalD
                 vista.tieneEvidencia(), MedicionResponse.from(vista.medicion()), vista.rachaDias());
     }
 
-    /** D-226. {@code unidad} es el nombre del enum: hoy solo {@code KILOMETROS}. */
-    public record MedicionResponse(String unidad, BigDecimal valorDelDia, BigDecimal total) {
+    /**
+     * D-226. {@code unidad} es el nombre del enum: hoy solo {@code KILOMETROS}. Spec 037 (aditivo): {@code meta} diaria que
+     * rige, y de dónde salió lo registrado ese día ({@code origenDelDia}: {@code MANUAL} o {@code HEALTH_CONNECT};
+     * {@code fuenteDelDia} solo en la lectura automática).
+     */
+    public record MedicionResponse(String unidad, BigDecimal valorDelDia, BigDecimal total, BigDecimal meta,
+                                   String origenDelDia, String fuenteDelDia) {
 
         static MedicionResponse from(MedicionDelTrack medicion) {
             if (medicion == null) {
                 return null;
             }
-            return new MedicionResponse(medicion.unidad().name(), medicion.valorDelDia(), medicion.total());
+            return new MedicionResponse(medicion.unidad().name(), medicion.valorDelDia(), medicion.total(),
+                    medicion.meta(), medicion.origenDelDia() != null ? medicion.origenDelDia().name() : null,
+                    medicion.fuenteDelDia());
         }
     }
 }

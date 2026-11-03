@@ -1,5 +1,6 @@
 package com.renaser.os.academy.application.ports.out.participante;
 
+import com.renaser.os.shared.domain.DuracionDelPrograma;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.ZoneId;
@@ -36,8 +37,17 @@ public interface ConsultarProgresoParticipanteAcademyPort {
      * (`POST /api/v1/mentor/activate-tracking`) queda con este campo puesto, y es lo unico que
      * distingue a un mentor que SI cursa el programa de uno que no.
      */
+    /**
+     * @param duracionDias la duración del programa de la persona (90 o 365, spec 022): hasta qué día hay Clase diaria
+     */
     record ProgresoParticipanteAcademy(Integer diaPrograma, ZoneId zona, RolParticipante rol, boolean suspendido,
-                                        boolean programaActivado) {
+                                        boolean programaActivado, int duracionDias) {
+
+        /** Firma de antes de las formaciones: el programa de 90 días de siempre. */
+        public ProgresoParticipanteAcademy(Integer diaPrograma, ZoneId zona, RolParticipante rol, boolean suspendido,
+                                            boolean programaActivado) {
+            this(diaPrograma, zona, rol, suspendido, programaActivado, DuracionDelPrograma.POR_DEFECTO);
+        }
     }
 
     /** Espejo LOCAL (a este modulo) del enum Postgres `rol_usuario`. */

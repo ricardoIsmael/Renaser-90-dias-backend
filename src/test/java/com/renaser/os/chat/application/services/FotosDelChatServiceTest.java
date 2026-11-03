@@ -1,5 +1,6 @@
 package com.renaser.os.chat.application.services;
 
+import com.renaser.os.chat.application.ports.in.bienvenida.ConsultarImagenDeLaFormacionUseCase;
 import com.renaser.os.chat.application.ports.in.conversacion.AutorizarAccesoAConversacionUseCase;
 import com.renaser.os.chat.application.ports.in.conversacion.VerFotosDelChatUseCase.FotoDelChat;
 import com.renaser.os.chat.application.ports.in.conversacion.VerFotosDelChatUseCase.TarjetasDelGrupo;
@@ -11,6 +12,7 @@ import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.conversacion.TipoConversacion;
 import com.renaser.os.community.api.FotoPropiaDelGrupoFinder;
 import com.renaser.os.community.api.FotoPropiaDelGrupoFinder.FotoPropia;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -36,8 +38,11 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -71,6 +76,9 @@ class FotosDelChatServiceTest {
     /** D-212: la foto propia de un grupo, que guarda community. */
     @Mock
     private FotoPropiaDelGrupoFinder fotosDeGrupos;
+    /** Spec 035: la imagen de la formación, para la comunidad general y los grupos sin foto propia. */
+    @Mock
+    private ConsultarImagenDeLaFormacionUseCase imagenes;
 
     private FotosDelChatService servicio;
 
@@ -84,7 +92,7 @@ class FotosDelChatServiceTest {
         cuenta(ANA, "maría josé ñahui", UserRole.TRAINEE, UserStatus.ACTIVE);
         cuenta(KELIN, "Kelin Rojas", UserRole.ADMIN, UserStatus.ACTIVE);
         cuenta(RICARDO, "ricardo palomino", UserRole.MENTOR, UserStatus.ACTIVE);
-        lenient().when(tarjetaPort.tarjetaDe(any())).thenReturn(TARJETA);
+        lenient().when(tarjetaPort.tarjetaDe(any(), any())).thenReturn(TARJETA);
     }
 
     // ── La foto del soporte (D-205) ─────────────────────────────────────────
@@ -96,7 +104,7 @@ class FotosDelChatServiceTest {
 
         FotoDelChat foto = servicio.fotoDeLaConversacion(ANA, SOPORTE);
 
-        verify(tarjetaPort).tarjetaDe("María");
+        verify(tarjetaPort).tarjetaDe("María", Formacion.ESCUELA);
         assertThat(foto.jpeg()).isSameAs(TARJETA.jpeg());
         assertThat(foto.huella()).isEqualTo("abc123");
     }
@@ -108,7 +116,7 @@ class FotosDelChatServiceTest {
 
         servicio.fotoDeLaConversacion(KELIN, SOPORTE);
 
-        verify(tarjetaPort).tarjetaDe("María");
+        verify(tarjetaPort).tarjetaDe("María", Formacion.ESCUELA);
     }
 
     @Test
@@ -185,7 +193,7 @@ class FotosDelChatServiceTest {
 
         servicio.fotoDeLaConversacion(KELIN, SOPORTE);
 
-        verify(tarjetaPort).tarjetaDe("");
+        verify(tarjetaPort).tarjetaDe("", Formacion.ESCUELA);
     }
 
     // ── La foto de cada integrante (D-206) ──────────────────────────────────
@@ -198,7 +206,7 @@ class FotosDelChatServiceTest {
 
         FotoDelChat foto = servicio.fotoDeIntegrante(ANA, GRUPO, RICARDO);
 
-        verify(tarjetaPort).tarjetaDe("Ricardo");
+        verify(tarjetaPort).tarjetaDe("Ricardo", Formacion.ESCUELA);
         assertThat(foto.huella()).isEqualTo("abc123");
     }
 
@@ -210,7 +218,7 @@ class FotosDelChatServiceTest {
 
         servicio.fotoDeIntegrante(ANA, SOPORTE, KELIN);
 
-        verify(tarjetaPort).tarjetaDe("Kelin");
+        verify(tarjetaPort).tarjetaDe("Kelin", Formacion.ESCUELA);
     }
 
     @Test
@@ -338,9 +346,66 @@ class FotosDelChatServiceTest {
                 .isEqualTo("${CHAT_FOTO_DE_INTEGRANTES:TARJETA}");
     }
 
+    // ── La imagen de la formación (spec 035) ───────────────────────────────
+
+    private static final ConsultarImagenDeLaFormacionUseCase.ImagenServida IMAGEN_DIPLOMADO =
+            new ConsultarImagenDeLaFormacionUseCase.ImagenServida(new byte[] {(byte) 0xFF, (byte) 0xD8, 9}, "diplomado");
+    private static final ConversacionId GLOBAL_DIPLOMADO = ConversacionId.of(UUID.randomUUID());
+    private static final ConversacionId SOPORTE_DIPLOMADO = ConversacionId.of(UUID.randomUUID());
+    private static final ConversacionId GRUPO_DIPLOMADO = ConversacionId.of(UUID.randomUUID());
+    private static final UUID CELULA_DIPLOMADO = UUID.randomUUID();
+
+    @Test
+    @DisplayName("la comunidad general muestra la imagen de SU formación, no la de otra")
+    void laComunidadMuestraLaImagenDeSuFormacion() {
+        conversacion(Conversacion.crearGlobal(GLOBAL_DIPLOMADO, "Diplomado Renaser Global", AHORA, Formacion.DIPLOMADO));
+        when(autorizarAcceso.puedeVer(GLOBAL_DIPLOMADO, ANA)).thenReturn(true);
+        when(imagenes.servir(Formacion.DIPLOMADO)).thenReturn(Optional.of(IMAGEN_DIPLOMADO));
+
+        FotoDelChat foto = servicio.fotoDeLaConversacion(ANA, GLOBAL_DIPLOMADO);
+
+        assertThat(foto.jpeg()).isSameAs(IMAGEN_DIPLOMADO.jpeg());
+        assertThat(foto.huella()).isEqualTo("diplomado");
+        verify(imagenes, never()).servir(Formacion.ESCUELA);
+    }
+
+    @Test
+    @DisplayName("un grupo sin foto propia muestra la imagen de su formación; con foto propia, la suya")
+    void unGrupoSinFotoPropiaMuestraLaDeSuFormacion() {
+        conversacion(Conversacion.crearCelula(GRUPO_DIPLOMADO, CELULA_DIPLOMADO, AHORA, Formacion.DIPLOMADO));
+        when(autorizarAcceso.puedeVer(GRUPO_DIPLOMADO, ANA)).thenReturn(true);
+        when(fotosDeGrupos.fotoDe(CELULA_DIPLOMADO)).thenReturn(Optional.empty());
+        when(imagenes.servir(Formacion.DIPLOMADO)).thenReturn(Optional.of(IMAGEN_DIPLOMADO));
+
+        assertThat(servicio.fotoDeLaConversacion(ANA, GRUPO_DIPLOMADO).huella()).isEqualTo("diplomado");
+
+        when(fotosDeGrupos.fotoDe(CELULA_DIPLOMADO)).thenReturn(Optional.of(
+                new FotoPropiaDelGrupoFinder.FotoPropia(new byte[] {1, 2, 3}, AHORA)));
+
+        FotoDelChat propia = servicio.fotoDeLaConversacion(ANA, GRUPO_DIPLOMADO);
+
+        assertThat(propia.jpeg()).containsExactly(1, 2, 3);
+        verify(imagenes, times(1)).servir(Formacion.DIPLOMADO);
+    }
+
+    @Test
+    @DisplayName("la tarjeta con nombre del soporte y de cada integrante se dibuja sobre la portada de la formación de la conversación")
+    void lasTarjetasSonDeLaFormacionDeLaConversacion() {
+        conversacion(Conversacion.crearSoporte(SOPORTE_DIPLOMADO, ANA, "Ana – Diplomado Renaser", AHORA, Formacion.DIPLOMADO));
+        when(autorizarAcceso.puedeVer(SOPORTE_DIPLOMADO, ANA)).thenReturn(true);
+        when(autorizarAcceso.puedeVer(SOPORTE_DIPLOMADO, KELIN)).thenReturn(true);
+
+        servicio.fotoDeLaConversacion(ANA, SOPORTE_DIPLOMADO);
+        servicio.fotoDeIntegrante(ANA, SOPORTE_DIPLOMADO, KELIN);
+
+        verify(tarjetaPort).tarjetaDe("María", Formacion.DIPLOMADO);
+        verify(tarjetaPort).tarjetaDe("Kelin", Formacion.DIPLOMADO);
+        verify(tarjetaPort, never()).tarjetaDe(anyString(), eq(Formacion.ESCUELA));
+    }
+
     private FotosDelChatService conModo(String modo) {
         return new FotosDelChatService(loadConversacionPort, autorizarAcceso, userSummaryFinder, tarjetaPort,
-                fotosDeGrupos, modo);
+                fotosDeGrupos, modo, new com.renaser.os.chat.application.services.VisibilidadPermisiva(), imagenes);
     }
 
     private void grupoConChat() {

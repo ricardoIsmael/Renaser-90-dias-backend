@@ -72,11 +72,13 @@ public class ClaseDiariaHabitoService implements CompletarClaseDiariaHabitoUseCa
     @Override
     public RegistroCompletado completarDeHoy(CompletarClaseDiariaHabitoCommand command) {
         UserId participanteId = command.participanteId();
-        Habito habitoDailyClass = loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_DAILY_CLASS)
+        var progreso = requireProgresoNoSuspendido(participanteId);
+        // Spec 023: la Clase diaria de la formacion de la persona; una formacion que no la ofrece no tiene este flujo (FR-005).
+        Habito habitoDailyClass = loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_DAILY_CLASS, progreso.formacion())
                 .orElseThrow(() -> new NoSuchElementException(
                         "No existe en el catalogo un habito con claveSistema=" + CLAVE_SISTEMA_DAILY_CLASS));
 
-        LocalDate hoy = fechaHoyEnZonaDe(requireProgresoNoSuspendido(participanteId).timezone());
+        LocalDate hoy = fechaHoyEnZonaDe(progreso.timezone());
         // CON cerrojo, y esta es la PRIMERA lectura de esta fila en la transaccion que abre
         // academy: la guarda de abajo y el completar() que la sigue tienen que decidir sobre el
         // estado que el cerrojo protege, no sobre uno leido antes. Ver el javadoc de la clase.

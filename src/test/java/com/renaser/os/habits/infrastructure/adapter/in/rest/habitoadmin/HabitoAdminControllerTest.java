@@ -84,6 +84,9 @@ class HabitoAdminControllerTest {
     private EliminarHabitoUseCase eliminarHabito;
     @MockitoBean
     private ConsultarRolesElegiblesUseCase rolesElegibles;
+    /** Spec 023: el controlador suma «copiar a otra formación»; estas pruebas no lo ejercen. */
+    @MockitoBean
+    private com.renaser.os.habits.application.ports.in.habitoadmin.CopiarHabitoAOtraFormacionUseCase copiarHabito;
 
     private final UUID admin = UUID.randomUUID();
     private final UUID post = UUID.randomUUID();
@@ -255,11 +258,12 @@ class HabitoAdminControllerTest {
     @Test
     @DisplayName("GET ?role= pasa el filtro al caso de uso")
     void listarPorRol() throws Exception {
-        when(consultarCatalogo.listar(any(), any())).thenReturn(List.of());
+        when(consultarCatalogo.listar(any(), any(), any())).thenReturn(List.of());
 
         mockMvc.perform(get("/api/v1/admin/habits").param("role", "MENTOR").header("X-Actor-Id", admin.toString()))
                 .andExpect(status().isOk());
-        verify(consultarCatalogo).listar(UserId.of(admin), CodigoDeRol.of("MENTOR"));
+        // Spec 023: sin `formation` el servidor responde la Escuela, que es lo que esperaba la app anterior.
+        verify(consultarCatalogo).listar(UserId.of(admin), CodigoDeRol.of("MENTOR"), com.renaser.os.shared.domain.Formacion.ESCUELA);
     }
 
     @Test

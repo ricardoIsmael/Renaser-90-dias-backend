@@ -97,6 +97,32 @@ class ConsultarSituacionDelAprendizAdapterTest {
         assertThat(adaptador(null).de(ALGUIEN)).isEmpty();
     }
 
+    // spec 036: SER distingue «empieza manana» de «todavia no lo activaste» por el Dia 1 activado, no por el dia 0
+    @Test
+    @DisplayName("spec 036: el dia 0 de quien ya activo su programa lleva su Dia 1 (manana); el de quien no lo activo, ninguno")
+    void elDiaCeroLlevaElDiaUnoSoloSiLoActivo() {
+        LocalDate manana = LocalDate.of(2026, 9, 26);
+        ParticipacionPrograma activado = new ParticipacionPrograma(ALGUIEN, true, 0, manana, ZoneId.of("America/Lima"),
+                FasePrograma.initial(), null, null, UserRole.TRAINEE, false, true);
+        ParticipacionPrograma sinActivar = new ParticipacionPrograma(ALGUIEN, true, 0, manana, ZoneId.of("America/Lima"),
+                FasePrograma.initial(), null, null, UserRole.TRAINEE, false, false);
+
+        assertThat(adaptador(activado).de(ALGUIEN)).hasValueSatisfying(s -> {
+            assertThat(s.diaPrograma()).isZero();
+            assertThat(s.diaUno()).isEqualTo(manana);
+            assertThat(s.programaPorEmpezar()).isTrue();
+            assertThat(s.programaSinActivar()).isFalse();
+        });
+        assertThat(adaptador(sinActivar).de(ALGUIEN)).hasValueSatisfying(s -> {
+            assertThat(s.diaUno()).isNull();
+            assertThat(s.programaSinActivar()).isTrue();
+        });
+        assertThat(adaptador(inscritoEnDia(5, FasePrograma.initial())).de(ALGUIEN)).hasValueSatisfying(s -> {
+            assertThat(s.programaPorEmpezar()).isFalse();
+            assertThat(s.programaSinActivar()).isFalse();
+        });
+    }
+
     private static ParticipacionPrograma inscritoEnDia(int dia, FasePrograma faseGuardada) {
         return new ParticipacionPrograma(ALGUIEN, true, dia, LocalDate.of(2026, 9, 1),
                 ZoneId.of("America/Lima"), faseGuardada, null, null, UserRole.TRAINEE, false, true);

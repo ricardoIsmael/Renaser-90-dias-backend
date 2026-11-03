@@ -79,6 +79,32 @@ class PropuestasRenasiaControllerTest {
                 .andExpect(jsonPath("$.mensaje").value("Listo, marque Meditar."));
     }
 
+    /** Spec 038: la app apaga las alarmas del habito cumplido (issue #33) con el habito y el dia que trae la respuesta. */
+    // spec 038 FR-009, SC-003
+    @Test
+    @DisplayName("spec 038: confirmar un habito cumplido trae registro, habito, dia y puntos; sin cumplir, el campo no viaja")
+    void confirmarTraeElHabitoCumplido() throws Exception {
+        UUID actorId = actor(UserStatus.ACTIVE);
+        UUID registro = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        UUID habito = UUID.fromString("22222222-2222-2222-2222-222222222222");
+        when(resolverUseCase.confirmar(UserId.of(actorId), propuestaId)).thenReturn(ResultadoHerramienta.exito(
+                "Habito marcado como completado. Puntos otorgados: 8.",
+                new com.renaser.os.rag.domain.model.herramienta.HabitoCumplido(registro, habito, java.time.LocalDate.of(2026, 11, 2), 8)));
+
+        mockMvc.perform(post(CONFIRMAR, propuestaId).header("X-Actor-Id", actorId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estado").value("CONFIRMADA"))
+                .andExpect(jsonPath("$.habitoCumplido.registroId").value(registro.toString()))
+                .andExpect(jsonPath("$.habitoCumplido.habitoId").value(habito.toString()))
+                .andExpect(jsonPath("$.habitoCumplido.fecha").value("2026-11-02"))
+                .andExpect(jsonPath("$.habitoCumplido.puntos").value(8));
+
+        when(resolverUseCase.confirmar(UserId.of(actorId), propuestaId)).thenReturn(ResultadoHerramienta.exito("Listo."));
+        mockMvc.perform(post(CONFIRMAR, propuestaId).header("X-Actor-Id", actorId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.habitoCumplido").doesNotExist());
+    }
+
     @Test
     @DisplayName("si el negocio rechaza al ejecutar, es 200 con estado FALLIDA y el motivo")
     void confirmarRechazadoPorElNegocio() throws Exception {

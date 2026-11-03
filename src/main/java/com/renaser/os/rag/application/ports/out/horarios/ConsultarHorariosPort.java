@@ -31,8 +31,13 @@ public interface ConsultarHorariosPort {
      */
     LocalTime ultimaHoraDeInicio();
 
-    /** @param diaPrograma el dia del programa que cae en {@code fecha}; puede quedar fuera de [0, 90]. */
-    record HorariosDelDia(LocalDate fecha, int diaPrograma, List<HorarioDeHabito> habitos, CuotaCambios cuota) {
+    /** @param diaPrograma el dia del programa que cae en {@code fecha}; puede quedar fuera de [0, duracionDias]. */
+    record HorariosDelDia(LocalDate fecha, int diaPrograma, List<HorarioDeHabito> habitos, CuotaCambios cuota, int duracionDias) {
+
+        /** Firma de antes de las formaciones (spec 022): el programa de 90 días. */
+        public HorariosDelDia(LocalDate fecha, int diaPrograma, List<HorarioDeHabito> habitos, CuotaCambios cuota) {
+            this(fecha, diaPrograma, habitos, cuota, 90);
+        }
     }
 
     /**

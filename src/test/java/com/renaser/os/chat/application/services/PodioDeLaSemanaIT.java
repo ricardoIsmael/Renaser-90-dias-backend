@@ -16,6 +16,7 @@ import com.renaser.os.points.api.RankingGeneralFinder;
 import com.renaser.os.points.api.RankingGeneralFinder.PuestoEnElRankingGeneral;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.junit.jupiter.api.AfterEach;
@@ -94,7 +95,7 @@ class PodioDeLaSemanaIT {
     void padron() {
         reloj.fijar(LUNES_8_A_LAS_22_DE_LIMA);
         when(pushPort.enviar(anyList(), any())).thenReturn(List.of());
-        if (conversaciones.global().isEmpty()) {
+        if (conversaciones.global(Formacion.ESCUELA).isEmpty()) {
             grupoGeneralCreadoAca = UUID.randomUUID();
             jdbc.update("INSERT INTO renaser.conversaciones (id, tipo, nombre) VALUES (?, 'GLOBAL', 'Comunidad Global')",
                     grupoGeneralCreadoAca);
@@ -105,8 +106,10 @@ class PodioDeLaSemanaIT {
     @AfterEach
     void limpiar() throws InterruptedException {
         esperarQueElOutboxTermine();
-        jdbc.update("DELETE FROM renaser.mensajes WHERE id IN (?, ?)", SEMANA.idDelTexto().value(),
-                SEMANA.idDeLaImagen().value());
+        for (Formacion formacion : Formacion.values()) {
+            jdbc.update("DELETE FROM renaser.mensajes WHERE id IN (?, ?)", SEMANA.idDelTexto(formacion).value(),
+                    SEMANA.idDeLaImagen(formacion).value());
+        }
         personas.forEach(id -> jdbc.update("DELETE FROM renaser.notificaciones WHERE usuario_id = ?", id));
         personas.forEach(id -> jdbc.update("DELETE FROM renaser.usuarios WHERE id = ?", id));
         habitos.forEach(id -> jdbc.update("DELETE FROM renaser.habitos WHERE id = ?", id));
@@ -152,7 +155,7 @@ class PodioDeLaSemanaIT {
     @Test
     @DisplayName("si nadie tiene puntaje, no publica")
     void sinPuntajesNoPublica() {
-        RankingGeneralFinder todosEnCero = hasta -> List.of(
+        RankingGeneralFinder todosEnCero = (hasta, formacion) -> List.of(
                 new PuestoEnElRankingGeneral(UserId.of(personas.get(0)), "Zoila Quispe", BigDecimal.ZERO));
 
         assertThat(servicio(todosEnCero, true).publicarLaSemanaCerrada().estado()).isEqualTo(Estado.SIN_PUNTAJES);
@@ -162,7 +165,7 @@ class PodioDeLaSemanaIT {
     @Test
     @DisplayName("V95: la base solo acepta un mensaje sin emisor si es del programa")
     void sinEmisorSoloDelPrograma() {
-        UUID global = conversaciones.global().orElseThrow().id().value();
+        UUID global = conversaciones.global(Formacion.ESCUELA).orElseThrow().id().value();
 
         assertThatThrownBy(() -> jdbc.update("""
                 INSERT INTO renaser.mensajes (id, conversacion_id, emisor_id, tipo, texto)

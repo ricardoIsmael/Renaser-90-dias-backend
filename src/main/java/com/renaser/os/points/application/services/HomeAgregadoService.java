@@ -22,6 +22,7 @@ import com.renaser.os.points.domain.model.semaforo.mensaje.CumplimientoDeHoy;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import com.renaser.os.users.api.ParticipacionPrograma;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import org.slf4j.Logger;
@@ -92,6 +93,7 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
     private final PorcentajeRocasFinder porcentajeRocasFinder;
     private final ConsultarMiSemaforoUseCase consultarMiSemaforo;
     private final ConsultarMensajeDelSemaforoUseCase consultarMensajeDelSemaforo;
+    private final AlcanceDeFormacionFinder formaciones;
     private final Clock clock;
 
     public HomeAgregadoService(ConsultarPuntajeUseCase consultarPuntajeUseCase,
@@ -104,7 +106,7 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
                                 PorcentajeRocasFinder porcentajeRocasFinder,
                                 ConsultarMiSemaforoUseCase consultarMiSemaforo,
                                 ConsultarMensajeDelSemaforoUseCase consultarMensajeDelSemaforo,
-                                Clock clock) {
+                                AlcanceDeFormacionFinder formaciones, Clock clock) {
         this.consultarPuntajeUseCase = consultarPuntajeUseCase;
         this.participacionProgramaFinder = participacionProgramaFinder;
         this.habitosDelDiaFinder = habitosDelDiaFinder;
@@ -115,6 +117,7 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
         this.porcentajeRocasFinder = porcentajeRocasFinder;
         this.consultarMiSemaforo = consultarMiSemaforo;
         this.consultarMensajeDelSemaforo = consultarMensajeDelSemaforo;
+        this.formaciones = formaciones;
         this.clock = clock;
     }
 
@@ -132,7 +135,19 @@ public class HomeAgregadoService implements ConsultarResumenHomeUseCase {
                 racha.maxima(), participacion.diaPrograma(), participacion.inscrito(),
                 participacion.fase(), habitosHoyDe(habitos), rocasHoyDe(rocas),
                 proximoEventoDe(actorId), notificacionesNoLeidasDe(actorId), BLOQUEOS,
-                semaforoDe(actorId, participacion, CumplimientoDeHoy.de(hoy, habitos, rocas)));
+                semaforoDe(actorId, participacion, CumplimientoDeHoy.de(hoy, habitos, rocas)),
+                participacion.duracionDias(), formacionDe(actorId, participacion).codigo());
+    }
+
+    /**
+     * La formación que se dice en Hoy: la de su programa si lo hace; quien no lo hace (el personal sin programa propio) dice la que tiene ACTIVA, no la
+     * Escuela por omisión. Administración y Alquimista, que no tienen una, siguen con la de siempre.
+     */
+    private com.renaser.os.shared.domain.Formacion formacionDe(UserId actorId, ParticipacionPrograma participacion) {
+        if (participacion.inscrito()) {
+            return participacion.formacion();
+        }
+        return formaciones.formacionDe(actorId).orElse(participacion.formacion());
     }
 
     /**

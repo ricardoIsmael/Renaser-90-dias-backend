@@ -27,9 +27,10 @@ public record RocaMensualResponse(UUID id, UUID rocaMaestraId, int numeroMes, in
                                    BigDecimal meta, BigDecimal avance, String unidad, Integer porcentaje,
                                    Instant creadoEn, Instant actualizadoEn) {
 
-    public static RocaMensualResponse from(RocaMensual r) {
+    /** {@code duracionDias} es la del programa de la persona: el ultimo mes cierra el ultimo dia de SU programa (90, o 365). */
+    public static RocaMensualResponse from(RocaMensual r, int duracionDias) {
         MetaCuantitativa meta = r.meta();
-        return new RocaMensualResponse(r.id().value(), r.rocaMaestraId().value(), r.numeroMes(), r.diaDeCierre(),
+        return new RocaMensualResponse(r.id().value(), r.rocaMaestraId().value(), r.numeroMes(), r.diaDeCierre(duracionDias),
                 r.titulo(),
                 meta == null ? null : meta.objetivo(),
                 meta == null ? null : meta.avance(),

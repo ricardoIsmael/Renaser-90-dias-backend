@@ -98,7 +98,7 @@ class UserRoleTest {
             "MANAGE_KNOWLEDGE_BASE", "MANAGE_SUPPORT_TICKETS", "MANAGE_WALL_CATEGORIES",
             "MODERATE_WALL", "PROMOTE_TESTIMONIAL", "APPROVE_ACCOUNT_REQUEST", "ASSIGN_MENTOR",
             "ADJUST_POINTS", "RENAME_GLOBAL_CHAT", "VIEW_ONBOARDING_DASHBOARD", "MANAGE_WELCOME",
-            "MANAGE_PHASE_ANIMALS"})
+            "MANAGE_PHASE_ANIMALS", "MANAGE_RADAR_VISIBILITY"})
     @DisplayName("MENTOR_LEAD NO administra la plataforma: ningun MANAGE_*, ni altas, ni puntos, ni moderacion")
     void mentorLeadNoEsAdministrador(Permission permiso) {
         assertThat(UserRole.MENTOR_LEAD.can(permiso)).isFalse();

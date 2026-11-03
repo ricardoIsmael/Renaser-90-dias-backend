@@ -1,10 +1,12 @@
 package com.renaser.os.points.application.ports.in.ranking;
 
 import com.renaser.os.points.application.ports.in.ranking.ConsultarRankingUseCase.EntradaRanking;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -28,7 +30,12 @@ import java.util.UUID;
  */
 public interface ConsultarRankingAgregadoUseCase {
 
-    RankingAgregado agregado(UserId actorId, LocalDate fecha);
+    default RankingAgregado agregado(UserId actorId, LocalDate fecha) {
+        return agregado(actorId, fecha, null);
+    }
+
+    /** Spec 024: el ranking de la formación de quien pide; Administración elige una o lee «Todas» ({@code formacion} null). */
+    RankingAgregado agregado(UserId actorId, LocalDate fecha, Formacion formacion);
 
     /**
      * @param celula                celula del actor, {@code null} si todavia no tiene una asignada
@@ -41,10 +48,20 @@ public interface ConsultarRankingAgregadoUseCase {
      *                              (D-226): km acumulados del programa; {@code puntaje} son km con dos decimales
      * @param gimnasio              snapshot {@link com.renaser.os.points.domain.model.ranking.TipoRanking#GIMNASIO}
      *                              (D-266): días de gimnasio del programa; {@code puntaje} son días enteros
+     * @param kilometrosAutomaticos spec 037: de quienes salen en {@code kilometros}, los que tienen algún día de km leído por
+     *                              el teléfono (Health Connect); el ranking los marca «auto». No cambia ninguna cifra
      */
     record RankingAgregado(LocalDate fecha, CelulaResumen celula, List<EntradaRanking> liga,
                             List<EntradaRanking> coherenciaIndividual, List<EntradaRanking> general,
-                            List<EntradaRanking> kilometros, List<EntradaRanking> gimnasio) {
+                            List<EntradaRanking> kilometros, List<EntradaRanking> gimnasio,
+                            Set<UserId> kilometrosAutomaticos) {
+
+        /** Sin marca «auto»: la forma anterior a la spec 037. */
+        public RankingAgregado(LocalDate fecha, CelulaResumen celula, List<EntradaRanking> liga,
+                               List<EntradaRanking> coherenciaIndividual, List<EntradaRanking> general,
+                               List<EntradaRanking> kilometros, List<EntradaRanking> gimnasio) {
+            this(fecha, celula, liga, coherenciaIndividual, general, kilometros, gimnasio, Set.of());
+        }
 
         /** Proyeccion publica de la celula del actor, tal como la expone {@code community.api.CelulaFinder}. */
         public record CelulaResumen(UUID celulaId, String cellName, String cohortName, String mentorName,

@@ -61,7 +61,7 @@ class AccountRequestTest {
         AccountRequest request = pendingRequest();
         UserId createdUserId = newUserId();
 
-        request.approve(adminActor(), createdUserId, CLOCK);
+        request.approve(adminActor(), createdUserId, EleccionDeIngreso.anteriorALasFormaciones(), CLOCK);
 
         assertThat(request.status()).isEqualTo(AccountRequestStatus.APPROVED);
         assertThat(request.createdUserId()).isEqualTo(createdUserId);
@@ -73,7 +73,7 @@ class AccountRequestTest {
     void traineeCannotApprove() {
         AccountRequest request = pendingRequest();
 
-        assertThatThrownBy(() -> request.approve(traineeActor(), newUserId(), CLOCK))
+        assertThatThrownBy(() -> request.approve(traineeActor(), newUserId(), EleccionDeIngreso.anteriorALasFormaciones(), CLOCK))
                 .isInstanceOf(NotAuthorizedException.class);
         assertThat(request.status()).isEqualTo(AccountRequestStatus.PENDING);
     }
@@ -150,7 +150,7 @@ class AccountRequestTest {
                 new Email("social@renaser.com"),
                 "Sofia Social", "+51999999999", "Lima", "203.0.113.5", origen, CLOCK);
 
-        request.approve(adminActor(), newUserId(), CLOCK);
+        request.approve(adminActor(), newUserId(), EleccionDeIngreso.anteriorALasFormaciones(), CLOCK);
 
         assertThat(request.origenSocial()).isEqualTo(origen);
     }
@@ -175,7 +175,7 @@ class AccountRequestTest {
     @DisplayName("una solicitud ya decidida no se puede volver a decidir")
     void cannotDecideTwice() {
         AccountRequest request = pendingRequest();
-        request.approve(adminActor(), newUserId(), CLOCK);
+        request.approve(adminActor(), newUserId(), EleccionDeIngreso.anteriorALasFormaciones(), CLOCK);
 
         assertThatThrownBy(() -> request.reject(adminActor(), "tarde", CLOCK))
                 .isInstanceOf(IllegalStateException.class);

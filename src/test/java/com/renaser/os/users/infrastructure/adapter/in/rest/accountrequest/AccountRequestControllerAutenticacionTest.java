@@ -71,6 +71,9 @@ class AccountRequestControllerAutenticacionTest {
     private ConsultarEmailRegistradoUseCase consultarEmailRegistradoUseCase;
     @MockitoBean
     private VerificarDominioEmailUseCase verificarDominioEmailUseCase;
+    /** Spec 025: el controlador suma las opciones de la hoja «Aceptar»; estas pruebas no las ejercen. */
+    @MockitoBean
+    private com.renaser.os.users.application.ports.in.accountrequest.ConsultarOpcionesDeAceptacionUseCase opcionesDeAceptacion;
 
     @Test
     @DisplayName("listar la bandeja sin sesion se rechaza aunque venga el header de actor")

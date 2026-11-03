@@ -1,5 +1,7 @@
 package com.renaser.os.users.application.ports.in.participante;
 
+import com.renaser.os.shared.domain.DuracionDelPrograma;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FasePrograma;
 import com.renaser.os.users.api.RolPersonalizadoAsignado;
@@ -30,9 +32,24 @@ public interface ListTraineesUseCase {
      *                     los roles (D-138): a un miembro de staff no se le puede asignar celula,
      *                     asi que contarlo aca lo dejaria en una cola de la que nada lo saca.
      * @param rol          {@code null} = todas las cuentas; si viene, solo las de ese rol (E-605).
+     * @param formacion    {@code null} = «Todas» (el valor por defecto del filtro «Formación» de Administración, spec 022); si viene, solo las
+     *                     personas de esa formación: los aprendices que la cursan y el personal que la tiene asignada.
+     * @param soloActivas  {@code true} = solo las cuentas ACTIVAS: sin las solicitudes que esperan aprobación (creadas como INACTIVAS) ni las
+     *                     suspendidas. Es lo que pide «Asignar a varias personas» (Fichas, spec 026: quien ya está dentro). {@code false} = todas (D-138).
      */
     record ListTraineesCommand(UserId actorId, int page, int size, String busqueda, boolean soloSinGrupo,
-                               UserRole rol) {
+                               UserRole rol, Formacion formacion, boolean soloActivas) {
+
+        /** Sin filtro de estado: todas las cuentas, que es lo que ve «Personas» (D-138). */
+        public ListTraineesCommand(UserId actorId, int page, int size, String busqueda, boolean soloSinGrupo,
+                                   UserRole rol, Formacion formacion) {
+            this(actorId, page, size, busqueda, soloSinGrupo, rol, formacion, false);
+        }
+
+        /** Sin filtro de formación (firma anterior a la spec 022): todas las formaciones, que es lo que ve Administración. */
+        public ListTraineesCommand(UserId actorId, int page, int size, String busqueda, boolean soloSinGrupo, UserRole rol) {
+            this(actorId, page, size, busqueda, soloSinGrupo, rol, null);
+        }
 
         /** Sobrecarga previa al SDD 003: listado completo, sin filtros. */
         public ListTraineesCommand(UserId actorId, int page, int size) {
@@ -75,7 +92,17 @@ public interface ListTraineesUseCase {
     record ResumenTraineeAdmin(UserId id, String fullName, String email, UserStatus status, int diaPrograma,
                                 FasePrograma fase, UUID celulaId, UserId mentorId, UserRole rol,
                                 java.time.Instant cerradaEn, java.time.Instant seBorraEl,
-                                RolPersonalizadoAsignado rolPersonalizado) {
+                                RolPersonalizadoAsignado rolPersonalizado, Formacion formacion, int duracionDias,
+                                List<Formacion> formacionesDelPersonal) {
+
+        /** Firma de antes de las formaciones (D-272): la Escuela, 90 días y sin formaciones de personal. */
+        public ResumenTraineeAdmin(UserId id, String fullName, String email, UserStatus status, int diaPrograma,
+                                   FasePrograma fase, UUID celulaId, UserId mentorId, UserRole rol,
+                                   java.time.Instant cerradaEn, java.time.Instant seBorraEl,
+                                   RolPersonalizadoAsignado rolPersonalizado) {
+            this(id, fullName, email, status, diaPrograma, fase, celulaId, mentorId, rol, cerradaEn, seBorraEl,
+                    rolPersonalizado, Formacion.POR_DEFECTO, DuracionDelPrograma.POR_DEFECTO, List.of());
+        }
 
         /** Sin rol personalizado (firma anterior a D-272). */
         public ResumenTraineeAdmin(UserId id, String fullName, String email, UserStatus status, int diaPrograma,
@@ -93,7 +120,7 @@ public interface ListTraineesUseCase {
         /** La fecha en que se borra, si la persona cerro su cuenta (D-243). */
         public ResumenTraineeAdmin conBorradoProgramado(com.renaser.os.users.domain.model.user.PlazoDeGracia plazo) {
             return new ResumenTraineeAdmin(id, fullName, email, status, diaPrograma, fase, celulaId, mentorId, rol,
-                    cerradaEn, plazo.seBorraEl(cerradaEn), rolPersonalizado);
+                    cerradaEn, plazo.seBorraEl(cerradaEn), rolPersonalizado, formacion, duracionDias, formacionesDelPersonal);
         }
     }
 }

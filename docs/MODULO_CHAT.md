@@ -1318,3 +1318,26 @@ app 1.5.0 ya muestra imágenes de `SYSTEM`: no hace falta APK.
 - **Interruptor** `RANKING_SEMANAL_ACTIVO` (apagado por defecto). Administración: `GET
   /api/v1/admin/ranking-semanal/vista-previa` y `POST /api/v1/admin/ranking-semanal/publicar` (ADMIN/ALCHEMIST
   activos; publicar no mira el interruptor).
+
+## Comunidad por formación (spec 024, D-301, 2026-10-31)
+
+Spec 024 (D-301, 2026-10-31): contrato completo en `specs/024-comunidad-por-formacion/contracts/comunidad-api.md`. Cada conversación es de UNA formación (`conversaciones.formacion`, V138). Reglas que deja:
+
+- **Una comunidad general por formación** (índice único parcial por `formacion`). La Escuela conserva «Formación Renaser Global» y «<Nombre> – Formación Renaser»; las demás llevan el nombre de su formación. Al abrir la Tribu se une a la persona a la de cada formación que le corresponde (aprendiz: la suya; personal: las asignadas; Administración y Alquimista: las tres), de forma idempotente.
+- **Quién ve una conversación vive en UNA clase**, `VisibilidadPorFormacion`: la formación está en el alcance de quien pregunta, el tipo de comunidad (general, grupo, soporte, directos) está prendido en esa formación y, en un directo, la otra persona también pertenece a ella. La usan la lista, el acceso de los mensajes, la presencia (al leer), la autorización en vivo, las fotos, los integrantes, el directorio y «Compartir». Lo de otra formación responde igual que un id inexistente (404). Si se agrega una cuarta puerta de acceso a una conversación, tiene que pasar por esta clase.
+- **Claves**: la Escuela no cambia (`soporte:<id>`, `<a>_<b>`); fuera de la Escuela se agrega `:CÓDIGO`, así quien comparte dos formaciones o cambia de una a otra tiene un soporte/directo por formación sin migrar nada.
+- **Tipos prendibles**: `formaciones.tipos_de_comunidad` (lo escribe `users`, lo lee `chat` por `users.api.ComunidadDeLaFormacionFinder`). Apagar esconde sin borrar; no se crean conversaciones de un tipo apagado.
+- **Traslado**: `AprendizTrasladadoDeFormacionChatListener` saca al aprendiz de la comunidad general y del soporte de la anterior y lo entra a los de la nueva.
+- **Podio semanal**: uno por formación, en su comunidad general; los ids de la Escuela son los de siempre.
+- **Pendiente**: ocultar Kilómetros/Gimnasio del ranking según los hábitos de la formación depende de la spec 023.
+
+## Identidad por formación (spec 035, D-308, 2026-11-02)
+
+Contrato en `specs/035-identidad-por-formacion/contracts/api.md`. La bienvenida (tres mensajes y portada) y la imagen de los chats son de cada formación:
+
+- **Una columna, no una tabla**: `cambios_bienvenida.formacion` (V159, default `ESCUELA`) y la pieza `IMAGEN_DE_LA_FORMACION` (ruta bajo `formaciones/imagenes/`). Sigue siendo append-only; lo vigente de una pieza en una formación es su última fila.
+- **Una sola regla**, `EstadoDePieza`: un texto = último cambio de su formación o su original (`bienvenida/mensajes.yaml`, secciones `diplomado:` y `certificacion:`; la clave que falta usa la de la Escuela); la portada y la imagen sin la propia = la vigente de la Escuela (`deImagen`), y sin ninguna, la app usa lo suyo.
+- **La formación sale del objeto**: `BienvenidaEnSoporteService` lee la formación de la conversación del soporte; `BienvenidaEnGrupoService`, la del chat del grupo; `FotosDelChatService`, la de la conversación cuya foto se pide (y es 404 si es de otra formación). Las tarjetas con nombre se cachean por (portada vigente, nombre).
+- **Imagen**: `ImagenDeLaFormacionService` (consulta, sin autorizar: lo hace quien llama) e `ImagenDeLaFormacionAdminService` (ADMIN/ALCHEMIST activos). `ImagenesDeLasFormaciones` abre la imagen con `ImagenDePortada.abrir` (misma revisión de formato, peso y medidas que la portada, sin medir el nombre), la lleva a un cuadrado de 512 px y guarda el JPEG ya servido.
+- **Firma del programa**: `NombreDelChat.delPrograma(formacion)` en el listado de mensajes y en los avisos.
+

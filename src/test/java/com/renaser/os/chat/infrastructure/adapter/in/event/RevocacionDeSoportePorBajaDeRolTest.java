@@ -181,6 +181,9 @@ class RevocacionDeSoportePorBajaDeRolTest {
         when(conversaciones.porClaveDirecta(anyString())).thenAnswer(inv ->
                 Conversacion.claveSoporteDe(ANA).equals(inv.getArgument(0))
                         ? Optional.of(SOPORTE_DE_ANA) : Optional.empty());
+        // Spec 024: abrir la bandeja une a la persona a la comunidad general de su formacion si le falta (idempotente).
+        org.mockito.Mockito.lenient().when(guardarConversacion.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        org.mockito.Mockito.lenient().when(idGenerator.newId()).thenAnswer(inv -> java.util.UUID.randomUUID());
         when(conversaciones.misConversaciones(any())).thenAnswer(inv -> List.of(SOPORTE_DE_ANA, DM_ANA_BRUNO)
                 .stream().filter(c -> participantesDe(c.id()).contains((UserId) inv.getArgument(0))).toList());
 
@@ -217,22 +220,22 @@ class RevocacionDeSoportePorBajaDeRolTest {
 
         soporte = new ConversacionSoporteService(conversaciones, guardarConversacion, agregarParticipante,
                 quitarParticipante, esParticipante, usuarios, participaciones, CLOCK, idGenerator, transacciones,
-                evento -> { });
+                evento -> { }, new com.renaser.os.chat.application.services.VisibilidadPermisiva(), new com.renaser.os.users.api.AlcanceDeFormacionSoloEscuela());
         listener = new RolDeUsuarioCambiadoSoporteListener(soporte, soporte);
         var accesoAGrupos = new com.renaser.os.chat.application.services.AccesoAChatsDeGrupo(pertenenciaVigente,
                 org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.participante.GruposEnCursoPort.class),
                 usuarios);
         autorizacion = new AutorizacionDeConversacionService(conversaciones, esParticipante,
-                accesoAGrupos, usuarios);
+                accesoAGrupos, usuarios, new com.renaser.os.chat.application.services.VisibilidadPermisiva());
         mensajes = new MensajeService(conversaciones, esParticipante, accesoAGrupos, marcarLeidoPort,
                 guardarMensaje, cargarMensajes, fanoutMensajes, usuarios, almacenamiento,
-                conversacion -> ConfirmacionDeLectura.sinDobleMarca(), CLOCK, idGenerator, evento -> { }, new com.renaser.os.chat.application.services.MetricasDelChatEnMemoria(), new com.renaser.os.chat.application.services.InterruptoresDelChat(new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido(), org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort.class)));
+                conversacion -> ConfirmacionDeLectura.sinDobleMarca(), CLOCK, idGenerator, evento -> { }, new com.renaser.os.chat.application.services.MetricasDelChatEnMemoria(), new com.renaser.os.chat.application.services.InterruptoresDelChat(new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido(), org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort.class)), new com.renaser.os.chat.application.services.VisibilidadPermisiva());
         bandeja = new ConversacionService(conversaciones, guardarConversacion, agregarParticipante,
                 esParticipante, accesoAGrupos, marcarLeidoPort, conversacion -> { }, contarNoLeidos, cargarMensajes, roster,
                 usuarios, sinFotosPropias(),
-                new com.renaser.os.chat.application.services.NombresDeLosChatsService(grupos -> java.util.Map.of(), usuarios), CLOCK, idGenerator, transacciones, ids -> java.util.Set.of());
+                new com.renaser.os.chat.application.services.NombresDeLosChatsService(grupos -> java.util.Map.of(), usuarios, org.mockito.Mockito.mock(com.renaser.os.users.api.FormacionesFinder.class)), CLOCK, idGenerator, transacciones, ids -> java.util.Set.of(), new com.renaser.os.users.api.AlcanceDeFormacionSoloEscuela(), org.mockito.Mockito.mock(com.renaser.os.users.api.FormacionesFinder.class), new com.renaser.os.chat.application.services.VisibilidadPermisiva(), org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.in.bienvenida.ConsultarImagenDeLaFormacionUseCase.class));
         presencia = new PresenciaService(presenciaPort, fanoutPresencia, conversacionesDeUsuario, roster,
-                conversaciones, esParticipante, accesoAGrupos, usuarios);
+                conversaciones, esParticipante, accesoAGrupos, usuarios, new com.renaser.os.chat.application.services.VisibilidadPermisiva());
     }
 
     /**

@@ -17,6 +17,10 @@ interface SpringDataHorarioSemanalRepository
     List<HorarioSemanalJpaEntity> findByParticipanteIdAndHabitoIdInAndDiaSemana(
             UUID participanteId, Collection<UUID> habitoIds, Short diaSemana);
 
+    /** H-01: lo que rige ese dia de la semana para UN habito, de varias personas, en una consulta. */
+    List<HorarioSemanalJpaEntity> findByParticipanteIdInAndHabitoIdAndDiaSemana(
+            Collection<UUID> participanteIds, UUID habitoId, Short diaSemana);
+
     /**
      * Las filas de varios habitos de un participante, en UNA consulta: el listado de preferencias y el
      * barrido de avisos recorren todos los habitos de la persona (spec 008, sin un pedido por habito).

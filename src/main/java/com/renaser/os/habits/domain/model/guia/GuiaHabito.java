@@ -48,6 +48,14 @@ public final class GuiaHabito {
                 null, null, null, null, ahora, ahora);
     }
 
+    /** Spec 023, «Copiar a otra formacion»: la misma guia (textos y mantra) para el habito copiado; no copia los archivos adjuntos. */
+    public GuiaHabito copiarPara(GuiaHabitoId idNuevo, HabitoId habitoNuevo, Instant ahora) {
+        Objects.requireNonNull(idNuevo, "idNuevo es obligatorio");
+        Objects.requireNonNull(habitoNuevo, "habitoNuevo es obligatorio");
+        return new GuiaHabito(idNuevo, habitoNuevo, diaInicio, diaFin, queHacer, comoHacerlo, ciencia, renaser, alquimia,
+                resultados, mantraTitulo, mantraIntro, mantraCuerpo, referenciaFuente, ahora, ahora);
+    }
+
     /** Solo para el adaptador de persistencia. */
     public static GuiaHabito rehydrate(GuiaHabitoId id, HabitoId habitoId, int diaInicio, Integer diaFin,
                                         String queHacer, String comoHacerlo, String ciencia, String renaser,

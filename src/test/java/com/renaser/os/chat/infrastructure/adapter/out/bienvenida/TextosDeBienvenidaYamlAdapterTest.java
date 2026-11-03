@@ -2,6 +2,7 @@ package com.renaser.os.chat.infrastructure.adapter.out.bienvenida;
 
 import com.renaser.os.chat.domain.model.bienvenida.PiezaDeBienvenida;
 import com.renaser.os.chat.domain.model.bienvenida.TextoDeBienvenida;
+import com.renaser.os.shared.domain.Formacion;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.config.YamlPropertiesFactoryBean;
@@ -50,10 +51,10 @@ class TextosDeBienvenidaYamlAdapterTest {
     void losOriginalesPorPieza() {
         TextosDeBienvenidaYamlAdapter textos = new TextosDeBienvenidaYamlAdapter();
 
-        assertThat(textos.original(PiezaDeBienvenida.SOPORTE_CON_LA_TARJETA)).isEqualTo(textos.soporteConLaTarjeta());
-        assertThat(textos.original(PiezaDeBienvenida.SOPORTE_FORMAL)).isEqualTo(textos.soporteFormal());
-        assertThat(textos.original(PiezaDeBienvenida.GRUPO)).isEqualTo(textos.grupo());
-        assertThatThrownBy(() -> textos.original(PiezaDeBienvenida.PORTADA)).isInstanceOf(IllegalArgumentException.class);
+        assertThat(textos.original(Formacion.ESCUELA, PiezaDeBienvenida.SOPORTE_CON_LA_TARJETA)).isEqualTo(textos.soporteConLaTarjeta());
+        assertThat(textos.original(Formacion.ESCUELA, PiezaDeBienvenida.SOPORTE_FORMAL)).isEqualTo(textos.soporteFormal());
+        assertThat(textos.original(Formacion.ESCUELA, PiezaDeBienvenida.GRUPO)).isEqualTo(textos.grupo());
+        assertThatThrownBy(() -> textos.original(Formacion.ESCUELA, PiezaDeBienvenida.PORTADA)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -62,8 +63,8 @@ class TextosDeBienvenidaYamlAdapterTest {
         TextosDeBienvenidaYamlAdapter textos = new TextosDeBienvenidaYamlAdapter();
 
         for (PiezaDeBienvenida pieza : PiezaDeBienvenida.textos()) {
-            assertThat(TextoDeBienvenida.validar(pieza, textos.original(pieza))).as(pieza.name())
-                    .isEqualTo(textos.original(pieza));
+            assertThat(TextoDeBienvenida.validar(pieza, textos.original(Formacion.ESCUELA, pieza))).as(pieza.name())
+                    .isEqualTo(textos.original(Formacion.ESCUELA, pieza));
         }
     }
 
@@ -84,6 +85,40 @@ class TextosDeBienvenidaYamlAdapterTest {
         assertThatThrownBy(() -> new TextosDeBienvenidaYamlAdapter(new ClassPathResource("bienvenida/no-existe.yaml")))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("textos de bienvenida");
+    }
+
+    @Test
+    @DisplayName("Spec 035: el Diplomado y la Certificación traen su sección con el nombre de su institución; el grupo (sin institución) usa el de la Escuela")
+    void cadaFormacionTraeLosSuyos() {
+        TextosDeBienvenidaYamlAdapter textos = new TextosDeBienvenidaYamlAdapter();
+
+        assertThat(textos.original(Formacion.ESCUELA, PiezaDeBienvenida.SOPORTE_FORMAL)).contains("Formación Renaser");
+        assertThat(textos.original(Formacion.DIPLOMADO, PiezaDeBienvenida.SOPORTE_FORMAL)).contains("al Diplomado Renaser")
+                .doesNotContain("Formación Renaser").contains("{nombre}");
+        assertThat(textos.original(Formacion.DIPLOMADO, PiezaDeBienvenida.SOPORTE_CON_LA_TARJETA)).contains("tu Diplomado Renaser");
+        assertThat(textos.original(Formacion.CERTIFICACION, PiezaDeBienvenida.SOPORTE_FORMAL)).contains("a la Certificación Renaser")
+                .doesNotContain("Formación Renaser");
+        assertThat(textos.original(Formacion.CERTIFICACION, PiezaDeBienvenida.SOPORTE_CON_LA_TARJETA)).contains("tu Certificación Renaser");
+        for (Formacion formacion : Formacion.values()) {
+            assertThat(textos.original(formacion, PiezaDeBienvenida.GRUPO)).isEqualTo(textos.grupo());
+            for (PiezaDeBienvenida pieza : PiezaDeBienvenida.textos()) {
+                assertThat(TextoDeBienvenida.validar(pieza, textos.original(formacion, pieza))).as(formacion + " " + pieza)
+                        .isEqualTo(textos.original(formacion, pieza));
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("Spec 035: a una formación que no trae un texto le sirve el de la Escuela; si lo trae vacío a propósito, ese mensaje no se manda SOLO en ella")
+    void faltaUnaClaveOLaTraeVacia() {
+        TextosDeBienvenidaYamlAdapter textos = new TextosDeBienvenidaYamlAdapter(new ByteArrayResource((
+                "soporte:\n  con-la-tarjeta: Tarjeta {nombre}\n  formal: Formal {nombre}\ngrupo: Grupo {nombre} {mentor}\n"
+                        + "diplomado:\n  soporte:\n    formal: \"\"\n").getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+
+        assertThat(textos.original(Formacion.DIPLOMADO, PiezaDeBienvenida.SOPORTE_CON_LA_TARJETA)).isEqualTo("Tarjeta {nombre}");
+        assertThat(textos.original(Formacion.DIPLOMADO, PiezaDeBienvenida.SOPORTE_FORMAL)).isEmpty();
+        assertThat(textos.original(Formacion.ESCUELA, PiezaDeBienvenida.SOPORTE_FORMAL)).isEqualTo("Formal {nombre}");
+        assertThat(textos.original(Formacion.CERTIFICACION, PiezaDeBienvenida.SOPORTE_FORMAL)).isEqualTo("Formal {nombre}");
     }
 
     @Test

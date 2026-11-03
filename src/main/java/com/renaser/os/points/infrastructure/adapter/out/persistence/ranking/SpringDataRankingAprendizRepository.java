@@ -5,14 +5,18 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 
 interface SpringDataRankingAprendizRepository extends JpaRepository<RankingAprendizJpaEntity, RankingAprendizId> {
 
-    /** Consulta JPQL tipada: el enum se compara vía el tipo mapeado por Hibernate
-     * (@JdbcTypeCode NAMED_ENUM), sin el problema de cast que tendría un bind param
-     * crudo contra una columna enum nativa de Postgres en una consulta nativa. */
-    List<RankingAprendizJpaEntity> findByTipoAndFechaOrderByPosicion(TipoRankingJpa tipo, LocalDate fecha);
+    /**
+     * Spec 024: el corte de las formaciones pedidas, agrupado por formación y en el orden de posición de cada una. Consulta derivada: el enum se
+     * compara vía el tipo mapeado por Hibernate (@JdbcTypeCode NAMED_ENUM), sin el problema de cast que tendría un bind param crudo contra una
+     * columna enum nativa de Postgres en una consulta nativa.
+     */
+    List<RankingAprendizJpaEntity> findByTipoAndFechaAndFormacionInOrderByFormacionAscPosicionAsc(
+            TipoRankingJpa tipo, LocalDate fecha, Collection<String> formaciones);
 
     /**
      * clearAutomatically=true es necesario: sin esto, un DELETE en bloque (bulk JPQL) no

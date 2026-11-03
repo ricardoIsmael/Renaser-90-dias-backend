@@ -16,11 +16,14 @@ import java.util.stream.Collectors;
  * El texto de {@code consultar_habitos_del_dia} (E-455, 2026-09-30).
  *
  * <p><b>Un habito no vence; vence la ventana de sus puntos.</b> Un registro PENDIENTE con el plazo
- * cumplido, o ya EXPIRADO, se puede completar igual y paga 0 ({@code EstadoRegistro.completable}
- * en {@code habits}). Esta herramienta decia {@code ya_vencio=si} y "ya vencieron hoy: no los cuentes
- * como pendientes", y el acompanante contesto "el agua tibia y el ritual de la manana ya vencieron"
- * de dos habitos que seguian PENDIENTE. Ahora dice que ya no dan puntos y que igual puede hacerlos,
+ * cumplido se puede completar igual y paga menos o 0 (D-259). Esta herramienta decia {@code ya_vencio=si} y "ya
+ * vencieron hoy: no los cuentes como pendientes", y el acompanante contesto "el agua tibia y el ritual de la manana
+ * ya vencieron" de dos habitos que seguian PENDIENTE. Ahora dice que ya no dan puntos y que igual puede hacerlos,
  * y los cuenta entre los que le faltan.
+ *
+ * <p><b>Spec 038 (D-259): un registro EXPIRADO es un DIA CERRADO</b> y NO se puede registrar: el barrido lo cerro porque su dia
+ * termino ({@code habits} lo rechaza con 409). Antes esta lista lo contaba entre los que «igual puede hacer»; ahora sale como
+ * {@code dia_cerrado}, no cuenta entre los que le faltan y no lleva marca de evidencia (no se le deja boton).
  *
  * <p><b>Lo que falta, contado y en orden.</b> Primero el total y el reparto por dimension (Cuerpo,
  * Mente, Emociones, Espiritu), despues la lista: los que todavia dan puntos antes, cada grupo por la
@@ -29,8 +32,9 @@ import java.util.stream.Collectors;
  */
 public final class LoQueLeFaltaHoy {
 
-    /** Los estados que todavia se pueden completar: el mismo {@code completable} de {@code habits}. */
-    private static final Set<String> SE_PUEDEN_HACER = Set.of("PENDIENTE", "EN_CURSO", "EXPIRADO");
+    /** Los estados que todavia se pueden completar (D-259: un EXPIRADO es un dia cerrado y ya no). */
+    private static final Set<String> SE_PUEDEN_HACER = Set.of("PENDIENTE", "EN_CURSO");
+    private static final String DIA_CERRADO = "EXPIRADO";
     private static final String SIN_DIMENSION = "Sin dimension";
 
     private LoQueLeFaltaHoy() {
@@ -43,7 +47,8 @@ public final class LoQueLeFaltaHoy {
         long conPuntos = faltan.stream().filter(habito -> daPuntos(habito, ahora)).count();
         int totalEnJuego = faltan.stream().filter(habito -> daPuntos(habito, ahora))
                 .mapToInt(HabitoDelDia::puntosEnJuego).sum();
-        StringBuilder texto = new StringBuilder(resumen(habitos.size(), faltan, conPuntos)).append('\n');
+        long diaCerrado = habitos.stream().filter(LoQueLeFaltaHoy::esDiaCerrado).count();
+        StringBuilder texto = new StringBuilder(resumen(habitos.size(), faltan, conPuntos, diaCerrado)).append('\n');
         faltan.forEach(habito -> texto.append(linea(habito, ahora)).append('\n'));
         resto.forEach(habito -> texto.append(linea(habito, ahora)).append('\n'));
         return texto.append("Total en juego: ").append(totalEnJuego).append(" puntos en ").append(conPuntos)
@@ -59,6 +64,11 @@ public final class LoQueLeFaltaHoy {
         return SE_PUEDEN_HACER.contains(habito.estado());
     }
 
+    /** D-259: su dia ya cerro. Ya no se registra, ni hoy ni despues. */
+    private static boolean esDiaCerrado(HabitoDelDia habito) {
+        return DIA_CERRADO.equals(habito.estado());
+    }
+
     private static boolean daPuntos(HabitoDelDia habito, Instant ahora) {
         return habito.sigueEnJuego() && habito.puntosEnJuego() > 0 && !yaNoDaPuntos(habito, ahora);
     }
@@ -69,14 +79,17 @@ public final class LoQueLeFaltaHoy {
                 .thenComparing(HabitoDelDia::horaInicio, Comparator.nullsLast(Comparator.<LocalTime>naturalOrder()));
     }
 
-    private static String resumen(int total, List<HabitoDelDia> faltan, long conPuntos) {
+    private static String resumen(int total, List<HabitoDelDia> faltan, long conPuntos, long diaCerrado) {
         if (faltan.isEmpty()) {
-            return "Hoy ya hizo todos sus habitos (" + total + ").";
+            return diaCerrado == 0 ? "Hoy ya hizo todos sus habitos (" + total + ")."
+                    : "Hoy no le queda ninguno por registrar (" + total + " en total): " + diaCerrado + " son de un dia que ya cerro "
+                            + "y no se pueden registrar, y el resto ya esta hecho.";
         }
         long sinPuntos = faltan.size() - conPuntos;
         return "Le faltan " + faltan.size() + " de " + total + " habitos de hoy. Por dimension: " + porDimension(faltan)
                 + ". " + conPuntos + " todavia dan puntos" + (sinPuntos == 0 ? "." : " y " + sinPuntos
                 + " ya no dan puntos porque paso su hora, pero igual puede hacerlos.")
+                + (diaCerrado == 0 ? "" : " Ademas " + diaCerrado + " son de un dia que ya cerro: no se pueden registrar ni cuentan entre los que le faltan.")
                 + "\nPara decirle que le falta: el total, el reparto por dimension y solo los 2 o 3 primeros de "
                 + "esta lista, que ya viene en orden (primero los que dan puntos, por su hora). No listes todos "
                 + "salvo que lo pida. Un habito no vence: si ya no da puntos, di que ya paso la hora para sumar "
@@ -118,10 +131,46 @@ public final class LoQueLeFaltaHoy {
                 linea.append(" | sus_puntos_terminan_en=").append(faltan(ahora, habito.plazo()));
             }
         }
+        if (esDiaCerrado(habito)) {
+            return linea.append(" | dia_cerrado (ese dia ya termino: no se puede registrar, no le dejes boton)").toString();
+        }
+        if (habito.mideKilometros()) {
+            linea.append(medicion(habito));
+        }
+        if (habito.seMideSolo()) {
+            return linea.append(" | registro=automatico (conecto sus pasos: los km se miden solos. No pidas foto ni captura ni uses "
+                    + "proponer_registrar_con_foto; que toque «Registrar» en la fila de Kilometros diarios en Training cuando llegue a su meta)")
+                    .toString();
+        }
         if (habito.exigeEvidencia()) {
             linea.append(" | exige_evidencia=si");
+            if (habito.seRegistraEscribiendo()) {
+                linea.append(" | registro=escribir (ritual: sin foto, escribe como se siente)");
+            }
         }
         return linea.toString();
+    }
+
+    /**
+     * Spec 037 (T021 de la 038): {@code mide=km | meta=5 | lleva=3.2}. {@code lleva} es lo ya REGISTRADO hoy (0 si todavia nada): lo que la persona va
+     * caminando en vivo lo lee su telefono, no el servidor. Con el dia registrado, de donde salio: {@code origen=pasos} o {@code origen=captura}.
+     */
+    private static String medicion(HabitoDelDia habito) {
+        var medicion = habito.medicion();
+        StringBuilder texto = new StringBuilder(" | mide=km");
+        if (medicion.meta() != null) {
+            texto.append(" | meta=").append(numero(medicion.meta()));
+        }
+        texto.append(" | lleva=").append(medicion.valorDelDia() == null ? "0" : numero(medicion.valorDelDia()));
+        if (medicion.origenDelDia() != null) {
+            texto.append(" | origen=").append("HEALTH_CONNECT".equals(medicion.origenDelDia()) ? "pasos" : "captura");
+        }
+        return texto.toString();
+    }
+
+    /** «5» y «5.4», no «5.00» ni «5.40». */
+    private static String numero(java.math.BigDecimal valor) {
+        return valor.stripTrailingZeros().toPlainString();
     }
 
     /** "45 min" o "2 h 10 min": relativo, asi no depende de ninguna zona horaria. */

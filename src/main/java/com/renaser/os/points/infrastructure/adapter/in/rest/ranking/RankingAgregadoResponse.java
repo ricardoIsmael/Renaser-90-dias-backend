@@ -15,13 +15,17 @@ import java.util.List;
  * {@code puntaje} son km con dos decimales, no puntos.
  *
  * <p>{@code gimnasio} (D-266, aditivo, al final) — días de gimnasio del programa; {@code puntaje} son días.
+ *
+ * <p>{@code kilometrosAutomaticos} (spec 037, aditivo, al final) — ids de quienes salen en {@code kilometros} y tienen algún
+ * día de km leído por el teléfono (Health Connect); la app los marca «auto». No cambia ninguna cifra.
  */
 public record RankingAgregadoResponse(LocalDate fecha, CelulaResumenResponse celula,
                                        List<EntradaRankingResponse> liga,
                                        List<EntradaRankingResponse> coherenciaIndividual,
                                        List<EntradaRankingResponse> general,
                                        List<EntradaRankingResponse> kilometros,
-                                       List<EntradaRankingResponse> gimnasio) {
+                                       List<EntradaRankingResponse> gimnasio,
+                                       List<String> kilometrosAutomaticos) {
 
     public static RankingAgregadoResponse from(RankingAgregado agregado) {
         return new RankingAgregadoResponse(agregado.fecha(), CelulaResumenResponse.from(agregado.celula()),
@@ -29,7 +33,8 @@ public record RankingAgregadoResponse(LocalDate fecha, CelulaResumenResponse cel
                 agregado.coherenciaIndividual().stream().map(EntradaRankingResponse::from).toList(),
                 agregado.general().stream().map(EntradaRankingResponse::from).toList(),
                 agregado.kilometros().stream().map(EntradaRankingResponse::from).toList(),
-                agregado.gimnasio().stream().map(EntradaRankingResponse::from).toList());
+                agregado.gimnasio().stream().map(EntradaRankingResponse::from).toList(),
+                agregado.kilometrosAutomaticos().stream().map(Object::toString).sorted().toList());
     }
 
     public record CelulaResumenResponse(String cellId, String cellName, String cohortName, String mentorName,

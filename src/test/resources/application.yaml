@@ -65,6 +65,11 @@ spring:
     properties:
       hibernate:
         default_batch_fetch_size: 50
+        # Espejo de H-03 (auditoria de consultas del 2026-11-02): los IT escriben igual que produccion.
+        jdbc:
+          batch_size: 50
+        order_inserts: true
+        order_updates: true
   autoconfigure:
     exclude:
       # Sin credenciales de Gemini/Vertex en este entorno de test — los tests no llaman

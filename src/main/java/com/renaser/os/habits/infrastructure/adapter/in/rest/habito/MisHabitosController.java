@@ -1,6 +1,7 @@
 package com.renaser.os.habits.infrastructure.adapter.in.rest.habito;
 
 import com.renaser.os.habits.application.ports.in.habito.ConsultarMisHabitosUseCase;
+import com.renaser.os.habits.domain.model.categoria.CodigoDeCategoria;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.application.ports.in.habito.CrearHabitoPersonalUseCase;
 import com.renaser.os.habits.application.ports.in.habito.CrearHabitoPersonalUseCase.CrearHabitoPersonalCommand;
@@ -52,7 +53,7 @@ public class MisHabitosController {
     public ResponseEntity<MiHabitoResponse> crear(@ActorAutenticado UserId actor,
                                                     @RequestBody @Valid CreatePersonalHabitRequest request) {
         var comando = new CrearHabitoPersonalCommand(actor, request.title(), request.habitType().toDomain(),
-                request.category().toClave(), request.template(), request.goalLabel(), request.iconKey(),
+                CodigoDeCategoria.aClave(request.category()), request.template(), request.goalLabel(), request.iconKey(),
                 request.triggerTime(), request.limitTime(), request.activeWeekdays());
         var habito = crearUseCase.crear(comando);
         // El horario del catalogo sigue siendo TODOS; los dias que corre de verdad son los que

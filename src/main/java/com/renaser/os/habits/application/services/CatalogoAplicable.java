@@ -8,6 +8,7 @@ import com.renaser.os.habits.domain.model.audiencia.CodigoDeRol;
 import com.renaser.os.habits.domain.model.audiencia.HistorialDeAudiencia;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
 
@@ -26,6 +27,10 @@ import java.util.stream.Collectors;
  * <p>Vigencia estricta (clarify 2026-10-12): para el día {@code dia} rigen la audiencia y el rol guardados antes de
  * ese día en la zona de la persona. Dos consultas por llamada —las audiencias de todo el catálogo en lote y el
  * historial de rol de la persona—, nunca una por hábito.
+ *
+ * <p>Spec 023 (D-300): además de la audiencia, el hábito tiene que ser de la FORMACIÓN en la que la persona hace su programa
+ * ({@code progreso.formacion()}). Un hábito de otra formación no le toca a nadie de esta, y sale en {@link #globalesQueNoLeTocan}
+ * igual que uno de otro rol: así las vistas de acompañamiento muestran los mismos hábitos que ve la persona.
  *
  * <p>El código de rol sale del espejo local {@code RolParticipante}: un rol nuevo pide sumarle una constante (el
  * {@code switch} del adaptador de progreso no compila sin ella), y nada más en habits.
@@ -46,7 +51,18 @@ public class CatalogoAplicable {
 
     /** Los hábitos globales activos que aplican a la persona el día local {@code dia}, en el orden del catálogo. */
     public List<Habito> globalesPara(UserId persona, ProgresoParticipanteHabits progreso, LocalDate dia) {
-        return separar(persona, progreso, dia).get(true);
+        // H-04: aqui solo importan los de SU formacion; se piden asi desde la consulta (y las audiencias, solo de esos) en vez de leer las tres y filtrar.
+        return separar(persona, progreso, dia, loadHabitoPort.catalogoActivoDeFormacion(progreso.formacion())).get(true);
+    }
+
+    /**
+     * Todos los hábitos que le corresponden a la persona el día local {@code dia} (spec 028): los globales que le tocan por su rol y sus
+     * hábitos personales activos. Es el conjunto sobre el que se planifica una semana o se repite: lo que queda fuera no se escribe.
+     */
+    public List<Habito> aplicablesPara(UserId persona, ProgresoParticipanteHabits progreso, LocalDate dia) {
+        List<Habito> habitos = new java.util.ArrayList<>(globalesPara(persona, progreso, dia));
+        habitos.addAll(loadHabitoPort.personalesActivosDe(persona));
+        return habitos;
     }
 
     /**
@@ -54,11 +70,11 @@ public class CatalogoAplicable {
      * del catálogo y solo tiene que sacar estos (FR-013).
      */
     public Set<HabitoId> globalesQueNoLeTocan(UserId persona, ProgresoParticipanteHabits progreso, LocalDate dia) {
-        return separar(persona, progreso, dia).get(false).stream().map(Habito::id).collect(Collectors.toSet());
+        // Los que NO le tocan incluyen los de otras formaciones: aqui si hace falta el catalogo entero.
+        return separar(persona, progreso, dia, loadHabitoPort.catalogoActivo()).get(false).stream().map(Habito::id).collect(Collectors.toSet());
     }
 
-    private Map<Boolean, List<Habito>> separar(UserId persona, ProgresoParticipanteHabits progreso, LocalDate dia) {
-        List<Habito> activos = loadHabitoPort.catalogoActivo();
+    private Map<Boolean, List<Habito>> separar(UserId persona, ProgresoParticipanteHabits progreso, LocalDate dia, List<Habito> activos) {
         if (activos.isEmpty()) {
             return Map.of(true, List.of(), false, List.of());
         }
@@ -67,7 +83,8 @@ public class CatalogoAplicable {
                 .vigenteEl(dia, zona, CodigoDeRol.of(progreso.rol().name()));
         Map<HabitoId, HistorialDeAudiencia> audiencias = audienciasPort.deHabitos(
                 activos.stream().map(Habito::id).toList());
-        return activos.stream().collect(Collectors.partitioningBy(h -> audiencias
+        Formacion formacion = progreso.formacion();
+        return activos.stream().collect(Collectors.partitioningBy(h -> h.esDeFormacion(formacion) && audiencias
                 .getOrDefault(h.id(), HistorialDeAudiencia.vacio()).vigenteEl(dia, zona).aplicaA(rol)));
     }
 }

@@ -5,11 +5,14 @@ import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeDelPrograma
 import com.renaser.os.chat.application.ports.out.bienvenida.DibujarBienvenidaPort;
 import com.renaser.os.chat.application.ports.out.bienvenida.MarcaDeBienvenidaPort;
 import com.renaser.os.chat.application.ports.out.bienvenida.TextosDeBienvenidaPort;
+import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort;
+import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.conversacion.PrimerNombre;
 import com.renaser.os.chat.domain.model.mensaje.ContenidoDelPrograma;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserSummaryFinder;
@@ -23,6 +26,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 
 /**
@@ -45,6 +49,9 @@ import java.util.Optional;
  *
  * <p><b>Mensajes separados y no una foto con texto:</b> el APK publicado muestra el texto de una foto
  * solo cuando la foto no carga, así que en un solo mensaje el texto no se vería.
+ *
+ * <p><b>De la formación del soporte</b> (spec 035): la tarjeta sale sobre la portada y los dos mensajes son los de la formación de la
+ * CONVERSACIÓN del soporte, nunca los de otra. Una persona del Diplomado no recibe «Hoy empiezas tu Formación Renaser».
  *
  * <p><b>Idempotente</b> (G-2, 2026-09-26). El evento que la dispara queda en el outbox de Modulith y
  * se reentrega si el proceso muere a mitad de camino o si falla. La marca es
@@ -79,13 +86,16 @@ public class BienvenidaEnSoporteService implements DarBienvenidaEnSoporteUseCase
     private final IdGenerator idGenerator;
     private final TransactionTemplate transaccion;
     private final TextosDeBienvenidaPort textos;
+    private final LoadConversacionPort conversaciones;
     private final boolean activa;
 
     public BienvenidaEnSoporteService(DibujarBienvenidaPort dibujarPort, AlmacenamientoPort almacenamientoPort,
                                        EnviarMensajeDelProgramaUseCase delPrograma, UserSummaryFinder userSummaryFinder,
                                        MarcaDeBienvenidaPort marcaPort, TextosDeBienvenidaPort textos,
                                        IdGenerator idGenerator, PlatformTransactionManager transactionManager,
+                                       LoadConversacionPort conversaciones,
                                        @Value("${renaser.chat.bienvenida.activa:false}") boolean activa) {
+        this.conversaciones = conversaciones;
         this.dibujarPort = dibujarPort;
         this.almacenamientoPort = almacenamientoPort;
         this.delPrograma = delPrograma;
@@ -111,9 +121,11 @@ public class BienvenidaEnSoporteService implements DarBienvenidaEnSoporteUseCase
             return;
         }
         String nombre = userSummaryFinder.findById(aprendizId).map(u -> PrimerNombre.de(u.fullName())).orElse("");
-        Optional<TarjetaSubida> tarjeta = subirTarjeta(soporteId, nombre);
+        Formacion formacion = conversaciones.porId(soporteId).map(Conversacion::formacion)
+                .orElseThrow(() -> new NoSuchElementException("El soporte " + soporteId + " no existe: no se sabe de qué formación es"));
+        Optional<TarjetaSubida> tarjeta = subirTarjeta(soporteId, nombre, formacion);
         try {
-            transaccion.executeWithoutResult(status -> enviarYMarcar(soporteId, aprendizId, tarjeta, nombre));
+            transaccion.executeWithoutResult(status -> enviarYMarcar(soporteId, aprendizId, tarjeta, nombre, formacion));
         } catch (DataIntegrityViolationException e) {
             if (!marcaPort.yaSeDio(aprendizId)) {
                 throw e; // no era la carrera con otra entrega: que el outbox reintente
@@ -126,13 +138,13 @@ public class BienvenidaEnSoporteService implements DarBienvenidaEnSoporteUseCase
      * Dibuja y sube la tarjeta. Vacío si el almacenamiento es de marcador (G-5): el objeto no
      * existiría. La ruta va bajo el prefijo del propio chat, como toda media de una conversación.
      */
-    private Optional<TarjetaSubida> subirTarjeta(ConversacionId soporteId, String nombre) {
+    private Optional<TarjetaSubida> subirTarjeta(ConversacionId soporteId, String nombre, Formacion formacion) {
         if (!almacenamientoPort.guardaObjetos()) {
             log.warn("[chat.bienvenida] el almacenamiento no guarda objetos (noop): se manda solo el texto al soporte {}",
                     soporteId);
             return Optional.empty();
         }
-        byte[] contenido = dibujarPort.dibujar(nombre);
+        byte[] contenido = dibujarPort.dibujarDe(nombre, formacion);
         String ruta = "chat/" + soporteId.value() + "/fotos/" + idGenerator.newId();
         almacenamientoPort.subir(ruta, contenido, DibujarBienvenidaPort.TIPO_CONTENIDO);
         return Optional.of(new TarjetaSubida(ruta, contenido.length));
@@ -144,14 +156,14 @@ public class BienvenidaEnSoporteService implements DarBienvenidaEnSoporteUseCase
      * mensaje del programa se guarda a nombre del aprendiz, que es de quien habla (ver {@code Mensaje}).
      */
     private void enviarYMarcar(ConversacionId soporteId, UserId aprendizId, Optional<TarjetaSubida> tarjeta,
-                               String nombre) {
+                               String nombre, Formacion formacion) {
         List<Mensaje> enviados = new ArrayList<>();
         tarjeta.ifPresent(t -> {
             enviados.add(delPrograma.enviarDelPrograma(soporteId, aprendizId,
                     ContenidoDelPrograma.imagen(t.ruta(), DibujarBienvenidaPort.TIPO_CONTENIDO, t.bytes())));
-            enviarTexto(soporteId, aprendizId, textos.soporteConLaTarjeta(), nombre).ifPresent(enviados::add);
+            enviarTexto(soporteId, aprendizId, textos.soporteConLaTarjeta(formacion), nombre).ifPresent(enviados::add);
         });
-        enviarTexto(soporteId, aprendizId, textos.soporteFormal(), nombre).ifPresent(enviados::add);
+        enviarTexto(soporteId, aprendizId, textos.soporteFormal(formacion), nombre).ifPresent(enviados::add);
         if (!enviados.isEmpty()) {
             marcaPort.marcar(aprendizId, enviados.get(0).id());
         }

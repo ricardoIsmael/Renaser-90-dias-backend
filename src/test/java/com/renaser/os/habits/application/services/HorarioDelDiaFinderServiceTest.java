@@ -80,7 +80,9 @@ class HorarioDelDiaFinderServiceTest {
     @BeforeEach
     void setUp() {
         finder = new HorarioDelDiaFinderService(consultarUseCase, progresoPort, loadHabitoPort, loadPreferenciaPort,
-                loadDesbloqueoPort, loadRegistroPort, CLOCK);
+                loadDesbloqueoPort, loadRegistroPort, CLOCK,
+                new HoraDeUnHabitoEnLote(progresoPort, loadHabitoPort, org.mockito.Mockito.mock(com.renaser.os.habits.application.ports.out.horario.LoadHorarioHabitoPort.class),
+                        loadPreferenciaPort, loadRegistroPort, CLOCK));
         aprendiz = UserId.of(UUID.randomUUID());
         lenient().when(progresoPort.deParticipante(aprendiz)).thenReturn(Optional.of(
                 new ProgresoParticipanteHabits(DIA_DE_HOY, "America/Lima", RolParticipante.TRAINEE, false, true)));

@@ -1,6 +1,7 @@
 package com.renaser.os.calendar.application.ports.out.participante;
 
 import com.renaser.os.calendar.domain.model.evento.RolUsuario;
+import com.renaser.os.shared.domain.DuracionDelPrograma;
 import com.renaser.os.shared.domain.UserId;
 
 import java.util.List;
@@ -26,6 +27,11 @@ public interface ResolverAudienciaMasivaPort {
      * ({@code null} si aun no tiene ficha de participante). */
     List<ParticipanteConDia> traineesActivosConDiaPrograma();
 
-    record ParticipanteConDia(UserId id, Integer diaPrograma) {
+    /** {@code duracionDias}: la duración de su programa (90 o 365, spec 022), para medir su nivel sobre ella. */
+    record ParticipanteConDia(UserId id, Integer diaPrograma, int duracionDias) {
+
+        public ParticipanteConDia(UserId id, Integer diaPrograma) {
+            this(id, diaPrograma, DuracionDelPrograma.POR_DEFECTO);
+        }
     }
 }

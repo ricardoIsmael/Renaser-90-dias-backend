@@ -48,6 +48,22 @@ class CajaRenaserTest {
             assertThat(caja.cumplimientoFaseUno()).as("la Fase 1 no cerró: no hay número").isEmpty();
         }
 
+        /** Spec 022: el día de la persona se acota a SU duración, no a un 90 fijo. */
+        @Test
+        @DisplayName("el día 200 de un programa de un año se dice 200; en uno de 90 días se corta en 90")
+        void elDiaSeAcotaConLaDuracionDeLaPersona() {
+            Instant dia200 = Instant.parse("2026-10-01T17:00:00Z").plus(199, java.time.temporal.ChronoUnit.DAYS);
+
+            assertThat(caja(new SituacionDelAprendiz(true, false, true, LIMA, DIA_1, dias(100), 365), List.of(), dia200).diaDelPrograma())
+                    .isEqualTo(200);
+            assertThat(caja(new SituacionDelAprendiz(true, false, true, LIMA, DIA_1, dias(100), 90), List.of(), dia200).diaDelPrograma())
+                    .isEqualTo(90);
+            assertThat(caja(situacion(dias(100)), List.of(), dia200).diaDelPrograma()).as("la firma de antes es la de 90").isEqualTo(90);
+            assertThat(caja(new SituacionDelAprendiz(true, false, true, LIMA, DIA_1, dias(100), 365), List.of(),
+                    Instant.parse("2026-10-01T17:00:00Z").plus(399, java.time.temporal.ChronoUnit.DAYS)).diaDelPrograma())
+                    .as("y nunca pasa del último día de SU programa").isEqualTo(365);
+        }
+
         @Test
         @DisplayName("a las 05:00 UTC del 8 empieza su Día 8: con 80 % o más, pasa sola a en revisión")
         void conOchentaPasaSola() {

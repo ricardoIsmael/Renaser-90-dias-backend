@@ -29,6 +29,9 @@ public interface ConsultarRocasDelAprendizPort {
 
     RocasDeLaSemana deLaSemana(UserId aprendizId);
 
+    /** La última semana del programa de esta persona (13 en uno de 90 días, 53 en el de 365): tope de «la semana siguiente». */
+    int ultimaSemanaDelPrograma(UserId aprendizId);
+
     List<ObjetivoDelMes> delMes(UserId aprendizId);
 
     /** D-177: el avance de la semana de programa en curso, como lo ve la app, y el balance por eje. */
@@ -83,9 +86,19 @@ public interface ConsultarRocasDelAprendizPort {
     record BalanceDelEje(String eje, int planificadas, int completadas) {
     }
 
-    /** Los numeros en {@code null}: objetivo solo cualitativo. */
+    /**
+     * Los numeros en {@code null}: objetivo solo cualitativo.
+     *
+     * @param porConfirmar nacio del diagnostico y todavia no lo confirmo en Plan (spec 026 y 038): lo puede reescribir UNA vez, despues queda fijo
+     */
     record ObjetivoDeNoventaDias(String eje, String objetivo, BigDecimal meta, BigDecimal avance, String unidad,
-                                 boolean unidadAdelante, BigDecimal lineaBase, Integer porcentaje) {
+                                 boolean unidadAdelante, BigDecimal lineaBase, Integer porcentaje, boolean porConfirmar) {
+
+        /** Un objetivo ya confirmado. */
+        public ObjetivoDeNoventaDias(String eje, String objetivo, BigDecimal meta, BigDecimal avance, String unidad,
+                                     boolean unidadAdelante, BigDecimal lineaBase, Integer porcentaje) {
+            this(eje, objetivo, meta, avance, unidad, unidadAdelante, lineaBase, porcentaje, false);
+        }
     }
 
     record CierreDeLaSemanaAnterior(int numeroSemana, List<CierreDelEje> ejes) {

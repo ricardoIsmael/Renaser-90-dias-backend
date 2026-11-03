@@ -74,7 +74,7 @@ class ProponerCerrarSemanaHerramientaTest {
     void propone() {
         ResultadoHerramienta resultado = herramienta.ejecutar(APRENDIZ, con(CIERRE_TRABAJO));
 
-        String resumen = "Cerrar la semana 3 (2026-09-21 al 2026-09-27). Trabajo (Cerrar 2 ventas): autoevaluacion "
+        String resumen = "Cerrar la semana 3 (2026-09-21 al 2026-09-27). Negocio (Cerrar 2 ventas): autoevaluacion "
                 + "7/10; bloqueo principal: Reuniones; correccion: Bloquear la agenda. Una vez cerrada, desde el "
                 + "chat no se reescribe.";
         verify(proponer).proponer(APRENDIZ, con("{\"semana\":3,\"ejes\":[{\"eje\":\"TRABAJO\",\"autoevaluacion\":7,"

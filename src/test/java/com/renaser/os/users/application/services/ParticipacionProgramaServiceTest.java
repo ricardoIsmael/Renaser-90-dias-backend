@@ -263,8 +263,10 @@ class ParticipacionProgramaServiceTest {
     void listarTraineesAceptaAdminActivo() {
         UserId actorId = UserId.of(UUID.randomUUID());
         when(loadUserPort.byId(actorId)).thenReturn(Optional.of(usuario(actorId, UserRole.ADMIN, UserStatus.ACTIVE)));
-        when(consultarResumenParticipacionPort.listarAprendices(0, 20, null, false, null)).thenReturn(java.util.List.of());
-        when(consultarResumenParticipacionPort.contarAprendices(null, false, null)).thenReturn(0L);
+        when(consultarResumenParticipacionPort.listarAprendices(0, 20, null, false, null,
+                com.renaser.os.shared.domain.AlcanceDeFormacion.todas(), false)).thenReturn(java.util.List.of());
+        when(consultarResumenParticipacionPort.contarAprendices(null, false, null,
+                com.renaser.os.shared.domain.AlcanceDeFormacion.todas(), false)).thenReturn(0L);
 
         var pagina = service.listar(new ListTraineesCommand(actorId, 0, 20));
 
@@ -388,14 +390,16 @@ class ParticipacionProgramaServiceTest {
     }
 
     @Test
-    void elComandoRechazaElCeroYElNoventa() {
+    void elComandoRechazaElCeroYLoQueNingunProgramaAdmite() {
         UserId actorId = UserId.of(UUID.randomUUID());
         UserId traineeId = UserId.of(UUID.randomUUID());
 
+        // Spec 022: el comando solo acota al mayor programa posible (1..364); el último día de CADA persona lo aplica el dominio.
         assertThatThrownBy(() -> new SetProgramDayCommand(actorId, traineeId, 0))
-                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("entre 1 y 89");
-        assertThatThrownBy(() -> new SetProgramDayCommand(actorId, traineeId, 90))
-                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("entre 1 y 89");
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("entre 1 y 364");
+        assertThatThrownBy(() -> new SetProgramDayCommand(actorId, traineeId, 365))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("entre 1 y 364");
+        assertThat(new SetProgramDayCommand(actorId, traineeId, 200).newProgramDay()).isEqualTo(200);
     }
 
     // --- bitacora de ajustes (D-82) -------------------------------------

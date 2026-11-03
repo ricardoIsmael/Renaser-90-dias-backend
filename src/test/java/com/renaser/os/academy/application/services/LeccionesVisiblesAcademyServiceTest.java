@@ -63,7 +63,7 @@ class LeccionesVisiblesAcademyServiceTest {
     @BeforeEach
     void setUp() {
         service = new LeccionesVisiblesAcademyService(loadCursoPort, loadSeccionCursoPort, loadLeccionPort,
-                progresoPort);
+                progresoPort, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
     }
 
     private static Curso curso(String id, Integer diaDesbloqueo) {

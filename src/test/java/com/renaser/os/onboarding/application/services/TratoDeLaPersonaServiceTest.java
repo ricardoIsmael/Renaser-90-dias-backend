@@ -1,5 +1,6 @@
 package com.renaser.os.onboarding.application.services;
 
+import com.renaser.os.onboarding.api.DiagnosticoDeLaPersonaFinder;
 import com.renaser.os.onboarding.api.TratoDeLaPersonaFinder.Trato;
 import com.renaser.os.onboarding.application.ports.out.respuesta.LeerRespuestasPorClavePort;
 import com.renaser.os.onboarding.application.ports.out.respuesta.LeerRespuestasPorClavePort.ValorDeRespuesta;
@@ -20,7 +21,8 @@ class TratoDeLaPersonaServiceTest {
 
     private static final UserId PERSONA = UserId.of(UUID.randomUUID());
     private final LeerRespuestasPorClavePort respuestas = mock(LeerRespuestasPorClavePort.class);
-    private final TratoDeLaPersonaService service = new TratoDeLaPersonaService(respuestas);
+    private final DiagnosticoDeLaPersonaFinder diagnostico = mock(DiagnosticoDeLaPersonaFinder.class);
+    private final TratoDeLaPersonaService service = new TratoDeLaPersonaService(respuestas, diagnostico);
 
     private void respondio(String valor) {
         when(respuestas.deUsuario(PERSONA, Set.of("sex"))).thenReturn(valor == null ? Map.of()
@@ -37,6 +39,19 @@ class TratoDeLaPersonaServiceTest {
         respondio(null);
         assertThat(service.de(PERSONA)).isEqualTo(Trato.NEUTRO);
         respondio("Prefiero no decirlo");
+        assertThat(service.de(PERSONA)).isEqualTo(Trato.NEUTRO);
+    }
+
+    /** Spec 026: quien contesto el diagnostico tiene su trato ahi (la pregunta protegida); manda sobre la ficha estandar. */
+    @Test
+    @DisplayName("spec 026: el trato del diagnostico manda sobre la ficha estandar")
+    void delDiagnostico() {
+        respondio("Masculino");
+        when(diagnostico.tratoDe(PERSONA)).thenReturn("FEMENINO");
+        assertThat(service.de(PERSONA)).isEqualTo(Trato.FEMENINO);
+        when(diagnostico.tratoDe(PERSONA)).thenReturn("MASCULINO");
+        assertThat(service.de(PERSONA)).isEqualTo(Trato.MASCULINO);
+        when(diagnostico.tratoDe(PERSONA)).thenReturn("NEUTRO");
         assertThat(service.de(PERSONA)).isEqualTo(Trato.NEUTRO);
     }
 }

@@ -1,6 +1,7 @@
 package com.renaser.os.habits.application.ports.in.registro;
 
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
+import com.renaser.os.habits.domain.model.medicion.OrigenMedicion;
 import com.renaser.os.habits.domain.model.medicion.UnidadMedicion;
 import com.renaser.os.habits.domain.model.registro.PuntosEnJuego;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
@@ -180,7 +181,17 @@ public interface ConsultarTracksDelDiaConCatalogoUseCase {
      * lo registrado ESE dia ({@code null} mientras no se complete) y el total acumulado del programa
      * hasta ese dia inclusive (con lo de ese dia si ya se registro). Solo existe en los habitos cuya
      * politica declara unidad; en los demas el track no lo trae.
+     *
+     * <p>Spec 037: {@code meta} es la meta diaria que rige (la de Administración o la del programa; {@code null} si el
+     * hábito no tiene una), y {@code origenDelDia}/{@code fuenteDelDia} dicen de dónde salió lo registrado ese día
+     * ({@code null} si todavía no se cumplió; la fuente solo la tiene la lectura automática).
      */
-    record MedicionDelTrack(UnidadMedicion unidad, BigDecimal valorDelDia, BigDecimal total) {
+    record MedicionDelTrack(UnidadMedicion unidad, BigDecimal valorDelDia, BigDecimal total, BigDecimal meta,
+                            OrigenMedicion origenDelDia, String fuenteDelDia) {
+
+        /** Sin meta ni origen: la forma anterior a la spec 037. */
+        public MedicionDelTrack(UnidadMedicion unidad, BigDecimal valorDelDia, BigDecimal total) {
+            this(unidad, valorDelDia, total, null, null, null);
+        }
     }
 }

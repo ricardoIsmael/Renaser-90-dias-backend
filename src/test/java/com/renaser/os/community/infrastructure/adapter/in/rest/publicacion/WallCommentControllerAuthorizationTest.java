@@ -78,7 +78,7 @@ class WallCommentControllerAuthorizationTest {
         UUID actorId = UUID.randomUUID();
         UUID postId = UUID.randomUUID();
         sesionDe(actorId, UserRole.TRAINEE, UserStatus.ACTIVE);
-        when(consultarUseCase.pagina(PublicacionId.of(postId), null))
+        when(consultarUseCase.pagina(UserId.of(actorId), PublicacionId.of(postId), null))
                 .thenReturn(new PaginaComentarios(List.of(), null, 0));
 
         mockMvc.perform(get("/api/v1/wall/{postId}/comments", postId))

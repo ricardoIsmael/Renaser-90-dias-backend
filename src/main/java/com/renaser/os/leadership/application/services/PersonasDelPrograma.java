@@ -8,7 +8,9 @@ import com.renaser.os.leadership.application.ports.in.ConsultarPersonasDelProgra
 import com.renaser.os.leadership.application.services.PersonasDelGrupo.Miembro;
 import com.renaser.os.leadership.domain.model.cumplimiento.BusquedaPorNombre;
 import com.renaser.os.leadership.domain.model.cumplimiento.GrupoDeLaPersona;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import com.renaser.os.users.api.CuentasDePruebaFinder;
 import com.renaser.os.users.api.ParticipacionPrograma;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
@@ -45,9 +47,11 @@ class PersonasDelPrograma {
     private final ParticipacionProgramaFinder participaciones;
     private final UserSummaryFinder usuarios;
     private final CuentasDePruebaFinder pruebas;
+    private final AlcanceDeFormacionFinder formaciones;
 
     PersonasDelPrograma(AcompanamientoFinder acompanamiento, ParticipacionProgramaFinder participaciones,
-                        UserSummaryFinder usuarios, CuentasDePruebaFinder pruebas) {
+                        UserSummaryFinder usuarios, CuentasDePruebaFinder pruebas, AlcanceDeFormacionFinder formaciones) {
+        this.formaciones = formaciones;
         this.acompanamiento = acompanamiento;
         this.participaciones = participaciones;
         this.usuarios = usuarios;
@@ -55,10 +59,12 @@ class PersonasDelPrograma {
     }
 
     /** La persona y el grupo con que se la mira; 404 si no es un aprendiz del programa que se muestre. */
-    Mirada mirar(UserId personaId, Instant ahora) {
+    Mirada mirar(UserId actor, UserId personaId, Instant ahora) {
         UserSummary perfil = usuarios.findById(personaId).filter(this::seMuestra).orElseThrow(PersonasDelPrograma::noEncontrada);
         ParticipacionPrograma participacion = participaciones.deParticipante(personaId)
                 .filter(ParticipacionPrograma::inscrito).orElseThrow(PersonasDelPrograma::noEncontrada);
+        // Spec 022: una persona de otra formación se responde como si no existiera (404).
+        formaciones.exigirQueLaVea(actor, participacion.formacion());
         GrupoDeLaPersona grupo = GrupoDeLaPersona.elegir(gruposDe(Set.of(personaId), ahora).getOrDefault(personaId, List.of()),
                 participacion.celulaId()).orElse(null);
         return new Mirada(new Miembro(perfil, participacion, false), grupo);
@@ -68,8 +74,8 @@ class PersonasDelPrograma {
      * Una página de los aprendices que coinciden con la búsqueda, por nombre. El padrón se lee entero (son cientos, no
      * miles) y se filtra y ordena en memoria: lo caro —el programa y el grupo de cada uno— se pide solo para la página.
      */
-    PaginaDePersonas listar(String busqueda, int pagina, int tamano, Instant ahora) {
-        List<UserSummary> coinciden = padron().stream()
+    PaginaDePersonas listar(UserId actor, String busqueda, int pagina, int tamano, Instant ahora) {
+        List<UserSummary> coinciden = padron(actor).stream()
                 .filter(perfil -> BusquedaPorNombre.coincide(perfil.fullName(), busqueda))
                 .sorted(Comparator.comparing(UserSummary::fullName, BusquedaPorNombre.porNombre())
                         .thenComparing(perfil -> perfil.id().value()))
@@ -81,9 +87,28 @@ class PersonasDelPrograma {
         return new PaginaDePersonas(armar(deLaPagina, ahora), pagina, tamano, total);
     }
 
+    /**
+     * Todos los alumnos que se muestran dentro del alcance, cada uno con el grupo con que se lo mira (spec 029). Todo en lote: el padrón, las cuentas de
+     * prueba y los grupos se leen una vez, nunca persona por persona. El grupo principal de cada una no se consulta (sería una lectura por persona): si está en
+     * dos grupos, cae en el mismo que la lista de {@link #listar} salvo cuando el principal es el otro.
+     */
+    List<Alumno> alumnos(AlcanceDeFormacion alcance, Instant ahora) {
+        List<UserSummary> padron = padron(alcance);
+        Set<UserId> ids = new HashSet<>();
+        padron.forEach(perfil -> ids.add(perfil.id()));
+        Map<UserId, List<GrupoDeLaPersona>> grupos = gruposDe(ids, ahora);
+        return padron.stream().map(perfil -> new Alumno(perfil,
+                GrupoDeLaPersona.elegir(grupos.getOrDefault(perfil.id(), List.of()), null).orElse(null))).toList();
+    }
+
     /** Aprendices activos, que estén en el programa y no sean de prueba. */
-    private List<UserSummary> padron() {
-        Set<UserId> enElPrograma = new HashSet<>(participaciones.participantesInscritosActivos());
+    private List<UserSummary> padron(UserId actor) {
+        // Spec 022: el padrón es el de la formación de quien mira (el líder con varias, la activa); Administración ve todas.
+        return padron(formaciones.de(actor));
+    }
+
+    private List<UserSummary> padron(AlcanceDeFormacion alcance) {
+        Set<UserId> enElPrograma = new HashSet<>(formaciones.dentroDelAlcance(participaciones.participantesInscritosActivos(), alcance));
         List<UserSummary> candidatos = usuarios.aprendicesActivos().stream()
                 .filter(perfil -> perfil.role() == UserRole.TRAINEE && enElPrograma.contains(perfil.id()))
                 .toList();
@@ -98,8 +123,8 @@ class PersonasDelPrograma {
         Set<UserId> ids = new HashSet<>();
         pagina.forEach(perfil -> ids.add(perfil.id()));
         Map<UserId, List<GrupoDeLaPersona>> gruposPorPersona = gruposDe(ids, ahora);
-        Map<UserId, ParticipacionPrograma> programas = new HashMap<>();
-        pagina.forEach(perfil -> participaciones.deParticipante(perfil.id()).ifPresent(p -> programas.put(perfil.id(), p)));
+        // Auditoria de consultas del 2026-11-02 (H-07): el programa de las personas de la pagina en UNA consulta, no una por fila (con el buscador, una por tecla).
+        Map<UserId, ParticipacionPrograma> programas = new HashMap<>(participaciones.deParticipantes(ids));
         Map<UserId, GrupoDeLaPersona> elegidos = new HashMap<>();
         for (UserSummary perfil : pagina) {
             ParticipacionPrograma programa = programas.get(perfil.id());
@@ -141,6 +166,10 @@ class PersonasDelPrograma {
 
     private boolean seMuestra(UserSummary perfil) {
         return perfil.role() == UserRole.TRAINEE && perfil.status().allowsAccess() && !pruebas.esDePrueba(perfil.id());
+    }
+
+    /** Un alumno que se muestra y el grupo con que se lo mira; {@code grupo} es null si no está en ninguno (spec 029). */
+    record Alumno(UserSummary perfil, GrupoDeLaPersona grupo) {
     }
 
     private static NoSuchElementException noEncontrada() {

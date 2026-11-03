@@ -1,5 +1,6 @@
 package com.renaser.os.chat.application.ports.in.bienvenida;
 
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 
 /**
@@ -7,6 +8,9 @@ import com.renaser.os.shared.domain.UserId;
  */
 public interface VerBienvenidaUseCase {
 
-    /** @throws com.renaser.os.shared.domain.NotAuthorizedException si no es ADMIN/ALCHEMIST activo */
-    BienvenidaEditable ver(UserId actorId);
+    /**
+     * @param formacion de cuál formación (spec 035)
+     * @throws com.renaser.os.shared.domain.NotAuthorizedException si no es ADMIN/ALCHEMIST activo
+     */
+    BienvenidaEditable ver(UserId actorId, Formacion formacion);
 }

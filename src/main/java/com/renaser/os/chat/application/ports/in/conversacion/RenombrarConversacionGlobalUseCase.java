@@ -1,6 +1,7 @@
 package com.renaser.os.chat.application.ports.in.conversacion;
 
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 
 /**
@@ -13,6 +14,11 @@ public interface RenombrarConversacionGlobalUseCase {
 
     Conversacion renombrar(RenombrarConversacionGlobalCommand command);
 
-    record RenombrarConversacionGlobalCommand(UserId actorId, String nuevoNombre) {
+    /** {@code formacion}: la comunidad general que se renombra (spec 024: hay una por formación); sin elegir, la de la Escuela. */
+    record RenombrarConversacionGlobalCommand(UserId actorId, String nuevoNombre, Formacion formacion) {
+
+        public RenombrarConversacionGlobalCommand(UserId actorId, String nuevoNombre) {
+            this(actorId, nuevoNombre, null);
+        }
     }
 }

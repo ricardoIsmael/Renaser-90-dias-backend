@@ -1,6 +1,7 @@
 package com.renaser.os.chat.infrastructure.adapter.out.bienvenida;
 
 import com.renaser.os.chat.application.ports.out.bienvenida.DibujarBienvenidaPort;
+import com.renaser.os.shared.domain.Formacion;
 import org.springframework.stereotype.Component;
 
 import javax.imageio.IIOImage;
@@ -64,12 +65,12 @@ class BienvenidaJava2dAdapter implements DibujarBienvenidaPort {
 
     @Override
     public byte[] dibujar(String nombre) {
-        return dibujar(nombre, portadas.vigente());
+        return dibujar(nombre, portadas.vigente(Formacion.POR_DEFECTO));
     }
 
     @Override
-    public String portadaVigente() {
-        return portadas.vigente();
+    public String portadaVigente(Formacion formacion) {
+        return portadas.vigente(formacion);
     }
 
     @Override

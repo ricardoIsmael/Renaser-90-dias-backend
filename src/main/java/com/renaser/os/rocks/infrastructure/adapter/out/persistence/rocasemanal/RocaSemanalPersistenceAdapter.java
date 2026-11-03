@@ -29,14 +29,14 @@ class RocaSemanalPersistenceAdapter implements LoadRocaSemanalPort, SaveRocaSema
     @Override
     public List<RocaSemanal> deParticipanteYSemana(List<RocaMaestraId> rocasMaestrasIds, int numeroSemana) {
         List<java.util.UUID> ids = rocasMaestrasIds.stream().map(RocaMaestraId::value).toList();
-        return repository.findByRocaMaestraIdInAndNumeroSemana(ids, (short) numeroSemana).stream()
+        return repository.findByRocaMaestraIdInAndNumeroSemana(ids, aCorto(numeroSemana)).stream()
                 .map(mapper::toDomain)
                 .toList();
     }
 
     @Override
     public Optional<RocaSemanal> deMaestraYSemana(RocaMaestraId rocaMaestraId, int numeroSemana) {
-        return repository.findByRocaMaestraIdAndNumeroSemana(rocaMaestraId.value(), (short) numeroSemana)
+        return repository.findByRocaMaestraIdAndNumeroSemana(rocaMaestraId.value(), aCorto(numeroSemana))
                 .map(mapper::toDomain);
     }
 
@@ -44,5 +44,16 @@ class RocaSemanalPersistenceAdapter implements LoadRocaSemanalPort, SaveRocaSema
     public RocaSemanal save(RocaSemanal rocaSemanal) {
         var saved = repository.saveAndFlush(mapper.toEntity(rocaSemanal));
         return mapper.toDomain(saved);
+    }
+
+    /**
+     * El número llega de un pedido y la columna es {@code smallint}: un valor fuera de rango se rechaza en vez de truncarse en
+     * silencio al convertirlo (CodeQL java/tainted-numeric-cast). Ninguno válido pasa de unas decenas.
+     */
+    private static short aCorto(int numero) {
+        if (numero < 0 || numero > Short.MAX_VALUE) {
+            throw new IllegalArgumentException("Número fuera de rango: " + numero);
+        }
+        return (short) numero;
     }
 }

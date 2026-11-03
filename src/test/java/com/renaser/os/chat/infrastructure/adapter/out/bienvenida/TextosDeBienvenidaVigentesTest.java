@@ -4,6 +4,7 @@ import com.renaser.os.chat.application.ports.out.bienvenida.CambiosDeBienvenidaE
 import com.renaser.os.chat.domain.model.bienvenida.CambioDeBienvenida;
 import com.renaser.os.chat.domain.model.bienvenida.PiezaDeBienvenida;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.domain.Formacion;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -20,26 +21,37 @@ class TextosDeBienvenidaVigentesTest {
 
     private final CambiosDeBienvenidaEnMemoria cambios = new CambiosDeBienvenidaEnMemoria();
     private final TextosDeBienvenidaVigentes textos =
-            new TextosDeBienvenidaVigentes(pieza -> "original de " + pieza.name(), cambios);
+            new TextosDeBienvenidaVigentes((formacion, pieza) -> "original de " + formacion + " " + pieza.name(), cambios);
 
     @Test
     @DisplayName("sin cambios salen los del repo")
     void sinCambiosLosDelRepo() {
-        assertThat(textos.soporteConLaTarjeta()).isEqualTo("original de SOPORTE_CON_LA_TARJETA");
-        assertThat(textos.soporteFormal()).isEqualTo("original de SOPORTE_FORMAL");
-        assertThat(textos.grupo()).isEqualTo("original de GRUPO");
+        assertThat(textos.soporteConLaTarjeta(Formacion.ESCUELA)).isEqualTo("original de ESCUELA SOPORTE_CON_LA_TARJETA");
+        assertThat(textos.soporteFormal(Formacion.ESCUELA)).isEqualTo("original de ESCUELA SOPORTE_FORMAL");
+        assertThat(textos.grupo(Formacion.ESCUELA)).isEqualTo("original de ESCUELA GRUPO");
     }
 
     @Test
     @DisplayName("el guardado reemplaza solo a su mensaje, y volver al original lo devuelve")
     void elGuardadoYLaVuelta() {
-        cambios.registrar(CambioDeBienvenida.texto(PiezaDeBienvenida.SOPORTE_FORMAL, "Hola, {nombre}. Nuevo.", KELIN, AHORA));
+        cambios.registrar(CambioDeBienvenida.texto(Formacion.ESCUELA, PiezaDeBienvenida.SOPORTE_FORMAL, "Hola, {nombre}. Nuevo.", KELIN, AHORA));
 
-        assertThat(textos.soporteFormal()).isEqualTo("Hola, {nombre}. Nuevo.");
-        assertThat(textos.soporteConLaTarjeta()).isEqualTo("original de SOPORTE_CON_LA_TARJETA");
-        assertThat(textos.grupo()).isEqualTo("original de GRUPO");
+        assertThat(textos.soporteFormal(Formacion.ESCUELA)).isEqualTo("Hola, {nombre}. Nuevo.");
+        assertThat(textos.soporteConLaTarjeta(Formacion.ESCUELA)).isEqualTo("original de ESCUELA SOPORTE_CON_LA_TARJETA");
+        assertThat(textos.grupo(Formacion.ESCUELA)).isEqualTo("original de ESCUELA GRUPO");
 
-        cambios.registrar(CambioDeBienvenida.volverAlOriginal(PiezaDeBienvenida.SOPORTE_FORMAL, KELIN, AHORA));
-        assertThat(textos.soporteFormal()).isEqualTo("original de SOPORTE_FORMAL");
+        cambios.registrar(CambioDeBienvenida.volverAlOriginal(Formacion.ESCUELA, PiezaDeBienvenida.SOPORTE_FORMAL, KELIN, AHORA));
+        assertThat(textos.soporteFormal(Formacion.ESCUELA)).isEqualTo("original de ESCUELA SOPORTE_FORMAL");
+    }
+
+    @Test
+    @DisplayName("Spec 035: cada formación lee SU último cambio o SU original; lo de una nunca llega a otra")
+    void cadaFormacionLeeLoSuyo() {
+        cambios.registrar(CambioDeBienvenida.texto(Formacion.DIPLOMADO, PiezaDeBienvenida.GRUPO, "¡{nombre}! {mentor}, del Diplomado.", KELIN, AHORA));
+
+        assertThat(textos.grupo(Formacion.DIPLOMADO)).isEqualTo("¡{nombre}! {mentor}, del Diplomado.");
+        assertThat(textos.grupo(Formacion.ESCUELA)).isEqualTo("original de ESCUELA GRUPO");
+        assertThat(textos.grupo(Formacion.CERTIFICACION)).isEqualTo("original de CERTIFICACION GRUPO");
+        assertThat(textos.soporteFormal(Formacion.DIPLOMADO)).isEqualTo("original de DIPLOMADO SOPORTE_FORMAL");
     }
 }

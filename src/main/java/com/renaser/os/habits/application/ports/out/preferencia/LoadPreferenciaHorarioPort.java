@@ -1,6 +1,7 @@
 package com.renaser.os.habits.application.ports.out.preferencia;
 
 import com.renaser.os.habits.domain.model.habito.HabitoId;
+import com.renaser.os.habits.domain.model.preferencia.FechaPropia;
 import com.renaser.os.habits.domain.model.preferencia.HorarioSemanal;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
 import com.renaser.os.shared.domain.UserId;
@@ -41,6 +42,15 @@ public interface LoadPreferenciaHorarioPort {
                                                                         Collection<HabitoId> habitoIds,
                                                                         LocalDate fecha);
 
+    /**
+     * La preferencia efectiva en la fecha para UN habito de VARIAS personas, en pocas consultas que no crecen con la cantidad de personas (auditoria de
+     * consultas del 2026-11-02, H-01). Es la misma resolucion por capas que {@link #porParticipanteHabitosYFechaSinAvisoDelDia} (general, cambio general
+     * vigente, dia de la semana y fecha exacta), pero solo la HORA: quien la usa es la lista «Hábitos de todos → personas de un hábito», que dice a
+     * que hora le toca a cada una. Quien no tiene ninguna capa no aparece en el mapa.
+     */
+    java.util.Map<UserId, PreferenciaHorario> horaDeUnHabitoDeVarios(Collection<UserId> participantes, HabitoId habitoId,
+                                                                      LocalDate fecha);
+
     /** Las filas de dia de la semana de varios habitos en UNA consulta (hora, apagado y aviso propios). */
     List<HorarioSemanal> horariosSemanalesDe(UserId participanteId, Collection<HabitoId> habitoIds);
 
@@ -75,4 +85,13 @@ public interface LoadPreferenciaHorarioPort {
      * Los dos responden "va hoy?" y el generador los junta en el mismo conjunto de descarte.
      */
     List<HabitoId> habitosApagadosEnDiaSemana(UserId participanteId, DayOfWeek diaSemana);
+
+    /**
+     * Spec 028: lo que la persona decidio solo para ciertas fechas ({@code horarios_habito_por_fecha}), de TODOS sus habitos y entre
+     * esas dos fechas inclusive. Una consulta, sin N+1.
+     */
+    List<FechaPropia> fechasPropiasEntre(UserId participanteId, LocalDate desde, LocalDate hasta);
+
+    /** Lo mismo, de un solo habito. */
+    List<FechaPropia> fechasPropiasDeUnHabitoEntre(UserId participanteId, HabitoId habitoId, LocalDate desde, LocalDate hasta);
 }

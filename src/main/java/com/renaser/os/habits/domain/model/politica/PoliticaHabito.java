@@ -3,6 +3,7 @@ package com.renaser.os.habits.domain.model.politica;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.medicion.UnidadMedicion;
 
+import java.math.BigDecimal;
 import java.util.Optional;
 
 /**
@@ -65,6 +66,14 @@ public interface PoliticaHabito {
      * acumulado. La unidad NO vive en la tabla {@code habitos}: seria la misma regla en dos lugares.
      */
     default Optional<UnidadMedicion> unidadDeMedicion() {
+        return Optional.empty();
+    }
+
+    /**
+     * La meta diaria que rige cuando Administración no fijó otra (spec 037: los 5 km de {@code DAILY_KM}). Vacía en todo hábito
+     * que no tiene meta. Es lo que la agenda de hoy le muestra a la app para ofrecer «Registrar» al alcanzarla.
+     */
+    default Optional<BigDecimal> metaPorDefectoDeLaMedicion() {
         return Optional.empty();
     }
 }

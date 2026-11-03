@@ -53,6 +53,20 @@ class HabitosDeHoyEnElPromptTest {
                 YOGA (sin fecha de fin).""");
     }
 
+    @Test
+    @DisplayName("spec 038: un ritual dice «pide escribir», un dia cerrado dice que no se registra, y ninguno de los dos habla de foto")
+    void ritualDiaCerradoYFoto() {
+        String texto = HabitosDeHoyEnElPrompt.texto(new HabitosDeHoy(List.of(
+                new HabitoDeHoy("RITUAL DE LA MAÑANA", EstadoDeHoy.PENDIENTE, false, null, true),
+                new HabitoDeHoy("JUGO VERDE", EstadoDeHoy.VENCIDO, true, null, false),
+                new HabitoDeHoy("LECTURA", EstadoDeHoy.DIA_CERRADO, true, null, false)), List.of()));
+
+        assertThat(texto).contains("- RITUAL DE LA MAÑANA: pendiente, pide escribir")
+                .contains("- JUGO VERDE: ya no da puntos (paso su hora; igual puede hacerlo), pide foto")
+                .contains("- LECTURA: dia cerrado (ese dia ya termino: no se puede registrar)")
+                .doesNotContain("dia cerrado (ese dia ya termino: no se puede registrar), pide foto");
+    }
+
     /**
      * E-289: con la ultima comida "hecho" en su propia linea de la lista, a "me salto la ultima comida"
      * el modelo contesto que saltarsela lo alejaba de su objetivo. Lo hecho va primero, junto, y con la
@@ -173,5 +187,19 @@ class HabitosDeHoyEnElPromptTest {
                         .FEMENINO)))
                 .contains("Trato: femenino.");
         assertThat(GoogleGenAiRenasiaChatAdapter.formatearSituacion(base)).contains("Trato: neutro (sin dato).");
+    }
+
+    // spec 037 (T021 de la 038): un habito de km con los pasos conectados no «pide foto»: se mide solo y se registra en Training
+    @Test
+    @DisplayName("spec 037: un habito que se mide solo dice que se registra en Training con «Registrar» y no habla de foto")
+    void kilometrosSeMidenSolos() {
+        String texto = HabitosDeHoyEnElPrompt.texto(new HabitosDeHoy(List.of(
+                new HabitoDeHoy("KILOMETROS DIARIOS", EstadoDeHoy.PENDIENTE, false, null, false, true),
+                new HabitoDeHoy("KILOMETROS DIARIOS", EstadoDeHoy.HECHO, false, null, false, true)), List.of()));
+
+        assertThat(texto).contains("- KILOMETROS DIARIOS: pendiente, se mide solo con sus pasos (sin foto: lo registra en Training con «Registrar»)")
+                .doesNotContain("pide foto");
+        // Ya hecho no necesita explicacion: queda en «Ya hechos hoy».
+        assertThat(texto).contains("Ya hechos hoy (no le propongas hacerlos, saltarlos ni registrarlos otra vez): KILOMETROS DIARIOS.");
     }
 }

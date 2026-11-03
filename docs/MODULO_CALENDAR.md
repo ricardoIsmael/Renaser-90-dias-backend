@@ -372,3 +372,7 @@ de la persona, pasados o por venir: `proximosDias` solo mira hacia adelante desd
 días ya vividos de la semana. Mismo caso de uso que `GET /calendar/events` (audiencia, recurrencias, excepciones y respuesta
 «Voy»/«No voy»), mismo tope de 90 días. Vienen las ocurrencias que EMPIEZAN dentro del rango (como `proximosDias`): quien
 necesite el pedazo de un evento que cruza la medianoche pide un día antes. `mentoring` descarta las de «No voy».
+
+## Eventos por formación (spec 024, D-301, 2026-10-31)
+
+Spec 024 (D-301, 2026-10-31): contrato completo en `specs/024-comunidad-por-formacion/contracts/comunidad-api.md`. `eventos.formacion` (V137); «Voy», recordatorios y asistencia la heredan del evento. La lista, el detalle, «Voy», la asistencia, «Próximo evento» y «Mi agenda» filtran por el alcance (lo de otra formación es inexistente) y la audiencia (todos, nivel, curso, roles, grupo) se resuelve dentro de la formación del evento. Administración elige la formación al crear. El aviso push de un evento no cambia de ruta.

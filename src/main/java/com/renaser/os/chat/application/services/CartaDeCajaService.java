@@ -10,6 +10,7 @@ import com.renaser.os.chat.domain.model.bienvenida.PiezaDeBienvenida;
 import com.renaser.os.chat.domain.model.bienvenida.PortadaDeBienvenida;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -94,18 +95,18 @@ public class CartaDeCajaService implements CartaDeCajaUseCase {
     public FondoDeLaCarta volverAlFondoOriginal(UserId actorId) {
         exigirAdmin(actorId);
         if (estado().cambiada()) {
-            cambios.registrar(CambioDeBienvenida.volverAlOriginal(PiezaDeBienvenida.CARTA_CAJA, actorId, clock.now()));
+            cambios.registrar(CambioDeBienvenida.volverAlOriginal(Formacion.POR_DEFECTO, PiezaDeBienvenida.CARTA_CAJA, actorId, clock.now()));
         }
         return leer();
     }
 
     private EstadoDePieza estado() {
         return new EstadoDePieza(PiezaDeBienvenida.CARTA_CAJA, "original",
-                cambios.ultimo(PiezaDeBienvenida.CARTA_CAJA).orElse(null));
+                cambios.ultimo(Formacion.POR_DEFECTO, PiezaDeBienvenida.CARTA_CAJA).orElse(null));
     }
 
     private FondoDeLaCarta leer() {
-        Optional<CambioDeBienvenida> ultimo = cambios.ultimo(PiezaDeBienvenida.CARTA_CAJA);
+        Optional<CambioDeBienvenida> ultimo = cambios.ultimo(Formacion.POR_DEFECTO, PiezaDeBienvenida.CARTA_CAJA);
         String por = ultimo.flatMap(CambioDeBienvenida::quien).flatMap(usuarios::findById)
                 .map(UserSummary::fullName).orElse(null);
         return new FondoDeLaCarta(estado().cambiada(), almacenamiento.guardaObjetos(), por,

@@ -66,7 +66,7 @@ class CompartirPublicacionServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new CompartirPublicacionService(enviarMensajeUseCase, publicacionMuroFinder, userSummaryFinder);
+        service = new CompartirPublicacionService(enviarMensajeUseCase, publicacionMuroFinder, userSummaryFinder, org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort.class));
         lenient().when(userSummaryFinder.findById(autor)).thenReturn(
                 Optional.of(new UserSummary(autor, "Maria Quispe", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
         lenient().when(enviarMensajeUseCase.enviar(any()))

@@ -15,6 +15,7 @@ import com.renaser.os.habits.domain.model.habito.TipoHabito;
 import com.renaser.os.habits.domain.model.politica.GestoCompletar;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -88,7 +89,7 @@ class PastillaRenacerHabitoServiceTest {
         completado.completar(10, RESUMEN, null, null, CLOCK.now());
 
         mockProgresoActivo(participanteId);
-        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_PASTILLA_RENACER)).thenReturn(Optional.of(habito));
+        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_PASTILLA_RENACER, Formacion.ESCUELA)).thenReturn(Optional.of(habito));
         when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(participanteId, habito.id(), HOY))
                 .thenReturn(Optional.of(pendiente));
         when(completarRegistroUseCase.completar(any())).thenReturn(completado);
@@ -111,7 +112,7 @@ class PastillaRenacerHabitoServiceTest {
         RegistroHabito pendiente = registroPendiente(participanteId, habito.id());
 
         mockProgresoActivo(participanteId);
-        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_PASTILLA_RENACER)).thenReturn(Optional.of(habito));
+        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_PASTILLA_RENACER, Formacion.ESCUELA)).thenReturn(Optional.of(habito));
         when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(participanteId, habito.id(), HOY))
                 .thenReturn(Optional.of(pendiente));
         when(completarRegistroUseCase.completar(any())).thenAnswer(inv -> {
@@ -134,7 +135,7 @@ class PastillaRenacerHabitoServiceTest {
         yaCompletado.completar(10, "resumen original", null, null, CLOCK.now());
 
         mockProgresoActivo(participanteId);
-        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_PASTILLA_RENACER)).thenReturn(Optional.of(habito));
+        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_PASTILLA_RENACER, Formacion.ESCUELA)).thenReturn(Optional.of(habito));
         when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(participanteId, habito.id(), HOY))
                 .thenReturn(Optional.of(yaCompletado));
 
@@ -162,7 +163,7 @@ class PastillaRenacerHabitoServiceTest {
         RegistroHabito pendiente = registroPendiente(participanteId, habito.id());
 
         mockProgresoActivo(participanteId);
-        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_PASTILLA_RENACER)).thenReturn(Optional.of(habito));
+        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_PASTILLA_RENACER, Formacion.ESCUELA)).thenReturn(Optional.of(habito));
         when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(participanteId, habito.id(), HOY))
                 .thenReturn(Optional.of(pendiente));
         when(completarRegistroUseCase.completar(any())).thenReturn(pendiente);
@@ -180,7 +181,7 @@ class PastillaRenacerHabitoServiceTest {
         Habito habito = habitoPastilla();
 
         mockProgresoActivo(participanteId);
-        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_PASTILLA_RENACER)).thenReturn(Optional.of(habito));
+        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_PASTILLA_RENACER, Formacion.ESCUELA)).thenReturn(Optional.of(habito));
         when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(participanteId, habito.id(), HOY))
                 .thenReturn(Optional.empty());
 
@@ -189,10 +190,11 @@ class PastillaRenacerHabitoServiceTest {
     }
 
     @Test
-    @DisplayName("Sin el habito en el catalogo de este entorno devuelve vacio, sin tocar el progreso del participante")
+    @DisplayName("Sin el habito en el catalogo de la formacion de la persona devuelve vacio, sin cerrar nada")
     void sinHabitoEnElCatalogoDevuelveVacio() {
         UserId participanteId = participante();
-        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_PASTILLA_RENACER)).thenReturn(Optional.empty());
+        mockProgresoActivo(participanteId);
+        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_PASTILLA_RENACER, Formacion.ESCUELA)).thenReturn(Optional.empty());
 
         assertThat(service().completarDeHoy(participanteId, RESUMEN)).isEmpty();
         verify(completarRegistroUseCase, never()).completar(any());
@@ -202,7 +204,6 @@ class PastillaRenacerHabitoServiceTest {
     @DisplayName("Cuenta suspendida -> NotAuthorizedException (CLAUDE.MD §0.3), aunque el llamador no lo haya chequeado")
     void rechazaSuspendido() {
         UserId participanteId = participante();
-        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_PASTILLA_RENACER)).thenReturn(Optional.of(habitoPastilla()));
         when(progresoPort.deParticipante(participanteId))
                 .thenReturn(Optional.of(new ProgresoParticipanteHabits(8, "UTC", RolParticipante.TRAINEE, true, false)));
 

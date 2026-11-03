@@ -64,7 +64,16 @@ public final class CalculadoraObjetivoMensual {
      */
     public static ObjetivoDelMes calcular(int numeroMes, int mesActual, BigDecimal lineaBase, BigDecimal valorHoy,
                                            BigDecimal meta, Magnitud magnitud, BigDecimal topePorMes) {
-        int mes = acotar(numeroMes);
+        return calcular(numeroMes, mesActual, lineaBase, valorHoy, meta, magnitud, topePorMes, MesPrograma.MESES);
+    }
+
+    /**
+     * Igual, para un programa de {@code mesesDelPrograma} meses (spec 026: 3 o 12). La cifra del ultimo mes es siempre la meta; la curva se estira
+     * ({@link CurvaDelPlan#acumuladoAlCierreDe(int, int)}) y el ritmo planeado es la meta repartida en los meses de ESE programa.
+     */
+    public static ObjetivoDelMes calcular(int numeroMes, int mesActual, BigDecimal lineaBase, BigDecimal valorHoy,
+                                           BigDecimal meta, Magnitud magnitud, BigDecimal topePorMes, int mesesDelPrograma) {
+        int mes = acotar(numeroMes, mesesDelPrograma);
         if (magnitud == null) {
             return new ObjetivoDelMes.SinCifra(mes, ObjetivoDelMes.MotivoSinCifra.SIN_TIPO);
         }
@@ -77,21 +86,21 @@ public final class CalculadoraObjetivoMensual {
         if (lineaBase.compareTo(meta) == 0) {
             return new ObjetivoDelMes.SinCifra(mes, ObjetivoDelMes.MotivoSinCifra.SIN_RECORRIDO);
         }
-        return conRecorrido(mes, acotar(mesActual), lineaBase, valorHoy == null ? lineaBase : valorHoy, meta,
-                magnitud, topePorMes);
+        return conRecorrido(mes, acotar(mesActual, mesesDelPrograma), lineaBase, valorHoy == null ? lineaBase : valorHoy, meta,
+                magnitud, topePorMes, mesesDelPrograma);
     }
 
     private static ObjetivoDelMes conRecorrido(int mes, int mesActual, BigDecimal base, BigDecimal hoy,
-                                                BigDecimal meta, Magnitud magnitud, BigDecimal topePorMes) {
+                                                BigDecimal meta, Magnitud magnitud, BigDecimal topePorMes, int meses) {
         boolean sube = meta.compareTo(base) > 0;
         if (sube ? hoy.compareTo(meta) >= 0 : hoy.compareTo(meta) <= 0) {
             return new ObjetivoDelMes.YaAlcanzado(mes, meta);
         }
-        BigDecimal valor = puntoDeLaCurva(mes, base, meta);
-        BigDecimal desde = mes == mesActual ? hoy : puntoDeLaCurva(mes - 1, base, meta);
+        BigDecimal valor = puntoDeLaCurva(mes, base, meta, meses);
+        BigDecimal desde = mes == mesActual ? hoy : puntoDeLaCurva(mes - 1, base, meta, meses);
         BigDecimal paso = valor.subtract(desde).abs();
 
-        ObjetivoDelMes.MotivoSinCifra fuera = fueraDeAlcance(paso, base, meta, topePorMes);
+        ObjetivoDelMes.MotivoSinCifra fuera = fueraDeAlcance(paso, base, meta, topePorMes, meses);
         if (fuera != null) {
             return new ObjetivoDelMes.SinCifra(mes, fuera);
         }
@@ -106,15 +115,15 @@ public final class CalculadoraObjetivoMensual {
      * <p>El mes 0 es el punto de partida: sirve para que el {@code paso} de un mes futuro sea su
      * propio tramo y no todo lo acumulado desde hoy.
      */
-    private static BigDecimal puntoDeLaCurva(int mes, BigDecimal base, BigDecimal meta) {
+    private static BigDecimal puntoDeLaCurva(int mes, BigDecimal base, BigDecimal meta, int meses) {
         if (mes < 1) {
             return base;
         }
-        return base.add(meta.subtract(base).multiply(CurvaDelPlan.acumuladoAlCierreDe(mes), PRECISION));
+        return base.add(meta.subtract(base).multiply(CurvaDelPlan.acumuladoAlCierreDe(mes, meses), PRECISION));
     }
 
-    private static int acotar(int numeroMes) {
-        return Math.min(Math.max(numeroMes, 1), MesPrograma.MESES);
+    private static int acotar(int numeroMes, int meses) {
+        return Math.min(Math.max(numeroMes, 1), Math.max(meses, 1));
     }
 
     /**
@@ -126,12 +135,12 @@ public final class CalculadoraObjetivoMensual {
      * todavia puede llegar. Donde no lo hay, manda {@link #VECES_EL_RITMO_PLANEADO}.
      */
     private static ObjetivoDelMes.MotivoSinCifra fueraDeAlcance(BigDecimal paso, BigDecimal base, BigDecimal meta,
-                                                                 BigDecimal topePorMes) {
+                                                                 BigDecimal topePorMes, int meses) {
         if (topePorMes != null && topePorMes.signum() > 0) {
             return paso.compareTo(topePorMes) > 0 ? ObjetivoDelMes.MotivoSinCifra.RITMO_NO_SALUDABLE : null;
         }
         BigDecimal ritmoPlaneado = meta.subtract(base).abs()
-                .divide(BigDecimal.valueOf(MesPrograma.MESES), PRECISION);
+                .divide(BigDecimal.valueOf(meses), PRECISION);
         BigDecimal techo = ritmoPlaneado.multiply(BigDecimal.valueOf(VECES_EL_RITMO_PLANEADO));
         return paso.compareTo(techo) > 0 ? ObjetivoDelMes.MotivoSinCifra.FUERA_DE_ALCANCE : null;
     }

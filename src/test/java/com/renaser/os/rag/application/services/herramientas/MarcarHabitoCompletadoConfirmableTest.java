@@ -2,12 +2,16 @@ package com.renaser.os.rag.application.services.herramientas;
 
 import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort;
 import com.renaser.os.rag.domain.model.herramienta.CatalogoHerramientasAgente;
+import com.renaser.os.rag.domain.model.herramienta.HabitoCumplido;
 import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -52,6 +56,35 @@ class MarcarHabitoCompletadoConfirmableTest {
         assertThat(resultado).isEqualTo(ResultadoHerramienta.exito(
                 "Habito marcado como completado. Puntos otorgados: 6."));
         verify(agenda).completar(APRENDIZ, REGISTRO);
+    }
+
+    /** Spec 038 (issue #33): la app necesita el habito y el dia para apagar sus alarmas cuando SER lo cumple. */
+    // spec 038 FR-009, SC-003
+    @Test
+    @DisplayName("spec 038: el exito dice que habito se cumplio, de que dia y con cuantos puntos, para que la app apague sus alarmas")
+    void completaYDiceQueHabitoSeCumplio() {
+        UUID habito = UUID.fromString("55555555-5555-5555-5555-555555555555");
+        LocalDate dia = LocalDate.of(2026, 11, 2);
+        when(agenda.deHoyDe(APRENDIZ)).thenReturn(List.of(
+                new ConsultarAgendaHabitosPort.HabitoDelDia(REGISTRO, "DESPERTAR", "PENDIENTE", 8, 10, null, false, List.of(), "WAKE_UP",
+                        null, LocalTime.of(6, 0), "Cuerpo", habito, dia)));
+        when(agenda.completar(APRENDIZ, REGISTRO)).thenReturn(8);
+
+        ResultadoHerramienta resultado = confirmable.aplicar(APRENDIZ, marcar(REGISTRO.toString()));
+
+        assertThat(resultado).isEqualTo(ResultadoHerramienta.exito("Habito marcado como completado. Puntos otorgados: 8.",
+                new HabitoCumplido(REGISTRO, habito, dia, 8)));
+        assertThat(((ResultadoHerramienta.Exito) resultado).contenido()).doesNotContain(habito.toString());
+    }
+
+    @Test
+    @DisplayName("spec 038: si no se puede leer el habito, el exito sale igual, sin el dato (nunca se cae por eso)")
+    void completaAunqueNoSePuedaLeerElHabito() {
+        when(agenda.deHoyDe(APRENDIZ)).thenThrow(new IllegalStateException("base caida"));
+        when(agenda.completar(APRENDIZ, REGISTRO)).thenReturn(6);
+
+        assertThat(confirmable.aplicar(APRENDIZ, marcar(REGISTRO.toString())))
+                .isEqualTo(ResultadoHerramienta.exito("Habito marcado como completado. Puntos otorgados: 6."));
     }
 
     @Test

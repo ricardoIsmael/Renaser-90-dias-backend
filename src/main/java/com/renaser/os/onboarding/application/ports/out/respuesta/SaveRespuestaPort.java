@@ -10,4 +10,7 @@ import com.renaser.os.onboarding.domain.model.respuesta.Respuesta;
 public interface SaveRespuestaPort {
 
     Respuesta guardar(Respuesta respuesta);
+
+    /** Borra la respuesta de esa persona a esa pregunta, si la hay (la persona la dejó en blanco). */
+    void eliminar(com.renaser.os.shared.domain.UserId usuarioId, int preguntaId);
 }

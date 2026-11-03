@@ -44,7 +44,7 @@ class ResolverAudienciaMasivaPersistenceAdapter implements ResolverAudienciaMasi
     @Override
     public List<ParticipanteConDia> traineesActivosConDiaPrograma() {
         return participacionFinder.usuariosActivosConDiaPrograma(SOLO_APRENDICES).stream()
-                .map(fila -> new ParticipanteConDia(fila.id(), fila.diaPrograma()))
+                .map(fila -> new ParticipanteConDia(fila.id(), fila.diaPrograma(), fila.duracionDias()))
                 .toList();
     }
 

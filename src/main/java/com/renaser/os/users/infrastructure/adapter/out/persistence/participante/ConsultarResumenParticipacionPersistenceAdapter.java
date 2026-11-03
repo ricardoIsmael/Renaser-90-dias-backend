@@ -1,6 +1,9 @@
 package com.renaser.os.users.infrastructure.adapter.out.persistence.participante;
 
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.Formacion;
+import com.renaser.os.shared.infrastructure.persistence.FiltroDeFormacionSql;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FasePrograma;
 import com.renaser.os.users.api.ParticipacionPrograma;
@@ -47,10 +50,32 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
                    u.rol,
                    u.estado,
                    pp.programa_activado_en,
-                   COALESCE(pp.dias_ajuste_programa, 0) AS dias_ajuste_programa
+                   COALESCE(pp.dias_ajuste_programa, 0) AS dias_ajuste_programa,
+                   COALESCE(pp.formacion, 'ESCUELA') AS formacion,
+                   COALESCE(pp.duracion_dias, 90) AS duracion_dias
             FROM renaser.usuarios u
             LEFT JOIN renaser.participantes_programa pp ON pp.usuario_id = u.id
             WHERE u.id = ?1
+            """;
+
+    /** Las mismas columnas de {@link #QUERY_RESUMEN}, en el mismo orden, y el id al final (H-01: una consulta para varias personas). */
+    private static final String QUERY_RESUMEN_DE_VARIOS = """
+            SELECT (pp.usuario_id IS NOT NULL) AS inscrito,
+                   COALESCE(pp.dia_programa, 0) AS dia_programa,
+                   pp.fecha_inicio,
+                   COALESCE(pp.timezone, 'America/Lima') AS timezone,
+                   pp.celula_id,
+                   pp.mentor_id,
+                   u.rol,
+                   u.estado,
+                   pp.programa_activado_en,
+                   COALESCE(pp.dias_ajuste_programa, 0) AS dias_ajuste_programa,
+                   COALESCE(pp.formacion, 'ESCUELA') AS formacion,
+                   COALESCE(pp.duracion_dias, 90) AS duracion_dias,
+                   u.id
+            FROM renaser.usuarios u
+            LEFT JOIN renaser.participantes_programa pp ON pp.usuario_id = u.id
+            WHERE u.id = ANY (CAST(?1 AS uuid[]))
             """;
 
     private static final String QUERY_MIEMBROS_ACTIVOS = """
@@ -78,7 +103,8 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
             SELECT u.id, pp.dia_programa, pp.fecha_inicio,
                    COALESCE(pp.timezone, 'America/Lima') AS timezone,
                    pp.programa_activado_en,
-                   COALESCE(pp.dias_ajuste_programa, 0) AS dias_ajuste_programa
+                   COALESCE(pp.dias_ajuste_programa, 0) AS dias_ajuste_programa,
+                   COALESCE(pp.duracion_dias, 90) AS duracion_dias
             FROM renaser.usuarios u
             LEFT JOIN renaser.participantes_programa pp ON pp.usuario_id = u.id
             WHERE u.estado = 'ACTIVO' AND u.rol = ANY (CAST(?1 AS renaser.rol_usuario[]))
@@ -116,6 +142,10 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
      * aprendiz), asi que los 7 quedarian en esa cola para siempre, sin ninguna accion que los
      * saque. Un contador que no puede llegar a cero no es una cola, es ruido.</blockquote>
      *
+     * <blockquote><b>El filtro «Formación» (spec 022)</b> es {@code ?4} («sin filtro»: Administración mira «Todas» y ahí entra también quien no
+     * pertenece a ninguna, como ella misma) y {@code ?5} (los códigos). Con una formación elegida salen los aprendices que la cursan y el
+     * personal que la tiene asignada.</blockquote>
+     *
      * <blockquote><b>Los filtros van PRIMERO y la paginacion despues, y no al reves.</b> Con la
      * numeracion invertida —filtros en {@code ?3}/{@code ?4}— el listado funcionaba y el conteo
      * reventaba con {@code ParameterLabelException: Ordinal parameter labels start from '?3'}: al
@@ -134,6 +164,11 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
               AND (?2 = FALSE OR (pp.celula_id IS NULL AND u.rol = 'APRENDIZ'))
               AND (CAST(?3 AS text) IS NULL OR u.rol = CAST(CAST(?3 AS text) AS renaser.rol_usuario))
               AND NOT u.es_cuenta_de_prueba
+              AND (?4 = TRUE
+                   OR pp.formacion IN (?5)
+                   OR EXISTS (SELECT 1 FROM renaser.formaciones_personal fp
+                              WHERE fp.usuario_id = u.id AND fp.formacion IN (?5)))
+              AND (?6 = FALSE OR u.estado = 'ACTIVO')
             """;
 
     /**
@@ -191,10 +226,13 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
                    (SELECT rp.id FROM renaser.roles_personalizados rp
                      WHERE rp.id = u.rol_personalizado_id AND rp.activo AND rp.rol_base = u.rol) AS rol_personalizado_id,
                    (SELECT rp.nombre FROM renaser.roles_personalizados rp
-                     WHERE rp.id = u.rol_personalizado_id AND rp.activo AND rp.rol_base = u.rol) AS rol_personalizado
+                     WHERE rp.id = u.rol_personalizado_id AND rp.activo AND rp.rol_base = u.rol) AS rol_personalizado,
+                   pp.formacion, COALESCE(pp.duracion_dias, 90) AS duracion_dias,
+                   (SELECT string_agg(fp.formacion, ',' ORDER BY fp.formacion)
+                      FROM renaser.formaciones_personal fp WHERE fp.usuario_id = u.id) AS formaciones_del_personal
             """ + FILTRO_PADRON + """
             ORDER BY u.creado_en DESC, u.id
-            LIMIT ?4 OFFSET ?5
+            LIMIT ?7 OFFSET ?8
             """;
 
     private static final String QUERY_CONTAR_APRENDICES = "SELECT COUNT(*) " + FILTRO_PADRON;
@@ -217,6 +255,22 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
             return Optional.empty();
         }
         return Optional.of(aResumen(usuarioId, filas.get(0)));
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public java.util.Map<UserId, ParticipacionPrograma> resumenDeVarios(java.util.Collection<UserId> usuarios) {
+        if (usuarios.isEmpty()) {
+            return java.util.Map.of();
+        }
+        String[] ids = usuarios.stream().map(u -> u.value().toString()).distinct().toArray(String[]::new);
+        List<Object[]> filas = entityManager.createNativeQuery(QUERY_RESUMEN_DE_VARIOS).setParameter(1, ids).getResultList();
+        java.util.Map<UserId, ParticipacionPrograma> resumenes = new java.util.LinkedHashMap<>();
+        for (Object[] fila : filas) {
+            UserId id = UserId.of(aUuid(fila[12]));
+            resumenes.put(id, aResumen(id, fila));
+        }
+        return resumenes;
     }
 
     @Override
@@ -278,7 +332,8 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
                 .map(fila -> new ParticipacionProgramaFinder.UsuarioConDiaPrograma(UserId.of(aUuid(fila[0])),
                         fila[1] == null ? null
                                 : diaVigente((Number) fila[1], aLocalDate(fila[2]), aZona(fila[3]), fila[4],
-                                        (Number) fila[5])))
+                                        (Number) fila[5], ((Number) fila[6]).intValue()),
+                        ((Number) fila[6]).intValue()))
                 .collect(Collectors.toList());
     }
 
@@ -317,23 +372,30 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
     @Override
     @SuppressWarnings("unchecked")
     public List<ResumenTraineeAdmin> listarAprendices(int offset, int limit, String busqueda,
-                                                       boolean soloSinGrupo, UserRole rol) {
+                                                       boolean soloSinGrupo, UserRole rol, AlcanceDeFormacion alcance,
+                                                       boolean soloActivas) {
         List<Object[]> filas = entityManager.createNativeQuery(QUERY_LISTAR_APRENDICES)
                 .setParameter(1, normalizar(busqueda))
                 .setParameter(2, soloSinGrupo)
                 .setParameter(3, rol == null ? null : aClave(rol))
-                .setParameter(4, limit)
-                .setParameter(5, offset)
+                .setParameter(4, alcance.esTodas())
+                .setParameter(5, FiltroDeFormacionSql.codigos(alcance))
+                .setParameter(6, soloActivas)
+                .setParameter(7, limit)
+                .setParameter(8, offset)
                 .getResultList();
         return filas.stream().map(this::aResumenTraineeAdmin).collect(Collectors.toList());
     }
 
     @Override
-    public long contarAprendices(String busqueda, boolean soloSinGrupo, UserRole rol) {
+    public long contarAprendices(String busqueda, boolean soloSinGrupo, UserRole rol, AlcanceDeFormacion alcance, boolean soloActivas) {
         Number total = (Number) entityManager.createNativeQuery(QUERY_CONTAR_APRENDICES)
                 .setParameter(1, normalizar(busqueda))
                 .setParameter(2, soloSinGrupo)
                 .setParameter(3, rol == null ? null : aClave(rol))
+                .setParameter(4, alcance.esTodas())
+                .setParameter(5, FiltroDeFormacionSql.codigos(alcance))
+                .setParameter(6, soloActivas)
                 .getSingleResult();
         return total.longValue();
     }
@@ -351,15 +413,26 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
         boolean suspendido = "SUSPENDIDO".equals(String.valueOf(fila[3]));
         UUID celulaId = fila[5] == null ? null : aUuid(fila[5]);
         UserId mentorId = fila[6] == null ? null : UserId.of(aUuid(fila[6]));
+        int duracion = ((Number) fila[16]).intValue();
         int diaPrograma = diaVigente((Number) fila[4], aLocalDate(fila[7]), aZona(fila[8]), fila[9],
-                (Number) fila[10]);
+                (Number) fila[10], duracion);
         // El rol se traduce ACA a UserRole, no viaja crudo: la etiqueta en espanol es un detalle de
         // la base, y quien lo consuma no tiene por que saber como se escribe `rol_usuario`.
         return new ResumenTraineeAdmin(id, fullName, email,
                 suspendido ? UserStatus.SUSPENDED : UserStatus.ACTIVE,
-                diaPrograma, FasePrograma.paraDiaPrograma(diaPrograma), celulaId, mentorId,
+                diaPrograma, FasePrograma.paraDiaPrograma(diaPrograma, duracion), celulaId, mentorId,
                 mapearRol(String.valueOf(fila[11])), aInstante(fila[12]), null,
-                fila[13] == null ? null : new RolPersonalizadoAsignado(aUuid(fila[13]), String.valueOf(fila[14])));
+                fila[13] == null ? null : new RolPersonalizadoAsignado(aUuid(fila[13]), String.valueOf(fila[14])),
+                fila[15] == null ? null : Formacion.desde(String.valueOf(fila[15])), duracion,
+                formacionesDe(fila[17]));
+    }
+
+    /** `string_agg` de los códigos de las formaciones asignadas al personal ('DIPLOMADO,ESCUELA'), o NULL si no tiene. */
+    private static List<Formacion> formacionesDe(Object agregado) {
+        if (agregado == null) {
+            return List.of();
+        }
+        return java.util.Arrays.stream(String.valueOf(agregado).split(",")).map(Formacion::desde).toList();
     }
 
     /**
@@ -375,11 +448,13 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
         UserId mentorId = fila[5] == null ? null : UserId.of(aUuid(fila[5]));
         UserRole rol = mapearRol(String.valueOf(fila[6]));
         boolean suspendido = "SUSPENDIDO".equals(String.valueOf(fila[7]));
-        int diaPrograma = diaVigente((Number) fila[1], fechaInicio, zona, fila[8], (Number) fila[9]);
+        int duracion = ((Number) fila[11]).intValue();
+        int diaPrograma = diaVigente((Number) fila[1], fechaInicio, zona, fila[8], (Number) fila[9], duracion);
         // fila[8] es programa_activado_en: NULL = aprobado pero sin Terminos firmados.
         boolean activado = inscrito && fila[8] != null;
         return new ParticipacionPrograma(usuarioId, inscrito, diaPrograma, fechaInicio, zona,
-                FasePrograma.paraDiaPrograma(diaPrograma), celulaId, mentorId, rol, suspendido, activado);
+                FasePrograma.paraDiaPrograma(diaPrograma, duracion), celulaId, mentorId, rol, suspendido, activado,
+                Formacion.desde(String.valueOf(fila[10])), duracion);
     }
 
     /**
@@ -403,7 +478,7 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
      * el mismo metodo que usa el barrido.
      */
     private int diaVigente(Number diaAlmacenado, LocalDate fechaInicio, ZoneId zona, Object programaActivadoEn,
-                           Number diasAjuste) {
+                           Number diasAjuste, int duracionDias) {
         int almacenado = diaAlmacenado == null ? 0 : diaAlmacenado.intValue();
         if (programaActivadoEn == null || fechaInicio == null) {
             return almacenado;
@@ -413,7 +488,7 @@ class ConsultarResumenParticipacionPersistenceAdapter implements ConsultarResume
             return almacenado;
         }
         return com.renaser.os.users.domain.model.participante.ParticipacionPrograma.diaProgramaDerivado(
-                fechaInicio, hoyEnSuZona, diasAjuste == null ? 0 : diasAjuste.intValue(), true);
+                fechaInicio, hoyEnSuZona, diasAjuste == null ? 0 : diasAjuste.intValue(), true, duracionDias);
     }
 
     /** `timezone` es NULL para quien no tiene fila de programa: mismo default que la columna. */

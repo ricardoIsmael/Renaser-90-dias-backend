@@ -291,6 +291,7 @@ Ver también la pregunta #5 agregada en §5. Resumen:
 | `participantes_programa` | `horas_mi_radar smallint[]` | Las horas de TODOS los días. `NULL` = apagado. Si no, 1 a 12 horas entre 3 y 23 (CHECK). Apagar guarda `NULL` |
 | `participantes_programa` | `dias_mi_radar jsonb` | Los días con horas propias: `[{"dia": 6, "horas": [11]}, {"dia": 7, "horas": []}]`, lunes = 1; `horas: []` = «Sin Radar ese día»; `NULL` = ningún día propio. CHECK: es un arreglo y hay `horas_mi_radar`. El resto de la forma lo valida el dominio |
 | `registros_radar` | `hora_prevista smallint` | La hora local (0–23) a la que respondía; `NULL` = registro libre o anterior a V119 (no se rellenó) |
+| `registros_radar` | `dictado boolean NOT NULL DEFAULT false` | (V132, spec 030, D-297) `true` si al menos una de las cuatro respuestas se dictó con el reconocimiento de voz del teléfono; lo declara la app, el audio nunca se guarda ni viaja. Registros anteriores y los de SER: `false` |
 
 **Por qué jsonb y no una tabla de días.** El dueño pidió no crear tablas, y son a lo sumo siete elementos que siempre se leen y se
 escriben juntos (no se consulta «quién tiene Radar los sábados»). El costo: la base no ve dentro del arreglo, y lo impone `MiRadar`.
@@ -328,6 +329,8 @@ historial para la persona, su mentor y liderazgo; en esa página `miRadar` es `n
 
 `POST /radar` suma `horaPrevista` a su respuesta; `/radar/history` y la lectura del mentor suman `miRadar` (`{ encendido, horas, dias }`;
 `null` en la semana 1) y `horaPrevista` por registro. `leadership` lee por `habits.api.CodigoRenaserDePersonaFinder` y no deja registro de consulta propio.
+
+**Código Renaser con la voz (spec 030, D-297).** `POST /radar` acepta `dictado` (opcional; ausente o `null` = `false`) y, junto con `/radar/history`, la lectura del mentor y la de `leadership`, devuelve `dictado` (booleano) en cada registro. Sin rutas ni permisos nuevos: el dato viaja en las mismas filas, así que lo ve exactamente quien ve el Código Renaser (y se oculta con él si la spec 034 lo oculta). El segundo intento de la misma hora devuelve el primer registro con su propio `dictado`. Contrato en `specs/030-codigo-renaser-con-audio/contracts/api.md`.
 
 **Pruebas.** `MiRadarTest`, `HorarioDelRadarTest`, `RegistroRadarTest`, `RadarServiceTest` (con el reloj en la madrugada UTC),
 `MiRadarServiceTest`, `AcompanamientoDeAlumnoServiceTest`, `RadarDePersonaServiceTest`, `RadarControllerMiRadarTest` y
@@ -562,6 +565,14 @@ Tests: `DesbloqueoHabitoServiceTest` — suspendido rechazado, sin desbloqueos �
 > secuencia completa PUT+PATCH de pausa y reactivación) y `PausaHabitoPersonalIT` (Testcontainers:
 > la fila entra en Postgres con un `habito_id` de ámbito PERSONAL, el hábito pausado no genera track,
 > y vuelve solo al día siguiente del último día de la pausa).
+
+### 12.5 «Solo esta semana» y repetir la semana (spec 028, D-296) — 2026-10-31
+
+`PlanDeLaSemanaUseCase` y `RepetirSemanaUseCase` (controladores `PlanDeLaSemanaController` y `RepetirSemanaController`, bajo `/api/v1/habit-preferences`). Un cambio «solo esta semana» es una fila
+de `horarios_habito_por_fecha` (V37/V38) ampliada con varios avisos y «Cómo suena» (V130/V131); repetir una semana en la siguiente es escribir, en la semana destino, las mismas filas por
+fecha que tiene la modelo (función pura `RepeticionDeSemana`, idempotente, todo o nada). Reglas: solo fechas posteriores a hoy, solo hábitos que le corresponden a la persona, sin cupo, un obligatorio no se
+apaga, las pausas no se repiten. Contratos y decisiones: `specs/028-planificacion-semana-y-mes/` y D-296. Tests: `CambioDeFechaTest`, `PlanDeLaSemanaTest`, `RepeticionDeSemanaTest` (dominio), `PlanDeLaSemanaServiceTest`,
+`RepeticionDeSemanaServiceTest`, `FechaPropiaPersistenceAdapterTest`, `PlanificacionDeLaSemanaIT` (Testcontainers) y los dos controladores con su 403 para la cuenta suspendida.
 
 ---
 
@@ -1231,6 +1242,9 @@ negativo, los dos o ninguno, solo en COMPLETADO). **La unidad no se guarda en `h
 del hábito (`PoliticaHabito.unidadDeMedicion()`), el mismo lugar donde viven las demás reglas propias; una columna
 de unidad en el catálogo sería la misma regla en dos lugares (lección de V22). Por lo mismo no se agregó
 `meta_diaria`: el dueño definió «cualquier km > 0» y nadie la leería.
+> **Corregido 2026-11-02 (spec 037, D-310).** Esa última frase ya no es cierta: con la lectura automática de los pasos el
+> «cualquier km > 0» se cumpliría solo por existir, así que `V161` agrega `habitos.meta_medicion` (NULL = 5 km). **La captura con
+> número a mano no cambia**: sigue valiendo cualquier km > 0 hasta 100. Ver la sección 30.
 
 **Piezas:**
 
@@ -1507,4 +1521,41 @@ una fila por persona y fecha (`UNIQUE`), con la nota del día en `contenido_text
 - **No entra al Espejo Sombra**: `EntradaDiarioFinder.entradasEntre` excluye el tipo `EVALUACION_DIA` (lo que alguien le cuenta a su
   acompañamiento no es material para el análisis de una IA); el dato se lee por el puerto de arriba.
 - `LoadEntradaDiarioPort.entreFechasDeTipo` es la lectura por tipo y rango.
+
+
+
+## 29. Hábitos y categorías por formación (spec 023, D-300, 2026-10-31)
+
+- **Pertenencia.** `categorias_habito.formacion` y `habitos.formacion` (solo el catálogo; un hábito propio no tiene formación y sigue a su dueño). Una llave compuesta
+  `(formacion, categoria_clave)` obliga a que un hábito esté en una categoría de SU formación. Título y `clave_sistema` son únicos **por formación**.
+- **Qué hábitos le tocan a una persona** = `CatalogoAplicable` (spec 001): audiencia por rol **y** formación del programa de la persona (`ProgresoParticipanteHabits.formacion`).
+  Un hábito de otra formación sale en `globalesQueNoLeTocan`.
+- **Flujos propios.** `LoadHabitoPort.porClaveSistema(clave, formacion)`: una formación sin ese hábito no tiene el flujo (`Optional.empty`).
+- **Otra formación = 404.** `Habito.exigirQueSeaVisibleEn(formacion)` en elegir, pausar, quitar, preferencias, día semanal y renombre.
+- **Categorías** (`CategoriaHabito`, `CategoriasDeHabitoAdminService`): nombre 2–40 único en la formación; ícono de una lista cerrada que la app ya dibuja; una con hábitos
+  activos no se desactiva ni se elimina; con hábitos de cualquier estado no se elimina. Cada cambio queda en `auditoria_catalogo_habitos`.
+- **Copiar** (`CopiarHabitoService`): hábito + horarios + guía (textos) + audiencia; no copia adjuntos de S3. La copia conserva la `clave_sistema`.
+- **API abierta de categorías:** `CodigoDeCategoria` (`CUERPO↔BODY`, …; el resto, la clave).
+- **Topes de día:** desbloqueo y huecos leen la duración de la persona; Audioterapia y Pastilla usan `ProgresoParticipanteHabits.diaEnEscalaBase()`.
+
+## 30. Los pasos del teléfono llenan «Kilómetros diarios» (spec 037, D-310) — 2026-11-02
+
+Pedido del dueño: «cómo hacemos que el celular cuente los pasos, tipo Pokémon GO». La app lee de **Health Connect** (Android 14 o más;
+el dueño descartó la Recording API y Android menor a 14, que se quedan con la captura) el agregado del día de pasos y distancia, sin contar
+lo escrito a mano ni los orígenes de método desconocido, y con la meta alcanzada ofrece «Registrar». Este módulo recibe la lectura y cierra el
+hábito; **no cuenta nada** ni toca el teléfono.
+
+- **Sin tablas.** `V161` (a) admite `HEALTH_CONNECT` en `registros_habito.origen_medicion`, (b) suma `pasos_medidos`, `fuente_medicion`,
+  `dispositivo_medicion` (TELEFONO | RELOJ | OTRO), `medicion_leida_en` y `medicion_por_revisar`, y (c) `habitos.meta_medicion`. Origen, fuente,
+  dispositivo y hora de lectura van juntos (CHECK). Dominio: `MedicionDiaria(valor, origen, lectura)` y `LecturaAutomatica`.
+- **`POST /habit-tracks/{id}/auto-measurement`** (`MedicionAutomaticaController`, solo el dueño): `MedicionAutomaticaService` lee el registro con
+  cerrojo, comprueba el hábito (`DAILY_KM`), la idempotencia, que la lectura sea de ese día en la zona de la persona y no del futuro, y la política
+  (`PoliticaKilometros.validarMedicionAutomatica`: meta, 60 km, 150 000 pasos); marca «por revisar» lo dudoso y completa por `RegistroService`
+  con el gesto `PROPIO_DEL_HABITO` (puntos, ventana, evento y D-259 intactos). Contrato en `specs/037-pasos-y-km/contracts/api.md`.
+- **Meta:** `MetaDeMedicionPort` (JDBC, `habitos.meta_medicion`; el agregado `Habito` no la conoce a propósito) y
+  `GET/PUT /admin/habits/{id}/measurement-goal`. La agenda de hoy suma a `medicion`: `meta`, `origenDelDia` y `fuenteDelDia`.
+- **Lectura del acompañamiento y del ranking:** `habits.api.MedicionDeLaObligacion` → `ObligacionDelDia.medicion`;
+  `MedicionAcumuladaFinder.conKilometrosAutomaticos` → `kilometrosAutomaticos` en `GET /ranking`.
+- **Por qué `PROPIO_DEL_HABITO` no es un bypass:** el DTO del endpoint genérico no puede producirlo y este camino trae su propia validación; el
+  gesto genérico (que exige foto y número escrito) sigue cerrando la captura.
 

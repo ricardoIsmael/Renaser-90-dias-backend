@@ -6,14 +6,17 @@ import java.util.Objects;
 
 /**
  * El número que una persona registró un día para un hábito medible (hoy, los km de {@code DAILY_KM}),
- * con su origen (D-226).
+ * con su origen (D-226) y, si lo leyó el teléfono, su {@link LecturaAutomatica} (spec 037).
  *
  * <p>Este objeto solo garantiza lo que la COLUMNA puede guardar ({@code numeric(7,2)}, {@code >= 0}):
  * dos decimales, redondeados al más cercano, y dentro del rango. Si el valor tiene sentido para ESE
  * hábito (mayor que cero, un tope por día) lo decide su política, porque es regla del hábito y no del
  * número: los pasos tendrán otro tope.
+ *
+ * <p>La lectura va si y solo si el origen es {@link OrigenMedicion#HEALTH_CONNECT} (lo exige también la base,
+ * V161).
  */
-public record MedicionDiaria(BigDecimal valor, OrigenMedicion origen) {
+public record MedicionDiaria(BigDecimal valor, OrigenMedicion origen, LecturaAutomatica lectura) {
 
     /** Decimales de {@code registros_habito.valor_medido}. */
     public static final int DECIMALES = 2;
@@ -30,10 +33,27 @@ public record MedicionDiaria(BigDecimal valor, OrigenMedicion origen) {
         if (valor.compareTo(MAXIMO_REPRESENTABLE) > 0) {
             throw new IllegalArgumentException("La medición es demasiado grande");
         }
+        if ((origen == OrigenMedicion.HEALTH_CONNECT) != (lectura != null)) {
+            throw new IllegalArgumentException("La lectura automática va si y solo si el origen es Health Connect");
+        }
+    }
+
+    /** Sin lectura: la forma de los llamadores anteriores a la spec 037 (D-226). */
+    public MedicionDiaria(BigDecimal valor, OrigenMedicion origen) {
+        this(valor, origen, null);
     }
 
     /** Lo que escribió la persona. {@code null} si no escribió nada: no hay medición. */
     public static MedicionDiaria manualSiHay(BigDecimal valor) {
         return valor == null ? null : new MedicionDiaria(valor, OrigenMedicion.MANUAL);
+    }
+
+    /** Lo que leyó el teléfono de Health Connect (spec 037). */
+    public static MedicionDiaria automatica(BigDecimal valor, LecturaAutomatica lectura) {
+        return new MedicionDiaria(valor, OrigenMedicion.HEALTH_CONNECT, Objects.requireNonNull(lectura, "lectura"));
+    }
+
+    public boolean esAutomatica() {
+        return origen == OrigenMedicion.HEALTH_CONNECT;
     }
 }

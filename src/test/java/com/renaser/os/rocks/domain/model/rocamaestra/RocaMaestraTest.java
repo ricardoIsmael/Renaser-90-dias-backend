@@ -57,7 +57,7 @@ class RocaMaestraTest {
     }
 
     @Test
-    @DisplayName("D-234: la misma definicion se acepta sin tocar nada (la activacion del Mapa reintenta)")
+    @DisplayName("D-234: la misma definicion se acepta sin tocar nada (un reintento no cambia nada)")
     void laMismaDefinicionEsIdempotente() {
         RocaMaestra roca = conMeta();
 
@@ -124,7 +124,7 @@ class RocaMaestraTest {
         assertThatThrownBy(() -> conMeta().recibirDefinicion("Facturar 45.000 USD",
                 MetaCuantitativa.nueva(new BigDecimal("30000"), "USD"), HOY))
                 .isInstanceOf(RocaMaestraFijaException.class)
-                .hasMessageContaining("quedó fijo en tu Mapa de Renacimiento")
+                .hasMessageContaining("ya quedó fijo y no se cambia")
                 .hasMessageContaining("objetivos semanales y tus acciones diarias");
     }
 
@@ -190,54 +190,78 @@ class RocaMaestraTest {
     }
 
     // ---------------------------------------------------------------------------------------
-    // D-284: mientras el Mapa no esta activo, lo que escribe el Mapa reemplaza a la roca
+    // Spec 026: el objetivo que nace del diagnostico llega "por confirmar" y se puede reescribir UNA vez
     // ---------------------------------------------------------------------------------------
 
-    @Test
-    @DisplayName("D-284: otro objetivo, meta y unidad del Mapa reemplazan a los de Plan, con la misma identidad")
-    void elMapaReemplazaLaRocaDefinidaDesdePlan() {
-        RocaMaestra dePlan = conMeta();
+    private static RocaMaestra delDiagnostico() {
+        return RocaMaestra.delDiagnostico(ID, PARTICIPANTE, EjeObjetivo.CUERPO, "Cuidar mi salud y mi energia", AYER);
+    }
 
-        RocaMaestra delMapa = dePlan.reemplazarPorLaDelMapa("Pesar 75 kg",
+    @Test
+    @DisplayName("spec 026: el objetivo del diagnostico nace por confirmar, cualitativo y con su origen")
+    void delDiagnosticoNacePorConfirmar() {
+        RocaMaestra roca = delDiagnostico();
+
+        assertThat(roca.estaPorConfirmar()).isTrue();
+        assertThat(roca.origen()).isEqualTo(OrigenDelObjetivo.DIAGNOSTICO);
+        assertThat(roca.confirmadaEn()).isNull();
+        assertThat(roca.tieneMeta()).isFalse();
+    }
+
+    @Test
+    @DisplayName("spec 026: lo escrito en Plan nace ya confirmado y fijo (D-234 tal cual)")
+    void loDePlanNaceConfirmado() {
+        RocaMaestra roca = conMeta();
+
+        assertThat(roca.estaPorConfirmar()).isFalse();
+        assertThat(roca.origen()).isEqualTo(OrigenDelObjetivo.PLAN);
+        assertThat(roca.confirmadaEn()).isEqualTo(AYER);
+    }
+
+    @Test
+    @DisplayName("spec 026: al confirmarlo se puede reescribir una vez, con la misma identidad, y despues queda fijo")
+    void sePuedeReescribirUnaSolaVez() {
+        RocaMaestra confirmada = delDiagnostico().recibirDefinicion("Bajar a 75 kg",
                 MetaCuantitativa.desde(new BigDecimal("82"), new BigDecimal("75"), "kg"), HOY);
 
-        assertThat(delMapa.objetivo()).isEqualTo("Pesar 75 kg");
-        assertThat(delMapa.meta().objetivo()).isEqualByComparingTo("75");
-        assertThat(delMapa.meta().unidad()).isEqualTo("kg");
-        assertThat(delMapa.meta().lineaBase()).isEqualByComparingTo("82");
-        assertThat(delMapa.meta().avance()).as("el avance es el que manda el Mapa").isEqualByComparingTo("82");
-        assertThat(delMapa.id()).as("misma roca: lo que cuelga de ella sigue apuntando").isEqualTo(ID);
-        assertThat(delMapa.participanteId()).isEqualTo(PARTICIPANTE);
-        assertThat(delMapa.eje()).isEqualTo(EjeObjetivo.TRABAJO);
-        assertThat(delMapa.creadoEn()).isEqualTo(AYER);
-        assertThat(delMapa.actualizadoEn()).isEqualTo(HOY);
+        assertThat(confirmada.estaPorConfirmar()).isFalse();
+        assertThat(confirmada.confirmadaEn()).isEqualTo(HOY);
+        assertThat(confirmada.objetivo()).isEqualTo("Bajar a 75 kg");
+        assertThat(confirmada.meta().unidad()).isEqualTo("kg");
+        assertThat(confirmada.id()).as("misma roca: lo que cuelga de ella sigue apuntando").isEqualTo(ID);
+        assertThat(confirmada.creadoEn()).isEqualTo(AYER);
+        assertThat(confirmada.origen()).as("sigue sabiendose de donde nacio").isEqualTo(OrigenDelObjetivo.DIAGNOSTICO);
+
+        assertThatThrownBy(() -> confirmada.recibirDefinicion("Otro objetivo distinto", null, HOY))
+                .isInstanceOf(RocaMaestraFijaException.class);
     }
 
     @Test
-    @DisplayName("D-284: el Mapa puede pasar un objetivo medible a cualitativo y al reves")
-    void elMapaPuedeAgregarOQuitarLaMeta() {
-        RocaMaestra sinMeta = conMeta().reemplazarPorLaDelMapa("Estar presente con mi familia", null, HOY);
-        assertThat(sinMeta.tieneMeta()).isFalse();
+    @DisplayName("spec 026: confirmarlo tal cual (sin reescribir) tambien lo deja fijo")
+    void confirmarTalCualLoDejaFijo() {
+        RocaMaestra confirmada = delDiagnostico().recibirDefinicion("Cuidar mi salud y mi energia", null, HOY);
 
-        RocaMaestra conMeta = sinMeta.reemplazarPorLaDelMapa(OBJETIVO,
-                MetaCuantitativa.nueva(new BigDecimal("30000"), "USD"), HOY);
-        assertThat(conMeta.tieneMeta()).isTrue();
-        assertThat(conMeta.id()).isEqualTo(ID);
+        assertThat(confirmada.estaPorConfirmar()).isFalse();
+        assertThat(confirmada.objetivo()).isEqualTo("Cuidar mi salud y mi energia");
+        assertThatThrownBy(() -> confirmada.recibirDefinicion("Cuidar mi salud", null, HOY))
+                .isInstanceOf(RocaMaestraFijaException.class);
     }
 
     @Test
-    @DisplayName("D-284: lo mismo que ya hay (reintento de la activacion) devuelve la misma roca sin tocar")
-    void elMapaQueRepiteLoMismoNoCambiaNada() {
-        RocaMaestra roca = conBase();
+    @DisplayName("spec 026: registrar avance conserva el origen y la confirmacion")
+    void elAvanceConservaOrigenYConfirmacion() {
+        RocaMaestra roca = RocaMaestra.rehydrate(ID, PARTICIPANTE, EjeObjetivo.CUERPO, "Pesar 75 kg",
+                MetaCuantitativa.desde(new BigDecimal("82"), new BigDecimal("75"), "kg"), AYER, AYER, OrigenDelObjetivo.DIAGNOSTICO, AYER);
 
-        RocaMaestra recibida = roca.reemplazarPorLaDelMapa("Pesar 75 kg",
-                MetaCuantitativa.desde(new BigDecimal("82.00"), new BigDecimal("75.00"), "kg"), HOY);
+        RocaMaestra conAvance = roca.registrarAvance(new BigDecimal("80"), HOY);
 
-        assertThat(recibida).isEqualTo(roca);
+        assertThat(conAvance.origen()).isEqualTo(OrigenDelObjetivo.DIAGNOSTICO);
+        assertThat(conAvance.confirmadaEn()).isEqualTo(AYER);
+        assertThat(conAvance.meta().avance()).isEqualByComparingTo("80");
     }
 
     @Test
-    @DisplayName("D-284: esLaMismaDefinicion mira objetivo, meta, unidad y punto de partida, y no el avance")
+    @DisplayName("esLaMismaDefinicion mira objetivo, meta, unidad y punto de partida, y no el avance")
     void esLaMismaDefinicionIgnoraElAvance() {
         RocaMaestra roca = conBase();
 
@@ -246,5 +270,36 @@ class RocaMaestraTest {
         assertThat(roca.esLaMismaDefinicion("Pesar 70 kg", roca.meta())).isFalse();
         assertThat(roca.esLaMismaDefinicion("Pesar 75 kg", null)).isFalse();
         assertThat(roca.esLaMismaDefinicion(null, roca.meta())).isFalse();
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Spec 026: el objetivo que nace del diagnostico puede traer su meta medible
+    // ---------------------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("del diagnostico: nace por confirmar y con la meta que la persona declaro")
+    void delDiagnosticoConMeta() {
+        MetaCuantitativa declarada = MetaCuantitativa.desde(new BigDecimal("92"), new BigDecimal("85"), "kg");
+
+        RocaMaestra roca = RocaMaestra.delDiagnostico(ID, PARTICIPANTE, EjeObjetivo.CUERPO, "Bajar de peso", declarada, AYER);
+
+        assertThat(roca.origen()).isEqualTo(OrigenDelObjetivo.DIAGNOSTICO);
+        assertThat(roca.estaPorConfirmar()).isTrue();
+        assertThat(roca.tieneMeta()).isTrue();
+        assertThat(roca.meta()).isEqualTo(declarada);
+    }
+
+    @Test
+    @DisplayName("confirmar solo con el texto no borra la meta declarada; si manda otra meta, esa manda")
+    void confirmarConservaLaMeta() {
+        MetaCuantitativa declarada = MetaCuantitativa.desde(new BigDecimal("92"), new BigDecimal("85"), "kg");
+        RocaMaestra roca = RocaMaestra.delDiagnostico(ID, PARTICIPANTE, EjeObjetivo.CUERPO, "Bajar de peso", declarada, AYER);
+
+        RocaMaestra soloTexto = roca.recibirDefinicion("Bajar a 85 kg", null, HOY);
+        assertThat(soloTexto.estaPorConfirmar()).isFalse();
+        assertThat(soloTexto.meta()).isEqualTo(declarada);
+
+        MetaCuantitativa otra = MetaCuantitativa.desde(new BigDecimal("92"), new BigDecimal("88"), "kg");
+        assertThat(roca.recibirDefinicion("Bajar a 88 kg", otra, HOY).meta()).isEqualTo(otra);
     }
 }

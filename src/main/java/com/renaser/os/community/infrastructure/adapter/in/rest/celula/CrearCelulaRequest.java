@@ -1,6 +1,7 @@
 package com.renaser.os.community.infrastructure.adapter.in.rest.celula;
 
 import com.renaser.os.community.domain.model.acompanamiento.TipoCelula;
+import com.renaser.os.shared.domain.Formacion;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -21,7 +22,18 @@ import java.util.UUID;
  */
 public record CrearCelulaRequest(@NotBlank String name, @NotNull UUID cohortId, String videoCallUrl,
                                   LocalDate periodStart, LocalDate periodEnd, String type,
-                                  @Min(10) @Max(15) Integer capacity) {
+                                  @Min(10) @Max(15) Integer capacity, String formation) {
+
+    /** Firma de antes de las formaciones (spec 022): el grupo nace en la Escuela. */
+    public CrearCelulaRequest(String name, UUID cohortId, String videoCallUrl, LocalDate periodStart, LocalDate periodEnd,
+                              String type, Integer capacity) {
+        this(name, cohortId, videoCallUrl, periodStart, periodEnd, type, capacity, null);
+    }
+
+    /** {@code formation} null o vacía = la Escuela. */
+    public Formacion formacion() {
+        return formation == null || formation.isBlank() ? null : Formacion.desde(formation);
+    }
 
     /** El vocabulario de la API va en ingles y el del dominio en castellano: la traduccion es
      * explicita y no un {@code valueOf} que dejaria pasar cualquier cosa con un 500. */

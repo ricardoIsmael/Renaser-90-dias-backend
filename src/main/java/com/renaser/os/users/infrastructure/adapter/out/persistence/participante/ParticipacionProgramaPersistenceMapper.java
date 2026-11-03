@@ -1,5 +1,6 @@
 package com.renaser.os.users.infrastructure.adapter.out.persistence.participante;
 
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FasePrograma;
 import com.renaser.os.users.domain.model.participante.ParticipacionPrograma;
@@ -32,7 +33,9 @@ class ParticipacionProgramaPersistenceMapper {
                 e.getNombreRetoPersonal(),
                 e.getProgramaCompletadoEn(),
                 e.getDiaProgramaAvanzadoEl(),
-                e.getDiasAjustePrograma());
+                e.getDiasAjustePrograma(),
+                Formacion.desde(e.getFormacion()),
+                e.getDuracionDias());
     }
 
     ParticipacionProgramaJpaEntity toEntity(ParticipacionPrograma p) {
@@ -53,7 +56,9 @@ class ParticipacionProgramaPersistenceMapper {
                 p.nombreRetoPersonal(),
                 p.programaCompletadoEn(),
                 p.diaProgramaAvanzadoEl(),
-                (short) p.diasAjuste());
+                (short) p.diasAjuste(),
+                p.formacion().codigo(),
+                (short) p.duracionDias());
     }
 
     private TipoMetaJpa toJpaTipoMeta(TipoMeta tipoMeta) {

@@ -1,5 +1,6 @@
 package com.renaser.os.users.application.ports.out.participante;
 
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.ParticipacionPrograma;
 import com.renaser.os.users.application.ports.in.participante.ListTraineesUseCase.ResumenTraineeAdmin;
@@ -22,6 +23,9 @@ public interface ConsultarResumenParticipacionPort {
 
     /** {@code Optional.empty()} SOLO si el usuario no existe en `usuarios` — ver javadoc de {@link ParticipacionPrograma}. */
     Optional<ParticipacionPrograma> resumenDe(UserId usuarioId);
+
+    /** Lo mismo que {@link #resumenDe} para varias personas en UNA consulta; las que no existen en `usuarios` no aparecen. */
+    java.util.Map<UserId, ParticipacionPrograma> resumenDeVarios(java.util.Collection<UserId> usuarios);
 
     List<UserId> miembrosActivosDeCelula(UUID celulaId);
 
@@ -61,9 +65,31 @@ public interface ConsultarResumenParticipacionPort {
      *                    pide solo aprendices para su sección y que el total cuadre con lo que muestra).
      */
     List<ResumenTraineeAdmin> listarAprendices(int offset, int limit, String busqueda, boolean soloSinGrupo,
-                                               UserRole rol);
+                                               UserRole rol, AlcanceDeFormacion alcance, boolean soloActivas);
 
-    long contarAprendices(String busqueda, boolean soloSinGrupo, UserRole rol);
+    long contarAprendices(String busqueda, boolean soloSinGrupo, UserRole rol, AlcanceDeFormacion alcance, boolean soloActivas);
+
+    /** Sin filtro de estado: todas las cuentas, las que esperan aprobación incluidas (D-138). */
+    default List<ResumenTraineeAdmin> listarAprendices(int offset, int limit, String busqueda, boolean soloSinGrupo,
+                                                       UserRole rol, AlcanceDeFormacion alcance) {
+        return listarAprendices(offset, limit, busqueda, soloSinGrupo, rol, alcance, false);
+    }
+
+    /** Sin filtro de estado: todas las cuentas, las que esperan aprobación incluidas (D-138). */
+    default long contarAprendices(String busqueda, boolean soloSinGrupo, UserRole rol, AlcanceDeFormacion alcance) {
+        return contarAprendices(busqueda, soloSinGrupo, rol, alcance, false);
+    }
+
+    /** Sin filtro de formación (spec 022): el alcance de Administración, todas. */
+    default List<ResumenTraineeAdmin> listarAprendices(int offset, int limit, String busqueda, boolean soloSinGrupo,
+                                                       UserRole rol) {
+        return listarAprendices(offset, limit, busqueda, soloSinGrupo, rol, AlcanceDeFormacion.todas());
+    }
+
+    /** Sin filtro de formación (spec 022): el alcance de Administración, todas. */
+    default long contarAprendices(String busqueda, boolean soloSinGrupo, UserRole rol) {
+        return contarAprendices(busqueda, soloSinGrupo, rol, AlcanceDeFormacion.todas());
+    }
 
     /** Sin filtro de rol: todas las cuentas (D-138). */
     default List<ResumenTraineeAdmin> listarAprendices(int offset, int limit, String busqueda, boolean soloSinGrupo) {

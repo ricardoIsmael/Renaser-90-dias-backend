@@ -58,4 +58,28 @@ class AvisosEnChatTest {
         assertThat(prendidos(Set.of("POR_VENCER")).redactar("POR_VENCER", datos))
                 .contains("Se vence Leer {hora} a las 07:00");
     }
+
+    // issue #63
+    @Test
+    void elTituloDelCatalogoEnMayusculasSeLeeEnTipoOracion() {
+        var avisos = new AvisosEnChat(true, Set.of("INICIO"), Map.of("INICIO", "Tu hábito {habito} empieza a las {hora}. Hay {puntos} puntos en juego."));
+
+        assertThat(avisos.redactar("INICIO", new DatosDelAviso("ÚLTIMA COMIDA DEL DÍA", LocalTime.of(18, 0), 10, 15)))
+                .contains("Tu hábito Última comida del día empieza a las 18:00. Hay 10 puntos en juego.");
+        assertThat(avisos.redactar("INICIO", new DatosDelAviso("RITUAL TIERRA - AGUA - FUEGO (mañana)", LocalTime.of(6, 0), 8, 15)))
+                .contains("Tu hábito Ritual tierra - agua - fuego (mañana) empieza a las 06:00. Hay 8 puntos en juego.");
+        assertThat(avisos.redactar("INICIO", new DatosDelAviso("HABLAR CON SER", LocalTime.of(9, 0), 8, 15)))
+                .contains("Tu hábito Hablar con SER empieza a las 09:00. Hay 8 puntos en juego.");
+    }
+
+    // issue #63
+    @Test
+    void unTituloQueYaTieneMinusculasSeDejaComoLoEscribio() {
+        var avisos = new AvisosEnChat(true, Set.of("INICIO"), Map.of("INICIO", "Tu hábito {habito} empieza a las {hora}."));
+
+        assertThat(avisos.redactar("INICIO", new DatosDelAviso("Clase diaria", LocalTime.of(14, 59), 10, 15)))
+                .contains("Tu hábito Clase diaria empieza a las 14:59.");
+        assertThat(avisos.redactar("INICIO", new DatosDelAviso("Mi jugo verde", LocalTime.of(7, 0), 10, 15)))
+                .contains("Tu hábito Mi jugo verde empieza a las 07:00.");
+    }
 }

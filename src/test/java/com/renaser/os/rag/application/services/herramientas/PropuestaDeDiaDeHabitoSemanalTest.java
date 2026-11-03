@@ -97,7 +97,9 @@ class PropuestaDeDiaDeHabitoSemanalTest {
 
         ResultadoHerramienta resultado = herramienta.ejecutar(APRENDIZ, invocacion(CORRER.toString(), "2026-09-24"));
 
-        assertThat(((ResultadoHerramienta.Fallo) resultado).motivo()).contains("Dia 1");
+        // issue #62: ya no se elige el Día 1; el programa empieza al día siguiente de activarlo, y eso es lo que SER debe decir.
+        assertThat(((ResultadoHerramienta.Fallo) resultado).motivo()).contains("Todavia no puede elegir dia")
+                .contains("cuando empiece su programa (al dia siguiente de activarlo)").doesNotContain("Dia 1");
         verifyNoInteractions(proponerAccion);
     }
 

@@ -17,6 +17,9 @@ interface SpringDataCambioHorarioPendienteRepository
 
     List<CambioHorarioPendienteJpaEntity> findByParticipanteId(UUID participanteId);
 
+    /** H-01: el cambio general diferido de UN habito para varias personas, en una consulta. */
+    List<CambioHorarioPendienteJpaEntity> findByParticipanteIdInAndHabitoId(java.util.Collection<UUID> participanteIds, UUID habitoId);
+
     /** Orden estable por participante para que el barrido nocturno sea reproducible en los logs. */
     List<CambioHorarioPendienteJpaEntity> findByFechaEfectivaLessThanEqualOrderByParticipanteIdAscHabitoIdAsc(
             LocalDate fecha);

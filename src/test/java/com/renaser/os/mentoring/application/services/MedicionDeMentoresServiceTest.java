@@ -86,6 +86,20 @@ class MedicionDeMentoresServiceTest {
     }
 
     @Test
+    @DisplayName("spec 022: solo salen los grupos de las formaciones del alcance, y lo de cada mentor se calcula sobre ellos")
+    void soloLasFormacionesDelAlcance() {
+        assertThat(servicio.vigente(com.renaser.os.shared.domain.AlcanceDeFormacion.de(com.renaser.os.shared.domain.Formacion.ESCUELA)).grupos())
+                .hasSize(3);
+
+        MedicionVigente delDiplomado = servicio.vigente(
+                com.renaser.os.shared.domain.AlcanceDeFormacion.de(com.renaser.os.shared.domain.Formacion.DIPLOMADO));
+        assertThat(delDiplomado.grupos()).isEmpty();
+        assertThat(delDiplomado.porMentor()).isEmpty();
+        assertThat(servicio.vigente(com.renaser.os.shared.domain.AlcanceDeFormacion.ninguna()).grupos()).isEmpty();
+        assertThat(servicio.vigente().grupos()).as("sin alcance explícito, todas").hasSize(3);
+    }
+
+    @Test
     @DisplayName("una cuenta suspendida no se cuenta, igual que en la tabla del semaforo")
     void soloCuentasActivas() {
         MedicionVigente medicion = servicio.vigente();

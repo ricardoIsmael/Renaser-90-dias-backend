@@ -6,6 +6,7 @@ import com.renaser.os.community.application.ports.in.testimonio.CrearTestimonioU
 import com.renaser.os.community.application.ports.in.testimonio.PromoverPublicacionATestimonioUseCase;
 import com.renaser.os.community.application.ports.in.testimonio.PromoverPublicacionATestimonioUseCase.PromoverPublicacionCommand;
 import com.renaser.os.community.domain.model.publicacion.PublicacionId;
+import com.renaser.os.shared.domain.FormacionDelContenido;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -51,8 +53,10 @@ public class TestimonioController {
        es abrir la ruta en SecurityConfig y cambiar esto a @PublicEndpoint, a proposito. */
     @RequiresPermission(Permission.USE_APP)
     @GetMapping
-    public List<TestimonioResponse> listar() {
-        return consultarUseCase.listarDestacados().stream().map(TestimonioResponse::from).toList();
+    public List<TestimonioResponse> listar(@ActorAutenticado UserId actorId,
+                                           @RequestParam(required = false) String formation) {
+        return consultarUseCase.listarDestacados(actorId, FormacionDelContenido.pedida(formation)).stream()
+                .map(TestimonioResponse::from).toList();
     }
 
     /* Corregido 2026-09-18. Aca decia que este handler tiene "dos autorizaciones segun el body:
@@ -73,7 +77,7 @@ public class TestimonioController {
         // `requireActorId` y no el `actorId` nullable: desde que `crear` exige ADMIN/ALCHEMIST,
         // entrar sin sesion no puede terminar en un NPE dentro del guard.
         var vista = crearUseCase.crear(new CrearTestimonioCommand(requireActorId(actorId), request.nombre(),
-                request.rol(), request.texto(), estrellas));
+                request.rol(), request.texto(), estrellas, FormacionDelContenido.pedida(request.formation())));
         return ResponseEntity.status(HttpStatus.CREATED).body(TestimonioResponse.from(vista));
     }
 

@@ -87,6 +87,24 @@ class FuncionalidadCambiadaNotificationListenerTest {
         assertThat(avisos.get(0).origenEventoId()).isEqualTo(avisos.get(1).origenEventoId());
     }
 
+    @Test
+    @DisplayName("034: el título dice «Soporte TI cambió…» solo si lo cambió Soporte TI; si fue Administración, no")
+    void elTituloNoMienteSobreQuienLoCambio() {
+        when(usuarios.findById(admin)).thenReturn(Optional.of(
+                new UserSummary(admin, "Ana", null, UserRole.ADMIN, UserStatus.ACTIVE)));
+
+        oyente.on(evento("chat.audio", false, false));
+        oyente.on(new FuncionalidadCambiadaEvent("radar.fichas", false, false, admin, "Cambio desde Administración", CUANDO,
+                "Código Renaser en las fichas", "Prendida para todos"));
+
+        List<EmitirNotificacionCommand> avisos = avisos();
+        assertThat(avisos).extracting(EmitirNotificacionCommand::titulo)
+                .containsExactly(FuncionalidadCambiadaNotificationListener.TITULO,
+                        FuncionalidadCambiadaNotificationListener.TITULO_DE_ADMINISTRACION);
+        assertThat(avisos.get(1).cuerpo()).startsWith("Código Renaser en las fichas: Prendida para todos. Lo hizo Ana.");
+        assertThat(avisos).extracting(EmitirNotificacionCommand::usuarioId).containsOnly(soporte);
+    }
+
     private List<EmitirNotificacionCommand> avisos() {
         ArgumentCaptor<EmitirNotificacionCommand> capturados = ArgumentCaptor.forClass(EmitirNotificacionCommand.class);
         verify(emitir, atLeastOnce()).emitir(capturados.capture());

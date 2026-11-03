@@ -11,7 +11,9 @@ import com.renaser.os.academy.domain.model.curso.Curso;
 import com.renaser.os.academy.domain.model.curso.CursoId;
 import com.renaser.os.academy.domain.model.curso.SeccionCurso;
 import com.renaser.os.academy.domain.model.curso.SeccionCursoId;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import com.renaser.os.users.api.UserRole;
 import org.springframework.stereotype.Service;
 
@@ -48,10 +50,14 @@ public class LeccionesVisiblesAcademyService implements LeccionesVisiblesFinder 
     private final LoadSeccionCursoPort loadSeccionCursoPort;
     private final LoadLeccionPort loadLeccionPort;
     private final ConsultarProgresoParticipanteAcademyPort progresoPort;
+    /** Spec 024 (FR-023): las lecciones que ve SER son las de los cursos de la formación de la persona. */
+    private final AlcanceDeFormacionFinder formaciones;
 
     public LeccionesVisiblesAcademyService(LoadCursoPort loadCursoPort, LoadSeccionCursoPort loadSeccionCursoPort,
                                             LoadLeccionPort loadLeccionPort,
-                                            ConsultarProgresoParticipanteAcademyPort progresoPort) {
+                                            ConsultarProgresoParticipanteAcademyPort progresoPort,
+                                            AlcanceDeFormacionFinder formaciones) {
+        this.formaciones = formaciones;
         this.loadCursoPort = loadCursoPort;
         this.loadSeccionCursoPort = loadSeccionCursoPort;
         this.loadLeccionPort = loadLeccionPort;
@@ -79,7 +85,9 @@ public class LeccionesVisiblesAcademyService implements LeccionesVisiblesFinder 
         UserRole rol = aUserRole(progreso.rol());
         Integer programDay = rol == UserRole.TRAINEE ? progreso.diaPrograma() : null;
 
+        AlcanceDeFormacion alcance = formaciones.de(actorId);
         Set<CursoId> cursosVisibles = loadCursoPort.listarTodos().stream()
+                .filter(curso -> alcance.incluye(curso.formacion()))
                 .filter(universo)
                 .filter(curso -> curso.visibleEnCatalogoPara(rol, programDay))
                 .map(Curso::id)

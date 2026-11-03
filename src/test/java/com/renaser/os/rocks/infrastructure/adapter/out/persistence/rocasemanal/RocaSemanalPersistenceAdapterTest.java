@@ -120,4 +120,22 @@ class RocaSemanalPersistenceAdapterTest {
         assertThat(recuperada.get().obstaculo()).isEqualTo("obstaculo nuevo");
         assertThat(recuperada.get().autoevaluacionInicio()).isEqualTo(8);
     }
+
+    /** V156 (spec 026): el programa de 365 dias llega a la semana 53 (la 54 no existe: la regla de D-203 nunca pasa de las completas mas una). */
+    @Test
+    void laBaseGuardaHastaLaSemanaCincuentaYTresYNoLaCincuentaYCuatro() {
+        adapter.save(RocaSemanal.planificar(unId(), rocaMaestraId, 53, "ultima del ano", null, null, null, CLOCK));
+        entityManager.flush();
+        assertThat(adapter.deMaestraYSemana(rocaMaestraId, 53)).isPresent();
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> {
+            entityManager.createNativeQuery("""
+                            INSERT INTO renaser.rocas_semanales (id, roca_maestra_id, numero_semana, titulo)
+                            VALUES (:id, :maestra, 54, 'de mas')
+                            """)
+                    .setParameter("id", UUID.randomUUID())
+                    .setParameter("maestra", rocaMaestraId.value())
+                    .executeUpdate();
+        }).hasMessageContaining("numero_semana");
+    }
 }

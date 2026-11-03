@@ -2,6 +2,7 @@ package com.renaser.os.chat.application.ports.in.conversacion;
 
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.Instant;
@@ -11,7 +12,15 @@ public interface ListarConversacionesUseCase {
 
     /** Mis conversaciones, con el ultimo mensaje y el conteo de no-leidos resueltos en
      * lote (nunca N+1 — CLAUDE.MD del encargo). Orden: mas actividad reciente primero. */
-    List<ConversacionResumen> listar(UserId actorId);
+    default List<ConversacionResumen> listar(UserId actorId) {
+        return listar(actorId, null);
+    }
+
+    /**
+     * Spec 024: la Tribu es la de la formación de quien pide (comunidad general, su grupo, su soporte y sus directos), sin lo que la formación
+     * tenga apagado. Solo Administración, Alquimista y Soporte TI eligen una; sin elegir ven las tres, cada conversación con la suya.
+     */
+    List<ConversacionResumen> listar(UserId actorId, Formacion formacion);
 
     /** {@code ultimoMensaje} es null si la conversacion todavia no tiene ningun mensaje. */
     /**
@@ -29,9 +38,13 @@ public interface ListarConversacionesUseCase {
      * @param nombre                 el nombre que se muestra (D-221, {@code NombresDeLosChatsService}):
      *                               «Formación Renaser Global», «Luisa y sus aprendices», «María – Formación
      *                               Renaser». {@code null} en un 1 a 1, que se llama como la otra persona.
+     * @param imagenDeLaFormacionDesde en la comunidad general y en los grupos, desde cuándo es la imagen de SU formación (spec 035); {@code null} si la
+     *                               formación no tiene imagen (el chat usa la de la app) y en el soporte y los 1 a 1. Un grupo con foto propia
+     *                               la ignora: manda la suya.
      */
     record ConversacionResumen(Conversacion conversacion, Mensaje ultimoMensaje, long noLeidos,
                                 UserId otroParticipante, String otroParticipanteNombre,
-                                String otroParticipanteAvatar, Instant fotoDelGrupoCambiadaEn, String nombre) {
+                                String otroParticipanteAvatar, Instant fotoDelGrupoCambiadaEn, String nombre,
+                                Instant imagenDeLaFormacionDesde) {
     }
 }

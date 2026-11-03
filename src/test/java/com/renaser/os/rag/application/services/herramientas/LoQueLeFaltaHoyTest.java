@@ -35,7 +35,7 @@ class LoQueLeFaltaHoyTest {
     void cuentaYOrdena() {
         HabitoDelDia aguaTibia = habito("AGUA TIBIA", "PENDIENTE", 0, AHORA.minusSeconds(3600 * 12),
                 LocalTime.of(6, 0), "Cuerpo");
-        HabitoDelDia ritual = habito("RITUAL TIERRA", "EXPIRADO", null, null, LocalTime.of(6, 30), "Espíritu");
+        HabitoDelDia ritual = habito("RITUAL TIERRA", "PENDIENTE", 0, AHORA.minusSeconds(3600 * 10), LocalTime.of(6, 30), "Espíritu");
         HabitoDelDia caminar = habito("Caminar 40 minutos", "PENDIENTE", 10, AHORA.plusSeconds(3600 * 2),
                 LocalTime.of(21, 0), "Cuerpo");
         HabitoDelDia leer = habito("Leer", "PENDIENTE", 10, AHORA.plusSeconds(3600), LocalTime.of(20, 30), "Mente");
@@ -53,9 +53,44 @@ class LoQueLeFaltaHoyTest {
                         + "| sus_puntos_terminan_en=1 h 0 min")
                 .contains("hora=06:00 | AGUA TIBIA | Cuerpo | estado=PENDIENTE | ya_no_da_puntos (paso su hora; "
                         + "igual puede hacerlo)")
-                .contains("RITUAL TIERRA | Espíritu | estado=EXPIRADO | ya_no_da_puntos")
+                .contains("RITUAL TIERRA | Espíritu | estado=PENDIENTE | ya_no_da_puntos")
                 .contains("solo los 2 o 3 primeros").contains("Total en juego: 20 puntos en 2 habito(s)")
                 .doesNotContainIgnoringCase("vencio").doesNotContainIgnoringCase("vencieron");
+    }
+
+    /** Spec 038 (D-259): un registro EXPIRADO es un dia cerrado: no se cuenta entre lo que falta ni se le deja boton. */
+    // spec 038 FR-010
+    @Test
+    @DisplayName("spec 038: un EXPIRADO es un dia cerrado: no cuenta entre los que faltan, no lleva marca de evidencia y se dice que no se registra")
+    void unDiaCerradoNoSeRegistra() {
+        HabitoDelDia cerrado = new HabitoDelDia(UUID.randomUUID(), "LECTURA", "EXPIRADO", null, 10, null, true, List.of(), null, null,
+                LocalTime.of(6, 0), "Mente");
+        HabitoDelDia pendiente = habito("Caminar", "PENDIENTE", 10, AHORA.plusSeconds(3600), LocalTime.of(21, 0), "Cuerpo");
+
+        String texto = LoQueLeFaltaHoy.texto(List.of(cerrado, pendiente), AHORA);
+
+        assertThat(texto).startsWith("Le faltan 1 de 2 habitos de hoy. Por dimension: Cuerpo 1.")
+                .contains("Ademas 1 son de un dia que ya cerro: no se pueden registrar ni cuentan entre los que le faltan")
+                .contains("LECTURA | Mente | estado=EXPIRADO | dia_cerrado (ese dia ya termino: no se puede registrar")
+                .doesNotContain("estado=EXPIRADO | ya_no_da_puntos").doesNotContain("exige_evidencia");
+        assertThat(LoQueLeFaltaHoy.texto(List.of(cerrado), AHORA))
+                .startsWith("Hoy no le queda ninguno por registrar (1 en total): 1 son de un dia que ya cerro");
+    }
+
+    @Test
+    @DisplayName("spec 038: un ritual dice que se registra escribiendo; el jugo verde, solo que exige evidencia")
+    void unRitualSeEscribe() {
+        HabitoDelDia ritual = new HabitoDelDia(UUID.randomUUID(), "RITUAL DE LA MAÑANA", "PENDIENTE", 10, 10,
+                AHORA.plusSeconds(3600), true, List.of(), "RITUAL_MORNING", null, LocalTime.of(6, 0), "Espíritu");
+        HabitoDelDia jugo = new HabitoDelDia(UUID.randomUUID(), "JUGO VERDE", "PENDIENTE", 10, 10,
+                AHORA.plusSeconds(3600), true, List.of(), "GREEN_JUICE", null, LocalTime.of(7, 0), "Cuerpo");
+
+        String texto = LoQueLeFaltaHoy.texto(List.of(ritual, jugo), AHORA);
+
+        assertThat(texto).contains("RITUAL DE LA MAÑANA | Espíritu | estado=PENDIENTE | puntos_en_juego=10 de 10 | sus_puntos_terminan_en=1 h 0 min "
+                        + "| exige_evidencia=si | registro=escribir (ritual: sin foto, escribe como se siente)")
+                .contains("JUGO VERDE | Cuerpo | estado=PENDIENTE | puntos_en_juego=10 de 10 | sus_puntos_terminan_en=1 h 0 min | exige_evidencia=si")
+                .doesNotContain("JUGO VERDE | Cuerpo | estado=PENDIENTE | puntos_en_juego=10 de 10 | sus_puntos_terminan_en=1 h 0 min | exige_evidencia=si | registro");
     }
 
     @Test
@@ -64,5 +99,49 @@ class LoQueLeFaltaHoyTest {
         String texto = LoQueLeFaltaHoy.texto(List.of(habito("Leer", "COMPLETADO", null, null, null, "Mente")), AHORA);
 
         assertThat(texto).startsWith("Hoy ya hizo todos sus habitos (1).").doesNotContain("Le faltan");
+    }
+
+    private static HabitoDelDia kilometros(String estado, java.math.BigDecimal lleva, String origen, boolean conPasosConectados) {
+        var medicion = new com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort.MedicionDelHabito("KILOMETROS",
+                new java.math.BigDecimal("5.00"), lleva, origen, null, conPasosConectados);
+        return new HabitoDelDia(UUID.randomUUID(), "KILOMETROS DIARIOS", estado, estado.equals("PENDIENTE") ? 10 : null, 10, null, true,
+                List.of(), "DAILY_KM", null, LocalTime.of(17, 0), "Cuerpo", null, null, medicion);
+    }
+
+    // spec 037 (T021 de la 038): consultar_habitos_del_dia suma mide=km, la meta y lo que lleva
+    @Test
+    @DisplayName("spec 037: el habito de km sale con mide=km, la meta y lo que lleva; sin pasos conectados sigue marcado exige_evidencia")
+    void kilometrosSinPasosConectados() {
+        String texto = LoQueLeFaltaHoy.texto(List.of(kilometros("PENDIENTE", null, null, false)), AHORA);
+
+        assertThat(texto).contains("KILOMETROS DIARIOS | Cuerpo | estado=PENDIENTE").contains("| mide=km | meta=5 | lleva=0")
+                .contains("| exige_evidencia=si").doesNotContain("registro=automatico");
+    }
+
+    @Test
+    @DisplayName("spec 037: con los pasos conectados dice registro=automatico y no pide foto ni la deja como exige_evidencia")
+    void kilometrosConPasosConectados() {
+        String texto = LoQueLeFaltaHoy.texto(List.of(kilometros("PENDIENTE", null, null, true)), AHORA);
+
+        assertThat(texto).contains("| mide=km | meta=5 | lleva=0").contains("registro=automatico")
+                .contains("No pidas foto ni captura").contains("proponer_registrar_con_foto")
+                .contains("«Registrar» en la fila de Kilometros diarios en Training").doesNotContain("exige_evidencia=si");
+    }
+
+    @Test
+    @DisplayName("spec 037: ya registrado dice cuanto llevo y de donde salio (pasos o captura), sin ceros de mas")
+    void kilometrosYaRegistrados() {
+        String porPasos = LoQueLeFaltaHoy.texto(List.of(kilometros("COMPLETADO", new java.math.BigDecimal("5.40"), "HEALTH_CONNECT", true)), AHORA);
+        String porCaptura = LoQueLeFaltaHoy.texto(List.of(kilometros("COMPLETADO", new java.math.BigDecimal("7.00"), "MANUAL", false)), AHORA);
+
+        assertThat(porPasos).contains("| mide=km | meta=5 | lleva=5.4 | origen=pasos");
+        assertThat(porCaptura).contains("| mide=km | meta=5 | lleva=7 | origen=captura");
+    }
+
+    @Test
+    @DisplayName("spec 037: un habito que no mide nada no lleva mide, meta ni lleva")
+    void otrosHabitosNoLlevanMedicion() {
+        assertThat(LoQueLeFaltaHoy.texto(List.of(habito("Leer", "PENDIENTE", 10, AHORA.plusSeconds(3600), LocalTime.of(20, 30), "Mente")), AHORA))
+                .doesNotContain("mide=").doesNotContain("lleva=");
     }
 }

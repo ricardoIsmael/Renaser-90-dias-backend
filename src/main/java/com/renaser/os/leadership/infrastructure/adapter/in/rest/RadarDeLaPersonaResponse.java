@@ -48,13 +48,17 @@ public record RadarDeLaPersonaResponse(List<RegistroResponse> entries, Instant n
         }
     }
 
-    /** @param horaPrevista la hora local (0-23) a la que respondía; null si fue un registro libre */
+    /**
+     * @param horaPrevista la hora local (0-23) a la que respondía; null si fue un registro libre
+     * @param dictado      spec 030: al menos una respuesta se dictó con el reconocimiento de voz del teléfono
+     */
     public record RegistroResponse(UUID id, String whatAmIDoing, String whatAmIThinking, String whatAmIFeeling,
-                                   int energyLevel, String whatAmIAvoiding, Instant createdAt, Integer horaPrevista) {
+                                   int energyLevel, String whatAmIAvoiding, Instant createdAt, Integer horaPrevista,
+                                   boolean dictado) {
 
         static RegistroResponse from(RegistroDelRadar r) {
             return new RegistroResponse(r.id(), r.queHago(), r.quePienso(), r.queSiento(), r.nivelEnergia(),
-                    r.queEvito(), r.creadoEn(), r.horaPrevista());
+                    r.queEvito(), r.creadoEn(), r.horaPrevista(), r.dictado());
         }
     }
 }

@@ -58,7 +58,7 @@ class CerrarSemanaConfirmableTest {
         when(cierre.cerrarSemana(APRENDIZ, 3, REVISIONES)).thenReturn(new ResultadoCierre.Cerrada(List.of("TRABAJO")));
 
         assertThat(confirmable.aplicar(APRENDIZ, invocacion(GUARDADO)))
-                .isEqualTo(ResultadoHerramienta.exito("Semana 3 cerrada: Trabajo."));
+                .isEqualTo(ResultadoHerramienta.exito("Semana 3 cerrada: Negocio."));
         verify(cierre).cerrarSemana(APRENDIZ, 3, REVISIONES);
     }
 

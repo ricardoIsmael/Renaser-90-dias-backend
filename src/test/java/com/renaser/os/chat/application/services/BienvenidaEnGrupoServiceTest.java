@@ -10,6 +10,7 @@ import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.mensaje.ContenidoDelPrograma;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
@@ -38,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -84,7 +86,7 @@ class BienvenidaEnGrupoServiceTest {
     private BienvenidaEnGrupoService servicio(String texto, boolean activa) {
         TextosDeBienvenidaPort textos = mock(TextosDeBienvenidaPort.class);
         if (activa) {
-            when(textos.grupo()).thenReturn(texto);
+            lenient().when(textos.grupo(Formacion.ESCUELA)).thenReturn(texto);
         }
         return new BienvenidaEnGrupoService(bienvenidaPort, textos, loadConversacionPort, delPrograma,
                 userSummaryFinder, transactionManager, FixedClock.at(AHORA), activa);
@@ -119,6 +121,26 @@ class BienvenidaEnGrupoServiceTest {
                 + "Aquí vas a compartir el camino con cada integrante y con Carlos, que te va a acompañar en estos "
                 + "días. Este es tu espacio para contar tus avances, pedir apoyo y celebrar cada paso. "
                 + "¡Te damos la bienvenida!");
+    }
+
+    // spec 035 FR-006
+    @Test
+    @DisplayName("Spec 035: el texto es el de la formación del chat del grupo; el de la Escuela no llega al Diplomado")
+    void elTextoEsDeLaFormacionDelGrupo() {
+        preparar(List.of(new Pendiente(ASIG_ANA, ANA, HACE_UNA_HORA)), UserStatus.ACTIVE);
+        when(loadConversacionPort.porCelulaId(GRUPO)).thenReturn(Optional.of(
+                Conversacion.crearCelula(CHAT, GRUPO, Instant.parse("2026-09-01T15:00:00Z"), Formacion.DIPLOMADO)));
+        when(bienvenidaPort.marcarDada(ASIG_ANA)).thenReturn(true);
+        TextosDeBienvenidaPort textos = mock(TextosDeBienvenidaPort.class);
+        lenient().when(textos.grupo(Formacion.ESCUELA)).thenReturn("Texto de la Escuela, {nombre}");
+        when(textos.grupo(Formacion.DIPLOMADO)).thenReturn("Texto del Diplomado, {nombre}");
+        BienvenidaEnGrupoService servicio = new BienvenidaEnGrupoService(bienvenidaPort, textos, loadConversacionPort,
+                delPrograma, userSummaryFinder, transactionManager, FixedClock.at(AHORA), true);
+
+        servicio.darBienvenidas(GRUPO);
+
+        verify(delPrograma).enviarDelPrograma(CHAT, ANA, ContenidoDelPrograma.texto("Texto del Diplomado, Ana"));
+        verify(textos, never()).grupo(Formacion.ESCUELA);
     }
 
     @Test
@@ -186,10 +208,16 @@ class BienvenidaEnGrupoServiceTest {
     }
 
     @Test
-    @DisplayName("sin texto de grupo en el recurso no consulta ni marca: las pertenencias quedan pendientes")
+    @DisplayName("sin texto de grupo para su formación no marca ni manda: las pertenencias quedan pendientes")
     void sinTextoNoMarca() {
+        when(bienvenidaPort.pendientes(GRUPO)).thenReturn(Optional.of(
+                new Pendientes(MENTOR, List.of(new Pendiente(ASIG_ANA, ANA, HACE_UNA_HORA)))));
+        when(loadConversacionPort.porCelulaId(GRUPO)).thenReturn(Optional.of(
+                Conversacion.crearCelula(CHAT, GRUPO, Instant.parse("2026-09-01T15:00:00Z"))));
+
         assertThat(servicio("").darBienvenidas(GRUPO)).isZero();
-        verifyNoInteractions(bienvenidaPort, delPrograma);
+        verify(bienvenidaPort, never()).marcarDada(any());
+        verifyNoInteractions(delPrograma);
     }
 
     @Test

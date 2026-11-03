@@ -39,6 +39,28 @@ public interface HorarioDelDiaFinder {
     HorariosDelDia deFecha(UserId participanteId, LocalDate fecha);
 
     /**
+     * La hora de UN habito ese dia para VARIAS personas, en pocas consultas que no crecen con la cantidad de personas (auditoria de consultas del
+     * 2026-11-02, H-01). Es lo que necesita una lista con una fila por persona («Habitos de todos → personas de un habito»), que antes llamaba a
+     * {@link #deFecha} por fila (unas 20 consultas cada una). La precedencia es la misma (fecha &gt; dia de la semana &gt; cambio general &gt; preferencia &gt;
+     * catalogo). Quien llama ya establecio que el habito le aplica a esas personas.
+     *
+     * <p>Sin entrada en el mapa = la persona no tiene hora ese dia (cuenta suspendida, sin programa, o ni ella ni el catalogo le fijan una). El cuerpo por
+     * defecto pregunta de a una (para los dobles de prueba); la implementacion real lo sobreescribe.
+     */
+    default java.util.Map<UserId, LocalTime> horaDeUnHabito(java.util.Collection<UserId> personas, UUID habitoId, LocalDate fecha) {
+        java.util.Map<UserId, LocalTime> horas = new java.util.LinkedHashMap<>();
+        for (UserId persona : personas) {
+            try {
+                deFecha(persona, fecha).habitos().stream().filter(h -> h.habitoId().equals(habitoId)).map(HorarioResuelto::horaDisparo)
+                        .filter(java.util.Objects::nonNull).findFirst().ifPresent(hora -> horas.put(persona, hora));
+            } catch (java.util.NoSuchElementException | com.renaser.os.shared.domain.NotAuthorizedException sinHorario) {
+                // sin hora: la cuenta no tiene programa o esta suspendida
+            }
+        }
+        return horas;
+    }
+
+    /**
      * @param fecha       el dia efectivamente consultado (ya resuelto si se pidio "hoy")
      * @param diaPrograma el dia del programa que le corresponde a {@code fecha}: el de hoy mas la
      *                    distancia en dias. Puede caer fuera de [0, 90] si la fecha esta fuera del

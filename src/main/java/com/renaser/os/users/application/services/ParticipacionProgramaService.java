@@ -2,6 +2,7 @@ package com.renaser.os.users.application.services;
 
 import com.renaser.os.users.domain.model.user.PlazoDeGracia;
 
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -34,6 +35,7 @@ import com.renaser.os.users.domain.model.participante.ParticipacionPrograma;
 import com.renaser.os.users.domain.model.user.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -91,6 +93,8 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
     /** Para decirle al panel cuando se borra una cuenta cerrada (D-243). */
     private final PlazoDeGracia plazoDeGracia;
 
+    private final ProgramaPropioDelPersonal programaPropio;
+
     public ParticipacionProgramaService(RequireActiveUserGuard requireActiveUserGuard,
                                          LoadParticipacionProgramaPort loadParticipacionProgramaPort,
                                          SaveParticipacionProgramaPort saveParticipacionProgramaPort,
@@ -102,6 +106,26 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
                                          LoadUltimoAjusteDiaProgramaPort loadUltimoAjusteDiaProgramaPort,
                                          IdGenerator idGenerator, Clock clock, PlazoDeGracia plazoDeGracia,
                                          ResolverEmergenciaAlCambiarDiaUseCase resolverEmergencia) {
+        this(requireActiveUserGuard, loadParticipacionProgramaPort, saveParticipacionProgramaPort,
+                deleteParticipacionProgramaPort, consultarResumenParticipacionPort, loadMentorProfilePort, loadUserPort,
+                requireAdminGuard, saveAjusteDiaProgramaPort, loadUltimoAjusteDiaProgramaPort, idGenerator, clock,
+                plazoDeGracia, resolverEmergencia, ProgramaPropioDelPersonal.escuela());
+    }
+
+    @Autowired
+    ParticipacionProgramaService(RequireActiveUserGuard requireActiveUserGuard,
+                                         LoadParticipacionProgramaPort loadParticipacionProgramaPort,
+                                         SaveParticipacionProgramaPort saveParticipacionProgramaPort,
+                                         DeleteParticipacionProgramaPort deleteParticipacionProgramaPort,
+                                         ConsultarResumenParticipacionPort consultarResumenParticipacionPort,
+                                         LoadMentorProfilePort loadMentorProfilePort, LoadUserPort loadUserPort,
+                                         RequireAdminGuard requireAdminGuard,
+                                         SaveAjusteDiaProgramaPort saveAjusteDiaProgramaPort,
+                                         LoadUltimoAjusteDiaProgramaPort loadUltimoAjusteDiaProgramaPort,
+                                         IdGenerator idGenerator, Clock clock, PlazoDeGracia plazoDeGracia,
+                                         ResolverEmergenciaAlCambiarDiaUseCase resolverEmergencia,
+                                         ProgramaPropioDelPersonal programaPropio) {
+        this.programaPropio = programaPropio;
         this.plazoDeGracia = plazoDeGracia;
         this.requireActiveUserGuard = requireActiveUserGuard;
         this.loadParticipacionProgramaPort = loadParticipacionProgramaPort;
@@ -128,7 +152,9 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
             throw new IllegalStateException("Ya activaste tu seguimiento personal de habitos y objetivos");
         }
 
-        ParticipacionPrograma nueva = ParticipacionPrograma.activarSeguimientoPersonal(actor.id(), clock);
+        var programa = programaPropio.para(actor.id());
+        ParticipacionPrograma nueva = ParticipacionPrograma.activarSeguimientoPersonal(actor.id(), clock,
+                programa.formacion(), programa.duracionDias());
         return saveParticipacionProgramaPort.save(nueva);
     }
 
@@ -203,6 +229,12 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
     }
 
     @Override
+    public java.util.Map<UserId, com.renaser.os.users.api.ParticipacionPrograma> deParticipantes(
+            java.util.Collection<UserId> participantes) {
+        return consultarResumenParticipacionPort.resumenDeVarios(participantes);
+    }
+
+    @Override
     public List<UserId> miembrosActivosDeCelula(UUID celulaId) {
         return consultarResumenParticipacionPort.miembrosActivosDeCelula(celulaId);
     }
@@ -246,14 +278,16 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
     @Override
     public PaginaTrainees listar(ListTraineesCommand command) {
         requireAdminGuard.requireAdminActivo(command.actorId());
+        // Administración y Alquimista ven las tres formaciones; el filtro «Formación» solo acota (spec 022, FR-024).
+        AlcanceDeFormacion alcance = AlcanceDeFormacion.todas().acotadoA(command.formacion());
         var contenido = consultarResumenParticipacionPort.listarAprendices(command.page() * command.size(),
-                        command.size(), command.busqueda(), command.soloSinGrupo(), command.rol()).stream()
+                        command.size(), command.busqueda(), command.soloSinGrupo(), command.rol(), alcance, command.soloActivas()).stream()
                 .map(resumen -> resumen.conBorradoProgramado(plazoDeGracia))
                 .toList();
         // El total se cuenta CON los mismos filtros: si contara el padron entero, la pantalla
         // diria "1 de 340" y el paginador ofreceria paginas que no existen.
         long total = consultarResumenParticipacionPort.contarAprendices(command.busqueda(), command.soloSinGrupo(),
-                command.rol());
+                command.rol(), alcance, command.soloActivas());
         return new PaginaTrainees(contenido, total, command.page(), command.size());
     }
 

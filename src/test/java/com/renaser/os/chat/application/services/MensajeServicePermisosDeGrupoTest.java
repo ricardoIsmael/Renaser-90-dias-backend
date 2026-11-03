@@ -114,8 +114,19 @@ class MensajeServicePermisosDeGrupoTest {
             }
 
             @Override
-            public Optional<Conversacion> global() {
+            public Optional<Conversacion> global(com.renaser.os.shared.domain.Formacion formacion) {
                 return Optional.empty();
+            }
+
+            @Override
+            public List<Conversacion> globales(java.util.Collection<com.renaser.os.shared.domain.Formacion> formaciones) {
+                return List.of();
+            }
+
+            @Override
+            public java.util.Map<com.renaser.os.chat.domain.model.conversacion.TipoConversacion, Long> contarPorTipo(
+                    com.renaser.os.shared.domain.Formacion formacion) {
+                return java.util.Map.of();
             }
 
             @Override
@@ -231,7 +242,7 @@ class MensajeServicePermisosDeGrupoTest {
         servicio = new MensajeService(conversaciones, esParticipante, new AccesoAChatsDeGrupo(pertenencia, org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.participante.GruposEnCursoPort.class), usuarios), marcarLeido, guardar,
                 cargarMensajes, fanout, usuarios, almacenamiento, conversacion -> ConfirmacionDeLectura.sinDobleMarca(),
                 FixedClock.at(AHORA),
-                UUID::randomUUID, evento -> { }, new MetricasDelChatEnMemoria(), new com.renaser.os.chat.application.services.InterruptoresDelChat(new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido(), org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort.class)));
+                UUID::randomUUID, evento -> { }, new MetricasDelChatEnMemoria(), new com.renaser.os.chat.application.services.InterruptoresDelChat(new com.renaser.os.shared.infrastructure.interruptores.TodoPrendido(), org.mockito.Mockito.mock(com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort.class)), new com.renaser.os.chat.application.services.VisibilidadPermisiva());
     }
 
     private EnviarMensajeCommand mensajeDe(UserId autor, ConversacionId conversacion) {

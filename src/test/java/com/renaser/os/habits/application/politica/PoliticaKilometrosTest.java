@@ -43,6 +43,7 @@ class PoliticaKilometrosTest {
                 no -> assertThat(no.motivo()).contains("km").contains("actualiza la app"));
     }
 
+    // spec 037 FR-013
     @ParameterizedTest(name = "{0} km no procede")
     @ValueSource(strings = {"0", "0.00", "0.004", "100.01", "150", "330"})
     @DisplayName("cero (también lo que redondea a cero) y más del tope no proceden")
@@ -50,6 +51,7 @@ class PoliticaKilometrosTest {
         assertThat(con(km)).isInstanceOf(DecisionPolitica.NoProcede.class);
     }
 
+    // spec 037 FR-013
     @ParameterizedTest(name = "{0} km procede")
     @ValueSource(strings = {"0.01", "0.005", "3.5", "42.195", "100", "100.004"})
     @DisplayName("cualquier km mayor que cero hasta 100 (tras redondear a dos decimales) procede")

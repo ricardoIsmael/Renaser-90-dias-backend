@@ -4,7 +4,6 @@ import com.renaser.os.rocks.application.ports.in.rocamaestra.ConsultarRocasMaest
 import com.renaser.os.rocks.application.ports.in.rocamaestra.DefinirRocaMaestraUseCase;
 import com.renaser.os.rocks.application.ports.in.rocamaestra.DefinirRocaMaestraUseCase.DefinirRocaMaestraCommand;
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
-import com.renaser.os.rocks.domain.model.rocamaestra.MapaPendienteException;
 import com.renaser.os.rocks.domain.model.rocamaestra.MetaCuantitativa;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestra;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestraFijaException;
@@ -213,7 +212,7 @@ class RocaMaestraControllerTest {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.codigo").value("ROCA_MAESTRA_FIJA"))
                 .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString(
-                        "quedó fijo en tu Mapa de Renacimiento")))
+                        "ya quedó fijo y no se cambia")))
                 .andExpect(jsonPath("$.timestamp").exists());
     }
 
@@ -223,7 +222,7 @@ class RocaMaestraControllerTest {
      * (Plan, o un APK anterior) el pedido es "desde fuera del Mapa".
      */
     @Test
-    @DisplayName("D-284: \"origen\": \"MAPA\" llega al caso de uso como pedido del Mapa; sin el campo, no")
+    @DisplayName("D-284 (spec 026): \"origen\": \"MAPA\" se sigue leyendo, aunque ya no cambie nada: la app anterior lo manda")
     void elOrigenDelMapaLlegaAlCasoDeUso() throws Exception {
         mockMvc.perform(put(RUTA_TRABAJO).session(sesion).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"objetivo\":\"Facturar\",\"origen\":\"MAPA\"}"))
@@ -247,20 +246,5 @@ class RocaMaestraControllerTest {
                         .content("{\"objetivo\":\"Facturar\",\"origen\":\"PLAN\"}"))
                 .andExpect(status().isBadRequest());
         verifyNoInteractions(definirUseCase);
-    }
-
-    @Test
-    @DisplayName("D-284: definir sin el Mapa activo (bloqueo encendido) es 409 MAPA_PENDIENTE con el mensaje para la persona")
-    void definirSinMapaActivoEs409ConCodigo() throws Exception {
-        doThrow(new MapaPendienteException()).when(definirUseCase).definir(any());
-
-        mockMvc.perform(put(RUTA_TRABAJO).session(sesion).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"objetivo\":\"Facturar\"}"))
-                .andExpect(status().isConflict())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.codigo").value("MAPA_PENDIENTE"))
-                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString(
-                        "Primero completa tu Mapa de Renacimiento")))
-                .andExpect(jsonPath("$.timestamp").exists());
     }
 }

@@ -111,7 +111,7 @@ public class BancoDeLiderazgo {
         }
     };
 
-    public final MedicionDeMentoresFinder medicion = () -> {
+    public final MedicionDeMentoresFinder medicion = alcance -> {
         if (medicionCaida) {
             throw new IllegalStateException("semaforo caido");
         }
@@ -301,7 +301,7 @@ public class BancoDeLiderazgo {
     // ── Servicios reales ───────────────────────────────────────────────
 
     public AccesoDeLiderazgo acceso() {
-        return new AccesoDeLiderazgo(usuariosFinder, fichas);
+        return new AccesoDeLiderazgo(usuariosFinder, fichas, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
     }
 
     public IndicadoresDeMentores indicadores() {

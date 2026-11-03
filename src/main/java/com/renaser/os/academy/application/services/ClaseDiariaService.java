@@ -18,8 +18,10 @@ import com.renaser.os.academy.domain.model.curso.SeccionCurso;
 import com.renaser.os.habits.api.CompletarClaseDiariaHabitoUseCase;
 import com.renaser.os.habits.api.CompletarClaseDiariaHabitoUseCase.CompletarClaseDiariaHabitoCommand;
 import com.renaser.os.habits.api.CompletarClaseDiariaHabitoUseCase.RegistroCompletado;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import com.renaser.os.users.api.UserRole;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,8 +42,6 @@ import java.util.regex.Pattern;
 @Service
 public class ClaseDiariaService implements ConsultarClaseDiariaUseCase, CompletarClaseDiariaUseCase {
 
-    /** Espejo de `ULTIMO_DIA_CON_CLASE` (clase-diaria/repository.ts:118). */
-    private static final int ULTIMO_DIA_CON_CLASE = 90;
     /** Espejo de `esLeccionClase` (clase-diaria/repository.ts:150-152). */
     private static final Pattern PATRON_LECCION_CLASE = Pattern.compile("\\bclase\\b", Pattern.CASE_INSENSITIVE);
 
@@ -52,12 +52,15 @@ public class ClaseDiariaService implements ConsultarClaseDiariaUseCase, Completa
     private final LoadProgresoLeccionPort loadProgresoLeccionPort;
     private final CompletarClaseDiariaHabitoUseCase completarHabitoUseCase;
     private final CompletarLeccionUseCase completarLeccionUseCase;
+    /** Spec 024: la Clase diaria sale de los cursos de la formación de la persona. */
+    private final AlcanceDeFormacionFinder formaciones;
 
     public ClaseDiariaService(LoadCursoPort loadCursoPort, LoadSeccionCursoPort loadSeccionCursoPort,
                                LoadLeccionPort loadLeccionPort, ConsultarProgresoParticipanteAcademyPort progresoPort,
                                LoadProgresoLeccionPort loadProgresoLeccionPort,
                                CompletarClaseDiariaHabitoUseCase completarHabitoUseCase,
-                               CompletarLeccionUseCase completarLeccionUseCase) {
+                               CompletarLeccionUseCase completarLeccionUseCase, AlcanceDeFormacionFinder formaciones) {
+        this.formaciones = formaciones;
         this.loadCursoPort = loadCursoPort;
         this.loadSeccionCursoPort = loadSeccionCursoPort;
         this.loadLeccionPort = loadLeccionPort;
@@ -75,7 +78,8 @@ public class ClaseDiariaService implements ConsultarClaseDiariaUseCase, Completa
             return new NoIniciado();
         }
 
-        Optional<ClaseEncontrada> clase = buscarClaseDiaria(diaActual);
+        AlcanceDeFormacion alcance = formaciones.de(actorId);
+        Optional<ClaseEncontrada> clase = buscarClaseDiaria(diaActual, progreso.duracionDias(), alcance);
         if (clase.isEmpty()) {
             return new Proximamente(diaActual);
         }
@@ -134,12 +138,15 @@ public class ClaseDiariaService implements ConsultarClaseDiariaUseCase, Completa
      * secciones representan RANGOS ("CICLO 2 (DIA 17-25)"), por eso el
      * match es por umbral y no por dia exacto.
      */
-    private Optional<ClaseEncontrada> buscarClaseDiaria(int programDay) {
-        if (programDay < 1 || programDay > ULTIMO_DIA_CON_CLASE) {
+    private Optional<ClaseEncontrada> buscarClaseDiaria(int programDay, int duracionDias, AlcanceDeFormacion alcance) {
+        // El repo viejo cortaba en el día 90 (`ULTIMO_DIA_CON_CLASE`); desde las formaciones (spec 022/023) hay Clase diaria hasta el
+        // último día del programa de la persona: 90 en la Escuela y la Certificación, 90 o 365 en el Diplomado.
+        if (programDay < 1 || programDay > duracionDias) {
             return Optional.empty();
         }
 
         List<Curso> cursosPublicados = loadCursoPort.listarTodos().stream()
+                .filter(c -> alcance.incluye(c.formacion()))
                 .filter(c -> c.publicado() && c.diaDesbloqueo() != null && c.diaDesbloqueo() <= programDay)
                 .toList();
         if (cursosPublicados.isEmpty()) {

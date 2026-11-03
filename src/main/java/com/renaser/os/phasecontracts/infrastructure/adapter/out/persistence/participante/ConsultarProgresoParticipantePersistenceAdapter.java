@@ -38,7 +38,7 @@ class ConsultarProgresoParticipantePersistenceAdapter implements ConsultarProgre
 
     private static ProgresoParticipante aProgreso(ParticipacionPrograma participacion) {
         return new ProgresoParticipante(participacion.diaPrograma(), mapearRol(participacion.rol()),
-                participacion.suspendido(), participacion.activado());
+                participacion.suspendido(), participacion.activado(), participacion.duracionDias());
     }
 
     private static RolParticipante mapearRol(UserRole rol) {

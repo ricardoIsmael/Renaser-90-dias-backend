@@ -14,6 +14,7 @@ import com.renaser.os.chat.application.ports.out.metricas.RegistrarMetricaDelCha
 import com.renaser.os.chat.application.ports.out.participante.EsParticipantePort;
 import com.renaser.os.chat.application.ports.out.participante.MarcarLeidoPort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
+import com.renaser.os.chat.domain.model.conversacion.NombreDelChat;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.conversacion.TipoConversacion;
 import com.renaser.os.chat.domain.model.mensaje.Cita;
@@ -73,6 +74,9 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
     /** Spec 002: la funcionalidad de cada tipo de conversación y la de la media (notas de voz, fotos). */
     private final InterruptoresDelChat interruptoresDelChat;
 
+    /** Spec 024: la regla única de quién ve cada conversación por formación. */
+    private final VisibilidadPorFormacion visibilidad;
+
     public MensajeService(LoadConversacionPort loadConversacionPort, EsParticipantePort esParticipantePort,
                            AccesoAChatsDeGrupo accesoAChatsDeGrupo,
                            MarcarLeidoPort marcarLeidoPort, SaveMensajePort saveMensajePort,
@@ -80,7 +84,8 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
                            UserSummaryFinder userSummaryFinder, AlmacenamientoPort almacenamientoPort,
                            ConsultarLecturaUseCase consultarLectura, Clock clock, IdGenerator idGenerator,
                            ApplicationEventPublisher eventos, RegistrarMetricaDelChatPort metricas,
-                           InterruptoresDelChat interruptoresDelChat) {
+                           InterruptoresDelChat interruptoresDelChat, VisibilidadPorFormacion visibilidad) {
+        this.visibilidad = visibilidad;
         this.metricas = metricas;
         this.interruptoresDelChat = interruptoresDelChat;
         this.loadConversacionPort = loadConversacionPort;
@@ -138,7 +143,12 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
         if (guardado.mediaRuta() != null && command.origenMedia() != OrigenMedia.MURO_COMPARTIDO) {
             metricas.mediaEnviada(guardado.tipo());
         }
-        return paraMostrar.recienEnviado(guardado, cita, command.actorId());
+        return paraMostrar.recienEnviado(guardado, cita, command.actorId(), firmaDelProgramaEn(conversacion));
+    }
+
+    /** Con qué nombre firma el programa en esta conversación (spec 035): el de su formación. */
+    private static String firmaDelProgramaEn(Conversacion conversacion) {
+        return NombreDelChat.delPrograma(conversacion.formacion());
     }
 
     /** {@code null} si la app no pidió responder (la app vieja nunca lo pide). Las reglas, en {@link Cita}. */
@@ -246,7 +256,7 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
         List<Mensaje> resultado = hayMas ? pagina.subList(0, limiteEfectivo) : pagina;
         Instant siguienteCursor = hayMas ? resultado.get(resultado.size() - 1).creadoEn() : null;
 
-        List<MensajeEnriquecido> enriquecidos = conMarcaDeEntrega(paraMostrar.deLaPagina(resultado, actorId),
+        List<MensajeEnriquecido> enriquecidos = conMarcaDeEntrega(paraMostrar.deLaPagina(resultado, actorId, firmaDelProgramaEn(conversacion)),
                 conversacion, actorId);
         return new PaginaMensajes(enriquecidos, siguienteCursor, hayMas);
     }
@@ -289,6 +299,8 @@ public class MensajeService implements EnviarMensajeUseCase, ListarMensajesUseCa
      * {@code AutorizacionDeConversacionService}; si se toca una, se tocan las cuatro.</b>
      */
     private void requireParticipante(Conversacion conversacion, UserId usuarioId) {
+        // Spec 024: una conversacion de otra formacion (o de un tipo apagado) es como si no existiera.
+        visibilidad.exigirQueLaVea(conversacion, usuarioId);
         if (conversacion.tipo() == TipoConversacion.CELULA) {
             if (!accesoAChatsDeGrupo.puedeVer(conversacion.celulaId(), usuarioId)) {
                 throw new NotAuthorizedException("Tu asignacion cambio: ya no perteneces a ese grupo");

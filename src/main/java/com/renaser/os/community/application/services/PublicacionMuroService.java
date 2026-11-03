@@ -33,12 +33,17 @@ import com.renaser.os.community.domain.model.publicacion.ReaccionMuro.Quitar;
 import com.renaser.os.community.domain.model.publicacion.ReaccionMuro.Reaccionar;
 import com.renaser.os.community.domain.model.publicacion.TipoReaccion;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.DuracionDelPrograma;
+import com.renaser.os.shared.domain.Formacion;
+import com.renaser.os.shared.domain.FormacionDelContenido;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.users.api.ParticipacionPrograma;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import com.renaser.os.users.api.CuentasCerradasFinder;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
@@ -115,6 +120,8 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     private final List<ReferenciasExternasDeMediaDelMuro> referenciasExternas;
     /** D-243: el Muro no muestra lo de cuentas cerradas esperando su borrado. */
     private final SinCuentasCerradas sinCerradas;
+    /** Spec 024: el Muro de cada formación es solo de ella; la formación de quien actúa sale del punto único de la 022. */
+    private final AlcanceDeFormacionFinder formaciones;
 
     public PublicacionMuroService(LoadPublicacionPort loadPublicacionPort, SavePublicacionPort savePublicacionPort,
                                    EliminarPublicacionPort eliminarPublicacionPort,
@@ -126,7 +133,8 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
                                    ParticipacionProgramaFinder participacionFinder,
                                    ReferenciasDeMediaDelMuroPort referenciasDeMediaPort,
                                    List<ReferenciasExternasDeMediaDelMuro> referenciasExternas,
-                                   CuentasCerradasFinder cuentasCerradas) {
+                                   CuentasCerradasFinder cuentasCerradas, AlcanceDeFormacionFinder formaciones) {
+        this.formaciones = formaciones;
         this.sinCerradas = new SinCuentasCerradas(cuentasCerradas);
         this.referenciasDeMediaPort = referenciasDeMediaPort;
         this.referenciasExternas = List.copyOf(referenciasExternas);
@@ -154,8 +162,9 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
         }
         List<MediaPublicacion> media = aMedia(command.media(), command.autorId());
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
+        Formacion donde = FormacionDelContenido.paraCrear(formaciones.de(command.autorId()), command.formacion());
         Publicacion publicacion = Publicacion.publicar(PublicacionId.of(idGenerator.newId()), command.autorId(),
-                command.texto(), media, command.categoriaClave(), clock.now(), diaDePrograma(command.autorId()));
+                command.texto(), media, command.categoriaClave(), clock.now(), diaDePrograma(command.autorId()), donde);
         Publicacion guardada = savePublicacionPort.save(publicacion);
         events.publishEvent(new PublicacionCreadaEvent(guardada.id().value(), guardada.autorId(),
                 guardada.categoriaClave(), clock.now()));
@@ -179,7 +188,7 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     @Override
     @Transactional
     public PublicacionVista editar(EditarPublicacionCommand command) {
-        Publicacion publicacion = requireVisible(command.publicacionId());
+        Publicacion publicacion = requireVisible(command.publicacionId(), command.actorId());
         requireActorHabilitado(command.actorId());
         if (!publicacion.autorId().equals(command.actorId())) {
             throw new NotAuthorizedException("No autorizado");
@@ -199,7 +208,7 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     @Override
     @Transactional
     public void ocultar(OcultarPublicacionCommand command) {
-        Publicacion publicacion = requireVisible(command.publicacionId());
+        Publicacion publicacion = requireVisible(command.publicacionId(), command.actorId());
         requireActorHabilitado(command.actorId());
         boolean puedeModerar = esModerador(command.actorId());
         if (!publicacion.autorId().equals(command.actorId()) && !puedeModerar) {
@@ -311,7 +320,7 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     @Override
     @Transactional
     public ResultadoReaccion reaccionar(ReaccionarCommand command) {
-        requireVisible(command.publicacionId());
+        requireVisible(command.publicacionId(), command.actorId());
         requireActorHabilitado(command.actorId());
         TipoReaccion existente = reaccionMuroPort.deUsuario(command.publicacionId(), command.actorId()).orElse(null);
         ReaccionMuro.ResultadoToggle resultado = ReaccionMuro.calcularToggle(existente, command.tipo());
@@ -344,7 +353,7 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     @Override
     @Transactional(readOnly = true)
     public List<ReaccionVista> reacciones(UserId actorId, PublicacionId publicacionId) {
-        requireVisible(publicacionId);
+        requireVisible(publicacionId, actorId);
         requireActorHabilitado(actorId);
         List<ReaccionMuro> filas = sinCerradas.de(reaccionMuroPort.listarDe(publicacionId), ReaccionMuro::usuarioId);
         if (filas.isEmpty()) {
@@ -373,12 +382,13 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
      */
     @Override
     @Transactional(readOnly = true)
-    public PaginaPublicaciones feed(UserId actorId, Instant cursor, String categoriaClave) {
+    public PaginaPublicaciones feed(UserId actorId, Instant cursor, String categoriaClave, Formacion formacion) {
         requireActorActivo(actorId);
         if (categoriaClave != null && !categoriasUseCase.clavesExistentes().contains(categoriaClave)) {
             throw new IllegalArgumentException("Categoria desconocida: " + categoriaClave);
         }
-        return paginaSinCuentasCerradas(actorId, cursor, categoriaClave, MAX_PAGINAS_SALTEADAS);
+        AlcanceDeFormacion alcance = FormacionDelContenido.paraLeer(formaciones.de(actorId), formacion);
+        return paginaSinCuentasCerradas(actorId, cursor, categoriaClave, alcance, MAX_PAGINAS_SALTEADAS);
     }
 
     /**
@@ -395,14 +405,14 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
      * con un tope de {@link #MAX_PAGINAS_SALTEADAS} para que un caso patológico no recorra el Muro entero.
      */
     private PaginaPublicaciones paginaSinCuentasCerradas(UserId actorId, Instant cursor, String categoriaClave,
-                                                         int saltosRestantes) {
-        List<Publicacion> filasConExtra = loadPublicacionPort.feed(cursor, TAMANO_PAGINA, categoriaClave);
+                                                         AlcanceDeFormacion alcance, int saltosRestantes) {
+        List<Publicacion> filasConExtra = loadPublicacionPort.feed(cursor, TAMANO_PAGINA, categoriaClave, alcance);
         boolean hayMas = filasConExtra.size() > TAMANO_PAGINA;
         List<Publicacion> cruda = hayMas ? filasConExtra.subList(0, TAMANO_PAGINA) : filasConExtra;
         Instant siguiente = hayMas ? cruda.get(cruda.size() - 1).creadoEn() : null;
         List<Publicacion> visibles = sinCerradas.de(cruda, Publicacion::autorId);
         if (visibles.isEmpty() && siguiente != null && saltosRestantes > 0) {
-            return paginaSinCuentasCerradas(actorId, siguiente, categoriaClave, saltosRestantes - 1);
+            return paginaSinCuentasCerradas(actorId, siguiente, categoriaClave, alcance, saltosRestantes - 1);
         }
         return new PaginaPublicaciones(aVistas(visibles, actorId), siguiente);
     }
@@ -410,16 +420,17 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     /** Misma razon que {@link #feed}: una conexion para toda la pagina, no una por consulta. */
     @Override
     @Transactional(readOnly = true)
-    public PaginaPublicaciones feedOculto(UserId actorId, Instant cursor) {
+    public PaginaPublicaciones feedOculto(UserId actorId, Instant cursor, Formacion formacion) {
         requireModerador(actorId);
-        List<Publicacion> pagina = loadPublicacionPort.feedOculto(cursor, TAMANO_PAGINA);
+        AlcanceDeFormacion alcance = FormacionDelContenido.paraLeer(formaciones.de(actorId), formacion);
+        List<Publicacion> pagina = loadPublicacionPort.feedOculto(cursor, TAMANO_PAGINA, alcance);
         return aPagina(pagina, actorId);
     }
 
     @Override
     public int contarMisPublicaciones(UserId actorId) {
         requireActorActivo(actorId);
-        return loadPublicacionPort.contarPorAutor(actorId);
+        return loadPublicacionPort.contarPorAutor(actorId, formaciones.de(actorId));
     }
 
     /**
@@ -476,7 +487,8 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
                             publicacion.texto(),
                             portada == null ? null : portada.bucket(),
                             portada == null ? null : portada.ruta(),
-                            portada == null ? null : portada.mime());
+                            portada == null ? null : portada.mime(),
+                            publicacion.formacion());
                 });
     }
 
@@ -485,13 +497,15 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     @Override
     public Optional<String> ultimoAutor(UserId actorId) {
         requireActorActivo(actorId);
+        // Spec 024: la invitación de Hoy nombra al último autor del Muro de SU formación, nunca al de otra.
+        AlcanceDeFormacion alcance = formaciones.de(actorId);
         // D-243: si la última es de una cuenta cerrada, el autor que se nombra es el de la última
         // visible de otra cuenta, buscado en la primera página del feed (una consulta más, solo entonces).
-        Optional<Publicacion> ultima = loadPublicacionPort.ultimaVisible();
+        Optional<Publicacion> ultima = loadPublicacionPort.ultimaVisible(alcance);
         if (ultima.isPresent() && !sinCerradas.de(List.of(ultima.get()), Publicacion::autorId).isEmpty()) {
             return ultima.flatMap(p -> consultarPerfilUsuarioPort.porId(p.autorId())).map(PerfilUsuario::nombreCompleto);
         }
-        return sinCerradas.de(loadPublicacionPort.feed(null, TAMANO_PAGINA, null), Publicacion::autorId).stream()
+        return sinCerradas.de(loadPublicacionPort.feed(null, TAMANO_PAGINA, null, alcance), Publicacion::autorId).stream()
                 .findFirst()
                 .flatMap(p -> consultarPerfilUsuarioPort.porId(p.autorId()))
                 .map(PerfilUsuario::nombreCompleto);
@@ -551,8 +565,10 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
         exigirRutaDelAutor(comando.ruta(), comando.autorId());
         MediaPublicacion media = new MediaPublicacion(comando.bucket(), comando.ruta(), comando.mime(), 0);
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
+        Formacion deLaPersona = formaciones.formacionDe(comando.autorId()).orElse(Formacion.POR_DEFECTO);
         Publicacion publicacion = Publicacion.publicarAutomatica(PublicacionId.of(idGenerator.newId()),
-                comando.autorId(), comando.texto(), List.of(media), clock.now(), diaDePrograma(comando.autorId()));
+                comando.autorId(), comando.texto(), List.of(media), clock.now(), diaDePrograma(comando.autorId()),
+                deLaPersona);
         Publicacion guardada = savePublicacionPort.save(publicacion);
         events.publishEvent(new PublicacionCreadaEvent(guardada.id().value(), guardada.autorId(),
                 guardada.categoriaClave(), clock.now()));
@@ -575,7 +591,7 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
                     .filter(ParticipacionPrograma::inscrito)
                     .filter(ParticipacionPrograma::activado)
                     .map(ParticipacionPrograma::diaPrograma)
-                    .filter(dia -> dia >= 1 && dia <= 90)
+                    .filter(dia -> dia >= 1 && dia <= DuracionDelPrograma.MAXIMA)
                     .orElse(null);
         } catch (RuntimeException e) {
             return null;
@@ -685,8 +701,13 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
                 + PREFIJO_MURO + "<carpeta>/" + autorId.value() + "/<uuid>)");
     }
 
-    private Publicacion requireVisible(PublicacionId id) {
+    /**
+     * La publicación tiene que existir, no estar oculta y ser de una formación que {@code actorId} ve (spec 024, FR-004): una de otra formación
+     * responde EXACTAMENTE lo mismo que una que no existe —el mismo texto, el mismo 404—, nunca algo que delate que está en otro lado.
+     */
+    private Publicacion requireVisible(PublicacionId id, UserId actorId) {
         Publicacion publicacion = loadPublicacionPort.porId(id)
+                .filter(p -> formaciones.de(actorId).incluye(p.formacion()))
                 .orElseThrow(() -> new NoSuchElementException("Publicacion no encontrada: " + id));
         if (publicacion.oculta()) {
             throw new NoSuchElementException("Publicacion no encontrada: " + id);

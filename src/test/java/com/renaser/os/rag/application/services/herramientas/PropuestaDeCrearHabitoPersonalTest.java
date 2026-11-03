@@ -46,7 +46,7 @@ class PropuestaDeCrearHabitoPersonalTest {
     private final CrearHabitoPersonalPort crearPort = mock(CrearHabitoPersonalPort.class);
     private final ProponerAccionUseCase proponerAccion = mock(ProponerAccionUseCase.class);
     private final PropuestaDeCrearHabitoPersonal herramienta =
-            new PropuestaDeCrearHabitoPersonal(planPort, crearPort, proponerAccion);
+            new PropuestaDeCrearHabitoPersonal(planPort, crearPort, proponerAccion, CategoriasDePrueba.ESCUELA);
 
     @BeforeEach
     void ultimaHora() {
@@ -104,7 +104,7 @@ class PropuestaDeCrearHabitoPersonalTest {
         ResultadoHerramienta resultado = herramienta.ejecutar(APRENDIZ, invocacion("nombre", "Leer"));
 
         assertThat(((ResultadoHerramienta.Fallo) resultado).motivo())
-                .contains("NO lo propongas todavia").contains("preguntale").contains("Cuerpo, Mente, Emociones o Espiritu");
+                .contains("NO lo propongas todavia").contains("preguntale").contains("Cuerpo, Mente, Emociones o Espíritu");
         verifyNoInteractions(proponerAccion, planPort);
     }
 
@@ -178,8 +178,76 @@ class PropuestaDeCrearHabitoPersonalTest {
         var definicion = herramienta.definicion();
 
         assertThat(definicion.nombre()).isEqualTo("proponer_crear_habito_personal");
-        assertThat(definicion.descripcion()).contains("si la persona no la dijo, NO llames todavia");
+        assertThat(definicion.descripcion()).contains("si la persona no la dijo, NO llames")
+                .contains("SU formacion").doesNotContain("Cuerpo, Mente, Emociones o Espiritu");
         assertThat(definicion.parametros()).filteredOn(parametro -> parametro.obligatorio())
                 .extracting(parametro -> parametro.nombre()).containsExactly("nombre");
+    }
+
+    /** Spec 038: SER nunca ofrece ni crea una categoria de otra formacion. */
+    // spec 038 FR-011
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.MethodSource("formaciones")
+    @DisplayName("spec 038: solo ofrece y acepta las categorias de la formacion de la persona")
+    void soloLasCategoriasDeSuFormacion(String formacion, List<com.renaser.os.rag.domain.model.habitopersonal.CategoriaDelHabito> propias,
+                                         String unaPropia, String claveDeLaPropia, String deLaEscuela) {
+        var suya = new PropuestaDeCrearHabitoPersonal(planPort, crearPort, proponerAccion, CategoriasDePrueba.de(propias));
+        conPlan();
+
+        // Sin categoria: le dice las SUYAS, ninguna de otra formacion.
+        String sinCategoria = ((ResultadoHerramienta.Fallo) suya.ejecutar(APRENDIZ, invocacion("nombre", "Leer"))).motivo();
+        propias.forEach(categoria -> assertThat(sinCategoria).as(formacion).contains(categoria.nombre()));
+        if (!"ESCUELA".equals(formacion)) {
+            assertThat(sinCategoria).as(formacion).doesNotContain("Emociones").doesNotContain("Cuerpo").doesNotContain("Mente");
+        }
+
+        // Con la suya (por su nombre): propone, guardando la clave de SU categoria.
+        ResultadoHerramienta propone = suya.ejecutar(APRENDIZ, invocacion("nombre", "Leer", "categoria", unaPropia, "hora", "07:30"));
+        assertThat(propone).as(formacion).isInstanceOf(ResultadoHerramienta.Exito.class);
+        verify(proponerAccion).proponer(eq(APRENDIZ), eq(invocacion("nombre", "Leer", "categoria", claveDeLaPropia, "hora", "07:30")),
+                anyString());
+
+        // Con una de la Escuela que su formacion no tiene: la rechaza y no propone nada mas.
+        if (!"ESCUELA".equals(formacion)) {
+            String rechazo = ((ResultadoHerramienta.Fallo) suya.ejecutar(APRENDIZ,
+                    invocacion("nombre", "Leer", "categoria", deLaEscuela))).motivo();
+            assertThat(rechazo).as(formacion).contains("no es una de las categorias de habitos de su formacion");
+            propias.forEach(categoria -> assertThat(rechazo).contains(categoria.nombre()));
+            org.mockito.Mockito.verifyNoMoreInteractions(proponerAccion);
+        }
+    }
+
+    static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments> formaciones() {
+        return java.util.stream.Stream.of(
+                org.junit.jupiter.params.provider.Arguments.of("ESCUELA", CategoriasDePrueba.LAS_DE_LA_ESCUELA, "emociones", "CONSCIENCIA", "Cuerpo"),
+                org.junit.jupiter.params.provider.Arguments.of("DIPLOMADO", CategoriasDePrueba.LAS_DEL_DIPLOMADO, "Estudio profundo",
+                        "DIPLOMADO_ESTUDIO_PROFUNDO", "Cuerpo"),
+                org.junit.jupiter.params.provider.Arguments.of("CERTIFICACION", CategoriasDePrueba.LAS_DE_LA_CERTIFICACION, "mentoria",
+                        "CERTIFICACION_MENTORIA", "emociones"));
+    }
+
+    @Test
+    @DisplayName("spec 038: una formacion sin categorias (el Diplomado o la Certificacion al empezar) no propone, lo dice con calidez")
+    void formacionSinCategorias() {
+        var sinCategorias = new PropuestaDeCrearHabitoPersonal(planPort, crearPort, proponerAccion,
+                CategoriasDePrueba.de(List.of()));
+
+        ResultadoHerramienta resultado = sinCategorias.ejecutar(APRENDIZ, invocacion("nombre", "Leer", "categoria", "Mente"));
+
+        assertThat(((ResultadoHerramienta.Fallo) resultado).motivo()).contains("todavia no tiene categorias de habitos")
+                .contains("NO lo propongas");
+        verifyNoInteractions(proponerAccion);
+    }
+
+    @Test
+    @DisplayName("spec 038: si no se pueden leer las categorias de su formacion, no propone y lo dice")
+    void categoriasQueNoSeLeen() {
+        var caida = new PropuestaDeCrearHabitoPersonal(planPort, crearPort, proponerAccion, persona -> {
+            throw new IllegalStateException("caida");
+        });
+
+        assertThat(((ResultadoHerramienta.Fallo) caida.ejecutar(APRENDIZ, invocacion("nombre", "Leer", "categoria", "Mente"))).motivo())
+                .contains("No pude leer las categorias");
+        verifyNoInteractions(proponerAccion);
     }
 }

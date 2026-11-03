@@ -1,5 +1,6 @@
 package com.renaser.os.calendar.application.services;
 
+import com.renaser.os.FormacionesDePrueba;
 import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.calendar.api.EventosDelParticipanteFinder;
@@ -276,7 +277,8 @@ class MentoriaConSemaforoVerdeIT {
     private EventoId evento(TipoEvento tipo, TipoAudiencia audiencia, Set<RolUsuario> roles, boolean avisarAlGuardar) {
         EventoId id = crear.crear(new CrearEventoCommand(admin, "Mentoria " + UUID.randomUUID().toString().substring(0, 6),
                 null, INICIO, 60, LIMA, TipoUbicacion.MEET, "https://meet.google.com/abc-defg-hij", audiencia, null,
-                null, null, tipo, avisarAlGuardar, false, false, null, roles, List.of())).evento().id();
+                null, null, tipo, avisarAlGuardar, false, false, null, roles, List.of(),
+                com.renaser.os.shared.domain.Formacion.ESCUELA)).evento().id();
         eventos.add(id.value());
         return id;
     }
@@ -287,6 +289,7 @@ class MentoriaConSemaforoVerdeIT {
                 INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado)
                 VALUES (?, ?, ?, CAST(? AS renaser.rol_usuario), 'ACTIVO')
                 """, id, "mentoria020-" + id + "@renaser.test", "Persona " + rol, rol);
+        FormacionesDePrueba.alPersonalLeAsignaLaEscuela(jdbc, id, rol);
         usuarios.add(id);
         return UserId.of(id);
     }

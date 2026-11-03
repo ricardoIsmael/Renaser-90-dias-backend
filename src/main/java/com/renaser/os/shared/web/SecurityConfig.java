@@ -100,11 +100,12 @@ public class SecurityConfig {
             throws Exception {
         http.securityMatcher("/api/v1/**")
                 .cors(Customizer.withDefaults())
-                // Sigue deshabilitado: la sesion todavia no es el mecanismo de auth EXIGIDO en
-                // ningun endpoint (X-Actor-Id sigue siendo lo que se valida, hasta la fase 4). El
-                // esquema de CSRF para cuando la cookie sea obligatoria queda pendiente y ya
-                // documentado (docs/MODULO_AUTH.md §5.2, D-31) — no se activa a medias.
-                .csrf(csrf -> csrf.disable())
+                // CSRF solo existe cuando el navegador manda la sesion solo, en una cookie. Aca la sesion
+                // viaja en la cabecera X-Auth-Token (httpSessionIdResolver), que el navegador nunca manda
+                // por su cuenta: se exige el token CSRF solo a un pedido que trae la cookie de sesion
+                // (`SESSION`), que hoy no existe. Si algun dia la sesion pasa a cookie, ya queda protegida
+                // sin tocar nada (antes estaba apagado del todo: CodeQL java/spring-disabled-csrf-protection).
+                .csrf(csrf -> csrf.requireCsrfProtectionMatcher(SecurityConfig::traeCookieDeSesion))
                 .securityContext(ctx -> ctx.securityContextRepository(securityContextRepository))
                 .authorizeHttpRequests(auth -> auth
                         // ---------------------------------------------------------------------
@@ -163,6 +164,11 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/home", "/api/v1/users/me/**").authenticated()
                         .requestMatchers("/api/v1/habits", "/api/v1/habit-preferences/**",
                                 "/api/v1/habit-tracks/**", "/api/v1/habit-unlocks/**").authenticated()
+                        // Spec 023: las categorias de habito de la formacion de la persona (la lectura de Training). La administracion de
+                        // las categorias vive bajo `/api/v1/admin/**`, que ya tiene su matcher.
+                        .requestMatchers("/api/v1/habit-categories").authenticated()
+                        // Spec 026: el diagnostico de ingreso de la persona (`/mio`). Lo decide `@RequiresPermission`; aca solo se pide sesion.
+                        .requestMatchers("/api/v1/diagnostico/**").authenticated()
                         .requestMatchers("/api/v1/evidence", "/api/v1/evidence/**").authenticated()
                         .requestMatchers("/api/v1/classroom/**", "/api/v1/cursos/**",
                                 "/api/v1/lecciones/**").authenticated()
@@ -186,8 +192,12 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/me/semaforo", "/api/v1/me/semaforo/**",
                                 "/api/v1/semaforo/**")
                         .authenticated()
+                        // La formacion de la sesion y la activa del personal (spec 022): el id sale de la sesion.
+                        .requestMatchers("/api/v1/me/formacion", "/api/v1/me/formacion/**").authenticated()
                         // «Tu Caja Renaser» (D-219): la caja propia; el id sale de la sesion.
                         .requestMatchers("/api/v1/me/caja", "/api/v1/me/caja/**").authenticated()
+                        // «Mi ingreso» (spec 032): los pasos y el cronograma de pagos propios; el id sale de la sesion.
+                        .requestMatchers("/api/v1/me/ingreso", "/api/v1/me/ingreso/**").authenticated()
                         // D-244: el pedido de emergencia del aprendiz. Sin esta linea quedaba bajo
                         // anyRequest().permitAll() y la identidad salia del X-Actor-Id del cliente.
                         .requestMatchers("/api/v1/me/emergency-request").authenticated()
@@ -213,6 +223,10 @@ public class SecurityConfig {
                         // El Mapa de Renacimiento es contenido del propio aprendiz: sin sesion no
                         // se lee ni se escribe (V41, fase 3 del plan del Mapa).
                         .requestMatchers("/api/v1/mapa-renacimiento/**").authenticated()
+                        // El analisis 80/20 con IA de la propia persona (spec 031). Lo atrapo RutasCubiertasPorElFiltroTest: sin esta
+                        // linea la ruta quedaba sin sesion y el actor saldria del header X-Actor-Id. Las rutas de ficha cuelgan de
+                        // /api/v1/mentor/** y /api/v1/leadership/**, que ya estan arriba.
+                        .requestMatchers("/api/v1/analisis-80-20/**").authenticated()
                         .requestMatchers("/api/v1/tickets/**", "/api/v1/ranking/**").authenticated()
                         // Acompanamiento (SDD 001). Faltaba: sin esta linea las rutas caian fuera
                         // de la lista y llegaban al controller sin sesion, que respondia 400 al no
@@ -322,5 +336,15 @@ public class SecurityConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/v1/**", config);
         return source;
+    }
+
+    /** ¿El pedido trae la cookie de sesion de Spring Session? Solo ese caso necesita CSRF (ver {@code apiFilterChain}). */
+    static boolean traeCookieDeSesion(jakarta.servlet.http.HttpServletRequest request) {
+        jakarta.servlet.http.Cookie[] cookies = request.getCookies();
+        if (cookies == null) return false;
+        for (jakarta.servlet.http.Cookie cookie : cookies) {
+            if ("SESSION".equals(cookie.getName())) return true;
+        }
+        return false;
     }
 }

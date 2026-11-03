@@ -86,13 +86,15 @@ class HomeAgregadoServiceTest {
     private HomeAgregadoService nuevoServicio() {
         return new HomeAgregadoService(consultarPuntajeUseCase, participacionProgramaFinder, habitosDelDiaFinder,
                 diasConHabitoCumplidoFinder, rocasDelDiaFinder, proximoEventoFinder, notificacionesNoLeidasFinder,
-                porcentajeRocasFinder, consultarMiSemaforo, consultarMensajeDelSemaforo, CLOCK);
+                porcentajeRocasFinder, consultarMiSemaforo, consultarMensajeDelSemaforo,
+                new com.renaser.os.users.api.AlcanceDeFormacionPermisivo(), CLOCK);
     }
 
     private HomeAgregadoService nuevoServicioCon(FixedClock reloj) {
         return new HomeAgregadoService(consultarPuntajeUseCase, participacionProgramaFinder, habitosDelDiaFinder,
                 diasConHabitoCumplidoFinder, rocasDelDiaFinder, proximoEventoFinder, notificacionesNoLeidasFinder,
-                porcentajeRocasFinder, consultarMiSemaforo, consultarMensajeDelSemaforo, reloj);
+                porcentajeRocasFinder, consultarMiSemaforo, consultarMensajeDelSemaforo,
+                new com.renaser.os.users.api.AlcanceDeFormacionPermisivo(), reloj);
     }
 
     /**
@@ -379,8 +381,9 @@ class HomeAgregadoServiceTest {
          * IllegalArgumentException("El rango va al reves"), que no esta entre las excepciones que
          * degradan el widget: el /home entero respondia 400 y la app mostraba ese texto en rojo.
          *
-         * El inicio se elige entre manana y dentro de 3 dias (`ParticipacionPrograma.opcionesDeActivacion`);
-         * se prueba el mas lejano porque es el que deja a la cuenta mas dias en este estado.
+         * Hasta la spec 036 (2026-11-02) el inicio se elegia entre manana y dentro de 3 dias, y esas cuentas
+         * conservan su fecha; desde entonces es siempre manana. Se prueba el caso mas lejano porque es el que deja a la
+         * cuenta mas dias en este estado.
          */
         HomeAgregadoService service = nuevoServicio();
         when(consultarPuntajeUseCase.consultar(actor, actor)).thenReturn(

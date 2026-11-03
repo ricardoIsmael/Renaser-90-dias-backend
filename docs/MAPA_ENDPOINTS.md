@@ -1,3 +1,5 @@
+> **Retirado 2026-10-31 (D-303, spec 026).** El Mapa de Renacimiento ya no va: estos endpoints se leen pero no se escriben (409 `MAPA_RETIRADO`) y `stageCompleted` es `true` para todos. Lo reemplaza el diagnóstico (`/api/v1/diagnostico/**`); ver `docs/MODULO_ONBOARDING.md`.
+
 # Mapa de endpoints — referencia de trabajo para conectar la app
 
 **Fecha:** 2026-08-26
@@ -104,6 +106,9 @@ Mandá también `Authorization: Bearer <token>` en paralelo — hoy el backend l
 | GET · PUT | `/api/v1/radar/mi-radar` (D-286) |
 | GET | `/api/v1/habit-preferences` |
 | PATCH | `/api/v1/habit-preferences/{habitId}` |
+| GET · PUT · DELETE | `/api/v1/habit-preferences/{habitId}/week` («Solo esta semana», D-296) |
+| GET · POST | `/api/v1/habit-preferences/week-repeat` (repetir la semana, D-296) |
+| DELETE | `/api/v1/habit-preferences/weeks/{weekStart}` («Deshacer», D-296) |
 | GET | `/api/v1/mentor/groups/{groupId}/learners/{userId}/habits` |
 | GET | `/api/v1/mentor/groups/{groupId}/learners/{userId}/radar` |
 | GET | `/api/v1/leadership/groups/{groupId}/people/{personId}/radar` (D-286) |
@@ -395,3 +400,35 @@ Vos avanzás con el frontend usando §1. Cuando te choques con algo:
 **Antes de construir cualquier cosa nueva voy a verificar primero si se puede reutilizar** — es la regla que pediste, y §2 muestra que en la mayoría de los casos aplica.
 
 **Queda para después** (decisión tuya de hoy): el motor diario del programa (generar tracks → coherencia → semáforo → Verdugo) y el resto del análisis de cumplimiento de los 45 requisitos, que está en [`CUMPLIMIENTO_REQUISITOS.md`](CUMPLIMIENTO_REQUISITOS.md).
+
+
+---
+
+## Hábitos y categorías por formación (spec 023, D-300, 2026-10-31)
+
+| Método | Ruta | Para qué |
+|---|---|---|
+| GET | `/api/v1/habit-categories` | Las categorías activas (dimensiones de Training) de la formación de la persona: `{ formation, categories:[{ key, code, name, icon, order }] }` |
+| GET | `/api/v1/admin/habits?formation=` | Catálogo de UNA formación (ausente = Escuela; `ALL` = las tres, solo lectura). ADMIN/ALCHEMIST |
+| POST | `/api/v1/admin/habits/{id}/copy` | «Copiar a otra formación» `{ formation, category }`: copia independiente (horarios, guía y audiencia). ADMIN/ALCHEMIST |
+| GET | `/api/v1/admin/habit-categories?formation=` | Categorías con sus conteos y qué se puede hacer con cada una. ADMIN/ALCHEMIST |
+| POST | `/api/v1/admin/habit-categories` | Crear `{ formation, name, icon? }` |
+| PUT | `/api/v1/admin/habit-categories/{key}` | Renombrar / cambiar el ícono `{ name?, icon?, changesIcon }` |
+| PUT | `/api/v1/admin/habit-categories/{key}/active` | Activar o desactivar `{ isActive }` (409 con hábitos activos) |
+| PUT | `/api/v1/admin/habit-categories/order` | Ordenar `{ formation, keys:[…] }` |
+| DELETE | `/api/v1/admin/habit-categories/{key}` | Eliminar (409 con hábitos o historial) |
+
+`category` de los hábitos (`/habits`, `/admin/habits`, `/admin/trainees/{id}/habits`) es un string abierto (`BODY`, `MIND`, `CONSCIENCE`, `SPIRIT` en la Escuela; la clave en las
+demás) y suma `categoryKey`. Detalle en `specs/023-habitos-por-formacion/contracts/habitos-por-formacion-api.md`.
+
+
+---
+
+## Hábitos de todos — el líder ve hábito por hábito (spec 029, D-305, 2026-10-31)
+
+| Método | Ruta | Para qué |
+|---|---|---|
+| GET | `/api/v1/leadership/habits?date=&group=&formation=&category=` | El día (hoy y hasta 7 atrás): resumen y hábitos con `expected/done/pending/missed`, los de menos cumplimiento primero. MENTOR_LEAD/ADMIN/ALCHEMIST |
+| GET | `/api/v1/leadership/habits/{habitId}/people?date=&group=&formation=&q=&page=&size=` | Las personas de ese hábito con su estado, hora planificada y hora de cumplimiento |
+
+Solo lectura, sin constancia de consulta, `no-store`. Detalle en `specs/029-lider-ve-todos-los-habitos/contracts/habitos-de-todos-api.md`.

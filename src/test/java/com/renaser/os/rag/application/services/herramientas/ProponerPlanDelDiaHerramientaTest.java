@@ -4,6 +4,7 @@ import com.renaser.os.rag.application.ports.in.propuesta.ProponerAccionUseCase;
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort;
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort.PlanDeManana;
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort.RocaDelDia;
+import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort.RocasDeLaSemana;
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarRocasDelAprendizPort.RocasDelDia;
 import com.renaser.os.rag.application.ports.out.rocas.PlanificarRocasPort;
 import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
@@ -82,7 +83,7 @@ class ProponerPlanDelDiaHerramientaTest {
                   {"eje":"CUERPO","titulo":"Pesarme en ayunas"}]}"""));
 
         String resumen = "Crear el plan del jueves 2026-09-24. Cuerpo: 1) Caminar 30 minutos (06:00 a 06:30); "
-                + "2) Pesarme en ayunas (sin hora). Trabajo: 1) Llamar a 3 clientes (desde 09:00).";
+                + "2) Pesarme en ayunas (sin hora). Negocio: 1) Llamar a 3 clientes (desde 09:00).";
         verify(proponer).proponer(APRENDIZ, con("{\"fecha\":\"2026-09-24\",\"acciones\":["
                 + "{\"eje\":\"CUERPO\",\"titulo\":\"Caminar 30 minutos\",\"inicio\":\"06:00\",\"fin\":\"06:30\"},"
                 + "{\"eje\":\"TRABAJO\",\"titulo\":\"Llamar a 3 clientes\",\"inicio\":\"09:00\"},"
@@ -118,6 +119,7 @@ class ProponerPlanDelDiaHerramientaTest {
                 + "Cuerpo: 1) Nadar (hasta 08:00). Si ese dia ya tiene acciones, se reemplazan."));
     }
 
+    // spec 038 FR-006
     @Test
     @DisplayName("el dia en curso ya armado no se reacomoda: Fallo y ninguna propuesta")
     void hoyYaArmado() {
@@ -129,7 +131,7 @@ class ProponerPlanDelDiaHerramientaTest {
                 + "\"acciones\":[{\"eje\":\"CUERPO\",\"titulo\":\"Correr\"}]}"));
 
         assertThat(resultado).isEqualTo(ResultadoHerramienta.fallo(
-                "El dia en curso ya esta armado y no se reacomoda. Puede cambiar los que vienen."));
+                "Tu dia en curso ya esta armado y no se reacomoda. Puedes cambiar los dias que vienen."));
         verify(proponer, never()).proponer(any(), any(), anyString());
     }
 
@@ -176,5 +178,76 @@ class ProponerPlanDelDiaHerramientaTest {
 
         assertThat(resultado).isInstanceOf(ResultadoHerramienta.Fallo.class);
         verifyNoInteractions(proponer);
+    }
+
+    private static final PlanDeManana VENTANA_CERRADA = new PlanDeManana(false, 0, false, LocalTime.of(18, 0), false);
+
+    private static final String UNA_ACCION = "\"acciones\":[{\"eje\":\"CUERPO\",\"titulo\":\"Correr\"}]}";
+
+    private void semanaDeLunes21AlDomingo27() {
+        when(rocas.deLaSemana(APRENDIZ)).thenReturn(new RocasDeLaSemana(3, LocalDate.of(2026, 9, 21), LocalDate.of(2026, 9, 27), List.of()));
+    }
+
+    /** Spec 038: SER nunca propone lo que el servidor va a rechazar al confirmar (fecha fuera de lo planificable). */
+    // spec 038 FR-005
+    @Test
+    @DisplayName("spec 038: con la ventana de las 18:00 abierta, el dia en curso no se propone y se le dice desde cuando si se puede")
+    void conLaVentanaAbiertaHoyNoSePropone() {
+        mananaCon(SIN_PLAN);
+        when(rocas.deHoy(APRENDIZ)).thenReturn(new RocasDelDia(HOY, List.of(), SIN_PLAN));
+        semanaDeLunes21AlDomingo27();
+
+        ResultadoHerramienta resultado = herramienta.ejecutar(APRENDIZ, con("{\"fecha\":\"2026-09-23\"," + UNA_ACCION));
+
+        assertThat(resultado).isInstanceOf(ResultadoHerramienta.Fallo.class);
+        assertThat(((ResultadoHerramienta.Fallo) resultado).motivo())
+                .contains("Ese dia ya no se puede planificar").contains("No dejes la propuesta")
+                .contains("desde las 18:00 el dia en curso ya no se arma")
+                .contains("Hoy se puede planificar del jueves 2026-09-24 al domingo 2026-09-27");
+        verify(proponer, never()).proponer(any(), any(), anyString());
+    }
+
+    // spec 038 FR-005
+    @Test
+    @DisplayName("spec 038: un dia que paso, o que cae despues del domingo, no se propone")
+    void unDiaQueYaPasoOMuyLejos() {
+        mananaCon(SIN_PLAN);
+        semanaDeLunes21AlDomingo27();
+
+        ResultadoHerramienta pasado = herramienta.ejecutar(APRENDIZ, con("{\"fecha\":\"2026-09-22\"," + UNA_ACCION));
+        ResultadoHerramienta lejos = herramienta.ejecutar(APRENDIZ, con("{\"fecha\":\"2026-09-28\"," + UNA_ACCION));
+
+        assertThat(((ResultadoHerramienta.Fallo) pasado).motivo()).contains("ese dia ya paso");
+        assertThat(((ResultadoHerramienta.Fallo) lejos).motivo())
+                .contains("solo se planifican los dias que quedan de esta semana").contains("al domingo 2026-09-27");
+        verify(proponer, never()).proponer(any(), any(), anyString());
+    }
+
+    // spec 038 FR-005
+    @Test
+    @DisplayName("spec 038: el domingo a la noche el lunes si se puede, y el ultimo dia de la semana tambien")
+    void elLunesDelDomingoYElUltimoDia() {
+        semanaDeLunes21AlDomingo27();
+        when(rocas.deManana(APRENDIZ)).thenReturn(new RocasDelDia(LocalDate.of(2026, 9, 28), List.of(), SIN_PLAN));
+        herramienta.ejecutar(APRENDIZ, con("{\"fecha\":\"2026-09-28\"," + UNA_ACCION));
+
+        mananaCon(SIN_PLAN);
+        herramienta.ejecutar(APRENDIZ, con("{\"fecha\":\"2026-09-27\"," + UNA_ACCION));
+
+        verify(proponer, org.mockito.Mockito.times(2)).proponer(any(), any(), anyString());
+    }
+
+    // spec 038 FR-005
+    @Test
+    @DisplayName("spec 038: antes de las 18:00 el dia en curso todavia se puede armar; si el fin de la semana no se sabe, decide el servidor")
+    void antesDeLasDieciochoHoySiYSinFinDeSemanaNoBloquea() {
+        when(rocas.deManana(APRENDIZ)).thenReturn(new RocasDelDia(MANANA, List.of(), VENTANA_CERRADA));
+        when(rocas.deHoy(APRENDIZ)).thenReturn(new RocasDelDia(HOY, List.of(), VENTANA_CERRADA));
+        when(rocas.deLaSemana(APRENDIZ)).thenThrow(new IllegalStateException("sin leer"));
+
+        herramienta.ejecutar(APRENDIZ, con("{\"fecha\":\"2026-09-23\"," + UNA_ACCION));
+        herramienta.ejecutar(APRENDIZ, con("{\"fecha\":\"2026-10-30\"," + UNA_ACCION));
+
+        verify(proponer, org.mockito.Mockito.times(2)).proponer(any(), any(), anyString());
     }
 }

@@ -32,7 +32,24 @@ final class CatalogoAplicableDePrueba {
     }
 
     static CatalogoAplicable sinAudiencias(LoadHabitoPort loadHabitoPort) {
+        responderElCatalogoPorFormacion(loadHabitoPort);
         return new CatalogoAplicable(loadHabitoPort, habitos -> Map.of(), SIN_HISTORIAL);
+    }
+
+    /**
+     * H-04 (auditoria de consultas del 2026-11-02): {@code CatalogoAplicable} pide el catalogo de la formacion de la persona
+     * ({@code catalogoActivoDeFormacion}) en vez de leer el entero y filtrar. Las pruebas siguen sembrando {@code catalogoActivo()}: este doble hace que la
+     * consulta por formacion conteste con lo que la prueba sembro, filtrado por la formacion, y se evalua al llamarse (cuando la prueba ya sembro).
+     * Va con {@code doAnswer(...).when(...)} para no ejecutar la llamada al armarlo.
+     */
+    static void responderElCatalogoPorFormacion(LoadHabitoPort loadHabitoPort) {
+        if (!Mockito.mockingDetails(loadHabitoPort).isMock()) {
+            return;
+        }
+        Mockito.lenient().doAnswer(invocacion -> {
+            com.renaser.os.shared.domain.Formacion formacion = invocacion.getArgument(0);
+            return loadHabitoPort.catalogoActivo().stream().filter(habito -> habito.esDeFormacion(formacion)).toList();
+        }).when(loadHabitoPort).catalogoActivoDeFormacion(Mockito.any());
     }
 
     /** Para servicios que no leen el catálogo: no excluye nada. */

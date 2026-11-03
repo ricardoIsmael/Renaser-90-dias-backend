@@ -7,11 +7,15 @@ import com.renaser.os.habits.application.ports.in.habitoadmin.CambiarActivoHabit
 import com.renaser.os.habits.application.ports.in.habitoadmin.ConsultarCatalogoAdminUseCase;
 import com.renaser.os.habits.application.ports.in.habitoadmin.ConsultarRolesElegiblesUseCase;
 import com.renaser.os.habits.domain.model.audiencia.CodigoDeRol;
+import com.renaser.os.habits.domain.model.categoria.CodigoDeCategoria;
+import com.renaser.os.habits.application.ports.in.habitoadmin.CopiarHabitoAOtraFormacionUseCase;
+import com.renaser.os.habits.application.ports.in.habitoadmin.CopiarHabitoAOtraFormacionUseCase.CopiarHabitoCommand;
 import com.renaser.os.habits.application.ports.in.habitoadmin.CrearHabitoUseCase;
 import com.renaser.os.habits.application.ports.in.habitoadmin.CrearHabitoUseCase.CrearHabitoCommand;
 import com.renaser.os.habits.application.ports.in.habitoadmin.EliminarHabitoUseCase;
 import com.renaser.os.habits.application.ports.in.habitoadmin.EliminarHabitoUseCase.EliminarHabitoCommand;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
@@ -45,18 +49,24 @@ import java.util.UUID;
 @Funcionalidad("admin.habitos")
 public class HabitoAdminController {
 
+    /** El valor de {@code formation} que pide las tres formaciones (solo lectura). */
+    static final String TODAS = "ALL";
+
     private final ConsultarCatalogoAdminUseCase consultarUseCase;
     private final CrearHabitoUseCase crearUseCase;
     private final ActualizarHabitoUseCase actualizarUseCase;
     private final CambiarActivoHabitoUseCase cambiarActivoUseCase;
     private final EliminarHabitoUseCase eliminarUseCase;
     private final ConsultarRolesElegiblesUseCase rolesUseCase;
+    private final CopiarHabitoAOtraFormacionUseCase copiarUseCase;
 
     public HabitoAdminController(ConsultarCatalogoAdminUseCase consultarUseCase, CrearHabitoUseCase crearUseCase,
                                   ActualizarHabitoUseCase actualizarUseCase,
                                   CambiarActivoHabitoUseCase cambiarActivoUseCase,
                                   EliminarHabitoUseCase eliminarUseCase,
-                                  ConsultarRolesElegiblesUseCase rolesUseCase) {
+                                  ConsultarRolesElegiblesUseCase rolesUseCase,
+                                  CopiarHabitoAOtraFormacionUseCase copiarUseCase) {
+        this.copiarUseCase = copiarUseCase;
         this.consultarUseCase = consultarUseCase;
         this.crearUseCase = crearUseCase;
         this.actualizarUseCase = actualizarUseCase;
@@ -65,12 +75,24 @@ public class HabitoAdminController {
         this.rolesUseCase = rolesUseCase;
     }
 
+    /**
+     * Spec 023: {@code formation} elige el catalogo de UNA formacion; {@code ALL} las tres (el filtro «Todas», cada hábito con la suya,
+     * solo para leer). Ausente = la Escuela, que es lo que el cliente anterior a las formaciones espera.
+     */
     @RequiresPermission(Permission.MANAGE_HABIT_CATALOG)
     @GetMapping
     public List<AdminHabitResponse> listar(@ActorAutenticado UserId actor,
-                                           @RequestParam(name = "role", required = false) String role) {
+                                           @RequestParam(name = "role", required = false) String role,
+                                           @RequestParam(name = "formation", required = false) String formation) {
         CodigoDeRol rol = role == null || role.isBlank() ? null : CodigoDeRol.of(role);
-        return consultarUseCase.listar(actor, rol).stream().map(AdminHabitResponse::from).toList();
+        return consultarUseCase.listar(actor, rol, formacionPedida(formation)).stream().map(AdminHabitResponse::from).toList();
+    }
+
+    private static Formacion formacionPedida(String formation) {
+        if (formation == null || formation.isBlank()) {
+            return Formacion.POR_DEFECTO;
+        }
+        return TODAS.equalsIgnoreCase(formation.trim()) ? null : Formacion.desde(formation);
     }
 
     /** Spec 001: los roles elegibles como audiencia, con el nombre visible del servidor. */
@@ -86,7 +108,8 @@ public class HabitoAdminController {
                                                       @RequestBody @Valid CreateHabitRequest request) {
         var habito = crearUseCase.crear(new CrearHabitoCommand(actor, request.title(),
                 request.habitType().toDomain(), request.toDetalles(), request.toAudiencia(),
-                request.defaultTriggerTime()));
+                request.defaultTriggerTime(), request.formation() == null || request.formation().isBlank() ? null
+                        : Formacion.desde(request.formation())));
         return ResponseEntity.status(HttpStatus.CREATED).body(AdminHabitResponse.from(habito));
     }
 
@@ -97,6 +120,16 @@ public class HabitoAdminController {
         var habito = actualizarUseCase.actualizar(new ActualizarHabitoCommand(actor, HabitoId.of(id),
                 request.toDetalles(), request.conservaObligatorioEnIntoxicacion(), request.toAudienciaOSinCambio()));
         return AdminHabitResponse.from(habito);
+    }
+
+    /** Spec 023: «Copiar a otra formación». La copia nace independiente del original. */
+    @RequiresPermission(Permission.MANAGE_HABIT_CATALOG)
+    @PostMapping("/{id}/copy")
+    public ResponseEntity<AdminHabitResponse> copiar(@ActorAutenticado UserId actor, @PathVariable UUID id,
+                                                       @RequestBody @Valid CopyHabitRequest request) {
+        var copia = copiarUseCase.copiar(new CopiarHabitoCommand(actor, HabitoId.of(id), Formacion.desde(request.formation()),
+                CodigoDeCategoria.aClave(request.category())));
+        return ResponseEntity.status(HttpStatus.CREATED).body(AdminHabitResponse.from(copia));
     }
 
     @RequiresPermission(Permission.MANAGE_HABIT_CATALOG)

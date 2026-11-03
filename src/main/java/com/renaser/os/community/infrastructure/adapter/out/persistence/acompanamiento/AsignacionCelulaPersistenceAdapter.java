@@ -33,6 +33,18 @@ class AsignacionCelulaPersistenceAdapter implements LoadAsignacionesPort, SaveAs
     }
 
     @Override
+    public java.util.Map<CelulaId, List<AsignacionCelula>> porCelulas(java.util.Collection<CelulaId> celulaIds) {
+        java.util.Map<CelulaId, List<AsignacionCelula>> resultado = new java.util.LinkedHashMap<>();
+        celulaIds.forEach(id -> resultado.put(id, new java.util.ArrayList<>()));
+        if (celulaIds.isEmpty()) {
+            return resultado;
+        }
+        repository.findByCelulaIdInOrderByInicioDesc(celulaIds.stream().map(CelulaId::value).toList())
+                .forEach(fila -> resultado.get(CelulaId.of(fila.getCelulaId())).add(mapper.toDomain(fila)));
+        return resultado;
+    }
+
+    @Override
     public Optional<AsignacionCelula> porClaveOperacion(String claveOperacion) {
         return repository.findFirstByClaveOperacion(claveOperacion).map(mapper::toDomain);
     }

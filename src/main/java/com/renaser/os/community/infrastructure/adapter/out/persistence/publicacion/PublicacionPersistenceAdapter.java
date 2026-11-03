@@ -8,7 +8,9 @@ import com.renaser.os.community.application.ports.out.publicacion.SavePublicacio
 import com.renaser.os.community.domain.model.publicacion.MediaPublicacion;
 import com.renaser.os.community.domain.model.publicacion.Publicacion;
 import com.renaser.os.community.domain.model.publicacion.PublicacionId;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.infrastructure.persistence.FiltroDeFormacionSql;
 import jakarta.persistence.EntityManager;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -61,33 +63,35 @@ class PublicacionPersistenceAdapter implements LoadPublicacionPort, SavePublicac
     }
 
     @Override
-    public List<Publicacion> feed(Instant cursor, int limite, String categoriaClave) {
+    public List<Publicacion> feed(Instant cursor, int limite, String categoriaClave, AlcanceDeFormacion alcance) {
         Pageable pageable = paginaDe(limite);
+        List<String> formaciones = FiltroDeFormacionSql.codigos(alcance);
         List<PublicacionJpaEntity> filas;
         if (cursor == null && categoriaClave == null) {
-            filas = repository.feedSinCursorSinCategoria(pageable);
+            filas = repository.feedSinCursorSinCategoria(formaciones, pageable);
         } else if (cursor == null) {
-            filas = repository.feedSinCursorConCategoria(categoriaClave, pageable);
+            filas = repository.feedSinCursorConCategoria(formaciones, categoriaClave, pageable);
         } else if (categoriaClave == null) {
-            filas = repository.feedConCursorSinCategoria(cursor, pageable);
+            filas = repository.feedConCursorSinCategoria(formaciones, cursor, pageable);
         } else {
-            filas = repository.feedConCursorConCategoria(cursor, categoriaClave, pageable);
+            filas = repository.feedConCursorConCategoria(formaciones, cursor, categoriaClave, pageable);
         }
         return hidratarConMedia(filas);
     }
 
     @Override
-    public List<Publicacion> feedOculto(Instant cursor, int limite) {
+    public List<Publicacion> feedOculto(Instant cursor, int limite, AlcanceDeFormacion alcance) {
         Pageable pageable = paginaDe(limite);
+        List<String> formaciones = FiltroDeFormacionSql.codigos(alcance);
         List<PublicacionJpaEntity> filas = cursor == null
-                ? repository.feedOcultoSinCursor(pageable)
-                : repository.feedOcultoConCursor(cursor, pageable);
+                ? repository.feedOcultoSinCursor(formaciones, pageable)
+                : repository.feedOcultoConCursor(formaciones, cursor, pageable);
         return hidratarConMedia(filas);
     }
 
     @Override
-    public int contarPorAutor(UserId autorId) {
-        return (int) repository.countByAutorId(autorId.value());
+    public int contarPorAutor(UserId autorId, AlcanceDeFormacion alcance) {
+        return (int) repository.countByAutorIdAndFormacionIn(autorId.value(), FiltroDeFormacionSql.codigos(alcance));
     }
 
     @Override
@@ -103,8 +107,8 @@ class PublicacionPersistenceAdapter implements LoadPublicacionPort, SavePublicac
     }
 
     @Override
-    public Optional<Publicacion> ultimaVisible() {
-        return repository.findFirstByOcultaFalseOrderByCreadoEnDesc()
+    public Optional<Publicacion> ultimaVisible(AlcanceDeFormacion alcance) {
+        return repository.findFirstByOcultaFalseAndFormacionInOrderByCreadoEnDesc(FiltroDeFormacionSql.codigos(alcance))
                 .map(e -> mapper.toDomain(e, mediaDe(e.getId())));
     }
 

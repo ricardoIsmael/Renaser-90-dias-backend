@@ -12,7 +12,11 @@ import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.conversacion.CursorDeSoportes;
 import com.renaser.os.chat.domain.model.mensaje.Mensaje;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.NotAuthorizedException;
+import com.renaser.os.shared.domain.TipoDeComunidad;
+import com.renaser.os.shared.infrastructure.persistence.FiltroDeFormacionSql;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.BusquedaDeUsuariosFinder;
 import com.renaser.os.users.api.UserStatus;
@@ -49,11 +53,14 @@ public class SoportesPaginadosService implements ListarSoportesUseCase {
     private final LoadMensajePort mensajes;
     private final ContarNoLeidosPort noLeidos;
     private final NombresDeLosChatsService nombres;
+    /** Spec 024: «Soporte · N» lista los soportes de la formación elegida (o de todas) cuyo tipo está prendido. */
+    private final VisibilidadPorFormacion visibilidad;
 
     public SoportesPaginadosService(UserSummaryFinder usuarios, BusquedaDeUsuariosFinder busqueda,
                                     SoportesPorActividadPort soportes, LoadConversacionPort conversaciones,
                                     LoadMensajePort mensajes, ContarNoLeidosPort noLeidos,
-                                    NombresDeLosChatsService nombres) {
+                                    NombresDeLosChatsService nombres, VisibilidadPorFormacion visibilidad) {
+        this.visibilidad = visibilidad;
         this.usuarios = usuarios;
         this.busqueda = busqueda;
         this.soportes = soportes;
@@ -72,11 +79,12 @@ public class SoportesPaginadosService implements ListarSoportesUseCase {
             return new PaginaDeSoportes(List.of(), null, ninguno, ninguno);
         }
         int tamano = Math.clamp(pedido.tamano() <= 0 ? TAMANO_POR_DEFECTO : pedido.tamano(), 1, TAMANO_MAXIMO);
+        List<String> formaciones = formacionesConSoporte(pedido);
         List<SoporteConActividad> filas = soportes.pagina(new SoportesPorActividadPort.PedidoDeSoportes(
-                pedido.actorId(), claves, pedido.desde(), tamano + 1));
+                pedido.actorId(), claves, pedido.desde(), tamano + 1, formaciones));
         boolean hayMas = filas.size() > tamano;
         List<SoporteConActividad> deEstaPagina = hayMas ? filas.subList(0, tamano) : filas;
-        ConteoDeSoportes conteo = pedido.desde() == null ? soportes.contar(pedido.actorId(), claves) : null;
+        ConteoDeSoportes conteo = pedido.desde() == null ? soportes.contar(pedido.actorId(), claves, formaciones) : null;
         return new PaginaDeSoportes(resumenes(pedido.actorId(), deEstaPagina),
                 hayMas ? cursorDespuesDe(deEstaPagina.getLast()) : null,
                 conteo == null ? null : conteo.total(), conteo == null ? null : conteo.conNoLeidos());
@@ -87,8 +95,19 @@ public class SoportesPaginadosService implements ListarSoportesUseCase {
         if (texto == null || texto.isBlank()) {
             return null;
         }
-        return busqueda.coincidenCon(texto).stream().map(Conversacion::claveSoporteDe)
+        return busqueda.coincidenCon(texto).stream().map(aprendiz -> aprendiz.value().toString())
                 .collect(Collectors.toUnmodifiableSet());
+    }
+
+    /**
+     * Los códigos de las formaciones cuyo soporte se lista: las que quien atiende ve (o la que eligió) y que tienen el soporte prendido
+     * (FR-028, FR-035). Administración las ve todas; si pide una y está apagada, la lista sale vacía.
+     */
+    private List<String> formacionesConSoporte(PedidoDeSoportes pedido) {
+        List<Formacion> prendidas = visibilidad.alcanceDe(pedido.actorId(), pedido.formacion()).formaciones().stream()
+                .filter(f -> visibilidad.tipoPrendido(f, TipoDeComunidad.SOPORTE))
+                .toList();
+        return FiltroDeFormacionSql.codigos(AlcanceDeFormacion.de(prendidas));
     }
 
     /** Las filas de la página en su orden, con sus datos en lote (como la lista completa). */
@@ -101,7 +120,7 @@ public class SoportesPaginadosService implements ListarSoportesUseCase {
         Map<ConversacionId, String> nombresDeLaPagina = nombres.nombresDe(porId.values());
         return ids.stream().map(porId::get).filter(Objects::nonNull)
                 .map(c -> new ConversacionResumen(c, ultimos.get(c.id()), sinLeer.getOrDefault(c.id(), 0L),
-                        null, null, null, null, nombresDeLaPagina.get(c.id())))
+                        null, null, null, null, nombresDeLaPagina.get(c.id()), null))
                 .toList();
     }
 

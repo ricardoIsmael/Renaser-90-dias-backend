@@ -343,3 +343,7 @@ Ambos puntos describen el mismo cambio real (adopción de `UserSummaryFinder` en
 ### Resumen
 
 Sin hallazgos de seguridad — los 3 controllers ya usan `@ActorAutenticado`, sin rastro del patrón `X-Actor-Id`. Arquitectura limpia: `domain/` puro, controllers tontos, Lombok/JPA acotados a persistencia, sin nombres basurero, tamaños dentro de los techos, sin logging de PII. Un hallazgo estructural documentado sin ser bloqueante (`domain → api` en `AjustePuntos`, decisión ya tomada y replicada en `rocks`), un hueco menor sin explotar (`UnsupportedOperationException` sin handler, hoy inalcanzable por HTTP) y dos secciones de este mismo documento (D-P3 en §4, la línea de N+1 en §8) desactualizadas contra una mejora real ya aplicada en `RankingPersistenceAdapter`/`ActorAdministrativoPersistenceAdapter` (migración a `users.api.UserSummaryFinder` en lote).
+
+## Ranking por formación (spec 024, D-301, 2026-10-31)
+
+Spec 024 (D-301, 2026-10-31): contrato completo en `specs/024-comunidad-por-formacion/contracts/comunidad-api.md`. `ranking_aprendices.formacion` (V139) se guarda en el corte porque es historia. `RankingService.generar` calcula los puntajes en lote (D-43) y ordena y numera por formación; `consultar` renumera dentro de cada formación; el caché `ranking` lleva el alcance en la clave y se vacía entero al regenerar. `RankingGeneralFinder.alCorte(hasta, formacion)` alimenta el podio de cada formación. Kilómetros y Gimnasio salen siempre hasta que la spec 023 decida por los hábitos de cada formación.

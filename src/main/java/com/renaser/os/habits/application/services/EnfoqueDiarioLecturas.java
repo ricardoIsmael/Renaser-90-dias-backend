@@ -47,8 +47,10 @@ class EnfoqueDiarioLecturas {
         return ZoneId.of(progreso.timezone());
     }
 
-    Optional<Habito> habitoPorClave(String claveSistema) {
-        return loadHabitoPort.porClaveSistema(claveSistema);
+    /** Spec 023: el habito con esa clave en la formacion de la persona (la clave es unica por formacion). */
+    Optional<Habito> habitoPorClave(UserId participanteId, String claveSistema) {
+        return progresoPort.deParticipante(participanteId)
+                .flatMap(progreso -> loadHabitoPort.porClaveSistema(claveSistema, progreso.formacion()));
     }
 
     boolean tieneSesion(RegistroHabitoId registroId) {

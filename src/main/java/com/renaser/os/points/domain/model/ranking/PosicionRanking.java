@@ -1,5 +1,6 @@
 package com.renaser.os.points.domain.model.ranking;
 
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 
 import java.math.BigDecimal;
@@ -7,9 +8,15 @@ import java.time.LocalDate;
 import java.util.Objects;
 
 public record PosicionRanking(LocalDate fecha, TipoRanking tipo, UserId participanteId, int posicion,
-                               BigDecimal puntaje) {
+                               BigDecimal puntaje, Formacion formacion) {
+
+    /** Sin formación: la Escuela, la de todo lo que existía antes de las formaciones (spec 024). */
+    public PosicionRanking(LocalDate fecha, TipoRanking tipo, UserId participanteId, int posicion, BigDecimal puntaje) {
+        this(fecha, tipo, participanteId, posicion, puntaje, Formacion.POR_DEFECTO);
+    }
 
     public PosicionRanking {
+        Objects.requireNonNull(formacion, "formacion es obligatoria");
         Objects.requireNonNull(fecha, "fecha es obligatoria");
         Objects.requireNonNull(tipo, "tipo es obligatorio");
         Objects.requireNonNull(participanteId, "participanteId es obligatorio");

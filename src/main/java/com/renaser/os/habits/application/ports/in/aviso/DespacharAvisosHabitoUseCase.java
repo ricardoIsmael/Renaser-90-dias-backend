@@ -22,4 +22,13 @@ import com.renaser.os.shared.domain.UserId;
 public interface DespacharAvisosHabitoUseCase {
 
     int despacharDe(UserId participanteId);
+
+    /**
+     * De los {@code inscritos} dados, los unicos a los que vale la pena abrirles {@link #despacharDe}: los que tienen algun registro sin terminar en la
+     * ventana de fechas que puede ser «hoy» para alguien (ayer, hoy y manana en UTC: la zona de cada persona la corre hasta un dia para cada lado).
+     * Auditoria de consultas del 2026-11-02 (H-05): el barrido de cada cinco minutos visitaba a TODOS los inscritos, uno por transaccion y con varias
+     * consultas cada uno (hasta 2,6 millones al dia); con esto visita a quien tiene algo vivo. {@code despacharDe} sigue decidiendo igual que antes
+     * (con la fecha exacta en la zona de la persona): este filtro solo descarta a quien seguro no tiene nada.
+     */
+    java.util.List<UserId> conAlgoPorAvisar(java.util.Collection<UserId> inscritos);
 }

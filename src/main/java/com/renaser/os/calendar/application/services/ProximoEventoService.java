@@ -11,6 +11,7 @@ import com.renaser.os.calendar.domain.model.evento.Excepcion;
 import com.renaser.os.calendar.domain.model.evento.ExpansorOcurrencias;
 import com.renaser.os.calendar.domain.model.evento.Ocurrencia;
 import com.renaser.os.calendar.domain.model.evento.ResolverAudiencia.VisorContexto;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
@@ -53,7 +54,9 @@ class ProximoEventoService implements ProximoEventoFinder {
         Instant ahora = clock.now();
         Instant hasta = ahora.plus(ListarEventosParaVisorUseCase.RANGO_MAXIMO_DIAS, ChronoUnit.DAYS);
 
+        AlcanceDeFormacion alcance = accesoEventoService.alcanceDe(participanteId, null);
         List<Evento> visibles = loadEventoPort.candidatosParaVisor(ahora, hasta).stream()
+                .filter(e -> alcance.incluye(e.formacion()))
                 .filter(e -> accesoEventoService.puedeAcceder(participanteId, progreso, visor, e))
                 .toList();
         if (visibles.isEmpty()) {

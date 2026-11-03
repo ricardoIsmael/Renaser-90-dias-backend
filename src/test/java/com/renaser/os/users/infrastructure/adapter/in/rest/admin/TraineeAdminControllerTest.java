@@ -61,6 +61,8 @@ class TraineeAdminControllerTest {
     private GetTraineeDetailUseCase getTraineeDetailUseCase;
     @MockitoBean
     private SetTraineeProgramDayUseCase setTraineeProgramDayUseCase;
+    @MockitoBean
+    private com.renaser.os.users.application.ports.in.accountrequest.ConsultarAceptacionDeLaPersonaUseCase aceptacionDeLaPersona;
 
     private static TraineeDetail detalle(UserId traineeId, AjusteDiaPrograma ultimoAjuste) {
         User user = User.rehydrate(traineeId, new Email(traineeId + "@renaser.com"), UserRole.TRAINEE,
@@ -137,22 +139,22 @@ class TraineeAdminControllerTest {
         mockMvc.perform(put("/api/v1/admin/trainees/{id}/program-day", UUID.randomUUID())
                         .header("X-Actor-Id", UserId.of(UUID.randomUUID()).toString())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"programDay\":91}"))
+                        .content("{\"programDay\":365}"))
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(setTraineeProgramDayUseCase);
     }
 
-    /** D-194: 0 y 90 ya no se fijan por esta via. Contra el codigo viejo (0..90) daban 204. */
+    /** D-194: el 0 ya no se fija por esta via (y el último día de cada programa tampoco: lo aplica el dominio con la duración de la persona). */
     @Test
-    void fijarDiaCeroONoventaDevuelve400ConMensajeClaroYNoLlegaAlCasoDeUso() throws Exception {
-        for (int dia : new int[] {0, 90}) {
+    void fijarDiaCeroOLoQueNingunProgramaAdmiteDevuelve400ConMensajeClaroYNoLlegaAlCasoDeUso() throws Exception {
+        for (int dia : new int[] {0, 365}) {
             mockMvc.perform(put("/api/v1/admin/trainees/{id}/program-day", UUID.randomUUID())
                             .header("X-Actor-Id", UserId.of(UUID.randomUUID()).toString())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"programDay\":" + dia + "}"))
                     .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("entre 1 y 89")));
+                    .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("entre 1 y 364")));
         }
 
         verifyNoInteractions(setTraineeProgramDayUseCase);
@@ -214,7 +216,7 @@ class TraineeAdminControllerTest {
         UserId traineeId = UserId.of(UUID.randomUUID());
         UserId admin = UserId.of(UUID.randomUUID());
         var ajuste = AjusteDiaPrograma.rehydrate(UUID.randomUUID(), traineeId, 40, 34, 0, 6, "Viaje",
-                admin, Instant.parse("2026-09-03T15:00:00Z"));
+                admin, Instant.parse("2026-09-03T15:00:00Z"), null, null);
         when(getTraineeDetailUseCase.obtener(any())).thenReturn(detalle(traineeId, ajuste));
 
         mockMvc.perform(get("/api/v1/admin/trainees/{id}", traineeId.value())
@@ -226,6 +228,46 @@ class TraineeAdminControllerTest {
                 .andExpect(jsonPath("$.lastDayAdjustment.adjustmentDays").value(6))
                 .andExpect(jsonPath("$.lastDayAdjustment.motivo").value("Viaje"))
                 .andExpect(jsonPath("$.lastDayAdjustment.adjustedBy").value(admin.toString()));
+    }
+
+    /** Spec 025, US4: la ficha dice lo mismo que la lista de «Aceptadas» —formación, duración, rol (y el personalizado con su nombre), diagnóstico— y quién y cuándo. */
+    @Test
+    void detalleDiceLoQueSeDecidioAlAceptar() throws Exception {
+        UserId traineeId = UserId.of(UUID.randomUUID());
+        UserId admin = UserId.of(UUID.randomUUID());
+        UUID rolPersonalizado = UUID.randomUUID();
+        when(getTraineeDetailUseCase.obtener(any())).thenReturn(detalle(traineeId, null));
+        when(aceptacionDeLaPersona.de(any(), any())).thenReturn(java.util.Optional.of(
+                new com.renaser.os.users.application.ports.in.accountrequest.ConsultarAceptacionDeLaPersonaUseCase.AceptacionDeLaPersona(
+                        new com.renaser.os.users.domain.model.accountrequest.EleccionDeIngreso(UserRole.TRAINEE,
+                                java.util.Set.of(com.renaser.os.shared.domain.Formacion.DIPLOMADO), 365, true, rolPersonalizado, "Aprendiz becado"),
+                        "Ana Quispe", Instant.parse("2026-10-31T15:00:00Z"))));
+
+        mockMvc.perform(get("/api/v1/admin/trainees/{id}", traineeId.value())
+                        .header("X-Actor-Id", admin.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.acceptance.formations[0]").value("DIPLOMADO"))
+                .andExpect(jsonPath("$.acceptance.durationDays").value(365))
+                .andExpect(jsonPath("$.acceptance.role").value("TRAINEE"))
+                .andExpect(jsonPath("$.acceptance.customRoleId").value(rolPersonalizado.toString()))
+                .andExpect(jsonPath("$.acceptance.customRoleName").value("Aprendiz becado"))
+                .andExpect(jsonPath("$.acceptance.withDiagnosis").value(true))
+                .andExpect(jsonPath("$.acceptedByName").value("Ana Quispe"))
+                .andExpect(jsonPath("$.acceptedAt").exists());
+    }
+
+    /** Una cuenta que no entró por una solicitud (la invitó Administración) no trae el campo. */
+    @Test
+    void detalleSinSolicitudNoTraeLaAceptacion() throws Exception {
+        UserId traineeId = UserId.of(UUID.randomUUID());
+        when(getTraineeDetailUseCase.obtener(any())).thenReturn(detalle(traineeId, null));
+        when(aceptacionDeLaPersona.de(any(), any())).thenReturn(java.util.Optional.empty());
+
+        mockMvc.perform(get("/api/v1/admin/trainees/{id}", traineeId.value())
+                        .header("X-Actor-Id", UserId.of(UUID.randomUUID()).toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.acceptance").doesNotExist())
+                .andExpect(jsonPath("$.acceptedByName").doesNotExist());
     }
 
     /** La enorme mayoria de los aprendices nunca tuvo un ajuste: el campo va nulo, no vacio. */
@@ -337,6 +379,24 @@ class TraineeAdminControllerTest {
         verify(listTraineesUseCase, org.mockito.Mockito.times(2)).listar(captor.capture());
         assertThat(captor.getAllValues()).extracting(ListTraineesUseCase.ListTraineesCommand::rol)
                 .containsExactly(UserRole.TRAINEE, null);
+    }
+
+    @Test
+    @DisplayName("E2E J2-1: activeOnly=true llega al caso de uso; sin él, ninguno (todas las cuentas, las solicitudes pendientes incluidas)")
+    void elFiltroDeSoloActivasLlegaAlCasoDeUso() throws Exception {
+        when(listTraineesUseCase.listar(any())).thenReturn(
+                new ListTraineesUseCase.PaginaTrainees(java.util.List.of(), 0, 0, 20));
+        String actor = UserId.of(UUID.randomUUID()).toString();
+
+        mockMvc.perform(get("/api/v1/admin/trainees").param("activeOnly", "true").header("X-Actor-Id", actor))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/admin/trainees").header("X-Actor-Id", actor)).andExpect(status().isOk());
+
+        ArgumentCaptor<ListTraineesUseCase.ListTraineesCommand> captor =
+                ArgumentCaptor.forClass(ListTraineesUseCase.ListTraineesCommand.class);
+        verify(listTraineesUseCase, org.mockito.Mockito.times(2)).listar(captor.capture());
+        assertThat(captor.getAllValues()).extracting(ListTraineesUseCase.ListTraineesCommand::soloActivas)
+                .containsExactly(true, false);
     }
 
     @Test

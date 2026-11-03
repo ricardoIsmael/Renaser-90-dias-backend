@@ -6,6 +6,7 @@ import com.renaser.os.points.api.RankingGeneralFinder;
 import com.renaser.os.points.application.ports.out.ranking.LoadRankingCandidatosPort;
 import com.renaser.os.points.application.ports.out.ranking.LoadRankingCandidatosPort.CandidatoRanking;
 import com.renaser.os.points.domain.model.ranking.PuntajeGeneral;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.CuentasCerradasFinder;
 import org.springframework.stereotype.Service;
@@ -46,8 +47,12 @@ public class RankingGeneralAlCorteService implements RankingGeneralFinder {
     }
 
     @Override
-    public List<PuestoEnElRankingGeneral> alCorte(LocalDate hasta) {
-        List<CandidatoRanking> padron = candidatos.aprendicesActivosConPuntaje();
+    public List<PuestoEnElRankingGeneral> alCorte(LocalDate hasta, Formacion formacion) {
+        return alCorte(hasta, candidatos.aprendicesActivosConPuntaje().stream()
+                .filter(c -> c.formacion() == formacion).toList());
+    }
+
+    private List<PuestoEnElRankingGeneral> alCorte(LocalDate hasta, List<CandidatoRanking> padron) {
         if (padron.isEmpty()) {
             return List.of();
         }

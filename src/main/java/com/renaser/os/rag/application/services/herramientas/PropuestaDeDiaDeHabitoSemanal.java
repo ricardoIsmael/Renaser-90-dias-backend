@@ -116,7 +116,7 @@ public class PropuestaDeDiaDeHabitoSemanal implements HerramientaAgente {
 
     private static Optional<String> impedimento(HabitoSemanal habito, LocalDate fecha) {
         if (habito.diasElegibles().isEmpty()) {
-            return Optional.of("Todavia no puede elegir dia: eso se habilita desde el Dia 1 del programa.");
+            return Optional.of("Todavia no puede elegir dia: eso se habilita cuando empiece su programa (al dia siguiente de activarlo).");
         }
         if (!habito.diasElegibles().contains(fecha)) {
             return Optional.of("Ese dia no se puede elegir: solo dias de esta semana que no hayan pasado ("

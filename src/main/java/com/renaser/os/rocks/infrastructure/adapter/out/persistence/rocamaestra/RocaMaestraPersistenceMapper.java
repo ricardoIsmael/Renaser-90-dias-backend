@@ -2,6 +2,7 @@ package com.renaser.os.rocks.infrastructure.adapter.out.persistence.rocamaestra;
 
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
 import com.renaser.os.rocks.domain.model.rocamaestra.MetaCuantitativa;
+import com.renaser.os.rocks.domain.model.rocamaestra.OrigenDelObjetivo;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestra;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestraId;
 import com.renaser.os.shared.domain.UserId;
@@ -12,7 +13,8 @@ class RocaMaestraPersistenceMapper {
 
     RocaMaestra toDomain(RocaMaestraJpaEntity e) {
         return RocaMaestra.rehydrate(RocaMaestraId.of(e.getId()), UserId.of(e.getParticipanteId()),
-                toDomainEje(e.getEje()), e.getObjetivo(), toDomainMeta(e), e.getCreadoEn(), e.getActualizadoEn());
+                toDomainEje(e.getEje()), e.getObjetivo(), toDomainMeta(e), e.getCreadoEn(), e.getActualizadoEn(),
+                OrigenDelObjetivo.valueOf(e.getOrigen()), e.getConfirmadaEn());
     }
 
     RocaMaestraJpaEntity toEntity(RocaMaestra r) {
@@ -22,7 +24,7 @@ class RocaMaestraPersistenceMapper {
                 meta == null ? null : meta.avance(),
                 meta == null ? null : meta.unidad(),
                 meta == null ? null : meta.lineaBase(),
-                r.creadoEn(), r.actualizadoEn());
+                r.creadoEn(), r.actualizadoEn(), r.origen().name(), r.confirmadaEn());
     }
 
     /**

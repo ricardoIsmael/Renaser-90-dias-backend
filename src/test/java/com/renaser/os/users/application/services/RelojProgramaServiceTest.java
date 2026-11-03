@@ -92,6 +92,33 @@ class RelojProgramaServiceTest {
         verify(saveParticipacionProgramaPort).save(participacion);
     }
 
+    /**
+     * Spec 036 (D-309): sin fecha en el pedido el programa empieza mañana en la zona de la persona, y con la fecha
+     * que ya no es mañana (la pantalla quedó abierta pasada la medianoche) el dominio rechaza y no se guarda nada.
+     */
+    @Test
+    void activarProgramaSinFechaEmpiezaManianaYConUnaFechaVencidaSeRechazaSinGuardar() {
+        FixedClock pasadaLaMedianocheEnLima = FixedClock.at(Instant.parse("2026-11-03T05:01:00Z"));
+        RelojProgramaService enLaMadrugada = new RelojProgramaService(new RequireActiveUserGuard(loadUserPort),
+                loadParticipacionProgramaPort, saveParticipacionProgramaPort, listarParticipantesConProgramaActivoPort,
+                guardarAvanceDelRelojPort, pasadaLaMedianocheEnLima, bloquearActivacionProgramaPort);
+        UserId actorId = UserId.of(UUID.randomUUID());
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(usuarioActivo(actorId)));
+        when(loadParticipacionProgramaPort.byParticipanteId(actorId)).thenReturn(Optional.of(
+                ParticipacionPrograma.inscribirTraineeAprobado(actorId, pasadaLaMedianocheEnLima)));
+
+        assertThatThrownBy(() -> enLaMadrugada.activarPrograma(
+                new ActivateProgramCommand(actorId, java.time.LocalDate.parse("2026-11-03"))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("2026-11-04");
+        verify(saveParticipacionProgramaPort, never()).save(any());
+
+        when(saveParticipacionProgramaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        ParticipacionPrograma activada = enLaMadrugada.activarPrograma(new ActivateProgramCommand(actorId, null));
+
+        assertThat(activada.fechaInicio()).isEqualTo(java.time.LocalDate.parse("2026-11-04"));
+    }
+
     @Test
     void activarProgramaSinParticipacionPreviaDevuelveNoEncontrado() {
         UserId actorId = UserId.of(UUID.randomUUID());
@@ -114,13 +141,13 @@ class RelojProgramaServiceTest {
     }
 
     /**
-     * D-260: el personal con la fila sin activar elige su Día 1 por este mismo caso de uso, con la
-     * misma regla que el aprendiz. Reloj en la madrugada UTC (regla 02): 03:00 UTC del 7 = 22:00 del 6
-     * en Lima, así que «mañana» es el 7 de Lima y no el 8 del servidor.
+     * D-260: el personal con la fila sin activar activa su programa por este mismo caso de uso, con la
+     * misma regla que el aprendiz (spec 036: empieza mañana). Reloj en la madrugada UTC (regla 02): 03:00 UTC del 7 =
+     * 22:00 del 6 en Lima, así que «mañana» es el 7 de Lima y no el 8 del servidor.
      */
-    @ParameterizedTest(name = "{0} con la fila sin activar elige su Día 1")
+    @ParameterizedTest(name = "{0} con la fila sin activar empieza mañana")
     @EnumSource(value = UserRole.class, names = {"MENTOR", "MENTOR_LEAD", "ADMIN", "ALCHEMIST"})
-    void elPersonalConLaFilaSinActivarEligeSuDiaUnoEnLaMadrugadaUtc(UserRole rol) {
+    void elPersonalConLaFilaSinActivarEmpiezaManianaEnLaMadrugadaUtc(UserRole rol) {
         FixedClock madrugadaUtc = FixedClock.at(Instant.parse("2026-10-07T03:00:00Z"));
         RelojProgramaService enLaMadrugada = new RelojProgramaService(new RequireActiveUserGuard(loadUserPort),
                 loadParticipacionProgramaPort, saveParticipacionProgramaPort, listarParticipantesConProgramaActivoPort,
@@ -136,20 +163,20 @@ class RelojProgramaServiceTest {
         ParticipacionPrograma activada = enLaMadrugada.activarPrograma(
                 new ActivateProgramCommand(actorId, estado.fechasValidas().get(0)));
 
-        assertThat(estado.fechasValidas()).first().isEqualTo(java.time.LocalDate.parse("2026-10-07"));
+        assertThat(estado.fechasValidas()).containsExactly(java.time.LocalDate.parse("2026-10-07"));
         assertThat(activada.estaActivado()).isTrue();
         assertThat(activada.fechaInicio()).isEqualTo(java.time.LocalDate.parse("2026-10-07"));
         assertThat(activada.diasAjuste()).isZero();
     }
 
     /**
-     * D-261 (decisión del dueño del 2026-10-07: «que elija el día como los demás»): el personal SIN
-     * fila ve las mismas fechas que el aprendiz y, al elegir, se le crea la fila ya activada con esa
-     * fecha. Consultar no guarda nada. Madrugada UTC (regla 02): las fechas se cuentan desde el 6 de Lima.
+     * D-261 (decisión del dueño del 2026-10-07): el personal SIN fila ve la misma fecha que el aprendiz
+     * y, al activar, se le crea la fila ya activada con inicio mañana (spec 036: sin elegir, con o sin fecha en el
+     * pedido). Consultar no guarda nada. Madrugada UTC (regla 02): «mañana» se cuenta desde el 6 de Lima.
      */
-    @ParameterizedTest(name = "{0} sin fila elige su Día 1 y se le crea la fila con esa fecha")
+    @ParameterizedTest(name = "{0} sin fila empieza mañana y se le crea la fila")
     @EnumSource(value = UserRole.class, names = {"MENTOR", "MENTOR_LEAD", "ADMIN", "ALCHEMIST"})
-    void elPersonalSinFilaEligeSuDiaUnoYSeLeCreaLaFila(UserRole rol) {
+    void elPersonalSinFilaEmpiezaManianaYSeLeCreaLaFila(UserRole rol) {
         FixedClock madrugadaUtc = FixedClock.at(Instant.parse("2026-10-07T03:00:00Z"));
         RelojProgramaService enLaMadrugada = new RelojProgramaService(new RequireActiveUserGuard(loadUserPort),
                 loadParticipacionProgramaPort, saveParticipacionProgramaPort, listarParticipantesConProgramaActivoPort,
@@ -163,14 +190,13 @@ class RelojProgramaServiceTest {
         var estado = enLaMadrugada.consultarEstado(new ConsultarActivacionProgramaQuery(actorId));
         verify(saveParticipacionProgramaPort, never()).save(any());
         ParticipacionPrograma creada = enLaMadrugada.activarPrograma(
-                new ActivateProgramCommand(actorId, estado.fechasValidas().get(1)));
+                new ActivateProgramCommand(actorId, null));
 
         assertThat(estado.activado()).isFalse();
-        assertThat(estado.fechasValidas()).containsExactly(java.time.LocalDate.parse("2026-10-07"),
-                java.time.LocalDate.parse("2026-10-08"), java.time.LocalDate.parse("2026-10-09"));
+        assertThat(estado.fechasValidas()).containsExactly(java.time.LocalDate.parse("2026-10-07"));
         assertThat(creada.participanteId()).isEqualTo(actorId);
         assertThat(creada.estaActivado()).isTrue();
-        assertThat(creada.fechaInicio()).isEqualTo(java.time.LocalDate.parse("2026-10-08"));
+        assertThat(creada.fechaInicio()).isEqualTo(java.time.LocalDate.parse("2026-10-07"));
         assertThat(creada.diasAjuste()).isZero();
         assertThat(creada.diaPrograma()).isZero();
         verify(saveParticipacionProgramaPort).save(creada);
@@ -218,7 +244,7 @@ class RelojProgramaServiceTest {
     // ─── consultarEstado ────────────────────────────────────────────────────
 
     @Test
-    void consultarEstadoDevuelveLasTresFechasCuandoNoEstaActivado() {
+    void consultarEstadoDevuelveSoloManianaCuandoNoEstaActivado() {
         UserId actorId = UserId.of(UUID.randomUUID());
         when(loadUserPort.byId(actorId)).thenReturn(Optional.of(usuarioActivo(actorId)));
         ParticipacionPrograma pausada = ParticipacionPrograma.inscribirTraineeAprobado(actorId, CLOCK);
@@ -227,8 +253,7 @@ class RelojProgramaServiceTest {
         var estado = service.consultarEstado(new ConsultarActivacionProgramaQuery(actorId));
 
         assertThat(estado.activado()).isFalse();
-        assertThat(estado.fechasValidas()).hasSize(3).contains(CLOCK.today().plusDays(1))
-                .doesNotContain(CLOCK.today());
+        assertThat(estado.fechasValidas()).containsExactly(CLOCK.today().plusDays(1));
     }
 
     @Test
@@ -245,15 +270,15 @@ class RelojProgramaServiceTest {
     }
 
     /**
-     * D-84: Plan necesita distinguir "todavia no elegiste" de "ya elegiste, arrancas el X".
+     * D-84: Plan necesita distinguir "todavia no empezaste" de "ya activaste, arrancas el X".
      * Hasta ahora las dos situaciones devolvian lo mismo y en pantalla se veian igual: un
      * plan vacio sin explicacion.
      */
     @Test
-    void consultarEstadoActivadoDevuelveLaFechaDeInicioElegida() {
+    void consultarEstadoActivadoDevuelveLaFechaDeInicio() {
         UserId actorId = UserId.of(UUID.randomUUID());
         var participacion = ParticipacionPrograma.inscribirTraineeAprobado(actorId, CLOCK);
-        participacion.activarPrograma(CLOCK.today().plusDays(2), CLOCK);
+        participacion.activarPrograma(null, CLOCK);
         when(loadUserPort.byId(actorId)).thenReturn(Optional.of(usuarioActivo(actorId)));
         when(loadParticipacionProgramaPort.byParticipanteId(actorId)).thenReturn(Optional.of(participacion));
 
@@ -261,7 +286,7 @@ class RelojProgramaServiceTest {
 
         assertThat(estado.activado()).isTrue();
         assertThat(estado.fechasValidas()).isEmpty();
-        assertThat(estado.fechaInicio()).isEqualTo(CLOCK.today().plusDays(2));
+        assertThat(estado.fechaInicio()).isEqualTo(CLOCK.today().plusDays(1));
     }
 
     @Test
@@ -275,7 +300,7 @@ class RelojProgramaServiceTest {
 
         assertThat(estado.activado()).isFalse();
         assertThat(estado.fechaInicio()).isNull();
-        assertThat(estado.fechasValidas()).hasSize(3);
+        assertThat(estado.fechasValidas()).containsExactly(CLOCK.today().plusDays(1));
     }
 
     // ─── avanzarParticipantesActivos (cron nocturno) ───────────────────────

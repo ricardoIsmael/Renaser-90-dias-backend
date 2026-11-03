@@ -58,7 +58,7 @@ class ProponerPlanDeLaSemanaHerramientaTest {
                    "contingencia":"Llamar en la hora de almuerzo"},
                   {"eje":"CUERPO","titulo":"Bajar 1 kg","obstaculo":"   ","contingencia":null}]}"""));
 
-        String resumen = "Crear los objetivos de la semana. Trabajo: Cerrar 2 ventas (obstaculo: Poco tiempo) "
+        String resumen = "Crear los objetivos de la semana. Negocio: Cerrar 2 ventas (obstaculo: Poco tiempo) "
                 + "(contingencia: Llamar en la hora de almuerzo). Cuerpo: Bajar 1 kg. Si algun eje ya tiene "
                 + "objetivo esa semana, se deja como esta.";
         verify(proponer).proponer(APRENDIZ, con("{\"objetivos\":["

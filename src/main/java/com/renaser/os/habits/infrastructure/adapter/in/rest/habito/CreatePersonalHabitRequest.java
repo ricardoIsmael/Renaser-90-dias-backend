@@ -1,7 +1,6 @@
 package com.renaser.os.habits.infrastructure.adapter.in.rest.habito;
 
 import com.renaser.os.habits.domain.model.habito.PlantillaHabitoPersonal;
-import com.renaser.os.habits.infrastructure.adapter.in.rest.habitoadmin.HabitCategoryDto;
 import com.renaser.os.habits.infrastructure.adapter.in.rest.habitoadmin.HabitTypeDto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -26,7 +25,7 @@ import java.util.Set;
  * {@code limitTime} es opcional, como la mayoria de los horarios del catalogo.
  */
 public record CreatePersonalHabitRequest(@NotBlank @Size(max = 120) String title, @NotNull HabitTypeDto habitType,
-                                          @NotNull HabitCategoryDto category, PlantillaHabitoPersonal template,
+                                          @NotBlank String category, PlantillaHabitoPersonal template,
                                           @Size(max = 200) String goalLabel, @Size(max = 40) String iconKey,
                                           @NotNull LocalTime triggerTime, LocalTime limitTime,
                                           Set<DayOfWeek> activeWeekdays) {

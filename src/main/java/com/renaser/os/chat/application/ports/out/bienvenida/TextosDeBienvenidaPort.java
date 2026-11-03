@@ -1,5 +1,7 @@
 package com.renaser.os.chat.application.ports.out.bienvenida;
 
+import com.renaser.os.shared.domain.Formacion;
+
 /**
  * Los textos VIGENTES de la bienvenida de Operaciones (OPE-01-01, D-190): los que salen hoy. Cada uno es
  * el que guardó Administración o Alquimista desde la app, si lo hay (D-210), o si no el original de
@@ -9,20 +11,22 @@ package com.renaser.os.chat.application.ports.out.bienvenida;
  * original (y sigue sin haber variables de entorno), pero desde D-210 también se cambian desde la app.
  * </blockquote>
  *
+ * <p><b>De una formación</b> (spec 035): los de la persona que recibe la bienvenida, nunca los de otra formación.
+ *
  * <p>Un texto vacío quiere decir «ese mensaje no se manda» (solo puede venir del recurso: desde la app no
  * se guarda vacío). Nunca devuelve {@code null}.
  */
 public interface TextosDeBienvenidaPort {
 
     /** Acompaña la tarjeta en el soporte. {@code {nombre}} = primer nombre del aprendiz. */
-    String soporteConLaTarjeta();
+    String soporteConLaTarjeta(Formacion formacion);
 
     /** El mensaje formal de bienvenida en el soporte. {@code {nombre}} = primer nombre del aprendiz. */
-    String soporteFormal();
+    String soporteFormal(Formacion formacion);
 
     /**
      * El mensaje del mentor en el chat del grupo estable (D-191). {@code {nombre}} = primer nombre del
      * aprendiz, {@code {mentor}} = primer nombre del mentor.
      */
-    String grupo();
+    String grupo(Formacion formacion);
 }

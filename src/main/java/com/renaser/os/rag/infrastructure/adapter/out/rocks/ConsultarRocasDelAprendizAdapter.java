@@ -33,6 +33,11 @@ class ConsultarRocasDelAprendizAdapter implements ConsultarRocasDelAprendizPort 
     }
 
     @Override
+    public int ultimaSemanaDelPrograma(UserId aprendizId) {
+        return finder.ultimaSemanaDelPrograma(aprendizId);
+    }
+
+    @Override
     public RocasDeLaSemana deLaSemana(UserId aprendizId) {
         RocasDelAprendizFinder.RocasDeLaSemana semana = finder.deLaSemana(aprendizId);
         List<RocaDeLaSemana> rocas = semana.rocas().stream()
@@ -66,7 +71,7 @@ class ConsultarRocasDelAprendizAdapter implements ConsultarRocasDelAprendizPort 
     public List<ObjetivoDeNoventaDias> objetivosDeNoventaDias(UserId aprendizId) {
         return finder.objetivosDeNoventaDias(aprendizId).stream()
                 .map(o -> new ObjetivoDeNoventaDias(o.eje(), o.objetivo(), o.meta(), o.avance(), o.unidad(),
-                        o.unidadAdelante(), o.lineaBase(), o.porcentaje()))
+                        o.unidadAdelante(), o.lineaBase(), o.porcentaje(), o.porConfirmar()))
                 .toList();
     }
 

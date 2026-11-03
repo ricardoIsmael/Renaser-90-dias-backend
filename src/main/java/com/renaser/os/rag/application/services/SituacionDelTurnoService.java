@@ -15,7 +15,10 @@ import com.renaser.os.rag.application.ports.out.participante.HabitosDeHoy.Habito
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort;
 import com.renaser.os.rag.application.ports.out.plan.GestionarPlanDeHabitosPort.HabitoDelPlan;
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarCompuertaDeRocasPort;
+import com.renaser.os.rag.domain.model.diagnostico.DiagnosticoDeLaPersona;
+import com.renaser.os.rag.domain.model.mapa.ResumenDelDiagnostico;
 import com.renaser.os.rag.domain.model.mapa.ResumenDelMapa;
+import com.renaser.os.rag.application.ports.out.diagnostico.ConsultarDiagnosticoDeLaPersonaPort;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import org.slf4j.Logger;
@@ -48,12 +51,14 @@ public class SituacionDelTurnoService implements ConsultarSituacionDelTurnoUseCa
     private final ConsultarTratoDeLaPersonaPort tratoPort;
     private final ConsultarMapaDeRenacimientoPort mapaPort;
     private final ConsultarCompuertaDeRocasPort compuertaPort;
+    private final ConsultarDiagnosticoDeLaPersonaPort diagnosticoPort;
 
     public SituacionDelTurnoService(ConsultarSituacionDelAprendizPort situacionPort,
                                     ConsultarAgendaHabitosPort agendaPort, GestionarPlanDeHabitosPort planPort,
                                     Clock clock, ConsultarTratoDeLaPersonaPort tratoPort,
                                     ConsultarMapaDeRenacimientoPort mapaPort,
-                                    ConsultarCompuertaDeRocasPort compuertaPort) {
+                                    ConsultarCompuertaDeRocasPort compuertaPort,
+                                    ConsultarDiagnosticoDeLaPersonaPort diagnosticoPort) {
         this.situacionPort = situacionPort;
         this.agendaPort = agendaPort;
         this.planPort = planPort;
@@ -61,6 +66,7 @@ public class SituacionDelTurnoService implements ConsultarSituacionDelTurnoUseCa
         this.tratoPort = tratoPort;
         this.mapaPort = mapaPort;
         this.compuertaPort = compuertaPort;
+        this.diagnosticoPort = diagnosticoPort;
     }
 
     @Override
@@ -72,15 +78,27 @@ public class SituacionDelTurnoService implements ConsultarSituacionDelTurnoUseCa
     }
 
     /**
-     * D-233: la prioridad y el proximo hito de su Mapa, una linea. Si no se puede leer, {@code null}: el
-     * prompt no dice nada del Mapa y el modelo, si lo necesita, llama a consultar_mi_mapa.
+     * D-233: la prioridad y el proximo hito de su Mapa (si lo hizo antes de que se retirara), una linea; y, desde la spec 026, si tiene diagnostico y su prioridad.
+     * Si no se puede leer el Mapa, igual salen las Rocas Maestras y el diagnostico: lo que falla no apaga lo demas.
      */
     private ResumenDelMapa mapaDe(UserId participanteId, int diaPrograma) {
+        ResumenDelMapa base;
         try {
-            return ResumenDelMapa.de(mapaPort.de(participanteId), diaPrograma)
-                    .conRocasMaestras(rocasMaestrasDe(participanteId));
+            base = ResumenDelMapa.de(mapaPort.de(participanteId), diaPrograma);
         } catch (RuntimeException falla) {
             log.warn("[rag] la situacion del turno sale sin el Mapa ({})", falla.getClass().getSimpleName());
+            base = ResumenDelMapa.de(com.renaser.os.rag.domain.model.mapa.MapaDeLaPersona.sinMapa(), diaPrograma);
+        }
+        return base.conRocasMaestras(rocasMaestrasDe(participanteId)).conDiagnostico(diagnosticoDe(participanteId));
+    }
+
+    /** Spec 026: sin diagnostico o si no se puede leer, {@code null}: el prompt no dice nada del diagnostico. */
+    private ResumenDelDiagnostico diagnosticoDe(UserId participanteId) {
+        try {
+            DiagnosticoDeLaPersona d = diagnosticoPort.de(participanteId);
+            return d.asignado() ? new ResumenDelDiagnostico(d.completado(), d.prioridad()) : null;
+        } catch (RuntimeException falla) {
+            log.warn("[rag] la situacion del turno sale sin el diagnostico ({})", falla.getClass().getSimpleName());
             return null;
         }
     }
@@ -121,8 +139,9 @@ public class SituacionDelTurnoService implements ConsultarSituacionDelTurnoUseCa
     private List<HabitoDeHoy> deHoy(UserId participanteId) {
         Instant ahora = clock.now();
         return agendaPort.deHoyDe(participanteId).stream()
-                .map(habito -> new HabitoDeHoy(habito.titulo(), estadoDe(habito, ahora), habito.seRegistraConFoto(),
-                        habito.tituloDelPrograma()))
+                .map(habito -> new HabitoDeHoy(habito.titulo(), estadoDe(habito, ahora),
+                        habito.seRegistraConFoto() && !habito.seRegistraEscribiendo() && !habito.seMideSolo(),
+                        habito.tituloDelPrograma(), habito.seRegistraEscribiendo(), habito.seMideSolo()))
                 .toList();
     }
 
@@ -135,13 +154,13 @@ public class SituacionDelTurnoService implements ConsultarSituacionDelTurnoUseCa
 
     /**
      * Mismo criterio que {@code consultar_habitos_del_dia}: un pendiente con el plazo cumplido ya
-     * vencio, aunque el barrido todavia no lo haya marcado EXPIRADO. Un estado que no se conoce se
+     * no da puntos (pero se puede registrar hoy: D-259); un EXPIRADO es un dia cerrado y no se registra (spec 038). Un estado que no se conoce se
      * dice pendiente, que es lo que obliga a consultar antes de darlo por hecho.
      */
     static EstadoDeHoy estadoDe(HabitoDelDia habito, Instant ahora) {
         return switch (habito.estado()) {
             case "COMPLETADO" -> EstadoDeHoy.HECHO;
-            case "EXPIRADO" -> EstadoDeHoy.VENCIDO;
+            case "EXPIRADO" -> EstadoDeHoy.DIA_CERRADO;
             case "FALLIDO" -> EstadoDeHoy.FALLIDO;
             default -> sinEntregar(habito, ahora);
         };

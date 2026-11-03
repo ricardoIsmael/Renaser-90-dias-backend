@@ -25,12 +25,11 @@ import com.renaser.os.users.application.ports.out.autenticacion.TokenVerificacio
 import com.renaser.os.users.application.ports.out.user.DeleteUserPort;
 import com.renaser.os.users.application.ports.out.user.LoadUserPort;
 import com.renaser.os.users.application.ports.out.user.SaveUserPort;
-import com.renaser.os.users.application.ports.out.participante.SaveParticipacionProgramaPort;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequest;
 import com.renaser.os.users.domain.model.accountrequest.AccountRequestId;
 import com.renaser.os.users.domain.model.accountrequest.OrigenSocial;
 import com.renaser.os.users.domain.model.identidadexterna.IdentidadExterna;
-import com.renaser.os.users.domain.model.participante.ParticipacionPrograma;
+import com.renaser.os.users.domain.model.accountrequest.EleccionDeIngreso;
 import com.renaser.os.users.api.UsuarioRegistradoEvent;
 import com.renaser.os.users.domain.model.user.Credencial;
 import com.renaser.os.users.domain.model.user.Email;
@@ -43,7 +42,11 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.stream.Collectors;
 
 /**
  * Casos de uso de AccountRequest (CLAUDE.MD §4.3). Una clase por agregado agrupando
@@ -84,7 +87,7 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
     private final SaveCredencialPort saveCredencialPort;
     private final SaveIdentidadExternaPort saveIdentidadExternaPort;
     private final PasswordEncoder passwordEncoder;
-    private final SaveParticipacionProgramaPort saveParticipacionProgramaPort;
+    private final IngresoPorAceptacion ingreso;
     private final TokenVerificacionEmailPort tokenVerificacionEmailPort;
     private final LimitarSolicitudesResetPort limitarSolicitudesResetPort;
     private final RequireActiveUserGuard requireActiveUserGuard;
@@ -101,7 +104,7 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
                                   DeleteUserPort deleteUserPort, SaveCredencialPort saveCredencialPort,
                                   SaveIdentidadExternaPort saveIdentidadExternaPort,
                                   PasswordEncoder passwordEncoder,
-                                  SaveParticipacionProgramaPort saveParticipacionProgramaPort,
+                                  IngresoPorAceptacion ingreso,
                                   TokenVerificacionEmailPort tokenVerificacionEmailPort,
                                   LimitarSolicitudesResetPort limitarSolicitudesResetPort,
                                   RequireActiveUserGuard requireActiveUserGuard, RequireAdminGuard requireAdminGuard,
@@ -116,7 +119,7 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
         this.saveCredencialPort = saveCredencialPort;
         this.saveIdentidadExternaPort = saveIdentidadExternaPort;
         this.passwordEncoder = passwordEncoder;
-        this.saveParticipacionProgramaPort = saveParticipacionProgramaPort;
+        this.ingreso = ingreso;
         this.tokenVerificacionEmailPort = tokenVerificacionEmailPort;
         this.limitarSolicitudesResetPort = limitarSolicitudesResetPort;
         this.requireActiveUserGuard = requireActiveUserGuard;
@@ -251,11 +254,17 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
         });
     }
 
+    /**
+     * Acepta la solicitud: la cuenta queda activa, con su rol y dentro de su formación, todo en UNA transacción (spec 025, FR-008): si cualquier
+     * paso falla —la formación, la duración, la ficha—, no queda nada cambiado. La fila de la solicitud va con candado: dos administradores que la
+     * deciden a la vez se turnan y el segundo recibe el 409 (FR-018).
+     */
     @Override
     @Transactional
     public void approve(ApproveAccountRequestCommand command) {
-        AccountRequest request = requireRequest(command.accountRequestId());
+        AccountRequest request = requireRequestParaDecidir(command.accountRequestId());
         User actor = requireActiveUserGuard.of(command.actorId());
+        request.verificarQuePuedeDecidir(actor);
 
         // El usuario YA existe desde el alta, en estado INACTIVE y con su contrasena elegida
         // (ver SubmitAccountRequestUseCase): aprobar solo le da acceso. Antes se creaba aca,
@@ -268,27 +277,34 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
         saveUserPort.save(usuario);
         vincularIdentidadSocialSiCorresponde(request);
 
-        // Invariante de participantes_programa (baseline V1, comentario de la tabla): el
-        // programa de 90 dias es obligatorio para TRAINEE y la fila se crea al aprobar la
-        // cuenta, en la MISMA transaccion — el alta fuerza el rol TRAINEE, asi que todo alta
-        // por este camino la necesita. Porte de
-        // onboarding/service.ts::createTraineePendingActivation (repo viejo): el reloj del
-        // programa arranca pausado, lo activa despues el primer login + Ficha + Terminos.
-        saveParticipacionProgramaPort.save(ParticipacionPrograma.inscribirTraineeAprobado(usuario.id(), clock));
-        request.approve(actor, usuario.id(), clock);
+        UserRole rolFinal = darElRol(command, usuario);
+        // Invariante de participantes_programa (baseline V1, comentario de la tabla): la fila se crea al aprobar la cuenta, en la MISMA
+        // transaccion. Desde la spec 025 nace en la formacion y con la duracion elegidas (el reloj del programa arranca pausado: lo activa el
+        // primer login + Ficha + Terminos + Dia 1). Porte de onboarding/service.ts::createTraineePendingActivation (repo viejo).
+        EleccionDeIngreso eleccion = ingreso.formalizar(usuario.id(), command.actorId(), rolFinal, command.pedido(), command.rolPersonalizadoId());
+        request.approve(actor, usuario.id(), eleccion, clock);
         saveAccountRequestPort.save(request);
 
-        // D-265: entrar con otro rol es aprobar como aprendiz y cambiarle el rol en la MISMA transaccion, por el
-        // mismo caso de uso que «Equipo y roles» (mismo guard, perfil de mentor y RolDeUsuarioCambiadoEvent). Los
-        // oyentes de UsuarioRegistradoEvent corren despues del commit y ya leen el rol final: un mentor o un guia
-        // aprobado asi no entra al grupo de bienvenida ni recibe chat de soporte de aprendiz.
-        // D-272: con un rol personalizado, también por ahí (aunque herede de APRENDIZ: hay que guardar la referencia).
-        if (command.rolPersonalizadoId() != null || command.rol() != UserRole.defaultForSelfRegistration()) {
-            updateUserRole.updateRole(new UpdateUserRoleCommand(usuario.id(), command.rol(), command.actorId(),
-                    command.rolPersonalizadoId()));
-        }
-
         events.publishEvent(new UsuarioRegistradoEvent(usuario.id(), clock.now()));
+    }
+
+    /**
+     * D-265: entrar con otro rol es aprobar como aprendiz y cambiarle el rol en la MISMA transaccion, por el mismo caso de uso que «Equipo y
+     * roles» (mismo guard, perfil de mentor y RolDeUsuarioCambiadoEvent). Los oyentes de UsuarioRegistradoEvent corren despues del commit y ya
+     * leen el rol final: un mentor o un guia aprobado asi no entra al grupo de bienvenida ni recibe chat de soporte de aprendiz.
+     * D-272: con un rol personalizado, tambien por ahi (aunque herede de APRENDIZ: hay que guardar la referencia); su rol base es el que cuenta.
+     *
+     * @return el rol con el que la cuenta quedo
+     */
+    private UserRole darElRol(ApproveAccountRequestCommand command, User usuario) {
+        boolean cambia = command.rolPersonalizadoId() != null || command.rol() != UserRole.defaultForSelfRegistration();
+        if (!cambia) {
+            return UserRole.defaultForSelfRegistration();
+        }
+        updateUserRole.updateRole(new UpdateUserRoleCommand(usuario.id(), command.rol(), command.actorId(),
+                command.rolPersonalizadoId()));
+        return command.rolPersonalizadoId() == null ? command.rol()
+                : loadUserPort.byId(usuario.id()).map(User::role).orElse(command.rol());
     }
 
     /**
@@ -314,7 +330,7 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
     @Override
     @Transactional
     public void reject(RejectAccountRequestCommand command) {
-        AccountRequest request = requireRequest(command.accountRequestId());
+        AccountRequest request = requireRequestParaDecidir(command.accountRequestId());
         User actor = requireActiveUserGuard.of(command.actorId());
 
         request.reject(actor, command.reason(), clock);
@@ -362,6 +378,12 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
                 .orElseThrow(() -> new NoSuchElementException("Solicitud no encontrada: " + id));
     }
 
+    /** Para decidir: la lee con candado, así dos decisiones simultáneas de la misma solicitud se turnan (spec 025, FR-018). */
+    private AccountRequest requireRequestParaDecidir(AccountRequestId id) {
+        return loadAccountRequestPort.byIdParaDecidir(id)
+                .orElseThrow(() -> new NoSuchElementException("Solicitud no encontrada: " + id));
+    }
+
     // Se elimino compensateSupabaseUserOnRollback (2026-08-27): compensaba la creacion de un
     // usuario en Supabase Auth durante approve(), y approve() ya no crea a nadie. La creacion
     // vive ahora en submit(), dentro de UNA sola transaccion contra NUESTRO Postgres — si algo
@@ -380,9 +402,20 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
     @Override
     public PaginaAccountRequests listar(ListAccountRequestsCommand command) {
         requireAdminGuard.requireAdminActivo(command.actorId());
-        var contenido = loadAccountRequestPort.pagina(command.statusFilter(), command.page(), command.size());
-        long total = loadAccountRequestPort.contar(command.statusFilter());
-        return new PaginaAccountRequests(contenido, total, command.page(), command.size());
+        var contenido = loadAccountRequestPort.pagina(command.statusFilter(), command.formacion(), command.page(), command.size());
+        long total = loadAccountRequestPort.contar(command.statusFilter(), command.formacion());
+        return new PaginaAccountRequests(contenido, total, command.page(), command.size(), quienDecidio(contenido));
+    }
+
+    /** El nombre de quien decidió cada solicitud, en UNA lectura (sin N+1). Quien ya no existe no figura. */
+    private Map<UserId, String> quienDecidio(List<AccountRequest> solicitudes) {
+        var ids = solicitudes.stream().map(AccountRequest::reviewedBy).filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UserId, String> nombres = new HashMap<>();
+        if (!ids.isEmpty()) {
+            loadUserPort.byIds(ids).forEach(usuario -> nombres.put(usuario.id(), usuario.fullName()));
+        }
+        return nombres;
     }
 
     /** El recurso se carga PRIMERO (404 si no existe), el gate de admin va DESPUES

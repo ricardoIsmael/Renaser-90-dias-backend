@@ -50,14 +50,15 @@ class ConsultarMiMapaHerramientaTest {
     }
 
     @Test
-    @DisplayName("se ofrece como consultar_mi_mapa, sin parametros, y la descripcion dice cuando usarla")
+    @DisplayName("se ofrece como consultar_mi_mapa, sin parametros, y la descripcion dice que es solo para el Mapa viejo (spec 038)")
     void definicion() {
         var definicion = new ConsultarMiMapaHerramienta(id -> MAPA, id -> Optional.empty()).definicion();
 
         assertThat(definicion.nombre()).isEqualTo("consultar_mi_mapa");
         assertThat(definicion.parametros()).isEmpty();
         assertThat(definicion.descripcion()).contains("Mapa de Renacimiento").contains("protocolo de retorno")
-                .contains("para que hace un habito").contains("se desanima");
+                .contains("SOLO para quien armo su Mapa de Renacimiento antes de que se retirara")
+                .contains("consultar_mi_diagnostico").contains("nunca la invita a hacer el Mapa");
     }
 
     @Test
@@ -105,14 +106,18 @@ class ConsultarMiMapaHerramientaTest {
         assertThat(texto).contains("no se su dia del programa").doesNotContain("PROXIMO").contains("- Dia 30: Salud");
     }
 
+    // spec 038 FR-001
     @Test
-    @DisplayName("sin Mapa: lo dice y pide no inventar; antes del dia 7 aclara que se arma ese dia")
+    @DisplayName("sin Mapa (spec 038): es lo normal, no la invita a hacerlo y la manda al diagnostico y a Plan, a cualquier dia")
     void sinMapa() {
-        assertThat(ejecutar(MapaDeLaPersona.sinMapa(), Optional.of(DIA_23)))
-                .contains("No tiene Mapa de Renacimiento guardado").contains("No le inventes metas ni hitos")
-                .contains("invitala a completar su Mapa");
-        assertThat(ejecutar(MapaDeLaPersona.sinMapa(), Optional.of(new SituacionDelAprendiz(4, 1))))
-                .contains("se arma el dia 7 del programa y hoy es su dia 4");
+        for (Optional<SituacionDelAprendiz> situacion : List.of(Optional.of(DIA_23),
+                Optional.of(new SituacionDelAprendiz(4, 1)), Optional.<SituacionDelAprendiz>empty())) {
+            assertThat(ejecutar(MapaDeLaPersona.sinMapa(), situacion))
+                    .contains("No tiene Mapa de Renacimiento guardado").contains("el Mapa se retiro")
+                    .contains("NO la invites a hacerlo").contains("consultar_mi_diagnostico").contains("pestana Plan")
+                    .contains("No le inventes metas ni hitos")
+                    .doesNotContain("invitala a completar").doesNotContain("se arma el dia 7");
+        }
     }
 
     @Test

@@ -11,6 +11,7 @@ import com.renaser.os.rocks.domain.model.rocadiaria.VentanaPlanificacionDiaria;
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestra;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestraId;
+import com.renaser.os.rocks.domain.model.rocasemanal.SemanaPrograma;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
@@ -87,6 +88,13 @@ class RocasDelAprendizService implements RocasDelAprendizFinder {
                 .sorted(POR_EJE_Y_POSICION).toList();
         return new RocasDelDia(ahora.atZone(zona).toLocalDate().plusDays(1), rocas,
                 planificacion(tablero, deManana, ahora, zona));
+    }
+
+    @Override
+    public int ultimaSemanaDelPrograma(UserId aprendizId) {
+        return progresoPort.deParticipante(aprendizId)
+                .map(progreso -> SemanaPrograma.ultimaSemanaDe(progreso.duracionDias()))
+                .orElseThrow(() -> new java.util.NoSuchElementException("Participante no encontrado: " + aprendizId));
     }
 
     @Override

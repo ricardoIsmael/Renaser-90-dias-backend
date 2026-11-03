@@ -14,6 +14,7 @@ import com.renaser.os.habits.domain.model.habito.ExigenciaEvidencia;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -31,6 +32,9 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /** Spec 001 (D-264): el filtro único de hábitos globales por rol, con vigencia estricta en la zona de la persona. */
@@ -57,6 +61,7 @@ class CatalogoAplicableTest {
 
     @BeforeEach
     void preparar() {
+        CatalogoAplicableDePrueba.responderElCatalogoPorFormacion(loadHabitoPort);
         catalogo = new CatalogoAplicable(loadHabitoPort, audiencias, historialDeRolPort);
         when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(paraTodos, deMentores));
         lenient().when(historialDeRolPort.de(any())).thenReturn(HistorialDeRol.vacio());
@@ -121,6 +126,68 @@ class CatalogoAplicableTest {
                 .contains(deMentores);
     }
 
+    // ── Spec 023: la formación de la persona ───────────────────────────────
+
+    @Test
+    @DisplayName("spec 023: un aprendiz del Diplomado recibe solo los hábitos del Diplomado, y uno de la Escuela solo los de la Escuela")
+    void soloLosDeSuFormacion() {
+        Habito delDiplomado = habitoEn("Estudio del día", Formacion.DIPLOMADO);
+        Habito delaCertificacion = habitoEn("Práctica guiada", Formacion.CERTIFICACION);
+        when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(paraTodos, deMentores, delDiplomado, delaCertificacion));
+
+        assertThat(catalogo.globalesPara(PERSONA, progresoEn(Formacion.DIPLOMADO), DIA_DEL_CAMBIO)).containsExactly(delDiplomado);
+        assertThat(catalogo.globalesPara(PERSONA, progresoEn(Formacion.ESCUELA), DIA_DEL_CAMBIO))
+                .containsExactly(paraTodos, deMentores);
+        assertThat(catalogo.globalesPara(PERSONA, progresoEn(Formacion.CERTIFICACION), DIA_DEL_CAMBIO))
+                .containsExactly(delaCertificacion);
+    }
+
+    @Test
+    @DisplayName("H-04: lo que le toca se pide a la consulta por formación (no se lee el catálogo de las tres para filtrar), y solo se leen las audiencias de esos hábitos")
+    void pideElCatalogoDeSuFormacion() {
+        Habito delDiplomado = habitoEn("Estudio del día", Formacion.DIPLOMADO);
+        when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(paraTodos, delDiplomado));
+
+        assertThat(catalogo.globalesPara(PERSONA, progresoEn(Formacion.DIPLOMADO), DIA_DEL_CAMBIO)).containsExactly(delDiplomado);
+
+        // La unica pregunta al catalogo es la de SU formacion (en la base, una consulta filtrada con `habitos_formacion_catalogo_idx`); leer el catalogo entero
+        // queda para la vista de quien acompaña (`globalesQueNoLeTocan`), que sí necesita los de las otras formaciones.
+        verify(loadHabitoPort, times(1)).catalogoActivoDeFormacion(Formacion.DIPLOMADO);
+        verify(loadHabitoPort, never()).catalogoActivoDeFormacion(Formacion.ESCUELA);
+    }
+
+    @Test
+    @DisplayName("spec 023: la vista de quien acompaña saca los hábitos de otra formación igual que los de otro rol")
+    void losDeOtraFormacionNoLeTocan() {
+        Habito delDiplomado = habitoEn("Estudio del día", Formacion.DIPLOMADO);
+        when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(paraTodos, delDiplomado));
+
+        assertThat(catalogo.globalesQueNoLeTocan(PERSONA, progresoEn(Formacion.ESCUELA), DIA_DEL_CAMBIO))
+                .containsExactly(delDiplomado.id());
+        assertThat(catalogo.globalesQueNoLeTocan(PERSONA, progresoEn(Formacion.DIPLOMADO), DIA_DEL_CAMBIO))
+                .containsExactly(paraTodos.id());
+    }
+
+    @Test
+    @DisplayName("spec 023: la audiencia por rol (spec 001) sigue rigiendo DENTRO de cada formación")
+    void audienciaDentroDeLaFormacion() {
+        Habito mentoresDelDiplomado = habitoEn("Revisión del grupo", Formacion.DIPLOMADO);
+        when(loadHabitoPort.catalogoActivo()).thenReturn(List.of(paraTodos, mentoresDelDiplomado));
+        versionDesde(mentoresDelDiplomado, soloMentores(), CREACION);
+
+        assertThat(catalogo.globalesPara(PERSONA, progresoEn(Formacion.DIPLOMADO, RolParticipante.TRAINEE), DIA_DEL_CAMBIO)).isEmpty();
+        assertThat(catalogo.globalesPara(PERSONA, progresoEn(Formacion.DIPLOMADO, RolParticipante.MENTOR), DIA_DEL_CAMBIO))
+                .containsExactly(mentoresDelDiplomado);
+        assertThat(catalogo.globalesPara(PERSONA, progresoEn(Formacion.ESCUELA, RolParticipante.MENTOR), DIA_DEL_CAMBIO))
+                .containsExactly(paraTodos);
+    }
+
+    @Test
+    @DisplayName("spec 023: una formación sin hábitos no es un error: no recibe ninguno")
+    void formacionSinHabitos() {
+        assertThat(catalogo.globalesPara(PERSONA, progresoEn(Formacion.CERTIFICACION), DIA_DEL_CAMBIO)).isEmpty();
+    }
+
     private void versionDesde(Habito habito, Audiencia audiencia, Instant desde) {
         audiencias.agregarVersion(new VersionDeAudiencia(habito.id(), audiencia, desde, ADMIN, desde));
     }
@@ -131,6 +198,19 @@ class CatalogoAplicableTest {
 
     private static ProgresoParticipanteHabits progreso(RolParticipante rol) {
         return new ProgresoParticipanteHabits(15, "America/Lima", rol, false, true);
+    }
+
+    private static ProgresoParticipanteHabits progresoEn(Formacion formacion) {
+        return progresoEn(formacion, RolParticipante.TRAINEE);
+    }
+
+    private static ProgresoParticipanteHabits progresoEn(Formacion formacion, RolParticipante rol) {
+        return new ProgresoParticipanteHabits(15, "America/Lima", rol, false, true, null, formacion, 90);
+    }
+
+    private static Habito habitoEn(String titulo, Formacion formacion) {
+        return Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), formacion, titulo, TipoHabito.CHECKBOX,
+                new DetallesHabito("desc", "CUERPO", ExigenciaEvidencia.OPCIONAL, false, false), CREACION);
     }
 
     private static Habito habito(String titulo) {

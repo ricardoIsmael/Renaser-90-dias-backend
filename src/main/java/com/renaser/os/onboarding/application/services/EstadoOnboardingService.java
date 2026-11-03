@@ -5,6 +5,8 @@ import com.renaser.os.onboarding.application.ports.in.estado.AceptarHitoOnboardi
 import com.renaser.os.onboarding.application.ports.in.estado.AvanzarEstadoUseCase;
 import com.renaser.os.onboarding.application.ports.in.estado.CompletarOnboardingUseCase;
 import com.renaser.os.onboarding.application.ports.in.estado.ObtenerEstadoOnboardingUseCase;
+import com.renaser.os.onboarding.application.ports.in.terminos.RegistrarAceptacionDeTerminosUseCase;
+import com.renaser.os.onboarding.application.ports.in.terminos.RegistrarAceptacionDeTerminosUseCase.PedidoDeAceptacion;
 import com.renaser.os.onboarding.application.ports.out.actor.ConsultarActorPort;
 import com.renaser.os.onboarding.application.ports.out.estado.LoadEstadoOnboardingPort;
 import com.renaser.os.onboarding.application.ports.out.estado.SaveEstadoOnboardingPort;
@@ -17,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.NoSuchElementException;
+import java.util.Optional;
 
 @Service
 public class EstadoOnboardingService implements ObtenerEstadoOnboardingUseCase, AvanzarEstadoUseCase,
@@ -25,13 +28,15 @@ public class EstadoOnboardingService implements ObtenerEstadoOnboardingUseCase, 
     private final LoadEstadoOnboardingPort loadEstadoPort;
     private final SaveEstadoOnboardingPort saveEstadoPort;
     private final ConsultarActorPort actorPort;
+    private final RegistrarAceptacionDeTerminosUseCase aceptacionDeTerminos;
     private final Clock clock;
 
     public EstadoOnboardingService(LoadEstadoOnboardingPort loadEstadoPort, SaveEstadoOnboardingPort saveEstadoPort,
-                                    ConsultarActorPort actorPort, Clock clock) {
+                                    ConsultarActorPort actorPort, RegistrarAceptacionDeTerminosUseCase aceptacionDeTerminos, Clock clock) {
         this.loadEstadoPort = loadEstadoPort;
         this.saveEstadoPort = saveEstadoPort;
         this.actorPort = actorPort;
+        this.aceptacionDeTerminos = aceptacionDeTerminos;
         this.clock = clock;
     }
 
@@ -39,8 +44,18 @@ public class EstadoOnboardingService implements ObtenerEstadoOnboardingUseCase, 
     @Transactional
     public EstadoOnboarding obtener(UserId usuarioId) {
         requireActorActivo(usuarioId);
-        return loadEstadoPort.deUsuario(usuarioId)
-                .orElseGet(() -> saveEstadoPort.guardar(EstadoOnboarding.iniciar(usuarioId, clock)));
+        Optional<EstadoOnboarding> existente = loadEstadoPort.deUsuario(usuarioId);
+        if (existente.isEmpty()) {
+            return saveEstadoPort.guardar(EstadoOnboarding.iniciar(usuarioId, clock));
+        }
+        return existente.filter(estado -> estado.iniciadoEn() == null).map(this::conElInicioRegistrado)
+                .orElseGet(existente::get);
+    }
+
+    /** La fila nació porque Administración le asignó la ficha (spec 026): con esta primera lectura la persona ya empezó. */
+    private EstadoOnboarding conElInicioRegistrado(EstadoOnboarding estado) {
+        estado.registrarInicio(clock);
+        return saveEstadoPort.guardar(estado);
     }
 
     @Override
@@ -58,6 +73,11 @@ public class EstadoOnboardingService implements ObtenerEstadoOnboardingUseCase, 
         requireActorActivo(command.usuarioId());
         EstadoOnboarding estado = requireEstado(command.usuarioId());
         estado.aceptarHito(command.hito(), clock);
+        if (command.hito() == HitoOnboarding.TERMINOS) {
+            // Spec 027: la constancia de QUÉ versión aceptó va en la misma transacción que el hito; si no se puede dejar, tampoco queda aceptado.
+            // Spec 039: con ella queda lo que se le mostró en «Mi aceptación». El cronograma de pagos no se firma aquí (D-315): se confirma en «Mi ingreso» (spec 032).
+            aceptacionDeTerminos.registrar(command.usuarioId(), new PedidoDeAceptacion(command.versionDeTerminosId(), command.inicioVisto()));
+        }
         return saveEstadoPort.guardar(estado);
     }
 

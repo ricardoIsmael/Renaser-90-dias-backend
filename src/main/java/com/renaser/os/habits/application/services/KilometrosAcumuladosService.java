@@ -2,6 +2,7 @@ package com.renaser.os.habits.application.services;
 
 import com.renaser.os.habits.application.politica.PoliticaKilometros;
 import com.renaser.os.habits.application.ports.out.medicion.ContarDiasCumplidosPort;
+import com.renaser.os.habits.application.ports.out.medicion.ContarMedicionesAutomaticasPort;
 import com.renaser.os.habits.application.ports.out.medicion.SumarMedicionesPort;
 import com.renaser.os.points.api.MedicionAcumuladaFinder;
 import com.renaser.os.shared.domain.UserId;
@@ -12,6 +13,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * D-226 — implementa {@link MedicionAcumuladaFinder} para el ranking de km y, desde D-266, el de días de gimnasio. La suma sale de las
@@ -26,11 +28,14 @@ public class KilometrosAcumuladosService implements MedicionAcumuladaFinder {
 
     private final SumarMedicionesPort sumarMedicionesPort;
     private final ContarDiasCumplidosPort contarDiasCumplidosPort;
+    private final ContarMedicionesAutomaticasPort contarMedicionesAutomaticasPort;
 
     public KilometrosAcumuladosService(SumarMedicionesPort sumarMedicionesPort,
-                                       ContarDiasCumplidosPort contarDiasCumplidosPort) {
+                                       ContarDiasCumplidosPort contarDiasCumplidosPort,
+                                       ContarMedicionesAutomaticasPort contarMedicionesAutomaticasPort) {
         this.sumarMedicionesPort = sumarMedicionesPort;
         this.contarDiasCumplidosPort = contarDiasCumplidosPort;
+        this.contarMedicionesAutomaticasPort = contarMedicionesAutomaticasPort;
     }
 
     @Override
@@ -43,5 +48,13 @@ public class KilometrosAcumuladosService implements MedicionAcumuladaFinder {
     @Transactional(readOnly = true)
     public Map<UserId, Integer> diasDeGimnasio(Collection<UserId> participantes, LocalDate hasta) {
         return contarDiasCumplidosPort.diasPorParticipante(participantes, CLAVE_GIMNASIO, hasta);
+    }
+
+    /** Spec 037: quiénes tienen algún día de km leído por el teléfono. */
+    @Override
+    @Transactional(readOnly = true)
+    public Set<UserId> conKilometrosAutomaticos(Collection<UserId> participantes, LocalDate hasta) {
+        return contarMedicionesAutomaticasPort.conAlgunaMedicionAutomatica(participantes,
+                PoliticaKilometros.CLAVE_SISTEMA, hasta);
     }
 }

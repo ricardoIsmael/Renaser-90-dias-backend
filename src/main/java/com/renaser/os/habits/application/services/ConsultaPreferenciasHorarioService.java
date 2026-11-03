@@ -18,7 +18,9 @@ import com.renaser.os.habits.domain.model.horario.HorariosDelHabito;
 import com.renaser.os.habits.domain.model.preferencia.CambioHorarioPendiente;
 import com.renaser.os.habits.domain.model.preferencia.CombinacionDeAlarma;
 import com.renaser.os.habits.domain.model.preferencia.CuotaEdicionHorario;
+import com.renaser.os.habits.domain.model.preferencia.FechaPropia;
 import com.renaser.os.habits.domain.model.preferencia.HorarioSemanal;
+import com.renaser.os.habits.domain.model.preferencia.PlanDeLaSemana;
 import com.renaser.os.habits.domain.model.preferencia.PreferenciaHorario;
 import com.renaser.os.habits.domain.model.preferencia.RecordatorioDelDia;
 import com.renaser.os.habits.domain.model.preferencia.SemanaDelHabito;
@@ -54,6 +56,11 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
     /** El programa arranca en el dia 1; el dia 0 es "todavia no activo". */
     private static final int PRIMER_DIA_DEL_PROGRAMA = 1;
     private static final HorariosDelHabito SIN_HORARIOS = HorariosDelHabito.de(List.of());
+    /**
+     * Spec 028: cuantos dias por delante de la fecha consultada se informan las fechas con cambio «solo esta semana». Cubre la semana en
+     * curso, la siguiente (donde cae lo que se repite) y un margen; las alarmas del telefono solo necesitan lo que viene.
+     */
+    static final int DIAS_DE_FECHAS_PROPIAS = 20;
 
     private final ConsultarProgresoParticipanteHabitsPort progresoPort;
     private final LoadHabitoPort loadHabitoPort;
@@ -130,14 +137,18 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
         TipoDia tipoDia = TipoDia.delDia(hoy);
         Map<HabitoId, Integer> yaGenerados = diasMasAltosYaGenerados(actorId, diaPrograma, tipoDia, horarios);
         BaseDeLaSemana base = baseDeLaSemana(actorId, ids, cambios, hoy);
+        Map<HabitoId, List<FechaPropia>> fechasPropias = loadPreferenciaPort
+                .fechasPropiasEntre(actorId, hoy, hoy.plusDays(DIAS_DE_FECHAS_PROPIAS)).stream()
+                .collect(Collectors.groupingBy(FechaPropia::habitoId));
 
         return habitos.stream()
                 .map(habito -> {
                     HorarioHabito catalogo = vigenteDeCatalogo(horarios.getOrDefault(habito.id(), SIN_HORARIOS),
                             diaPrograma, tipoDia, yaGenerados.get(habito.id()));
+                    List<SemanaDelHabito.Dia> semana = base.semanaDe(habito.id(), catalogo);
                     return construirVista(habito, catalogo, preferencias.get(habito.id()),
-                            programados.get(habito.id()), base.semanaDe(habito.id(), catalogo),
-                            base.alarmaGeneral(habito.id()));
+                            programados.get(habito.id()), semana, base.alarmaGeneral(habito.id()),
+                            fechasResueltas(fechasPropias.getOrDefault(habito.id(), List.of()), semana, hoy));
                 })
                 .toList();
     }
@@ -206,11 +217,23 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
                 : loadRegistroPort.diaProgramaMasAltoGeneradoPorHabito(actorId, candidatos);
     }
 
+    /** Las fechas propias de UN habito ya resueltas: el dia de la semana que les toca con la fila encima (spec 028). */
+    private static List<PlanDeLaSemana.DiaDeLaFecha> fechasResueltas(List<FechaPropia> filas, List<SemanaDelHabito.Dia> semana,
+                                                                     LocalDate consultada) {
+        Map<java.time.DayOfWeek, SemanaDelHabito.Dia> porDia = semana.stream()
+                .collect(Collectors.toMap(SemanaDelHabito.Dia::diaSemana, d -> d));
+        return filas.stream()
+                .sorted(java.util.Comparator.comparing(FechaPropia::fecha))
+                .map(f -> PlanDeLaSemana.resolverFecha(f.fecha(), porDia.get(f.fecha().getDayOfWeek()), f, consultada))
+                .toList();
+    }
+
     private static HorarioDeHabito construirVista(Habito habito, HorarioHabito catalogo,
                                                     PreferenciaHorario preferencia,
                                                     CambioHorarioPendiente programado,
                                                     List<SemanaDelHabito.Dia> diasDeLaSemana,
-                                                    CombinacionDeAlarma alarma) {
+                                                    CombinacionDeAlarma alarma,
+                                                    List<PlanDeLaSemana.DiaDeLaFecha> fechasPropias) {
         LocalTime horaDisparo = primeraNoNula(preferencia != null ? preferencia.horaDisparo() : null,
                 catalogo != null ? catalogo.horaDisparo() : null);
         LocalTime horaLimite = primeraNoNula(preferencia != null ? preferencia.horaLimite() : null,
@@ -224,7 +247,8 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
                 VentanaDelDia.limiteQueSigueAlDisparo(horaDisparo, horaLimite), eligioHorario,
                 preferencia != null && preferencia.recordatorioActivo(),
                 preferencia != null ? preferencia.minutosRecordatorio() : null,
-                cambio, preferencia != null ? preferencia.antelacionesRecordatorio() : null, diasDeLaSemana, alarma);
+                cambio, preferencia != null ? preferencia.antelacionesRecordatorio() : null, diasDeLaSemana, alarma,
+                fechasPropias);
     }
 
     /**
@@ -238,7 +262,7 @@ public class ConsultaPreferenciasHorarioService implements ConsultarPreferencias
      * <p>D-200: si el habito ya corrio y un retroceso dejo el dia por debajo del inicio de su
      * horario, rige ese horario (el mismo con el que se lo genera).
      */
-    private static HorarioHabito vigenteDeCatalogo(HorariosDelHabito horarios, int diaPrograma, TipoDia tipoDia,
+    static HorarioHabito vigenteDeCatalogo(HorariosDelHabito horarios, int diaPrograma, TipoDia tipoDia,
                                                    Integer diaMasAltoYaGenerado) {
         int diaAConsultar = Math.max(diaPrograma, PRIMER_DIA_DEL_PROGRAMA);
         int dia = horarios.diaEfectivo(diaAConsultar, tipoDia, diaMasAltoYaGenerado);

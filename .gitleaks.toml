@@ -1,0 +1,71 @@
+# Configuración de gitleaks para el job «Secretos (gitleaks)» de .github/workflows/seguridad.yml.
+#
+# Parte de las reglas por defecto de gitleaks y solo agrega excepciones. Cada una está limitada a UNA regla,
+# a unos archivos concretos y, donde se puede, también al texto exacto, para que un secreto de verdad que
+# alguien pegue mañana en esos mismos archivos siga saltando. Las excepciones valen para todo el historial de
+# Git: gitleaks recorre los commits viejos y esos hallazgos no desaparecen aunque el archivo cambie.
+#
+# Estas 22 son las únicas que había el 02/11/2026 al escanear el historial completo. Ninguna es un secreto.
+# Un secreto de verdad NO se anota acá: se rota primero (ocultarlo no lo arregla) y recién después, si hace
+# falta, se deja constancia.
+title = "Renaser backend"
+
+[extend]
+useDefault = true
+
+# ─── 16 hallazgos de la regla `jwt`: miniaturas de video firmadas ───────────────────────────────────────────
+#
+# La migración V6 (catálogo inicial de la academia) trae 8 URLs de miniaturas de Mux del tipo
+#   https://image.mux.com/<playback-id>/thumbnail.jpg?token=<JWT>
+# y cada una aparece en 2 commits, de ahí los 16. El JWT de esa URL es un token de reproducción firmado de Mux
+# (RS256, `aud: "t"` = thumbnail) con vencimiento en el año 2126. Solo da acceso a ESA miniatura de ESE video:
+# no es la clave con la que Mux firma, que no está en el repositorio. Quien lo tenga no puede firmar tokens
+# nuevos ni ver el video.
+#
+# Una migración de Flyway que ya se aplicó no se edita (cambia su checksum y la base se niega a arrancar), y
+# reescribir el historial de un repositorio público no revoca nada de lo que ya se copió. Si el dueño no quiere
+# que esas 8 miniaturas sean públicas, lo que corresponde es rotar la clave de firma en Mux o poner los videos
+# en política «privada»: ahí cambiarían los tokens de verdad.
+[[allowlists]]
+description = "V6: URLs firmadas de miniaturas de Mux (token de thumbnail, no es una clave de firma)"
+condition = "AND"
+targetRules = ["jwt"]
+paths = ['''src/main/resources/db/migration/V6__catalogo_academy_default\.sql''']
+regexTarget = "line"
+regexes = ['''https://image\.mux\.com/[A-Za-z0-9]+/thumbnail\.jpg\?token=''']
+
+# ─── 5 hallazgos de la regla `generic-api-key`: datos de prueba ─────────────────────────────────────────────
+#
+# Dos textos fijos que aparecen en pruebas y que el patrón confunde con una clave:
+#   * «una-contrasena-de-12-o-mas»: la contraseña de ejemplo de los formularios de alta
+#     (AccountRequestServiceTokenNoSePierdeIT y AccountRequestRateLimitConcurrenciaTest).
+#   * «dGhlIHNhbXBsZSBub25jZQ==»: el valor de ejemplo de `Sec-WebSocket-Key` del RFC 6455 (base64 de
+#     «the sample nonce»), que usa VozEnVivoAutenticacionTest para pedir un upgrade de WebSocket sin sesión.
+[[allowlists]]
+description = "Pruebas: la contraseña de ejemplo del alta y el Sec-WebSocket-Key de ejemplo del RFC 6455"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = [
+  '''src/test/java/com/renaser/os/users/application/services/AccountRequestServiceTokenNoSePierdeIT\.java''',
+  '''src/test/java/com/renaser/os/users/application/services/AccountRequestRateLimitConcurrenciaTest\.java''',
+  '''src/test/java/com/renaser/os/rag/infrastructure/adapter/in/websocket/VozEnVivoAutenticacionTest\.java''',
+]
+regexes = [
+  '''una-contrasena-de-12-o-mas''',
+  '''dGhlIHNhbXBsZSBub25jZQ==''',
+]
+
+# ─── 1 hallazgo de la regla `private-key`: una cabecera PEM en una prueba ───────────────────────────────────
+#
+# AppleIdentidadAdapterTest arma en cada corrida una clave EC de prueba (KeyPairGenerator) y la envuelve en un
+# PEM para simular el .p8 de Apple. En el archivo solo está el texto «-----BEGIN PRIVATE KEY-----» y el código
+# que la genera; no hay material de clave escrito.
+#
+# Lo que la regla marca es el trozo de Java que va entre «BEGIN» y «END» (llama a `System.lineSeparator()`); por
+# eso la excepción exige ese texto además del archivo: un PEM de verdad pegado ahí (que no lo lleva) sigue saltando.
+[[allowlists]]
+description = "Prueba de Apple: la clave EC se genera al ejecutar; el archivo solo trae la cabecera del PEM"
+condition = "AND"
+targetRules = ["private-key"]
+paths = ['''src/test/java/com/renaser/os/users/infrastructure/adapter/out/oauth/AppleIdentidadAdapterTest\.java''']
+regexes = ['''System\.lineSeparator\(\)''']

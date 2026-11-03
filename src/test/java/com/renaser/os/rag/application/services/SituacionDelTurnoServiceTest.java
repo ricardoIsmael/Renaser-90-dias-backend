@@ -54,12 +54,20 @@ class SituacionDelTurnoServiceTest {
     private final ConsultarTratoDeLaPersonaPort tratoPort = mock(ConsultarTratoDeLaPersonaPort.class);
     private final ConsultarMapaDeRenacimientoPort mapaPort = mock(ConsultarMapaDeRenacimientoPort.class);
     private final ConsultarCompuertaDeRocasPort compuertaPort = mock(ConsultarCompuertaDeRocasPort.class);
+    private final com.renaser.os.rag.application.ports.out.diagnostico.ConsultarDiagnosticoDeLaPersonaPort diagnosticoPort =
+            mock(com.renaser.os.rag.application.ports.out.diagnostico.ConsultarDiagnosticoDeLaPersonaPort.class);
     private final SituacionDelTurnoService service = new SituacionDelTurnoService(situacionPort, agendaPort, planPort,
-            FixedClock.at(TRES_AM_UTC), tratoPort, mapaPort, compuertaPort);
+            FixedClock.at(TRES_AM_UTC), tratoPort, mapaPort, compuertaPort, diagnosticoPort);
+
+    @org.junit.jupiter.api.BeforeEach
+    void sinDiagnosticoPorDefecto() {
+        when(diagnosticoPort.de(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(com.renaser.os.rag.domain.model.diagnostico.DiagnosticoDeLaPersona.ninguno());
+    }
 
     /** D-233: la prioridad y el proximo hito del Mapa viajan en la situacion; si falla, sin Mapa y el turno sigue. */
     @Test
-    @DisplayName("D-233: la situacion lleva la prioridad y el proximo hito del Mapa, y nada si falla la lectura")
+    @DisplayName("D-233: la situacion lleva la prioridad y el proximo hito del Mapa, y sin Mapa si falla la lectura")
     void resumenDelMapa() {
         when(situacionPort.de(APRENDIZ)).thenReturn(Optional.of(DIA_12));
         when(mapaPort.de(APRENDIZ)).thenReturn(new MapaDeLaPersona(true, true, "salud", List.of(),
@@ -72,7 +80,7 @@ class SituacionDelTurnoServiceTest {
         assertThat(mapa.hito().texto()).isEqualTo("89 kg");
 
         when(mapaPort.de(APRENDIZ)).thenThrow(new IllegalStateException("caida"));
-        assertThat(service.de(APRENDIZ).orElseThrow().mapa()).isNull();
+        assertThat(service.de(APRENDIZ).orElseThrow().mapa().tieneMapa()).isFalse();
     }
 
     /**
@@ -127,6 +135,7 @@ class SituacionDelTurnoServiceTest {
         when(planPort.planDe(APRENDIZ)).thenReturn(new PlanDelAprendiz(HOY_EN_LIMA, List.of(habitos), List.of()));
     }
 
+    // spec 038 FR-010
     @Test
     @DisplayName("lleva cada habito de hoy con su estado en palabras, si pide foto, y los pausados con su fin")
     void habitosDeHoyYPausados() {
@@ -149,11 +158,26 @@ class SituacionDelTurnoServiceTest {
                 // 04:30 UTC = 23:30 del sabado en Lima: a las 22:00 de Lima sigue pendiente
                 new HabitoDeHoy("MEDITAR", EstadoDeHoy.PENDIENTE, true),
                 new HabitoDeHoy("CAMINAR", EstadoDeHoy.VENCIDO, false),
-                new HabitoDeHoy("LECTURA", EstadoDeHoy.VENCIDO, false),
+                // spec 038 (D-259): un EXPIRADO es un dia cerrado, no «ya no da puntos»; un PENDIENTE con el plazo pasado si se puede registrar
+                new HabitoDeHoy("LECTURA", EstadoDeHoy.DIA_CERRADO, false),
                 // la Clase diaria pide evidencia en el catalogo, pero se cierra con su resumen (D-171)
                 new HabitoDeHoy("CLASE DIARIA", EstadoDeHoy.EN_CURSO, false));
         assertThat(habitos.pausados()).containsExactly(
                 new HabitoPausado("DUCHA FRIA", LocalDate.of(2026, 9, 27)), new HabitoPausado("YOGA", null));
+    }
+
+    @Test
+    @DisplayName("spec 038: un ritual no pide foto, pide escribir; y el resto de los que exigen evidencia sigue pidiendo foto")
+    void ritualPideEscribir() {
+        when(situacionPort.de(APRENDIZ)).thenReturn(Optional.of(DIA_12));
+        when(agendaPort.deHoyDe(APRENDIZ)).thenReturn(List.of(
+                habito("RITUAL DE LA MAÑANA", "PENDIENTE", null, true, "RITUAL_MORNING"),
+                habito("JUGO VERDE", "PENDIENTE", null, true, null)));
+        conPlan();
+
+        assertThat(service.de(APRENDIZ).orElseThrow().habitos().deHoy()).containsExactly(
+                new HabitoDeHoy("RITUAL DE LA MAÑANA", EstadoDeHoy.PENDIENTE, false, null, true),
+                new HabitoDeHoy("JUGO VERDE", EstadoDeHoy.PENDIENTE, true, null, false));
     }
 
     @Test
@@ -189,7 +213,11 @@ class SituacionDelTurnoServiceTest {
         when(situacionPort.de(APRENDIZ)).thenReturn(Optional.of(DIA_12));
         when(agendaPort.deHoyDe(APRENDIZ)).thenThrow(new IllegalStateException("base caida"));
 
-        assertThat(service.de(APRENDIZ)).contains(DIA_12);
+        SituacionDelAprendiz situacion = service.de(APRENDIZ).orElseThrow();
+        assertThat(situacion.diaPrograma()).isEqualTo(DIA_12.diaPrograma());
+        assertThat(situacion.fase()).isEqualTo(DIA_12.fase());
+        assertThat(situacion.hoy()).isEqualTo(DIA_12.hoy());
+        assertThat(situacion.habitos()).isNull();
     }
 
     @Test
@@ -209,5 +237,46 @@ class SituacionDelTurnoServiceTest {
 
         assertThat(service.de(APRENDIZ)).isEmpty();
         verifyNoInteractions(agendaPort, planPort);
+    }
+
+    /** Spec 026, 026-8 B: la situacion sabe si la persona tiene diagnostico y su prioridad; si no se puede leer, no dice nada. */
+    @Test
+    @DisplayName("spec 026: la situacion lleva el diagnostico (completado y su prioridad), y nada si no lo tiene o falla la lectura")
+    void resumenDelDiagnostico() {
+        when(situacionPort.de(APRENDIZ)).thenReturn(Optional.of(DIA_12));
+        when(mapaPort.de(APRENDIZ)).thenReturn(MapaDeLaPersona.sinMapa());
+        when(diagnosticoPort.de(APRENDIZ)).thenReturn(new com.renaser.os.rag.domain.model.diagnostico.DiagnosticoDeLaPersona(true, true, "CUERPO", List.of()));
+
+        var diagnostico = service.de(APRENDIZ).orElseThrow().mapa().diagnostico();
+        assertThat(diagnostico.completado()).isTrue();
+        assertThat(diagnostico.prioridad()).isEqualTo("CUERPO");
+
+        when(diagnosticoPort.de(APRENDIZ)).thenReturn(com.renaser.os.rag.domain.model.diagnostico.DiagnosticoDeLaPersona.ninguno());
+        assertThat(service.de(APRENDIZ).orElseThrow().mapa().diagnostico()).isNull();
+
+        when(diagnosticoPort.de(APRENDIZ)).thenThrow(new IllegalStateException("caida"));
+        assertThat(service.de(APRENDIZ).orElseThrow().mapa().diagnostico()).isNull();
+    }
+
+    // spec 037 (T021 de la 038): la situacion marca el habito de km que se mide solo y no lo cuenta entre los que piden foto
+    @Test
+    @DisplayName("spec 037: el habito de km con los pasos conectados llega a la situacion como «se mide solo» y sin pedir foto; sin ellos, pide foto")
+    void kilometrosQueSeMidenSolos() {
+        var conPasos = new ConsultarAgendaHabitosPort.MedicionDelHabito("KILOMETROS", new java.math.BigDecimal("5.00"), null, null, null, true);
+        var sinPasos = new ConsultarAgendaHabitosPort.MedicionDelHabito("KILOMETROS", new java.math.BigDecimal("5.00"), null, null, null, false);
+        when(situacionPort.de(APRENDIZ)).thenReturn(Optional.of(DIA_12));
+        when(agendaPort.deHoyDe(APRENDIZ)).thenReturn(List.of(
+                new HabitoDelDia(UUID.randomUUID(), "KILOMETROS DIARIOS", "PENDIENTE", 10, 10, null, true, List.of(), "DAILY_KM", null, null,
+                        "Cuerpo", null, null, conPasos),
+                new HabitoDelDia(UUID.randomUUID(), "KILOMETROS DIARIOS", "PENDIENTE", 10, 10, null, true, List.of(), "DAILY_KM", null, null,
+                        "Cuerpo", null, null, sinPasos)));
+        when(planPort.planDe(APRENDIZ)).thenReturn(new GestionarPlanDeHabitosPort.PlanDelAprendiz(HOY_EN_LIMA, List.of(), List.of()));
+
+        var habitos = service.de(APRENDIZ).orElseThrow().habitos().deHoy();
+
+        assertThat(habitos.get(0).seMideSolo()).isTrue();
+        assertThat(habitos.get(0).pideFoto()).isFalse();
+        assertThat(habitos.get(1).seMideSolo()).isFalse();
+        assertThat(habitos.get(1).pideFoto()).isTrue();
     }
 }

@@ -15,6 +15,7 @@ import com.renaser.os.users.domain.model.participante.ParticipacionPrograma;
 import com.renaser.os.users.domain.model.user.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,12 +49,29 @@ public class RelojProgramaService
     private final Clock clock;
     private final BloquearActivacionProgramaPort bloquearActivacionProgramaPort;
 
+    private final ProgramaPropioDelPersonal programaPropio;
+
+    /** Firma de antes de las formaciones: el personal que elige su Día 1 lo hace en la Escuela. */
     public RelojProgramaService(RequireActiveUserGuard requireActiveUserGuard,
                                  LoadParticipacionProgramaPort loadParticipacionProgramaPort,
                                  SaveParticipacionProgramaPort saveParticipacionProgramaPort,
                                  ListarParticipantesConProgramaActivoPort listarParticipantesConProgramaActivoPort,
                                  GuardarAvanceDelRelojPort guardarAvanceDelRelojPort, Clock clock,
                                  BloquearActivacionProgramaPort bloquearActivacionProgramaPort) {
+        this(requireActiveUserGuard, loadParticipacionProgramaPort, saveParticipacionProgramaPort,
+                listarParticipantesConProgramaActivoPort, guardarAvanceDelRelojPort, clock, bloquearActivacionProgramaPort,
+                ProgramaPropioDelPersonal.escuela());
+    }
+
+    @Autowired
+    RelojProgramaService(RequireActiveUserGuard requireActiveUserGuard,
+                                 LoadParticipacionProgramaPort loadParticipacionProgramaPort,
+                                 SaveParticipacionProgramaPort saveParticipacionProgramaPort,
+                                 ListarParticipantesConProgramaActivoPort listarParticipantesConProgramaActivoPort,
+                                 GuardarAvanceDelRelojPort guardarAvanceDelRelojPort, Clock clock,
+                                 BloquearActivacionProgramaPort bloquearActivacionProgramaPort,
+                                 ProgramaPropioDelPersonal programaPropio) {
+        this.programaPropio = programaPropio;
         this.requireActiveUserGuard = requireActiveUserGuard;
         this.loadParticipacionProgramaPort = loadParticipacionProgramaPort;
         this.saveParticipacionProgramaPort = saveParticipacionProgramaPort;
@@ -68,7 +86,7 @@ public class RelojProgramaService
      * `participantes_programa` se la crea {@code ApproveAccountRequestUseCase} al aprobar la
      * cuenta (CLAUDE.MD §5.3.3), y esto solo la activa.
      *
-     * <p><b>D-261:</b> al personal sin fila se la crea aca, ya con la fecha elegida — ver
+     * <p><b>D-261:</b> al personal sin fila se la crea aca, ya activada (spec 036: con inicio mañana) — ver
      * {@link #participacionOFilaNuevaDelPersonal}.
      */
     @Override
@@ -199,9 +217,9 @@ public class RelojProgramaService
 
     /**
      * La fila del actor, o —solo para el personal sin fila— una fila nueva sin activar, armada en
-     * memoria (D-261, decision del dueño 2026-10-07: «que elija el dia como los demas»). El GET la
-     * usa para ofrecer las mismas fechas que al aprendiz y no la guarda; el POST la guarda ya
-     * activada con la fecha elegida. Quien puede es quien tiene
+     * memoria (D-261, decision del dueño 2026-10-07: «que lo haga como los demas»). El GET la
+     * usa para ofrecer la misma fecha que al aprendiz y no la guarda; el POST la guarda ya
+     * activada con inicio mañana (spec 036). Quien puede es quien tiene
      * {@link Permission#TRACK_PROGRAM_AS_STAFF}, el mismo permiso que {@code POST
      * /mentor/activate-tracking} (MENTOR, MENTOR_LEAD, ADMIN, ALCHEMIST). Al aprendiz sin fila no
      * se le inventa una: sigue el 404 de siempre, porque su fila nace al aprobarse la cuenta.
@@ -217,6 +235,8 @@ public class RelojProgramaService
         if (!actor.role().can(Permission.TRACK_PROGRAM_AS_STAFF)) {
             return Optional.empty();
         }
-        return Optional.of(ParticipacionPrograma.inscribirPersonalSinActivar(actor.id(), clock));
+        var programa = programaPropio.para(actor.id());
+        return Optional.of(ParticipacionPrograma.inscribirPersonalSinActivar(actor.id(), clock, programa.formacion(),
+                programa.duracionDias()));
     }
 }

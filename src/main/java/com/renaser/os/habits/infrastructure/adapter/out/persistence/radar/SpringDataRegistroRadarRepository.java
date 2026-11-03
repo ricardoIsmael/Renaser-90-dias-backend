@@ -19,6 +19,9 @@ interface SpringDataRegistroRadarRepository extends JpaRepository<RegistroRadarJ
     List<RegistroRadarJpaEntity> findByParticipanteIdAndCreadoEnLessThanOrderByCreadoEnDesc(
             UUID participanteId, Instant cursor, Pageable pageable);
 
+    List<RegistroRadarJpaEntity> findByParticipanteIdAndCreadoEnGreaterThanEqualAndCreadoEnLessThanOrderByCreadoEnAsc(
+            UUID participanteId, Instant desde, Instant hasta);
+
     /** Para {@link com.renaser.os.users.api.RadarLogrosFinder} — agregacion en SQL, nunca en memoria. */
     long countByParticipanteId(UUID participanteId);
 

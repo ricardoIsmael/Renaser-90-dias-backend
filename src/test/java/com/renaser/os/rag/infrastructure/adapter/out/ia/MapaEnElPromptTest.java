@@ -57,41 +57,53 @@ class MapaEnElPromptTest {
     }
 
     @Test
-    @DisplayName("sin Mapa, una linea corta; si no se pudo leer, nada (la situacion queda como estaba)")
+    @DisplayName("sin Mapa (retirado, spec 026) el prompt no dice nada de el; si no se pudo leer, tampoco")
     void sinMapaONull() {
-        assertThat(MapaEnElPrompt.linea(ResumenDelMapa.de(MapaDeLaPersona.sinMapa(), 23), 23))
-                .isEqualTo("Mapa de Renacimiento: no lo tiene guardado.\n");
-        assertThat(MapaEnElPrompt.linea(ResumenDelMapa.de(MapaDeLaPersona.sinMapa(), 4), 4))
-                .isEqualTo("Mapa de Renacimiento: todavia no (se arma el dia 7).\n");
+        assertThat(MapaEnElPrompt.linea(ResumenDelMapa.de(MapaDeLaPersona.sinMapa(), 23), 23)).isEmpty();
+        assertThat(MapaEnElPrompt.linea(ResumenDelMapa.de(MapaDeLaPersona.sinMapa(), 4), 4)).isEmpty();
         assertThat(GoogleGenAiRenasiaChatAdapter.formatearSituacion(DIA_23))
                 .isEqualTo(GoogleGenAiRenasiaChatAdapter.formatearSituacion(DIA_23.conMapa(null)))
                 .doesNotContain("Mapa de Renacimiento");
     }
 
     /**
-     * D-247 (E-496): sin Rocas Maestras la linea dice que no se proponga nada de objetivos, tenga o no el
-     * Mapa respondido (con Mapa, la activacion no las creo). Con ellas, o sin saberlo, como antes.
+     * D-247 (E-496) y spec 026: sin Rocas Maestras la linea dice que no se proponga nada de objetivos y que los escriba en Plan, tenga o no el Mapa
+     * respondido y tenga o no diagnostico. Con ellas, o sin saberlo, como antes.
      */
     @Test
-    @DisplayName("D-247: sin Rocas Maestras la linea prohibe proponer objetivos, con o sin Mapa respondido")
+    @DisplayName("D-247: sin Rocas Maestras la linea prohibe proponer objetivos y manda a Plan, nunca al Mapa")
     void sinRocasMaestras() {
         String sinMapa = GoogleGenAiRenasiaChatAdapter.formatearSituacion(DIA_23.conMapa(
                 ResumenDelMapa.de(MapaDeLaPersona.sinMapa(), 23).conRocasMaestras(false)));
-        assertThat(sinMapa).contains("Mapa de Renacimiento: sin completar — no se puede planificar NINGUN objetivo "
-                + "(acciones del dia, plan de la semana): todo se rechaza. Si pide planificar su dia o sus objetivos, "
-                + "antes de preguntarle nada dile eso e invitala a completarlo en Plan, \"Ir al Mapa de "
-                + "Renacimiento\". Sus habitos si se ajustan.\n");
-        assertThat(sinMapa.lines().filter(l -> l.contains("Mapa de Renacimiento")).count()).isEqualTo(1);
+        assertThat(sinMapa).contains(MapaEnElPrompt.SIN_OBJETIVOS).doesNotContain("Ir al Mapa");
+        assertThat(MapaEnElPrompt.SIN_OBJETIVOS).contains("no se puede planificar NINGUN objetivo").contains("abrir la pestana Plan").contains("Tu no puedes escribirlos ni confirmarlos");
 
         assertThat(MapaEnElPrompt.linea(ResumenDelMapa.de(mapa("salud", List.of()), 23).conRocasMaestras(false), 23))
-                .isEqualTo(MapaEnElPrompt.SIN_ROCAS_MAESTRAS)
-                .contains("respondido, pero sus objetivos de 90 dias (Rocas Maestras) no quedaron creados");
-        assertThat(MapaEnElPrompt.linea(ResumenDelMapa.de(MapaDeLaPersona.sinMapa(), 4).conRocasMaestras(false), 4))
-                .isEqualTo(MapaEnElPrompt.SIN_COMPLETAR);
+                .isEqualTo(MapaEnElPrompt.SIN_OBJETIVOS);
 
         assertThat(MapaEnElPrompt.linea(ResumenDelMapa.de(mapa("salud", List.of()), 23).conRocasMaestras(true), 23))
                 .startsWith("Mapa de Renacimiento: prioridad Salud");
-        assertThat(MapaEnElPrompt.linea(ResumenDelMapa.de(MapaDeLaPersona.sinMapa(), 23).conRocasMaestras(null), 23))
-                .isEqualTo("Mapa de Renacimiento: no lo tiene guardado.\n");
+        assertThat(MapaEnElPrompt.linea(ResumenDelMapa.de(MapaDeLaPersona.sinMapa(), 23).conRocasMaestras(null), 23)).isEmpty();
+    }
+
+    /** Spec 026, 026-8 B: SER sabe del diagnostico en cada turno y lo lee entero con la herramienta. */
+    @Test
+    @DisplayName("el diagnostico: lo asignado sin terminar, lo completado con su prioridad, y el bloqueo de objetivos sigue diciendolo")
+    void elDiagnosticoEnElPrompt() {
+        ResumenDelMapa base = ResumenDelMapa.de(MapaDeLaPersona.sinMapa(), 23);
+
+        assertThat(MapaEnElPrompt.linea(base.conDiagnostico(new com.renaser.os.rag.domain.model.mapa.ResumenDelDiagnostico(false, null)), 23))
+                .isEqualTo("Diagnostico inicial: lo tiene asignado y todavia no lo termina.\n");
+        assertThat(MapaEnElPrompt.linea(base.conDiagnostico(new com.renaser.os.rag.domain.model.mapa.ResumenDelDiagnostico(true, "CUERPO")), 23))
+                .isEqualTo("Diagnostico inicial: completado; prioridad principal: Salud. Sus respuestas completas no estan aca: llama consultar_mi_diagnostico.\n");
+        assertThat(MapaEnElPrompt.linea(base.conDiagnostico(new com.renaser.os.rag.domain.model.mapa.ResumenDelDiagnostico(true, null)), 23))
+                .doesNotContain("prioridad");
+        assertThat(MapaEnElPrompt.linea(base.conRocasMaestras(false).conDiagnostico(new com.renaser.os.rag.domain.model.mapa.ResumenDelDiagnostico(true, "TRABAJO")), 23))
+                .startsWith(MapaEnElPrompt.sinObjetivos("90 días", false, true)).contains("Negocio y dinero")
+                .contains("confirma los que nacieron de su diagnostico");
+        // issue #65: con el diagnostico asignado pero sin terminar no nacio ningun objetivo de el: solo «escribelos en Plan».
+        assertThat(MapaEnElPrompt.linea(base.conRocasMaestras(false).conDiagnostico(new com.renaser.os.rag.domain.model.mapa.ResumenDelDiagnostico(false, null)), 23))
+                .startsWith(MapaEnElPrompt.SIN_OBJETIVOS).doesNotContain("confirma los que nacieron");
+        assertThat(MapaEnElPrompt.linea(base.conDiagnostico(null), 23)).isEmpty();
     }
 }

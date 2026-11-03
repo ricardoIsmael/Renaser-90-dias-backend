@@ -71,6 +71,8 @@ class MisHabitosServiceTest {
     private com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort loadRegistroPort;
     @Mock
     private RachasDeHabitos rachasDeHabitos;
+    @Mock
+    private com.renaser.os.habits.application.ports.out.categoria.LoadCategoriaHabitoPort categoriasPort;
 
     private final UserId actor = UserId.of(UUID.randomUUID());
 
@@ -79,8 +81,11 @@ class MisHabitosServiceTest {
     @BeforeEach
     void setUp() {
         service = new MisHabitosService(loadPort, savePort, saveHorarioPort, loadHorarioPort, progresoPort,
-                savePreferenciaPort, loadRegistroPort, CLOCK, idGenerator, rachasDeHabitos, CatalogoAplicableDePrueba.sinAudiencias(loadPort));
+                savePreferenciaPort, loadRegistroPort, CLOCK, idGenerator, rachasDeHabitos, CatalogoAplicableDePrueba.sinAudiencias(loadPort), categoriasPort);
         lenient().when(loadHorarioPort.porHabitos(any())).thenReturn(List.of());
+        lenient().when(categoriasPort.byClave(any())).thenAnswer(inv -> Optional.of(
+                com.renaser.os.habits.domain.model.categoria.CategoriaHabito.rehydrate(inv.getArgument(0),
+                        com.renaser.os.shared.domain.Formacion.ESCUELA, "Categoría", 1, null, true, CLOCK.now(), CLOCK.now())));
         // `consultar` necesita el dia de programa desde que calcula el desbloqueo de cada habito
         // (dia 2: el mismo escenario en el que el dueño reporto ver habitos que aun no le tocaban).
         lenient().when(progresoPort.deParticipante(actor)).thenReturn(
@@ -520,7 +525,7 @@ class MisHabitosServiceTest {
     void enDia0ElHabitoPersonalSeCreaIgualConElRelojEnLaMadrugadaUtc() {
         MisHabitosService servicioDeMadrugada = new MisHabitosService(loadPort, savePort, saveHorarioPort,
                 loadHorarioPort, progresoPort, savePreferenciaPort, loadRegistroPort,
-                FixedClock.at(Instant.parse("2026-09-07T02:00:00Z")), idGenerator, rachasDeHabitos, CatalogoAplicableDePrueba.sinAudiencias(loadPort));
+                FixedClock.at(Instant.parse("2026-09-07T02:00:00Z")), idGenerator, rachasDeHabitos, CatalogoAplicableDePrueba.sinAudiencias(loadPort), categoriasPort);
         when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(enDia(0)));
         when(idGenerator.newId()).thenReturn(UUID.randomUUID(), UUID.randomUUID());
 
@@ -585,7 +590,7 @@ class MisHabitosServiceTest {
         java.time.LocalDate inicio = java.time.LocalDate.of(2026, 8, 30);
         MisHabitosService deMadrugada = new MisHabitosService(loadPort, savePort, saveHorarioPort, loadHorarioPort,
                 progresoPort, savePreferenciaPort, loadRegistroPort,
-                FixedClock.at(Instant.parse("2026-09-07T02:00:00Z")), idGenerator, rachasDeHabitos, CatalogoAplicableDePrueba.sinAudiencias(loadPort));
+                FixedClock.at(Instant.parse("2026-09-07T02:00:00Z")), idGenerator, rachasDeHabitos, CatalogoAplicableDePrueba.sinAudiencias(loadPort), categoriasPort);
         Habito leer = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "LEER", TipoHabito.CHECKBOX,
                 new DetallesHabito("desc", "MENTE", ExigenciaEvidencia.OPCIONAL, false, false), CLOCK.now());
         Habito correr = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "CORRER", TipoHabito.CHECKBOX,
@@ -613,5 +618,15 @@ class MisHabitosServiceTest {
         service.consultar(actor);
 
         verifyNoInteractions(rachasDeHabitos);
+    }
+
+    @Test
+    void unHabitoPropioEnUnaCategoriaQueNoExisteSeRechazaConSuMotivoSinGuardarNada() {
+        when(categoriasPort.byClave("INVENTADA")).thenReturn(Optional.empty());
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.crear(new CrearHabitoPersonalCommand(actor, "Correr 5km",
+                        TipoHabito.CHECKBOX, "INVENTADA", PlantillaHabitoPersonal.CORRER, "meta", null, DISPARO, LIMITE, null)))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("categoría");
+        org.mockito.Mockito.verifyNoInteractions(savePort, saveHorarioPort);
     }
 }

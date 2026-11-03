@@ -5,11 +5,13 @@ import com.renaser.os.rag.application.ports.in.herramienta.EjecutarHerramientaAg
 import com.renaser.os.rag.application.ports.out.ia.ChatIAPort;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz;
 import com.renaser.os.rag.application.ports.out.participante.ConsultarTratoDeLaPersonaPort;
+import com.renaser.os.rag.application.services.InicioDelPrograma;
 import com.renaser.os.rag.domain.model.conversacion.AgenteConversacional;
 import com.renaser.os.rag.domain.model.conversacion.CanalConversacion;
 import com.renaser.os.rag.domain.model.conversacion.EventoRenasia;
 import com.renaser.os.rag.domain.model.conversacion.MensajeRenasia;
 import com.renaser.os.rag.domain.model.conversacion.RolMensaje;
+import com.renaser.os.shared.domain.DuracionDelPrograma;
 import io.micrometer.observation.ObservationRegistry;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.ToolCallingAdvisor;
@@ -25,6 +27,7 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -263,14 +266,50 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
      */
     static String formatearSituacion(SituacionDelAprendiz situacion) {
         if (situacion == null) {
-            return "(quien te escribe no esta cursando el programa de 90 dias: no tiene dia ni fase. "
+            return "(quien te escribe no esta cursando el programa: no tiene dia ni fase. "
                     + "No hables de su dia ni se lo preguntes.)";
         }
         String fecha = situacion.hoy() == null ? "" : situacion.hoy().format(FECHA_DE_HOY) + ", ";
-        return "Hoy es " + fecha + "su dia " + situacion.diaPrograma() + " de 90, en la fase " + situacion.fase()
-                + " de 4.\n" + tratoDe(situacion.trato()) + "\n"
-                + MapaEnElPrompt.linea(situacion.mapa(), situacion.diaPrograma())
+        if (situacion.programaPorEmpezar()) {
+            return "Hoy es " + fecha + programaPorEmpezar(situacion) + "\n" + nombreDelObjetivoGrande(situacion.plazoDelObjetivo())
+                    + tratoDe(situacion.trato()) + "\n" + MapaEnElPrompt.linea(situacion.mapa(), situacion.diaPrograma(), situacion.plazoDelObjetivo())
+                    + HabitosDeHoyEnElPrompt.texto(situacion.habitos());
+        }
+        return "Hoy es " + fecha + "su dia " + situacion.diaPrograma() + " de " + situacion.duracionDias() + ", en la fase " + situacion.fase()
+                + " de 4.\n" + nombreDelObjetivoGrande(situacion.plazoDelObjetivo()) + tratoDe(situacion.trato()) + "\n"
+                + MapaEnElPrompt.linea(situacion.mapa(), situacion.diaPrograma(), situacion.plazoDelObjetivo())
                 + HabitosDeHoyEnElPrompt.texto(situacion.habitos());
+    }
+
+    /**
+     * Spec 036 (D-309): el programa empieza al dia siguiente de confirmarlo, asi que el primer encuentro con SER cae casi siempre en el dia 0. Sin esto
+     * la situacion decia «su dia 0 de 90, en la fase 1 de 4» y el modelo hablaba de un dia y una fase que todavia no existen. Ahora dice cuando empieza
+     * (con el plazo de SU formacion: «90 dias», «3 meses», «1 año») y le prohibe hablar de dia o de fase. Si todavia no lo activo, lo dice y manda al boton
+     * «Empezar manana»: nunca le asigna una fecha por su cuenta.
+     */
+    static String programaPorEmpezar(SituacionDelAprendiz situacion) {
+        String plazo = situacion.plazoDelObjetivo();
+        String noHables = " No hables de su dia ni de su fase: todavia no tiene.";
+        LocalDate diaUno = situacion.diaUno();
+        if (diaUno == null) {
+            return "Todavia no activo su programa de " + plazo + ": empieza al dia siguiente de confirmarlo, con el boton «Empezar manana» "
+                    + "(en Hoy, Plan o Training)." + noHables;
+        }
+        String cuando = "empieza " + InicioDelPrograma.de(situacion).map(InicioDelPrograma::cuandoSinEnie)
+                .orElseGet(() -> "el " + diaUno);
+        return "Su programa de " + plazo + " " + cuando + "." + noHables;
+    }
+
+    /**
+     * Su objetivo grande se llama «objetivo de 1 año» si su programa dura un año, «objetivo de 3 meses» en el Diplomado de 90 dias (decision del dueno, 2026-10-31): el modelo
+     * lo nombra asi y no como «de 90 dias», que es lo que dicen el material y algunos textos fijos. En la Escuela y la Certificacion (90 dias) no se dice nada: es el nombre de siempre.
+     */
+    static String nombreDelObjetivoGrande(String plazo) {
+        if (plazo.equals(DuracionDelPrograma.plazoDelObjetivo(DuracionDelPrograma.POR_DEFECTO))) {
+            return "";
+        }
+        return "Su objetivo grande se llama \"objetivo de " + plazo + "\": nombralo asi y nunca como \"objetivo de 90 dias\", "
+                + "aunque algun dato de las herramientas o del material lo diga.\n";
     }
 
     /**

@@ -3,11 +3,14 @@ package com.renaser.os.habits.application.services;
 import com.renaser.os.habits.api.AgendaDelDiaFinder;
 import com.renaser.os.habits.api.HabitoEnJuegoResumen;
 import com.renaser.os.habits.api.HabitoEnJuegoResumen.TramoPuntos;
+import com.renaser.os.habits.api.MedicionDelHabito;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase.CompletarRegistroCommand;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase;
+import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase.MedicionDelTrack;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase.TrackDelDiaConCatalogo;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
+import com.renaser.os.habits.application.ports.out.medicion.ContarMedicionesAutomaticasPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
@@ -24,6 +27,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -44,15 +48,18 @@ public class AgendaDelDiaFinderService implements AgendaDelDiaFinder {
     private final CompletarRegistroUseCase completarRegistroUseCase;
     private final ConsultarProgresoParticipanteHabitsPort progresoPort;
     private final LoadHabitoPort loadHabitoPort;
+    private final ContarMedicionesAutomaticasPort medicionesAutomaticasPort;
 
     public AgendaDelDiaFinderService(ConsultarTracksDelDiaConCatalogoUseCase consultarTracksUseCase,
                                       CompletarRegistroUseCase completarRegistroUseCase,
                                       ConsultarProgresoParticipanteHabitsPort progresoPort,
-                                      LoadHabitoPort loadHabitoPort) {
+                                      LoadHabitoPort loadHabitoPort,
+                                      ContarMedicionesAutomaticasPort medicionesAutomaticasPort) {
         this.consultarTracksUseCase = consultarTracksUseCase;
         this.completarRegistroUseCase = completarRegistroUseCase;
         this.progresoPort = progresoPort;
         this.loadHabitoPort = loadHabitoPort;
+        this.medicionesAutomaticasPort = medicionesAutomaticasPort;
     }
 
     @Override
@@ -60,8 +67,37 @@ public class AgendaDelDiaFinderService implements AgendaDelDiaFinder {
         List<TrackDelDiaConCatalogo> tracks = consultarTracksUseCase.consultarHoyDe(participanteId);
         Map<HabitoId, String> dimensiones = dimensionesDe(tracks);
         return tracks.stream()
-                .map(vista -> resumirDe(vista, dimensiones.get(vista.registro().habitoId())))
+                .map(vista -> resumirDe(vista, dimensiones.get(vista.registro().habitoId()),
+                        medicionDe(participanteId, vista)))
                 .toList();
+    }
+
+    /**
+     * Spec 037 sobre la 038 (T021): la medicion de un habito medible, con la pista de si ya mide con el telefono. Solo el habito medible (hoy uno) cuesta
+     * una consulta; el resto de la agenda no cambia. Si esa consulta falla, la medicion sale sin la pista: SER vuelve a lo de siempre (la camara) en vez
+     * de caerse.
+     */
+    private MedicionDelHabito medicionDe(UserId participanteId, TrackDelDiaConCatalogo vista) {
+        MedicionDelTrack medicion = vista.medicion();
+        if (medicion == null) {
+            return null;
+        }
+        return new MedicionDelHabito(medicion.unidad().name(), medicion.meta(), medicion.valorDelDia(),
+                medicion.origenDelDia() == null ? null : medicion.origenDelDia().name(), medicion.fuenteDelDia(),
+                conPasosConectados(participanteId, vista));
+    }
+
+    private boolean conPasosConectados(UserId participanteId, TrackDelDiaConCatalogo vista) {
+        if (vista.claveSistema() == null) {
+            return false;
+        }
+        try {
+            Set<UserId> automaticas = medicionesAutomaticasPort.conAlgunaMedicionAutomatica(List.of(participanteId),
+                    vista.claveSistema(), vista.registro().fechaEjecucion());
+            return automaticas.contains(participanteId);
+        } catch (RuntimeException sinLeer) {
+            return false;
+        }
     }
 
     /** E-455: la dimension de cada habito del dia, en UNA consulta para todo el dia. */
@@ -89,13 +125,13 @@ public class AgendaDelDiaFinderService implements AgendaDelDiaFinder {
                 .orElse(ZoneId.of("UTC"));
     }
 
-    private static HabitoEnJuegoResumen resumirDe(TrackDelDiaConCatalogo vista, String categoriaClave) {
+    private static HabitoEnJuegoResumen resumirDe(TrackDelDiaConCatalogo vista, String categoriaClave, MedicionDelHabito medicion) {
         PuntosEnJuego enJuego = vista.puntosEnJuego();
         return new HabitoEnJuegoResumen(vista.registro().id().value(), vista.tituloHabito(),
                 vista.registro().estado().name(), enJuego != null ? enJuego.siCompletaAhora() : null,
                 enJuego != null ? enJuego.maximo() : null, enJuego != null ? enJuego.plazo() : null,
                 vista.exigeEvidencia(), tramosDe(enJuego), vista.claveSistema(), vista.tituloDelPrograma(),
-                vista.horaDisparo(), categoriaClave);
+                vista.horaDisparo(), categoriaClave, vista.registro().habitoId().value(), vista.registro().fechaEjecucion(), medicion);
     }
 
     /**

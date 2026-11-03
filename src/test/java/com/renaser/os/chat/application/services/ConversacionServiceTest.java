@@ -29,6 +29,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -92,6 +93,9 @@ class ConversacionServiceTest {
     /** D-212: cuándo cambió la foto propia de cada grupo de la lista. */
     @Mock
     private FotoPropiaDelGrupoFinder fotosDeGrupos;
+    /** Spec 035: la imagen de cada formación; sin stubbing no hay imagen (Optional vacío) y los chats usan la de la app. */
+    @Mock
+    private com.renaser.os.chat.application.ports.in.bienvenida.ConsultarImagenDeLaFormacionUseCase imagenesDeFormacion;
     @Mock
     private IdGenerator idGenerator;
     /** No necesita stubbing: TransactionTemplate.execute con getTransaction()==null solo
@@ -115,7 +119,7 @@ class ConversacionServiceTest {
         service = new ConversacionService(loadConversacionPort, saveConversacionPort, agregarParticipantePort,
                 esParticipantePort, new AccesoAChatsDeGrupo(pertenenciaVigentePort, gruposEnCursoPort, userSummaryFinder), marcarLeidoPort, anunciarLectura, contarNoLeidosPort,
                 loadMensajePort, listarUsuariosPort, userSummaryFinder, fotosDeGrupos,
-                new NombresDeLosChatsService(grupos -> java.util.Map.of(), userSummaryFinder), CLOCK, idGenerator, transactionManager, cuentasCerradas);
+                new NombresDeLosChatsService(grupos -> java.util.Map.of(), userSummaryFinder, org.mockito.Mockito.mock(com.renaser.os.users.api.FormacionesFinder.class)), CLOCK, idGenerator, transactionManager, cuentasCerradas, new com.renaser.os.users.api.AlcanceDeFormacionSoloEscuela(), org.mockito.Mockito.mock(com.renaser.os.users.api.FormacionesFinder.class), new com.renaser.os.chat.application.services.VisibilidadPermisiva(), imagenesDeFormacion);
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(userSummaryFinder.findById(activo)).thenReturn(
                 Optional.of(new UserSummary(activo, "Activo", null, UserRole.TRAINEE, UserStatus.ACTIVE)));
@@ -161,6 +165,35 @@ class ConversacionServiceTest {
         when(loadConversacionPort.porClaveDirecta(clave)).thenReturn(Optional.empty());
 
         service.obtenerOCrear(new CrearConversacionDirectaCommand(activo, otroActivo));
+
+        verify(saveConversacionPort).save(any());
+        verify(agregarParticipantePort, times(2)).agregar(any());
+    }
+
+    @Test
+    @DisplayName("Spec 024 (E2E P3-H): la mentora que el directorio ofrece por pertenecer al Diplomado también se puede abrir, aunque su activa sea la Escuela")
+    void elDirectoSeAbreEnUnaFormacionQueLaOtraPersonaTieneAsignadaAunqueNoSeaLaActiva() {
+        var delDiplomado = new com.renaser.os.users.api.AlcanceDeFormacionPermisivo() {
+            @Override
+            public com.renaser.os.shared.domain.AlcanceDeFormacion de(UserId actor) {
+                return com.renaser.os.shared.domain.AlcanceDeFormacion.de(actor.equals(activo)
+                        ? com.renaser.os.shared.domain.Formacion.DIPLOMADO : com.renaser.os.shared.domain.Formacion.ESCUELA);
+            }
+
+            @Override
+            public java.util.Set<com.renaser.os.shared.domain.Formacion> formacionesDe(UserId persona) {
+                return persona.equals(activo) ? java.util.Set.of(com.renaser.os.shared.domain.Formacion.DIPLOMADO)
+                        : java.util.Set.of(com.renaser.os.shared.domain.Formacion.ESCUELA, com.renaser.os.shared.domain.Formacion.DIPLOMADO);
+            }
+        };
+        var servicio = new ConversacionService(loadConversacionPort, saveConversacionPort, agregarParticipantePort,
+                esParticipantePort, new AccesoAChatsDeGrupo(pertenenciaVigentePort, gruposEnCursoPort, userSummaryFinder), marcarLeidoPort, anunciarLectura, contarNoLeidosPort,
+                loadMensajePort, listarUsuariosPort, userSummaryFinder, fotosDeGrupos,
+                new NombresDeLosChatsService(grupos -> java.util.Map.of(), userSummaryFinder, org.mockito.Mockito.mock(com.renaser.os.users.api.FormacionesFinder.class)), CLOCK, idGenerator, transactionManager, cuentasCerradas, delDiplomado, org.mockito.Mockito.mock(com.renaser.os.users.api.FormacionesFinder.class), new com.renaser.os.chat.application.services.VisibilidadPermisiva(), imagenesDeFormacion);
+        String claveEnElDiplomado = Conversacion.claveDirectaDe(activo, otroActivo, com.renaser.os.shared.domain.Formacion.DIPLOMADO);
+        when(loadConversacionPort.porClaveDirecta(claveEnElDiplomado)).thenReturn(Optional.empty());
+
+        servicio.obtenerOCrear(new CrearConversacionDirectaCommand(activo, otroActivo));
 
         verify(saveConversacionPort).save(any());
         verify(agregarParticipantePort, times(2)).agregar(any());
@@ -292,6 +325,37 @@ class ConversacionServiceTest {
         assertThat(fotos.get(aurora.id())).as("usa la foto de Renaser").isNull();
         assertThat(fotos.get(comunidad.id())).isNull();
         verify(fotosDeGrupos, times(1)).cambiadasEn(any());
+    }
+
+    /**
+     * Spec 035: la comunidad general y los grupos llevan desde cuándo es la imagen de SU formación, una consulta por formación (no por conversación); el
+     * soporte y los 1 a 1 no, y una formación sin imagen no trae nada.
+     */
+    // spec 035 FR-008
+    @Test
+    void laListaTraeLaImagenDeLaFormacionDeLaComunidadYDeLosGruposUnaVezPorFormacion() {
+        Conversacion global = Conversacion.crearGlobal(ConversacionId.of(UUID.randomUUID()), "Diplomado Renaser Global", CLOCK.now(),
+                com.renaser.os.shared.domain.Formacion.DIPLOMADO);
+        Conversacion grupo = Conversacion.crearCelula(ConversacionId.of(UUID.randomUUID()), UUID.randomUUID(), CLOCK.now(),
+                com.renaser.os.shared.domain.Formacion.DIPLOMADO);
+        Conversacion escuela = Conversacion.crearGlobal(ConversacionId.of(UUID.randomUUID()), CLOCK.now());
+        Instant desde = Instant.parse("2026-11-02T15:00:00Z");
+        when(loadConversacionPort.misConversaciones(activo)).thenReturn(List.of(global, grupo, escuela));
+        when(loadMensajePort.ultimosPorConversacion(any())).thenReturn(Map.of());
+        when(contarNoLeidosPort.contarNoLeidos(eq(activo), any())).thenReturn(Map.of());
+        when(pertenenciaVigentePort.perteneceAlGrupo(any(), eq(activo))).thenReturn(true);
+        when(imagenesDeFormacion.vigente(com.renaser.os.shared.domain.Formacion.DIPLOMADO)).thenReturn(Optional.of(
+                new com.renaser.os.chat.application.ports.in.bienvenida.ConsultarImagenDeLaFormacionUseCase.ImagenDeLaFormacionVigente(
+                        "formaciones/imagenes/d", desde)));
+
+        Map<ConversacionId, Instant> imagenes = new java.util.HashMap<>();
+        service.listar(activo).forEach(r -> imagenes.put(r.conversacion().id(), r.imagenDeLaFormacionDesde()));
+
+        assertThat(imagenes.get(global.id())).isEqualTo(desde);
+        assertThat(imagenes.get(grupo.id())).isEqualTo(desde);
+        assertThat(imagenes.get(escuela.id())).as("la Escuela no tiene imagen: usa la de la app").isNull();
+        verify(imagenesDeFormacion, times(1)).vigente(com.renaser.os.shared.domain.Formacion.DIPLOMADO);
+        verify(imagenesDeFormacion, times(1)).vigente(com.renaser.os.shared.domain.Formacion.ESCUELA);
     }
 
     /**
@@ -455,7 +519,7 @@ class ConversacionServiceTest {
 
     @Test
     void unirseCreaLaGlobalSiTodaviaNoExisteYAgregaAlUsuario() {
-        when(loadConversacionPort.global()).thenReturn(Optional.empty());
+        when(loadConversacionPort.global(any())).thenReturn(Optional.empty());
         when(esParticipantePort.esParticipante(any(), eq(activo))).thenReturn(false);
 
         service.unirse(activo);
@@ -465,9 +529,36 @@ class ConversacionServiceTest {
     }
 
     @Test
+    @DisplayName("Issue #55: si otro pedido crea la comunidad general al mismo tiempo, quien pierde la carrera relee la que ganó y se une a ella")
+    void unirseNoSeRompeSiOtroPedidoCreaLaComunidadAlMismoTiempo() {
+        Conversacion ganadora = Conversacion.crearGlobal(ConversacionId.of(UUID.randomUUID()), CLOCK.now());
+        // La primera lectura no ve nada (todavía no ganó nadie); la segunda, tras perder la carrera, ya ve la que comprometió el otro pedido.
+        when(loadConversacionPort.global(any())).thenReturn(Optional.empty(), Optional.of(ganadora));
+        when(saveConversacionPort.save(any())).thenThrow(new DataIntegrityViolationException("conversacion_global_unica_uk simulado"));
+        when(esParticipantePort.esParticipante(ganadora.id(), activo)).thenReturn(false);
+
+        service.unirse(activo);
+
+        ArgumentCaptor<com.renaser.os.chat.domain.model.conversacion.Participante> agregado =
+                ArgumentCaptor.forClass(com.renaser.os.chat.domain.model.conversacion.Participante.class);
+        verify(agregarParticipantePort).agregar(agregado.capture());
+        assertThat(agregado.getValue().conversacionId()).isEqualTo(ganadora.id());
+    }
+
+    @Test
+    @DisplayName("Issue #55: si la carrera se pierde y la comunidad tampoco aparece al releer, el error de verdad sale (no se traga)")
+    void unirseDejaSalirElErrorSiNiSiquieraSeEncuentraLaGanadora() {
+        when(loadConversacionPort.global(any())).thenReturn(Optional.empty());
+        when(saveConversacionPort.save(any())).thenThrow(new DataIntegrityViolationException("otra violación"));
+
+        assertThatThrownBy(() -> service.unirse(activo)).isInstanceOf(DataIntegrityViolationException.class);
+        verify(agregarParticipantePort, never()).agregar(any());
+    }
+
+    @Test
     void unirseEsIdempotenteSiYaEsParticipante() {
         Conversacion global = Conversacion.crearGlobal(ConversacionId.of(UUID.randomUUID()), CLOCK.now());
-        when(loadConversacionPort.global()).thenReturn(Optional.of(global));
+        when(loadConversacionPort.global(any())).thenReturn(Optional.of(global));
         when(esParticipantePort.esParticipante(global.id(), activo)).thenReturn(true);
 
         service.unirse(activo);
@@ -500,7 +591,7 @@ class ConversacionServiceTest {
     @Test
     void renombrarFuncionaParaUnAdmin() {
         Conversacion global = Conversacion.crearGlobal(ConversacionId.of(UUID.randomUUID()), CLOCK.now());
-        when(loadConversacionPort.global()).thenReturn(Optional.of(global));
+        when(loadConversacionPort.global(any())).thenReturn(Optional.of(global));
 
         Conversacion renombrada = service.renombrar(new RenombrarConversacionGlobalCommand(admin, "Comunidad Renaser"));
 
@@ -511,7 +602,7 @@ class ConversacionServiceTest {
     @Test
     void renombrarRechazaAQuienNoEsAdminNiAlquimista() {
         Conversacion global = Conversacion.crearGlobal(ConversacionId.of(UUID.randomUUID()), CLOCK.now());
-        lenient().when(loadConversacionPort.global()).thenReturn(Optional.of(global));
+        lenient().when(loadConversacionPort.global(any())).thenReturn(Optional.of(global));
 
         assertThatThrownBy(() -> service.renombrar(new RenombrarConversacionGlobalCommand(activo, "Otro nombre")))
                 .isInstanceOf(NotAuthorizedException.class);

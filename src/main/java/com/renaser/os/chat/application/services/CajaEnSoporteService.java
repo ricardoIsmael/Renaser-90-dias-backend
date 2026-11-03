@@ -2,7 +2,6 @@ package com.renaser.os.chat.application.services;
 
 import com.renaser.os.chat.application.ports.in.caja.AvisarCajaEnSoporteUseCase;
 import com.renaser.os.chat.application.ports.in.mensaje.EnviarMensajeDelProgramaUseCase;
-import com.renaser.os.chat.application.ports.out.conversacion.LoadConversacionPort;
 import com.renaser.os.chat.domain.model.conversacion.Conversacion;
 import com.renaser.os.chat.domain.model.conversacion.ConversacionId;
 import com.renaser.os.chat.domain.model.mensaje.ContenidoDelPrograma;
@@ -31,14 +30,14 @@ public class CajaEnSoporteService implements AvisarCajaEnSoporteUseCase {
     private static final long PESO_MAXIMO_FOTO = 10L * 1024 * 1024;
     private static final byte[] FIRMA_PNG = {(byte) 0x89, 'P', 'N', 'G'};
 
-    private final LoadConversacionPort conversaciones;
+    private final SoporteVigenteDelAprendiz soportes;
     private final EnviarMensajeDelProgramaUseCase delPrograma;
     private final AlmacenamientoPort almacenamiento;
     private final IdGenerator idGenerator;
 
-    CajaEnSoporteService(LoadConversacionPort conversaciones, EnviarMensajeDelProgramaUseCase delPrograma,
+    CajaEnSoporteService(SoporteVigenteDelAprendiz soportes, EnviarMensajeDelProgramaUseCase delPrograma,
                          AlmacenamientoPort almacenamiento, IdGenerator idGenerator) {
-        this.conversaciones = conversaciones;
+        this.soportes = soportes;
         this.delPrograma = delPrograma;
         this.almacenamiento = almacenamiento;
         this.idGenerator = idGenerator;
@@ -49,7 +48,7 @@ public class CajaEnSoporteService implements AvisarCajaEnSoporteUseCase {
         if (!aviso.aviso().alAprendiz()) {
             return;
         }
-        Optional<Conversacion> soporte = conversaciones.porClaveDirecta(Conversacion.claveSoporteDe(aviso.aprendizId()));
+        Optional<Conversacion> soporte = soportes.de(aviso.aprendizId());
         if (soporte.isEmpty()) {
             log.info("[chat.caja] {} no tiene chat de soporte: el aviso {} queda solo en la bandeja",
                     aviso.aprendizId(), aviso.aviso());

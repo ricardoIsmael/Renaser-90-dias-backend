@@ -18,27 +18,29 @@ class AceptarHitoCommandTest {
     void construyeUnComandoValidoSinExplotar() {
         UserId usuarioId = UserId.of(UUID.randomUUID());
 
-        var command = new AceptarHitoCommand(usuarioId, HitoOnboarding.PACTO);
+        var command = new AceptarHitoCommand(usuarioId, HitoOnboarding.PACTO, null, null);
 
         assertThat(command.hito()).isEqualTo(HitoOnboarding.PACTO);
     }
 
     @Test
     void rechazaUsuarioIdNulo() {
-        assertThatThrownBy(() -> new AceptarHitoCommand(null, HitoOnboarding.PACTO))
+        assertThatThrownBy(() -> new AceptarHitoCommand(null, HitoOnboarding.PACTO, null, null))
                 .isInstanceOf(ConstraintViolationException.class);
     }
 
     @Test
     void rechazaHitoNulo() {
         UserId usuarioId = UserId.of(UUID.randomUUID());
-        assertThatThrownBy(() -> new AceptarHitoCommand(usuarioId, null))
+        assertThatThrownBy(() -> new AceptarHitoCommand(usuarioId, null, null, null))
                 .isInstanceOf(ConstraintViolationException.class);
     }
 
+    // spec 039 FR-011; decisión 2026-11-02 pagos fuera de términos
     @Test
-    @DisplayName("el comando SOLO tiene usuarioId + hito (CLAUDE.MD §5.3.3)")
-    void tieneSoloDosComponentes() {
-        assertThat(AceptarHitoCommand.class.getRecordComponents()).hasSize(2);
+    @DisplayName("el comando solo tiene usuarioId, hito y lo que firma en Términos (versión e inicio visto), sin huella de cronograma (decisión 2026-11-02 pagos fuera de términos) y sin rol (CLAUDE.MD §5.3.3)")
+    void tieneSoloLosComponentesDeLaAceptacion() {
+        assertThat(AceptarHitoCommand.class.getRecordComponents()).extracting(componente -> componente.getName())
+                .containsExactly("usuarioId", "hito", "versionDeTerminosId", "inicioVisto");
     }
 }

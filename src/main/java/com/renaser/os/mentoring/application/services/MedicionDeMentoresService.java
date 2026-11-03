@@ -8,6 +8,7 @@ import com.renaser.os.mentoring.domain.model.semaforo.PeriodoDelSemaforo;
 import com.renaser.os.mentoring.domain.model.semaforo.ResumenDelGrupo;
 import com.renaser.os.points.api.ColorSemaforo;
 import com.renaser.os.points.api.VentanaDelSemaforo;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
@@ -47,9 +48,10 @@ public class MedicionDeMentoresService implements MedicionDeMentoresFinder {
 
     @Override
     @Transactional(readOnly = true)
-    public MedicionVigente vigente() {
+    public MedicionVigente vigente(AlcanceDeFormacion alcance) {
         Instant ahora = clock.now();
-        List<GrupoAcompanado> grupos = acompanamientoFinder.gruposConMentorVigente(ahora);
+        List<GrupoAcompanado> grupos = acompanamientoFinder.gruposConMentorVigente(ahora).stream()
+                .filter(grupo -> alcance.incluye(grupo.formacion())).toList();
         Map<UUID, List<UserId>> aprendicesPorGrupo = medicion.aprendicesPorGrupo(grupos, ahora);
         Map<UserId, VentanaDelSemaforo> ventanas = medicion.ventanasDe(todos(aprendicesPorGrupo.values()), null);
 

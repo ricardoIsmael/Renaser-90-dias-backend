@@ -12,7 +12,7 @@ import java.util.UUID;
 
 /**
  * Implementa {@link CrearHabitoPersonalPort} delegando en el contrato publico de {@code habits}
- * (D-41, D-229). Solo traduce: la dimension a su clave de {@code categorias_habito}.
+ * (D-41, D-229). Solo traduce: la categoria a su clave de {@code categorias_habito}.
  */
 @Component
 class CrearHabitoPersonalAdapter implements CrearHabitoPersonalPort {
@@ -26,7 +26,7 @@ class CrearHabitoPersonalAdapter implements CrearHabitoPersonalPort {
     @Override
     public UUID crear(UserId actorId, HabitoPersonalPedido pedido) {
         return habitosPersonales.crear(actorId, new HabitoPersonalNuevo(pedido.nombre(),
-                pedido.dimension().claveCategoria(), pedido.hora(), pedido.dias(), pedido.meta()));
+                pedido.categoria().clave(), pedido.hora(), pedido.dias(), pedido.meta()));
     }
 
     @Override

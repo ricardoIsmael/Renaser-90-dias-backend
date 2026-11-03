@@ -1,7 +1,7 @@
 package com.renaser.os.rag.application.services.herramientas;
 
 import com.renaser.os.rag.application.ports.out.rocas.ConsultarCompuertaDeRocasPort;
-import com.renaser.os.rag.domain.model.mapa.MapaDeLaPersona;
+import com.renaser.os.rag.domain.model.diagnostico.DiagnosticoDeLaPersona;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.LocalDate;
@@ -11,21 +11,36 @@ import java.util.List;
 final class CompuertasDePrueba {
 
     /** Con las tres Rocas Maestras y objetivo semanal en todos los ejes: la propuesta sale como siempre. */
-    static final CompuertaParaProponer LIBRE = compuerta(true, List.of(), false);
+    static final CompuertaParaProponer LIBRE = compuerta(true, List.of());
 
     private CompuertasDePrueba() {
     }
 
-    /** Sin Rocas Maestras; {@code conMapa} = el Mapa esta respondido (la activacion no las creo). */
-    static CompuertaParaProponer sinRocasMaestras(boolean conMapa) {
-        return compuerta(false, List.of("CUERPO", "TRABAJO", "RELACIONES"), conMapa);
+    /** Sin Rocas Maestras: todavia no escribio sus tres objetivos de 90 dias. */
+    static CompuertaParaProponer sinRocasMaestras() {
+        return compuerta(false, List.of("CUERPO", "TRABAJO", "RELACIONES"));
     }
 
     static CompuertaParaProponer sinObjetivoSemanal(List<String> ejes) {
-        return compuerta(true, ejes, true);
+        return compuerta(true, ejes);
     }
 
-    private static CompuertaParaProponer compuerta(boolean maestras, List<String> sinSemanal, boolean conMapa) {
+    /** Sin Rocas Maestras, de una persona cuyo programa y formación se dicen con otro plazo (spec 022). */
+    static CompuertaParaProponer sinRocasMaestrasDe(com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort situacion) {
+        return new CompuertaParaProponer(new ConsultarCompuertaDeRocasPort() {
+            @Override
+            public boolean rocasMaestrasCompletas(UserId aprendizId) {
+                return false;
+            }
+
+            @Override
+            public List<String> ejesSinObjetivoSemanal(UserId aprendizId, LocalDate fecha) {
+                return List.of("CUERPO", "TRABAJO", "RELACIONES");
+            }
+        }, situacion, participanteId -> DiagnosticoDeLaPersona.ninguno());
+    }
+
+    private static CompuertaParaProponer compuerta(boolean maestras, List<String> sinSemanal) {
         ConsultarCompuertaDeRocasPort port = new ConsultarCompuertaDeRocasPort() {
             @Override
             public boolean rocasMaestrasCompletas(UserId aprendizId) {
@@ -37,8 +52,6 @@ final class CompuertasDePrueba {
                 return sinSemanal;
             }
         };
-        return new CompuertaParaProponer(port, id -> conMapa
-                ? new MapaDeLaPersona(true, true, "salud", List.of(), List.of(), null, List.of(), List.of())
-                : MapaDeLaPersona.sinMapa());
+        return new CompuertaParaProponer(port, participanteId -> java.util.Optional.empty(), participanteId -> DiagnosticoDeLaPersona.ninguno());
     }
 }

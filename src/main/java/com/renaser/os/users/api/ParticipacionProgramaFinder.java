@@ -1,8 +1,12 @@
 package com.renaser.os.users.api;
 
+import com.renaser.os.shared.domain.DuracionDelPrograma;
 import com.renaser.os.shared.domain.UserId;
 
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -23,6 +27,21 @@ public interface ParticipacionProgramaFinder {
      * {@code inscrito=false}, nunca vacio — ver javadoc de {@link ParticipacionPrograma}.
      */
     Optional<ParticipacionPrograma> deParticipante(UserId participanteId);
+
+    /**
+     * Las participaciones de VARIAS personas en UNA consulta (auditoria de consultas, H-01): quien arma una pantalla con una fila por persona
+     * (la lista de «Hábitos de todos», «Todos los aprendices») no puede llamar a {@link #deParticipante} dentro de un {@code for}. Mismo contrato:
+     * una persona que no existe en `usuarios` no aparece; una que existe y no esta inscrita aparece con {@code inscrito=false}.
+     *
+     * <p>El cuerpo por defecto pregunta de a una (para los dobles de prueba que no necesitan la consulta en lote); la implementacion real la sobreescribe.
+     */
+    default Map<UserId, ParticipacionPrograma> deParticipantes(Collection<UserId> participantes) {
+        Map<UserId, ParticipacionPrograma> resultado = new LinkedHashMap<>();
+        for (UserId participante : participantes) {
+            deParticipante(participante).ifPresent(participacion -> resultado.put(participante, participacion));
+        }
+        return resultado;
+    }
 
     /** Miembros de la celula cuyo `usuarios.estado = 'ACTIVO'`. */
     List<UserId> miembrosActivosDeCelula(UUID celulaId);
@@ -50,7 +69,12 @@ public interface ParticipacionProgramaFinder {
     /** Usuarios ACTIVOS que ademas tienen fila en `participantes_programa`, sin importar el rol. */
     List<UserId> participantesInscritosActivos();
 
-    record UsuarioConDiaPrograma(UserId id, Integer diaPrograma) {
+    /** {@code duracionDias}: la duración de SU programa (90 o 365, spec 022); 90 si no está inscrito. */
+    record UsuarioConDiaPrograma(UserId id, Integer diaPrograma, int duracionDias) {
+
+        public UsuarioConDiaPrograma(UserId id, Integer diaPrograma) {
+            this(id, diaPrograma, DuracionDelPrograma.POR_DEFECTO);
+        }
     }
 
     /** Cantidad total de participantes con esa celula asignada (cualquier estado). */

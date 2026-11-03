@@ -120,6 +120,8 @@ Mismo patrón que `users.api.UserSummaryFinder` y `academy.api.AccesoCursoFinder
 
 **Dónde vive el filtro:** `VectorStorePort.buscarSimilares` ganó un tercer parámetro, `FiltroLecciones` (`SinFiltro` | `SoloVisibles(Set<String> leccionIds)`). Va en el WHERE de `PgVectorNativoAdapter` (`leccion_id IS NULL OR leccion_id = ANY(...)`), antes del `ORDER BY ... LIMIT` — filtrar en Java después de traer `topK` filas devolvería menos de `topK` fragmentos cuando hay candidatos bloqueados de por medio. `ConversacionRenasiaService` resuelve el conjunto visible (vía `ConsultarLeccionesVisiblesPort`) y arma el filtro; `PgVectorNativoAdapter` no sabe nada de reglas de `academy`, solo aplica el WHERE. Los chunks con `leccion_id IS NULL` (material general) nunca se filtran. `ConocimientoService` (indexación admin) no llama a `buscarSimilares` hoy — si algún día necesita buscar, usa `FiltroLecciones.sinFiltro()`.
 
+> **Agregado 2026-11-02 (V164, D-314, issue #62).** Un chunk con `leccion_id IS NULL` sigue siendo material general que ve cualquier formación, así que NO puede nacer por accidente: la llave `base_conocimiento.leccion_id` pasó de `ON DELETE SET NULL` a `ON DELETE CASCADE` (borrar una lección o su curso borra su transcripción). Cargar un fragmento sin `leccionId` por `POST /admin/conocimiento` es, desde ahora, decir «esto es para todas las formaciones».
+
 **Consecuencia para el contrato compartido:** es el segundo cambio de firma de `VectorStorePort` (antes "firma congelada" salvo para cerrar bugs reales) — `ConversacionRenasiaServiceTest`/`PgVectorNativoAdapterTest` ya están al día.
 
 ### D-82 — Puerto y adaptador vacío del clasificador de riesgo (solo estructura, sin conectar)
@@ -282,6 +284,7 @@ se migraron: funcionan y están probadas.
 | `consultar_horarios` | horario resuelto por día, apagado/pausado/obligatorio, **cuota de cambios** restante | nuevo `habits.api.HorarioDelDiaFinder` → `ConsultarPreferenciasHorarioUseCase` (el de `GET /habit-preferences?date=`) |
 | `consultar_rocas` | rocas de hoy/mañana/semana/mes, si el plan de mañana existe, ventana de las 18:00 (D-177 sumó `progreso` y `noventa`) | nuevo `rocks.api.RocasDelAprendizFinder` → dashboard, rocas de mañana, objetivo del mes, `VentanaPlanificacionDiaria` |
 | `consultar_eventos` | eventos de hoy o de los próximos 7 días, con el RSVP | nuevo `calendar.api.EventosDelParticipanteFinder` → `ListarEventosParaVisorUseCase` (audiencia y RSVP intactos) |
+| `consultar_analisis_80_20` | «¿qué mueve más mi avance?», «¿cómo me fue la semana / el mes?»: el último análisis 80/20 LISTO de la persona, semana y mes, con sus cuatro partes y su fecha (spec 031, D-306) | `rag.api.Analisis8020Finder.ultimoListo` (la misma lectura que la hoja «Tu 80/20»; **solo lee**: nunca genera ni llama a la IA, y SER lo explica sin cambiar el plan). Sin análisis todavía lo dice; sin parámetros |
 
 **Horas y fechas, siempre en código** (regla 02): "hoy", "mañana", "faltan 32 min" y la hora local
 salen de `Clock` en la zona del participante; el modelo solo los repite. Cada herramienta tiene
@@ -1616,6 +1619,23 @@ idea! ✨ ¿Lo pones en Cuerpo, Mente, Emociones o Espíritu? ¿Y a qué hora?»
 `proponer_crear_habito_personal(nombre="Leer 20 minutos", categoria="Mente", hora="21:00")` → «Te
 dejé la propuesta abajo para que la confirmes 🙌» → la persona toca Confirmar → «Hábito 'Leer 20
 minutos' creado en Mente, a las 21:00, todos los días. Ya lo ves en Training.»
+
+### D-311 — SER al día con la lógica nueva y para las tres formaciones (2026-11-02, spec 038)
+
+> **Corregido 2026-11-02 (spec 038, D-311).** El Mapa de Renacimiento **se retiró** (spec 026): SER ya no lo ofrece. `consultar_mi_mapa` queda solo para quien lo armó
+> antes y, sin Mapa, responde que es lo normal y manda a `consultar_mi_diagnostico` y a Plan; `MapaParaProponer` es vacío sin Mapa; el prompt tiene la sección «Su diagnóstico y
+> sus objetivos». Lo de abajo (D-233) describe cómo se leía el Mapa y sigue valiendo **solo** para esas personas. Ver `specs/038-ser-al-dia/`.
+
+> **Integrado 2026-11-02 (consolidación, T020 y T021 de la spec 038).** Con la 036 y la 037 ya en la rama: (1) **día 0** — `SituacionDelAprendiz` suma `diaUno` (el Día 1 activado,
+> `ParticipacionPrograma.diaUnoElegido()`) y mientras el día es 0 la situación dice «Su programa de {plazo} empieza manana (martes 3 de noviembre). No hables de su dia ni de su fase: todavia no
+> tiene.» (con el plazo de su formación: «90 días», «3 meses», «1 año»; «empieza el jueves 5 de noviembre» para quien eligió +2 o +3 antes del cambio; «Todavia no activo su programa de …: empieza
+> al dia siguiente de confirmarlo, con el boton «Empezar manana»» si no lo activó); (2) **`proponer_plan_del_dia` y `proponer_agregar_accion`** no dejan tarjeta si no activó su programa
+> (`CompuertaParaProponer.bloqueoPorProgramaSinActivar`: `rocks` rechazaría toda fecha con `INVALID_DATE`); quien ya lo activó (empieza mañana) sí puede planificar, como deja el servidor;
+> (3) **KILÓMETROS DIARIOS** — `habits.api.HabitoEnJuegoResumen.medicion` (`MedicionDelHabito`: meta, lo registrado hoy, origen y si **ya tiene algún día medido por el teléfono**,
+> `ContarMedicionesAutomaticasPort`) llega a `rag`; `consultar_habitos_del_dia` suma `mide=km | meta=5 | lleva=3.2` (lo ya registrado, no lo que camina en vivo) y, con pasos conectados,
+> `registro=automatico` en vez de `exige_evidencia=si`; `proponer_registrar_con_foto` no deja la cámara para esos km y manda al «Registrar» de la fila de Training; el prompt lo explica.
+> **Límite:** el servidor no sabe si los pasos están conectados *ahora* (el permiso vive en el teléfono); usa «ya tuvo un día medido por el teléfono» como pista. Sin la pista, SER sigue con la
+> cámara o la galería, y la fila de Training atiende las dos cosas.
 
 ### D-233 — SER conoce el Mapa de Renacimiento de cada persona (2026-09-30)
 

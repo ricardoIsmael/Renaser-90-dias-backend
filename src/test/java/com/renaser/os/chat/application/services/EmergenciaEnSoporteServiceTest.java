@@ -47,7 +47,7 @@ class EmergenciaEnSoporteServiceTest {
         when(conversaciones.porClaveDirecta(Conversacion.claveSoporteDe(ANA))).thenReturn(Optional.of(
                 Conversacion.crearSoporte(SOPORTE, ANA, "Ana – Formación Renaser", Instant.now())));
 
-        new EmergenciaEnSoporteService(conversaciones, delPrograma).avisar(pedido);
+        new EmergenciaEnSoporteService(new SoporteVigenteDelAprendiz(conversaciones, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo()), delPrograma).avisar(pedido);
 
         ArgumentCaptor<EntregaDelPrograma> entrega = ArgumentCaptor.forClass(EntregaDelPrograma.class);
         verify(delPrograma).enviarUnaVez(entrega.capture());
@@ -69,7 +69,7 @@ class EmergenciaEnSoporteServiceTest {
                 Conversacion.crearSoporte(SOPORTE, ANA, "Ana – Formación Renaser", Instant.now())));
         var resuelta = new EmergenciaResueltaEvent(UUID.randomUUID(), ANA, 12, 12);
 
-        new EmergenciaEnSoporteService(conversaciones, delPrograma).responder(resuelta);
+        new EmergenciaEnSoporteService(new SoporteVigenteDelAprendiz(conversaciones, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo()), delPrograma).responder(resuelta);
 
         ArgumentCaptor<EntregaDelPrograma> entrega = ArgumentCaptor.forClass(EntregaDelPrograma.class);
         verify(delPrograma).enviarUnaVez(entrega.capture());
@@ -87,7 +87,7 @@ class EmergenciaEnSoporteServiceTest {
     void sinSoporte() {
         when(conversaciones.porClaveDirecta(Conversacion.claveSoporteDe(ANA))).thenReturn(Optional.empty());
 
-        new EmergenciaEnSoporteService(conversaciones, delPrograma).avisar(pedido);
+        new EmergenciaEnSoporteService(new SoporteVigenteDelAprendiz(conversaciones, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo()), delPrograma).avisar(pedido);
 
         verifyNoInteractions(delPrograma);
     }

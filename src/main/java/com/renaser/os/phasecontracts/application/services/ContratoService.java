@@ -81,7 +81,7 @@ public class ContratoService implements FirmarContratoUseCase, ConsultarContrato
     @Transactional
     public ContratoFase firmar(FirmarContratoCommand command) {
         UserId participante = command.participanteId();
-        int dia = requireProgreso(participante, ROLES_PUEDEN_FIRMAR).diaPrograma();
+        int dia = requireProgreso(participante, ROLES_PUEDEN_FIRMAR).diaEnEscalaBase();
         List<ContratoFase> firmados = loadContratoPort.todosDeParticipante(participante);
         return command.fase() != null
                 ? firmarLaFasePedida(participante, command.fase(), dia, firmados)
@@ -143,7 +143,7 @@ public class ContratoService implements FirmarContratoUseCase, ConsultarContrato
     @Override
     public ContratoPendiente consultarPendiente(UserId participanteId) {
         ProgresoParticipante progreso = requireProgreso(participanteId, ROLES_PUEDEN_CONSULTAR);
-        FasePrograma faseAFirmar = FasePrograma.faseAFirmar(progreso.diaPrograma(), fasesFirmadas(participanteId));
+        FasePrograma faseAFirmar = FasePrograma.faseAFirmar(progreso.diaEnEscalaBase(), fasesFirmadas(participanteId));
         return faseAFirmar == null ? ContratoPendiente.ninguno() : ContratoPendiente.de(faseAFirmar);
     }
 
@@ -158,7 +158,7 @@ public class ContratoService implements FirmarContratoUseCase, ConsultarContrato
     @Override
     public UrlFirmaContrato obtenerUrlSubida(ObtenerUrlFirmaContratoCommand command) {
         ProgresoParticipante progreso = requireProgreso(command.participanteId(), ROLES_PUEDEN_FIRMAR);
-        int dia = progreso.diaPrograma();
+        int dia = progreso.diaEnEscalaBase();
         FasePrograma fase = FasePrograma.faseAFirmar(dia, fasesFirmadas(command.participanteId()));
         if (fase == null) {
             throw sinPactoQueFirmar(FasePrograma.paraDiaPrograma(dia), dia);

@@ -124,6 +124,18 @@ public enum Permission {
     MANAGE_PHASE_ANIMALS,
 
     /**
+     * Decidir si el mentor, la guía y el líder de mentores ven el Código Renaser en las fichas de los aprendices, y
+     * leer cómo está (spec 034, D-299, pedido del dueño del 2026-10-31). Guard:
+     * {@code VisibilidadDelCodigoRenaserService} -> "Solo Administración, Alquimista y Soporte TI deciden quién ve el
+     * Código Renaser en las fichas" / "La cuenta esta suspendida".
+     *
+     * <p>Roles que lo satisfacen: ADMIN, ALCHEMIST e IT_SUPPORT activos, y nadie más. Como MENTOR, TRAINEE_GUIDE, ADMIN y
+     * ALCHEMIST todavía no tienen matriz (A-1), el 403 de un mentor o una guía y el de una cuenta suspendida los da el
+     * servicio; el de TRAINEE y el de MENTOR_LEAD, el interceptor.
+     */
+    MANAGE_RADAR_VISIBILITY,
+
+    /**
      * Ver la lista paginada de TODOS los chats de soporte, con búsqueda por el nombre o el correo del
      * aprendiz (D-249, sección «Soporte» de Tribu). Guard: {@code SoportesPaginadosService} -> "Solo
      * Administración y Alquimista ven todos los chats de soporte" / "La cuenta esta suspendida".
@@ -152,6 +164,20 @@ public enum Permission {
      * cumplimiento siga en modo sombra.
      */
     MANAGE_RENASER_BOX,
+
+    // ---------------------------------------------------------------------------------
+    // onboarding: cronograma de pagos
+    // ---------------------------------------------------------------------------------
+
+    /**
+     * Llevar los pagos de una persona (spec 032, D-307, 2026-11-01): ver su cronograma, asignarlo o marcarlo «sin cronograma», agregar, editar y quitar cuotas pendientes y marcar cada
+     * cuota pagada o pendiente. Guard: {@code GuardiaDePagos.exigirQuePuedaAdministrar} (onboarding) -> "Solo Administración y Alquimista llevan los pagos" / "Cuenta suspendida".
+     *
+     * <p>Roles que lo satisfacen: <b>solo ADMIN y ALCHEMIST activos</b> (decisión del dueño: «Administración y Alquimista, nadie más»). Ni MENTOR, ni TRAINEE_GUIDE, ni MENTOR_LEAD, ni
+     * Soporte TI. Como MENTOR, TRAINEE_GUIDE, ADMIN, ALCHEMIST e IT_SUPPORT todavía no tienen matriz estricta (A-1, falla-abierto en {@code UserRole}), el 403 de un mentor, una guía o Soporte
+     * TI lo da el servicio; el del aprendiz y el del líder, el interceptor (no está en sus matrices). Lo propio de la persona (su «Mi ingreso») es {@link #USE_APP}.
+     */
+    MANAGE_PAYMENTS,
 
     // ---------------------------------------------------------------------------------
     // calendar

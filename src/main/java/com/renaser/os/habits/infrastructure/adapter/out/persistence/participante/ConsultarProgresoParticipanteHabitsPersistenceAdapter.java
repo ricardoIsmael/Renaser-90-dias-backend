@@ -34,6 +34,17 @@ class ConsultarProgresoParticipanteHabitsPersistenceAdapter implements Consultar
     }
 
     @Override
+    public java.util.Map<UserId, ProgresoParticipanteHabits> deVarios(java.util.Collection<UserId> participantes) {
+        java.util.Map<UserId, ProgresoParticipanteHabits> resultado = new java.util.LinkedHashMap<>();
+        participacionFinder.deParticipantes(participantes).forEach((id, participacion) -> {
+            if (participacion.inscrito()) {
+                resultado.put(id, aProgreso(participacion));
+            }
+        });
+        return resultado;
+    }
+
+    @Override
     public List<UserId> participantesInscritosActivos() {
         return participacionFinder.participantesInscritosActivos();
     }
@@ -41,7 +52,7 @@ class ConsultarProgresoParticipanteHabitsPersistenceAdapter implements Consultar
     private static ProgresoParticipanteHabits aProgreso(ParticipacionPrograma participacion) {
         return new ProgresoParticipanteHabits(participacion.diaPrograma(), participacion.zona().getId(),
                 mapearRol(participacion.rol()), participacion.suspendido(), participacion.activado(),
-                participacion.fechaInicio());
+                participacion.fechaInicio(), participacion.formacion(), participacion.duracionDias());
     }
 
     private static RolParticipante mapearRol(UserRole rol) {

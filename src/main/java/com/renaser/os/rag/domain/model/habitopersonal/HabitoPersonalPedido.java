@@ -20,13 +20,14 @@ import java.util.stream.Collectors;
  * regla que manda sigue siendo la de {@code habits}: al confirmar se vuelve a validar alla.
  *
  * <p>La categoria es obligatoria: sin ella no hay pedido. Es lo que obliga al acompanante a
- * preguntarla en vez de adivinarla.
+ * preguntarla en vez de adivinarla. Desde la spec 038 es una {@link CategoriaDelHabito} de la formacion de la persona (el Diplomado y la
+ * Certificacion tienen las suyas), no solo una de las cuatro de la Escuela.
  *
  * @param horaElegida {@code false} si la persona no dio hora y se uso {@link #HORA_POR_DEFECTO}
  * @param dias        nunca vacio; los siete si no eligio
  * @param meta        {@code null} si no dio meta
  */
-public record HabitoPersonalPedido(String nombre, DimensionDelHabito dimension, LocalTime hora,
+public record HabitoPersonalPedido(String nombre, CategoriaDelHabito categoria, LocalTime hora,
                                    boolean horaElegida, Set<DayOfWeek> dias, String meta) {
 
     /**
@@ -41,9 +42,15 @@ public record HabitoPersonalPedido(String nombre, DimensionDelHabito dimension, 
     private static final DateTimeFormatter HORA = DateTimeFormatter.ofPattern("HH:mm");
 
     public HabitoPersonalPedido {
-        Objects.requireNonNull(dimension, "la dimension es obligatoria");
+        Objects.requireNonNull(categoria, "la categoria es obligatoria");
         Objects.requireNonNull(hora, "la hora es obligatoria");
         dias = dias == null || dias.isEmpty() ? EnumSet.allOf(DayOfWeek.class) : EnumSet.copyOf(dias);
+    }
+
+    /** Con una de las cuatro dimensiones de la Escuela (lo que habia antes de la spec 038). */
+    public HabitoPersonalPedido(String nombre, DimensionDelHabito dimension, LocalTime hora, boolean horaElegida,
+                                Set<DayOfWeek> dias, String meta) {
+        this(nombre, CategoriaDelHabito.de(dimension), hora, horaElegida, dias, meta);
     }
 
     /**
@@ -53,6 +60,12 @@ public record HabitoPersonalPedido(String nombre, DimensionDelHabito dimension, 
      * @throws IllegalArgumentException con el motivo, si el nombre falta o algo se pasa de largo
      */
     public static HabitoPersonalPedido de(String nombre, DimensionDelHabito dimension, LocalTime hora,
+                                          Set<DayOfWeek> dias, String meta) {
+        return de(nombre, CategoriaDelHabito.de(dimension), hora, dias, meta);
+    }
+
+    /** Igual, con una categoria de la formacion de la persona (spec 038). */
+    public static HabitoPersonalPedido de(String nombre, CategoriaDelHabito categoria, LocalTime hora,
                                           Set<DayOfWeek> dias, String meta) {
         String limpio = nombre == null ? "" : nombre.trim().replaceAll("\\s+", " ");
         if (limpio.isEmpty()) {
@@ -66,7 +79,7 @@ public record HabitoPersonalPedido(String nombre, DimensionDelHabito dimension, 
         if (metaLimpia != null && metaLimpia.length() > LARGO_MAXIMO_META) {
             throw new IllegalArgumentException("La meta puede tener hasta " + LARGO_MAXIMO_META + " caracteres.");
         }
-        return new HabitoPersonalPedido(limpio, dimension, hora == null ? HORA_POR_DEFECTO : hora, hora != null,
+        return new HabitoPersonalPedido(limpio, categoria, hora == null ? HORA_POR_DEFECTO : hora, hora != null,
                 dias, metaLimpia);
     }
 
@@ -81,7 +94,7 @@ public record HabitoPersonalPedido(String nombre, DimensionDelHabito dimension, 
 
     /** Lo que ve la persona en la tarjeta: «Nuevo hábito: Leer · Mente · 06:00 · todos los días». */
     public String resumen() {
-        return "Nuevo hábito: " + nombre + " · " + dimension.etiqueta() + " · " + hora.format(HORA) + " · "
+        return "Nuevo hábito: " + nombre + " · " + categoria.nombre() + " · " + hora.format(HORA) + " · "
                 + diasLegibles() + (meta == null ? "" : " · meta: " + meta);
     }
 

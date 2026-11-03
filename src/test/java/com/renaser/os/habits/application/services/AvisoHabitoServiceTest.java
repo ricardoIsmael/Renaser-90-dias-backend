@@ -490,4 +490,29 @@ class AvisoHabitoServiceTest {
         verify(events).publishEvent(captor.capture());
         return captor.getValue();
     }
+
+    // H-05 (auditoria de consultas del 2026-11-02): el barrido de cada cinco minutos visita solo a quien tiene un registro sin terminar
+    @Test
+    @DisplayName("H-05: de los inscritos, solo se visita a quien tiene un registro sin terminar entre ayer, hoy y mañana en UTC; el resto no abre transaccion")
+    void soloSeVisitaAQuienTieneAlgoVivo() {
+        UserId conAlgo = UserId.of(UUID.randomUUID());
+        UserId sinNada = UserId.of(UUID.randomUUID());
+        when(loadRegistroPort.participantesConRegistrosSinTerminarEntre(DIA_EN_EL_SERVIDOR.minusDays(1), DIA_EN_EL_SERVIDOR.plusDays(1)))
+                .thenReturn(java.util.Set.of(conAlgo));
+
+        List<UserId> aVisitar = servicioCon(MADRUGADA_UTC).conAlgoPorAvisar(List.of(sinNada, conAlgo));
+
+        assertThat(aVisitar).containsExactly(conAlgo);
+        verify(loadRegistroPort, times(1)).participantesConRegistrosSinTerminarEntre(any(), any());
+        // Nadie fue consultado uno por uno.
+        verify(progresoPort, never()).deParticipante(any());
+        verify(loadRegistroPort, never()).porParticipanteYFecha(any(), any());
+    }
+
+    @Test
+    @DisplayName("H-05: sin inscritos no se consulta nada")
+    void sinInscritosNoConsultaNada() {
+        assertThat(servicioCon(MADRUGADA_UTC).conAlgoPorAvisar(List.of())).isEmpty();
+        verify(loadRegistroPort, never()).participantesConRegistrosSinTerminarEntre(any(), any());
+    }
 }

@@ -102,32 +102,35 @@ class PropuestasConRocasBloqueadasTest {
     }
 
     @Test
-    @DisplayName("sin Mapa ni Rocas Maestras: ninguna de las cinco herramientas crea tarjeta y todas dicen ir al Mapa")
-    void sinMapaNingunaPropone() {
-        CompuertaParaProponer bloqueada = CompuertasDePrueba.sinRocasMaestras(false);
+    @DisplayName("sin sus tres objetivos de 90 dias: ninguna de las cinco herramientas crea tarjeta y todas dicen escribirlos en Plan")
+    void sinObjetivosNingunaPropone() {
+        CompuertaParaProponer bloqueada = CompuertasDePrueba.sinRocasMaestras();
 
         for (ResultadoHerramienta resultado : List.of(agregarAccion(bloqueada), planDelDia(bloqueada),
                 planDeLaSemana(bloqueada), editarObjetivo(bloqueada), cerrarSemana(bloqueada))) {
-            assertThat(resultado).isEqualTo(ResultadoHerramienta.fallo(CompuertaParaProponer.SIN_MAPA));
+            assertThat(resultado).isEqualTo(ResultadoHerramienta.fallo(CompuertaParaProponer.SIN_OBJETIVOS));
         }
         verify(proponer, never()).proponer(any(), any(), anyString());
-        assertThat(CompuertaParaProponer.SIN_MAPA)
-                .startsWith("No se creó ninguna propuesta: todavía no completó su Mapa de Renacimiento")
-                .contains("en la pestaña Plan, botón \"Ir al Mapa de Renacimiento\"")
-                .contains("No le propongas otro plan ni otra acción de objetivos hasta que lo complete");
+        assertThat(CompuertaParaProponer.SIN_OBJETIVOS)
+                .startsWith("No se creó ninguna propuesta: todavía no tiene escritos sus tres objetivos de 90 días")
+                .contains("en la pestaña Plan")
+                .doesNotContain("Mapa de Renacimiento")
+                .contains("No le propongas otro plan ni otra acción de objetivos hasta que los tenga");
     }
 
     @Test
-    @DisplayName("Mapa respondido pero sin Rocas Maestras (activacion fallida): bloqueada y lo dice distinto")
-    void mapaSinActivar() {
-        CompuertaParaProponer bloqueada = CompuertasDePrueba.sinRocasMaestras(true);
+    @DisplayName("el aviso de «sin objetivos» nombra el plazo de la persona: 90 días, 3 meses o 1 año")
+    void elAvisoNombraElPlazoDeLaPersona() {
+        var unAnio = CompuertasDePrueba.sinRocasMaestrasDe(participanteId -> java.util.Optional.of(
+                new com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz(5, 1)
+                        .conDuracion(365).conFormacion(com.renaser.os.shared.domain.Formacion.DIPLOMADO)));
+        var tresMeses = CompuertasDePrueba.sinRocasMaestrasDe(participanteId -> java.util.Optional.of(
+                new com.renaser.os.rag.application.ports.out.participante.ConsultarSituacionDelAprendizPort.SituacionDelAprendiz(5, 1)
+                        .conDuracion(90).conFormacion(com.renaser.os.shared.domain.Formacion.DIPLOMADO)));
 
-        assertThat(agregarAccion(bloqueada)).isEqualTo(ResultadoHerramienta.fallo(CompuertaParaProponer.MAPA_SIN_ACTIVAR));
-        assertThat(planDeLaSemana(bloqueada)).isEqualTo(ResultadoHerramienta.fallo(
-                CompuertaParaProponer.MAPA_SIN_ACTIVAR));
-        verify(proponer, never()).proponer(any(), any(), anyString());
-        assertThat(CompuertaParaProponer.MAPA_SIN_ACTIVAR).contains("su Mapa de Renacimiento está respondido, pero "
-                + "sus tres objetivos de 90 días (Rocas Maestras) no quedaron creados");
+        assertThat(unAnio.bloqueoDeObjetivos(APRENDIZ).orElseThrow()).contains("sus tres objetivos de 1 año").doesNotContain("90 días");
+        assertThat(tresMeses.bloqueoDeObjetivos(APRENDIZ).orElseThrow()).contains("sus tres objetivos de 3 meses");
+        assertThat(CompuertasDePrueba.sinRocasMaestras().bloqueoDeObjetivos(APRENDIZ)).contains(CompuertaParaProponer.SIN_OBJETIVOS);
     }
 
     @Test
@@ -176,13 +179,13 @@ class PropuestasConRocasBloqueadasTest {
                     public List<String> ejesSinObjetivoSemanal(UserId aprendizId, LocalDate fecha) {
                         throw new IllegalStateException("rocks caido");
                     }
-                }, id -> { throw new IllegalStateException("tampoco el Mapa"); });
+                }, participanteId -> java.util.Optional.empty(), participanteId -> com.renaser.os.rag.domain.model.diagnostico.DiagnosticoDeLaPersona.ninguno());
 
         assertThat(agregarAccion(caida)).isInstanceOf(ResultadoHerramienta.Exito.class);
     }
 
     @Test
-    @DisplayName("una tarjeta vieja confirmada sin Rocas Maestras: la persona lee en español que vaya a su Mapa")
+    @DisplayName("una tarjeta vieja confirmada sin Rocas Maestras: la persona lee en español que escriba sus objetivos en Plan")
     void confirmarTarjetaVieja() {
         AgregarAccionAlPlanPort agregar = mock(AgregarAccionAlPlanPort.class);
         when(agregar.agregar(any(), any(), any())).thenReturn(
@@ -191,9 +194,8 @@ class PropuestasConRocasBloqueadasTest {
                 new PlanificarRocasPort.ResultadoPlan.Rechazado(PlanificarRocasPort.Motivo.ROCAS_BLOQUEADAS));
         when(planificar.crearPlanDeLaSemana(any(), any())).thenReturn(
                 new PlanificarRocasPort.ResultadoPlan.Rechazado(PlanificarRocasPort.Motivo.ROCAS_BLOQUEADAS));
-        String esperado = "No se pudo: primero completa tu Mapa de Renacimiento (en Plan, \"Ir al Mapa de "
-                + "Renacimiento\"). De ahí salen tus tres objetivos de 90 días, y sin ellos todavía no se pueden "
-                + "planificar acciones ni objetivos.";
+        String esperado = "No se pudo: primero escribe tus tres objetivos en Plan (o confirma los de tu "
+                + "diagnóstico). Sin ellos todavía no se pueden planificar acciones ni objetivos.";
 
         assertThat(new AgregarAccionConfirmable(agregar, planificar).aplicar(APRENDIZ, new InvocacionHerramienta(
                 ProponerAgregarAccionHerramienta.NOMBRE, Map.of("eje", "CUERPO", "titulo", "Correr",

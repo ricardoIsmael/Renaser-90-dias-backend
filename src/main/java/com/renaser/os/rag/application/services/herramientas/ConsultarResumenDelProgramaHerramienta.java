@@ -44,11 +44,10 @@ public class ConsultarResumenDelProgramaHerramienta implements HerramientaAgente
 
     public static final String NOMBRE = "consultar_resumen_del_programa";
 
-    static final int DIAS_DEL_PROGRAMA = 90;
     static final int FASES_DEL_PROGRAMA = 4;
 
     private static final DefinicionHerramienta DEFINICION = DefinicionHerramienta.sinParametros(NOMBRE,
-            "Devuelve donde esta parado el aprendiz en su programa de 90 dias: el dia (N de 90) y la fase, "
+            "Devuelve donde esta parado el aprendiz en su programa (de 90 dias, 3 meses o 1 año, segun su formacion): el dia (N de M) y la fase, "
                     + "la fecha y la hora de ahora en su zona horaria, su coherencia de los ultimos 7 dias y su "
                     + "proximo evento del calendario, su racha actual de dias seguidos con al menos un habito "
                     + "cumplido (y su record) y sus puntos de liga. Usala cuando pregunte que dia u hora es para "
@@ -78,7 +77,7 @@ public class ConsultarResumenDelProgramaHerramienta implements HerramientaAgente
     public ResultadoHerramienta ejecutar(UserId actorId, InvocacionHerramienta invocacion) {
         Optional<SituacionDelAprendiz> situacion = situacionPort.de(actorId);
         if (situacion.isEmpty()) {
-            return ResultadoHerramienta.exito("No esta inscrito en el programa de 90 dias: no tiene dia ni fase.");
+            return ResultadoHerramienta.exito("No esta inscrito en un programa: no tiene dia ni fase.");
         }
         Instant ahora = clock.now();
         return panoramaPort.de(actorId, ahora)
@@ -100,9 +99,9 @@ public class ConsultarResumenDelProgramaHerramienta implements HerramientaAgente
     /** Dia 0 es una inscripcion cuyo programa todavia no arranco: no se le dice "dia 0 de 90". */
     private static String lineaDelDia(SituacionDelAprendiz situacion) {
         if (situacion.diaPrograma() < 1) {
-            return "Su programa de 90 dias todavia no empezo.";
+            return "Su programa de " + situacion.duracionDias() + " dias todavia no empezo.";
         }
-        return "Dia del programa: " + situacion.diaPrograma() + " de " + DIAS_DEL_PROGRAMA
+        return "Dia del programa: " + situacion.diaPrograma() + " de " + situacion.duracionDias()
                 + " (fase " + situacion.fase() + " de " + FASES_DEL_PROGRAMA + ").";
     }
 

@@ -85,6 +85,17 @@ public class AvisoHabitoService implements DespacharAvisosHabitoUseCase {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public java.util.List<UserId> conAlgoPorAvisar(java.util.Collection<UserId> inscritos) {
+        if (inscritos.isEmpty()) {
+            return java.util.List.of();
+        }
+        LocalDate hoyEnUtc = clock.now().atZone(ZoneId.of("UTC")).toLocalDate();
+        Set<UserId> conAlgoVivo = loadRegistroPort.participantesConRegistrosSinTerminarEntre(hoyEnUtc.minusDays(1), hoyEnUtc.plusDays(1));
+        return inscritos.stream().filter(conAlgoVivo::contains).toList();
+    }
+
+    @Override
     @Transactional
     public int despacharDe(UserId participanteId) {
         Optional<ProgresoParticipanteHabits> progreso = progresoPort.deParticipante(participanteId);

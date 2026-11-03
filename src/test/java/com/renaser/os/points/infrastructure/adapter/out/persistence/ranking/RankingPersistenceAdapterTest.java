@@ -1,5 +1,6 @@
 package com.renaser.os.points.infrastructure.adapter.out.persistence.ranking;
 
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.points.application.ports.out.ranking.LoadRankingCandidatosPort;
 import com.renaser.os.points.application.ports.out.ranking.LoadRankingCandidatosPort.CandidatoRanking;
@@ -158,7 +159,7 @@ class RankingPersistenceAdapterTest {
         adapterEscritura.reemplazar(TipoRanking.LEAGUE, FECHA, List.of(
                 new PosicionRanking(FECHA, TipoRanking.LEAGUE, UserId.of(aprendizActivoId), 1, new BigDecimal("130"))));
 
-        var filas = adapter.porTipoYFecha(TipoRanking.LEAGUE, FECHA);
+        var filas = adapter.porTipoYFecha(TipoRanking.LEAGUE, FECHA, AlcanceDeFormacion.todas());
 
         assertThat(filas).hasSize(1);
         assertThat(filas.get(0).participanteId()).isEqualTo(UserId.of(aprendizActivoId));
@@ -168,7 +169,7 @@ class RankingPersistenceAdapterTest {
 
     @Test
     void porTipoYFechaSinSnapshotDevuelveVacio() {
-        assertThat(adapter.porTipoYFecha(TipoRanking.CELL, FECHA)).isEmpty();
+        assertThat(adapter.porTipoYFecha(TipoRanking.CELL, FECHA, AlcanceDeFormacion.todas())).isEmpty();
     }
 
     @DisplayName("traduce los 4 valores de TipoRanking en ambas direcciones (GENERAL/COHORT no se generan hoy, pero el adaptador ya los soporta)")
@@ -178,7 +179,7 @@ class RankingPersistenceAdapterTest {
         adapterEscritura.reemplazar(tipo, FECHA, List.of(
                 new PosicionRanking(FECHA, tipo, UserId.of(aprendizActivoId), 1, new BigDecimal("42"))));
 
-        var filas = adapter.porTipoYFecha(tipo, FECHA);
+        var filas = adapter.porTipoYFecha(tipo, FECHA, AlcanceDeFormacion.todas());
 
         assertThat(filas).hasSize(1);
         assertThat(filas.get(0).participanteId()).isEqualTo(UserId.of(aprendizActivoId));

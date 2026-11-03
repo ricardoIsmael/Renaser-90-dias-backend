@@ -46,12 +46,14 @@ class RocaMensualTest {
     }
 
     @Test
-    @DisplayName("el mes tiene que caer dentro de los tres del programa")
+    @DisplayName("el mes tiene que caer entre 1 y 12 (el programa mas largo); que sea de los meses de la persona lo exige el servicio")
     void rechazaUnMesFueraDeRango() {
         assertThatThrownBy(() -> RocaMensual.definir(ID, MAESTRA, 0, "titulo", null, AYER))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> RocaMensual.definir(ID, MAESTRA, 4, "titulo", null, AYER))
+        assertThatThrownBy(() -> RocaMensual.definir(ID, MAESTRA, 13, "titulo", null, AYER))
                 .isInstanceOf(IllegalArgumentException.class);
+        assertThat(RocaMensual.definir(ID, MAESTRA, 12, "titulo", null, AYER).diaDeCierre(365)).isEqualTo(365);
+        assertThat(RocaMensual.definir(ID, MAESTRA, 3, "titulo", null, AYER).diaDeCierre()).isEqualTo(90);
     }
 
     @Test

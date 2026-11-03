@@ -18,6 +18,11 @@
 #  APAGADAS POR DEFECTO (D-199/D-204, 2026-09-27): ni el soporte ni el grupo mandan nada mientras
 #  BIENVENIDA_ACTIVA no sea true. Se prende cuando el dueño apruebe estos textos.
 #
+#  POR FORMACIÓN (spec 035, 2026-11-02): lo de ARRIBA es de la Escuela Renaser, como siempre. El Diplomado y la Certificación tienen su sección al final
+#  (`diplomado:` y `certificacion:`, con las mismas claves): es el texto de la Escuela con el nombre de la institución cambiado. Si una formación no trae
+#  una clave, usa la de la Escuela. Un texto vacío ("") en una formación apaga ese mensaje SOLO en ella. Lo que Administración guarde desde la app
+#  para una formación reemplaza al de su sección; nunca reemplaza al de otra.
+#
 #  Marcadores: {nombre} = primer nombre del aprendiz (lo pone el servidor).
 #  Tuteo, español neutro de Perú. Un texto vacío ("") hace que ese mensaje no se mande.
 #  No poner horarios, links ni nombres concretos: el mismo texto va a todos los aprendices.
@@ -54,3 +59,31 @@ soporte:
 # mentor). El dueño pidió que lo diga el programa y con un tono más amigable.
 grupo: |
   ¡Hola, {nombre}! 🌿 Qué alegría que te sumes a este grupo. Aquí vas a compartir el camino con cada integrante y con {mentor}, que te va a acompañar en estos días. Este es tu espacio para contar tus avances, pedir apoyo y celebrar cada paso. ¡Te damos la bienvenida!
+
+# ============================================================================================
+#  Diplomado Renaser (spec 035). Mismo texto que la Escuela, con el nombre de la institución. El mensaje del grupo no nombra la institución: usa el de la Escuela.
+# ============================================================================================
+diplomado:
+  soporte:
+    con-la-tarjeta: |
+      {nombre}, esta tarjeta es para ti 🌿 Hoy empiezas tu Diplomado Renaser y nos alegra mucho que estés aquí. Este camino es tuyo, y vamos a acompañarte en cada paso.
+    formal: |
+      Hola, {nombre}. Te damos la bienvenida oficial al Diplomado Renaser: tu ingreso al programa ya está confirmado.
+
+      Sesión técnica: el equipo te confirmará por este chat el horario de tu sesión técnica.
+
+      Antes de esa sesión te enviaremos por aquí la información que necesitas para aprovecharla. Si tienes cualquier duda, escríbenos en este chat: estamos para acompañarte.
+
+# ============================================================================================
+#  Certificación Renaser (spec 035). Igual: el texto de la Escuela con el nombre de la institución.
+# ============================================================================================
+certificacion:
+  soporte:
+    con-la-tarjeta: |
+      {nombre}, esta tarjeta es para ti 🌿 Hoy empiezas tu Certificación Renaser y nos alegra mucho que estés aquí. Este camino es tuyo, y vamos a acompañarte en cada paso.
+    formal: |
+      Hola, {nombre}. Te damos la bienvenida oficial a la Certificación Renaser: tu ingreso al programa ya está confirmado.
+
+      Sesión técnica: el equipo te confirmará por este chat el horario de tu sesión técnica.
+
+      Antes de esa sesión te enviaremos por aquí la información que necesitas para aprovecharla. Si tienes cualquier duda, escríbenos en este chat: estamos para acompañarte.

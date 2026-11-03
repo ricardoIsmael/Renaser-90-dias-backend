@@ -39,4 +39,14 @@ class NombreDelChatTest {
         assertThat(Conversacion.crearGlobal(ConversacionId.of(UUID.randomUUID()), Instant.EPOCH).nombre())
                 .isEqualTo("Formación Renaser Global");
     }
+
+    // spec 035 FR-013
+    @Test
+    @DisplayName("spec 035: el programa firma con el nombre de la formación de la conversación; la Escuela conserva «Formación Renaser»")
+    void laFirmaDelProgramaEsDeLaFormacion() {
+        assertThat(NombreDelChat.delPrograma(com.renaser.os.shared.domain.Formacion.ESCUELA)).isEqualTo("Formación Renaser")
+                .isEqualTo(NombreDelChat.FORMACION_RENASER);
+        assertThat(NombreDelChat.delPrograma(com.renaser.os.shared.domain.Formacion.DIPLOMADO)).isEqualTo("Diplomado Renaser");
+        assertThat(NombreDelChat.delPrograma(com.renaser.os.shared.domain.Formacion.CERTIFICACION)).isEqualTo("Certificación Renaser");
+    }
 }

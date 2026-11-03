@@ -9,6 +9,8 @@ import com.renaser.os.onboarding.application.ports.out.respuesta.LoadRespuestaPo
 import com.renaser.os.onboarding.application.ports.out.respuesta.SaveRespuestaPort;
 import com.renaser.os.onboarding.domain.model.caja.CajaRenaser;
 import com.renaser.os.onboarding.domain.model.cuestionario.Pregunta;
+import com.renaser.os.onboarding.domain.model.diagnostico.Diagnostico;
+import com.renaser.os.onboarding.domain.model.mapa.MapaRetiradoException;
 import com.renaser.os.onboarding.domain.model.cuestionario.Seccion;
 import com.renaser.os.onboarding.domain.model.respuesta.FechaDeNacimiento;
 import com.renaser.os.onboarding.domain.model.respuesta.Respuesta;
@@ -58,7 +60,7 @@ public class RespuestaService implements GuardarRespuestaUseCase, ObtenerRespues
         requireActorActivo(command.usuarioId());
         Pregunta pregunta = loadCuestionarioPort.porId(command.preguntaId())
                 .orElseThrow(() -> new NoSuchElementException("Pregunta no encontrada: " + command.preguntaId()));
-        requireNoEsDeLaCaja(pregunta);
+        requireFlujoAbierto(pregunta);
         requireMayorDeEdadSiEsLaFechaDeNacimiento(pregunta, command.valorTexto());
         requireMediaPropia(command.mediaId(), command.usuarioId());
 
@@ -79,6 +81,9 @@ public class RespuestaService implements GuardarRespuestaUseCase, ObtenerRespues
     @Override
     public List<SeccionConRespuestas> obtener(ObtenerRespuestasQuery query) {
         requireActorActivo(query.actorId());
+        if (Diagnostico.FLUJO.equals(query.flujo())) {
+            return List.of();
+        }
         Map<Integer, Respuesta> respuestasPorPregunta = loadRespuestaPort.todasDeUsuario(query.actorId()).stream()
                 .collect(Collectors.toMap(Respuesta::preguntaId, Function.identity()));
 
@@ -97,18 +102,29 @@ public class RespuestaService implements GuardarRespuestaUseCase, ObtenerRespues
     }
 
     /**
-     * Las preguntas de la Caja Renaser (flujo {@code caja_renaser}, V82, D-219) NO se responden por acá. Este
-     * endpoint acepta cualquier pregunta del propio actor, y sin este cierre un aprendiz se marcaba solo el
-     * checklist de su caja ({@code caja_contenido}), que es lo que el Admin exige completo antes de enviarla.
-     * El destino lo escribe su propio caso de uso ({@code MiCajaService}), que además mira el estado de la
-     * caja; el contenido, solo el Admin.
+     * Estos flujos NO se responden por acá. Este endpoint acepta cualquier pregunta del propio actor, y sin este cierre:
+     * <ul>
+     *   <li>un aprendiz se marcaba solo el checklist de su caja ({@code caja_renaser}, V82, D-219): el destino lo escribe su propio caso de uso
+     *       ({@code MiCajaService}), que además mira el estado de la caja, y el contenido solo el Admin;</li>
+     *   <li>el diagnóstico ({@code diagnostico}, spec 026) se responde por {@code /diagnostico/mio/respuestas}, que valida cada respuesta contra SU versión
+     *       publicada y su formación;</li>
+     *   <li>el Mapa ({@code mapa_dia7}) se retiró (spec 026): sus respuestas se leen, no se escriben.</li>
+     * </ul>
      */
-    private void requireNoEsDeLaCaja(Pregunta pregunta) {
-        boolean deLaCaja = loadCuestionarioPort.seccionesDeFlujo(CajaRenaser.FLUJO).stream()
-                .anyMatch(seccion -> seccion.id() == pregunta.seccionId());
-        if (deLaCaja) {
+    private void requireFlujoAbierto(Pregunta pregunta) {
+        if (esDelFlujo(pregunta, CajaRenaser.FLUJO)) {
             throw new NotAuthorizedException("Las preguntas de la Caja Renaser no se responden por acá");
         }
+        if (esDelFlujo(pregunta, Diagnostico.FLUJO)) {
+            throw new NotAuthorizedException("El diagnóstico se responde desde su propia pantalla");
+        }
+        if (esDelFlujo(pregunta, MapaRenacimientoService.FLUJO)) {
+            throw new MapaRetiradoException();
+        }
+    }
+
+    private boolean esDelFlujo(Pregunta pregunta, String flujo) {
+        return loadCuestionarioPort.seccionesDeFlujo(flujo).stream().anyMatch(seccion -> seccion.id() == pregunta.seccionId());
     }
 
     /**

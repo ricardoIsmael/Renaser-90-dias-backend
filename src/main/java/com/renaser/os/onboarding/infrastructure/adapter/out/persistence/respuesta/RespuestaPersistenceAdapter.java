@@ -76,6 +76,14 @@ class RespuestaPersistenceAdapter implements LoadRespuestaPort, SaveRespuestaPor
         return repository.findByUsuarioId(usuarioId.value()).stream().map(mapper::toDomain).toList();
     }
 
+    @Override
+    public void eliminar(UserId usuarioId, int preguntaId) {
+        jdbcClient.sql("DELETE FROM renaser.respuestas_onboarding WHERE usuario_id = :usuarioId AND pregunta_id = :preguntaId")
+                .param("usuarioId", usuarioId.value())
+                .param("preguntaId", preguntaId)
+                .update();
+    }
+
     /** UPSERT atomico por {@code (usuarioId, preguntaId)}. Ver {@link #UPSERT}. */
     @Override
     public Respuesta guardar(Respuesta r) {

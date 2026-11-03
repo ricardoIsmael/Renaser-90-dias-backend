@@ -99,6 +99,17 @@ class AlcanceDelPadronTest {
         }
     }
 
+    @Test
+    @DisplayName("E2E J2-1: el filtro «solo cuentas activas» es opcional (?6 false deja pasar a todas) y va en el listado y en el conteo")
+    void elFiltroDeSoloActivasEsOpcional() {
+        for (String sql : List.of(sqlDelListado(), sqlDelConteo())) {
+            assertThat(sql.lines().map(String::trim).filter(linea -> linea.contains("?6")))
+                    .as("el filtro de estado tiene que dejar pasar todo cuando no se pide:\n" + sql)
+                    .singleElement()
+                    .satisfies(linea -> assertThat(linea).isEqualTo("AND (?6 = FALSE OR u.estado = 'ACTIVO')"));
+        }
+    }
+
     private String sqlDelListado() {
         return sqlCapturado(adaptador -> adaptador.listarAprendices(0, 20, null, false));
     }

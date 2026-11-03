@@ -2,6 +2,7 @@ package com.renaser.os.chat.application.ports.in.conversacion;
 
 import com.renaser.os.chat.application.ports.in.conversacion.ListarConversacionesUseCase.ConversacionResumen;
 import com.renaser.os.chat.domain.model.conversacion.CursorDeSoportes;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 
 import java.util.List;
@@ -22,8 +23,14 @@ public interface ListarSoportesUseCase {
      * @param texto  lo escrito en el buscador; {@code null} o en blanco = todos
      * @param desde  {@code null} para la primera página
      * @param tamano se acota a 1..{@link #TAMANO_MAXIMO}
+     * @param formacion spec 024: solo los soportes de esa formación; {@code null} = todas, cada fila con la suya
      */
-    record PedidoDeSoportes(UserId actorId, String texto, CursorDeSoportes desde, int tamano) {
+    record PedidoDeSoportes(UserId actorId, String texto, CursorDeSoportes desde, int tamano, Formacion formacion) {
+
+        /** Sin elegir formación: las tres (quien atiende es Administración o Alquimista). */
+        public PedidoDeSoportes(UserId actorId, String texto, CursorDeSoportes desde, int tamano) {
+            this(actorId, texto, desde, tamano, null);
+        }
     }
 
     /**

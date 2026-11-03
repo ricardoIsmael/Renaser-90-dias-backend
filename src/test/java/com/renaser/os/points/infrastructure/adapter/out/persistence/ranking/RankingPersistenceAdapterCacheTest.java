@@ -1,5 +1,7 @@
 package com.renaser.os.points.infrastructure.adapter.out.persistence.ranking;
 
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
+import com.renaser.os.shared.domain.Formacion;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.renaser.os.points.application.ports.out.ranking.LoadRankingPort;
 import com.renaser.os.points.application.ports.out.ranking.SaveRankingSnapshotPort;
@@ -75,8 +77,8 @@ class RankingPersistenceAdapterCacheTest {
         cacheManager.getCacheNames().forEach(nombre -> cacheManager.getCache(nombre).clear());
 
         RankingAprendizJpaEntity fila = new RankingAprendizJpaEntity(FECHA, TipoRankingJpa.LIGA, PARTICIPANTE, 1,
-                new BigDecimal("100"));
-        when(repository.findByTipoAndFechaOrderByPosicion(any(), any())).thenReturn(List.of(fila));
+                new BigDecimal("100"), "ESCUELA");
+        when(repository.findByTipoAndFechaAndFormacionInOrderByFormacionAscPosicionAsc(any(), any(), any())).thenReturn(List.of(fila));
         when(userSummaryFinder.findByIds(any())).thenReturn(Map.of(UserId.of(PARTICIPANTE),
                 new UserSummary(UserId.of(PARTICIPANTE), "Aprendiz de Prueba", null, UserRole.TRAINEE,
                         UserStatus.ACTIVE)));
@@ -85,40 +87,50 @@ class RankingPersistenceAdapterCacheTest {
     @Test
     @DisplayName("dos llamadas seguidas con el mismo tipo y fecha consultan la base una sola vez")
     void mismaConsultaNoRepiteLaConsultaALaBase() {
-        adapter.porTipoYFecha(TipoRanking.LEAGUE, FECHA);
-        adapter.porTipoYFecha(TipoRanking.LEAGUE, FECHA);
+        adapter.porTipoYFecha(TipoRanking.LEAGUE, FECHA, AlcanceDeFormacion.todas());
+        adapter.porTipoYFecha(TipoRanking.LEAGUE, FECHA, AlcanceDeFormacion.todas());
 
-        verify(repository, times(1)).findByTipoAndFechaOrderByPosicion(any(), any());
+        verify(repository, times(1)).findByTipoAndFechaAndFormacionInOrderByFormacionAscPosicionAsc(any(), any(), any());
     }
 
     @Test
     @DisplayName("tipo distinto no comparte entrada de cache")
     void tipoDistintoNoComparteCache() {
-        adapter.porTipoYFecha(TipoRanking.LEAGUE, FECHA);
-        adapter.porTipoYFecha(TipoRanking.CELL, FECHA);
+        adapter.porTipoYFecha(TipoRanking.LEAGUE, FECHA, AlcanceDeFormacion.todas());
+        adapter.porTipoYFecha(TipoRanking.CELL, FECHA, AlcanceDeFormacion.todas());
 
-        verify(repository, times(2)).findByTipoAndFechaOrderByPosicion(any(), any());
+        verify(repository, times(2)).findByTipoAndFechaAndFormacionInOrderByFormacionAscPosicionAsc(any(), any(), any());
     }
 
     @Test
     @DisplayName("fecha distinta no comparte entrada de cache")
     void fechaDistintaNoComparteCache() {
-        adapter.porTipoYFecha(TipoRanking.LEAGUE, FECHA);
-        adapter.porTipoYFecha(TipoRanking.LEAGUE, FECHA.plusDays(1));
+        adapter.porTipoYFecha(TipoRanking.LEAGUE, FECHA, AlcanceDeFormacion.todas());
+        adapter.porTipoYFecha(TipoRanking.LEAGUE, FECHA.plusDays(1), AlcanceDeFormacion.todas());
 
-        verify(repository, times(2)).findByTipoAndFechaOrderByPosicion(any(), any());
+        verify(repository, times(2)).findByTipoAndFechaAndFormacionInOrderByFormacionAscPosicionAsc(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("spec 024: otro alcance de formaciones no comparte entrada de cache (la Escuela no sirve el ranking del Diplomado)")
+    void alcanceDistintoNoComparteCache() {
+        adapter.porTipoYFecha(TipoRanking.LEAGUE, FECHA, AlcanceDeFormacion.de(Formacion.ESCUELA));
+        adapter.porTipoYFecha(TipoRanking.LEAGUE, FECHA, AlcanceDeFormacion.de(Formacion.DIPLOMADO));
+        adapter.porTipoYFecha(TipoRanking.LEAGUE, FECHA, AlcanceDeFormacion.de(Formacion.ESCUELA));
+
+        verify(repository, times(2)).findByTipoAndFechaAndFormacionInOrderByFormacionAscPosicionAsc(any(), any(), any());
     }
 
     @Test
     @DisplayName("reemplazar() invalida la entrada de ese tipo+fecha: la siguiente lectura vuelve a pegar la base")
     void reemplazarInvalidaLaEntradaCacheada() {
-        adapter.porTipoYFecha(TipoRanking.LEAGUE, FECHA);
+        adapter.porTipoYFecha(TipoRanking.LEAGUE, FECHA, AlcanceDeFormacion.todas());
 
         adapterEscritura.reemplazar(TipoRanking.LEAGUE, FECHA, List.of());
 
-        adapter.porTipoYFecha(TipoRanking.LEAGUE, FECHA);
+        adapter.porTipoYFecha(TipoRanking.LEAGUE, FECHA, AlcanceDeFormacion.todas());
 
-        verify(repository, times(2)).findByTipoAndFechaOrderByPosicion(any(), any());
+        verify(repository, times(2)).findByTipoAndFechaAndFormacionInOrderByFormacionAscPosicionAsc(any(), any(), any());
     }
 
     @Configuration

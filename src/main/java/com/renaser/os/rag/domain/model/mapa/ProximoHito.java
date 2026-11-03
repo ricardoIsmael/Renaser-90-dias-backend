@@ -12,6 +12,11 @@ import java.util.Optional;
  * <p>Recibe el dia ya derivado de las fechas en la zona de la persona ({@code users} lo deriva de
  * {@code fecha_inicio}, su zona y los ajustes, regla 02): aca no se cuenta nada a mano ni se lee un reloj.
  *
+ * <p><b>Solo para los Mapas viejos (spec 026).</b> Los tres hitos son los que la persona escribió en un Mapa respondido en el programa de 90 días de la Escuela:
+ * están guardados con el día 30, 60 y 90 como clave, así que esta cuenta NO escala con la duración de la formación. Quien viene del diagnóstico (026) no tiene
+ * hitos: su objetivo es cualitativo y el plan no inventa cifras ni fechas intermedias (spec 026, Q14-B). Hoy y Plan no usan esta clase; la leen solo las
+ * herramientas de SER que explican un Mapa (`TextoDelMapa`, `MapaParaProponer`) y el resumen del Mapa del prompt.
+ *
  * @param dia    30, 60 o 90
  * @param faltan dias que faltan desde hoy; 0 = es hoy
  */

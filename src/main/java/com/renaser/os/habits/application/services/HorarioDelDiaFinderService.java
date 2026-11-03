@@ -62,12 +62,14 @@ public class HorarioDelDiaFinderService implements HorarioDelDiaFinder {
     private final LoadDesbloqueoHabitoPort loadDesbloqueoPort;
     private final LoadRegistroHabitoPort loadRegistroPort;
     private final Clock clock;
+    private final HoraDeUnHabitoEnLote horaDeUnHabitoEnLote;
 
     public HorarioDelDiaFinderService(ConsultarPreferenciasHorarioUseCase consultarPreferenciasUseCase,
                                       ConsultarProgresoParticipanteHabitsPort progresoPort,
                                       LoadHabitoPort loadHabitoPort, LoadPreferenciaHorarioPort loadPreferenciaPort,
                                       LoadDesbloqueoHabitoPort loadDesbloqueoPort,
-                                      LoadRegistroHabitoPort loadRegistroPort, Clock clock) {
+                                      LoadRegistroHabitoPort loadRegistroPort, Clock clock,
+                                      HoraDeUnHabitoEnLote horaDeUnHabitoEnLote) {
         this.consultarPreferenciasUseCase = consultarPreferenciasUseCase;
         this.progresoPort = progresoPort;
         this.loadHabitoPort = loadHabitoPort;
@@ -75,6 +77,12 @@ public class HorarioDelDiaFinderService implements HorarioDelDiaFinder {
         this.loadDesbloqueoPort = loadDesbloqueoPort;
         this.loadRegistroPort = loadRegistroPort;
         this.clock = clock;
+        this.horaDeUnHabitoEnLote = horaDeUnHabitoEnLote;
+    }
+
+    @Override
+    public Map<UserId, java.time.LocalTime> horaDeUnHabito(java.util.Collection<UserId> personas, java.util.UUID habitoId, LocalDate fecha) {
+        return horaDeUnHabitoEnLote.de(personas, HabitoId.of(habitoId), fecha);
     }
 
     @Override
