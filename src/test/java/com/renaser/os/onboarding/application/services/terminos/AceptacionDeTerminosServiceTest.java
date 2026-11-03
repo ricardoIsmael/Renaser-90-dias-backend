@@ -100,7 +100,7 @@ class AceptacionDeTerminosServiceTest {
         assertThat(loGuardado()).isEqualTo(new LoMostrado("Formación RENASER · 90 días", INICIO, FIN));
     }
 
-    // spec 039 FR-009, FR-011
+    // spec 039 FR-009, FR-011; decisión 2026-11-02 pagos fuera de términos
     @Test
     @DisplayName("una app anterior (sin versión ni inicio en el pedido) acepta igual y la constancia guarda lo de ahora")
     void unaAppAnterior() {
@@ -111,7 +111,7 @@ class AceptacionDeTerminosServiceTest {
         assertThat(loGuardado()).isEqualTo(new LoMostrado("Formación RENASER · 90 días", INICIO, FIN));
     }
 
-    // spec 039 FR-007
+    // spec 039 FR-007; decisión 2026-11-02 pagos fuera de términos
     @Test
     @DisplayName("pasó la medianoche: el inicio que vio ya no es el de ahora → 409 y no queda constancia")
     void inicioVencido() {
@@ -123,6 +123,7 @@ class AceptacionDeTerminosServiceTest {
         verify(aceptaciones, never()).registrar(any(), any(), any(), any(), any(), any());
     }
 
+    // decisión 2026-11-02 pagos fuera de términos
     @Test
     @DisplayName("una versión que dejó de ser la vigente sigue siendo 409 (spec 027)")
     void versionVencida() {
@@ -132,6 +133,7 @@ class AceptacionDeTerminosServiceTest {
         verify(aceptaciones, never()).registrar(any(), any(), any(), any(), any(), any());
     }
 
+    // decisión 2026-11-02 pagos fuera de términos
     @Test
     @DisplayName("una formación sin términos publicados no deja constancia")
     void sinTerminosPublicados() {

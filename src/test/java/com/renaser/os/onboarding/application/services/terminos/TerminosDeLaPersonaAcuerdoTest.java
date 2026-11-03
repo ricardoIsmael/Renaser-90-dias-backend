@@ -107,6 +107,7 @@ class TerminosDeLaPersonaAcuerdoTest {
                 .noneMatch(nombre -> nombre.contains("cronograma") || nombre.contains("schedule") || nombre.contains("huella"));
     }
 
+    // decisión 2026-11-02 pagos fuera de términos
     @Test
     @DisplayName("quien ya estaba dentro y vuelve a aceptar (versión nueva): «Mi aceptación» con su programa real")
     void volverAAceptar() {
@@ -127,6 +128,7 @@ class TerminosDeLaPersonaAcuerdoTest {
         assertThat(acuerdo.inicio()).isEqualTo(LocalDate.parse("2026-10-26"));
     }
 
+    // decisión 2026-11-02 pagos fuera de términos
     @Test
     @DisplayName("una formación sin términos publicados no trae «Mi aceptación»")
     void sinTerminos() {
@@ -138,6 +140,7 @@ class TerminosDeLaPersonaAcuerdoTest {
         assertThat(servicio.para(persona).acuerdo()).isEmpty();
     }
 
+    // decisión 2026-11-02 pagos fuera de términos
     @Test
     @DisplayName("releer lo aceptado trae lo que se le mostró (programa y fechas); en lo anterior a la spec 039, nada")
     void releerLoAceptado() {
