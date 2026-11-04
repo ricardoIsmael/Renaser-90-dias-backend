@@ -19,9 +19,12 @@ public interface ConsultarFichaDeMentorUseCase {
     /**
      * @param cuentaActiva false si la cuenta del mentor está suspendida o inactiva
      * @param perfil       null si todavía no tiene perfil de mentor
+     * @param haceSuPrograma true si el mentor o la guía lleva su propio programa de 90 días y ya lo activó (eligió su
+     *                     Día 1): el líder le puede abrir sus días y evidencias, igual que a un aprendiz (D-318). Es
+     *                     exactamente la regla con la que {@code /leadership/people/{id}/week} lo abre o lo rechaza
      */
     record FichaDeMentor(IndicadoresDeMentor indicadores, boolean cuentaActiva, PerfilDeMentor perfil, String mes,
                          String zona, Instant corteEn, LocalDate semaforoDesde, LocalDate semaforoHasta,
-                         List<ObservacionDeMentor> ultimasObservaciones) {
+                         List<ObservacionDeMentor> ultimasObservaciones, boolean haceSuPrograma) {
     }
 }

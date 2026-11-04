@@ -84,7 +84,7 @@ grupo: **huecos y cierres sí; el Radar no** (spec 012, FR-015: la ficha ya regi
 |---|---|
 | Sin sesión | 401 |
 | Rol que no es del liderazgo, o cuenta suspendida | 403 |
-| La persona no existe, no es un aprendiz del programa, está suspendida o es una cuenta de prueba | 404 (sin distinguir cuál) |
+| La persona no existe, no es un aprendiz del programa (ni, desde D-318, un mentor o una guía con su programa activado), está suspendida o es una cuenta de prueba | 404 (sin distinguir cuál) |
 | `page` negativa, `size` fuera de 1–100, fecha que no es viernes / lunes o es futura | 400 |
 
 Los caminos que terminan en 403, 404 o 400 no leen nada ni dejan registro.
@@ -121,3 +121,27 @@ cuenta de prueba 404, registro con grupo `NULL`, cuerpo igual al del grupo); `Ar
 - «Avisar a su mentor» sigue siendo la observación de siempre; la app la ofrece con `puedeAvisarAlMentor`.
 - La lista no ordena por semáforo ni muestra color: el pedido es llegar a la ficha. Si se quiere ordenar por color, es otra
   lectura (el semáforo por persona de todo el programa).
+
+## Ampliación 2026-11-03 (D-318, issue #74): también el mentor y la guía con programa propio
+
+Pedido del dueño: «¿De los mentores puede ver qué hábitos hace o no, como con los aprendices? … Sí, procede.» Solo lectura, sin tablas
+ni migraciones, mismos permisos (`AccesoDeLiderazgo`). Lo que cambia:
+
+- **`GET /api/v1/leadership/people/{personId}/week`, `/radar`, `/huecos`, `/cierres` (y `/analisis-80-20` y `/diagnostico`)** aceptan
+  además a una persona con rol **`MENTOR` o `TRAINEE_GUIDE`** que **ya activó su programa** (eligió su Día 1), con la cuenta activa,
+  que no es de prueba y es de una formación que quien mira ve. Con otro rol del personal, sin programa, inscrita pero sin Día 1, suspendida o de
+  prueba: **404**, igual que antes. `mirar` es el único punto por el que pasan las seis lecturas: no hay un camino aparte.
+- **Sus días de verdad:** el mismo armado que el de un aprendiz (`LecturaDeLaFicha` + `ArmadoDeLaFicha`): hábitos hechos y pendientes con su
+  evidencia, `respuestaTexto`, acciones, `programacion`, `resumen` y `primeraSemana`. `color` es **`NO_SE_MIDE`** («No se mide en el
+  semáforo») con su `porcentaje`: no cuenta para el semáforo de ningún grupo, y tampoco entra a la lista `GET /leadership/people` ni al
+  `resumen` de un grupo.
+- **Sin grupo ni mentor:** `grupoId: null`, `mentor: null`, `puedeAvisarAlMentor: false` (él es el mentor). La consulta (FR-016) queda con
+  `grupo_id` y `mentor_id` en `NULL`: nadie recibe el resumen de las 20:00 por esa consulta.
+- **`GET /api/v1/leadership/mentors/{id}` suma `haceSuPrograma: boolean`** (aditivo): `true` si ese mentor o guía se abre por las rutas
+  de arriba. Sale de la misma regla (`PersonasDelPrograma.sePuedenVerSusDias`), así que la fila de la app nunca lleva a un 404.
+- **La ruta por grupo** `/groups/{g}/people/{p}/week` ya devolvía los días del mentor o la guía **de ese grupo** con programa activado (solo
+  se le quita el color); lo único sin días es su fila en `GET /groups/{g}/semaforo` (`dias: []`), que no cambia. Un mentor de otro grupo, 404.
+- **Un MENTOR (o una guía) nunca ve los días de otro mentor, ni los suyos:** 403 en las cuatro lecturas y en la ficha.
+
+Pruebas: `LiderVeATodosServiceTest`, `SemanaDePersonaServiceTest`, `FichaYObservacionesServiceTest`, `PersonasDelProgramaControllerTest`,
+`LeadershipControllersTest` y `LiderVeATodosIT`.

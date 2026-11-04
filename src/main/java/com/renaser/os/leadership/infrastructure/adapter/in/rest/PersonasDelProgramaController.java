@@ -41,6 +41,10 @@ import java.util.UUID;
  *       versiones por grupo. Huecos y cierres registran la consulta; el Radar no, como en el grupo.</li>
  * </ul>
  *
+ * <p>D-318 (2026-11-03): las cuatro lecturas de una persona abren también a un mentor o a una guía de aprendiz con su programa
+ * propio ya activado, con sus días de verdad (sin color: no cuenta para el semáforo de ningún grupo) y sin grupo ni mentor
+ * a quien avisar. La lista de {@code GET /people} sigue siendo de aprendices.
+ *
  * <p>Solo lectura. El permiso declarado no alcanza solo: MENTOR pasa el interceptor sin que se le mire nada (A-1) y
  * MENTOR_LEAD está en modo sombra. Quien decide es {@code AccesoDeLiderazgo}, el mismo de las rutas por grupo. Misma
  * funcionalidad de Soporte TI que ellas ({@code lider.cumplimiento}). Datos de personas: nada se guarda en caché
@@ -52,7 +56,7 @@ import java.util.UUID;
 public class PersonasDelProgramaController {
 
     private static final String GUARD = "AccesoDeLiderazgo: MENTOR_LEAD/ADMIN/ALCHEMIST activo; el permiso no alcanza (A-1); "
-            + "aprendiz del programa que se muestra, con o sin grupo";
+            + "aprendiz del programa que se muestra, con o sin grupo, o mentor/guía con su programa activado";
 
     private final ConsultarPersonasDelProgramaUseCase personas;
     private final ConsultarSemanaDePersonaUseCase semanaDePersona;

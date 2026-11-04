@@ -120,6 +120,23 @@ class LeadershipControllersTest {
     }
 
     @Test
+    @DisplayName("D-318 ficha: haceSuPrograma viaja siempre; es true solo si el mentor ya activo su programa")
+    void fichaDiceSiHaceSuPrograma() throws Exception {
+        pedir(PADRON + "/" + LUISA, LIDER)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.haceSuPrograma").value(false));
+
+        banco.programaPropio(LUISA, UserRole.MENTOR, false);
+        pedir(PADRON + "/" + LUISA, LIDER).andExpect(jsonPath("$.haceSuPrograma").value(false));
+
+        banco.programaPropio(LUISA, UserRole.MENTOR, true);
+        pedir(PADRON + "/" + LUISA, LIDER).andExpect(jsonPath("$.haceSuPrograma").value(true));
+        pedir(PADRON + "/" + LUISA, ALQUIMISTA).andExpect(jsonPath("$.haceSuPrograma").value(true));
+        // Quien no es del liderazgo no llega a saberlo: 403 antes de leer nada.
+        pedir(PADRON + "/" + LUISA, RAUL).andExpect(status().isForbidden());
+    }
+
+    @Test
     @DisplayName("observacion: 201 y queda en la ficha; un tipo invalido es 400")
     void observacion() throws Exception {
         observar(LIDER, LUISA, """

@@ -253,6 +253,25 @@ class SemanaDePersonaServiceTest {
     }
 
     @Test
+    @DisplayName("D-318: el mentor del grupo con programa propio trae sus 7 días de verdad (hábitos y evidencias), no solo «No se mide»")
+    void elMentorDelGrupoTraeSusDias() {
+        banco.programa(MENTORA, UserRole.MENTOR, LocalDate.of(2026, 9, 1), true);
+        banco.vigente(MENTORA, ventanaPareja(DESDE_VIGENTE, false, 85));
+        UUID foto = UUID.randomUUID();
+        ObligacionDelDia ritual = new ObligacionDelDia(UUID.randomUUID(), "Ritual de la mañana", "COMPLETADO", true,
+                "ENTREGADA", Instant.parse("2026-10-14T14:00:00Z"), "VALIDA", foto, null, "Me sentí con energía",
+                List.of(new EvidenciaDeObligacion(foto, "FOTO", Instant.parse("2026-10-14T14:00:00Z"))));
+        banco.obligacion(MENTORA, LocalDate.of(2026, 10, 14), ritual);
+
+        SemanaDeLaPersona semana = delLider(MENTORA, null);
+
+        assertThat(semana.color()).isEqualTo(ColorDeLaFila.NO_SE_MIDE);
+        assertThat(semana.dias()).hasSize(7);
+        assertThat(semana.dias().get(2).obligaciones()).containsExactly(ritual);
+        assertThat(semana.resumen().obligaciones()).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("las obligaciones del dia viajan tal cual: respuesta, evidencias, publicacion")
     void obligacionesTalCual() {
         UUID foto = UUID.randomUUID();

@@ -62,6 +62,7 @@ class LiderVeATodosIT {
     private final ObjectMapper json = new ObjectMapper();
     private final List<UUID> usuarios = new ArrayList<>();
     private final List<UUID> grupos = new ArrayList<>();
+    private final List<UUID> habitos = new ArrayList<>();
 
     private String marca;
     private UUID lider;
@@ -115,6 +116,7 @@ class LiderVeATodosIT {
             jdbc.update("DELETE FROM renaser.celulas WHERE id = ?", id);
         });
         usuarios.forEach(id -> jdbc.update("DELETE FROM renaser.usuarios WHERE id = ?", id));
+        habitos.forEach(id -> jdbc.update("DELETE FROM renaser.habitos WHERE id = ?", id));
         jdbc.update("DELETE FROM renaser.politicas_mentoria WHERE cohorte_id = ?", cohorte);
         jdbc.update("DELETE FROM renaser.cohortes WHERE id = ?", cohorte);
     }
@@ -274,7 +276,7 @@ class LiderVeATodosIT {
     }
 
     @Test
-    @DisplayName("una cuenta de prueba, una suspendida, una mentora y un id que no existe son 404 y no dejan registro")
+    @DisplayName("una cuenta de prueba, una suspendida, una mentora sin programa propio y un id que no existe son 404 y no dejan registro")
     void noSeMuestra() throws Exception {
         for (UUID persona : List.of(prueba, suspendida, mentora, UUID.randomUUID())) {
             for (String parte : List.of("week", "radar", "huecos", "cierres")) {
@@ -283,6 +285,161 @@ class LiderVeATodosIT {
             }
             assertThat(consultasDe(persona)).isZero();
         }
+    }
+
+    // ── D-318: el mentor y la guía con programa propio ──────────────────────
+
+    /** Un día de la ventana vigente (los 7 que terminan ayer, en Lima): hace dos días. */
+    private LocalDate diaConHabitos() {
+        return LocalDate.now(ZoneId.of("America/Lima")).minusDays(2);
+    }
+
+    private UUID habitoCumplido(UUID persona, String titulo, String respuesta) {
+        UUID habito = UUID.randomUUID();
+        habitos.add(habito);
+        jdbc.update("INSERT INTO renaser.habitos (id, ambito, titulo, tipo, categoria_clave, exigencia_evidencia) "
+                + "VALUES (?, 'SISTEMA', ?, 'CHECKBOX', 'MENTE', CAST('OBLIGATORIA' AS renaser.exigencia_evidencia))",
+                habito, titulo);
+        UUID registro = UUID.randomUUID();
+        jdbc.update("INSERT INTO renaser.registros_habito (id, participante_id, habito_id, fecha_ejecucion, dia_programa, "
+                + "tipo_dia, estado, respuesta_texto, completado_en) VALUES (?, ?, ?, ?, 19, "
+                + "CAST('DISCIPLINA' AS renaser.tipo_dia), CAST('COMPLETADO' AS renaser.estado_registro), ?, now())",
+                registro, persona, habito, diaConHabitos(), respuesta);
+        return registro;
+    }
+
+    @Test
+    @DisplayName("D-318: el líder abre la semana de un mentor con su programa activado: 200, sus hábitos y lo que escribió, sin grupo ni mentor, y la consulta queda con el grupo y el mentor en NULL")
+    void laSemanaDeUnMentorConPrograma() throws Exception {
+        programa(otroMentor);
+        UUID registro = habitoCumplido(otroMentor, "Ritual de la mañana " + marca, "Me sentí con energía");
+
+        HttpResponse<String> respuesta = pedir("/api/v1/leadership/people/" + otroMentor + "/week", lider);
+
+        assertThat(respuesta.statusCode()).isEqualTo(200);
+        JsonNode ficha = json.readTree(respuesta.body());
+        assertThat(ficha.get("personaId").asText()).isEqualTo(otroMentor.toString());
+        assertThat(ficha.get("rol").asText()).isEqualTo("MENTOR");
+        assertThat(ficha.get("color").asText()).as("no cuenta para el semáforo de ningún grupo").isEqualTo("NO_SE_MIDE");
+        assertThat(ficha.get("grupoId").isNull()).isTrue();
+        assertThat(ficha.get("mentor").isNull()).isTrue();
+        assertThat(ficha.get("puedeAvisarAlMentor").asBoolean()).isFalse();
+        assertThat(ficha.get("dias")).hasSize(7);
+        JsonNode dia = null;
+        for (JsonNode candidato : ficha.get("dias")) {
+            if (candidato.get("fecha").asText().equals(diaConHabitos().toString())) {
+                dia = candidato;
+            }
+        }
+        assertThat(dia).as("el día con hábitos está en la ventana").isNotNull();
+        assertThat(dia.get("obligaciones")).hasSize(1);
+        assertThat(dia.get("obligaciones").get(0).get("registroId").asText()).isEqualTo(registro.toString());
+        assertThat(dia.get("obligaciones").get(0).get("estadoHabito").asText()).isEqualTo("COMPLETADO");
+        assertThat(dia.get("obligaciones").get(0).get("respuestaTexto").asText()).isEqualTo("Me sentí con energía");
+        Map<String, Object> fila = jdbc.queryForMap("SELECT rol_consultor, grupo_id, mentor_id, consultor_id "
+                + "FROM renaser.consultas_de_ficha WHERE persona_id = ?", otroMentor);
+        assertThat(fila.get("rol_consultor")).isEqualTo("MENTOR_LEAD");
+        assertThat(fila.get("consultor_id")).isEqualTo(lider);
+        assertThat(fila.get("grupo_id")).isNull();
+        assertThat(fila.get("mentor_id")).isNull();
+    }
+
+    @Test
+    @DisplayName("D-318: el Radar, los huecos y los cierres del mentor con programa también se abren; Administración abre la semana igual")
+    void radarHuecosYCierresDelMentor() throws Exception {
+        programa(otroMentor);
+
+        for (String parte : List.of("radar", "huecos", "cierres", "week")) {
+            assertThat(pedir("/api/v1/leadership/people/" + otroMentor + "/" + parte, lider).statusCode()).as(parte).isEqualTo(200);
+        }
+        assertThat(pedir("/api/v1/leadership/people/" + otroMentor + "/week", admin).statusCode()).isEqualTo(200);
+        // El Radar no registra; la semana (2), los huecos y los cierres sí.
+        assertThat(consultasDe(otroMentor)).isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("D-318: un mentor, y una guía, sin su programa activado (o sin programa) son 404; con él inscrito pero sin Día 1, también")
+    void mentorSinProgramaActivado() throws Exception {
+        // La guía tiene fila de programa pero no eligió su Día 1: programa_activado_en NULL.
+        jdbc.update("INSERT INTO renaser.participantes_programa (usuario_id, dia_programa, fecha_inicio, timezone) "
+                + "VALUES (?, 0, CURRENT_DATE + 1, 'America/Lima')", guia);
+
+        for (UUID persona : List.of(otroMentor, guia)) {
+            for (String parte : List.of("week", "radar", "huecos", "cierres")) {
+                assertThat(pedir("/api/v1/leadership/people/" + persona + "/" + parte, lider).statusCode())
+                        .as(parte + ", " + persona).isEqualTo(404);
+            }
+            assertThat(consultasDe(persona)).isZero();
+        }
+    }
+
+    @Test
+    @DisplayName("D-318: un MENTOR que pide los días de otro mentor recibe 403 (en las cuatro lecturas), también con el programa activado; no queda registro")
+    void unMentorNoVeLosDiasDeOtroMentor() throws Exception {
+        programa(otroMentor);
+        programa(guia);
+
+        for (UUID actor : List.of(mentora, guia, otroMentor)) {
+            for (String parte : List.of("week", "radar", "huecos", "cierres")) {
+                assertThat(pedir("/api/v1/leadership/people/" + otroMentor + "/" + parte, actor).statusCode())
+                        .as(parte + ", actor " + actor).isEqualTo(403);
+            }
+        }
+        assertThat(consultasDe(otroMentor)).isZero();
+    }
+
+    @Test
+    @DisplayName("D-318: la ficha del mentor dice haceSuPrograma: true con su programa activado, false sin él o sin fila")
+    void laFichaDelMentorDiceSiHaceSuPrograma() throws Exception {
+        assertThat(obtener("/api/v1/leadership/mentors/" + otroMentor, lider).get("haceSuPrograma").asBoolean()).isFalse();
+
+        programa(otroMentor);
+        assertThat(obtener("/api/v1/leadership/mentors/" + otroMentor, lider).get("haceSuPrograma").asBoolean()).isTrue();
+        assertThat(obtener("/api/v1/leadership/mentors/" + otroMentor, admin).get("haceSuPrograma").asBoolean()).isTrue();
+
+        jdbc.update("INSERT INTO renaser.participantes_programa (usuario_id, dia_programa, fecha_inicio, timezone) "
+                + "VALUES (?, 0, CURRENT_DATE + 1, 'America/Lima')", guia);
+        assertThat(obtener("/api/v1/leadership/mentors/" + guia, lider).get("haceSuPrograma").asBoolean()).isFalse();
+        // Quien no es del liderazgo no llega a saberlo.
+        assertThat(pedir("/api/v1/leadership/mentors/" + otroMentor, mentora).statusCode()).isEqualTo(403);
+    }
+
+    @Test
+    @DisplayName("D-318: por la ruta del grupo, el líder recibe los días de verdad del mentor de ESE grupo con su programa activado; el de otro grupo, 404")
+    void laRutaDelGrupoDaLosDiasDelMentorDeEseGrupo() throws Exception {
+        programa(mentora);
+        UUID registro = habitoCumplido(mentora, "Ritual de la mañana " + marca, "Listo");
+
+        JsonNode porGrupo = obtener("/api/v1/leadership/groups/" + fenix + "/people/" + mentora + "/week", lider);
+
+        assertThat(porGrupo.get("grupoId").asText()).isEqualTo(fenix.toString());
+        assertThat(porGrupo.get("color").asText()).isEqualTo("NO_SE_MIDE");
+        assertThat(porGrupo.get("mentor").isNull()).isTrue();
+        assertThat(porGrupo.get("puedeAvisarAlMentor").asBoolean()).isFalse();
+        assertThat(porGrupo.get("dias")).hasSize(7);
+        assertThat(porGrupo.toString()).contains(registro.toString()).contains("Listo");
+        // Y lo mismo por la puerta sin grupo, salvo el grupo con que se lo mira.
+        JsonNode sinGrupo = obtener("/api/v1/leadership/people/" + mentora + "/week", lider);
+        assertThat(sinGrupo.get("dias")).isEqualTo(porGrupo.get("dias"));
+        // Su lugar en la lista del grupo: sigue sin días y «No se mide», y no es lo que cambia.
+        JsonNode lista = obtener("/api/v1/leadership/groups/" + fenix + "/semaforo", lider);
+        JsonNode suFila = null;
+        for (JsonNode fila : lista.get("aprendices")) {
+            if (fila.get("aprendizId").asText().equals(mentora.toString())) {
+                suFila = fila;
+            }
+        }
+        assertThat(suFila).isNotNull();
+        assertThat(suFila.get("color").asText()).isEqualTo("NO_SE_MIDE");
+        assertThat(suFila.get("dias")).isEmpty();
+        // El mentor de otro grupo no se abre por este.
+        programa(otroMentor);
+        UUID aurora = grupo("Aurora " + marca, otroMentor);
+        asignar(aurora, otroMentor, "MENTOR");
+        assertThat(pedir("/api/v1/leadership/groups/" + fenix + "/people/" + otroMentor + "/week", lider).statusCode())
+                .isEqualTo(404);
+        assertThat(pedir("/api/v1/leadership/groups/" + aurora + "/people/" + otroMentor + "/week", lider).statusCode())
+                .isEqualTo(200);
     }
 
     // ── Pedido y semilla ────────────────────────────────────────────────────

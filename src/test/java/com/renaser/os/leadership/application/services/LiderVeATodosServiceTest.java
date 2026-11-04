@@ -9,7 +9,11 @@ import com.renaser.os.leadership.application.ports.in.ConsultarRadarDePersonaUse
 import com.renaser.os.leadership.application.ports.in.ConsultarSemanaDePersonaUseCase.ConsultaSemanaDePersona;
 import com.renaser.os.leadership.application.ports.in.ConsultarSemanaDePersonaUseCase.ConsultaSemanaDeUnaPersona;
 import com.renaser.os.leadership.application.ports.in.ConsultarSemanaDePersonaUseCase.SemanaDeLaPersona;
+import com.renaser.os.leadership.application.ports.in.ConsultarSemanaDePersonaUseCase.DiaDeLaFicha;
 import com.renaser.os.leadership.domain.model.consulta.ConsultaDeFicha;
+import com.renaser.os.leadership.domain.model.cumplimiento.ColorDeLaFila;
+import com.renaser.os.mentoring.api.EvidenciaDeObligacion;
+import com.renaser.os.mentoring.api.ObligacionDelDia;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserRole;
@@ -19,6 +23,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.RecordComponent;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
@@ -335,16 +340,21 @@ class LiderVeATodosServiceTest {
     }
 
     @Test
-    @DisplayName("404 sin registro ni lectura: no existe, suspendida, de prueba, mentora, sin programa o un uuid cualquiera")
+    @DisplayName("404 sin registro ni lectura: no existe, suspendida, de prueba, sin programa, un mentor sin su programa activado, personal que no es mentor o un uuid cualquiera")
     void noSeMuestra() {
         banco.aprendizSinGrupo(ELENA, "Elena Suspendida");
         banco.usuario(ELENA, "Elena Suspendida", UserRole.TRAINEE, UserStatus.SUSPENDED);
         banco.aprendizSinGrupo(FABIO, "Fabio de Prueba");
         banco.cuentasDePrueba.add(FABIO);
         banco.usuario(GINA, "Gina Sinprograma", UserRole.TRAINEE, UserStatus.ACTIVE);
-        banco.programa(MENTORA, UserRole.MENTOR, LocalDate.of(2026, 9, 1), true);
+        // D-318: la mentora se abre solo con su programa ACTIVADO; inscrita pero sin Día 1 elegido, no.
+        banco.programa(MENTORA, UserRole.MENTOR, LocalDate.of(2026, 9, 1), false);
+        // El personal que no es mentor ni guía no se abre, aunque haya activado el suyo.
+        banco.programa(ADMIN, UserRole.ADMIN, LocalDate.of(2026, 9, 1), true);
+        banco.programa(LIDER, UserRole.MENTOR_LEAD, LocalDate.of(2026, 9, 1), true);
+        banco.programa(SOPORTE_TI, UserRole.IT_SUPPORT, LocalDate.of(2026, 9, 1), true);
 
-        for (UserId persona : List.of(ELENA, FABIO, GINA, MENTORA, LIDER, id("ff"))) {
+        for (UserId persona : List.of(ELENA, FABIO, GINA, MENTORA, OTRO_MENTOR, ADMIN, LIDER, SOPORTE_TI, id("ff"))) {
             assertThatThrownBy(() -> semanaDe(LIDER, persona, null)).as("persona " + persona)
                     .isInstanceOf(NoSuchElementException.class);
         }
@@ -370,6 +380,219 @@ class LiderVeATodosServiceTest {
     @DisplayName("el 403 va antes que el 404: quien no tiene permiso no averigua qué ids existen")
     void primeroElPermiso() {
         assertThatThrownBy(() -> semanaDe(OTRO_MENTOR, id("ff"), null)).isInstanceOf(NotAuthorizedException.class);
+    }
+
+    // ── D-318: el mentor y la guía con programa propio ──────────────────────
+
+    private static final LocalDate DIA_CON_HABITOS = LocalDate.of(2026, 10, 14);
+
+    private ObligacionDelDia ritualCumplido() {
+        UUID foto = UUID.randomUUID();
+        return new ObligacionDelDia(UUID.randomUUID(), "Ritual de la mañana", "COMPLETADO", true, "ENTREGADA",
+                Instant.parse("2026-10-14T14:00:00Z"), "VALIDA", foto, null, "Me sentí con energía",
+                List.of(new EvidenciaDeObligacion(foto, "FOTO", Instant.parse("2026-10-14T14:00:00Z"))));
+    }
+
+    private ObligacionDelDia caminarSinHacer() {
+        return new ObligacionDelDia(UUID.randomUUID(), "Caminar", "PENDIENTE", false, "NO_REQUERIDA", null, null, null,
+                null, null, List.of());
+    }
+
+    private void mentoraConSuPrograma() {
+        banco.programa(MENTORA, UserRole.MENTOR, LocalDate.of(2026, 9, 1), true);
+        banco.vigente(MENTORA, ventanaPareja(DESDE_VIGENTE, false, 85));
+        banco.obligacion(MENTORA, DIA_CON_HABITOS, ritualCumplido());
+        banco.obligacion(MENTORA, DIA_CON_HABITOS, caminarSinHacer());
+    }
+
+    @Test
+    @DisplayName("D-318: una mentora con su programa activado se abre sin grupo, con sus días de verdad: hábitos hechos y pendientes, evidencias y lo que escribió")
+    void laMentoraSeAbreConSusDias() {
+        mentoraConSuPrograma();
+
+        SemanaDeLaPersona ficha = semanaDe(LIDER, MENTORA, null);
+
+        assertThat(ficha.personaId()).isEqualTo(MENTORA.value());
+        assertThat(ficha.nombre()).isEqualTo("Luisa Rojas");
+        assertThat(ficha.rol()).isEqualTo(UserRole.MENTOR);
+        assertThat(ficha.desde()).isEqualTo(DESDE_VIGENTE);
+        assertThat(ficha.dias()).hasSize(7);
+        DiaDeLaFicha miercoles = ficha.dias().stream().filter(d -> d.fecha().equals(DIA_CON_HABITOS)).findFirst().orElseThrow();
+        assertThat(miercoles.obligaciones()).extracting(ObligacionDelDia::titulo).containsExactly("Ritual de la mañana", "Caminar");
+        assertThat(miercoles.obligaciones().getFirst().respuestaTexto()).isEqualTo("Me sentí con energía");
+        assertThat(miercoles.obligaciones().getFirst().evidencias()).hasSize(1);
+        assertThat(miercoles.obligaciones().get(1).estadoHabito()).isEqualTo("PENDIENTE");
+        assertThat(ficha.resumen().obligaciones()).isEqualTo(2);
+        assertThat(ficha.primeraSemana()).isNotNull();
+        // Su % se ve, pero él no cuenta para el semáforo de ningún grupo: sin color de semáforo.
+        assertThat(ficha.color()).isEqualTo(ColorDeLaFila.NO_SE_MIDE);
+        assertThat(ficha.porcentaje()).isEqualByComparingTo("85");
+        // Sin grupo, y sin «mentor a quien avisar»: él es el mentor.
+        assertThat(ficha.grupoId()).isNull();
+        assertThat(ficha.mentor()).isNull();
+    }
+
+    @Test
+    @DisplayName("D-318: la consulta de la ficha de un mentor queda registrada con el rol de quien la hizo, y sin grupo ni mentor (nadie recibe el resumen de las 20:00)")
+    void laConsultaDeLaMentoraSeRegistra() {
+        mentoraConSuPrograma();
+
+        semanaDe(ADMIN, MENTORA, null);
+        semanaDe(LIDER, MENTORA, SEMANA_CERRADA);
+
+        assertThat(banco.consultas).hasSize(2);
+        assertThat(banco.consultas).extracting(ConsultaDeFicha::rolConsultor).containsExactly(UserRole.ADMIN, UserRole.MENTOR_LEAD);
+        assertThat(banco.consultas).allSatisfy(c -> {
+            assertThat(c.personaId()).isEqualTo(MENTORA);
+            assertThat(c.grupoId()).isNull();
+            assertThat(c.mentorId()).isNull();
+        });
+        assertThat(banco.consultas.get(1).semanaDesde()).isEqualTo(DESDE_SEMANA_CERRADA);
+    }
+
+    @Test
+    @DisplayName("D-318: una guía de aprendiz con su programa activado también se abre; el líder, Administración y Alquimista, los tres")
+    void laGuiaSeAbre() {
+        banco.programa(GUIA, UserRole.TRAINEE_GUIDE, LocalDate.of(2026, 9, 1), true);
+        banco.vigente(GUIA, ventanaPareja(DESDE_VIGENTE, false, 60));
+
+        for (UserId actor : List.of(LIDER, ADMIN, ALQUIMISTA)) {
+            SemanaDeLaPersona ficha = semanaDe(actor, GUIA, null);
+            assertThat(ficha.rol()).isEqualTo(UserRole.TRAINEE_GUIDE);
+            assertThat(ficha.color()).isEqualTo(ColorDeLaFila.NO_SE_MIDE);
+            assertThat(ficha.dias()).hasSize(7);
+            assertThat(ficha.mentor()).isNull();
+        }
+    }
+
+    @Test
+    @DisplayName("D-318: se arma con el mismo armado que el de un aprendiz: con igual semáforo, el mismo motivo por día; con sus obligaciones, las de ella")
+    void laMentoraSeArmaIgualQueUnAprendiz() {
+        mentoraConSuPrograma();
+        banco.aprendizSinGrupo(ELENA, "Elena Zeta");
+        banco.obligacion(ELENA, DIA_CON_HABITOS, ritualCumplido());
+        banco.vigente(ELENA, ventanaPareja(DESDE_VIGENTE, false, 85));
+
+        SemanaDeLaPersona deLaMentora = semanaDe(LIDER, MENTORA, null);
+        SemanaDeLaPersona deElena = semanaDe(LIDER, ELENA, null);
+
+        assertThat(deLaMentora.dias().stream().map(DiaDeLaFicha::motivo).toList())
+                .isEqualTo(deElena.dias().stream().map(DiaDeLaFicha::motivo).toList());
+        assertThat(deLaMentora.dias().stream().map(d -> d.obligaciones().size()).toList())
+                .isEqualTo(List.of(0, 0, 2, 0, 0, 0, 0));
+        assertThat(deElena.dias().stream().map(d -> d.obligaciones().size()).toList())
+                .isEqualTo(List.of(0, 0, 1, 0, 0, 0, 0));
+    }
+
+    @Test
+    @DisplayName("D-318: el mentor suspendido o de prueba no se abre; el otro rol del personal tampoco, aunque tenga programa")
+    void mentorQueNoSeMuestra() {
+        banco.programa(MENTORA, UserRole.MENTOR, LocalDate.of(2026, 9, 1), true);
+        banco.programa(OTRO_MENTOR, UserRole.MENTOR, LocalDate.of(2026, 9, 1), true);
+        banco.programa(GUIA, UserRole.TRAINEE_GUIDE, LocalDate.of(2026, 9, 1), true);
+        banco.usuario(OTRO_MENTOR, "Otro Mentor", UserRole.MENTOR, UserStatus.SUSPENDED);
+        banco.cuentasDePrueba.add(GUIA);
+
+        for (UserId persona : List.of(OTRO_MENTOR, GUIA)) {
+            assertThatThrownBy(() -> semanaDe(LIDER, persona, null)).as("persona " + persona)
+                    .isInstanceOf(NoSuchElementException.class);
+        }
+        assertThat(banco.consultas).isEmpty();
+        assertThat(banco.ventanasPedidasALaSemana).isEmpty();
+        assertThat(banco.horariosPedidos).isEmpty();
+    }
+
+    @Test
+    @DisplayName("D-318: un MENTOR o una guía nunca ve los días de otro mentor ni los suyos: 403 antes de saber si el id existe")
+    void unMentorNoVeLosDiasDeOtroMentor() {
+        mentoraConSuPrograma();
+        banco.programa(GUIA, UserRole.TRAINEE_GUIDE, LocalDate.of(2026, 9, 1), true);
+
+        for (UserId actor : List.of(OTRO_MENTOR, GUIA, MENTORA)) {
+            assertThatThrownBy(() -> semanaDe(actor, MENTORA, null)).as("actor " + actor)
+                    .isInstanceOf(NotAuthorizedException.class);
+            assertThatThrownBy(() -> semanaDe(actor, id("ff"), null)).as("actor " + actor)
+                    .isInstanceOf(NotAuthorizedException.class);
+        }
+        assertThat(banco.consultas).isEmpty();
+        assertThat(banco.ventanasPedidasALaSemana).isEmpty();
+    }
+
+    @Test
+    @DisplayName("D-318: la mentora y la guía tampoco entran a la lista de aprendices: la lista sigue siendo de aprendices")
+    void laListaSigueSiendoDeAprendices() {
+        mentoraConSuPrograma();
+        banco.programa(GUIA, UserRole.TRAINEE_GUIDE, LocalDate.of(2026, 9, 1), true);
+
+        assertThat(listar(LIDER, null, 0, 30).items()).extracting(PersonaDelPrograma::nombre)
+                .doesNotContain("Luisa Rojas", "Guía de aprendiz");
+        assertThat(listar(LIDER, "luisa", 0, 30).total()).isZero();
+    }
+
+    @Test
+    @DisplayName("D-318: el Radar, los huecos y los cierres de la mentora se abren por la misma puerta; huecos y cierres dejan su consulta sin grupo")
+    void radarHuecosYCierresDeLaMentora() {
+        mentoraConSuPrograma();
+
+        radar.radarDeUnaPersona(new ConsultaRadarDeUnaPersona(LIDER, MENTORA.value(), null));
+        huecos.huecosDeUnaPersona(new ConsultaHuecosDeUnaPersona(LIDER, MENTORA.value(), LocalDate.of(2026, 10, 12)));
+        cierres.cierresDeUnaPersona(new ConsultaCierresDeUnaPersona(ADMIN, MENTORA.value(), LocalDate.of(2026, 10, 12)));
+
+        assertThat(banco.lecturasDelRadar).extracting(l -> l.persona()).containsExactly(MENTORA);
+        assertThat(banco.consultas).hasSize(2);
+        assertThat(banco.consultas).allSatisfy(c -> {
+            assertThat(c.personaId()).isEqualTo(MENTORA);
+            assertThat(c.grupoId()).isNull();
+            assertThat(c.mentorId()).isNull();
+        });
+    }
+
+    @Test
+    @DisplayName("D-318: el Radar, los huecos y los cierres de un mentor sin su programa activado son 404 sin leer nada; y un MENTOR que los pide, 403")
+    void radarHuecosYCierresSinProgramaActivado() {
+        banco.programa(MENTORA, UserRole.MENTOR, LocalDate.of(2026, 9, 1), false);
+
+        assertThatThrownBy(() -> radar.radarDeUnaPersona(new ConsultaRadarDeUnaPersona(LIDER, MENTORA.value(), null)))
+                .isInstanceOf(NoSuchElementException.class);
+        assertThatThrownBy(() -> huecos.huecosDeUnaPersona(new ConsultaHuecosDeUnaPersona(LIDER, MENTORA.value(), null)))
+                .isInstanceOf(NoSuchElementException.class);
+        assertThatThrownBy(() -> cierres.cierresDeUnaPersona(new ConsultaCierresDeUnaPersona(LIDER, MENTORA.value(), null)))
+                .isInstanceOf(NoSuchElementException.class);
+        assertThatThrownBy(() -> radar.radarDeUnaPersona(new ConsultaRadarDeUnaPersona(OTRO_MENTOR, MENTORA.value(), null)))
+                .isInstanceOf(NotAuthorizedException.class);
+        assertThat(banco.lecturasDelRadar).isEmpty();
+        assertThat(banco.consultas).isEmpty();
+    }
+
+    @Test
+    @DisplayName("D-318: la ruta por grupo también da los días de verdad de la mentora de ESE grupo, igual que por la puerta sin grupo")
+    void laRutaDelGrupoDaLosDiasDeLaMentora() {
+        mentoraConSuPrograma();
+
+        SemanaDeLaPersona porGrupo = semana.semanaDe(new ConsultaSemanaDePersona(LIDER, FENIX, MENTORA.value(), null));
+        SemanaDeLaPersona sinGrupo = semanaDe(LIDER, MENTORA, null);
+
+        assertThat(porGrupo.grupoId()).isEqualTo(FENIX);
+        assertThat(porGrupo.color()).isEqualTo(ColorDeLaFila.NO_SE_MIDE);
+        assertThat(porGrupo.mentor()).as("él es el mentor del grupo: nadie a quien avisar").isNull();
+        assertThat(porGrupo.dias()).isEqualTo(sinGrupo.dias());
+        assertThat(porGrupo.dias().stream().mapToInt(d -> d.obligaciones().size()).sum()).isEqualTo(2);
+        assertThat(porGrupo.resumen()).isEqualTo(sinGrupo.resumen());
+    }
+
+    @Test
+    @DisplayName("D-318: por el grupo solo se abre la mentora de ESE grupo; la de otro grupo, o sin programa activado, es 404")
+    void laRutaDelGrupoSoloAbreAlMentorDeEseGrupo() {
+        mentoraConSuPrograma();
+        UUID aurora = UUID.fromString("00000000-0000-0000-0000-00000000f005");
+        banco.grupoConMentor(aurora, "Grupo Aurora", OTRO_MENTOR, "Otro Mentor");
+        banco.programa(OTRO_MENTOR, UserRole.MENTOR, LocalDate.of(2026, 9, 1), false);
+
+        assertThatThrownBy(() -> semana.semanaDe(new ConsultaSemanaDePersona(LIDER, FENIX, OTRO_MENTOR.value(), null)))
+                .as("el mentor de otro grupo").isInstanceOf(NoSuchElementException.class);
+        assertThatThrownBy(() -> semana.semanaDe(new ConsultaSemanaDePersona(LIDER, aurora, OTRO_MENTOR.value(), null)))
+                .as("sin su programa activado").isInstanceOf(NoSuchElementException.class);
+        assertThat(banco.consultas).isEmpty();
     }
 
     // ── el Radar, los huecos y los cierres ──────────────────────────────────

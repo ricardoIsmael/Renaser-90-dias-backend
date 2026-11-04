@@ -47,8 +47,11 @@ final class ArmadoDeLaFicha {
     }
 
     /**
-     * Quien lleva su programa en el grupo no tiene color (FR-006). Quien el semáforo no mide, tampoco: «sin datos».
-     * Un porcentaje no se convierte nunca en cero ni en verde por falta de datos.
+     * Quien lleva su programa en el grupo no tiene color (FR-006): ni su mentor o su guía, ni —D-318— un mentor o una guía
+     * que el líder abre sin grupo. Lo que NO cambia por eso son sus días: salen del mismo armado que los de un aprendiz,
+     * con sus hábitos, evidencias y acciones; el color solo dice que no cuenta para el semáforo de ningún grupo. Quien el
+     * semáforo no mide, tampoco tiene color: «sin datos». Un porcentaje no se convierte nunca en cero ni en verde por
+     * falta de datos.
      */
     private static ColorDeLaFila color(Miembro miembro, VentanaDelSemaforo suya) {
         if (miembro.acompanante()) {
