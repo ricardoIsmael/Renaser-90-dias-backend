@@ -6,6 +6,7 @@ import com.renaser.os.calendar.domain.model.recordatorio.RecordatorioEvento;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import jakarta.persistence.EntityManager;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -108,6 +109,123 @@ class RecordatorioPersistenceAdapterTest {
     @Test
     void cancelarPorIdsNoConsultaConListaVacia() {
         assertThat(adapter.cancelarPorIds(List.of(), RecordatorioEvento.MOTIVO_NO_ELEGIBLE)).isZero();
+    }
+
+    // ─── Avisos de MENSAJE en la misma cola (spec 041, V167) ────────────────────
+
+    private static RecordatorioEvento mensaje(EventoId eventoId, UserId usuario, Instant enviarEn, int minutosAntes) {
+        return RecordatorioEvento.programarMensaje(eventoId, INICIA_EN, usuario, enviarEn, minutosAntes, CLOCK);
+    }
+
+    // spec 041 FR-014
+    @Test
+    @DisplayName("spec 041: un aviso de mensaje se encola, es idempotente y NO es un aviso del telefono")
+    void unAvisoDeMensajeSeEncolaUnaVez() {
+        EventoId eventoId = crearEvento();
+        UserId usuario = crearUsuario();
+        List<RecordatorioEvento> lote = List.of(mensaje(eventoId, usuario, VENCIDO, 60));
+
+        assertThat(adapter.encolarSiFalta(lote)).isEqualTo(1);
+        assertThat(adapter.encolarSiFalta(lote)).as("la segunda pasada no cuenta nada").isZero();
+
+        assertThat(colaDe(eventoId, AHORA)).singleElement().satisfies(fila -> {
+            assertThat(fila.avisoEnApp()).isFalse();
+            assertThat(fila.mensajeMinAntes()).isEqualTo(60);
+            assertThat(fila.esDeMensaje()).isTrue();
+        });
+    }
+
+    // spec 041 FR-014
+    @Test
+    @DisplayName("spec 041: un aviso del telefono de siempre sigue siendo del telefono y sin marca de mensaje (V167 no cambia lo que ya existia)")
+    void unAvisoDelTelefonoNoCambia() {
+        EventoId eventoId = crearEvento();
+        adapter.encolarSiFalta(List.of(aviso(eventoId, crearUsuario(), VENCIDO)));
+
+        assertThat(colaDe(eventoId, AHORA)).singleElement().satisfies(fila -> {
+            assertThat(fila.avisoEnApp()).isTrue();
+            assertThat(fila.esDeMensaje()).isFalse();
+        });
+    }
+
+    // spec 041 FR-014
+    @Test
+    @DisplayName("spec 041: si una regla del evento y un aviso de mensaje caen en el MISMO instante son UNA fila con las dos marcas, en cualquier orden")
+    void elMismoInstanteEsUnaSolaFila() {
+        EventoId eventoId = crearEvento();
+        UserId primero = crearUsuario();
+        UserId segundo = crearUsuario();
+
+        adapter.encolarSiFalta(List.of(aviso(eventoId, primero, VENCIDO), mensaje(eventoId, primero, VENCIDO, 10)));
+        adapter.encolarSiFalta(List.of(mensaje(eventoId, segundo, VENCIDO, 10), aviso(eventoId, segundo, VENCIDO)));
+
+        assertThat(colaDe(eventoId, AHORA)).hasSize(2).allSatisfy(fila -> {
+            assertThat(fila.avisoEnApp()).as("es aviso del telefono").isTrue();
+            assertThat(fila.mensajeMinAntes()).as("y tambien de mensaje").isEqualTo(10);
+        });
+    }
+
+    // spec 041 FR-014
+    @Test
+    @DisplayName("spec 041: pasar otra vez por lo mismo no cambia nada ni cuenta filas nuevas")
+    void sumarLasMarcasEsIdempotente() {
+        EventoId eventoId = crearEvento();
+        UserId usuario = crearUsuario();
+        List<RecordatorioEvento> lote = List.of(aviso(eventoId, usuario, VENCIDO), mensaje(eventoId, usuario, VENCIDO, 10));
+
+        adapter.encolarSiFalta(lote);
+        int segundaPasada = adapter.encolarSiFalta(lote);
+
+        assertThat(segundaPasada).isZero();
+        assertThat(colaDe(eventoId, AHORA)).hasSize(1);
+    }
+
+    // spec 041 FR-014
+    @Test
+    @DisplayName("spec 041: una fila que ya se envio no se toca: sumarle una marca despues no la vuelve a despachar")
+    void unaFilaEnviadaNoSeToca() {
+        EventoId eventoId = crearEvento();
+        UserId usuario = crearUsuario();
+        adapter.encolarSiFalta(List.of(aviso(eventoId, usuario, VENCIDO)));
+        adapter.marcarEnviados(List.of(colaDe(eventoId, AHORA).get(0).id()), AHORA);
+
+        int creadas = adapter.encolarSiFalta(List.of(mensaje(eventoId, usuario, VENCIDO, 10)));
+
+        assertThat(creadas).isZero();
+        assertThat(colaDe(eventoId, AHORA)).as("sigue enviada: no hay nada pendiente").isEmpty();
+    }
+
+    // spec 041 FR-014, SC-008
+    @Test
+    @DisplayName("spec 041: editar el evento borra los avisos de mensaje pendientes junto con los demas, para regenerarlos con la hora nueva")
+    void editarBorraLosDeMensajeTambien() {
+        EventoId eventoId = crearEvento();
+        UserId usuario = crearUsuario();
+        adapter.encolarSiFalta(List.of(mensaje(eventoId, usuario, FUTURO, 10), mensaje(eventoId, usuario, VENCIDO, 60)));
+
+        int borrados = adapter.borrarPendientesFuturos(eventoId, AHORA);
+
+        assertThat(borrados).isEqualTo(1);
+        assertThat(colaDe(eventoId, FUTURO)).extracting(RecordatorioEvento::mensajeMinAntes).containsExactly(60);
+    }
+
+    // spec 041 FR-014
+    @Test
+    @DisplayName("spec 041: la base no deja una fila que no sea ni aviso del telefono ni de mensaje, ni minutos no positivos")
+    void laBaseCuidaLaForma() {
+        EventoId eventoId = crearEvento();
+        UserId usuario = crearUsuario();
+
+        org.junit.jupiter.api.Assertions.assertThrows(Exception.class, () -> {
+            entityManager.createNativeQuery("""
+                            INSERT INTO renaser.recordatorios_evento (evento_id, inicio_ocurrencia, usuario_id, enviar_en, creado_en,
+                                                                      aviso_en_app, mensaje_min_antes)
+                            VALUES (:evento, :inicio, :usuario, :enviar, now(), false, NULL)
+                            """)
+                    .setParameter("evento", eventoId.value()).setParameter("inicio", INICIA_EN)
+                    .setParameter("usuario", usuario.value()).setParameter("enviar", VENCIDO)
+                    .executeUpdate();
+        });
     }
 
     // ─── Fixtures ───────────────────────────────────────────────────────────────

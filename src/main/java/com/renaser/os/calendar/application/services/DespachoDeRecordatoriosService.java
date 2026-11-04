@@ -14,6 +14,7 @@ import com.renaser.os.calendar.domain.model.evento.EventoId;
 import com.renaser.os.calendar.domain.model.evento.ExpansorOcurrencias;
 import com.renaser.os.calendar.domain.model.evento.Ocurrencia;
 import com.renaser.os.calendar.domain.model.recordatorio.RecordatorioEvento;
+import com.renaser.os.calendar.domain.model.recordatorio.UbicacionDelAviso;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
@@ -227,7 +228,10 @@ public class DespachoDeRecordatoriosService implements DespacharRecordatoriosUse
                     : recordatorio.inicioOcurrencia();
             boolean asistenciaConfirmada = !esAnuncio && asistencias.incluye(recordatorio);
             return new RecordatorioEventoDebidoEvent(recordatorio.id(), evento.id().value(), recordatorio.usuarioId(),
-                    inicio, evento.titulo(), esAnuncio, asistenciaConfirmada, evento.timezone().getId(), ahora);
+                    inicio, evento.titulo(), esAnuncio, asistenciaConfirmada, evento.timezone().getId(), ahora,
+                    recordatorio.avisoEnApp(), recordatorio.mensajeMinAntes(), evento.formacion().name(),
+                    UbicacionDelAviso.enlace(evento.tipoUbicacion(), evento.valorUbicacion()),
+                    UbicacionDelAviso.lugar(evento.tipoUbicacion(), evento.valorUbicacion()));
         }
     }
 }

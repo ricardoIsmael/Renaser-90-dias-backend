@@ -41,18 +41,44 @@ public final class RecordatorioEvento {
     private Instant enviadoEn;
     private String motivoCancelacion;
     private final Instant creadoEn;
+    /** Si la fila es un aviso del telefono (bandeja y push), el de siempre. {@code false}: existe solo para el mensaje (spec 041). */
+    private final boolean avisoEnApp;
+    /** Minutos antes del inicio de este aviso de MENSAJE (chat y WhatsApp; spec 041), o {@code null} si la fila no es de mensaje. */
+    private final Integer mensajeMinAntes;
 
     public static RecordatorioEvento programar(EventoId eventoId, Instant inicioOcurrencia, UserId usuarioId,
                                                 Instant enviarEn, Clock clock) {
         return new RecordatorioEvento(null, Objects.requireNonNull(eventoId), Objects.requireNonNull(inicioOcurrencia),
-                Objects.requireNonNull(usuarioId), Objects.requireNonNull(enviarEn), null, null, clock.now());
+                Objects.requireNonNull(usuarioId), Objects.requireNonNull(enviarEn), null, null, clock.now(), true, null);
+    }
+
+    /**
+     * Un aviso de MENSAJE (spec 041): sale por el chat de soporte y por WhatsApp, y NO es un aviso del telefono (esos siguen siendo los de
+     * las reglas del evento). Si una regla del evento cae en el mismo instante, la cola junta las dos marcas en una sola fila.
+     */
+    public static RecordatorioEvento programarMensaje(EventoId eventoId, Instant inicioOcurrencia, UserId usuarioId,
+                                                       Instant enviarEn, int minutosAntes, Clock clock) {
+        if (minutosAntes <= 0) {
+            throw new IllegalArgumentException("minutosAntes tiene que ser positivo");
+        }
+        return new RecordatorioEvento(null, Objects.requireNonNull(eventoId), Objects.requireNonNull(inicioOcurrencia),
+                Objects.requireNonNull(usuarioId), Objects.requireNonNull(enviarEn), null, null, clock.now(), false,
+                minutosAntes);
     }
 
     public static RecordatorioEvento rehydrate(Long id, EventoId eventoId, Instant inicioOcurrencia,
                                                 UserId usuarioId, Instant enviarEn, Instant enviadoEn,
                                                 String motivoCancelacion, Instant creadoEn) {
+        return rehydrate(id, eventoId, inicioOcurrencia, usuarioId, enviarEn, enviadoEn, motivoCancelacion, creadoEn,
+                true, null);
+    }
+
+    public static RecordatorioEvento rehydrate(Long id, EventoId eventoId, Instant inicioOcurrencia,
+                                                UserId usuarioId, Instant enviarEn, Instant enviadoEn,
+                                                String motivoCancelacion, Instant creadoEn, boolean avisoEnApp,
+                                                Integer mensajeMinAntes) {
         return new RecordatorioEvento(id, eventoId, inicioOcurrencia, usuarioId, enviarEn, enviadoEn,
-                motivoCancelacion, creadoEn);
+                motivoCancelacion, creadoEn, avisoEnApp, mensajeMinAntes);
     }
 
     public void marcarEnviado(Clock clock) {
@@ -65,6 +91,11 @@ public final class RecordatorioEvento {
 
     public boolean pendiente() {
         return enviadoEn == null && motivoCancelacion == null;
+    }
+
+    /** Si esta fila es tambien un aviso de mensaje (chat y WhatsApp, spec 041). */
+    public boolean esDeMensaje() {
+        return mensajeMinAntes != null;
     }
 
     /**

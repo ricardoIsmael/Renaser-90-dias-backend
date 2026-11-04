@@ -37,4 +37,10 @@ public class RecordatorioEventoJpaEntity {
     private String motivoCancelacion;
 
     private Instant creadoEn;
+
+    /** Spec 041 (V167): si la fila es un aviso del telefono; {@code false} = existe solo para el mensaje. */
+    private boolean avisoEnApp = true;
+
+    /** Spec 041 (V167): minutos antes del inicio de este aviso de mensaje, o {@code null}. */
+    private Integer mensajeMinAntes;
 }

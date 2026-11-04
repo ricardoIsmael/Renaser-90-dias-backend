@@ -186,6 +186,28 @@ class RecordatorioEventoNotificationListenerTest {
         assertThat(mensaje.rutaApp()).isEqualTo("/eventos/" + EVENTO);
     }
 
+    // spec 041 FR-014
+    @Test
+    @DisplayName("spec 041: una fila que existe SOLO para el mensaje (chat y WhatsApp) no genera aviso del telefono: la app no recibe avisos de mas")
+    void unaFilaSoloDeMensajeNoEsAvisoDelTelefono() {
+        listener.on(new RecordatorioEventoDebidoEvent(20L, EVENTO, aprendiz, INICIO, "Mentoria", false, false, "America/Lima", AHORA,
+                false, 10, "ESCUELA", null, null));
+
+        assertThat(bandeja).isEmpty();
+        verify(pushPort, never()).enviar(anyList(), any());
+    }
+
+    // spec 041 FR-014
+    @Test
+    @DisplayName("spec 041: una fila de mensaje que coincide con una regla del evento SI es aviso del telefono, como siempre")
+    void unaFilaQueCoincideConUnaReglaSigueSiendoAvisoDelTelefono() {
+        listener.on(new RecordatorioEventoDebidoEvent(21L, EVENTO, aprendiz, INICIO, "Mentoria", false, false, "America/Lima", AHORA,
+                true, 10, "ESCUELA", null, null));
+
+        assertThat(bandeja).hasSize(1);
+        assertThat(bandeja.getFirst().cuerpo()).isEqualTo("Empieza en 10 min, a las 19:30.");
+    }
+
     @Test
     @DisplayName("el outbox reentrega el mismo evento -> sigue habiendo UNA fila y UN push")
     void reentregaNoDuplica() {
