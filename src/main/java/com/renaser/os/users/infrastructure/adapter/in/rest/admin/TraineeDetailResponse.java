@@ -29,6 +29,9 @@ import java.util.UUID;
  *
  * <p>{@code acceptance}, {@code acceptedByName} y {@code acceptedAt} (spec 025, US4): lo que se decidió al aceptar a la persona —con la MISMA forma que
  * {@code acceptance} de la lista de solicitudes— y quién la aceptó y cuándo; {@code null} si la cuenta no entró por una solicitud.
+ *
+ * <p>{@code whatsapp} (D-320): el de su Ficha Inicial, tal como se guardó ({@code "+51 987654321"}), o {@code null} si no lo tiene; el mismo
+ * campo que trae cada fila del listado {@code GET /admin/trainees}. Aditivo, al final.
  */
 public record TraineeDetailResponse(String id, String email, String fullName, UserRole role, UserStatus status,
                                      String avatarUrl, boolean inscrito, int programDay, LocalDate startDate,
@@ -36,7 +39,8 @@ public record TraineeDetailResponse(String id, String email, String fullName, Us
                                      UltimoAjusteDiaResponse lastDayAdjustment,
                                      java.time.Instant deletionScheduledFor,
                                      RolPersonalizadoResponse rolPersonalizado, String formation, int programDuration,
-                                     AccountRequestResponse.Acceptance acceptance, String acceptedByName, Instant acceptedAt) {
+                                     AccountRequestResponse.Acceptance acceptance, String acceptedByName, Instant acceptedAt,
+                                     String whatsapp) {
 
     public static TraineeDetailResponse from(TraineeDetail detail, Optional<AceptacionDeLaPersona> aceptacion) {
         var user = detail.user();
@@ -49,6 +53,7 @@ public record TraineeDetailResponse(String id, String email, String fullName, Us
                 RolPersonalizadoResponse.de(user.rolPersonalizado().orElse(null)),
                 participacion.inscrito() ? participacion.formacion().codigo() : null, participacion.duracionDias(),
                 aceptacion.map(a -> AccountRequestResponse.Acceptance.from(a.eleccion())).orElse(null),
-                aceptacion.map(AceptacionDeLaPersona::aceptadaPorNombre).orElse(null), aceptacion.map(AceptacionDeLaPersona::aceptadaEn).orElse(null));
+                aceptacion.map(AceptacionDeLaPersona::aceptadaPorNombre).orElse(null), aceptacion.map(AceptacionDeLaPersona::aceptadaEn).orElse(null),
+                detail.whatsapp());
     }
 }

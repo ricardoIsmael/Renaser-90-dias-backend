@@ -412,4 +412,57 @@ class TraineeAdminControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].role").value("GUIA_APRENDIZ"));
     }
+
+    // --- D-320 / issue #78: el WhatsApp de la Ficha Inicial, solo para Administración ---
+
+    @Test
+    @DisplayName("D-320: cada fila del listado viaja con su whatsapp tal como se guardó, o null (presente en el JSON) si no lo tiene")
+    void elListadoTraeElWhatsappDeCadaFila() throws Exception {
+        UserId ana = UserId.of(UUID.randomUUID());
+        UserId sinFicha = UserId.of(UUID.randomUUID());
+        when(listTraineesUseCase.listar(any())).thenReturn(new ListTraineesUseCase.PaginaTrainees(
+                java.util.List.of(
+                        new ResumenTraineeAdmin(ana, "Ana", "ana@renaser.com", UserStatus.ACTIVE, 34,
+                                FasePrograma.PHASE_3_ALCHEMIST_WARRIOR, null, null, UserRole.TRAINEE).conWhatsapp("+51 987654321"),
+                        new ResumenTraineeAdmin(sinFicha, "Sin ficha", "sin@renaser.com", UserStatus.ACTIVE, 0,
+                                FasePrograma.paraDiaPrograma(0), null, null, UserRole.MENTOR)),
+                2, 0, 20));
+
+        mockMvc.perform(get("/api/v1/admin/trainees").header("X-Actor-Id", UserId.of(UUID.randomUUID()).toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].whatsapp").value("+51 987654321"))
+                .andExpect(jsonPath("$.content[1].whatsapp").hasJsonPath())
+                .andExpect(jsonPath("$.content[1].whatsapp").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    @Test
+    @DisplayName("D-320: la ficha de una persona viaja con su whatsapp, o null")
+    void laFichaTraeElWhatsapp() throws Exception {
+        UserId id = UserId.of(UUID.randomUUID());
+        UserId otra = UserId.of(UUID.randomUUID());
+        when(getTraineeDetailUseCase.obtener(any())).thenReturn(
+                new TraineeDetail(detalle(id, null).user(), detalle(id, null).participacion(), null, null, "+51 987654321"),
+                detalle(otra, null));
+
+        mockMvc.perform(get("/api/v1/admin/trainees/{id}", id.value()).header("X-Actor-Id", UserId.of(UUID.randomUUID()).toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.whatsapp").value("+51 987654321"));
+        mockMvc.perform(get("/api/v1/admin/trainees/{id}", otra.value()).header("X-Actor-Id", UserId.of(UUID.randomUUID()).toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.whatsapp").hasJsonPath())
+                .andExpect(jsonPath("$.whatsapp").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    @Test
+    @DisplayName("D-320: el listado y la ficha siguen detrás de MANAGE_TRAINEES (autorización declarada, regla 0.3)")
+    void ambosEndpointsExigenManageTrainees() throws Exception {
+        var listar = TraineeAdminController.class.getMethod("listar", UserId.class, int.class, int.class, String.class,
+                boolean.class, UserRole.class, String.class, boolean.class);
+        var detalle = TraineeAdminController.class.getMethod("detalle", UUID.class, UserId.class);
+
+        assertThat(listar.getAnnotation(com.renaser.os.shared.web.security.RequiresPermission.class).value())
+                .isEqualTo(com.renaser.os.shared.domain.Permission.MANAGE_TRAINEES);
+        assertThat(detalle.getAnnotation(com.renaser.os.shared.web.security.RequiresPermission.class).value())
+                .isEqualTo(com.renaser.os.shared.domain.Permission.MANAGE_TRAINEES);
+    }
 }

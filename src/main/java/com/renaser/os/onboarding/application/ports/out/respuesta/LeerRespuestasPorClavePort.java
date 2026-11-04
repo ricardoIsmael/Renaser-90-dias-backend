@@ -2,6 +2,7 @@ package com.renaser.os.onboarding.application.ports.out.respuesta;
 
 import com.renaser.os.shared.domain.UserId;
 
+import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -22,6 +23,13 @@ public interface LeerRespuestasPorClavePort {
      * —o que no existen en el catalogo— simplemente no aparecen en el mapa.
      */
     Map<String, ValorDeRespuesta> deUsuario(UserId usuarioId, Set<String> clavesDePregunta);
+
+    /**
+     * El texto de la respuesta de VARIAS personas a UNA clave, en <b>una sola consulta</b> (un {@code IN} por página, sin una
+     * consulta por persona). Solo aparecen quienes respondieron con texto; el valor es el guardado, sin tocar. Lo usa el
+     * WhatsApp que ve Administración en su panel de personas.
+     */
+    Map<UserId, String> textosDeVarios(Collection<UserId> usuarios, String clavePregunta);
 
     /**
      * El {@code media_id} de la respuesta de ese usuario a esa clave: el archivo (firma, audio) que la

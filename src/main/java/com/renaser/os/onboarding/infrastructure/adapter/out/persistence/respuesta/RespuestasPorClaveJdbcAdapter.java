@@ -5,10 +5,12 @@ import com.renaser.os.shared.domain.UserId;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Lectura por proyeccion (CLAUDE.MD §11): trae solo {@code clave_pregunta}, {@code valor_texto} y
@@ -28,6 +30,20 @@ class RespuestasPorClaveJdbcAdapter implements LeerRespuestasPorClavePort {
               JOIN renaser.preguntas_onboarding  p ON p.id = r.pregunta_id
              WHERE r.usuario_id = :usuarioId
                AND p.clave_pregunta IN (:claves)
+            """;
+
+    /**
+     * Una consulta para todas las personas pedidas. Usa el índice único {@code (usuario_id, pregunta_id)} de
+     * {@code respuestas_onboarding}: la clave se resuelve por el índice único de {@code clave_pregunta} y las personas, por el
+     * {@code IN}. Sin índice nuevo.
+     */
+    private static final String SQL_TEXTOS_DE_VARIOS = """
+            SELECT r.usuario_id, r.valor_texto
+              FROM renaser.respuestas_onboarding r
+              JOIN renaser.preguntas_onboarding  p ON p.id = r.pregunta_id
+             WHERE p.clave_pregunta = :clave
+               AND r.usuario_id IN (:usuarios)
+               AND r.valor_texto IS NOT NULL
             """;
 
     private static final String SQL_MEDIA = """
@@ -61,6 +77,23 @@ class RespuestasPorClaveJdbcAdapter implements LeerRespuestasPorClavePort {
                 })
                 .list();
         return porClave;
+    }
+
+    @Override
+    public Map<UserId, String> textosDeVarios(Collection<UserId> usuarios, String clavePregunta) {
+        if (usuarios == null || usuarios.isEmpty()) {
+            return Map.of();
+        }
+        Map<UserId, String> textos = new HashMap<>();
+        jdbcClient.sql(SQL_TEXTOS_DE_VARIOS)
+                .param("clave", clavePregunta)
+                .param("usuarios", usuarios.stream().map(UserId::value).distinct().toList())
+                .query((rs, fila) -> {
+                    textos.put(UserId.of(rs.getObject("usuario_id", UUID.class)), rs.getString("valor_texto"));
+                    return null;
+                })
+                .list();
+        return textos;
     }
 
     /** A lo sumo una fila: {@code clave_pregunta} es UNIQUE global y la respuesta, UNIQUE por (usuario, pregunta). */

@@ -29,9 +29,17 @@ public interface GetTraineeDetailUseCase {
      * dia a mano — que es el caso de la enorme mayoria. Va aca y no en un endpoint aparte
      * para que el panel muestre el dia y su explicacion en la misma pantalla, sin una
      * segunda llamada.
+     *
+     * <p>{@code whatsapp} (D-320): el de la Ficha Inicial de la persona, tal como se guardó, o {@code null} si no lo tiene.
      */
     record TraineeDetail(User user, com.renaser.os.users.api.ParticipacionPrograma participacion,
-                          AjusteDiaPrograma ultimoAjuste, java.time.Instant seBorraEl) {
+                          AjusteDiaPrograma ultimoAjuste, java.time.Instant seBorraEl, String whatsapp) {
+
+        /** Sin WhatsApp (firma anterior a D-320). */
+        public TraineeDetail(User user, com.renaser.os.users.api.ParticipacionPrograma participacion,
+                             AjusteDiaPrograma ultimoAjuste, java.time.Instant seBorraEl) {
+            this(user, participacion, ultimoAjuste, seBorraEl, null);
+        }
 
         /** Firma historica (sin ultimo ajuste). */
         public TraineeDetail(User user, com.renaser.os.users.api.ParticipacionPrograma participacion) {

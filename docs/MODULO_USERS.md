@@ -360,6 +360,12 @@ solo adiciones en puntos distintos de las mismas clases.
   > parámetro `withoutGroup=true` **sigue devolviendo solo aprendices sin célula**: es la cola de
   > "a quién hay que ubicar", y a un miembro de staff no se le puede asignar célula. La ruta
   > conserva el nombre `/admin/trainees` para no romper al cliente que ya la consume.
+  > **Agregado 2026-11-04 (D-320, issue #78).** Cada fila del listado y la ficha (`GET /{id}`) traen `whatsapp`: el de la Ficha
+  > Inicial de la persona **tal como se guardó** (`"+51 987654321"`: prefijo del país, un espacio y el número) o `null` si no lo
+  > tiene (no llenó la ficha, es personal que no pasó por ella o la dejó vacía); el campo siempre viaja. Lo pidió RenaserOs, que
+  > entra con una cuenta de Administración. Solo sale aquí (ADMIN y ALCHEMIST; el resto recibe 403 antes de leerlo). El dato vive
+  > en `respuestas_onboarding` (módulo `onboarding`): `users` lo pide por `users.api.WhatsappDeLaFichaFinder`, en una sola consulta
+  > para toda la página.
 - **Gap #9 — solicitudes de cuenta**: `GET/DELETE /api/v1/account-requests` (admin,
   paginado) + `GET /api/v1/account-requests/{id}/status` **PUBLIC_ENDPOINT**. Decisión de
   diseño (el encargo pedía elegir entre email o id y documentarlo): se resuelve por el
