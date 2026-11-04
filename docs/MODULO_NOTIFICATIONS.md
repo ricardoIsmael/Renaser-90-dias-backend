@@ -549,3 +549,15 @@ El árbol real usa `notifications/infrastructure/adapter/{in,out}/...`, un nivel
 ### 7. `api/` — módulo sin paquete público propio
 
 `notifications` no tiene paquete `api/` (a diferencia de los otros 13 módulos). Verificado que es correcto para su rol: `notifications` es mayormente consumidor de eventos de otros módulos (no expone casos de uso para que otros los llamen síncronamente) — la única implementación "hacia afuera" es `NotificacionesNoLeidasService implements NotificacionesNoLeidasFinder`, donde la interfaz vive en `points.api` (Dependency Inversion: `points` define el puerto, `notifications` lo implementa, evitando que `points` dependa de `notifications`). Ningún otro módulo importa `com.renaser.os.notifications.*` — confirmado por grep sobre todo `src/main/java`. No hace falta `api/` mientras esto no cambie.
+
+## 12. Recordatorios de eventos por el chat y por WhatsApp (spec 041, D-322, 2026-11-04)
+
+Además del aviso del teléfono (§10.1, que no cambia), el recordatorio de un evento llega **al chat de soporte** y **por WhatsApp** a quienes dijeron «Voy» (por ahora solo aprendices; todo es configuración, ver D-322). Dos *listeners* propios, uno por canal, cada uno con su publicación en el *outbox* (un fallo del chat no repite el WhatsApp):
+
+- `RecordatorioEventoEnElChatListener` → `RecordatorioDeEventoEnElChatService` → `chat.api.RecordatorioDeEventoEnElChat` (mensaje del programa, firmado por la formación de la persona, sin segundo push, una vez por fila de la cola).
+- `RecordatorioEventoPorWhatsAppListener` → `RecordatorioDeEventoPorWhatsAppService` → `EnvioDeWhatsAppPort` (adaptador `YCloudAdapter`). **Aparta la entrega antes de llamar** (`entregas_whatsapp`, V168), no reintenta, no lanza por fallas del proveedor, y sin configuración no hace nada.
+- Webhook `POST /api/v1/webhooks/whatsapp` (`WebhookDeWhatsAppController`, firma `YCloud-Signature`): estados de entrega y la baja, que apaga la preferencia `RECORDATORIO_EVENTO_WHATSAPP` (V166, encendida de fábrica).
+- `GET /api/v1/calendar/events/{id}/whatsapp`: conteos para Administración y Alquimista. Interruptor `eventos.whatsapp`, apagado de fábrica.
+- `PurgaEntregasDeWhatsAppScheduler`: 12 meses. La tabla no guarda texto, número ni respuestas.
+
+Quien filtra a quién (rol, audiencia `VOY`/`TODOS`, cuenta activa y no de prueba) es `DestinatarioDelMensajeDeEvento`, el mismo para los dos canales; la preferencia manda en cada uno (`RECORDATORIO_EVENTO` para el chat, `RECORDATORIO_EVENTO_WHATSAPP` para WhatsApp).
