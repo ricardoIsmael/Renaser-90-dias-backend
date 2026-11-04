@@ -1,9 +1,11 @@
 package com.renaser.os.habits.application.ports.in.registro;
 
+import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -58,4 +60,32 @@ public interface GenerarTracksDelDiaUseCase {
      * a otro llamador a hacer ese N+1 (ver javadoc del puerto).
      */
     List<RegistroHabito> generarDiaCompletoEnSuZona(UserId participanteId);
+
+    /**
+     * El registro de HOY, en SU zona, de estos habitos y de ningun otro: lo que hace falta cuando algo cambia DESPUES de
+     * que el dia se armo. La persona crea un habito propio a media manana, o reactiva uno que pauso hoy (la pausa borra
+     * el registro pendiente de hoy): el barrido ya paso y la red de seguridad de {@code GET /habit-tracks/today} solo
+     * arma el dia cuando viene VACIO, asi que sin esto el habito no se veria hasta manana.
+     *
+     * <p><b>Es el mismo armado del dia, no una copia.</b> Aplica a cada habito la regla de siempre —programa empezado,
+     * hoy es uno de sus dias, no esta en pausa ni apagado, su horario vigente— y crea un registro identico al que habria
+     * armado esa manana (mismo {@code dia_programa}, mismo tipo de dia, mismo {@code es_opcional}; plazo, puntos, hora y
+     * evidencia salen del habito y de su horario al leerlo). Lo que no le toca hoy no se crea: en el Dia 0 no crea nada.
+     *
+     * <p><b>Idempotente.</b> Si el registro ya existe —el barrido corrio, o la persona toco dos veces— no se duplica ni se
+     * toca, y si otro pedido lo crea a la vez lo resuelve la UNIQUE ({@code insertarSiNoExiste}). Corre en la
+     * transaccion de quien llama: el habito y su registro de hoy quedan juntos o no queda ninguno.
+     *
+     * <p><b>Un dia que ni se armo se arma entero</b> (con la regla de {@link #generarDisponiblesAhora}), como lo habria
+     * hecho la red de seguridad: un registro suelto en un dia vacio haria que el dia pareciera armado y nadie lo
+     * completaria hasta manana.
+     *
+     * <p><b>Sin corte por hora, tampoco el primer dia del programa.</b> D-259: un habito se registra durante su dia
+     * aunque se le haya pasado la hora (solo bajan los puntos); y quien acaba de crearlo o reactivarlo lo hizo a
+     * proposito. El corte de {@link #generarDisponiblesAhora} es del staff que activa su seguimiento a media tarde, y
+     * esto no arma el resto de su dia.
+     *
+     * @return los registros que se crearon ahora; vacio si no habia nada que crear
+     */
+    List<RegistroHabito> generarElDeHoyDe(UserId participanteId, Collection<HabitoId> habitos);
 }

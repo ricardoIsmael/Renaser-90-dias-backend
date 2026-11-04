@@ -1,10 +1,12 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.RelojDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.habits.application.ports.in.habito.CrearHabitoPersonalUseCase;
 import com.renaser.os.habits.application.ports.in.habito.CrearHabitoPersonalUseCase.CrearHabitoPersonalCommand;
 import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUseCase;
 import com.renaser.os.habits.application.ports.out.horario.SaveHorarioHabitoPort;
+import com.renaser.os.habits.application.ports.out.registro.SaveRegistroHabitoPort;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.habito.PlantillaHabitoPersonal;
 import com.renaser.os.habits.domain.model.habito.TipoHabito;
@@ -13,6 +15,7 @@ import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,6 +57,7 @@ import static org.mockito.Mockito.doThrow;
 class CrearHabitoPersonalGeneraTrackTransaccionIT {
 
     private static final FixedClock CLOCK = FixedClock.at(Instant.parse("2026-09-02T10:00:00Z"));
+    private static final LocalDate HOY = LocalDate.of(2026, 9, 2);
 
     @Autowired
     private CrearHabitoPersonalUseCase crearUseCase;
@@ -68,8 +72,23 @@ class CrearHabitoPersonalGeneraTrackTransaccionIT {
     /** Espia, no mock: los demas tests de esta clase tienen que seguir guardando de verdad. */
     @MockitoSpyBean
     private SaveHorarioHabitoPort saveHorarioPort;
+    /** Issue #76: tambien espia el guardado del registro de hoy, que ahora va en la misma transaccion del alta. */
+    @MockitoSpyBean
+    private SaveRegistroHabitoPort saveRegistroPort;
+
+    @Autowired
+    private RelojDePrueba reloj;
 
     private UserId participanteId;
+
+    /**
+     * Issue #76: al crear un habito se crea en el acto su registro de HOY, asi que "hoy" tiene que ser el dia que estas
+     * pruebas generan a mano (2/9/2026). Antes el reloj era el real y el registro de hoy no existia hasta el dia siguiente.
+     */
+    @BeforeEach
+    void fijarElReloj() {
+        reloj.fijar(CLOCK.now());
+    }
 
     @AfterEach
     void limpiar() {
@@ -125,9 +144,12 @@ class CrearHabitoPersonalGeneraTrackTransaccionIT {
                 habito.id().value());
         assertThat(horarios).as("el horario debe existir junto con el habito").isEqualTo(1L);
 
-        List<RegistroHabito> generados = generarUseCase.generar(participanteId, LocalDate.of(2026, 9, 2));
+        // Issue #76: el track de hoy ya existe al terminar de crear (antes lo generaba el barrido de la noche, y
+        // este test llamaba a `generar` para provocarlo). Generar el dia a mano despues no lo duplica.
+        List<RegistroHabito> generados = generarUseCase.generar(participanteId, HOY);
 
-        assertThat(generados).extracting(r -> r.habitoId()).contains(habito.id());
+        assertThat(generados).extracting(r -> r.habitoId()).as("ya estaba: el armado del dia no lo repite")
+                .doesNotContain(habito.id());
         Long registros = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM renaser.registros_habito WHERE habito_id = ? AND participante_id = ?",
                 Long.class, habito.id().value(), participanteId.value());
@@ -142,7 +164,9 @@ class CrearHabitoPersonalGeneraTrackTransaccionIT {
 
         Habito habito = crearUseCase.crear(comando(LocalTime.of(6, 0), null));
 
-        List<RegistroHabito> generados = generarUseCase.generar(participanteId, LocalDate.of(2026, 9, 2));
+        // Para probar que `generar` TAMBIEN lo arma (el barrido de la manana siguiente), se quita el de hoy.
+        jdbcTemplate.update("DELETE FROM renaser.registros_habito WHERE habito_id = ?", habito.id().value());
+        List<RegistroHabito> generados = generarUseCase.generar(participanteId, HOY);
 
         assertThat(generados).extracting(r -> r.habitoId()).contains(habito.id());
     }
@@ -206,5 +230,22 @@ class CrearHabitoPersonalGeneraTrackTransaccionIT {
         assertThat(contarHabitosDe(participanteId))
                 .as("ningun habito debe quedar persistido si su horario no pudo guardarse")
                 .isZero();
+    }
+
+    /**
+     * Issue #76: el registro de hoy se crea en la MISMA transaccion del alta. Si no se puede guardar, tampoco queda el
+     * habito: no hay un habito «creado» al que le falte lo que la persona espera ver hoy en Training.
+     */
+    @Test
+    @DisplayName("Atomicidad: si el registro de hoy no se puede guardar, tampoco queda el Habito (rollback)")
+    void siElRegistroDeHoyNoSePuedeGuardarNoQuedaNingunHabito() {
+        seedParticipante(23);
+        doThrow(new IllegalStateException("fallo simulado al guardar el registro de hoy"))
+                .when(saveRegistroPort).insertarSiNoExiste(any());
+
+        assertThatThrownBy(() -> crearUseCase.crear(comando(LocalTime.of(6, 0), LocalTime.of(22, 0))))
+                .isInstanceOf(IllegalStateException.class);
+
+        assertThat(contarHabitosDe(participanteId)).as("ni el habito ni su horario quedan a medias").isZero();
     }
 }

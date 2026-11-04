@@ -57,6 +57,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -223,6 +224,32 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
     }
 
     /**
+     * Ver javadoc del puerto. El armado es el de {@link #generarInterno} de siempre, acotado a estos habitos y sin corte
+     * por hora (D-259): no hay una segunda regla de "que le toca hoy", y por eso lo que crea es identico a lo que habria
+     * armado el barrido de esa manana.
+     *
+     * <p><b>Si el dia ni se armo, se arma entero.</b> Un registro suelto en un dia vacio haria que el dia PARECIERA armado:
+     * ni la red de seguridad de {@code GET /habit-tracks/today} (solo mira si viene vacio) ni el barrido (se salta a quien
+     * ya tiene registros hoy) volverian a armarlo, y la persona veria solo ese habito hasta manana. Pasa si el barrido de
+     * esa hora fallo y el habito se crea antes de abrir Training (por ejemplo, desde SER).
+     */
+    @Override
+    @Transactional
+    public List<RegistroHabito> generarElDeHoyDe(UserId participanteId, Collection<HabitoId> habitos) {
+        if (habitos.isEmpty()) {
+            return List.of();
+        }
+        ProgresoParticipanteHabits progreso = requireProgreso(participanteId);
+        LocalDate hoyEnSuZona = clock.now().atZone(ZoneId.of(progreso.timezone())).toLocalDate();
+        List<RegistroHabito> generados = new ArrayList<>();
+        if (loadRegistroPort.porParticipanteYFecha(participanteId, hoyEnSuZona).isEmpty()) {
+            generados.addAll(generarDisponiblesAhora(participanteId));
+        }
+        generados.addAll(generarInterno(progreso, participanteId, hoyEnSuZona, null, Set.copyOf(habitos)));
+        return generados;
+    }
+
+    /**
      * {@code horaDeCorte} nulo = generar el dia completo (uso del barrido nocturno, que corre
      * cuando el dia todavia no empezo). No nulo = solo lo que sigue siendo alcanzable.
      *
@@ -232,12 +259,24 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
      */
     private List<RegistroHabito> generarInterno(ProgresoParticipanteHabits progreso, UserId participanteId,
                                                 LocalDate fecha, LocalTime horaDeCorte) {
+        return generarInterno(progreso, participanteId, fecha, horaDeCorte, null);
+    }
+
+    /**
+     * El armado del dia. {@code soloEstos} nulo = todo lo que le toca a la persona (el barrido y la red de seguridad);
+     * con valor, solo esos habitos —{@link #generarElDeHoyDe}—, pasando por EXACTAMENTE las mismas reglas de abajo.
+     */
+    private List<RegistroHabito> generarInterno(ProgresoParticipanteHabits progreso, UserId participanteId,
+                                                LocalDate fecha, LocalTime horaDeCorte, Set<HabitoId> soloEstos) {
         TipoDia tipoDia = resolverTipoDia(fecha);
         Instant ahora = clock.now();
 
         // Spec 001 (D-264): solo los globales cuya audiencia incluye el rol de la persona ESE dia (vigencia estricta).
         List<Habito> catalogo = new ArrayList<>(catalogoAplicable.globalesPara(participanteId, progreso, fecha));
         catalogo.addAll(loadHabitoPort.personalesActivosDe(participanteId));
+        if (soloEstos != null) {
+            catalogo.removeIf(habito -> !soloEstos.contains(habito.id()));
+        }
         // V-5 (D-180): los horarios de todo el catalogo en UNA consulta de lote, no una por habito.
         Map<HabitoId, HorariosDelHabito> horariosPorHabito = horariosDe(catalogo);
         List<DesbloqueoHabito> plan = loadDesbloqueoPort.deParticipante(participanteId);

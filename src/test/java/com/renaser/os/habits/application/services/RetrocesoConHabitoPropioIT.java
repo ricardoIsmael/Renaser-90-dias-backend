@@ -124,6 +124,9 @@ class RetrocesoConHabitoPropioIT {
     void unHabitoPropioSinRegistrosSigueActivoTrasRetroceder() {
         seedParticipanteEnElDia(30);
         Habito propio = crearHabitoPropio();
+        // Issue #76: crear el habito ya le arma el registro de hoy. Esta prueba es de D-216 —«crearlo prueba que llego
+        // a ese dia aunque no tenga NINGUN registro»— y por eso se lo quita: sin registros, solo el alta lo respalda.
+        jdbcTemplate.update("DELETE FROM renaser.registros_habito WHERE habito_id = ?", propio.id().value());
 
         pasarAlDia(25);
         List<RegistroHabito> generados = generarUseCase.generar(participanteId, LocalDate.of(2026, 9, 22));

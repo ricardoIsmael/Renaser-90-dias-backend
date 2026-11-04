@@ -2,6 +2,7 @@ package com.renaser.os.habits.application.services;
 
 import com.renaser.os.habits.application.ports.in.habito.ConsultarMisHabitosUseCase;
 import com.renaser.os.habits.application.ports.in.habito.CrearHabitoPersonalUseCase;
+import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUseCase;
 import com.renaser.os.habits.application.ports.out.categoria.LoadCategoriaHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.SaveHabitoPort;
@@ -64,14 +65,18 @@ public class MisHabitosService implements ConsultarMisHabitosUseCase, CrearHabit
     private final CatalogoAplicable catalogoAplicable;
     /** Spec 023: un habito propio solo puede quedar en una categoria que exista (la llave de la base lo exige; asi se dice con un motivo). */
     private final LoadCategoriaHabitoPort categoriasPort;
+    /** Issue #76: el registro de HOY del habito que se acaba de crear, con la regla de siempre del armado del dia. */
+    private final GenerarTracksDelDiaUseCase generarTracks;
 
     public MisHabitosService(LoadHabitoPort loadPort, SaveHabitoPort savePort,
                               SaveHorarioHabitoPort saveHorarioPort, LoadHorarioHabitoPort loadHorarioPort,
                               ConsultarProgresoParticipanteHabitsPort progresoPort,
                               SavePreferenciaHorarioPort savePreferenciaPort, LoadRegistroHabitoPort loadRegistroPort,
                               Clock clock, IdGenerator idGenerator, RachasDeHabitos rachasDeHabitos,
-                              CatalogoAplicable catalogoAplicable, LoadCategoriaHabitoPort categoriasPort) {
+                              CatalogoAplicable catalogoAplicable, LoadCategoriaHabitoPort categoriasPort,
+                              GenerarTracksDelDiaUseCase generarTracks) {
         this.categoriasPort = categoriasPort;
+        this.generarTracks = generarTracks;
         this.loadPort = loadPort;
         this.savePort = savePort;
         this.saveHorarioPort = saveHorarioPort;
@@ -208,6 +213,12 @@ public class MisHabitosService implements ConsultarMisHabitosUseCase, CrearHabit
      * {@code savePort.save(habito)} anterior: nunca queda un habito personal sin horario, que es
      * exactamente el bug que este cambio cierra.
      *
+     * <p><b>Aparece hoy, no manana (issue #76).</b> Los registros del dia se arman una sola vez, cuando el dia
+     * empieza; un habito creado a media manana no tenia el suyo hasta el dia siguiente y no se veia en Training. Al
+     * final se pide su registro de hoy a {@link GenerarTracksDelDiaUseCase#generarElDeHoyDe}, que aplica la MISMA regla
+     * del armado del dia (el programa ya empezo, hoy es uno de sus dias, no esta pausado) y es idempotente. En el
+     * Dia 0 no crea nada: el habito arranca el dia 1.
+     *
      * <p><b>{@code diaInicio}/{@code tipoDia} elegidos</b> (ver informe para la traza completa
      * contra {@code aplicaEnDia}): {@code diaInicio = primerDiaPlanificable(diaPrograma)} (aplica
      * desde HOY, el dia de programa del participante en el momento de la creacion, nunca en el
@@ -243,6 +254,9 @@ public class MisHabitosService implements ConsultarMisHabitosUseCase, CrearHabit
                 null, TipoDia.TODOS, command.horaDisparo(), command.horaLimite(), clock.now());
         saveHorarioPort.save(horario);
         apagarLosDiasNoElegidos(command.actorId(), id, command.diasActivos());
+        // Issue #76: el dia de hoy ya estaba armado cuando la persona lo creo, y el barrido no vuelve a pasar hasta
+        // manana. Va DESPUES de apagar los dias no elegidos, porque el armado los respeta, y en esta misma transaccion.
+        generarTracks.generarElDeHoyDe(command.actorId(), List.of(id));
 
         return guardado;
     }

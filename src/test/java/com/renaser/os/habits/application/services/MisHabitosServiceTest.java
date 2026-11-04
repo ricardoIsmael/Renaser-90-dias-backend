@@ -73,6 +73,8 @@ class MisHabitosServiceTest {
     private RachasDeHabitos rachasDeHabitos;
     @Mock
     private com.renaser.os.habits.application.ports.out.categoria.LoadCategoriaHabitoPort categoriasPort;
+    @Mock
+    private com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUseCase generarTracks;
 
     private final UserId actor = UserId.of(UUID.randomUUID());
 
@@ -81,7 +83,7 @@ class MisHabitosServiceTest {
     @BeforeEach
     void setUp() {
         service = new MisHabitosService(loadPort, savePort, saveHorarioPort, loadHorarioPort, progresoPort,
-                savePreferenciaPort, loadRegistroPort, CLOCK, idGenerator, rachasDeHabitos, CatalogoAplicableDePrueba.sinAudiencias(loadPort), categoriasPort);
+                savePreferenciaPort, loadRegistroPort, CLOCK, idGenerator, rachasDeHabitos, CatalogoAplicableDePrueba.sinAudiencias(loadPort), categoriasPort, generarTracks);
         lenient().when(loadHorarioPort.porHabitos(any())).thenReturn(List.of());
         lenient().when(categoriasPort.byClave(any())).thenAnswer(inv -> Optional.of(
                 com.renaser.os.habits.domain.model.categoria.CategoriaHabito.rehydrate(inv.getArgument(0),
@@ -471,6 +473,43 @@ class MisHabitosServiceTest {
         assertThat(captor.getValue().diaInicio()).as("el dia 0 arranca el dia 1, como en D-103").isEqualTo(1);
     }
 
+    // ---- issue #76: el habito que se acaba de crear aparece HOY, no manana ----
+
+    /**
+     * El registro de hoy se pide a la MISMA regla del armado del dia, para ese habito y ninguno mas, y despues de
+     * guardarlo todo: el armado lee el habito, su horario y los dias que se apagaron. Contra el codigo viejo no se
+     * pedia nunca y el habito no tenia registro hasta que el barrido corria al dia siguiente.
+     */
+    @Test
+    void alCrearUnHabitoPropioSePideSuRegistroDeHoyDespuesDeGuardarloTodo() {
+        when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(enDia(10)));
+        UUID idDelHabito = UUID.randomUUID();
+        when(idGenerator.newId()).thenReturn(idDelHabito, UUID.randomUUID());
+
+        Habito creado = service.crear(comando(DISPARO, LIMITE,
+                java.util.Set.of(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.WEDNESDAY)));
+
+        org.mockito.InOrder orden = org.mockito.Mockito.inOrder(savePort, saveHorarioPort, savePreferenciaPort,
+                generarTracks);
+        orden.verify(savePort).save(any());
+        orden.verify(saveHorarioPort).save(any());
+        orden.verify(savePreferenciaPort, org.mockito.Mockito.atLeastOnce()).saveParaDiaSemana(any(), any(), any());
+        orden.verify(generarTracks).generarElDeHoyDe(actor, List.of(creado.id()));
+        assertThat(creado.id().value()).isEqualTo(idDelHabito);
+        org.mockito.Mockito.verifyNoMoreInteractions(generarTracks);
+    }
+
+    /** Si el alta es rechazada (la categoria no existe) no se arma nada: el registro de hoy no se pide a ciegas. */
+    @Test
+    void siElAltaSeRechazaNoSePideNingunRegistro() {
+        when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(enDia(10)));
+        when(categoriasPort.byClave(any())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.crear(comando(DISPARO, LIMITE))).isInstanceOf(IllegalArgumentException.class);
+
+        verifyNoInteractions(generarTracks);
+    }
+
     // ---- "este habito lo hago lunes, miercoles y viernes" (2026-09-08) ----
     //
     // Hasta ahora un habito propio nacia con TipoDia.TODOS y corria los siete dias; para dejarlo en
@@ -525,7 +564,7 @@ class MisHabitosServiceTest {
     void enDia0ElHabitoPersonalSeCreaIgualConElRelojEnLaMadrugadaUtc() {
         MisHabitosService servicioDeMadrugada = new MisHabitosService(loadPort, savePort, saveHorarioPort,
                 loadHorarioPort, progresoPort, savePreferenciaPort, loadRegistroPort,
-                FixedClock.at(Instant.parse("2026-09-07T02:00:00Z")), idGenerator, rachasDeHabitos, CatalogoAplicableDePrueba.sinAudiencias(loadPort), categoriasPort);
+                FixedClock.at(Instant.parse("2026-09-07T02:00:00Z")), idGenerator, rachasDeHabitos, CatalogoAplicableDePrueba.sinAudiencias(loadPort), categoriasPort, generarTracks);
         when(progresoPort.deParticipante(actor)).thenReturn(Optional.of(enDia(0)));
         when(idGenerator.newId()).thenReturn(UUID.randomUUID(), UUID.randomUUID());
 
@@ -590,7 +629,7 @@ class MisHabitosServiceTest {
         java.time.LocalDate inicio = java.time.LocalDate.of(2026, 8, 30);
         MisHabitosService deMadrugada = new MisHabitosService(loadPort, savePort, saveHorarioPort, loadHorarioPort,
                 progresoPort, savePreferenciaPort, loadRegistroPort,
-                FixedClock.at(Instant.parse("2026-09-07T02:00:00Z")), idGenerator, rachasDeHabitos, CatalogoAplicableDePrueba.sinAudiencias(loadPort), categoriasPort);
+                FixedClock.at(Instant.parse("2026-09-07T02:00:00Z")), idGenerator, rachasDeHabitos, CatalogoAplicableDePrueba.sinAudiencias(loadPort), categoriasPort, generarTracks);
         Habito leer = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "LEER", TipoHabito.CHECKBOX,
                 new DetallesHabito("desc", "MENTE", ExigenciaEvidencia.OPCIONAL, false, false), CLOCK.now());
         Habito correr = Habito.crearDeSistema(HabitoId.of(UUID.randomUUID()), "CORRER", TipoHabito.CHECKBOX,
