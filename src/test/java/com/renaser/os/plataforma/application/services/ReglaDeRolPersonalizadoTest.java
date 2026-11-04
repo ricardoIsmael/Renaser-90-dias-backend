@@ -103,9 +103,9 @@ class ReglaDeRolPersonalizadoTest {
         MisFuncionalidades suyas = mias.mias(mentorJunior);
 
         assertThat(suyas.noDisponibles()).containsExactlyInAnyOrder("eventos", "eventos.gestion",
-                "eventos.asistencia");
+                "eventos.asistencia", "eventos.meet");
         assertThat(suyas.apagadas()).isEmpty();
-        assertThat(mias.mias(mentor).noDisponibles()).isEmpty();
+        assertThat(mias.mias(mentor).noDisponibles()).as("solo lo que nace apagado (spec 040)").containsExactly("eventos.meet");
         // Desde la spec 034 `radar.fichas` apaga por defecto a ciertos roles, y evaluarla obliga a leer el rol: una lectura por llamada
         // (dos llamadas arriba), no una por funcionalidad. Antes de la 034 aquí no se leía la cuenta.
         verify(usuarios, times(2)).findById(any());
@@ -131,7 +131,7 @@ class ReglaDeRolPersonalizadoTest {
     void desactivarDevuelveLaBase() {
         asignar(false);
 
-        assertThat(mias.mias(mentorJunior).noDisponibles()).isEmpty();
+        assertThat(mias.mias(mentorJunior).noDisponibles()).as("solo lo que nace apagado (spec 040)").containsExactly("eventos.meet");
         assertThatCode(() -> interruptores.exigirPrendidaPara("eventos", mentorJunior)).doesNotThrowAnyException();
     }
 

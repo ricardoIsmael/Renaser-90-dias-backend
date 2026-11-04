@@ -285,6 +285,11 @@ semana en curso de la persona; una semana futura, anterior a la primera de su pr
 | GET | `/api/v1/calendar/events/{id}/attendance` (D-256) |
 | PUT | `/api/v1/calendar/events/{id}/attendance/{userId}` (D-256) |
 | POST | `/api/v1/calendar/events/{id}/attendance/close` · `/attendance/reopen` (D-256) |
+| GET | `/api/v1/calendar/events/meet/status` (D-321: si el formulario puede ofrecer «Crear enlace de Meet») |
+| POST | `/api/v1/calendar/events/{id}/meet/retry` (D-321: «Reintentar» a mano; solo ADMIN y ALCHEMIST) |
+| GET · DELETE | `/api/v1/admin/integraciones/google` (D-321: estado de la cuenta de Google; desconectar) |
+| POST | `/api/v1/admin/integraciones/google/connect` (D-321: devuelve la dirección de Google para conectar la cuenta) |
+| GET | `/api/v1/integraciones/google/callback` (D-321: regreso de Google, sin sesión; protegido por el `state` de un solo uso) |
 
 ### `chat`
 

@@ -24,7 +24,26 @@ public interface ListarEventosParaVisorUseCase {
      */
     List<OcurrenciaVista> listar(UserId actorId, Instant desde, Instant hasta, Formacion formacion);
 
+    /**
+     * {@code ubicacionDeMeet}: solo en un evento con el enlace de Meet automático (spec 040, FR-017). Cada fecha tiene su sala y su enlace, así que
+     * el de la fecha reemplaza al del evento (que es el de la próxima); {@code null} = el evento no es de Meet automático y vale el suyo.
+     */
     record OcurrenciaVista(Evento evento, String coverUrl, Instant inicioOcurrencia, Instant iniciaEn,
-                            Integer duracionMinutos, String titulo, EstadoConfirmacion viewerRsvpStatus) {
+                            Integer duracionMinutos, String titulo, EstadoConfirmacion viewerRsvpStatus,
+                            EnlaceDeLaFecha ubicacionDeMeet) {
+
+        public OcurrenciaVista(Evento evento, String coverUrl, Instant inicioOcurrencia, Instant iniciaEn,
+                               Integer duracionMinutos, String titulo, EstadoConfirmacion viewerRsvpStatus) {
+            this(evento, coverUrl, inicioOcurrencia, iniciaEn, duracionMinutos, titulo, viewerRsvpStatus, null);
+        }
+
+        public OcurrenciaVista conEnlace(EnlaceDeLaFecha enlace) {
+            return new OcurrenciaVista(evento, coverUrl, inicioOcurrencia, iniciaEn, duracionMinutos, titulo,
+                    viewerRsvpStatus, enlace);
+        }
+    }
+
+    /** El enlace de Meet de ESA fecha; {@code enlace} es nulo si su sala todavía no existe (no se muestra el de otra fecha). */
+    record EnlaceDeLaFecha(String enlace) {
     }
 }

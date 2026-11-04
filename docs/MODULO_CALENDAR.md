@@ -376,3 +376,23 @@ necesite el pedazo de un evento que cruza la medianoche pide un día antes. `men
 ## Eventos por formación (spec 024, D-301, 2026-10-31)
 
 Spec 024 (D-301, 2026-10-31): contrato completo en `specs/024-comunidad-por-formacion/contracts/comunidad-api.md`. `eventos.formacion` (V137); «Voy», recordatorios y asistencia la heredan del evento. La lista, el detalle, «Voy», la asistencia, «Próximo evento» y «Mi agenda» filtran por el alcance (lo de otra formación es inexistente) y la audiencia (todos, nivel, curso, roles, grupo) se resuelve dentro de la formación del evento. Administración elige la formación al crear. El aviso push de un evento no cambia de ruta.
+
+## Enlace de Meet automático (spec 040, D-321, 2026-11-04)
+
+Un evento puede pedir `crearEnlaceMeet` (con `accesoSalaMeet`: `ABIERTA` por defecto o `CON_PERMISO`) en lugar de que alguien pegue el link a mano.
+Todo vive en `calendar/` y se prende con la funcionalidad `eventos.meet` (Soporte TI), que **nace apagada**.
+
+- **Flujo.** `EventoConSalaDeMeetService` (no transaccional) envuelve los casos de uso de siempre: guarda el evento, y DESPUÉS le pide a Google las salas
+  (`SincronizadorDeSalas` → `PasosConGoogle` → `SalaDeReunionPort`). Nada de lo que falle en Google pierde el evento; la fila de `eventos_meet` queda con su
+  estado (`CREADO`, `PENDIENTE`, `FALLIDO`, `PENDIENTE_DE_SINCRONIZAR`, `BORRADO`) y el proceso de fondo reintenta (1, 2, 4… hasta 15 minutos, máximo 8).
+- **Una sala por fecha.** `PlanDeSalas` (dominio, puro) compara las fechas deseadas (`OcurrenciasDeseadas`, ventana de 60 días, zona del evento) con las
+  filas existentes y dice qué crear, actualizar, ajustar o borrar. El id del evento de Google se deriva del de Renaser (`IdDeEventoDeGoogle`): reintentar
+  no duplica y un 409 toma la sala que ya existe.
+- **Acceso.** Se pide a la Meet REST API (`config.accessType` OPEN/TRUSTED) y se LEE de vuelta; el evento muestra `accesoAplicado` solo si Google lo confirmó.
+- **Cuenta.** `integracion_google` (una fila): permiso permanente cifrado con AES-256-GCM (`AesGcmCifrado`, clave en SSM), calendario propio «Renaser 90 días».
+  Conectar/desconectar/ver: `/api/v1/admin/integraciones/google` (solo ADMIN y ALCHEMIST); regreso de Google: `/api/v1/integraciones/google/callback`
+  (público, protegido por el `state` de un solo uso, hash en la base, 15 minutos, PKCE S256).
+- **Qué ve la app.** `GET /api/v1/calendar/events/meet/status` (disponibilidad y motivo), `meet` en la respuesta de un evento (solo ADMIN y ALCHEMIST),
+  el link de cada fecha en el listado de ocurrencias y `POST /{id}/meet/retry`.
+- **Privacidad.** A Google solo viajan el id, el título, el inicio, el fin y la zona; nunca invitados, audiencia ni descripción.
+

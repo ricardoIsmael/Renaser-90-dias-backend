@@ -1,5 +1,6 @@
 package com.renaser.os.calendar.infrastructure.adapter.in.rest.evento;
 
+import com.renaser.os.calendar.application.ports.in.meet.ResumenDeMeet;
 import com.renaser.os.calendar.domain.model.evento.Evento;
 
 import java.util.List;
@@ -12,9 +13,33 @@ record EventoResponse(String id, String title, String description, String coverU
                        Integer durationMinutes, String timezone, String locationType, String locationValue,
                        String eventType, List<EventoWireMapper.ReglaRecordatorioWire> reminderRules,
                        boolean notifyOnCreate, boolean remindByEmail, String recurrenceFrequency, String createdById,
-                       String audienceType, List<String> targetRoles, String formation) {
+                       String audienceType, List<String> targetRoles, String formation, MeetResponse meet) {
+
+    /**
+     * Cómo van las salas de Meet del evento (spec 040): solo para ADMIN y ALCHEMIST y solo si el evento pide el enlace automático; en cualquier
+     * otro caso la respuesta no lo lleva ({@code null}, y el aprendiz, el mentor y el líder no ven nada nuevo, SC-007).
+     */
+    record MeetResponse(String estado, String acceso, boolean accesoAplicado, String mensaje, int fechasConSala,
+                        int fechasConProblema) {
+
+        static MeetResponse from(ResumenDeMeet r) {
+            return r == null ? null : new MeetResponse(r.estado().name(), r.acceso().name(), r.accesoAplicado(), r.mensaje(),
+                    r.fechasConSala(), r.fechasConProblema());
+        }
+    }
 
     static EventoResponse from(Evento e, String coverUrl) {
+        return from(e, coverUrl, null);
+    }
+
+    /** El mismo evento con el enlace de Meet de UNA fecha, que reemplaza al del evento (FR-017). */
+    EventoResponse conUbicacion(String valor) {
+        return new EventoResponse(id, title, description, coverUrl, startsAt, durationMinutes, timezone, locationType, valor,
+                eventType, reminderRules, notifyOnCreate, remindByEmail, recurrenceFrequency, createdById, audienceType,
+                targetRoles, formation, meet);
+    }
+
+    static EventoResponse from(Evento e, String coverUrl, ResumenDeMeet meet) {
         List<EventoWireMapper.ReglaRecordatorioWire> reminderRules = e.recordatoriosPersonalizados()
                 ? e.reglasRecordatorio().stream().map(EventoWireMapper::toWireRegla).toList()
                 : null;
@@ -36,6 +61,7 @@ record EventoResponse(String id, String title, String description, String coverU
                 e.creadoPor() == null ? null : e.creadoPor().toString(),
                 EventoWireMapper.toWireAudiencia(e.tipoAudiencia()),
                 e.rolesDestino().stream().map(Enum::name).toList(),
-                e.formacion().codigo());
+                e.formacion().codigo(),
+                MeetResponse.from(meet));
     }
 }

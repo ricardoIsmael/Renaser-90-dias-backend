@@ -1,6 +1,7 @@
 package com.renaser.os.calendar.infrastructure.adapter.out.persistence.evento;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -37,4 +38,12 @@ interface SpringDataEventoRepository extends JpaRepository<EventoJpaEntity, UUID
             """, nativeQuery = true)
     List<EventoJpaEntity> candidatosParaRecordatorios(@Param("ahora") Instant ahora, @Param("hastaMax") Instant hastaMax,
                                                         @Param("desdeAnuncio") Instant desdeAnuncio);
+
+    /**
+     * Solo el enlace de Meet, sin tocar el resto del evento (spec 040). `flushAutomatically` va con `clearAutomatically` (E-360): vaciar el contexto
+     * sin enviar antes lo pendiente cancelaría los `persist` de la transacción de quien llama.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(value = "UPDATE renaser.eventos SET valor_ubicacion = :enlace WHERE id = :id AND acceso_sala_meet IS NOT NULL", nativeQuery = true)
+    int fijarEnlaceDeMeet(@Param("id") UUID id, @Param("enlace") String enlace);
 }

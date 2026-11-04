@@ -1,5 +1,6 @@
 package com.renaser.os.calendar.infrastructure.adapter.in.rest.evento;
 
+import com.renaser.os.calendar.domain.model.meet.AccesoSalaMeet;
 import jakarta.validation.constraints.NotBlank;
 
 import java.time.Instant;
@@ -22,6 +23,11 @@ import java.util.List;
  * ambos, verificado contra {@code CreateEventInput}/{@code UpdateEventInput}
  * (schema.ts, repo viejo): {@code notifyOnCreate: z.boolean().default(false)},
  * {@code remindByEmail: z.boolean().default(false)}.
+ *
+ * <p>Spec 040: {@code crearEnlaceMeet} pide que el servidor cree la sala de Meet (el evento es {@code MEET} y no lleva
+ * {@code locationValue}) y {@code accesoSalaMeet} ({@code ABIERTA} por defecto, o {@code CON_PERMISO}) dice quién puede entrar. Los dos
+ * son opcionales: un cliente anterior no los manda y todo es como siempre. Los nombres son los de la spec, no los del resto del contrato
+ * (que está en inglés), para que la app y el servidor hablen igual.
  */
 record EventoRequest(@NotBlank String title, @NotBlank String eventType, String description,
                       @NotBlank String startsAt, Integer durationMinutes, String timezone,
@@ -30,7 +36,7 @@ record EventoRequest(@NotBlank String title, @NotBlank String eventType, String 
                       List<EventoWireMapper.ReglaRecordatorioWire> reminderRules, Boolean notifyOnCreate,
                       Boolean remindByEmail, String recurrenceFrequency, Integer recurrenceInterval,
                       List<Integer> recurrenceByWeekday, String recurrenceUntil, Integer recurrenceCount,
-                      String formation) {
+                      String formation, Boolean crearEnlaceMeet, String accesoSalaMeet) {
 
     EventoRequest {
         if (audienceType == null || audienceType.isBlank()) {
@@ -50,6 +56,24 @@ record EventoRequest(@NotBlank String title, @NotBlank String eventType, String 
         }
         if (remindByEmail == null) {
             remindByEmail = Boolean.FALSE;
+        }
+        if (crearEnlaceMeet == null) {
+            crearEnlaceMeet = Boolean.FALSE;
+        }
+    }
+
+    /** Spec 040: {@code null} si el evento no pide el enlace automático; si lo pide y no dice acceso, {@code ABIERTA}. */
+    AccesoSalaMeet accesoPedido() {
+        if (!Boolean.TRUE.equals(crearEnlaceMeet)) {
+            return null;
+        }
+        if (accesoSalaMeet == null || accesoSalaMeet.isBlank()) {
+            return AccesoSalaMeet.porDefecto();
+        }
+        try {
+            return AccesoSalaMeet.valueOf(accesoSalaMeet.trim());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Elige quién puede entrar a la sala: ABIERTA o CON_PERMISO.");
         }
     }
 
