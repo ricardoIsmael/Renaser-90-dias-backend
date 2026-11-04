@@ -36,7 +36,9 @@ import java.util.stream.Collectors;
  * <p><b>D-216 (2026-09-27, TZ-15 del e2e): un habito PERSONAL corre desde que se crea.</b> Su
  * {@code dia_inicio} no lo elige el programa: es el dia en que la persona estaba cuando lo creo. Asi
  * que crearlo ya prueba que llego a ese dia con el habito andando, aunque todavia no tenga ningun
- * registro (los del dia ya estaban generados cuando lo creo, y el primero sale al dia siguiente).
+ * registro (los del dia ya estaban generados cuando lo creo). <i>Corregido 2026-11-04 (issue #76): ahi decia
+ * «y el primero sale al dia siguiente»; desde ese cambio su registro de hoy se crea en el acto, al crearlo
+ * ({@code GenerarTracksDelDiaUseCase#generarElDeHoyDe}).</i>
  * Antes, si el mismo dia la retrocedian, el habito que acababa de crear quedaba con candado
  * ("FALTAN 5 DIAS") y sin generarse hasta volver a ese dia. Para el catalogo no cambia nada: su
  * {@code dia_inicio} es del programa y el "ya corrio" sigue saliendo de los registros.

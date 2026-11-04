@@ -4,6 +4,7 @@ import com.renaser.os.habits.application.ports.in.desbloqueo.CambiarEstadoHabito
 import com.renaser.os.habits.application.ports.in.desbloqueo.ConsultarDesbloqueosHabitoUseCase;
 import com.renaser.os.habits.application.ports.in.desbloqueo.ElegirHabitoUseCase;
 import com.renaser.os.habits.application.ports.in.desbloqueo.QuitarHabitoDelPlanUseCase;
+import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUseCase;
 import com.renaser.os.habits.application.ports.out.desbloqueo.LoadDesbloqueoHabitoPort;
 import com.renaser.os.habits.application.ports.out.desbloqueo.SaveDesbloqueoHabitoPort;
 import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
@@ -41,12 +42,16 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
     private final SaveDesbloqueoHabitoPort savePort;
     private final LoadHabitoPort loadHabitoPort;
     private final RetirarObligacionesPausadasPort retirarPort;
+    /** Issue #76: al reactivar, el registro de hoy que la pausa borro vuelve con la regla de siempre del armado del dia. */
+    private final GenerarTracksDelDiaUseCase generarTracks;
     private final Clock clock;
 
     public DesbloqueoHabitoService(ConsultarProgresoParticipanteHabitsPort progresoPort,
                                     LoadDesbloqueoHabitoPort loadPort, SaveDesbloqueoHabitoPort savePort,
                                     LoadHabitoPort loadHabitoPort,
-                                    RetirarObligacionesPausadasPort retirarPort, Clock clock) {
+                                    RetirarObligacionesPausadasPort retirarPort,
+                                    GenerarTracksDelDiaUseCase generarTracks, Clock clock) {
+        this.generarTracks = generarTracks;
         this.progresoPort = progresoPort;
         this.loadPort = loadPort;
         this.savePort = savePort;
@@ -138,7 +143,22 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
             retirarPort.retirarPendientes(command.actorId(), command.habitoId(), desdeHoy,
                     command.pausadoHasta());
         }
-        return savePort.save(desbloqueo);
+        DesbloqueoHabito guardado = savePort.save(desbloqueo);
+        if (command.activo()) {
+            reponerElDeHoy(command.actorId(), command.habitoId());
+        }
+        return guardado;
+    }
+
+    /**
+     * Issue #76: pausar borra el registro PENDIENTE de hoy (arriba), y reactivar solo limpiaba la pausa: el habito
+     * volvia a estar «activo» pero sin su registro de hoy, y no se veia en Training hasta manana. Se vuelve a pedir el
+     * de hoy con la regla de siempre del armado del dia: si hoy sigue sin tocarle (el programa no empezo, no es uno de
+     * sus dias, lo apago para hoy, esta elegido para mas adelante) no crea nada, y si ya existe no lo duplica. Va DESPUES
+     * de guardar la fila, porque el armado lee la pausa.
+     */
+    private void reponerElDeHoy(UserId actorId, HabitoId habitoId) {
+        generarTracks.generarElDeHoyDe(actorId, List.of(habitoId));
     }
 
     /**

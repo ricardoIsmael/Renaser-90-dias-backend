@@ -237,10 +237,11 @@ class PausaHabitoPersonalIT {
     @DisplayName("Pausar borra el track PENDIENTE de hoy que ya estaba generado (contra Postgres)")
     void pausarRetiraElTrackPendienteDeHoy() {
         elegirUseCase.elegir(new ElegirHabitoCommand(participanteId, habitoPersonal.id(), null));
-        assertThat(generarPara(DIA_DENTRO_DE_LA_PAUSA))
+        // Issue #76: el track de hoy lo crea el alta del habito (en `seedParticipanteConHabitoPropio`), no hace falta
+        // generarlo: `generar` devolveria vacio porque ya existe.
+        assertThat(tracksEn(DIA_DENTRO_DE_LA_PAUSA))
                 .as("precondicion: el track del dia existe antes de pausar")
-                .contains(habitoPersonal.id().value());
-        assertThat(tracksEn(DIA_DENTRO_DE_LA_PAUSA)).isEqualTo(1L);
+                .isEqualTo(1L);
 
         cambiarEstadoUseCase.cambiarEstado(
                 new CambiarEstadoHabitoCommand(participanteId, habitoPersonal.id(), false, DIA_DENTRO_DE_LA_PAUSA));

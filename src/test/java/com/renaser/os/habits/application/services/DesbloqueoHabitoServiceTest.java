@@ -60,13 +60,15 @@ class DesbloqueoHabitoServiceTest {
     private LoadHabitoPort loadHabitoPort;
     @Mock
     private RetirarObligacionesPausadasPort retirarPort;
+    @Mock
+    private com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUseCase generarTracks;
 
     private DesbloqueoHabitoService service;
 
     @BeforeEach
     void setUp() {
         service = new DesbloqueoHabitoService(progresoPort, loadPort, savePort, loadHabitoPort, retirarPort,
-                CLOCK);
+                generarTracks, CLOCK);
     }
 
     private static Habito habitoDeSistemaActivo() {
@@ -485,5 +487,66 @@ class DesbloqueoHabitoServiceTest {
         service.cambiarEstado(new CambiarEstadoHabitoCommand(actor, personal.id(), true, null));
 
         verifyNoInteractions(retirarPort);
+    }
+
+    /**
+     * Issue #76. Pausar borra el registro PENDIENTE de hoy; reactivar el mismo dia tiene que devolverlo, porque si no el
+     * habito queda «activo» pero ausente de Training hasta manana. Se pide DESPUES de guardar la fila (el armado lee la
+     * pausa) y solo para ese habito. Contra el codigo viejo no se pedia nunca.
+     */
+    @Test
+    @DisplayName("Reactivar pide el registro de hoy de ese habito, despues de guardar la fila")
+    void reactivarPideElRegistroDeHoy() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito personal = habitoPersonalDe(actor);
+        when(progresoPort.deParticipante(actor)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(10, "America/Lima", RolParticipante.TRAINEE, false, false)));
+        when(loadHabitoPort.byId(personal.id())).thenReturn(Optional.of(personal));
+        DesbloqueoHabito fila = DesbloqueoHabito.rehydrate(actor, personal.id(), 10, CLOCK.now(), CLOCK.now(),
+                CLOCK.now(), CLOCK.now(), LocalDate.of(2026, 8, 30));
+        when(loadPort.deParticipanteYHabito(actor, personal.id())).thenReturn(Optional.of(fila));
+        when(savePort.save(fila)).thenReturn(fila);
+
+        service.cambiarEstado(new CambiarEstadoHabitoCommand(actor, personal.id(), true, null));
+
+        org.mockito.InOrder orden = org.mockito.Mockito.inOrder(savePort, generarTracks);
+        orden.verify(savePort).save(fila);
+        orden.verify(generarTracks).generarElDeHoyDe(actor, List.of(personal.id()));
+    }
+
+    /** Pausar es lo contrario: retira el de hoy, no lo repone. */
+    @Test
+    @DisplayName("Pausar no pide ningun registro de hoy")
+    void pausarNoPideElRegistroDeHoy() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito personal = habitoPersonalDe(actor);
+        when(progresoPort.deParticipante(actor)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(10, "America/Lima", RolParticipante.TRAINEE, false, false)));
+        when(loadHabitoPort.byId(personal.id())).thenReturn(Optional.of(personal));
+        DesbloqueoHabito fila = DesbloqueoHabito.rehydrate(actor, personal.id(), 10, CLOCK.now(), CLOCK.now(),
+                CLOCK.now());
+        when(loadPort.deParticipanteYHabito(actor, personal.id())).thenReturn(Optional.of(fila));
+        when(savePort.save(fila)).thenReturn(fila);
+
+        service.cambiarEstado(new CambiarEstadoHabitoCommand(actor, personal.id(), false, null));
+
+        verifyNoInteractions(generarTracks);
+    }
+
+    /** Elegir un habito (D-99) no cambia lo que se arma hoy: el que no tiene fila ya se genera, y el elegido para mas adelante espera. */
+    @Test
+    @DisplayName("Elegir un habito no pide el registro de hoy")
+    void elegirNoPideElRegistroDeHoy() {
+        UserId actor = UserId.of(UUID.randomUUID());
+        Habito habito = habitoDeSistemaActivo();
+        when(progresoPort.deParticipante(actor)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.TRAINEE, false, false)));
+        when(loadHabitoPort.byId(habito.id())).thenReturn(Optional.of(habito));
+        when(loadPort.deParticipanteYHabito(actor, habito.id())).thenReturn(Optional.of(
+                DesbloqueoHabito.rehydrate(actor, habito.id(), 10, CLOCK.now(), CLOCK.now(), CLOCK.now())));
+
+        service.elegir(new ElegirHabitoCommand(actor, habito.id(), null));
+
+        verifyNoInteractions(generarTracks);
     }
 }
