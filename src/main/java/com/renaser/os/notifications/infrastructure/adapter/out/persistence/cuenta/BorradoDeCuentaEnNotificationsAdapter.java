@@ -22,7 +22,9 @@ class BorradoDeCuentaEnNotificationsAdapter implements BorradoDeDatosDeCuenta {
     private static final List<String> BORRADOS = List.of(
             "DELETE FROM renaser.notificaciones WHERE usuario_id = :id",
             "DELETE FROM renaser.preferencias_notificacion WHERE usuario_id = :id",
-            "DELETE FROM renaser.tokens_push WHERE usuario_id = :id");
+            "DELETE FROM renaser.tokens_push WHERE usuario_id = :id",
+            // Spec 041 (V168): el estado de cada recordatorio de evento que se le mando por WhatsApp. Sin texto ni numero, pero con su id.
+            "DELETE FROM renaser.entregas_whatsapp WHERE usuario_id = :id");
 
     private final NamedParameterJdbcTemplate jdbc;
 

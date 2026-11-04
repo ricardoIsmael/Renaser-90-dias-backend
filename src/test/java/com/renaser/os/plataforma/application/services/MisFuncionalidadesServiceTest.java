@@ -68,7 +68,8 @@ class MisFuncionalidadesServiceTest {
         MisFuncionalidades mias = service.mias(aprendiz);
 
         assertThat(mias.apagadas()).isEmpty();
-        assertThat(mias.noDisponibles()).as("el aprendiz ve radar.fichas prendida").isEmpty();
+        assertThat(mias.noDisponibles()).as("el aprendiz ve radar.fichas prendida; eventos.whatsapp (spec 041) nace apagada para todos")
+                .containsExactly("eventos.whatsapp");
         assertThat(mias.version()).isZero();
         verify(usuarios, times(1)).findById(any());
     }
@@ -82,9 +83,9 @@ class MisFuncionalidadesServiceTest {
 
         MisFuncionalidades delMentor = service.mias(mentor);
 
-        assertThat(delMentor.noDisponibles()).containsExactly("radar.fichas");
+        assertThat(delMentor.noDisponibles()).containsExactlyInAnyOrder("radar.fichas", "eventos.whatsapp");
         assertThat(delMentor.apagadas()).isEmpty();
-        assertThat(service.mias(aprendiz).noDisponibles()).isEmpty();
+        assertThat(service.mias(aprendiz).noDisponibles()).containsExactly("eventos.whatsapp");
     }
 
     @Test
@@ -139,7 +140,7 @@ class MisFuncionalidadesServiceTest {
             throw new IllegalStateException("se cayó la copia del despliegue");
         });
 
-        assertThat(service.mias(aprendiz).noDisponibles()).isEmpty();
+        assertThat(service.mias(aprendiz).noDisponibles()).containsExactly("eventos.whatsapp");
     }
 
     @Test

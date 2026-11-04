@@ -30,5 +30,7 @@ public enum TipoNotificacionJpa {
     /** V109. Espejo del valor homonimo del enum de Postgres. */
     REVISION_DEL_LIDER,
     /** V154. Espejo del valor homonimo del enum de Postgres. */
-    ANALISIS_80_20
+    ANALISIS_80_20,
+    /** V166 (spec 041): solo existe como preferencia de la persona; nunca se emite una notificacion de este tipo. */
+    RECORDATORIO_EVENTO_WHATSAPP
 }

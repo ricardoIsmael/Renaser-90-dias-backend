@@ -127,7 +127,8 @@ class DespliegueProgresivoIT {
         assertThat(paraTodos.get("enDespliegue").asBoolean()).isFalse();
         assertThat(paraTodos.get("porcentaje").asInt()).isEqualTo(100);
         assertThat(pedidos.enviar("GET", "/api/v1/me/cells", otra, null).statusCode()).isEqualTo(200);
-        assertThat(mias(otra).get("noDisponibles")).isEmpty();
+        assertThat(textos(mias(otra).get("noDisponibles"))).as("solo lo que nace apagado para todos (spec 041: eventos.whatsapp)")
+                .containsExactly("eventos.whatsapp");
 
         List<String> antes = jdbc.queryForList("SELECT antes::text FROM renaser.cambios_auditados WHERE actor_id = ? "
                 + "AND tipo = 'MANUAL' AND clave = 'chat.grupos' ORDER BY creado_en", String.class, soporteId);

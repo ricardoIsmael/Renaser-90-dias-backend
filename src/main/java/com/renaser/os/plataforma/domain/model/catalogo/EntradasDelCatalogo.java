@@ -80,6 +80,8 @@ final class EntradasDelCatalogo {
                 normal("eventos", "Eventos", "Eventos", "Ver los eventos y confirmar asistencia.", TODOS, SALTA),
                 normal("eventos.gestion", "Eventos", "Crear y editar eventos", "Crear, editar y cancelar eventos.", ADMINISTRACION, NO_APLICA),
                 normal("eventos.asistencia", "Eventos", "Asistencia", "Quién respondió y pasar lista.", EnumSet.of(MENTOR_LEAD, ADMIN, ALCHEMIST, IT_SUPPORT), NO_APLICA),
+                // Spec 041 (D-322): el WhatsApp de los recordatorios de eventos nace APAGADO (sin el numero, la clave y la plantilla aprobada no hay como enviar) y se prende a proposito.
+                naceApagada("eventos.whatsapp", "Eventos", "Recordatorios por WhatsApp", "Los recordatorios de los eventos por WhatsApp (1 día, 1 hora, 30 y 10 minutos antes) y su resumen.", ADMINISTRACION, SALTA),
                 normal("cursos", "Cursos", "Cursos", "Los cursos y sus lecciones.", TODOS, NO_APLICA),
                 normal("ranking", "Ranking", "Ranking", "Las tablas del ranking.", TODOS, NO_APLICA),
                 normal("ranking.podio_semanal", "Ranking", "Podio de los lunes", "El podio semanal en el chat global.", TODOS, POSPONE),
@@ -119,6 +121,16 @@ final class EntradasDelCatalogo {
                                                     Set<UserRole> roles, PoliticaDeProcesos procesos) {
         return new DefinicionDeFuncionalidad(clave, prefijo(clave), area, nombre, descripcion, roles, false,
                 ValorPorDefecto.PRENDIDA, procesos);
+    }
+
+    /**
+     * Una funcionalidad que NACE apagada para todos (spec 041): no tiene fila y Soporte TI la prende a proposito. Apagada se esconde (404 «no disponible»), porque no es un
+     * servicio que se cae sino algo que todavia no se ofrece. Los procesos {@code SALTA}: lo que toca mientras esta apagada no se acumula para mandarse tarde.
+     */
+    private static DefinicionDeFuncionalidad naceApagada(String clave, String area, String nombre, String descripcion,
+                                                        Set<UserRole> roles, PoliticaDeProcesos procesos) {
+        return new DefinicionDeFuncionalidad(clave, prefijo(clave), area, nombre, descripcion, roles, false,
+                ValorPorDefecto.APAGADA, procesos, Set.of(), true);
     }
 
     /**

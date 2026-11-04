@@ -66,6 +66,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AvisosDeEventoEnMasaIT {
 
     private static final int PERSONAS = 1000;
+    /**
+     * Cada aviso se publica una vez POR OYENTE (Spring Modulith guarda una publicacion del outbox por oyente, para que uno que falle no repita a los
+     * demas): el aviso de la bandeja, el mensaje del chat y el WhatsApp (spec 041). Lo que protege E-360 sigue igual: ninguno queda sin guardar.
+     */
+    private static final int OYENTES_DEL_AVISO = 3;
     private static final String TITULO = "Clase en masa";
     /** Espera de una conexion que ya es un problema para la API (produccion corta a los 5 s). */
     private static final Duration ESPERA_TOLERABLE = Duration.ofMillis(2500);
@@ -132,8 +137,8 @@ class AvisosDeEventoEnMasaIT {
         assertThat(sonda.peorEspera()).as("la espera mas larga de la API por una conexion")
                 .isLessThan(ESPERA_TOLERABLE);
         assertThat(publicacionesIncompletas()).as("ningun aviso quedo a medio entregar en el outbox").isZero();
-        assertThat(publicacionesDelEvento()).as("el outbox guardo una publicacion por aviso: " + estadoDelOutbox())
-                .isEqualTo(PERSONAS);
+        assertThat(publicacionesDelEvento()).as("el outbox guardo una publicacion por aviso y por oyente: " + estadoDelOutbox())
+                .isEqualTo((long) PERSONAS * OYENTES_DEL_AVISO);
     }
 
     @Test

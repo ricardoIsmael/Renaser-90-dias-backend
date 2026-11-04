@@ -164,14 +164,14 @@ class RolPersonalizadoDePuntaAPuntaIT {
         assertThat(pedidos.json(bloqueado).get("funcionalidad").asText()).isEqualTo("eventos");
         // «radar.fichas» (spec 034) nace oculta para todo mentor, con o sin rol personalizado, mientras Administración no la encienda.
         assertThat(noDisponiblesDe(sesionConRol)).containsExactlyInAnyOrder("radar.fichas", "eventos", "eventos.gestion",
-                "eventos.asistencia");
+                "eventos.asistencia", "eventos.whatsapp");
         JsonNode mias = pedidos.json(pedidos.enviar("GET", "/api/v1/funcionalidades/mias", sesionConRol, null));
         assertThat(mias.get("apagadas")).as("no es mantenimiento").isEmpty();
         assertThat(pedidos.enviar("GET", "/api/v1/me/cells", sesionConRol, null).statusCode())
                 .as("lo marcado sigue igual que para un mentor").isNotIn(404, 503);
         assertThat(eventosDe(sesionSinRol).statusCode()).as("otro mentor sin rol personalizado").isEqualTo(200);
-        assertThat(noDisponiblesDe(sesionSinRol)).as("solo lo que nace oculto para todo mentor (spec 034)")
-                .containsExactly("radar.fichas");
+        assertThat(noDisponiblesDe(sesionSinRol)).as("solo lo que nace oculto para todo mentor (spec 034) y para todos (spec 041)")
+                .containsExactlyInAnyOrder("radar.fichas", "eventos.whatsapp");
         assertThat(esperar(() -> copiaDeOtraInstancia.foto().de(UserId.of(conRol)).isPresent()))
                 .as("la otra instancia se enteró de la asignación por Redis").isTrue();
 
@@ -184,7 +184,7 @@ class RolPersonalizadoDePuntaAPuntaIT {
         assertThat(pedidos.enviar("PUT", RUTA + "/" + rol, soporte, desactivar, consola).statusCode()).isEqualTo(200);
 
         assertThat(eventosDe(sesionConRol).statusCode()).as("desactivado: todo lo de la base").isEqualTo(200);
-        assertThat(noDisponiblesDe(sesionConRol)).containsExactly("radar.fichas");
+        assertThat(noDisponiblesDe(sesionConRol)).containsExactlyInAnyOrder("radar.fichas", "eventos.whatsapp");
         assertThat(pedidos.json(pedidos.enviar("GET", "/api/v1/auth/me", sesionConRol, null)).get("rolPersonalizado")
                 .isNull()).isTrue();
         assertThat(esperar(() -> copiaDeOtraInstancia.foto().de(UserId.of(conRol)).isEmpty()))
