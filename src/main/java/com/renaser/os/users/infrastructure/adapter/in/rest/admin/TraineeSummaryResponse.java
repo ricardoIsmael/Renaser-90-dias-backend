@@ -28,12 +28,17 @@ import java.util.UUID;
  *
  * <p>{@code rolPersonalizado} (spec 002, fase 2; D-272): {@code { id, nombre }} si tiene un rol personalizado vigente;
  * aditivo, al final. {@code role} sigue siendo el rol base.
+ *
+ * <p>{@code whatsapp} (D-320, pedido de RenaserOs): el WhatsApp que la persona declaró en su Ficha Inicial, <b>tal como se guardó</b>
+ * ({@code "+51 987654321"}: prefijo del país, un espacio y el número), o {@code null} si no lo tiene (no llenó la ficha, es personal que
+ * no pasó por ella o la dejó vacía). Aditivo, al final: una app que no lo conoce lo ignora. <b>Solo sale en este listado y en la ficha
+ * ({@code GET /admin/trainees/{id}}), que exigen ADMIN o ALCHEMIST</b>: no se agrega a nada que vea el mentor, el líder o la propia persona.
  */
 public record TraineeSummaryResponse(String id, String fullName, String email, UserStatus status, int programDay,
                                       FasePrograma phase, UUID cellId, String mentorId, String role,
                                       java.time.Instant deletionScheduledFor,
                                       RolPersonalizadoResponse rolPersonalizado, String formation, int programDuration,
-                                      java.util.List<String> staffFormations) {
+                                      java.util.List<String> staffFormations, String whatsapp) {
 
     public static TraineeSummaryResponse from(ResumenTraineeAdmin resumen) {
         return new TraineeSummaryResponse(resumen.id().toString(), resumen.fullName(), resumen.email(),
@@ -41,7 +46,8 @@ public record TraineeSummaryResponse(String id, String fullName, String email, U
                 resumen.mentorId() == null ? null : resumen.mentorId().toString(), etiquetaDe(resumen.rol()),
                 resumen.seBorraEl(), RolPersonalizadoResponse.de(resumen.rolPersonalizado()),
                 resumen.formacion() == null ? null : resumen.formacion().codigo(), resumen.duracionDias(),
-                resumen.formacionesDelPersonal().stream().map(com.renaser.os.shared.domain.Formacion::codigo).toList());
+                resumen.formacionesDelPersonal().stream().map(com.renaser.os.shared.domain.Formacion::codigo).toList(),
+                resumen.whatsapp());
     }
 
     /**

@@ -88,12 +88,25 @@ public interface ListTraineesUseCase {
      *            mover los parametros que ya usaba el adaptador.
      * @param rolPersonalizado el rol personalizado vigente (spec 002, fase 2; D-272), o {@code null}. Al final, como
      *                         {@code rol}, y con los constructores de antes intactos.
+     * @param whatsapp el WhatsApp de la Ficha Inicial, tal como se guardó («+51 987654321»), o {@code null} si la persona no lo
+     *                 tiene (D-320). Lo pone el servicio que arma la página, con UNA consulta para todas las filas, no la consulta
+     *                 del padrón. Va al final y los constructores de antes quedan intactos.
      */
     record ResumenTraineeAdmin(UserId id, String fullName, String email, UserStatus status, int diaPrograma,
                                 FasePrograma fase, UUID celulaId, UserId mentorId, UserRole rol,
                                 java.time.Instant cerradaEn, java.time.Instant seBorraEl,
                                 RolPersonalizadoAsignado rolPersonalizado, Formacion formacion, int duracionDias,
-                                List<Formacion> formacionesDelPersonal) {
+                                List<Formacion> formacionesDelPersonal, String whatsapp) {
+
+        /** Sin WhatsApp (firma anterior a D-320): lo que arma el padrón; el WhatsApp se suma después, por {@link #conWhatsapp}. */
+        public ResumenTraineeAdmin(UserId id, String fullName, String email, UserStatus status, int diaPrograma,
+                                   FasePrograma fase, UUID celulaId, UserId mentorId, UserRole rol,
+                                   java.time.Instant cerradaEn, java.time.Instant seBorraEl,
+                                   RolPersonalizadoAsignado rolPersonalizado, Formacion formacion, int duracionDias,
+                                   List<Formacion> formacionesDelPersonal) {
+            this(id, fullName, email, status, diaPrograma, fase, celulaId, mentorId, rol, cerradaEn, seBorraEl,
+                    rolPersonalizado, formacion, duracionDias, formacionesDelPersonal, null);
+        }
 
         /** Firma de antes de las formaciones (D-272): la Escuela, 90 días y sin formaciones de personal. */
         public ResumenTraineeAdmin(UserId id, String fullName, String email, UserStatus status, int diaPrograma,
@@ -120,7 +133,14 @@ public interface ListTraineesUseCase {
         /** La fecha en que se borra, si la persona cerro su cuenta (D-243). */
         public ResumenTraineeAdmin conBorradoProgramado(com.renaser.os.users.domain.model.user.PlazoDeGracia plazo) {
             return new ResumenTraineeAdmin(id, fullName, email, status, diaPrograma, fase, celulaId, mentorId, rol,
-                    cerradaEn, plazo.seBorraEl(cerradaEn), rolPersonalizado, formacion, duracionDias, formacionesDelPersonal);
+                    cerradaEn, plazo.seBorraEl(cerradaEn), rolPersonalizado, formacion, duracionDias, formacionesDelPersonal,
+                    whatsapp);
+        }
+
+        /** El mismo resumen con el WhatsApp de la persona ({@code null} = no lo tiene). */
+        public ResumenTraineeAdmin conWhatsapp(String whatsapp) {
+            return new ResumenTraineeAdmin(id, fullName, email, status, diaPrograma, fase, celulaId, mentorId, rol,
+                    cerradaEn, seBorraEl, rolPersonalizado, formacion, duracionDias, formacionesDelPersonal, whatsapp);
         }
     }
 }

@@ -11,6 +11,7 @@ import com.renaser.os.users.api.AsignacionCelulaPort;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.ParticipacionProgramaFinder.UsuarioConDiaPrograma;
 import com.renaser.os.users.api.UserRole;
+import com.renaser.os.users.api.WhatsappDeLaFichaFinder;
 import com.renaser.os.users.application.ports.in.emergencia.ResolverEmergenciaAlCambiarDiaUseCase;
 import com.renaser.os.users.application.ports.in.participante.ActivateSelfTrackingUseCase;
 import com.renaser.os.users.application.ports.in.participante.AssignMentorToTraineeUseCase;
@@ -41,6 +42,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
@@ -95,6 +97,9 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
 
     private final ProgramaPropioDelPersonal programaPropio;
 
+    /** El WhatsApp de la Ficha Inicial que ve Administración en su panel de personas (D-320). */
+    private final WhatsappDeLaFichaFinder whatsappDeLaFicha;
+
     public ParticipacionProgramaService(RequireActiveUserGuard requireActiveUserGuard,
                                          LoadParticipacionProgramaPort loadParticipacionProgramaPort,
                                          SaveParticipacionProgramaPort saveParticipacionProgramaPort,
@@ -109,7 +114,7 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
         this(requireActiveUserGuard, loadParticipacionProgramaPort, saveParticipacionProgramaPort,
                 deleteParticipacionProgramaPort, consultarResumenParticipacionPort, loadMentorProfilePort, loadUserPort,
                 requireAdminGuard, saveAjusteDiaProgramaPort, loadUltimoAjusteDiaProgramaPort, idGenerator, clock,
-                plazoDeGracia, resolverEmergencia, ProgramaPropioDelPersonal.escuela());
+                plazoDeGracia, resolverEmergencia, ProgramaPropioDelPersonal.escuela(), personas -> Map.of());
     }
 
     @Autowired
@@ -124,8 +129,10 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
                                          LoadUltimoAjusteDiaProgramaPort loadUltimoAjusteDiaProgramaPort,
                                          IdGenerator idGenerator, Clock clock, PlazoDeGracia plazoDeGracia,
                                          ResolverEmergenciaAlCambiarDiaUseCase resolverEmergencia,
-                                         ProgramaPropioDelPersonal programaPropio) {
+                                         ProgramaPropioDelPersonal programaPropio,
+                                         WhatsappDeLaFichaFinder whatsappDeLaFicha) {
         this.programaPropio = programaPropio;
+        this.whatsappDeLaFicha = whatsappDeLaFicha;
         this.plazoDeGracia = plazoDeGracia;
         this.requireActiveUserGuard = requireActiveUserGuard;
         this.loadParticipacionProgramaPort = loadParticipacionProgramaPort;
@@ -280,15 +287,25 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
         requireAdminGuard.requireAdminActivo(command.actorId());
         // Administración y Alquimista ven las tres formaciones; el filtro «Formación» solo acota (spec 022, FR-024).
         AlcanceDeFormacion alcance = AlcanceDeFormacion.todas().acotadoA(command.formacion());
-        var contenido = consultarResumenParticipacionPort.listarAprendices(command.page() * command.size(),
-                        command.size(), command.busqueda(), command.soloSinGrupo(), command.rol(), alcance, command.soloActivas()).stream()
-                .map(resumen -> resumen.conBorradoProgramado(plazoDeGracia))
-                .toList();
+        var pagina = consultarResumenParticipacionPort.listarAprendices(command.page() * command.size(),
+                command.size(), command.busqueda(), command.soloSinGrupo(), command.rol(), alcance, command.soloActivas());
+        var contenido = conWhatsapp(pagina);
         // El total se cuenta CON los mismos filtros: si contara el padron entero, la pantalla
         // diria "1 de 340" y el paginador ofreceria paginas que no existen.
         long total = consultarResumenParticipacionPort.contarAprendices(command.busqueda(), command.soloSinGrupo(),
                 command.rol(), alcance, command.soloActivas());
         return new PaginaTrainees(contenido, total, command.page(), command.size());
+    }
+
+    /**
+     * El borrado programado de cada cuenta cerrada y el WhatsApp de la Ficha Inicial de cada fila (D-320). El WhatsApp se pide
+     * <b>una sola vez para toda la página</b> (un {@code IN}), nunca por fila, y solo después del gate de admin de {@link #listar}.
+     */
+    private List<ResumenTraineeAdmin> conWhatsapp(List<ResumenTraineeAdmin> pagina) {
+        Map<UserId, String> whatsapps = whatsappDeLaFicha.de(pagina.stream().map(ResumenTraineeAdmin::id).toList());
+        return pagina.stream()
+                .map(resumen -> resumen.conBorradoProgramado(plazoDeGracia).conWhatsapp(whatsapps.get(resumen.id())))
+                .toList();
     }
 
     /**
@@ -302,9 +319,11 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
         requireAdminGuard.requireAdminActivo(command.actorId());
         var participacion = consultarResumenParticipacionPort.resumenDe(command.traineeId())
                 .orElseThrow(() -> new NoSuchElementException("Participante no encontrado: " + command.traineeId()));
+        // El WhatsApp se lee DESPUES del gate de admin: nadie que no administre llega a pedirlo (D-320).
         return new TraineeDetail(trainee, participacion,
                 loadUltimoAjusteDiaProgramaPort.ultimoDe(command.traineeId()).orElse(null),
-                plazoDeGracia.seBorraEl(trainee.bajaSolicitadaEn()));
+                plazoDeGracia.seBorraEl(trainee.bajaSolicitadaEn()),
+                whatsappDeLaFicha.de(List.of(command.traineeId())).get(command.traineeId()));
     }
 
     /** Mismo orden que {@link #obtener}: recurso primero, gate de admin despues (E-42). */
