@@ -54,14 +54,14 @@ class RecordatorioPersistenceAdapter implements LoadRecordatorioPort, SaveRecord
      * inserto) — se suma para saber cuantas se crearon de verdad, igual que
      * `res.count`/`skipDuplicates` del repo viejo (Prisma). */
     @Override
-    public int encolarSiFalta(List<RecordatorioEvento> lote) {
-        if (lote.isEmpty()) {
+    public int encolarSiFalta(List<RecordatorioEvento> pedidos) {
+        if (pedidos.isEmpty()) {
             return 0;
         }
         // Issue #86: con `reWriteBatchedInserts` el driver junta el lote en UN `INSERT ... VALUES (...),(...) ON CONFLICT DO UPDATE`, y
         // Postgres no deja que un mismo comando toque dos veces la misma fila («ON CONFLICT DO UPDATE command cannot affect row a second
         // time»). El aviso del telefono y el de mensaje del mismo instante tienen la misma llave: se suman aca, antes de mandarlos.
-        List<RecordatorioEvento> recordatorios = unaFilaPorLlave(lote);
+        List<RecordatorioEvento> recordatorios = unaFilaPorLlave(pedidos);
         // batchUpdate(sql, Collection, batchSize, setter) devuelve int[][]: una fila por lote.
         int[][] resultados = jdbcTemplate.batchUpdate(SQL_ENCOLAR, recordatorios, recordatorios.size(),
                 (ps, r) -> {
