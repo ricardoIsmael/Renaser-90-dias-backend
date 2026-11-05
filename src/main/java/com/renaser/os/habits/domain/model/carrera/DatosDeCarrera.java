@@ -17,13 +17,15 @@ import java.util.stream.Collectors;
 
 /**
  * Lo que el teléfono manda al terminar una carrera con GPS (spec 042, FR-016): la clave de idempotencia, el resumen, los tramos y,
- * si la persona la guarda, la ruta. Este objeto garantiza los TOPES DE ENTRADA (FR-026): fuera de ellos el pedido es inválido y
+ * si la persona la guarda, la ruta YA SIN la zona de privacidad (la que se guarda: el teléfono la manda completa en una
+ * {@link RutaEnviada} y el servidor la recorta antes de construir este objeto, FR-043). Este objeto garantiza los TOPES DE ENTRADA (FR-026): fuera de ellos el pedido es inválido y
  * es un 400 con un texto que la persona lee. Si la carrera CUENTA para el hábito (velocidad, más de 60 km, hora del teléfono) no
  * lo decide este objeto sino {@code PoliticaKilometros}: esa carrera se guarda igual.
  *
  * <p>{@link #huella()} es el SHA-256 del cuerpo canónico: los campos en un orden fijo y los números normalizados (la distancia con
  * un decimal, los instantes en milisegundos). Dos envíos con la misma {@code carreraId} y el mismo contenido tienen la misma huella
- * aunque el JSON venga con otro orden o con otros espacios (FR-019).
+ * aunque el JSON venga con otro orden o con otros espacios (FR-019). La ruta que entra en la huella es la que MANDÓ el teléfono
+ * ({@link #huellaDelEnvio(RutaEnviada)}), no la recortada: se compara lo que se envió.
  */
 public record DatosDeCarrera(UUID carreraId, Instant iniciadaEn, Instant terminadaEn, int duracionActivaSeg,
                              BigDecimal distanciaMetros, Integer subidaMetros, Integer pasos, Integer caloriasAprox,
@@ -78,10 +80,28 @@ public record DatosDeCarrera(UUID carreraId, Instant iniciadaEn, Instant termina
         return (int) Math.round(duracionActivaSeg / (distanciaMetros.doubleValue() / 1000));
     }
 
-    /** SHA-256 (hex en minúsculas) del cuerpo canónico (FR-019). */
+    /** La misma carrera con otra ruta: la que queda después de quitar la zona de privacidad (FR-043). */
+    public DatosDeCarrera conRuta(RutaDeCarrera otra) {
+        return new DatosDeCarrera(carreraId, iniciadaEn, terminadaEn, duracionActivaSeg, distanciaMetros, subidaMetros, pasos,
+                caloriasAprox, tramos, metrosSinGps, otra, appVersion);
+    }
+
+    /** SHA-256 (hex en minúsculas) del cuerpo canónico (FR-019), con la ruta de este objeto. */
     public String huella() {
+        return digerir(canonico());
+    }
+
+    /**
+     * La huella del envío: el cuerpo canónico con la ruta tal como la mandó el teléfono (completa). Sin ruta enviada, la de este
+     * objeto ({@link #huella()}). Repetir el mismo pedido da la misma huella (FR-019).
+     */
+    public String huellaDelEnvio(RutaEnviada enviada) {
+        return enviada == null ? huella() : digerir(canonico(enviada.polyline(), String.valueOf(enviada.puntos())));
+    }
+
+    private static String digerir(String canonico) {
         try {
-            byte[] hash = MessageDigest.getInstance("SHA-256").digest(canonico().getBytes(StandardCharsets.UTF_8));
+            byte[] hash = MessageDigest.getInstance("SHA-256").digest(canonico.getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(hash);
         } catch (NoSuchAlgorithmException imposible) {
             throw new IllegalStateException("La JVM no trae SHA-256", imposible);
@@ -89,12 +109,15 @@ public record DatosDeCarrera(UUID carreraId, Instant iniciadaEn, Instant termina
     }
 
     String canonico() {
+        return ruta == null ? canonico("", "") : canonico(ruta.polyline(), String.valueOf(ruta.puntos()));
+    }
+
+    private String canonico(String polyline, String puntos) {
         String tramosCanonicos = tramos.stream().map(t -> t.km() + ":" + t.segundos()).collect(Collectors.joining(";"));
         return String.join("|", "v1", carreraId.toString(), String.valueOf(iniciadaEn.toEpochMilli()),
                 String.valueOf(terminadaEn.toEpochMilli()), String.valueOf(duracionActivaSeg),
                 distanciaMetros.stripTrailingZeros().toPlainString(), texto(subidaMetros), texto(pasos), texto(caloriasAprox),
-                texto(metrosSinGps), tramosCanonicos, ruta == null ? "" : ruta.polyline(),
-                ruta == null ? "" : String.valueOf(ruta.puntos()), appVersion == null ? "" : appVersion);
+                texto(metrosSinGps), tramosCanonicos, polyline, puntos, appVersion == null ? "" : appVersion);
     }
 
     private static String texto(Integer valor) {

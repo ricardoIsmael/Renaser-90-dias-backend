@@ -43,9 +43,15 @@ public record Carrera(UUID id, UserId participanteId, DatosDeCarrera datos, Stri
      */
     public static Carrera nueva(UUID id, UserId participante, DatosDeCarrera datos, ZoneId zona, EvaluacionDeCarrera evaluacion,
                                 Instant ahora) {
+        return nueva(id, participante, datos, datos.huella(), zona, evaluacion, ahora);
+    }
+
+    /** Con la huella del envío (FR-019), que puede ser de la ruta completa que mandó el teléfono y no de la guardada (FR-043). */
+    public static Carrera nueva(UUID id, UserId participante, DatosDeCarrera datos, String huella, ZoneId zona,
+                                EvaluacionDeCarrera evaluacion, Instant ahora) {
         EfectoEnElHabito provisional = EfectoEnElHabito.sinRegistro(evaluacion.cuenta() ? ResultadoEnElHabito.SIN_CAMBIO
                 : ResultadoEnElHabito.NO_CUENTA);
-        return new Carrera(id, participante, datos, datos.huella(), datos.fechaEn(zona), evaluacion, provisional, ahora);
+        return new Carrera(id, participante, datos, huella, datos.fechaEn(zona), evaluacion, provisional, ahora);
     }
 
     public Carrera conEfecto(EfectoEnElHabito nuevo) {

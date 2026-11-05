@@ -11,6 +11,7 @@ import com.renaser.os.habits.domain.model.politica.SelectorHabito;
 import com.renaser.os.habits.domain.model.carrera.DatosDeCarrera;
 import com.renaser.os.habits.domain.model.carrera.EvaluacionDeCarrera;
 import com.renaser.os.habits.domain.model.carrera.Tramo;
+import com.renaser.os.habits.domain.model.carrera.ZonaDePrivacidad;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -84,8 +85,11 @@ public class PoliticaKilometros implements PoliticaHabito {
     public static final Duration TOLERANCIA_DEL_RELOJ = Duration.ofMinutes(5);
     /** Diferencia aceptada entre el largo de la ruta y la distancia declarada (FR-025). */
     public static final double DIFERENCIA_DE_RUTA_PARA_REVISAR = 0.15;
-    /** Lo que el teléfono recorta de la ruta por privacidad: 200 m al empezar y 200 m al terminar (FR-043). */
-    public static final double METROS_RECORTADOS_DE_LA_RUTA = 400;
+    /**
+     * Lo que el SERVIDOR recorta de la ruta por privacidad antes de guardarla: 200 m al empezar y 200 m al terminar (FR-043). La
+     * ruta que llega a esta política ya viene recortada ({@code RutaEnviada#sinLaZonaDePrivacidad}).
+     */
+    public static final double METROS_RECORTADOS_DE_LA_RUTA = 2 * ZonaDePrivacidad.METROS;
     /** Por debajo de esto la ruta recortada es casi nada y no se compara con la distancia. */
     public static final double DISTANCIA_MINIMA_PARA_COMPARAR_LA_RUTA = 1000;
     /** Zancada posible en una carrera (corriendo es más larga que caminando): metros por paso (FR-025). */

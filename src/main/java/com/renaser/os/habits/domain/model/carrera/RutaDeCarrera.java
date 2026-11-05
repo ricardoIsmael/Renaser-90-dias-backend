@@ -4,9 +4,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
 /**
- * La ruta de una carrera (spec 042, FR-040 y FR-043): la polilínea codificada que mandó el teléfono, ya simplificada y sin los
- * primeros ni los últimos 200 m, y cuántos puntos tiene. Opcional: la persona puede no guardarla, y el servidor la borra a los
- * 180 días (FR-042).
+ * La ruta GUARDADA de una carrera (spec 042, FR-040 y FR-043): la polilínea codificada, ya simplificada por el teléfono y sin
+ * los primeros ni los últimos 200 m, que quita el servidor ({@link RutaEnviada#sinLaZonaDePrivacidad()}), y cuántos puntos tiene.
+ * Opcional: la persona puede no guardarla, y el servidor la borra a los 180 días (FR-042).
+ *
+ * <p>{@code toString} no muestra la polilínea: son coordenadas de una persona y no van a ningún log.
  */
 public record RutaDeCarrera(String polyline, int puntos) {
 
@@ -31,5 +33,10 @@ public record RutaDeCarrera(String polyline, int puntos) {
     /** Su largo en metros (haversine entre los puntos). */
     public double largoEnMetros() {
         return PolylineDeGoogle.largoEnMetros(polyline);
+    }
+
+    @Override
+    public String toString() {
+        return "RutaDeCarrera[puntos=" + puntos + "]";
     }
 }

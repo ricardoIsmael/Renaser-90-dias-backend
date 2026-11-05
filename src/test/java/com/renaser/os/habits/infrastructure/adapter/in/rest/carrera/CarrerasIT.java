@@ -9,6 +9,8 @@ import com.renaser.os.habits.api.MedicionDeLaObligacion;
 import com.renaser.os.habits.api.ObligacionHabito;
 import com.renaser.os.habits.api.ObligacionesHistoricasFinder;
 import com.renaser.os.habits.application.ports.in.carrera.BorrarRutasViejasUseCase;
+import com.renaser.os.habits.domain.model.carrera.PolylineDeGoogle;
+import com.renaser.os.habits.domain.model.carrera.ZonaDePrivacidadTest;
 import com.renaser.os.plataforma.application.services.CopiaDeEstados;
 import com.renaser.os.points.api.MedicionAcumuladaFinder;
 import com.renaser.os.shared.domain.UserId;
@@ -431,6 +433,49 @@ class CarrerasIT {
         jdbc.update("UPDATE renaser.usuarios SET estado = CAST('SUSPENDIDO' AS renaser.estado_usuario) WHERE id = ?", lider);
         assertThat(enviar("GET", "/api/v1/leadership/people/" + ana + "/carreras/" + conRuta + "/ruta", null, sesionDelLider)
                 .statusCode()).isEqualTo(403);
+    }
+
+    // spec 042 FR-043, FR-019
+    @Test
+    @DisplayName("el teléfono manda la ruta completa: se guarda y se lee sin sus primeros ni sus últimos 200 m, y repetirla es 200")
+    void laZonaDePrivacidadLaQuitaElServidor() throws Exception {
+        UUID clave = UUID.randomUUID();
+        String completa = ZonaDePrivacidadTest.rutaCompleta();
+        String ruta = "{\"polyline\": \"" + completa.replace("\\", "\\\\") + "\", \"puntos\": 180}";
+
+        HttpResponse<byte[]> primera = carrera(clave, "1830", 660, ruta, sesionDe(ana));
+        HttpResponse<byte[]> otraVez = carrera(clave, "1830", 660, ruta, sesionDe(ana));
+
+        assertThat(primera.statusCode()).isEqualTo(201);
+        assertThat(json.readTree(primera.body()).get("porRevisar").asBoolean()).isFalse();
+        assertThat(otraVez.statusCode()).isEqualTo(200);
+        assertThat(json.readTree(otraVez.body()).get("repetida").asBoolean()).isTrue();
+        assertThat(jdbc.queryForObject("SELECT ruta_polyline FROM renaser.carreras WHERE carrera_id = ?", String.class, clave))
+                .isEqualTo(ZonaDePrivacidadTest.recortadaPorLaApp());
+        JsonNode deLaMentora = json.readTree(enviar("GET", "/api/v1/mentor/groups/" + grupo + "/learners/" + ana + "/carreras/"
+                + clave + "/ruta", null, sesionDe(mentora)).body());
+        JsonNode delLider = json.readTree(enviar("GET", "/api/v1/leadership/people/" + ana + "/carreras/" + clave + "/ruta", null,
+                sesionDe(lider)).body());
+        assertThat(deLaMentora.get("polyline").asText()).isEqualTo(ZonaDePrivacidadTest.recortadaPorLaApp());
+        assertThat(delLider.get("polyline").asText()).isEqualTo(ZonaDePrivacidadTest.recortadaPorLaApp());
+    }
+
+    // spec 042 FR-043
+    @Test
+    @DisplayName("una ruta de menos de 400 m: la carrera se guarda y cuenta, sin ruta")
+    void rutaCortaSinRuta() throws Exception {
+        UUID clave = UUID.randomUUID();
+        List<double[]> puntos = PolylineDeGoogle.decodificar(ZonaDePrivacidadTest.rutaCompleta()).subList(0, 30);
+        String corta = PolylineDeGoogle.codificar(puntos).replace("\\", "\\\\");
+
+        HttpResponse<byte[]> respuesta = carrera(clave, "300", 180, "{\"polyline\": \"" + corta + "\", \"puntos\": 30}",
+                sesionDe(ana));
+
+        assertThat(respuesta.statusCode()).isEqualTo(201);
+        assertThat(json.readTree(respuesta.body()).get("cuentaParaElHabito").asBoolean()).isTrue();
+        assertThat(jdbc.queryForObject("SELECT ruta_polyline IS NULL FROM renaser.carreras WHERE carrera_id = ?", Boolean.class,
+                clave)).isTrue();
+        assertThat(enviar("GET", "/api/v1/carreras/" + clave + "/ruta", null, sesionDe(ana)).statusCode()).isEqualTo(404);
     }
 
     // spec 042 FR-042

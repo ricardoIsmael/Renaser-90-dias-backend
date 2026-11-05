@@ -13,7 +13,11 @@ import com.renaser.os.habits.domain.model.carrera.CarrerasDePrueba;
 import com.renaser.os.habits.domain.model.carrera.DatosDeCarrera;
 import com.renaser.os.habits.domain.model.carrera.EfectoEnElHabito;
 import com.renaser.os.habits.domain.model.carrera.EvaluacionDeCarrera;
+import com.renaser.os.habits.domain.model.carrera.PolylineDeGoogle;
 import com.renaser.os.habits.domain.model.carrera.ResultadoEnElHabito;
+import com.renaser.os.habits.domain.model.carrera.RutaDeCarrera;
+import com.renaser.os.habits.domain.model.carrera.RutaEnviada;
+import com.renaser.os.habits.domain.model.carrera.ZonaDePrivacidadTest;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -22,12 +26,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -140,5 +146,76 @@ class CarreraServiceTest {
         assertThatThrownBy(() -> service.registrar(new RegistrarCarreraCommand(ana, datos)))
                 .isInstanceOf(NotAuthorizedException.class);
         verifyNoInteractions(carreras, enElHabito);
+    }
+
+    /** La ruta de ~1,83 km por Lima, completa como la manda el teléfono, en una carrera de 1830 m (FR-043). */
+    private DatosDeCarrera carreraDeLaRuta() {
+        return CarrerasDePrueba.de(UUID.randomUUID(), "1830", 660);
+    }
+
+    private RutaEnviada rutaCompleta() {
+        return new RutaEnviada(ZonaDePrivacidadTest.rutaCompleta(), PolylineDeGoogle.decodificar(ZonaDePrivacidadTest.rutaCompleta()).size());
+    }
+
+    // spec 042 FR-043
+    @Test
+    @DisplayName("lo que se guarda es la ruta sin la zona de privacidad, y la regla de «por revisar» da lo mismo que antes")
+    void guardaLaRutaRecortadaYEvaluaIgual() {
+        DatosDeCarrera sinRuta = carreraDeLaRuta();
+        when(carreras.de(ana, sinRuta.carreraId())).thenReturn(Optional.empty());
+        when(carreras.guardarSiEsNueva(any())).thenReturn(true);
+        when(enElHabito.aplicar(any(), any())).thenReturn(EfectoEnElHabito.sinRegistro(ResultadoEnElHabito.SIN_CAMBIO));
+        ArgumentCaptor<Carrera> guardada = ArgumentCaptor.forClass(Carrera.class);
+
+        service.registrar(new RegistrarCarreraCommand(ana, sinRuta, rutaCompleta()));
+
+        verify(carreras).guardarSiEsNueva(guardada.capture());
+        RutaDeCarrera ruta = guardada.getValue().datos().ruta();
+        assertThat(ruta.polyline()).isEqualTo(ZonaDePrivacidadTest.recortadaPorLaApp());
+        // Lo mismo que daba antes, cuando la ruta llegaba ya recortada desde el teléfono: no queda «por revisar».
+        EvaluacionDeCarrera comoAntes = new PoliticaKilometros().evaluarCarrera(sinRuta.conRuta(ruta), AHORA);
+        assertThat(guardada.getValue().evaluacion()).isEqualTo(comoAntes);
+        assertThat(guardada.getValue().evaluacion().porRevisar()).isFalse();
+    }
+
+    // spec 042 FR-043, FR-019
+    @Test
+    @DisplayName("la carrera repetida con la ruta completa sigue siendo idempotente: la huella es la de lo que mandó el teléfono")
+    void repetidaConRutaCompleta() {
+        DatosDeCarrera sinRuta = carreraDeLaRuta();
+        when(carreras.de(ana, sinRuta.carreraId())).thenReturn(Optional.empty());
+        when(carreras.guardarSiEsNueva(any())).thenReturn(true);
+        when(enElHabito.aplicar(any(), any())).thenReturn(EfectoEnElHabito.sinRegistro(ResultadoEnElHabito.SIN_CAMBIO));
+        Carrera primera = service.registrar(new RegistrarCarreraCommand(ana, sinRuta, rutaCompleta())).carrera();
+        when(carreras.de(ana, sinRuta.carreraId())).thenReturn(Optional.of(primera));
+
+        CarreraRegistrada otraVez = service.registrar(new RegistrarCarreraCommand(ana, sinRuta, rutaCompleta()));
+
+        assertThat(otraVez.repetida()).isTrue();
+        assertThat(primera.huella()).isEqualTo(sinRuta.huellaDelEnvio(rutaCompleta()))
+                .isNotEqualTo(primera.datos().huella());
+        // Otra ruta completa con la misma clave es otro envío: 409.
+        List<double[]> puntos = PolylineDeGoogle.decodificar(ZonaDePrivacidadTest.rutaCompleta());
+        RutaEnviada otra = new RutaEnviada(PolylineDeGoogle.codificar(puntos.subList(0, 170)), 170);
+        assertThatThrownBy(() -> service.registrar(new RegistrarCarreraCommand(ana, sinRuta, otra)))
+                .isInstanceOf(CarreraYaRegistradaException.class);
+    }
+
+    // spec 042 FR-043
+    @Test
+    @DisplayName("una ruta de menos de 400 m se guarda sin ruta, y la carrera igual cuenta")
+    void rutaCortaSinRuta() {
+        DatosDeCarrera corta = CarrerasDePrueba.de(UUID.randomUUID(), "300", 180);
+        List<double[]> puntos = PolylineDeGoogle.decodificar(ZonaDePrivacidadTest.rutaCompleta()).subList(0, 30);
+        when(carreras.de(ana, corta.carreraId())).thenReturn(Optional.empty());
+        when(carreras.guardarSiEsNueva(any())).thenReturn(true);
+        when(enElHabito.aplicar(any(), any())).thenReturn(EfectoEnElHabito.sinRegistro(ResultadoEnElHabito.SIN_CAMBIO));
+        ArgumentCaptor<Carrera> guardada = ArgumentCaptor.forClass(Carrera.class);
+
+        service.registrar(new RegistrarCarreraCommand(ana, corta, new RutaEnviada(PolylineDeGoogle.codificar(puntos), 30)));
+
+        verify(carreras).guardarSiEsNueva(guardada.capture());
+        assertThat(guardada.getValue().datos().ruta()).isNull();
+        assertThat(guardada.getValue().evaluacion().cuenta()).isTrue();
     }
 }

@@ -52,7 +52,7 @@ public class CarreraController {
     @RequiresPermission(value = Permission.USE_APP, scope = "la propia persona: el participante es quien esta autenticado")
     @PostMapping
     public ResponseEntity<CarreraResponse> registrar(@ActorAutenticado UserId actor, @RequestBody @Valid CarreraRequest request) {
-        CarreraRegistrada registrada = registrar.registrar(new RegistrarCarreraCommand(actor, request.aDatos()));
+        CarreraRegistrada registrada = registrar.registrar(new RegistrarCarreraCommand(actor, request.aDatos(), request.rutaEnviada()));
         return ResponseEntity.status(registrada.repetida() ? HttpStatus.OK : HttpStatus.CREATED)
                 .body(CarreraResponse.from(registrada));
     }

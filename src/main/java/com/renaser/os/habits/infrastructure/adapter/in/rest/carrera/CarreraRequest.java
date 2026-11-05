@@ -1,7 +1,7 @@
 package com.renaser.os.habits.infrastructure.adapter.in.rest.carrera;
 
 import com.renaser.os.habits.domain.model.carrera.DatosDeCarrera;
-import com.renaser.os.habits.domain.model.carrera.RutaDeCarrera;
+import com.renaser.os.habits.domain.model.carrera.RutaEnviada;
 import com.renaser.os.habits.domain.model.carrera.Tramo;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -25,12 +25,22 @@ public record CarreraRequest(@NotNull UUID carreraId, @NotNull Instant iniciadaE
     public record TramoRequest(@NotNull Integer km, @NotNull Integer segundos) {
     }
 
+    /** {@code toString} sin la polilínea: son coordenadas de una persona y no van a ningún log (FR-043). */
     public record RutaRequest(@NotNull String polyline, @NotNull Integer puntos) {
+        @Override
+        public String toString() {
+            return "RutaRequest[puntos=" + puntos + "]";
+        }
     }
 
+    /** La carrera SIN ruta: la ruta viaja aparte ({@link #rutaEnviada()}) porque el servidor la recorta antes de guardar (FR-043). */
     DatosDeCarrera aDatos() {
         return new DatosDeCarrera(carreraId, iniciadaEn, terminadaEn, duracionActivaSeg, distanciaMetros, subidaMetros, pasos,
-                caloriasAprox, tramos.stream().map(t -> new Tramo(t.km(), t.segundos())).toList(), metrosSinGps,
-                ruta == null ? null : new RutaDeCarrera(ruta.polyline(), ruta.puntos()), appVersion);
+                caloriasAprox, tramos.stream().map(t -> new Tramo(t.km(), t.segundos())).toList(), metrosSinGps, null, appVersion);
+    }
+
+    /** La ruta completa, tal como la mandó el teléfono (con la zona de privacidad todavía). */
+    RutaEnviada rutaEnviada() {
+        return ruta == null ? null : new RutaEnviada(ruta.polyline(), ruta.puntos());
     }
 }

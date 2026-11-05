@@ -6,6 +6,7 @@ import com.renaser.os.habits.application.ports.out.carrera.CarrerasPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
 import com.renaser.os.habits.domain.model.carrera.Carrera;
+import com.renaser.os.habits.domain.model.carrera.DatosDeCarrera;
 import com.renaser.os.habits.domain.model.carrera.EfectoEnElHabito;
 import com.renaser.os.habits.domain.model.carrera.EvaluacionDeCarrera;
 import com.renaser.os.shared.domain.Clock;
@@ -62,14 +63,16 @@ public class CarreraService implements RegistrarCarreraUseCase {
         if (progreso.map(ProgresoParticipanteHabits::suspendido).orElse(false)) {
             throw new NotAuthorizedException("Cuenta suspendida");
         }
-        String huella = command.datos().huella();
+        String huella = command.huellaDelEnvio();
         Optional<Carrera> guardada = carreras.de(command.actorId(), command.datos().carreraId());
         if (guardada.isPresent()) {
             return repeticion(guardada.get(), huella);
         }
+        // FR-043: la zona de privacidad la quita el servidor; lo que se evalúa y se guarda ya viene sin ella.
+        DatosDeCarrera datos = command.datosAGuardar();
         Instant ahora = clock.now();
-        EvaluacionDeCarrera evaluacion = politica.evaluarCarrera(command.datos(), ahora);
-        Carrera nueva = Carrera.nueva(ids.newId(), command.actorId(), command.datos(), zonaDe(progreso), evaluacion, ahora);
+        EvaluacionDeCarrera evaluacion = politica.evaluarCarrera(datos, ahora);
+        Carrera nueva = Carrera.nueva(ids.newId(), command.actorId(), datos, huella, zonaDe(progreso), evaluacion, ahora);
         if (!carreras.guardarSiEsNueva(nueva)) {
             return repeticion(carreras.de(command.actorId(), command.datos().carreraId()).orElseThrow(), huella);
         }
