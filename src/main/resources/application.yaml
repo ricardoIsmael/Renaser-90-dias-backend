@@ -348,6 +348,11 @@ renaser:
       habits-despachar-avisos:
         lock-at-most-for: PT4M
         lock-at-least-for: PT10S
+      # Spec 042 (D-323): borra una vez al dia las rutas de carreras de mas de 180 dias, de a lotes de 500.
+      # Sin lock, dos instancias borran lo mismo dos veces (no hace dano, es trabajo doble).
+      habits-borrar-rutas-viejas:
+        lock-at-most-for: PT10M
+        lock-at-least-for: PT10S
       # D-168: barrido horario del semaforo del aprendiz (minuto 25). Sin lock, dos instancias
       # calculan el padron dos veces; la foto semanal no se duplica (PK + ON CONFLICT DO NOTHING)
       # ni el aviso (solo lo publica quien inserto la foto), pero es trabajo doble.

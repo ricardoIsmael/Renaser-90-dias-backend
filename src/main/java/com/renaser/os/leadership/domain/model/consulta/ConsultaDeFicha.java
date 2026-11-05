@@ -70,6 +70,17 @@ public record ConsultaDeFicha(UUID id, UserId consultorId, UserRole rolConsultor
                 contenido.mentorId(), null, consultadaEn, TipoDeConsulta.DIAGNOSTICO);
     }
 
+    /**
+     * Quién abrió la ruta de una carrera con GPS de una persona (spec 042, FR-041). Lo mismo que {@link #registrarDiagnostico}, con
+     * {@link TipoDeConsulta#RUTA_DE_CARRERA}: la abren las mismas personas (cualquiera que acompañe o administre, nunca un aprendiz ni
+     * la propia persona), no es de una semana y no entra al resumen del mentor.
+     */
+    public static ConsultaDeFicha registrarRutaDeCarrera(UUID id, ContenidoDelDiagnostico contenido, Instant consultadaEn) {
+        Objects.requireNonNull(contenido, "contenido es obligatorio");
+        return new ConsultaDeFicha(id, contenido.consultorId(), contenido.rolConsultor(), contenido.personaId(), contenido.grupoId(),
+                contenido.mentorId(), null, consultadaEn, TipoDeConsulta.RUTA_DE_CARRERA);
+    }
+
     /** Lo que dice quien consulta; la identidad y la hora las pone {@link #registrar}. */
     public record Contenido(UserId consultorId, UserRole rolConsultor, UserId personaId, UUID grupoId, UserId mentorId,
                             LocalDate semanaDesde) {

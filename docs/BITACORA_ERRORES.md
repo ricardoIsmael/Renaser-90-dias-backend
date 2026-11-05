@@ -16052,3 +16052,13 @@ De las 78 tablas que compara la prueba, solo esa. A «la otra persona» no se le
 **Solución.** Un aviso de mensaje se genera si todavía no llega, o si llegó DESPUÉS del último cambio del evento (`actualizadoEn`) y lleva como mucho 15 minutos de atraso (`GRACIA_DE_GENERACION_DE_MENSAJE`, el mismo tope con que sale), con el evento sin empezar. El despachador lo manda en el turno siguiente. Los avisos del teléfono (reglas E2) no cambiaron.
 
 **Cómo evitar que vuelva a pasar.** Una regla «solo lo que todavía no pasó» en un barrido periódico se prueba con el barrido corriendo JUSTO a la hora del aviso. `RecordatorioServiceMensajesTest` (issue #85) fija los tres casos: creado 15 min antes, creado después de la hora del aviso y más de 15 min de atraso.
+
+## E-670 · Las rutas nuevas de las carreras con GPS quedaban fuera del filtro de sesión (backend, spec 042, RESUELTO antes de publicar, 05/11)
+
+**Síntoma literal** (`./mvnw clean verify`, `RutasCubiertasPorElFiltroTest.ningunaRutaQuedaFueraDelFiltro`): «Estas rutas no las alcanza ningun matcher .authenticated() de SecurityConfig y tampoco declaran @PublicEndpoint. […] Expecting empty but was: ["/api/v1/carreras", "/api/v1/carreras/{carreraId}/ruta"]».
+
+**Causa real.** `CarreraController` vive en una ruta base nueva (`/api/v1/carreras`) y `SecurityConfig` termina en `anyRequest().permitAll()`: sin su matcher, la ruta se atendía sin sesión y la identidad saldría del header `X-Actor-Id`. Las IT pasaban porque todas mandan una sesión real.
+
+**Solución.** `.requestMatchers("/api/v1/carreras", "/api/v1/carreras/**").authenticated()` en `SecurityConfig`, junto a las de hábitos.
+
+**Cómo evitar que vuelva a pasar.** Ya es ejecutable: la prueba lo atrapó. Toda ruta base nueva suma su matcher en el mismo cambio; correr `RutasCubiertasPorElFiltroTest` apenas se crea un controller, no al final.

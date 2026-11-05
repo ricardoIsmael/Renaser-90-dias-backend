@@ -63,6 +63,8 @@ final class EntradasDelCatalogo {
                 critica("habitos", "Hábitos", "Hábitos", "Los hábitos de hoy y completarlos.", TODOS, SALTA),
                 normal("habitos.foto", "Hábitos", "Evidencia con foto", "Subir la foto de un hábito.", TODOS, NO_APLICA),
                 normal("habitos.km", "Hábitos", "Kilómetros diarios", "Registrar los kilómetros del día.", TODOS, SALTA),
+                // Spec 042 (D-323): la carrera con GPS desde Training y la lectura de su ruta. Hija de habitos.km: apagar los km la apaga.
+                normal("habitos.km.carreras", "Hábitos", "Carreras con GPS", "Salir a correr o caminar con GPS desde Training, registrar la carrera y ver su ruta.", TODOS, NO_APLICA),
                 normal("habitos.gimnasio", "Hábitos", "Gimnasio", "El hábito de gimnasio.", TODOS, SALTA),
                 normal("habitos.espiritu", "Hábitos", "Pastilla y audioterapia", "La Pastilla Renacer y la audioterapia semanal.", TODOS, NO_APLICA),
                 normal("habitos.ajustes", "Hábitos", "Ajustes de hábitos", "Horarios, pausa y renombre de hábitos.", TODOS, NO_APLICA),

@@ -185,13 +185,27 @@ public interface ConsultarTracksDelDiaConCatalogoUseCase {
      * <p>Spec 037: {@code meta} es la meta diaria que rige (la de Administración o la del programa; {@code null} si el
      * hábito no tiene una), y {@code origenDelDia}/{@code fuenteDelDia} dicen de dónde salió lo registrado ese día
      * ({@code null} si todavía no se cumplió; la fuente solo la tiene la lectura automática).
+     *
+     * <p>Spec 042 (FR-029): {@code carrerasDelDia} son las carreras con GPS de ese día (cuántas, y los km de las que cuentan). En el
+     * hábito de km va SIEMPRE, con cantidad 0 si no hay: que falte le dice a la app que el backend es anterior. {@code null} en
+     * cualquier otro hábito medible.
      */
     record MedicionDelTrack(UnidadMedicion unidad, BigDecimal valorDelDia, BigDecimal total, BigDecimal meta,
-                            OrigenMedicion origenDelDia, String fuenteDelDia) {
+                            OrigenMedicion origenDelDia, String fuenteDelDia, CarrerasDelDiaDelTrack carrerasDelDia) {
 
         /** Sin meta ni origen: la forma anterior a la spec 037. */
         public MedicionDelTrack(UnidadMedicion unidad, BigDecimal valorDelDia, BigDecimal total) {
-            this(unidad, valorDelDia, total, null, null, null);
+            this(unidad, valorDelDia, total, null, null, null, null);
         }
+
+        /** Sin carreras: la forma de la spec 037. */
+        public MedicionDelTrack(UnidadMedicion unidad, BigDecimal valorDelDia, BigDecimal total, BigDecimal meta,
+                                OrigenMedicion origenDelDia, String fuenteDelDia) {
+            this(unidad, valorDelDia, total, meta, origenDelDia, fuenteDelDia, null);
+        }
+    }
+
+    /** Las carreras con GPS de un día (spec 042): cuántas hay y la suma de los km de las que cuentan para el hábito. */
+    record CarrerasDelDiaDelTrack(int cantidad, BigDecimal kilometros) {
     }
 }

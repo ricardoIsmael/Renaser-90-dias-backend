@@ -153,7 +153,8 @@ public final class LoQueLeFaltaHoy {
 
     /**
      * Spec 037 (T021 de la 038): {@code mide=km | meta=5 | lleva=3.2}. {@code lleva} es lo ya REGISTRADO hoy (0 si todavia nada): lo que la persona va
-     * caminando en vivo lo lee su telefono, no el servidor. Con el dia registrado, de donde salio: {@code origen=pasos} o {@code origen=captura}.
+     * caminando en vivo lo lee su telefono, no el servidor. Con el dia registrado, de donde salio: {@code origen=pasos}, {@code origen=carrera} (las
+     * carreras con GPS, spec 042) o {@code origen=captura}.
      */
     private static String medicion(HabitoDelDia habito) {
         var medicion = habito.medicion();
@@ -163,9 +164,17 @@ public final class LoQueLeFaltaHoy {
         }
         texto.append(" | lleva=").append(medicion.valorDelDia() == null ? "0" : numero(medicion.valorDelDia()));
         if (medicion.origenDelDia() != null) {
-            texto.append(" | origen=").append("HEALTH_CONNECT".equals(medicion.origenDelDia()) ? "pasos" : "captura");
+            texto.append(" | origen=").append(origenEnPalabras(medicion.origenDelDia()));
         }
         return texto.toString();
+    }
+
+    private static String origenEnPalabras(String origen) {
+        return switch (origen) {
+            case "HEALTH_CONNECT" -> "pasos";
+            case "GPS" -> "carrera";
+            default -> "captura";
+        };
     }
 
     /** «5» y «5.4», no «5.00» ni «5.40». */

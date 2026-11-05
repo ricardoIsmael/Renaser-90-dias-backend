@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase;
 import com.renaser.os.habits.application.politica.PoliticaKilometros;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase.MedicionDelTrack;
 import com.renaser.os.habits.domain.model.habito.AmbitoHabito;
@@ -65,7 +66,9 @@ class MedicionesDelDiaTest {
         assertThat(resultado).containsOnlyKeys(deKm);
         // Spec 037: el hábito de km trae además la meta que rige (sin otra fijada, la del programa) y ningún origen aún.
         assertThat(resultado.get(deKm)).isEqualTo(new MedicionDelTrack(UnidadMedicion.KILOMETROS, null,
-                new BigDecimal("12.50"), PoliticaKilometros.META_POR_DEFECTO_KM, null, null));
+                new BigDecimal("12.50"), PoliticaKilometros.META_POR_DEFECTO_KM, null, null,
+                // Spec 042 (FR-029): el de km trae siempre sus carreras del día, también sin ninguna.
+                new ConsultarTracksDelDiaConCatalogoUseCase.CarrerasDelDiaDelTrack(0, new BigDecimal("0.00"))));
         assertThat(consultas).containsExactly("DAILY_KM@" + HOY);
     }
 

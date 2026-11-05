@@ -62,6 +62,7 @@ class RegistroHabitoPersistenceMapper {
         return switch (origen) {
             case MANUAL -> "MANUAL";
             case HEALTH_CONNECT -> "HEALTH_CONNECT";
+            case GPS -> "GPS";
         };
     }
 
@@ -69,6 +70,7 @@ class RegistroHabitoPersistenceMapper {
         return switch (origen) {
             case "MANUAL" -> OrigenMedicion.MANUAL;
             case "HEALTH_CONNECT" -> OrigenMedicion.HEALTH_CONNECT;
+            case "GPS" -> OrigenMedicion.GPS;
             default -> throw new IllegalStateException("origen_medicion desconocido: " + origen);
         };
     }

@@ -50,11 +50,11 @@ public class KilometrosAcumuladosService implements MedicionAcumuladaFinder {
         return contarDiasCumplidosPort.diasPorParticipante(participantes, CLAVE_GIMNASIO, hasta);
     }
 
-    /** Spec 037: quiénes tienen algún día de km leído por el teléfono. */
+    /** Spec 037: quiénes tienen algún día de km leído por el teléfono; desde la spec 042 (FR-028), también por carreras con GPS. */
     @Override
     @Transactional(readOnly = true)
     public Set<UserId> conKilometrosAutomaticos(Collection<UserId> participantes, LocalDate hasta) {
-        return contarMedicionesAutomaticasPort.conAlgunaMedicionAutomatica(participantes,
+        return contarMedicionesAutomaticasPort.conAlgunaMedicionDelTelefono(participantes,
                 PoliticaKilometros.CLAVE_SISTEMA, hasta);
     }
 }
