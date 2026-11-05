@@ -5,6 +5,7 @@ import com.renaser.os.calendar.application.ports.out.evento.SaveEventoPort;
 import com.renaser.os.calendar.domain.model.evento.Evento;
 import com.renaser.os.calendar.domain.model.evento.EventoId;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
@@ -104,6 +105,12 @@ class EventoPersistenceAdapter implements LoadEventoPort, SaveEventoPort {
         }
 
         return evento;
+    }
+
+    @Override
+    @Transactional
+    public void fijarEnlaceDeMeet(EventoId id, String enlace) {
+        eventoRepo.fijarEnlaceDeMeet(id.value(), enlace);
     }
 
     @Override

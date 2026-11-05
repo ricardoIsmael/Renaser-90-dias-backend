@@ -74,4 +74,7 @@ public class EventoJpaEntity {
 
     /** V137: el código de la formación (`ESCUELA`, `DIPLOMADO`, `CERTIFICACION`). */
     private String formacion = "ESCUELA";
+
+    /** V169 (spec 040): `ABIERTA` o `CON_PERMISO` si el evento pide el enlace de Meet automático; nulo si no. */
+    private String accesoSalaMeet;
 }

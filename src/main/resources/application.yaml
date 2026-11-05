@@ -306,6 +306,14 @@ renaser:
     idioma: ${WHATSAPP_IDIOMA:es}
   scheduling:
     shedlock:
+      # Spec 040: los reintentos de las salas de Meet (cada minuto) y su mantenimiento (cada hora). Sin lock, dos instancias le pedirian lo
+      # mismo a Google; el id de Google derivado del evento hace que no se dupliquen (409), pero gastarian la cuota del limitador propio.
+      calendar-salas-de-meet-reintentos:
+        lock-at-most-for: PT10M
+        lock-at-least-for: PT20S
+      calendar-salas-de-meet-mantenimiento:
+        lock-at-most-for: PT30M
+        lock-at-least-for: PT1M
       evidence-procesar-cola:
         lock-at-most-for: PT20M
         lock-at-least-for: PT10S
@@ -704,6 +712,36 @@ renaser:
     google:
       client-id: ${GOOGLE_OAUTH_CLIENT_ID:}
       client-secret: ${GOOGLE_OAUTH_CLIENT_SECRET:}
+  # Spec 040 (D-321, 2026-11-04): el enlace de Meet automatico de los eventos. TODO APAGADO de fabrica: la funcionalidad `eventos.meet` nace
+  # apagada en el catalogo de Soporte TI y no se prende en produccion hasta pasar SC-001 (reunion de mas de 60 minutos con 3 o mas
+  # personas en la cuenta real). Las credenciales son las de un proyecto de Google Cloud y un cliente OAuth PROPIOS de Renaser (no los de
+  # RenaserOs, aunque compartan el Gmail). Ninguna va en el codigo: en produccion llegan desde SSM (docs/DESPLIEGUE_Y_CI.md). Sin ellas el
+  # servidor arranca igual y crear un evento funciona como siempre.
+  calendar:
+    meet:
+      oauth:
+        client-id: ${EVENTOS_GOOGLE_CLIENT_ID:}
+        client-secret: ${EVENTOS_GOOGLE_CLIENT_SECRET:}
+        # Tiene que coincidir EXACTO con el URI de redireccionamiento autorizado del cliente OAuth:
+        # https://<servidor>/api/v1/integraciones/google/callback
+        redirect-uri: ${EVENTOS_GOOGLE_REDIRECT_URI:}
+        # Por defecto el calendario propio de la app (calendar.app.created) y los ajustes de la sala (meetings.space.settings), mas
+        # `openid email` para saber de que cuenta es el permiso. Si SC-001 muestra que el permiso reducido no alcanza: calendar.events.
+        permisos: ${EVENTOS_GOOGLE_PERMISOS:https://www.googleapis.com/auth/calendar.app.created https://www.googleapis.com/auth/meetings.space.settings openid email}
+      # Si se pone, solo se puede conectar ESA cuenta (renasercorporation@gmail.com): evita conectar otra por error.
+      correo-esperado: ${EVENTOS_GOOGLE_CORREO:}
+      # Cuantos dias hacia adelante se crean las salas de un evento que se repite (un enlace distinto por fecha).
+      ventana-dias: ${EVENTOS_MEET_VENTANA_DIAS:60}
+      # Tope propio de pedidos por minuto a Google (el de Google es 600): que un error de bucle no agote la cuota.
+      pedidos-por-minuto: ${EVENTOS_MEET_PEDIDOS_POR_MINUTO:30}
+      # El permiso permanente de la cuenta se guarda CIFRADO (AES-256-GCM). La clave: 32 bytes en base64
+      # (`openssl rand -base64 32`), en SSM. `version` identifica la clave; para rotar, la nueva pasa a `clave` con otra `version` y
+      # la vieja queda en `clave-anterior` con su `version-anterior` mientras haya datos cifrados con ella.
+      cifrado:
+        clave: ${EVENTOS_GOOGLE_CLAVE_DE_CIFRADO:}
+        version: ${EVENTOS_GOOGLE_VERSION_DE_CLAVE:1}
+        clave-anterior: ${EVENTOS_GOOGLE_CLAVE_ANTERIOR:}
+        version-anterior: ${EVENTOS_GOOGLE_VERSION_ANTERIOR:0}
   web:
     cors:
       origenes: ${CORS_ORIGENES:http://localhost:8081,http://localhost:19006,http://localhost:3000}

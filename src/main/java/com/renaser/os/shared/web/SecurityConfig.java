@@ -115,6 +115,9 @@ public class SecurityConfig {
                                 "/api/v1/auth/social/complete").permitAll()
                         .requestMatchers("/api/v1/auth/password/**",
                                 "/api/v1/auth/email-verification/**").permitAll()
+                        // El regreso de Google al conectar la cuenta de los eventos (spec 040): lo abre el navegador, sin sesion. Solo GET y solo
+                        // esa ruta; se protege con el `state` de un solo uso que ata la respuesta a quien empezo la conexion.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/integraciones/google/callback").permitAll()
                         // El alta y sus pasos previos: por definicion no puede haber sesion
                         // todavia. Se enumeran uno a uno y POR METODO porque `POST
                         // /account-requests` (pedir cuenta) y `GET /account-requests` (la bandeja

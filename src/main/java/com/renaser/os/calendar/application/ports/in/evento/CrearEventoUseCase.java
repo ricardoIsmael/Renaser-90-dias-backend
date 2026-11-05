@@ -6,6 +6,7 @@ import com.renaser.os.calendar.domain.model.evento.RolUsuario;
 import com.renaser.os.calendar.domain.model.evento.TipoAudiencia;
 import com.renaser.os.calendar.domain.model.evento.TipoEvento;
 import com.renaser.os.calendar.domain.model.evento.TipoUbicacion;
+import com.renaser.os.calendar.domain.model.meet.AccesoSalaMeet;
 import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 
@@ -33,11 +34,28 @@ public interface CrearEventoUseCase {
                                String cursoId, UUID celulaDestinoId, TipoEvento tipoEvento, boolean notificarAlCrear,
                                boolean recordarPorEmail, boolean recordatoriosPersonalizados, Recurrencia recurrencia,
                                Set<RolUsuario> rolesDestino, List<ReglaRecordatorio> reglasRecordatorio,
-                               Formacion formacion) {
+                               Formacion formacion, AccesoSalaMeet accesoSalaMeet) {
 
         public CrearEventoCommand {
             Objects.requireNonNull(actorId, "actorId es obligatorio");
             Objects.requireNonNull(tipoEvento, "tipoEvento es obligatorio");
+        }
+
+        /**
+         * Con la formación pero sin pedir el enlace de Meet automático (spec 040): {@code accesoSalaMeet} nulo. El enlace automático lo pide el
+         * controller con {@code crearEnlaceMeet: true}, y entonces el evento es de Meet, sin link, y {@code accesoSalaMeet} dice quién puede entrar.
+         */
+        public CrearEventoCommand(UserId actorId, String titulo, String descripcion, Instant iniciaEn,
+                                  Integer duracionMinutos, ZoneId timezone, TipoUbicacion tipoUbicacion,
+                                  String valorUbicacion, TipoAudiencia tipoAudiencia, Integer nivelMinimoId,
+                                  String cursoId, UUID celulaDestinoId, TipoEvento tipoEvento, boolean notificarAlCrear,
+                                  boolean recordarPorEmail, boolean recordatoriosPersonalizados, Recurrencia recurrencia,
+                                  Set<RolUsuario> rolesDestino, List<ReglaRecordatorio> reglasRecordatorio,
+                                  Formacion formacion) {
+            this(actorId, titulo, descripcion, iniciaEn, duracionMinutos, timezone, tipoUbicacion, valorUbicacion,
+                    tipoAudiencia, nivelMinimoId, cursoId, celulaDestinoId, tipoEvento, notificarAlCrear,
+                    recordarPorEmail, recordatoriosPersonalizados, recurrencia, rolesDestino, reglasRecordatorio,
+                    formacion, null);
         }
 
         /**
@@ -52,7 +70,7 @@ public interface CrearEventoUseCase {
                                   Set<RolUsuario> rolesDestino, List<ReglaRecordatorio> reglasRecordatorio) {
             this(actorId, titulo, descripcion, iniciaEn, duracionMinutos, timezone, tipoUbicacion, valorUbicacion,
                     tipoAudiencia, nivelMinimoId, cursoId, celulaDestinoId, tipoEvento, notificarAlCrear,
-                    recordarPorEmail, recordatoriosPersonalizados, recurrencia, rolesDestino, reglasRecordatorio, null);
+                    recordarPorEmail, recordatoriosPersonalizados, recurrencia, rolesDestino, reglasRecordatorio, null, null);
         }
     }
 }

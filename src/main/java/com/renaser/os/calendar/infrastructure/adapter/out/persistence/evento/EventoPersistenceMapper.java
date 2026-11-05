@@ -11,6 +11,7 @@ import com.renaser.os.calendar.domain.model.evento.TipoAudiencia;
 import com.renaser.os.calendar.domain.model.evento.TipoEvento;
 import com.renaser.os.calendar.domain.model.evento.TipoReglaRecordatorio;
 import com.renaser.os.calendar.domain.model.evento.TipoUbicacion;
+import com.renaser.os.calendar.domain.model.meet.AccesoSalaMeet;
 import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
@@ -44,7 +45,8 @@ class EventoPersistenceMapper {
                 e.getCelulaDestinoId(), toDomainEstado(e.getEstado()), toDomainTipoEvento(e.getTipoEvento()),
                 e.isNotificarAlCrear(), e.isRecordarPorEmail(), e.isRecordatoriosPersonalizados(), recurrencia, roles,
                 reglasRecordatorio, e.getCreadoPor() == null ? null : UserId.of(e.getCreadoPor()), e.getCreadoEn(),
-                e.getActualizadoEn(), Formacion.desde(e.getFormacion()));
+                e.getActualizadoEn(), Formacion.desde(e.getFormacion()),
+                e.getAccesoSalaMeet() == null ? null : AccesoSalaMeet.valueOf(e.getAccesoSalaMeet()));
     }
 
     EventoJpaEntity toEntity(Evento ev) {
@@ -54,7 +56,7 @@ class EventoPersistenceMapper {
                 ev.cursoId(), ev.celulaDestinoId(), toJpaEstado(ev.estado()), toJpaTipoEvento(ev.tipoEvento()),
                 ev.notificarAlCrear(), ev.recordarPorEmail(), ev.recordatoriosPersonalizados(),
                 ev.creadoPor() == null ? null : ev.creadoPor().value(), ev.creadoEn(), ev.actualizadoEn(),
-                ev.formacion().codigo());
+                ev.formacion().codigo(), ev.accesoSalaMeet() == null ? null : ev.accesoSalaMeet().name());
     }
 
     RecurrenciaJpaEntity toEntityRecurrencia(EventoId eventoId, Recurrencia r) {

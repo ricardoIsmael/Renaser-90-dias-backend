@@ -80,6 +80,9 @@ final class EntradasDelCatalogo {
                 normal("eventos", "Eventos", "Eventos", "Ver los eventos y confirmar asistencia.", TODOS, SALTA),
                 normal("eventos.gestion", "Eventos", "Crear y editar eventos", "Crear, editar y cancelar eventos.", ADMINISTRACION, NO_APLICA),
                 normal("eventos.asistencia", "Eventos", "Asistencia", "Quién respondió y pasar lista.", EnumSet.of(MENTOR_LEAD, ADMIN, ALCHEMIST, IT_SUPPORT), NO_APLICA),
+                // Spec 040 (D-321): el enlace de Meet que el servidor crea solo. Nace APAGADA y no se prende en producción hasta pasar SC-001
+                // (reunión de más de 60 minutos con 3 o más personas). Apagada se esconde (404), y los procesos de fondo saltan su turno.
+                apagadaDeFabrica("eventos.meet", "Eventos", "Enlace de Meet automático", "Crear solo la sala de Meet de un evento al guardarlo.", ADMINISTRACION, SALTA),
                 // Spec 041 (D-322): el WhatsApp de los recordatorios de eventos nace APAGADO (sin el numero, la clave y la plantilla aprobada no hay como enviar) y se prende a proposito.
                 naceApagada("eventos.whatsapp", "Eventos", "Recordatorios por WhatsApp", "Los recordatorios de los eventos por WhatsApp (1 día, 1 hora, 30 y 10 minutos antes) y su resumen.", ADMINISTRACION, SALTA),
                 normal("cursos", "Cursos", "Cursos", "Los cursos y sus lecciones.", TODOS, NO_APLICA),
@@ -141,6 +144,16 @@ final class EntradasDelCatalogo {
                                                     Set<UserRole> roles) {
         return new DefinicionDeFuncionalidad(clave, prefijo(clave), area, nombre, descripcion, roles, false,
                 ValorPorDefecto.PRENDIDA, NO_APLICA, roles, true);
+    }
+
+    /**
+     * Una funcionalidad que nace APAGADA para todos (spec 040): Soporte TI la prende a propósito, y mientras no, se esconde (404) en vez de avisar
+     * mantenimiento. Es la forma de entregar algo que depende de una prueba manual del dueño.
+     */
+    private static DefinicionDeFuncionalidad apagadaDeFabrica(String clave, String area, String nombre, String descripcion,
+                                                              Set<UserRole> roles, PoliticaDeProcesos procesos) {
+        return new DefinicionDeFuncionalidad(clave, prefijo(clave), area, nombre, descripcion, roles, false,
+                ValorPorDefecto.APAGADA, procesos, Set.of(), true);
     }
 
     private static DefinicionDeFuncionalidad critica(String clave, String area, String nombre, String descripcion,

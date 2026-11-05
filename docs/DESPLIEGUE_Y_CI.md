@@ -811,6 +811,25 @@ sola vez, al arrancar; no hay recarga en caliente. Después de un `put-parameter
 `docker restart backend` (o un despliegue). Olvidarlo dejó a producción una noche sin correos con
 una `SMTP_PASSWORD` vieja (**E-244**).
 
+#### Parámetros del enlace de Meet automático (spec 040, D-321)
+
+Ninguno va en el código ni en el repositorio. Todos se crean en `/renaser/prod/` con el nombre de la variable; sin ellos el servidor arranca igual y crear un
+evento funciona como siempre (la opción «Crear enlace de Meet» no se ofrece). **No se prende `eventos.meet` en producción hasta pasar SC-001** (una reunión de más
+de 60 minutos con 3 o más personas en la cuenta real).
+
+| Parámetro | Tipo | Qué es |
+|---|---|---|
+| `EVENTOS_GOOGLE_CLIENT_ID` | String | Id del cliente OAuth «Renaser servidor» del proyecto de Google Cloud de Renaser (no el de RenaserOs). |
+| `EVENTOS_GOOGLE_CLIENT_SECRET` | **SecureString** | Su secreto. |
+| `EVENTOS_GOOGLE_REDIRECT_URI` | String | `https://<servidor>/api/v1/integraciones/google/callback`, EXACTO como en «URI de redireccionamiento autorizados» del cliente. |
+| `EVENTOS_GOOGLE_CLAVE_DE_CIFRADO` | **SecureString** | 32 bytes en base64 (`openssl rand -base64 32`): cifra el permiso permanente en la base (AES-256-GCM). Perderla obliga a reconectar la cuenta. |
+| `EVENTOS_GOOGLE_VERSION_DE_CLAVE` | String | Número de esa clave (por defecto `1`). Para rotar: la nueva pasa a `..._CLAVE_DE_CIFRADO` con otra versión y la vieja queda en `EVENTOS_GOOGLE_CLAVE_ANTERIOR` / `EVENTOS_GOOGLE_VERSION_ANTERIOR`. |
+| `EVENTOS_GOOGLE_CORREO` | String | Opcional: `renasercorporation@gmail.com`. Si se pone, solo se puede conectar esa cuenta. |
+| `EVENTOS_GOOGLE_PERMISOS` | String | Opcional. Por defecto `calendar.app.created meetings.space.settings openid email`; si SC-001 muestra que no alcanza, `calendar.events` en lugar del primero. |
+| `EVENTOS_MEET_VENTANA_DIAS` / `EVENTOS_MEET_PEDIDOS_POR_MINUTO` | String | Opcionales (60 y 30). |
+
+La pantalla de consentimiento del proyecto debe estar publicada «En producción»: en modo prueba Google vence el permiso permanente a los 7 días.
+
 ### 6.3 Permisos que necesita el rol de ejecución de la aplicación
 
 ```json

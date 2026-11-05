@@ -1,17 +1,15 @@
 package com.renaser.os.calendar.infrastructure.adapter.in.rest.evento;
 
 import com.renaser.os.calendar.application.ports.in.confirmacion.ConfirmarAsistenciaUseCase;
-import com.renaser.os.calendar.application.ports.in.evento.ActualizarEventoUseCase;
 import com.renaser.os.calendar.application.ports.in.evento.ActualizarEventoUseCase.ActualizarEventoCommand;
-import com.renaser.os.calendar.application.ports.in.evento.CancelarOcurrenciaUseCase;
 import com.renaser.os.calendar.application.ports.in.evento.ConfirmarPortadaUseCase;
-import com.renaser.os.calendar.application.ports.in.evento.CrearEventoUseCase;
 import com.renaser.os.calendar.application.ports.in.evento.CrearEventoUseCase.CrearEventoCommand;
-import com.renaser.os.calendar.application.ports.in.evento.EliminarEventoUseCase;
 import com.renaser.os.calendar.application.ports.in.evento.EventoVista;
-import com.renaser.os.calendar.application.ports.in.evento.ListarEventosParaVisorUseCase;
-import com.renaser.os.calendar.application.ports.in.evento.ObtenerEventoUseCase;
 import com.renaser.os.calendar.application.ports.in.evento.SolicitarUrlPortadaUseCase;
+import com.renaser.os.calendar.application.ports.in.meet.DisponibilidadDeMeetUseCase;
+import com.renaser.os.calendar.application.ports.in.meet.EventoConMeetVista;
+import com.renaser.os.calendar.application.ports.in.meet.EventosConMeetUseCase;
+import com.renaser.os.calendar.application.ports.in.meet.ReintentarSalaDeMeetUseCase;
 import com.renaser.os.calendar.domain.model.evento.EventoId;
 import com.renaser.os.calendar.domain.model.evento.Recurrencia;
 import com.renaser.os.calendar.domain.model.evento.ReglaRecordatorio;
@@ -58,31 +56,25 @@ import java.util.stream.Collectors;
 @Funcionalidad("eventos")
 class EventoController {
 
-    private final ListarEventosParaVisorUseCase listarUseCase;
-    private final ObtenerEventoUseCase obtenerUseCase;
-    private final CrearEventoUseCase crearUseCase;
-    private final ActualizarEventoUseCase actualizarUseCase;
-    private final EliminarEventoUseCase eliminarUseCase;
-    private final CancelarOcurrenciaUseCase cancelarOcurrenciaUseCase;
+    /** Listar, ver, crear, editar, borrar y cancelar una fecha: los casos de uso de siempre, con el enlace de Meet automático (spec 040). */
+    private final EventosConMeetUseCase eventosUseCase;
     private final SolicitarUrlPortadaUseCase solicitarUrlPortadaUseCase;
     private final ConfirmarPortadaUseCase confirmarPortadaUseCase;
     private final ConfirmarAsistenciaUseCase confirmarAsistenciaUseCase;
+    private final DisponibilidadDeMeetUseCase disponibilidadDeMeetUseCase;
+    private final ReintentarSalaDeMeetUseCase reintentarSalaUseCase;
 
-    EventoController(ListarEventosParaVisorUseCase listarUseCase, ObtenerEventoUseCase obtenerUseCase,
-                      CrearEventoUseCase crearUseCase, ActualizarEventoUseCase actualizarUseCase,
-                      EliminarEventoUseCase eliminarUseCase, CancelarOcurrenciaUseCase cancelarOcurrenciaUseCase,
-                      SolicitarUrlPortadaUseCase solicitarUrlPortadaUseCase,
+    EventoController(EventosConMeetUseCase eventosUseCase, SolicitarUrlPortadaUseCase solicitarUrlPortadaUseCase,
                       ConfirmarPortadaUseCase confirmarPortadaUseCase,
-                      ConfirmarAsistenciaUseCase confirmarAsistenciaUseCase) {
-        this.listarUseCase = listarUseCase;
-        this.obtenerUseCase = obtenerUseCase;
-        this.crearUseCase = crearUseCase;
-        this.actualizarUseCase = actualizarUseCase;
-        this.eliminarUseCase = eliminarUseCase;
-        this.cancelarOcurrenciaUseCase = cancelarOcurrenciaUseCase;
+                      ConfirmarAsistenciaUseCase confirmarAsistenciaUseCase,
+                      DisponibilidadDeMeetUseCase disponibilidadDeMeetUseCase,
+                      ReintentarSalaDeMeetUseCase reintentarSalaUseCase) {
+        this.eventosUseCase = eventosUseCase;
         this.solicitarUrlPortadaUseCase = solicitarUrlPortadaUseCase;
         this.confirmarPortadaUseCase = confirmarPortadaUseCase;
         this.confirmarAsistenciaUseCase = confirmarAsistenciaUseCase;
+        this.disponibilidadDeMeetUseCase = disponibilidadDeMeetUseCase;
+        this.reintentarSalaUseCase = reintentarSalaUseCase;
     }
 
     @RequiresPermission(value = Permission.USE_APP, scope = "el listado ya viene filtrado por la audiencia de cada evento")
@@ -91,7 +83,7 @@ class EventoController {
                                             @RequestParam("from") String from, @RequestParam("to") String to,
                                             @RequestParam(value = "scope", required = false) String scope,
                                             @RequestParam(value = "formation", required = false) String formation) {
-        var ocurrencias = listarUseCase.listar(actor, Instant.parse(from), Instant.parse(to),
+        var ocurrencias = eventosUseCase.listar(actor, Instant.parse(from), Instant.parse(to),
                 FormacionDelContenido.pedida(formation));
         return ocurrencias.stream().map(OcurrenciaResponse::from).toList();
     }
@@ -99,8 +91,7 @@ class EventoController {
     @RequiresPermission(value = Permission.USE_APP, scope = "el actor tiene que estar en la audiencia del evento")
     @GetMapping("/{id}")
     public EventoResponse obtener(@ActorAutenticado UserId actor, @PathVariable UUID id) {
-        EventoVista vista = obtenerUseCase.obtener(actor, EventoId.of(id));
-        return EventoResponse.from(vista.evento(), vista.coverUrl());
+        return aRespuesta(eventosUseCase.obtener(actor, EventoId.of(id)));
     }
 
     @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "solo ADMIN/ALCHEMIST (D-186): el servicio rechaza a MENTOR, MENTOR_LEAD y TRAINEE")
@@ -108,8 +99,7 @@ class EventoController {
     @PostMapping
     public ResponseEntity<EventoResponse> crear(@ActorAutenticado UserId actor,
                                                  @Valid @RequestBody EventoRequest request) {
-        EventoVista creado = crearUseCase.crear(aComandoCrear(actor, request));
-        return ResponseEntity.status(HttpStatus.CREATED).body(EventoResponse.from(creado.evento(), creado.coverUrl()));
+        return ResponseEntity.status(HttpStatus.CREATED).body(aRespuesta(eventosUseCase.crear(aComandoCrear(actor, request))));
     }
 
     @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "solo ADMIN/ALCHEMIST (D-186): el servicio rechaza a MENTOR, MENTOR_LEAD y TRAINEE")
@@ -117,15 +107,14 @@ class EventoController {
     @PutMapping("/{id}")
     public EventoResponse actualizar(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                       @Valid @RequestBody EventoRequest request) {
-        EventoVista actualizado = actualizarUseCase.actualizar(aComandoActualizar(actor, id, request));
-        return EventoResponse.from(actualizado.evento(), actualizado.coverUrl());
+        return aRespuesta(eventosUseCase.actualizar(aComandoActualizar(actor, id, request)));
     }
 
     @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "solo ADMIN/ALCHEMIST (D-186): el servicio rechaza a MENTOR, MENTOR_LEAD y TRAINEE")
     @Funcionalidad("eventos.gestion")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminar(@ActorAutenticado UserId actor, @PathVariable UUID id) {
-        eliminarUseCase.eliminar(actor, EventoId.of(id));
+        eventosUseCase.eliminar(actor, EventoId.of(id));
         return ResponseEntity.noContent().build();
     }
 
@@ -143,7 +132,7 @@ class EventoController {
     @PostMapping("/{id}/cancel-occurrence")
     public ResponseEntity<Void> cancelarOcurrencia(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                                     @Valid @RequestBody CancelarOcurrenciaRequest request) {
-        cancelarOcurrenciaUseCase.cancelar(actor, EventoId.of(id), Instant.parse(request.occurrenceStart()));
+        eventosUseCase.cancelarOcurrencia(actor, EventoId.of(id), Instant.parse(request.occurrenceStart()));
         return ResponseEntity.ok().build();
     }
 
@@ -165,7 +154,31 @@ class EventoController {
         return EventoResponse.from(vista.evento(), vista.coverUrl());
     }
 
+    /**
+     * Si el formulario puede ofrecer «Crear enlace de Meet» (spec 040, FR-014): hay cuenta de Google activa y Soporte TI prendió {@code eventos.meet}.
+     * Solo ADMIN y ALCHEMIST. Un backend anterior responde 404 y la app no dibuja la opción.
+     */
+    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "solo ADMIN/ALCHEMIST (D-186): el servicio rechaza a MENTOR, MENTOR_LEAD y TRAINEE")
+    @Funcionalidad("eventos.gestion")
+    @GetMapping("/meet/status")
+    public DisponibilidadDeMeetResponse disponibilidadDeMeet(@ActorAutenticado UserId actor) {
+        return DisponibilidadDeMeetResponse.from(disponibilidadDeMeetUseCase.consultar(actor));
+    }
+
+    /** «Reintentar» el enlace de Meet de un evento (spec 040, FR-008): vuelve a pedir lo que quedó sin hacer, sin duplicar nada (FR-007). */
+    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "solo ADMIN/ALCHEMIST (D-186): el servicio rechaza a MENTOR, MENTOR_LEAD y TRAINEE")
+    @Funcionalidad("eventos.meet")
+    @PostMapping("/{id}/meet/retry")
+    public EventoResponse reintentarMeet(@ActorAutenticado UserId actor, @PathVariable UUID id) {
+        return aRespuesta(reintentarSalaUseCase.reintentar(actor, EventoId.of(id)));
+    }
+
     // ─── Traduccion wire -> comando ─────────────────────────────────────────────
+
+    private static EventoResponse aRespuesta(EventoConMeetVista vista) {
+        EventoVista evento = vista.evento();
+        return EventoResponse.from(evento.evento(), evento.coverUrl(), vista.meet());
+    }
 
     private CrearEventoCommand aComandoCrear(UserId actorId, EventoRequest r) {
         return new CrearEventoCommand(actorId, r.title(), r.description(), r.startsAtInstant(), r.durationMinutes(),
@@ -173,7 +186,7 @@ class EventoController {
                 EventoWireMapper.fromWireAudiencia(r.audienceType()), r.minLevelId(), r.courseId(),
                 r.targetCellId() == null ? null : UUID.fromString(r.targetCellId()), TipoEvento.valueOf(r.eventType()),
                 r.notifyOnCreate(), r.remindByEmail(), r.reminderRules() != null, recurrenciaDe(r), rolesDestinoDe(r),
-                reglasDe(r), FormacionDelContenido.pedida(r.formation()));
+                reglasDe(r), FormacionDelContenido.pedida(r.formation()), r.accesoPedido());
     }
 
     private ActualizarEventoCommand aComandoActualizar(UserId actorId, UUID id, EventoRequest r) {
@@ -181,7 +194,7 @@ class EventoController {
                 r.durationMinutes(), ZoneId.of(r.timezone()), EventoWireMapper.fromWireUbicacion(r.locationType()),
                 r.locationValue(), EventoWireMapper.fromWireAudiencia(r.audienceType()), r.minLevelId(), r.courseId(),
                 r.targetCellId() == null ? null : UUID.fromString(r.targetCellId()), r.notifyOnCreate(),
-                r.remindByEmail(), r.reminderRules() != null, recurrenciaDe(r), rolesDestinoDe(r), reglasDe(r));
+                r.remindByEmail(), r.reminderRules() != null, recurrenciaDe(r), rolesDestinoDe(r), reglasDe(r), r.accesoPedido());
     }
 
     private static Recurrencia recurrenciaDe(EventoRequest r) {

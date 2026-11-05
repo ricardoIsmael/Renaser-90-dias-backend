@@ -152,7 +152,7 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
                 cmd.iniciaEn(), cmd.duracionMinutos(), cmd.timezone(), cmd.tipoUbicacion(), cmd.valorUbicacion(),
                 cmd.tipoAudiencia(), cmd.nivelMinimoId(), cmd.cursoId(), cmd.celulaDestinoId(), cmd.tipoEvento(),
                 cmd.notificarAlCrear(), cmd.recordarPorEmail(), cmd.recordatoriosPersonalizados(), cmd.recurrencia(),
-                cmd.rolesDestino(), cmd.reglasRecordatorio(), cmd.actorId(), clock, donde);
+                cmd.rolesDestino(), cmd.reglasRecordatorio(), cmd.actorId(), clock, donde, cmd.accesoSalaMeet());
         Evento guardado = saveEventoPort.guardar(evento);
         return new EventoVista(guardado, coverUrlDe(guardado));
     }
@@ -168,7 +168,7 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
                 cmd.tipoUbicacion(), cmd.valorUbicacion(), cmd.tipoAudiencia(), cmd.nivelMinimoId(), cmd.cursoId(),
                 cmd.celulaDestinoId(), cmd.notificarAlCrear(), cmd.recordarPorEmail(),
                 cmd.recordatoriosPersonalizados(), cmd.recurrencia(), cmd.rolesDestino(), cmd.reglasRecordatorio(),
-                clock);
+                clock, cmd.accesoSalaMeet());
         Evento guardado = saveEventoPort.guardar(evento);
 
         // Los avisos ya generados nacieron de la version ANTERIOR — fuera del camino de

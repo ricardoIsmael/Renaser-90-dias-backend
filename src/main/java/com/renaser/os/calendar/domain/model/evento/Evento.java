@@ -1,5 +1,6 @@
 package com.renaser.os.calendar.domain.model.evento;
 
+import com.renaser.os.calendar.domain.model.meet.AccesoSalaMeet;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
@@ -71,6 +72,14 @@ public final class Evento {
      * cambia de formación (para repetirlo en otra se copia).
      */
     private final Formacion formacion;
+    /**
+     * Spec 040 (V169): si este evento pide que su enlace de Meet se cree solo. {@code null} = no lo pide (el evento no usa Meet, o su link se
+     * pegó a mano); con valor, el evento es {@code MEET} y su enlace lo pone el servidor ({@link #fijarEnlaceDeMeet}). Con valor es SIEMPRE
+     * {@link AccesoSalaMeet#ABIERTA}: la sala de Renaser no se elige con permiso (decisión del dueño del 2026-11-05, «mucha configuración
+     * arruina la experiencia»). Cualquier otro valor que llegue —un dato guardado antes de esa decisión o un llamador viejo— se toma como
+     * abierta, así el servidor nunca pide {@code TRUSTED} a Google.
+     */
+    private AccesoSalaMeet accesoSalaMeet;
 
     /**
      * El {@code id} entra por parametro, no se genera aca: la identidad viene del puerto
@@ -101,15 +110,33 @@ public final class Evento {
                                 boolean recordatoriosPersonalizados, Recurrencia recurrencia,
                                 Set<RolUsuario> rolesDestino, List<ReglaRecordatorio> reglasRecordatorio,
                                 UserId creadoPor, Clock clock, Formacion formacion) {
+        return crear(id, titulo, descripcion, iniciaEn, duracionMinutos, timezone, tipoUbicacion, valorUbicacion,
+                tipoAudiencia, nivelMinimoId, cursoId, celulaDestinoId, tipoEvento, notificarAlCrear, recordarPorEmail,
+                recordatoriosPersonalizados, recurrencia, rolesDestino, reglasRecordatorio, creadoPor, clock, formacion,
+                null);
+    }
+
+    /**
+     * Igual que la anterior, pidiendo que el enlace de Meet se cree solo (spec 040): con {@code accesoSalaMeet} el evento es {@code MEET} y su
+     * enlace todavía no existe ({@code valorUbicacion} nulo); lo pone el servidor cuando Google crea la sala. {@code null} = el evento no lo pide.
+     */
+    public static Evento crear(EventoId id, String titulo, String descripcion, Instant iniciaEn,
+                                Integer duracionMinutos, ZoneId timezone, TipoUbicacion tipoUbicacion,
+                                String valorUbicacion, TipoAudiencia tipoAudiencia, Integer nivelMinimoId,
+                                String cursoId, UUID celulaDestinoId, TipoEvento tipoEvento,
+                                boolean notificarAlCrear, boolean recordarPorEmail,
+                                boolean recordatoriosPersonalizados, Recurrencia recurrencia,
+                                Set<RolUsuario> rolesDestino, List<ReglaRecordatorio> reglasRecordatorio,
+                                UserId creadoPor, Clock clock, Formacion formacion, AccesoSalaMeet accesoSalaMeet) {
         Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(formacion, "formacion es obligatoria");
         Instant ahora = clock.now();
         Evento evento = new Evento(id, null, null, null, null, null, null, null, null, null,
                 null, null, null, EstadoEvento.PUBLICADO, requireNonNullEvento(tipoEvento), false, false,
-                false, null, Set.<RolUsuario>of(), List.<ReglaRecordatorio>of(), creadoPor, ahora, ahora, formacion);
+                false, null, Set.<RolUsuario>of(), List.<ReglaRecordatorio>of(), creadoPor, ahora, ahora, formacion, null);
         evento.aplicarCambios(titulo, descripcion, iniciaEn, duracionMinutos, timezone, tipoUbicacion, valorUbicacion,
                 tipoAudiencia, nivelMinimoId, cursoId, celulaDestinoId, notificarAlCrear, recordarPorEmail,
-                recordatoriosPersonalizados, recurrencia, rolesDestino, reglasRecordatorio);
+                recordatoriosPersonalizados, recurrencia, rolesDestino, reglasRecordatorio, accesoSalaMeet);
         evento.actualizadoEn = ahora;
         return evento;
     }
@@ -121,9 +148,21 @@ public final class Evento {
                             boolean notificarAlCrear, boolean recordarPorEmail, boolean recordatoriosPersonalizados,
                             Recurrencia recurrencia, Set<RolUsuario> rolesDestino,
                             List<ReglaRecordatorio> reglasRecordatorio, Clock clock) {
+        actualizar(titulo, descripcion, iniciaEn, duracionMinutos, timezone, tipoUbicacion, valorUbicacion,
+                tipoAudiencia, nivelMinimoId, cursoId, celulaDestinoId, notificarAlCrear, recordarPorEmail,
+                recordatoriosPersonalizados, recurrencia, rolesDestino, reglasRecordatorio, clock, null);
+    }
+
+    /** Igual que la anterior, pidiendo (o dejando de pedir) que el enlace de Meet se cree solo (spec 040). */
+    public void actualizar(String titulo, String descripcion, Instant iniciaEn, Integer duracionMinutos,
+                            ZoneId timezone, TipoUbicacion tipoUbicacion, String valorUbicacion,
+                            TipoAudiencia tipoAudiencia, Integer nivelMinimoId, String cursoId, UUID celulaDestinoId,
+                            boolean notificarAlCrear, boolean recordarPorEmail, boolean recordatoriosPersonalizados,
+                            Recurrencia recurrencia, Set<RolUsuario> rolesDestino,
+                            List<ReglaRecordatorio> reglasRecordatorio, Clock clock, AccesoSalaMeet accesoSalaMeet) {
         aplicarCambios(titulo, descripcion, iniciaEn, duracionMinutos, timezone, tipoUbicacion, valorUbicacion,
                 tipoAudiencia, nivelMinimoId, cursoId, celulaDestinoId, notificarAlCrear, recordarPorEmail,
-                recordatoriosPersonalizados, recurrencia, rolesDestino, reglasRecordatorio);
+                recordatoriosPersonalizados, recurrencia, rolesDestino, reglasRecordatorio, accesoSalaMeet);
         this.actualizadoEn = clock.now();
     }
 
@@ -151,16 +190,52 @@ public final class Evento {
                                     boolean recordatoriosPersonalizados, Recurrencia recurrencia,
                                     Set<RolUsuario> rolesDestino, List<ReglaRecordatorio> reglasRecordatorio,
                                     UserId creadoPor, Instant creadoEn, Instant actualizadoEn, Formacion formacion) {
+        return rehydrate(id, titulo, descripcion, portadaRuta, iniciaEn, duracionMinutos, timezone, tipoUbicacion,
+                valorUbicacion, tipoAudiencia, nivelMinimoId, cursoId, celulaDestinoId, estado, tipoEvento,
+                notificarAlCrear, recordarPorEmail, recordatoriosPersonalizados, recurrencia, rolesDestino,
+                reglasRecordatorio, creadoPor, creadoEn, actualizadoEn, formacion, null);
+    }
+
+    /** Solo para el adaptador de persistencia, con la formación y el acceso de la sala automática (spec 040). */
+    public static Evento rehydrate(EventoId id, String titulo, String descripcion, String portadaRuta,
+                                    Instant iniciaEn, Integer duracionMinutos, ZoneId timezone,
+                                    TipoUbicacion tipoUbicacion, String valorUbicacion, TipoAudiencia tipoAudiencia,
+                                    Integer nivelMinimoId, String cursoId, UUID celulaDestinoId, EstadoEvento estado,
+                                    TipoEvento tipoEvento, boolean notificarAlCrear, boolean recordarPorEmail,
+                                    boolean recordatoriosPersonalizados, Recurrencia recurrencia,
+                                    Set<RolUsuario> rolesDestino, List<ReglaRecordatorio> reglasRecordatorio,
+                                    UserId creadoPor, Instant creadoEn, Instant actualizadoEn, Formacion formacion,
+                                    AccesoSalaMeet accesoSalaMeet) {
         return new Evento(id, titulo, descripcion, portadaRuta, iniciaEn, duracionMinutos, timezone, tipoUbicacion,
                 valorUbicacion, tipoAudiencia, nivelMinimoId, cursoId, celulaDestinoId, estado, tipoEvento,
                 notificarAlCrear, recordarPorEmail, recordatoriosPersonalizados, recurrencia,
                 rolesDestino == null || rolesDestino.isEmpty() ? Set.of() : EnumSet.copyOf(rolesDestino),
                 reglasRecordatorio == null ? List.of() : List.copyOf(reglasRecordatorio), creadoPor, creadoEn,
-                actualizadoEn, formacion);
+                actualizadoEn, formacion, accesoSalaMeet);
     }
 
     public void fijarPortada(String ruta) {
         this.portadaRuta = ruta;
+    }
+
+    /** Si el servidor, y no una persona, pone el enlace de Meet de este evento (spec 040, FR-001). */
+    public boolean usaSalaDeMeetAutomatica() {
+        return accesoSalaMeet != null;
+    }
+
+    /**
+     * El enlace de la sala que creó Google. Solo un evento que pide la sala automática lo recibe, y debe ser un link web válido (la misma regla
+     * que un link pegado a mano, {@link #requireLinkWeb}); {@code null} lo quita. Es lo que el resto del sistema —listas, «Unirme»,
+     * recordatorios— lee como cualquier link de Meet (FR-003).
+     */
+    public void fijarEnlaceDeMeet(String enlace) {
+        if (!usaSalaDeMeetAutomatica()) {
+            throw new IllegalStateException("Este evento no pide el enlace de Meet automático.");
+        }
+        if (enlace != null) {
+            requireLinkWeb(enlace);
+        }
+        this.valorUbicacion = enlace;
     }
 
     public void cancelar(Clock clock) {
@@ -183,9 +258,10 @@ public final class Evento {
                                  TipoAudiencia tipoAudiencia, Integer nivelMinimoId, String cursoId,
                                  UUID celulaDestinoId, boolean notificarAlCrear, boolean recordarPorEmail,
                                  boolean recordatoriosPersonalizados, Recurrencia recurrencia,
-                                 Set<RolUsuario> rolesDestino, List<ReglaRecordatorio> reglasRecordatorio) {
+                                 Set<RolUsuario> rolesDestino, List<ReglaRecordatorio> reglasRecordatorio,
+                                 AccesoSalaMeet accesoSalaMeet) {
         requireAudienciaCoherente(tipoAudiencia, nivelMinimoId, cursoId, celulaDestinoId, rolesDestino);
-        requireUbicacionCoherente(tipoUbicacion, valorUbicacion);
+        requireUbicacionCoherente(tipoUbicacion, valorUbicacion, accesoSalaMeet != null);
         requireReglasValidas(recordatoriosPersonalizados, reglasRecordatorio);
         if (recurrencia != null && recurrencia.hasta() != null && !recurrencia.hasta().isAfter(iniciaEn)) {
             throw new IllegalArgumentException("recurrencia.hasta debe ser posterior a iniciaEn");
@@ -209,6 +285,7 @@ public final class Evento {
         this.rolesDestino = rolesDestino == null || rolesDestino.isEmpty()
                 ? Set.of() : EnumSet.copyOf(rolesDestino);
         this.reglasRecordatorio = reglasRecordatorio == null ? List.of() : List.copyOf(reglasRecordatorio);
+        this.accesoSalaMeet = accesoSalaMeet == null ? null : AccesoSalaMeet.ABIERTA;
     }
 
     private static void requireAudienciaCoherente(TipoAudiencia tipoAudiencia, Integer nivelMinimoId, String cursoId,
@@ -234,8 +311,12 @@ public final class Evento {
         }
     }
 
-    private static void requireUbicacionCoherente(TipoUbicacion tipo, String valor) {
+    private static void requireUbicacionCoherente(TipoUbicacion tipo, String valor, boolean enlaceDeMeetAutomatico) {
         boolean blank = valor == null || valor.isBlank();
+        if (enlaceDeMeetAutomatico) {
+            requireUbicacionDeMeetAutomatico(tipo, blank ? null : valor);
+            return;
+        }
         switch (tipo) {
             case ZOOM, MEET, ENLACE -> {
                 if (blank) {
@@ -253,6 +334,16 @@ public final class Evento {
                     throw new IllegalArgumentException("valorUbicacion debe ser nulo para " + tipo);
                 }
             }
+        }
+    }
+
+    /** Spec 040: con la sala automática el evento es de Meet y su enlace, si ya existe, es uno web válido; todavía puede no existir. */
+    private static void requireUbicacionDeMeetAutomatico(TipoUbicacion tipo, String valor) {
+        if (tipo != TipoUbicacion.MEET) {
+            throw new IllegalArgumentException("Con el enlace de Meet automático, el evento tiene que ser de Meet.");
+        }
+        if (valor != null) {
+            requireLinkWeb(valor);
         }
     }
 

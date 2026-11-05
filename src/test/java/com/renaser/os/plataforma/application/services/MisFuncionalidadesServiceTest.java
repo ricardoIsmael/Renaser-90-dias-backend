@@ -68,8 +68,8 @@ class MisFuncionalidadesServiceTest {
         MisFuncionalidades mias = service.mias(aprendiz);
 
         assertThat(mias.apagadas()).isEmpty();
-        assertThat(mias.noDisponibles()).as("el aprendiz ve radar.fichas prendida; eventos.whatsapp (spec 041) nace apagada para todos")
-                .containsExactly("eventos.whatsapp");
+        // spec 040 FR-014: `eventos.meet` nace apagada para todos, así que es lo único que la app no ve de fábrica.
+        assertThat(mias.noDisponibles()).as("el aprendiz ve radar.fichas prendida; eventos.meet nace apagada (specs 040 y 041)").containsExactlyInAnyOrder("eventos.meet", "eventos.whatsapp");
         assertThat(mias.version()).isZero();
         verify(usuarios, times(1)).findById(any());
     }
@@ -83,9 +83,9 @@ class MisFuncionalidadesServiceTest {
 
         MisFuncionalidades delMentor = service.mias(mentor);
 
-        assertThat(delMentor.noDisponibles()).containsExactlyInAnyOrder("radar.fichas", "eventos.whatsapp");
+        assertThat(delMentor.noDisponibles()).containsExactlyInAnyOrder("radar.fichas", "eventos.meet", "eventos.whatsapp");
         assertThat(delMentor.apagadas()).isEmpty();
-        assertThat(service.mias(aprendiz).noDisponibles()).containsExactly("eventos.whatsapp");
+        assertThat(service.mias(aprendiz).noDisponibles()).containsExactlyInAnyOrder("eventos.meet", "eventos.whatsapp");
     }
 
     @Test
@@ -140,7 +140,7 @@ class MisFuncionalidadesServiceTest {
             throw new IllegalStateException("se cayó la copia del despliegue");
         });
 
-        assertThat(service.mias(aprendiz).noDisponibles()).containsExactly("eventos.whatsapp");
+        assertThat(service.mias(aprendiz).noDisponibles()).containsExactlyInAnyOrder("eventos.meet", "eventos.whatsapp");
     }
 
     @Test

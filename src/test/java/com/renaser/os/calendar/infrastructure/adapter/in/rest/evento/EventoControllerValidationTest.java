@@ -1,16 +1,14 @@
 package com.renaser.os.calendar.infrastructure.adapter.in.rest.evento;
 
 import com.renaser.os.calendar.application.ports.in.confirmacion.ConfirmarAsistenciaUseCase;
-import com.renaser.os.calendar.application.ports.in.evento.ActualizarEventoUseCase;
-import com.renaser.os.calendar.application.ports.in.evento.CancelarOcurrenciaUseCase;
 import com.renaser.os.calendar.application.ports.in.evento.ConfirmarPortadaUseCase;
-import com.renaser.os.calendar.application.ports.in.evento.CrearEventoUseCase;
 import com.renaser.os.calendar.application.ports.in.evento.CrearEventoUseCase.CrearEventoCommand;
-import com.renaser.os.calendar.application.ports.in.evento.EliminarEventoUseCase;
 import com.renaser.os.calendar.application.ports.in.evento.EventoVista;
-import com.renaser.os.calendar.application.ports.in.evento.ListarEventosParaVisorUseCase;
-import com.renaser.os.calendar.application.ports.in.evento.ObtenerEventoUseCase;
 import com.renaser.os.calendar.application.ports.in.evento.SolicitarUrlPortadaUseCase;
+import com.renaser.os.calendar.application.ports.in.meet.DisponibilidadDeMeetUseCase;
+import com.renaser.os.calendar.application.ports.in.meet.EventoConMeetVista;
+import com.renaser.os.calendar.application.ports.in.meet.EventosConMeetUseCase;
+import com.renaser.os.calendar.application.ports.in.meet.ReintentarSalaDeMeetUseCase;
 import com.renaser.os.calendar.domain.model.evento.Evento;
 import com.renaser.os.calendar.domain.model.evento.EventoId;
 import com.renaser.os.calendar.domain.model.evento.TipoAudiencia;
@@ -59,18 +57,13 @@ class EventoControllerValidationTest {
     @Autowired
     private MockMvc mockMvc;
 
+    /** Spec 040: listar, ver, crear, editar, borrar y cancelar una fecha pasan por un solo caso de uso, el que sabe del enlace de Meet. */
     @MockitoBean
-    private ListarEventosParaVisorUseCase listarUseCase;
+    private EventosConMeetUseCase eventosUseCase;
     @MockitoBean
-    private ObtenerEventoUseCase obtenerUseCase;
+    private DisponibilidadDeMeetUseCase disponibilidadDeMeetUseCase;
     @MockitoBean
-    private CrearEventoUseCase crearUseCase;
-    @MockitoBean
-    private ActualizarEventoUseCase actualizarUseCase;
-    @MockitoBean
-    private EliminarEventoUseCase eliminarUseCase;
-    @MockitoBean
-    private CancelarOcurrenciaUseCase cancelarOcurrenciaUseCase;
+    private ReintentarSalaDeMeetUseCase reintentarSalaUseCase;
     @MockitoBean
     private SolicitarUrlPortadaUseCase solicitarUrlPortadaUseCase;
     @MockitoBean
@@ -97,7 +90,7 @@ class EventoControllerValidationTest {
                         .content("{}"))
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(cancelarOcurrenciaUseCase);
+        verifyNoInteractions(eventosUseCase);
     }
 
     @Test
@@ -110,7 +103,7 @@ class EventoControllerValidationTest {
                                 """))
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(crearUseCase);
+        verifyNoInteractions(eventosUseCase);
     }
 
     @Test
@@ -121,7 +114,7 @@ class EventoControllerValidationTest {
                 "https://meet.google.com/abc", TipoAudiencia.TODOS,
                 null, null, null, TipoEvento.ESPONTANEO, false, false, false, null, Set.of(), List.of(), actorId,
                 CLOCK);
-        when(crearUseCase.crear(any())).thenReturn(new EventoVista(respuesta, null));
+        when(eventosUseCase.crear(any())).thenReturn(new EventoConMeetVista(new EventoVista(respuesta, null), null));
 
         mockMvc.perform(post("/api/v1/calendar/events")
                         .header("X-Actor-Id", actorId.toString())
@@ -133,7 +126,7 @@ class EventoControllerValidationTest {
                 .andExpect(status().isCreated());
 
         org.mockito.ArgumentCaptor<CrearEventoCommand> captor = org.mockito.ArgumentCaptor.forClass(CrearEventoCommand.class);
-        verify(crearUseCase).crear(captor.capture());
+        verify(eventosUseCase).crear(captor.capture());
         assertThat(captor.getValue().notificarAlCrear()).isFalse();
         assertThat(captor.getValue().recordarPorEmail()).isFalse();
     }
@@ -158,6 +151,6 @@ class EventoControllerValidationTest {
                                 """))
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(crearUseCase);
+        verifyNoInteractions(eventosUseCase);
     }
 }

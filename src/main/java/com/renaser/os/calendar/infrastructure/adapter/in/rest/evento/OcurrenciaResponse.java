@@ -7,8 +7,13 @@ record OcurrenciaResponse(EventoResponse event, String occurrenceStart, String s
                            String title, String viewerRsvpStatus) {
 
     static OcurrenciaResponse from(OcurrenciaVista v) {
+        EventoResponse evento = EventoResponse.from(v.evento(), v.coverUrl());
+        // Un evento con Meet automatico que se repite: cada fecha abre SU enlace, nunca el de otra (spec 040, FR-017).
+        if (v.ubicacionDeMeet() != null) {
+            evento = evento.conUbicacion(v.ubicacionDeMeet().enlace());
+        }
         return new OcurrenciaResponse(
-                EventoResponse.from(v.evento(), v.coverUrl()),
+                evento,
                 v.inicioOcurrencia().toString(),
                 v.iniciaEn().toString(),
                 v.duracionMinutos(),

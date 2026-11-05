@@ -97,6 +97,11 @@ renaser:
     # Spec 005: el resumen horario «Tu líder revisó a tu grupo» tampoco corre solo en la suite; se prueba directo.
     resumen-consultas-lider:
       activo: false
+    # Spec 040: los dos barridos de las salas de Meet tampoco corren solos en la suite (hablarian con una Google que no existe); se prueban directo.
+    salas-de-meet-reintentos:
+      cron: "-"
+    salas-de-meet-mantenimiento:
+      cron: "-"
     # E-534: el barrido que expira registros corre cada hora en produccion. En la suite no corre solo: a la hora en
     # punto expiraria lo PENDIENTE de dias pasados que otra prueba sembro a proposito. Se prueba llamandolo directo
     # (ExpiracionPorZonaIT). "-" es el cron desactivado de Spring.

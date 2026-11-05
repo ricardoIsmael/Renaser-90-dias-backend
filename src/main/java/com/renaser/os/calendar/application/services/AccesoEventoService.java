@@ -63,6 +63,22 @@ class AccesoEventoService {
         return progreso;
     }
 
+    /**
+     * Administrar el calendario —y lo que cuelga de él, como la cuenta de Google que crea las salas de Meet (spec 040, FR-015)— es solo de ADMIN y
+     * ALCHEMIST (D-186): ni TRAINEE, ni MENTOR, ni MENTOR_LEAD. La misma regla que {@code EventoService}.
+     */
+    void requireAdministraElCalendario(UserId actorId) {
+        if (!administraElCalendario(actorId)) {
+            throw new NotAuthorizedException("No tienes permiso para administrar el calendario");
+        }
+    }
+
+    /** Lo mismo sin lanzar: para decidir qué mostrarle a quien ya está autorizado a ver el evento. */
+    boolean administraElCalendario(UserId actorId) {
+        RolUsuario rol = requireProgreso(actorId).rol();
+        return rol == RolUsuario.ADMIN || rol == RolUsuario.ALCHEMIST;
+    }
+
     /** Las formaciones cuyos eventos lee {@code actorId}; {@code pedida} (Administración) acota a una. */
     AlcanceDeFormacion alcanceDe(UserId actorId, Formacion pedida) {
         return FormacionDelContenido.paraLeer(formaciones.de(actorId), pedida);
