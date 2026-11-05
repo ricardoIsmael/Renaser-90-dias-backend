@@ -88,13 +88,14 @@ class EventoConEnlaceDeMeetAutomaticoTest {
 
     // spec 040 FR-005, FR-023
     @Test
-    @DisplayName("FR-023: editar puede cambiar quién puede entrar, o dejar de pedir el enlace automático")
+    @DisplayName("FR-023 (corregido 2026-11-05): la sala es siempre ABIERTA aunque llegue CON_PERMISO; editar puede dejar de pedir el enlace automático")
     void editarElAcceso() {
-        Evento evento = crear(TipoUbicacion.MEET, null, AccesoSalaMeet.ABIERTA);
+        Evento evento = crear(TipoUbicacion.MEET, null, AccesoSalaMeet.CON_PERMISO);
+        assertThat(evento.accesoSalaMeet()).isEqualTo(AccesoSalaMeet.ABIERTA);
 
         evento.actualizar("Clase", null, INICIA, 60, ZoneId.of("America/Lima"), TipoUbicacion.MEET, null, TipoAudiencia.TODOS, null, null, null,
                 false, false, false, null, Set.of(), List.of(), RELOJ, AccesoSalaMeet.CON_PERMISO);
-        assertThat(evento.accesoSalaMeet()).isEqualTo(AccesoSalaMeet.CON_PERMISO);
+        assertThat(evento.accesoSalaMeet()).isEqualTo(AccesoSalaMeet.ABIERTA);
 
         evento.actualizar("Clase", null, INICIA, 60, ZoneId.of("America/Lima"), TipoUbicacion.ZOOM, "https://zoom.us/j/1", TipoAudiencia.TODOS,
                 null, null, null, false, false, false, null, Set.of(), List.of(), RELOJ, null);
