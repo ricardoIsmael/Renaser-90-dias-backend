@@ -4,6 +4,7 @@ import com.renaser.os.calendar.application.ports.out.meet.LoadSalaMeetPort;
 import com.renaser.os.calendar.application.ports.out.meet.SaveSalaMeetPort;
 import com.renaser.os.calendar.domain.model.evento.EventoId;
 import com.renaser.os.calendar.domain.model.meet.AccesoSalaMeet;
+import com.renaser.os.calendar.domain.model.meet.ArtefactosDeLaSala;
 import com.renaser.os.calendar.domain.model.meet.EstadoSalaMeet;
 import com.renaser.os.calendar.domain.model.meet.PoliticaDeReintentos;
 import com.renaser.os.calendar.domain.model.meet.SalaMeet;
@@ -26,7 +27,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * {@code eventos_meet} (V169, spec 040) con {@link JdbcClient}: una fila por evento y por fecha. Guardar es un upsert por id; la unicidad
+ * {@code eventos_meet} (V169 y V171, spec 040) con {@link JdbcClient}: una fila por evento y por fecha. Guardar es un upsert por id; la unicidad
  * {@code (evento_id, fecha_ocurrencia)} y la de {@code id_google} protegen contra dos salas para la misma fecha aunque dos hilos pidan a la vez.
  * Los instantes viajan como {@link OffsetDateTime} en UTC.
  */
@@ -34,7 +35,8 @@ import java.util.stream.Collectors;
 class SalaMeetJdbcAdapter implements LoadSalaMeetPort, SaveSalaMeetPort {
 
     private static final String COLUMNAS = "id, evento_id, fecha_ocurrencia, id_google, enlace, estado, acceso_elegido, acceso_confirmado, "
-            + "intentos, proximo_intento, ultimo_error, creada_en, actualizada_en, version";
+            + "intentos, proximo_intento, ultimo_error, creada_en, actualizada_en, version, grabacion_confirmada, transcripcion_confirmada, "
+            + "notas_confirmadas";
 
     /** Lo que sigue faltando por hacer con Google: sin hacer, o con el acceso a medias. */
     private static final String CON_TRABAJO = "(estado IN ('PENDIENTE', 'FALLIDO', 'PENDIENTE_DE_SINCRONIZAR') "
@@ -101,12 +103,14 @@ class SalaMeetJdbcAdapter implements LoadSalaMeetPort, SaveSalaMeetPort {
         jdbcClient.sql("""
                         INSERT INTO renaser.eventos_meet (%s)
                         VALUES (:id, :evento, :fecha, :idGoogle, :enlace, :estado, :elegido, :confirmado, :intentos, :proximo,
-                                :error, :creada, :actualizada, 0)
+                                :error, :creada, :actualizada, 0, :grabacion, :transcripcion, :notas)
                         ON CONFLICT (id) DO UPDATE SET fecha_ocurrencia = EXCLUDED.fecha_ocurrencia, enlace = EXCLUDED.enlace,
                             estado = EXCLUDED.estado, acceso_elegido = EXCLUDED.acceso_elegido,
                             acceso_confirmado = EXCLUDED.acceso_confirmado, intentos = EXCLUDED.intentos,
                             proximo_intento = EXCLUDED.proximo_intento, ultimo_error = EXCLUDED.ultimo_error,
-                            actualizada_en = EXCLUDED.actualizada_en, version = eventos_meet.version + 1
+                            actualizada_en = EXCLUDED.actualizada_en, version = eventos_meet.version + 1,
+                            grabacion_confirmada = EXCLUDED.grabacion_confirmada,
+                            transcripcion_confirmada = EXCLUDED.transcripcion_confirmada, notas_confirmadas = EXCLUDED.notas_confirmadas
                         """.formatted(COLUMNAS))
                 .param("id", sala.id())
                 .param("evento", sala.eventoId().value())
@@ -121,6 +125,9 @@ class SalaMeetJdbcAdapter implements LoadSalaMeetPort, SaveSalaMeetPort {
                 .param("error", sala.ultimoError())
                 .param("creada", utc(sala.creadaEn()))
                 .param("actualizada", utc(sala.actualizadaEn()))
+                .param("grabacion", sala.artefactos().grabacion())
+                .param("transcripcion", sala.artefactos().transcripcion())
+                .param("notas", sala.artefactos().notas())
                 .update();
         return sala;
     }
@@ -172,7 +179,14 @@ class SalaMeetJdbcAdapter implements LoadSalaMeetPort, SaveSalaMeetPort {
                 EstadoSalaMeet.valueOf(rs.getString("estado")), AccesoSalaMeet.valueOf(rs.getString("acceso_elegido")),
                 confirmado == null ? null : AccesoSalaMeet.valueOf(confirmado), rs.getInt("intentos"),
                 instante(rs, "proximo_intento"), rs.getString("ultimo_error"), instante(rs, "creada_en"),
-                instante(rs, "actualizada_en"), rs.getLong("version"));
+                instante(rs, "actualizada_en"), rs.getLong("version"),
+                new ArtefactosDeLaSala(booleano(rs, "grabacion_confirmada"), booleano(rs, "transcripcion_confirmada"),
+                        booleano(rs, "notas_confirmadas")));
+    }
+
+    private static Boolean booleano(ResultSet rs, String columna) throws SQLException {
+        boolean valor = rs.getBoolean(columna);
+        return rs.wasNull() ? null : valor;
     }
 
     private static Instant instante(ResultSet rs, String columna) throws SQLException {

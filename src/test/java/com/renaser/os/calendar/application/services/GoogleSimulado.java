@@ -4,6 +4,7 @@ import com.renaser.os.calendar.application.ports.out.meet.PedidoDeSala;
 import com.renaser.os.calendar.application.ports.out.meet.ResultadoDeSala;
 import com.renaser.os.calendar.application.ports.out.meet.SalaDeReunionPort;
 import com.renaser.os.calendar.domain.model.meet.AccesoSalaMeet;
+import com.renaser.os.calendar.domain.model.meet.ArtefactosDeLaSala;
 import com.renaser.os.calendar.domain.model.meet.CodigoDeSalaMeet;
 
 import java.util.ArrayList;
@@ -33,6 +34,12 @@ final class GoogleSimulado implements SalaDeReunionPort {
     boolean tardaEnCrearLaSala;
     /** Google no deja cambiar quién puede entrar: la sala conserva el acceso de siempre. */
     boolean noDejaCambiarElAcceso;
+    /** La cuenta conectada no tiene Google One de 2 TB: Google no deja grabar (FR-037). */
+    boolean sinPlanParaGrabar;
+    /** La cuenta conectada no tiene Google Workspace: Google no deja transcribir ni tomar notas (FR-037). */
+    boolean sinPlanParaTranscribir;
+    /** enlace -> lo que la sala graba, transcribe y anota sola. */
+    final Map<String, ArtefactosDeLaSala> artefactosPorEnlace = new LinkedHashMap<>();
     /** Google crea el evento pero la respuesta se pierde en el camino: Renaser no se entera (SC-011). */
     boolean perderLaRespuestaAlCrear;
     /** Se ejecuta en cada llamada, antes de contestar: para comprobar qué había pasado ya (por ejemplo, que el evento estaba guardado). */
@@ -78,6 +85,17 @@ final class GoogleSimulado implements SalaDeReunionPort {
         }
         accesoPorEnlace.put(enlace, acceso);
         return Optional.of(acceso);
+    }
+
+    @Override
+    public ArtefactosDeLaSala fijarArtefactos(String enlace, ArtefactosDeLaSala pedidos) {
+        entrar("grabacion:" + CodigoDeSalaMeet.deEnlace(enlace).orElse("?"));
+        ArtefactosDeLaSala quedo = new ArtefactosDeLaSala(
+                pedidos.grabacion() == null ? null : !sinPlanParaGrabar,
+                pedidos.transcripcion() == null ? null : !sinPlanParaTranscribir,
+                pedidos.notas() == null ? null : !sinPlanParaTranscribir);
+        artefactosPorEnlace.put(enlace, quedo);
+        return quedo;
     }
 
     long llamadasDe(String prefijo) {

@@ -41,6 +41,8 @@ public final class SalaMeet {
     private final Instant creadaEn;
     private Instant actualizadaEn;
     private long version;
+    /** La grabación, la transcripción y las notas que Google dejó encendidas (FR-036); {@link ArtefactosDeLaSala#NADA} si todavía no se pidieron. */
+    private ArtefactosDeLaSala artefactos;
 
     /** Una sala que todavía no se le pidió a Google: nace {@code PENDIENTE} y lista para el primer intento. */
     public static SalaMeet nueva(UUID id, EventoId eventoId, LocalDate fecha, String idGoogle, AccesoSalaMeet acceso,
@@ -51,7 +53,7 @@ public final class SalaMeet {
         Objects.requireNonNull(idGoogle, "idGoogle es obligatorio");
         Objects.requireNonNull(acceso, "acceso es obligatorio");
         return new SalaMeet(id, eventoId, fecha, idGoogle, null, EstadoSalaMeet.PENDIENTE, acceso, null, 0, ahora, null,
-                ahora, ahora, 0L);
+                ahora, ahora, 0L, ArtefactosDeLaSala.NADA);
     }
 
     /** Solo para el adaptador de persistencia: reconstruye una fila existente sin revalidar. */
@@ -59,8 +61,32 @@ public final class SalaMeet {
                                      EstadoSalaMeet estado, AccesoSalaMeet accesoElegido,
                                      AccesoSalaMeet accesoConfirmado, int intentos, Instant proximoIntento,
                                      String ultimoError, Instant creadaEn, Instant actualizadaEn, long version) {
+        return rehydrate(id, eventoId, fecha, idGoogle, enlace, estado, accesoElegido, accesoConfirmado, intentos, proximoIntento, ultimoError,
+                creadaEn, actualizadaEn, version, ArtefactosDeLaSala.NADA);
+    }
+
+    /** Igual, con la grabación, la transcripción y las notas que Google confirmó (V171). */
+    public static SalaMeet rehydrate(UUID id, EventoId eventoId, LocalDate fecha, String idGoogle, String enlace,
+                                     EstadoSalaMeet estado, AccesoSalaMeet accesoElegido,
+                                     AccesoSalaMeet accesoConfirmado, int intentos, Instant proximoIntento,
+                                     String ultimoError, Instant creadaEn, Instant actualizadaEn, long version,
+                                     ArtefactosDeLaSala artefactos) {
         return new SalaMeet(id, eventoId, fecha, idGoogle, enlace, estado, accesoElegido, accesoConfirmado, intentos,
-                proximoIntento, ultimoError, creadaEn, actualizadaEn, version);
+                proximoIntento, ultimoError, creadaEn, actualizadaEn, version, artefactos == null ? ArtefactosDeLaSala.NADA : artefactos);
+    }
+
+    /**
+     * Lo que Google dejó encendido de la grabación, la transcripción y las notas al leer la sala de vuelta (FR-036). No cuenta como trabajo
+     * pendiente ni genera reintentos: si la cuenta no tiene el plan, reintentar no lo cambia (FR-037).
+     */
+    public void registrarArtefactos(ArtefactosDeLaSala confirmados, Instant ahora) {
+        this.artefactos = confirmados == null ? ArtefactosDeLaSala.NADA : confirmados;
+        this.actualizadaEn = ahora;
+    }
+
+    /** Todavía no se le pidió a Google la grabación ni lo demás de esta sala. */
+    public boolean artefactosSinPedir() {
+        return estado == EstadoSalaMeet.CREADO && !artefactos.algo();
     }
 
     /** Google creó la sala: se guarda su enlace y se olvidan los fallos. */
@@ -121,6 +147,7 @@ public final class SalaMeet {
         this.estado = EstadoSalaMeet.BORRADO;
         this.enlace = null;
         this.accesoConfirmado = null;
+        this.artefactos = ArtefactosDeLaSala.NADA;
         this.intentos = 0;
         this.proximoIntento = null;
         this.ultimoError = null;
@@ -133,6 +160,7 @@ public final class SalaMeet {
         this.enlace = null;
         this.accesoElegido = acceso;
         this.accesoConfirmado = null;
+        this.artefactos = ArtefactosDeLaSala.NADA;
         this.intentos = 0;
         this.proximoIntento = ahora;
         this.ultimoError = null;

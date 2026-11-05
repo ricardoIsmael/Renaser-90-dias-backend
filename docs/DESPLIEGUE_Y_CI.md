@@ -827,6 +827,8 @@ de 60 minutos con 3 o más personas en la cuenta real).
 | `EVENTOS_GOOGLE_CORREO` | String | Opcional: `renasercorporation@gmail.com`. Si se pone, solo se puede conectar esa cuenta. |
 | `EVENTOS_GOOGLE_PERMISOS` | String | Opcional. Por defecto `calendar.app.created meetings.space.settings openid email`; si SC-001 muestra que no alcanza, `calendar.events` en lugar del primero. |
 | `EVENTOS_MEET_VENTANA_DIAS` / `EVENTOS_MEET_PEDIDOS_POR_MINUTO` | String | Opcionales (60 y 30). |
+| `EVENTOS_MEET_INVITAR_AL_CREADOR` | String | Opcional (`true`). Invita al evento de Calendar a quien crea o edita el evento en Renaser, sin correos de Google (spec 040 FR-035). |
+| `EVENTOS_MEET_GRABAR` / `EVENTOS_MEET_TRANSCRIBIR` / `EVENTOS_MEET_NOTAS` | String | Opcionales (`true`). Piden que la sala grabe, transcriba y tome notas sola (FR-036). Mismo permiso `meetings.space.settings`: no hace falta reconectar. Sin el plan en la cuenta (grabar: Google One de 2 TB o más; transcribir y notas: Google Workspace) no se rompe nada y Administración ve un aviso (FR-037). |
 
 La pantalla de consentimiento del proyecto debe estar publicada «En producción»: en modo prueba Google vence el permiso permanente a los 7 días.
 
