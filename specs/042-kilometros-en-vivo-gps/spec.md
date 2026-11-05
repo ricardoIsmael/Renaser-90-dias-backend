@@ -33,6 +33,9 @@ del día (FR-022).
 - **El avatar refleja el movimiento real al instante, incluso 4 pasos** (segunda decisión del mismo día): fusión de GPS y podómetro
   (FR-030 a FR-036).
 - **Android primero.** Corre en segundo plano con un servicio en primer plano y una notificación fija.
+- **La fila se adapta al teléfono** (tercera decisión del mismo día: «que se detecte el dispositivo solo»): donde la carrera está
+  disponible (FR-001 y FR-045), el botón de la derecha de «Kilómetros diarios» por cumplir es «Correr» en lugar de «Subir», y la captura
+  queda como opción secundaria («Subir captura») en la hoja del hábito. En cualquier otro caso la fila es la de siempre. Solo la app.
 
 ## Reglas generales del dueño para este lote
 
