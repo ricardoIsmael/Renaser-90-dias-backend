@@ -4,6 +4,12 @@
 
 > Plan de alto nivel. Antes de implementar se cierran los supuestos de la spec y se hace la investigación técnica de la app (sección
 > «Investigación pendiente»), que puede cambiar las librerías nativas.
+>
+> **Corregido 2026-11-05 (backend implementado, D-323).** La migración es **V170** (V166–V168 son de la rama de la 041 y V169 de la 040).
+> La tabla suma `motivo_no_cuenta`, `km_del_dia` y `origen_del_dia`, la distancia admite hasta 100 km (entre 60 y 100 se guarda y no
+> cuenta), y la ruta ajena se lee por las puertas de las fichas (contrato §3), con constancia en `consultas_de_ficha`
+> (`RUTA_DE_CARRERA`). El servicio que aplica al hábito se llama `CarreraEnElHabito`; subir el número de un registro cumplido es
+> `RegistroHabito.subirMedicion` (no hizo falta un caso de uso aparte).
 
 ## Summary
 
@@ -30,7 +36,7 @@ calorías) y Maestro escrito (el GPS se simula con `mobile_set_location` o rutas
 | Hexagonal (01) | `habits/application/ports/in/carrera/RegistrarCarreraUseCase`; servicio `CarreraService` que orquesta: guardar (puerto `out` `CarreraPort`, adaptador JPA/JDBC) y aplicar al hábito por `CompletarRegistroUseCase` o un caso nuevo `ActualizarMedicionDelDiaUseCase` (subir el valor de un registro cumplido, sin puntos). Validación pura en `PoliticaKilometros.validarCarrera`. Controller `CarreraController` llama un solo caso de uso. La lectura de la ruta para el acompañamiento pasa por `habits.api` y el acceso por los puertos que ya usa `leadership`/`mentoring`. |
 | Tiempo y zonas (02) | El día es `iniciadaEn` en la zona del participante; D-259 lo impone `RegistroService`; no se reasigna un día cerrado. Pruebas con reloj 00:00–05:00 UTC. |
 | Pruebas (03) | Unitarias de la política (topes, velocidad, por revisar), del servicio (los 7 resultados de `habito.resultado`), IT del endpoint (201/200 repetida/409 huella/403/400/503) y concurrencia real. |
-| Migraciones (04) | Una migración (la siguiente libre, hoy V169) con cabecera que justifica la tabla; CHECKs evaluables con la fila. |
+| Migraciones (04) | Una migración (V170) con cabecera que justifica la tabla; CHECKs evaluables con la fila. |
 | Documentación (05) | Decisión D-NNN en `docs/MODULOS_A_AVANZAR.md` §8 al implementar; `CLAUDE.MD` apunta a la spec. |
 | Trazabilidad (06) | Cada FR/SC con prueba marcada `spec 042 FR-NNN`; la spec entra a `specs/trazabilidad.json` en el mismo cambio que pone las marcas, no antes. |
 | Seguridad (0.3) | `@RequiresPermission(USE_APP)` y `@Funcionalidad("habitos.km.carreras")`; prueba 403 de suspendido y de rol ajeno en la ruta. |

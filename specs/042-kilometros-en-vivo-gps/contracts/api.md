@@ -1,5 +1,8 @@
 # Contrato de la API — spec 042
 
+> **Estado: implementado en el backend (2026-11-05, D-323, migración V170).** Lo que cambió respecto del borrador está marcado con
+> «Corregido 2026-11-05» y es lo que la app debe usar.
+
 Todo es **aditivo**: la app publicada no conoce estos endpoints y los campos nuevos de lectura los ignora.
 
 ## 1. `POST /api/v1/carreras` (nuevo) — la única escritura de una carrera
@@ -37,9 +40,9 @@ de Health Connect).
 | Campo | Regla |
 |---|---|
 | `carreraId` | obligatorio, UUID |
-| `iniciadaEn`, `terminadaEn` | obligatorios, ISO; `terminadaEn > iniciadaEn`; `terminadaEn` no más de 5 min en el futuro; duración total ≤ 12 h |
-| `duracionActivaSeg` | obligatorio, `60 .. 43200`, ≤ `terminadaEn − iniciadaEn` |
-| `distanciaMetros` | obligatorio, `100 .. 60000` (más de 60 km: 400 con «más de 60 km no se registra solo») |
+| `iniciadaEn`, `terminadaEn` | obligatorios, ISO; `terminadaEn > iniciadaEn`; duración total ≤ 12 h. `terminadaEn` más de 5 min en el futuro **no es un 400**: la carrera se guarda con `cuentaParaElHabito = false` (FR-024) |
+| `duracionActivaSeg` | obligatorio, `60 .. 43200`, ≤ `terminadaEn − iniciadaEn` (+1 s de redondeo) |
+| `distanciaMetros` | obligatorio, `100 .. 100000` (fuera: 400). Entre 60 y 100 km se guarda y **no cuenta** (`NO_CUENTA`, FR-024) |
 | `subidaMetros` | opcional, `0 .. 5000` |
 | `pasos` | opcional (sin permiso de actividad física no hay), `0 .. 150000` |
 | `caloriasAprox` | opcional, `0 .. 6000` |
@@ -82,6 +85,10 @@ de Health Connect).
 
 En una respuesta repetida, `habito` es **la misma que se devolvió la primera vez** (guardada con la carrera), no se recalcula.
 
+> **Corregido 2026-11-05.** El borrador decía que más de 60 km y la hora en el futuro eran 400; por las decisiones del dueño («no
+> cuenta») se guardan con `cuentaParaElHabito = false`, `motivoNoCuenta` y `habito.resultado = NO_CUENTA`. La respuesta trae además
+> `motivoNoCuenta` (texto que lee la persona, o `null`). Una carrera que no cuenta puede igual venir `porRevisar`.
+
 **Errores** (`{ "message": "…", "codigo": "…" }`)
 | Código | Cuándo |
 |---|---|
@@ -99,14 +106,29 @@ Concurrencia: dos pedidos iguales a la vez → el índice único resuelve; el qu
               "origenDelDia": "GPS", "fuenteDelDia": null,
               "carrerasDelDia": { "cantidad": 1, "kilometros": 6.21 } }
 ```
-`origenDelDia` suma el valor `GPS`. `carrerasDelDia` es `null` si no hay carreras ese día. **Sin `carrerasDelDia` en la respuesta (backend
-anterior), la app no ofrece la carrera.**
+`origenDelDia` suma el valor `GPS`. `carrerasDelDia` trae cuántas carreras hay ese día y la suma de los km **de las que cuentan**.
 
-## 3. `GET /api/v1/carreras/{carreraId}/ruta` (nuevo)
+> **Corregido 2026-11-05.** Decía que `carrerasDelDia` era `null` sin carreras: así la app no podía distinguir «sin carreras» de «backend
+> anterior». Ahora va **siempre** en el hábito de km (`{ "cantidad": 0, "kilometros": 0.00 }` sin carreras) y es `null` en cualquier otro
+> hábito medible. **Sin el campo (backend anterior), la app no ofrece la carrera.**
 
-Devuelve `{ "polyline": "…", "puntos": 412 }` o 404 si no se guardó, se borró por antigüedad o no existe. Pueden leerla: la propia persona,
-su mentor o guía vigente, el líder de mentores, ADMIN y ALCHEMIST (mismo acceso que la ficha, spec 005/021). Otro rol: 403 (antes que el
-404). Cada lectura que no sea de la propia persona deja un registro de consulta. Funcionalidad `habitos.km.carreras`.
+## 3. La ruta (nuevo)
+
+Todas devuelven `{ "polyline": "…", "puntos": 412 }` (`Cache-Control: no-store`) o 404 si esa persona no tiene esa carrera, no guardó la
+ruta o ya se borró (180 días). Funcionalidad `habitos.km.carreras`.
+
+| Quién | Ruta | Guardián |
+|---|---|---|
+| La propia persona | `GET /api/v1/carreras/{carreraId}/ruta` | solo sus carreras: la de otra persona es 404; no deja constancia |
+| Su mentor o guía vigente | `GET /api/v1/mentor/groups/{groupId}/learners/{userId}/carreras/{carreraId}/ruta` | el de las fichas del mentor: acompañante vigente del grupo, alumno de ese grupo, cuenta activa (403 si no) |
+| Líder, ADMIN, ALCHEMIST | `GET /api/v1/leadership/groups/{groupId}/people/{personId}/carreras/{carreraId}/ruta` y, sin grupo, `GET /api/v1/leadership/people/{personId}/carreras/{carreraId}/ruta` | `AccesoDeLiderazgo` y el aislamiento de formaciones de siempre (403 si no) |
+
+Cada lectura ajena deja una fila en `consultas_de_ficha` (`tipo = RUTA_DE_CARRERA`, con el rol de quien la abrió); no entra al resumen de
+las 20:00 del mentor.
+
+> **Corregido 2026-11-05.** El borrador tenía una sola ruta, `/api/v1/carreras/{carreraId}/ruta`, para todos. La `carreraId` es única por
+> persona (la genera el teléfono), no en toda la base, y cada rol ya tiene su puerta a la ficha con su guardián y el aislamiento de
+> formaciones: la ruta ajena entra por esas mismas puertas, como el diagnóstico (spec 026).
 
 ## 4. Fichas del acompañamiento (`ObligacionDelDia.medicion`, campos nuevos)
 
@@ -116,7 +138,13 @@ En `GET /mentor/groups/{g}/learners/{u}/progress` y `GET /leadership/**/people/{
 "carreras": [{ "carreraId": "…", "kilometros": 6.21, "duracionActivaSeg": 2215, "ritmoSegPorKm": 357,
                "porRevisar": false, "cuentaParaElHabito": true, "tieneRuta": true }]
 ```
-La ruta no viaja acá: se pide con §3 al abrir el mapa.
+La ruta no viaja acá: se pide con §3 al abrir el mapa. `carreras` va siempre (vacía si no hay). Un día con carreras cuyo hábito no quedó
+cumplido con un número (no contaron, el día ya había cerrado) trae `medicion` con `valor` y `origen` en `null` y solo las carreras.
+
+## 4b. Calorías (sin endpoint)
+
+El servidor no expone un peso. La app calcula las calorías con el peso de Plan que ya lee en `GET /api/v1/rocks/master`: el objetivo del
+eje `CUERPO` si su `unidad` es de kilos, su `avance` o, si no hay, su `lineaBase` (30–300 kg); si no, 70 kg (decisión 5 del dueño, FR-015).
 
 ## 5. Ranking (`GET /api/v1/ranking`)
 

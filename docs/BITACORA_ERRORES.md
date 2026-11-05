@@ -16012,3 +16012,13 @@ De las 78 tablas que compara la prueba, solo esa. A «la otra persona» no se le
 **Solución.** `GenerarTracksDelDiaUseCase.generarElDeHoyDe(persona, hábitos)`: el mismo `generarInterno` del barrido acotado a esos hábitos y sin corte por hora (D-259), idempotente y en la transacción de quien llama. Lo llaman `crear` y la reactivación. Si el día ni se armó, lo arma entero primero (un registro suelto en un día vacío lo haría parecer armado). Ver D-319.
 
 **Cómo evitar que vuelva a pasar.** Todo cambio que altere qué hábitos le tocan a la persona HOY (crear, reactivar, y lo que se sume) tiene que pedir su registro de hoy en la misma operación; no se deja para el barrido de mañana. Una prueba de «aparece hoy» arma primero el día (como el barrido de esa mañana) y recién después hace el cambio: con el día vacío la red de seguridad lo arma y el bug no se ve. `HabitoPropioApareceElMismoDiaIT` falla contra el código anterior (siete de sus diez casos). Anotado sin hacer: el alta/activación de un hábito global por Administración (arma el día de todo el padrón) y encender el día de la semana de hoy por la API (la app lo bloquea).
+
+## E-666 · Las rutas nuevas de las carreras con GPS quedaban fuera del filtro de sesión (backend, spec 042, RESUELTO antes de publicar, 05/11)
+
+**Síntoma literal** (`./mvnw clean verify`, `RutasCubiertasPorElFiltroTest.ningunaRutaQuedaFueraDelFiltro`): «Estas rutas no las alcanza ningun matcher .authenticated() de SecurityConfig y tampoco declaran @PublicEndpoint. […] Expecting empty but was: ["/api/v1/carreras", "/api/v1/carreras/{carreraId}/ruta"]».
+
+**Causa real.** `CarreraController` vive en una ruta base nueva (`/api/v1/carreras`) y `SecurityConfig` termina en `anyRequest().permitAll()`: sin su matcher, la ruta se atendía sin sesión y la identidad saldría del header `X-Actor-Id`. Las IT pasaban porque todas mandan una sesión real.
+
+**Solución.** `.requestMatchers("/api/v1/carreras", "/api/v1/carreras/**").authenticated()` en `SecurityConfig`, junto a las de hábitos.
+
+**Cómo evitar que vuelva a pasar.** Ya es ejecutable: la prueba lo atrapó. Toda ruta base nueva suma su matcher en el mismo cambio; correr `RutasCubiertasPorElFiltroTest` apenas se crea un controller, no al final.

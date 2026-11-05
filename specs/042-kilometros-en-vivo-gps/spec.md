@@ -311,7 +311,7 @@ Reemplazan a los «Supuestos para el dueño» que tenía este borrador. Cada una
 
 - **APK nuevo** (código nativo: `react-native-maps`, servicio en primer plano, sensores). No llega por aire.
 - **Clave de Maps SDK for Android** restringida al paquete de la app y a las huellas SHA-1 de la llave de subida y la de firma de Play.
-- **Migración** (la siguiente libre al implementar, hoy V169): tabla `carreras` con índice único `(participante_id, carrera_id)` y el CHECK de
+- **Migración** (V170): tabla `carreras` con índice único `(participante_id, carrera_id)` y el CHECK de
   `registros_habito.origen_medicion` ampliado a `GPS` (ver `plan.md`).
 - **Play Console:** declaración de servicio en primer plano de tipo ubicación (con video) y, si se pide `ACCESS_BACKGROUND_LOCATION`, la
   declaración de ubicación en segundo plano; actualizar Data safety (ubicación precisa, actividad física).
