@@ -16,6 +16,6 @@
 - [x] Lo que necesita: APK nuevo, clave de Maps, migración, Play Console, política de privacidad.
 - [x] Lo que no se hace está dicho (iPhone, metas, historial, Strava).
 - [x] Los criterios que no se pueden probar con código llevan `[sin prueba automática: …]` (SC-007, SC-011).
-- [ ] El dueño respondió los supuestos.
+- [x] El dueño respondió los supuestos (2026-11-05, «Decisiones del dueño» de la spec).
 - [ ] Investigación técnica de la app hecha (plan, «Investigación pendiente»).
 - [x] La spec NO está en `specs/trazabilidad.json` (entra en el mismo cambio que pone sus marcas, regla 06).

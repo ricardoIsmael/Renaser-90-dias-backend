@@ -2,7 +2,7 @@
 
 **Feature Branch**: `042-kilometros-en-vivo-gps` (backend y app)
 **Created**: 2026-11-05
-**Status**: Borrador. Solo especificación: no hay código. Faltan las respuestas del dueño a los «Supuestos» de abajo.
+**Status**: Backend implementado (2026-11-05, D-323, migración V170). El dueño respondió los supuestos el 2026-11-05: ver «Decisiones del dueño». La app queda por implementar.
 **Input**: Decisiones del dueño del 2026-11-05 sobre el lienzo de diseño (https://claude.ai/artifact/ReXHkKhQPazr1ZvdDwKFps, fila
 «Elegida»): estilo adidas Running con los botones de Renaser (redondeados, tipo oración, dorado `#B2924F`, fondo crema). Pedido explícito
 del dueño de explicar **la idempotencia y que no se llame al servidor a cada rato**. El mismo día sumó: **«el avatar debe reflejar el
@@ -162,8 +162,10 @@ primeros ni los últimos metros de la ruta (zona de privacidad, FR-043). Es un p
 - **FR-013** «Descartar» pide confirmación, borra la carrera del teléfono y no envía nada.
 - **FR-014** Pantalla Terminaste: mapa con la ruta, km, duración, ritmo, calorías y tramos; la línea del hábito con su estado (FR-018) y
   «Compartir en el Muro».
-- **FR-015** Calorías aproximadas = MET según la velocidad × peso (kg) × horas activas. Sin peso conocido, 70 kg. Se muestran como «aprox.».
-  El servidor las guarda tal como llegan, topadas (FR-026).
+- **FR-015** Calorías aproximadas = MET según la velocidad × peso (kg) × horas activas. El peso sale de Plan, sin campo nuevo (decisión 5
+  del dueño): el objetivo de 90 días del eje `CUERPO` de `GET /api/v1/rocks/master`, si su `unidad` es de peso en kilos («kg», «kilo»,
+  «kilos», «kilogramo(s)», sin importar mayúsculas ni tildes), usa su `avance` y, si no hay, su `lineaBase`; un valor fuera de 30–300 kg se
+  ignora. Sin nada de eso, 70 kg. Lo calcula la app; se muestran como «aprox.». El servidor las guarda tal como llegan, topadas (FR-026).
 
 ### Envío único e idempotencia
 
@@ -192,19 +194,23 @@ primeros ni los últimos metros de la ruta (zona de privacidad, FR-043). Es un p
   COMPLETADO con origen `GPS` o `HEALTH_CONNECT`, se aplica FR-022 sin pagar de nuevo. Si está COMPLETADO con la captura (`MANUAL`), no se
   toca. Si el día del registro ya cerró (D-259) o no existe el hábito de km, no se aplica. En todos los casos la carrera se guarda y la
   respuesta dice qué pasó con el hábito. Nunca se aplica al registro de otro día (regla del 17-oct).
-- **FR-024** **Límites que impiden que cuente** (la carrera se guarda con `cuentaParaElHabito = false` y su motivo): velocidad media mayor a
-  25 km/h, más de 60 km (el tope automático de la 037), duración activa menor a la que exige la distancia a 25 km/h, o `terminadaEn` más de
-  5 minutos en el futuro.
+- **FR-024** **Límites que impiden que cuente** (la carrera se guarda con `cuentaParaElHabito = false`, resultado `NO_CUENTA` y su motivo):
+  velocidad media (distancia / duración activa) mayor a 25 km/h, más de 60 km (el tope automático de la 037), o `terminadaEn` más de
+  5 minutos en el futuro según el reloj del servidor. No son un 400: la carrera existe y se ve en la ficha.
 - **FR-025** **Lo dudoso se acepta marcado «por revisar»** (como la 037): algún tramo de 1 km a más de 22 km/h, o una ruta enviada cuya
   longitud difiere más de 15 % de la distancia declarada, o una zancada (distancia / pasos) fuera de 0,3–2,2 m cuando hay pasos.
-- **FR-026** Topes de entrada: duración ≤ 12 h, pasos ≤ 150 000, calorías ≤ 6 000, subida ≤ 5 000 m, tramos ≤ 61, ruta ≤ 3 000 puntos
-  y ≤ 100 KB codificada. Fuera de tope: 400.
+- **FR-026** Topes de entrada: duración total y activa ≤ 12 h, duración activa ≥ 60 s y no mayor que la total, distancia de 100 m a
+  100 km, pasos ≤ 150 000, calorías ≤ 6 000, subida ≤ 5 000 m, metros sin GPS entre 0 y la distancia, tramos ≤ 61 con `km` consecutivos
+  desde 1 y segundos > 0, ruta ≤ 3 000 puntos y ≤ 100 KB codificada, versión de la app ≤ 20 caracteres. Fuera de tope: 400 con un texto que
+  la persona lee. (Entre 60 y 100 km la carrera se acepta y no cuenta, FR-024.)
 - **FR-027** Si el hábito se cumple por una carrera, se emite el mismo evento de hábito cumplido de siempre (alarmas, celebraciones,
   semáforo); al subir el valor de un registro ya cumplido, no se emite de nuevo.
 - **FR-028** El ranking de Kilómetros no cambia de reglas: suma `valor_medido` (que ya respeta FR-022). Quien tiene algún día con origen
   `GPS` se marca como los automáticos de la 037.
-- **FR-029** La agenda de hoy (`GET /habit-tracks/today`) suma en `medicion`: `origenDelDia` puede ser `GPS`, y `carrerasDelDia` (cuántas y
-  sus km), para que Training muestre lo ya registrado sin otra lectura.
+- **FR-029** La agenda de hoy (`GET /habit-tracks/today`, y la de otro día) suma en la `medicion` del hábito de km: `origenDelDia` puede ser
+  `GPS`, y `carrerasDelDia` (cuántas carreras tiene ese día y la suma de los km de las que cuentan para el hábito), para que Training muestre
+  lo ya registrado sin otra lectura. `carrerasDelDia` va **siempre** en el hábito de km (con `cantidad: 0` si no hay carreras): que falte es
+  la señal de un backend anterior, y entonces la app no ofrece la carrera.
 
 ### El avatar refleja el movimiento real al instante (fusión de sensores)
 
@@ -223,7 +229,7 @@ primeros ni los últimos metros de la ruta (zona de privacidad, FR-043). Es un p
   salvo FR-035.
 - **FR-035** **Huecos cortos sin señal:** si el GPS no da puntos buenos por menos de 60 s y hay pasos, se rellena la distancia con pasos ×
   zancada estimada (calibrada con los últimos km de GPS de esa carrera; sin calibración, 0,75 m caminando y 1,0 m corriendo). Más de 60 s sin
-  señal: el tramo se marca sin GPS y no suma (supuesto 4).
+  señal: el tramo se marca sin GPS y no suma (supuesto del equipo, ver «Decisiones del dueño»).
 - **FR-036** Sin permiso de actividad física o sin sensor de pasos, el avatar se mueve solo con el GPS (con la misma reconciliación) y las
   estadísticas de pasos no se muestran.
 - **FR-037** **El mapa no calcula nada:** dibuja la ruta aceptada como una línea que crece (dorado `#B2924F`) y el avatar propio animado entre
@@ -237,11 +243,13 @@ primeros ni los últimos metros de la ruta (zona de privacidad, FR-043). Es un p
 ### Ruta y privacidad
 
 - **FR-040** La ruta viaja **una sola vez**, dentro del pedido final, como polyline codificada (algoritmo de Google) y simplificada
-  (Douglas-Peucker, tolerancia 5 m). Es opcional: la persona puede apagar «Guardar mi ruta» (encendido por defecto, supuesto 6); apagada,
+  (Douglas-Peucker, tolerancia 5 m). Es opcional: la persona puede apagar «Guardar mi ruta» (encendido por defecto, decisión 4 del dueño); apagada,
   solo viaja el resumen.
-- **FR-041** Ven la ruta: la persona, su mentor o guía de ese momento, el líder de mentores, Administración y Alquimista. Cada lectura de una
-  ruta ajena deja un registro de consulta (como la spec 005). Nadie más (ni el Muro, salvo la imagen que la persona comparte).
-- **FR-042** La ruta se guarda 180 días desde la carrera; después se borra y queda solo el resumen (supuesto 7).
+- **FR-041** Ven la ruta: la persona, su mentor o guía de ese momento, el líder de mentores, Administración y Alquimista, cada uno por la
+  puerta por la que ya ve su ficha (la persona, la suya; el mentor o la guía, la de su grupo; el líder, Administración y Alquimista, las de
+  liderazgo, con y sin grupo). Cada lectura de una ruta ajena deja un registro de consulta (`consultas_de_ficha`, tipo `RUTA_DE_CARRERA`,
+  como el diagnóstico de la spec 026). Nadie más (ni el Muro, salvo la imagen que la persona comparte).
+- **FR-042** La ruta se guarda 180 días desde la carrera; después se borra y queda solo el resumen (decisión 4 del dueño).
 - **FR-043** Zona de privacidad: los primeros y últimos 200 m de la ruta no se guardan en el servidor ni se muestran en la imagen del Muro
   (la distancia sí cuenta).
 
@@ -271,23 +279,33 @@ primeros ni los últimos metros de la ruta (zona de privacidad, FR-043). Es un p
 - **SC-011** Con la pantalla bloqueada 10 minutos, la notificación sigue actualizándose y la carrera suma la distancia recorrida.
   [sin prueba automática: depende del teléfono real y su ahorro de batería]
 
-## Supuestos para el dueño (a confirmar)
+## Decisiones del dueño (2026-11-05, respuestas a los supuestos)
 
-1. **Registrar en el hábito es automático al terminar.** El botón «Registrar X km en mi hábito» del diseño pasa a ser la línea que muestra
-   el estado de ese mismo pedido (FR-018). Así hay una sola escritura. Si prefieres que sea un botón aparte, son dos pedidos (los dos
-   idempotentes).
-2. **Una carrera cierra el hábito con cualquier km mayor que cero** (como la captura), porque es una actividad hecha a propósito y trae su
-   ruta. La alternativa es exigir la meta de la 037 (5 km); entonces una carrera de 3 km se guarda pero no cierra el hábito hasta sumar 5.
-3. **Regla de km del día: el mayor** entre carreras y Health Connect, nunca la suma (FR-022). El valor sube aunque el hábito ya esté
-   cumplido, sin pagar puntos de nuevo.
-4. **Los pasos rellenan huecos sin señal de hasta 60 s**; más largos no suman.
-5. **Límites anti-fraude:** no cuenta a más de 25 km/h de media ni más de 60 km; «por revisar» con tramos a más de 22 km/h.
-6. **«Guardar mi ruta» viene encendido** y la ven la persona, su mentor o guía, el líder, Administración y Alquimista.
-7. **La ruta se guarda 180 días**, con los primeros y últimos 200 m recortados.
-8. **Calorías:** MET × peso; la ficha no pregunta el peso (el catálogo lo tiene, la app no lo pide), así que casi siempre se usa 70 kg.
-9. **La voz** usa la voz del teléfono (texto a voz) para los números, no audios grabados: los números cambian en cada aviso.
-10. **Carrera mínima:** 100 m y 1 minuto activo; menos no se envía.
-11. **Solo el hábito KILÓMETROS DIARIOS.** Una carrera no cumple GIMNASIO ni otro hábito.
+Reemplazan a los «Supuestos para el dueño» que tenía este borrador. Cada una ya está aplicada en los requisitos de arriba.
+
+1. **Registrar en el hábito es automático al terminar**, sin botón aparte. El botón «Registrar X km en mi hábito» del diseño pasa a ser la
+   línea que muestra el estado de ese mismo envío (FR-018): una sola escritura (FR-016).
+2. **Cualquier distancia mayor que cero cumple el hábito**, sin meta (la meta de 5 km de la 037 sigue siendo solo de Health Connect). Como
+   la carrera más corta que se envía es de 100 m (decisión 9), en la práctica toda carrera que cuenta cumple (FR-023).
+3. **Límites anti-trampa:** no cuenta para el hábito una carrera con velocidad media mayor a 25 km/h ni de más de 60 km (se guarda con
+   `cuentaParaElHabito = false`, FR-024); un km a más de 22 km/h la deja «por revisar» (FR-025).
+4. **Ruta:** «Guardar mi ruta» viene encendido; la ven la persona, su mentor o guía, el líder de mentores, Administración y Alquimista, y cada
+   lectura ajena queda registrada (FR-041); se guarda 180 días (FR-042); se recortan los primeros y los últimos 200 m (FR-043).
+5. **Calorías sin un campo de peso nuevo** (FR-015): si la persona tiene en Plan su objetivo de 90 días del eje Cuerpo con una unidad de
+   peso en kilos y un número de avance o de línea base, se usa ese peso (el más reciente: el avance actual; si no hay, la línea base); si
+   no, 70 kg. **Lo calcula la app**, con la lectura de `GET /api/v1/rocks/master` que ya hace en Plan (eje `CUERPO`, campos `unidad`,
+   `avance` y `lineaBase`): el servidor no lee Plan para esto, no expone un peso y no cambia nada de Plan. El servidor guarda las calorías
+   tal como llegan, topadas (FR-026). Se eligió así por ser lo más simple y coherente: las calorías son aproximadas, nadie decide nada con
+   ellas, y el dato ya está en el teléfono.
+6. **Voz:** el texto a voz del teléfono (los números cambian en cada aviso; no hay audios grabados).
+7. **Carreras de menos de 100 m o de menos de 1 minuto activo no se envían** (la pantalla ofrece descartarlas). El servidor responde 400 a
+   una que llegue igual (FR-026).
+8. **Health Connect el mismo día: el mayor, nunca la suma**, y los puntos una sola vez (FR-022, FR-023).
+
+### Supuestos del equipo que siguen en pie (no los contestó el dueño; se pueden cambiar sin tocar el servidor)
+
+- Los pasos rellenan huecos sin señal de hasta 60 s; más largos no suman (FR-035). Es lógica de la app.
+- Solo el hábito KILÓMETROS DIARIOS: una carrera no cumple GIMNASIO ni otro hábito.
 
 ## Qué necesita
 
