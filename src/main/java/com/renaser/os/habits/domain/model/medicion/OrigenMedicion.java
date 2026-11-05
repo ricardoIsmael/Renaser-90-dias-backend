@@ -13,5 +13,11 @@ public enum OrigenMedicion {
      * Lo leyó el teléfono de Health Connect (Android 14 o más; spec 037, D-310): pasos y distancia que el sistema o un
      * reloj registraron. Siempre lleva su {@link LecturaAutomatica}.
      */
-    HEALTH_CONNECT
+    HEALTH_CONNECT,
+
+    /**
+     * La suma de las carreras con GPS del día (spec 042, D-323): el teléfono grabó la carrera y la mandó al terminar. El detalle
+     * (tramos, ruta, por revisar) vive en la tabla {@code carreras}; la medición no lleva {@link LecturaAutomatica}.
+     */
+    GPS
 }

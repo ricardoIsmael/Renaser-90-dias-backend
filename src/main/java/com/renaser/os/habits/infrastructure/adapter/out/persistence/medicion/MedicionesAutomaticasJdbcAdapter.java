@@ -27,7 +27,7 @@ class MedicionesAutomaticasJdbcAdapter implements ContarMedicionesAutomaticasPor
               AND r.participante_id IN (:participantes)
               AND r.fecha_ejecucion <= :hasta
               AND r.estado = 'COMPLETADO'
-              AND r.origen_medicion = 'HEALTH_CONNECT'
+              AND r.origen_medicion IN (:origenes)
             """;
 
     private final JdbcClient jdbcClient;
@@ -39,12 +39,22 @@ class MedicionesAutomaticasJdbcAdapter implements ContarMedicionesAutomaticasPor
     @Override
     public Set<UserId> conAlgunaMedicionAutomatica(Collection<UserId> participantes, String claveSistema,
                                                    LocalDate hasta) {
+        return conAlgunaDe(participantes, claveSistema, hasta, List.of("HEALTH_CONNECT"));
+    }
+
+    @Override
+    public Set<UserId> conAlgunaMedicionDelTelefono(Collection<UserId> participantes, String claveSistema, LocalDate hasta) {
+        return conAlgunaDe(participantes, claveSistema, hasta, List.of("HEALTH_CONNECT", "GPS"));
+    }
+
+    private Set<UserId> conAlgunaDe(Collection<UserId> participantes, String claveSistema, LocalDate hasta,
+                                    List<String> origenes) {
         if (participantes.isEmpty()) {
             return Set.of();
         }
         List<UUID> ids = participantes.stream().map(UserId::value).distinct().toList();
         return new HashSet<>(jdbcClient.sql(SQL).param("clave", claveSistema).param("participantes", ids)
-                .param("hasta", hasta)
+                .param("hasta", hasta).param("origenes", origenes)
                 .query((rs, fila) -> UserId.of(rs.getObject("participante_id", UUID.class)))
                 .list());
     }

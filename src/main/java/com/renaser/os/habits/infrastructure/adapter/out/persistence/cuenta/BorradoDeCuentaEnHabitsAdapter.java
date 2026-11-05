@@ -14,7 +14,7 @@ import java.util.Set;
 
 /**
  * Lo que {@code habits} borra de una persona cuando su cuenta se borra para siempre (D-243): su track de
- * hábitos (registros, sesiones del Santuario, rachas sin celular y sus revisiones semanales), su bitácora
+ * hábitos (registros, carreras con GPS, sesiones del Santuario, rachas sin celular y sus revisiones semanales), su bitácora
  * nocturna, el Espíritu, el Radar, todo lo de sus horarios (desbloqueos, días, horarios por fecha, cambios
  * pendientes, preferencias, historial, renombres) y sus hábitos PERSONALES con sus horarios, guías y
  * adjuntos. Los hábitos del sistema son catálogo y no se tocan.
@@ -64,6 +64,8 @@ class BorradoDeCuentaEnHabitsAdapter implements BorradoDeDatosDeCuenta {
             "DELETE FROM renaser.rachas_sin_celular WHERE participante_id = :id OR registro_habito_id IN "
                     + SUS_REGISTROS,
             "DELETE FROM renaser.revisiones_semanales_sin_celular WHERE participante_id = :id",
+            // Spec 042: sus carreras con GPS (cuelgan de sus registros por registro_habito_id).
+            "DELETE FROM renaser.carreras WHERE participante_id = :id",
             "DELETE FROM renaser.registros_habito WHERE participante_id = :id",
             "DELETE FROM renaser.entradas_diario WHERE participante_id = :id",
             "DELETE FROM renaser.registros_espiritu WHERE participante_id = :id",

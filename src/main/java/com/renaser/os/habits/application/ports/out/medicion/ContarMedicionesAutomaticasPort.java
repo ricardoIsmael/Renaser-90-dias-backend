@@ -13,4 +13,11 @@ import java.util.Set;
 public interface ContarMedicionesAutomaticasPort {
 
     Set<UserId> conAlgunaMedicionAutomatica(Collection<UserId> participantes, String claveSistema, LocalDate hasta);
+
+    /**
+     * Quiénes tienen al menos un día medido por el teléfono, por Health Connect o por carreras con GPS (spec 042, FR-028: la marca
+     * «auto» del ranking de km incluye a quien corrió con GPS). {@link #conAlgunaMedicionAutomatica} sigue siendo solo Health
+     * Connect: SER la usa para saber si la persona tiene los pasos conectados.
+     */
+    Set<UserId> conAlgunaMedicionDelTelefono(Collection<UserId> participantes, String claveSistema, LocalDate hasta);
 }

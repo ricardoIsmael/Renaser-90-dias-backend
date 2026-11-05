@@ -8,10 +8,15 @@ import com.renaser.os.habits.domain.model.politica.ContextoCompletar;
 import com.renaser.os.habits.domain.model.politica.DecisionPolitica;
 import com.renaser.os.habits.domain.model.politica.PoliticaHabito;
 import com.renaser.os.habits.domain.model.politica.SelectorHabito;
+import com.renaser.os.habits.domain.model.carrera.DatosDeCarrera;
+import com.renaser.os.habits.domain.model.carrera.EvaluacionDeCarrera;
+import com.renaser.os.habits.domain.model.carrera.Tramo;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 
 /**
@@ -35,6 +40,12 @@ import java.util.Optional;
  * topa lo imposible ({@link #TOPE_KM_AUTOMATICO}, {@link #TOPE_PASOS_AUTOMATICO}) y deja «por revisar»
  * ({@link #conRevision}) lo dudoso sin rechazarlo: el servidor no confía en el teléfono, pero tampoco le quita a nadie un día
  * que sí caminó. La captura con número a mano sigue igual (mayor que cero, hasta 100 km).
+ *
+ * <p><b>Carreras con GPS (spec 042, D-323, decisiones del dueño del 2026-11-05).</b> Una carrera grabada por el teléfono cierra el
+ * hábito con cualquier distancia mayor que cero, sin meta. {@link #evaluarCarrera} decide si cuenta (no cuenta a más de
+ * {@link #VELOCIDAD_MAXIMA_CARRERA_KMH} km/h de media, con más de {@link #TOPE_KM_AUTOMATICO} km o si termina en el futuro) y si
+ * queda «por revisar» (un km a más de {@link #VELOCIDAD_DE_TRAMO_PARA_REVISAR_KMH} km/h, una ruta que no cuadra con la distancia o
+ * una zancada imposible). Una carrera que no cuenta se guarda igual: el servidor no la rechaza, la marca.
  *
  * <p>Selecciona por clave y no por tipo (su tipo, CHECKBOX, lo comparten otros quince): la clave
  * {@link #CLAVE_SISTEMA} se la puso {@code V84}. No decide puntos, ventana ni evento: eso sigue en
@@ -64,6 +75,22 @@ public class PoliticaKilometros implements PoliticaHabito {
     /** Una zancada fuera de este rango (en metros por paso) hace dudar de la lectura: bici, auto o datos escritos por otra app. */
     public static final BigDecimal METROS_POR_PASO_MINIMO = new BigDecimal("0.3");
     public static final BigDecimal METROS_POR_PASO_MAXIMO = new BigDecimal("1.6");
+
+    /** Decisión del dueño (2026-11-05): una carrera con más velocidad media que esto no cuenta. */
+    public static final double VELOCIDAD_MAXIMA_CARRERA_KMH = 25;
+    /** Decisión del dueño (2026-11-05): un km más rápido que esto deja la carrera «por revisar». */
+    public static final double VELOCIDAD_DE_TRAMO_PARA_REVISAR_KMH = 22;
+    /** Lo que se tolera de reloj mal puesto en el teléfono (el mismo margen que la lectura de Health Connect). */
+    public static final Duration TOLERANCIA_DEL_RELOJ = Duration.ofMinutes(5);
+    /** Diferencia aceptada entre el largo de la ruta y la distancia declarada (FR-025). */
+    public static final double DIFERENCIA_DE_RUTA_PARA_REVISAR = 0.15;
+    /** Lo que el teléfono recorta de la ruta por privacidad: 200 m al empezar y 200 m al terminar (FR-043). */
+    public static final double METROS_RECORTADOS_DE_LA_RUTA = 400;
+    /** Por debajo de esto la ruta recortada es casi nada y no se compara con la distancia. */
+    public static final double DISTANCIA_MINIMA_PARA_COMPARAR_LA_RUTA = 1000;
+    /** Zancada posible en una carrera (corriendo es más larga que caminando): metros por paso (FR-025). */
+    public static final double ZANCADA_MINIMA_CARRERA_M = 0.3;
+    public static final double ZANCADA_MAXIMA_CARRERA_M = 2.2;
 
     @Override
     public SelectorHabito selector() {
@@ -130,6 +157,68 @@ public class PoliticaKilometros implements PoliticaHabito {
             return DecisionPolitica.noProcede("Todavía no llegas a tu meta de " + comoSeLee(meta) + " km.");
         }
         return DecisionPolitica.procede();
+    }
+
+    /**
+     * Si una carrera con GPS cuenta para el hábito (FR-024) y si queda «por revisar» (FR-025). Los motivos los leen la persona y su
+     * mentor. Nunca rechaza: lo que no cuenta se guarda igual con su motivo.
+     *
+     * @param ahora el reloj del servidor, para la hora del teléfono puesta en el futuro
+     */
+    public EvaluacionDeCarrera evaluarCarrera(DatosDeCarrera carrera, Instant ahora) {
+        String revision = motivoDeRevision(carrera);
+        String noCuenta = motivoParaNoContar(carrera, ahora);
+        return noCuenta == null ? EvaluacionDeCarrera.queCuenta(revision) : EvaluacionDeCarrera.queNoCuenta(noCuenta, revision);
+    }
+
+    private static String motivoParaNoContar(DatosDeCarrera carrera, Instant ahora) {
+        if (carrera.terminadaEn().isAfter(ahora.plus(TOLERANCIA_DEL_RELOJ))) {
+            return "La hora de tu teléfono no es válida: la carrera termina en el futuro.";
+        }
+        if (carrera.kilometros().compareTo(TOPE_KM_AUTOMATICO) > 0) {
+            return "Más de " + TOPE_KM_AUTOMATICO.toPlainString() + " km no se registran solos. Sube tu captura.";
+        }
+        if (carrera.velocidadMediaKmH() > VELOCIDAD_MAXIMA_CARRERA_KMH) {
+            return "Ibas a más de " + (int) VELOCIDAD_MAXIMA_CARRERA_KMH + " km/h de media: no cuenta como carrera.";
+        }
+        return null;
+    }
+
+    private static String motivoDeRevision(DatosDeCarrera carrera) {
+        int kmCompletos = carrera.distanciaMetros().intValue() / 1000;
+        if (carrera.tramos().stream().anyMatch(tramo -> tramo.km() <= kmCompletos && tramoMuyRapido(tramo))) {
+            return "Un kilómetro a más de " + (int) VELOCIDAD_DE_TRAMO_PARA_REVISAR_KMH + " km/h.";
+        }
+        if (rutaQueNoCuadra(carrera)) {
+            return "La ruta no coincide con la distancia.";
+        }
+        if (zancadaImposible(carrera)) {
+            return "Los pasos no coinciden con la distancia.";
+        }
+        return null;
+    }
+
+    /** Solo un km completo: el último tramo parcial no tiene una velocidad comparable. */
+    private static boolean tramoMuyRapido(Tramo tramo) {
+        return tramo.kmPorHora() > VELOCIDAD_DE_TRAMO_PARA_REVISAR_KMH;
+    }
+
+    private static boolean rutaQueNoCuadra(DatosDeCarrera carrera) {
+        double distancia = carrera.distanciaMetros().doubleValue();
+        if (carrera.ruta() == null || distancia < DISTANCIA_MINIMA_PARA_COMPARAR_LA_RUTA) {
+            return false;
+        }
+        double sinGps = carrera.metrosSinGps() == null ? 0 : carrera.metrosSinGps();
+        double esperada = Math.max(distancia - sinGps - METROS_RECORTADOS_DE_LA_RUTA, 0);
+        return Math.abs(carrera.ruta().largoEnMetros() - esperada) > distancia * DIFERENCIA_DE_RUTA_PARA_REVISAR;
+    }
+
+    private static boolean zancadaImposible(DatosDeCarrera carrera) {
+        if (carrera.pasos() == null || carrera.pasos() == 0) {
+            return false;
+        }
+        double zancada = carrera.distanciaMetros().doubleValue() / carrera.pasos();
+        return zancada < ZANCADA_MINIMA_CARRERA_M || zancada > ZANCADA_MAXIMA_CARRERA_M;
     }
 
     /** La misma lectura, marcada «por revisar» si es dudosa (nunca desmarca una que ya viene marcada). */

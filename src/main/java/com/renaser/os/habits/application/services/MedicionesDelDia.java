@@ -1,6 +1,11 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase.CarrerasDelDiaDelTrack;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase.MedicionDelTrack;
+import com.renaser.os.habits.application.politica.PoliticaKilometros;
+import com.renaser.os.habits.application.ports.out.carrera.LeerCarrerasPort;
+import com.renaser.os.habits.application.ports.out.carrera.LeerCarrerasPort.CarrerasDelDia;
+import com.renaser.os.habits.application.ports.out.carrera.LeerCarrerasPort.ResumenDeCarrera;
 import com.renaser.os.habits.application.ports.out.medicion.MetaDeMedicionPort;
 import com.renaser.os.habits.application.ports.out.medicion.SumarMedicionesPort;
 import com.renaser.os.habits.domain.model.habito.Habito;
@@ -37,13 +42,21 @@ public class MedicionesDelDia {
     private final RegistroPoliticasHabito politicas;
     private final SumarMedicionesPort sumarMedicionesPort;
     private final MetaDeMedicionPort metaPort;
+    private final LeerCarrerasPort carrerasPort;
 
     @Autowired
     public MedicionesDelDia(List<PoliticaHabito> politicas, SumarMedicionesPort sumarMedicionesPort,
-                            MetaDeMedicionPort metaPort) {
+                            MetaDeMedicionPort metaPort, LeerCarrerasPort carrerasPort) {
         this.politicas = new RegistroPoliticasHabito(politicas);
         this.sumarMedicionesPort = sumarMedicionesPort;
         this.metaPort = metaPort;
+        this.carrerasPort = carrerasPort;
+    }
+
+    /** Sin carreras con GPS (ningún día tiene): la forma de la spec 037. */
+    public MedicionesDelDia(List<PoliticaHabito> politicas, SumarMedicionesPort sumarMedicionesPort,
+                            MetaDeMedicionPort metaPort) {
+        this(politicas, sumarMedicionesPort, metaPort, new SinCarreras());
     }
 
     /** Sin metas fijadas por Administración (rige la de la política): la forma anterior a la spec 037. */
@@ -69,7 +82,17 @@ public class MedicionesDelDia {
     private MedicionDelTrack medicionDe(UnidadMedicion unidad, RegistroHabito registro, Habito habito, BigDecimal total) {
         MedicionDiaria dia = registro.medicion();
         return new MedicionDelTrack(unidad, dia != null ? dia.valor() : null, total, metaDe(habito).orElse(null),
-                dia != null ? dia.origen() : null, dia != null && dia.lectura() != null ? dia.lectura().fuente() : null);
+                dia != null ? dia.origen() : null, dia != null && dia.lectura() != null ? dia.lectura().fuente() : null,
+                carrerasDe(registro, habito));
+    }
+
+    /** Spec 042 (FR-029): solo en el hábito de km, y siempre (cantidad 0 si no hay carreras ese día). */
+    private CarrerasDelDiaDelTrack carrerasDe(RegistroHabito registro, Habito habito) {
+        if (!PoliticaKilometros.CLAVE_SISTEMA.equals(habito.claveSistema())) {
+            return null;
+        }
+        CarrerasDelDia delDia = carrerasPort.delDia(registro.participanteId(), registro.fechaEjecucion());
+        return new CarrerasDelDiaDelTrack(delDia.cantidad(), delDia.kilometros());
     }
 
     /** La que fijó Administración o, sin ella, la de la política del hábito. */
@@ -89,6 +112,20 @@ public class MedicionesDelDia {
         Collection<UserId> uno = List.of(participante);
         return sumarMedicionesPort.sumaPorParticipante(uno, habito.claveSistema(), hasta)
                 .getOrDefault(participante, BigDecimal.ZERO.setScale(2));
+    }
+
+    /** El puerto sin ninguna carrera: solo para los constructores cortos. */
+    private static final class SinCarreras implements LeerCarrerasPort {
+
+        @Override
+        public CarrerasDelDia delDia(UserId participante, LocalDate fecha) {
+            return new CarrerasDelDia(0, BigDecimal.ZERO.setScale(2));
+        }
+
+        @Override
+        public List<ResumenDeCarrera> entre(Collection<UserId> participantes, LocalDate desde, LocalDate hasta) {
+            return List.of();
+        }
     }
 
     /** El puerto sin ninguna meta fijada: solo para el constructor corto. */

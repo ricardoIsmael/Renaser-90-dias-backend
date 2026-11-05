@@ -75,19 +75,28 @@ public record RegistroHabitoConCatalogoResponse(String id, UUID habitoId, LocalD
 
     /**
      * D-226. {@code unidad} es el nombre del enum: hoy solo {@code KILOMETROS}. Spec 037 (aditivo): {@code meta} diaria que
-     * rige, y de dónde salió lo registrado ese día ({@code origenDelDia}: {@code MANUAL} o {@code HEALTH_CONNECT};
+     * rige, y de dónde salió lo registrado ese día ({@code origenDelDia}: {@code MANUAL}, {@code HEALTH_CONNECT} o, desde la spec 042, {@code GPS};
      * {@code fuenteDelDia} solo en la lectura automática).
      */
     public record MedicionResponse(String unidad, BigDecimal valorDelDia, BigDecimal total, BigDecimal meta,
-                                   String origenDelDia, String fuenteDelDia) {
+                                   String origenDelDia, String fuenteDelDia, CarrerasDelDiaResponse carrerasDelDia) {
 
         static MedicionResponse from(MedicionDelTrack medicion) {
             if (medicion == null) {
                 return null;
             }
+            var carreras = medicion.carrerasDelDia();
             return new MedicionResponse(medicion.unidad().name(), medicion.valorDelDia(), medicion.total(),
                     medicion.meta(), medicion.origenDelDia() != null ? medicion.origenDelDia().name() : null,
-                    medicion.fuenteDelDia());
+                    medicion.fuenteDelDia(),
+                    carreras == null ? null : new CarrerasDelDiaResponse(carreras.cantidad(), carreras.kilometros()));
         }
+    }
+
+    /**
+     * Spec 042 (FR-029, aditivo): las carreras con GPS del día. En el hábito de km va siempre ({@code cantidad: 0} si no hay); que
+     * falte es la señal de un backend anterior y la app no ofrece la carrera.
+     */
+    public record CarrerasDelDiaResponse(int cantidad, BigDecimal kilometros) {
     }
 }

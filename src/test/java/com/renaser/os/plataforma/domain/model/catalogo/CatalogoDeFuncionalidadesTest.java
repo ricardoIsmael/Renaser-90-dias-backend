@@ -17,7 +17,7 @@ class CatalogoDeFuncionalidadesTest {
 
     /** Las 52 claves de la tabla de la spec 002 y las que se sumaron después (radar.fichas, ia.analisis…), en su orden. Una clave nueva se suma acá y en el catálogo. */
     private static final List<String> CLAVES_DE_LA_SPEC = List.of("registro", "onboarding", "dia_uno", "radar",
-            "mapa", "plan", "habitos", "habitos.foto", "habitos.km", "habitos.gimnasio", "habitos.espiritu",
+            "mapa", "plan", "habitos", "habitos.foto", "habitos.km", "habitos.km.carreras", "habitos.gimnasio", "habitos.espiritu",
             "habitos.ajustes", "clase_diaria", "muro", "muro.publicar", "muro.comentarios", "muro.reacciones", "chat",
             "chat.grupos", "chat.global", "chat.soporte", "chat.directos", "chat.audio", "chat.fotos", "eventos",
             "eventos.gestion", "eventos.asistencia", "cursos", "ranking", "ranking.podio_semanal", "semaforo", "ia",
@@ -63,7 +63,7 @@ class CatalogoDeFuncionalidadesTest {
     void politicaDeProcesosDeLaSpec() {
         Map<String, PoliticaDeProcesos> esperadas = Map.ofEntries(
                 Map.entry("plan", PoliticaDeProcesos.SALTA), Map.entry("habitos", PoliticaDeProcesos.SALTA),
-                Map.entry("habitos.km", PoliticaDeProcesos.SALTA), Map.entry("muro", PoliticaDeProcesos.SALTA),
+                Map.entry("habitos.km", PoliticaDeProcesos.SALTA), Map.entry("habitos.km.carreras", PoliticaDeProcesos.NO_APLICA), Map.entry("muro", PoliticaDeProcesos.SALTA),
                 Map.entry("chat", PoliticaDeProcesos.POSPONE), Map.entry("chat.global", PoliticaDeProcesos.POSPONE),
                 Map.entry("chat.soporte", PoliticaDeProcesos.SALTA), Map.entry("eventos", PoliticaDeProcesos.SALTA),
                 Map.entry("ranking", PoliticaDeProcesos.NO_APLICA),
