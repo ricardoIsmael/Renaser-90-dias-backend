@@ -54,10 +54,14 @@ class RecordatorioPersistenceAdapter implements LoadRecordatorioPort, SaveRecord
      * inserto) — se suma para saber cuantas se crearon de verdad, igual que
      * `res.count`/`skipDuplicates` del repo viejo (Prisma). */
     @Override
-    public int encolarSiFalta(List<RecordatorioEvento> recordatorios) {
-        if (recordatorios.isEmpty()) {
+    public int encolarSiFalta(List<RecordatorioEvento> lote) {
+        if (lote.isEmpty()) {
             return 0;
         }
+        // Issue #86: con `reWriteBatchedInserts` el driver junta el lote en UN `INSERT ... VALUES (...),(...) ON CONFLICT DO UPDATE`, y
+        // Postgres no deja que un mismo comando toque dos veces la misma fila («ON CONFLICT DO UPDATE command cannot affect row a second
+        // time»). El aviso del telefono y el de mensaje del mismo instante tienen la misma llave: se suman aca, antes de mandarlos.
+        List<RecordatorioEvento> recordatorios = unaFilaPorLlave(lote);
         // batchUpdate(sql, Collection, batchSize, setter) devuelve int[][]: una fila por lote.
         int[][] resultados = jdbcTemplate.batchUpdate(SQL_ENCOLAR, recordatorios, recordatorios.size(),
                 (ps, r) -> {
@@ -78,6 +82,21 @@ class RecordatorioPersistenceAdapter implements LoadRecordatorioPort, SaveRecord
             }
         }
         return creados;
+    }
+
+    /**
+     * Una fila por llave {@code (evento, inicio de la ocurrencia, persona, enviar_en)}, en el orden en que aparecio cada llave: las marcas
+     * se suman (aviso del telefono si alguna lo es; los minutos del primer aviso de mensaje que haya), igual que el {@code ON CONFLICT}.
+     */
+    static List<RecordatorioEvento> unaFilaPorLlave(List<RecordatorioEvento> lote) {
+        java.util.Map<java.util.List<Object>, RecordatorioEvento> porLlave = new java.util.LinkedHashMap<>();
+        for (RecordatorioEvento r : lote) {
+            java.util.List<Object> llave = java.util.List.of(r.eventoId(), r.inicioOcurrencia(), r.usuarioId(), r.enviarEn());
+            porLlave.merge(llave, r, (antes, ahora) -> RecordatorioEvento.rehydrate(null, antes.eventoId(), antes.inicioOcurrencia(),
+                    antes.usuarioId(), antes.enviarEn(), null, null, antes.creadoEn(), antes.avisoEnApp() || ahora.avisoEnApp(),
+                    antes.mensajeMinAntes() != null ? antes.mensajeMinAntes() : ahora.mensajeMinAntes()));
+        }
+        return porLlave.size() == lote.size() ? lote : java.util.List.copyOf(porLlave.values());
     }
 
     @Override

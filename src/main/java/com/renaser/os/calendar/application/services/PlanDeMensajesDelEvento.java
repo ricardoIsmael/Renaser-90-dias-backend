@@ -41,9 +41,9 @@ class PlanDeMensajesDelEvento {
         return CalculadoraRecordatorios.diasDeVentanaDeMensaje(antelacionesMin, minimo);
     }
 
-    /** Los instantes de una ocurrencia que todavia llegan a tiempo; los que ya pasaron cuando se creo o se edito el evento no se generan. */
-    List<InstanteDeMensaje> instantes(Instant inicioOcurrencia, Instant ahora) {
-        return CalculadoraRecordatorios.instantesDeMensaje(inicioOcurrencia, antelacionesMin, ahora);
+    /** Los instantes de una ocurrencia que todavia llegan a tiempo; los que ya pasaron cuando se creo o se edito el evento no se generan (issue #85). */
+    List<InstanteDeMensaje> instantes(Instant inicioOcurrencia, Instant ahora, Instant ultimoCambioDelEvento) {
+        return CalculadoraRecordatorios.instantesDeMensaje(inicioOcurrencia, antelacionesMin, ahora, ultimoCambioDelEvento);
     }
 
     /** Una fila de la cola por persona e instante. */
