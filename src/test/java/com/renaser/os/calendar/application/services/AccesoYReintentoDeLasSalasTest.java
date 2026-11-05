@@ -59,14 +59,15 @@ class AccesoYReintentoDeLasSalasTest {
 
     // spec 040 FR-023, SC-013
     @Test
-    @DisplayName("SC-013: elegir «con permiso» deja la sala TRUSTED, y la pantalla de Administración lo dice")
-    void conPermisoQuedaConPermiso() {
+    @DisplayName("SC-013 (corregido 2026-11-05): aunque un llamador pida «con permiso», la sala se pide ABIERTA (OPEN) y queda abierta")
+    void conPermisoYaNoExisteLaSalaQuedaAbierta() {
         EventoConMeetVista creado = crear(AccesoSalaMeet.CON_PERMISO);
 
         SalaMeet sala = m.salas.todas().get(0);
-        assertThat(sala.accesoConfirmado()).isEqualTo(AccesoSalaMeet.CON_PERMISO);
+        assertThat(sala.accesoElegido()).isEqualTo(AccesoSalaMeet.ABIERTA);
+        assertThat(sala.accesoConfirmado()).isEqualTo(AccesoSalaMeet.ABIERTA);
         assertThat(m.google.llamadasDe("acceso:")).isEqualTo(1);
-        assertThat(creado.meet().acceso()).isEqualTo(AccesoSalaMeet.CON_PERMISO);
+        assertThat(creado.meet().acceso()).isEqualTo(AccesoSalaMeet.ABIERTA);
         assertThat(creado.meet().accesoAplicado()).isTrue();
     }
 
@@ -104,7 +105,7 @@ class AccesoYReintentoDeLasSalasTest {
 
     // spec 040 FR-023
     @Test
-    @DisplayName("FR-023: cambiar quién puede entrar en un evento ya creado actualiza las salas de las fechas que todavía no pasaron")
+    @DisplayName("FR-023 (corregido 2026-11-05): editar un evento pidiendo «con permiso» no cambia nada: sus salas siguen abiertas")
     void cambiarElAccesoDeUnEventoYaCreado() {
         EventoConMeetVista creado = crear(AccesoSalaMeet.ABIERTA);
         Evento e = creado.evento().evento();
@@ -114,9 +115,9 @@ class AccesoYReintentoDeLasSalasTest {
                 AccesoSalaMeet.CON_PERMISO));
 
         SalaMeet sala = m.salas.todas().get(0);
-        assertThat(sala.accesoElegido()).isEqualTo(AccesoSalaMeet.CON_PERMISO);
-        assertThat(sala.accesoConfirmado()).isEqualTo(AccesoSalaMeet.CON_PERMISO);
-        assertThat(m.eventos.byId(e.id()).orElseThrow().accesoSalaMeet()).isEqualTo(AccesoSalaMeet.CON_PERMISO);
+        assertThat(sala.accesoElegido()).isEqualTo(AccesoSalaMeet.ABIERTA);
+        assertThat(sala.accesoConfirmado()).isEqualTo(AccesoSalaMeet.ABIERTA);
+        assertThat(m.eventos.byId(e.id()).orElseThrow().accesoSalaMeet()).isEqualTo(AccesoSalaMeet.ABIERTA);
     }
 
     // spec 040 FR-007, SC-011

@@ -379,7 +379,7 @@ Spec 024 (D-301, 2026-10-31): contrato completo en `specs/024-comunidad-por-form
 
 ## Enlace de Meet automático (spec 040, D-321, 2026-11-04)
 
-Un evento puede pedir `crearEnlaceMeet` (con `accesoSalaMeet`: `ABIERTA` por defecto o `CON_PERMISO`) en lugar de que alguien pegue el link a mano.
+Un evento puede pedir `crearEnlaceMeet` (la sala queda siempre abierta, `accessType=OPEN`: corregido 2026-11-05, ya no hay `accesoSalaMeet`; si un cliente lo manda se ignora) en lugar de que alguien pegue el link a mano.
 Todo vive en `calendar/` y se prende con la funcionalidad `eventos.meet` (Soporte TI), que **nace apagada**.
 
 - **Flujo.** `EventoConSalaDeMeetService` (no transaccional) envuelve los casos de uso de siempre: guarda el evento, y DESPUÉS le pide a Google las salas

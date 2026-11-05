@@ -73,9 +73,11 @@ public final class Evento {
      */
     private final Formacion formacion;
     /**
-     * Spec 040 (V169): si este evento pide que su enlace de Meet se cree solo, y quién puede entrar a la sala. {@code null} = no lo pide (el
-     * evento no usa Meet, o su link se pegó a mano); con valor, el evento es {@code MEET} y su enlace lo pone el servidor
-     * ({@link #fijarEnlaceDeMeet}). {@link AccesoSalaMeet#ABIERTA} es lo que se elige si no se dice nada.
+     * Spec 040 (V169): si este evento pide que su enlace de Meet se cree solo. {@code null} = no lo pide (el evento no usa Meet, o su link se
+     * pegó a mano); con valor, el evento es {@code MEET} y su enlace lo pone el servidor ({@link #fijarEnlaceDeMeet}). Con valor es SIEMPRE
+     * {@link AccesoSalaMeet#ABIERTA}: la sala de Renaser no se elige con permiso (decisión del dueño del 2026-11-05, «mucha configuración
+     * arruina la experiencia»). Cualquier otro valor que llegue —un dato guardado antes de esa decisión o un llamador viejo— se toma como
+     * abierta, así el servidor nunca pide {@code TRUSTED} a Google.
      */
     private AccesoSalaMeet accesoSalaMeet;
 
@@ -283,7 +285,7 @@ public final class Evento {
         this.rolesDestino = rolesDestino == null || rolesDestino.isEmpty()
                 ? Set.of() : EnumSet.copyOf(rolesDestino);
         this.reglasRecordatorio = reglasRecordatorio == null ? List.of() : List.copyOf(reglasRecordatorio);
-        this.accesoSalaMeet = accesoSalaMeet;
+        this.accesoSalaMeet = accesoSalaMeet == null ? null : AccesoSalaMeet.ABIERTA;
     }
 
     private static void requireAudienciaCoherente(TipoAudiencia tipoAudiencia, Integer nivelMinimoId, String cursoId,

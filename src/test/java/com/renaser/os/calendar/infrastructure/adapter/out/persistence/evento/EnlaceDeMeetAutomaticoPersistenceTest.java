@@ -78,7 +78,7 @@ class EnlaceDeMeetAutomaticoPersistenceTest {
 
     // spec 040 FR-023
     @Test
-    @DisplayName("FR-023: el acceso elegido (abierta o con permiso) se guarda en el evento y vuelve igual")
+    @DisplayName("FR-023 (corregido 2026-11-05): se guarda ABIERTA, también si un llamador pide CON_PERMISO")
     void elAccesoSeGuardaEnElEvento() {
         UserId creador = admin();
         Evento abierto = evento(creador, null, AccesoSalaMeet.ABIERTA);
@@ -89,7 +89,7 @@ class EnlaceDeMeetAutomaticoPersistenceTest {
         entityManager.clear();
 
         assertThat(adapter.byId(abierto.id()).orElseThrow().accesoSalaMeet()).isEqualTo(AccesoSalaMeet.ABIERTA);
-        assertThat(adapter.byId(conPermiso.id()).orElseThrow().accesoSalaMeet()).isEqualTo(AccesoSalaMeet.CON_PERMISO);
+        assertThat(adapter.byId(conPermiso.id()).orElseThrow().accesoSalaMeet()).isEqualTo(AccesoSalaMeet.ABIERTA);
     }
 
     // spec 040 FR-003

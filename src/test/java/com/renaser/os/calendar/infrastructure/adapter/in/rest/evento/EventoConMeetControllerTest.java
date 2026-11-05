@@ -76,7 +76,7 @@ class EventoConMeetControllerTest {
 
     // spec 040 FR-001, FR-023
     @Test
-    @DisplayName("FR-001: crearEnlaceMeet + accesoSalaMeet llegan al caso de uso; sin acceso, la sala es ABIERTA")
+    @DisplayName("FR-001, FR-023 (corregido 2026-11-05): con crearEnlaceMeet y sin elegir nada la sala es ABIERTA; un accesoSalaMeet que mande un cliente se ignora")
     void pedirElEnlaceAutomatico() throws Exception {
         UserId actor = UserId.of(UUID.randomUUID());
         when(eventosUseCase.crear(any())).thenReturn(new EventoConMeetVista(new EventoVista(evento(actor, null, AccesoSalaMeet.ABIERTA), null), null));
@@ -97,7 +97,7 @@ class EventoConMeetControllerTest {
         ArgumentCaptor<CrearEventoCommand> captor = ArgumentCaptor.forClass(CrearEventoCommand.class);
         verify(eventosUseCase, org.mockito.Mockito.times(2)).crear(captor.capture());
         assertThat(captor.getAllValues()).extracting(CrearEventoCommand::accesoSalaMeet)
-                .containsExactly(AccesoSalaMeet.ABIERTA, AccesoSalaMeet.CON_PERMISO);
+                .containsExactly(AccesoSalaMeet.ABIERTA, AccesoSalaMeet.ABIERTA);
     }
 
     // spec 040 FR-020
@@ -124,16 +124,21 @@ class EventoConMeetControllerTest {
 
     // spec 040 FR-023
     @Test
-    @DisplayName("FR-023: un acceso que no es ABIERTA ni CON_PERMISO se rechaza con 400 y no llega al caso de uso")
-    void unAccesoInvalido() throws Exception {
-        mockMvc.perform(post("/api/v1/calendar/events").header("X-Actor-Id", UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON)
+    @DisplayName("FR-023 (corregido 2026-11-05): un accesoSalaMeet cualquiera (de una app de la versión anterior) no rompe: se ignora y la sala es ABIERTA")
+    void unAccesoQueYaNoExisteSeIgnora() throws Exception {
+        UserId actor = UserId.of(UUID.randomUUID());
+        when(eventosUseCase.crear(any())).thenReturn(new EventoConMeetVista(new EventoVista(evento(actor, null, AccesoSalaMeet.ABIERTA), null), null));
+
+        mockMvc.perform(post("/api/v1/calendar/events").header("X-Actor-Id", actor.toString()).contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"title":"Clase en vivo","eventType":"ESPONTANEO","startsAt":"2026-11-10T01:00:00Z","locationType":"MEET",
                                  "crearEnlaceMeet":true,"accesoSalaMeet":"PUBLICA"}
                                 """))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isCreated());
 
-        org.mockito.Mockito.verifyNoInteractions(eventosUseCase);
+        ArgumentCaptor<CrearEventoCommand> captor = ArgumentCaptor.forClass(CrearEventoCommand.class);
+        verify(eventosUseCase).crear(captor.capture());
+        assertThat(captor.getValue().accesoSalaMeet()).isEqualTo(AccesoSalaMeet.ABIERTA);
     }
 
     // spec 040 FR-004, FR-008
