@@ -7,9 +7,12 @@
 # sin prueba sin esperar al resto.
 #
 # LAS PRUEBAS DE LA APP viven en otro repositorio (Jest y flujos de Maestro del frontend). Es PUBLICO, asi que se
-# baja sin token ni secreto. Se busca primero la rama `integracion-formaciones` (donde estan las marcas de las specs
-# 035 a 039 mientras se consolidan) y, si todavia no existe o ya se borro, `master`. Cuando las marcas de la app lleguen
-# a su `master`, la primera rama deja de existir y este job sigue funcionando sin tocarlo.
+# baja sin token ni secreto. En un PR se busca primero la rama de la app que se llama IGUAL que la rama del PR (una
+# spec que toca los dos repos se trabaja en ramas del mismo nombre, p. ej. `041-recordatorios-impl`): asi el PR del
+# backend se revisa contra las pruebas de la app que van con el. Si esa rama no existe (o no es un PR), `master`.
+# Por eso, al fusionar, el PR de la app va ANTES que el del backend: en `master` el job lee el `master` de la app.
+# (Hasta el 05/11/2026 se leia primero `integracion-formaciones`; esa rama ya se fusiono en el `master` de la app
+# (#92) y quedo vieja: no trae las marcas de las specs 040 en adelante.)
 #
 # Sale con 1 si un requisito exigido no tiene prueba o si una marca apunta a un requisito que la spec no define; con 2
 # si la configuracion esta mal (una spec de la lista sin carpeta). El resumen en tablas queda en la pagina del job.
@@ -40,19 +43,20 @@ jobs:
         with:
           persist-credentials: false
 
-      # El repositorio de la app es publico: sin `token`, sin PAT. Si la rama de consolidacion no existe, el paso falla
-      # (continue-on-error) y el siguiente baja `master`.
-      - name: App (rama integracion-formaciones)
+      # El repositorio de la app es publico: sin `token`, sin PAT. Si la app no tiene una rama con el nombre de la del
+      # PR, el paso falla (continue-on-error) y el siguiente baja `master`. Fuera de un PR (`head_ref` vacio) no corre.
+      - name: App (rama con el mismo nombre que la del PR)
         id: app_rama
+        if: github.head_ref != ''
         continue-on-error: true
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: RENASER-LAB/Renaser-90-dias-frontend-
-          ref: integracion-formaciones
+          ref: ${{ github.head_ref }}
           path: app
           persist-credentials: false
 
-      - name: App (master, si no hay rama de consolidacion)
+      - name: App (master, si no hay rama con el mismo nombre)
         if: steps.app_rama.outcome != 'success'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
