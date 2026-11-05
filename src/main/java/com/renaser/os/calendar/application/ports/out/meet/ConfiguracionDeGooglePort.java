@@ -14,4 +14,24 @@ public interface ConfiguracionDeGooglePort {
 
     /** Cuántos días hacia adelante se crean las salas de un evento que se repite ({@code EVENTOS_MEET_VENTANA_DIAS}, 60 por defecto). */
     int ventanaEnDias();
+
+    /** Invitar al evento de Calendar a quien lo crea o edita ({@code EVENTOS_MEET_INVITAR_AL_CREADOR}, sí por defecto; FR-035). */
+    default boolean invitarAlCreador() {
+        return true;
+    }
+
+    /** Pedir que la sala se grabe sola ({@code EVENTOS_MEET_GRABAR}, sí por defecto; FR-036). */
+    default boolean grabar() {
+        return true;
+    }
+
+    /** Pedir que la sala se transcriba sola ({@code EVENTOS_MEET_TRANSCRIBIR}, sí por defecto; FR-036). */
+    default boolean transcribir() {
+        return true;
+    }
+
+    /** Pedir las notas automáticas de Gemini («Tomar notas por mí») ({@code EVENTOS_MEET_NOTAS}, sí por defecto; FR-036). */
+    default boolean tomarNotas() {
+        return true;
+    }
 }

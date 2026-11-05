@@ -8,6 +8,7 @@ import com.renaser.os.calendar.application.ports.out.meet.PedidoDeSala;
 import com.renaser.os.calendar.application.ports.out.meet.ResultadoDeSala;
 import com.renaser.os.calendar.application.ports.out.meet.SalaDeReunionPort;
 import com.renaser.os.calendar.domain.model.meet.AccesoSalaMeet;
+import com.renaser.os.calendar.domain.model.meet.ArtefactosDeLaSala;
 import com.renaser.os.calendar.domain.model.meet.CodigoDeSalaMeet;
 import com.renaser.os.calendar.infrastructure.adapter.out.google.LlamadasAGoogle.Respuesta;
 import com.renaser.os.calendar.infrastructure.adapter.out.google.TokenDeAccesoDeGoogle.Credencial;
@@ -20,7 +21,9 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -31,8 +34,12 @@ import java.util.function.Function;
  * RenaserOs ya usa en producción con un Gmail sin Workspace, adaptada a nuestro puerto: {@code events.insert} con
  * {@code conferenceData.createRequest} y {@code conferenceDataVersion=1}.
  *
- * <p><b>Qué viaja a Google</b> (FR-022): el id derivado, el título, cuándo empieza y termina y la zona. Sin invitados ({@code sendUpdates=none}),
- * sin descripción, sin nombres.
+ * <p><b>Qué viaja a Google</b> (FR-022): el id derivado, el título, cuándo empieza y termina y la zona, y como único invitado el correo de quien
+ * crea o edita el evento en Renaser (decisión 6 del dueño, FR-035). Sin descripción ni audiencia, y {@code sendUpdates=none}: Google no le manda
+ * correos a nadie.
+ *
+ * <p><b>Grabación y transcripción</b> (FR-036, FR-037): con la Meet REST API, {@code config.artifactConfig} (GA desde el 29/04/2025, permiso
+ * {@code meetings.space.settings}, el mismo de {@code accessType}). Si Google no lo deja, el evento y la sala se conservan.
  *
  * <p><b>Sin duplicados</b> (FR-007): el id del evento de Google sale del de Renaser, así que crear dos veces lo mismo da 409 y, en vez de crear otro,
  * se toma el que ya existe. Si estaba cancelado en Google, se vuelve a confirmar.
@@ -132,6 +139,90 @@ class GoogleCalendarMeetAdapter implements SalaDeReunionPort {
         return leido;
     }
 
+    /** Los campos de {@code config.artifactConfig} de la Meet REST API v2 (GA): el que se manda y la ruta de su {@code updateMask}. */
+    private enum Artefacto {
+        GRABACION("recordingConfig", "autoRecordingGeneration"),
+        TRANSCRIPCION("transcriptionConfig", "autoTranscriptionGeneration"),
+        NOTAS("smartNotesConfig", "autoSmartNotesGeneration");
+
+        private final String bloque;
+        private final String campo;
+
+        Artefacto(String bloque, String campo) {
+            this.bloque = bloque;
+            this.campo = campo;
+        }
+
+        String mascara() {
+            return "config.artifactConfig." + bloque + "." + campo;
+        }
+
+        boolean pedido(ArtefactosDeLaSala pedidos) {
+            return Boolean.TRUE.equals(switch (this) {
+                case GRABACION -> pedidos.grabacion();
+                case TRANSCRIPCION -> pedidos.transcripcion();
+                case NOTAS -> pedidos.notas();
+            });
+        }
+
+        Boolean leido(JsonNode config) {
+            return "ON".equals(config.path("artifactConfig").path(bloque).path(campo).asText(""));
+        }
+    }
+
+    @Override
+    public ArtefactosDeLaSala fijarArtefactos(String enlace, ArtefactosDeLaSala pedidos) {
+        List<Artefacto> aPedir = new ArrayList<>();
+        for (Artefacto a : Artefacto.values()) {
+            if (a.pedido(pedidos)) {
+                aPedir.add(a);
+            }
+        }
+        if (aPedir.isEmpty()) {
+            return ArtefactosDeLaSala.NADA;
+        }
+        String codigo = CodigoDeSalaMeet.deEnlace(enlace)
+                .orElseThrow(() -> new GoogleRechazoException("El enlace no es de una sala de Meet.", 0));
+        String nombre = nombreDeLaSala(codigo);
+        try {
+            pedirArtefactos(nombre, aPedir);
+        } catch (GoogleRechazoException todosJuntos) {
+            // Una cuenta sin el plan de uno (p. ej. transcribir sin Workspace) puede rechazar el pedido entero: se piden de a uno para que lo que sí
+            // se puede (grabar con Google One de 2 TB) no se pierda por lo que no.
+            for (Artefacto a : aPedir) {
+                try {
+                    pedirArtefactos(nombre, List.of(a));
+                } catch (GoogleRechazoException ignorado) {
+                    // Se lee igual: queda en false y Administración ve el aviso del plan (FR-037).
+                }
+            }
+        }
+        Respuesta sala = conToken(c -> llamadas.api(HttpMethod.GET, URI.create(MEET + "/" + nombre), c.tokenDeAcceso(), null));
+        if (!sala.ok()) {
+            throw llamadas.falla(sala);
+        }
+        JsonNode config = sala.cuerpo().path("config");
+        return new ArtefactosDeLaSala(
+                Artefacto.GRABACION.pedido(pedidos) ? Artefacto.GRABACION.leido(config) : null,
+                Artefacto.TRANSCRIPCION.pedido(pedidos) ? Artefacto.TRANSCRIPCION.leido(config) : null,
+                Artefacto.NOTAS.pedido(pedidos) ? Artefacto.NOTAS.leido(config) : null);
+    }
+
+    private void pedirArtefactos(String nombre, List<Artefacto> artefactos) {
+        Map<String, Object> artifactConfig = new LinkedHashMap<>();
+        List<String> mascaras = new ArrayList<>();
+        for (Artefacto a : artefactos) {
+            artifactConfig.put(a.bloque, Map.of(a.campo, "ON"));
+            mascaras.add(a.mascara());
+        }
+        Respuesta cambio = conToken(c -> llamadas.api(HttpMethod.PATCH,
+                URI.create(MEET + "/" + nombre + "?updateMask=" + String.join(",", mascaras)), c.tokenDeAcceso(),
+                Map.of("config", Map.of("artifactConfig", artifactConfig))));
+        if (!cambio.ok()) {
+            throw llamadas.falla(cambio);
+        }
+    }
+
     // ─── Crear: 409, pendiente ──────────────────────────────────────────────────
 
     /** Google ya tenía el evento: toma su sala (FR-007). Cancelado, se reconfirma; sin sala, se le pide una. */
@@ -216,12 +307,18 @@ class GoogleCalendarMeetAdapter implements SalaDeReunionPort {
         return cuerpo;
     }
 
-    /** Solo lo que Google necesita para el calendario: título, inicio y fin con su zona. */
+    /**
+     * Lo que Google necesita para el calendario: título, inicio y fin con su zona y, si se dijo, quién va como invitado (FR-035). Sin la lista
+     * ({@code null}) el campo no viaja y Google conserva los invitados que ya tenía; un {@code PATCH} con {@code attendees} reemplaza la lista.
+     */
     private static Map<String, Object> cuerpoDelEvento(PedidoDeSala pedido) {
         Map<String, Object> cuerpo = new LinkedHashMap<>();
         cuerpo.put("summary", pedido.titulo());
         cuerpo.put("start", momento(pedido, true));
         cuerpo.put("end", momento(pedido, false));
+        if (pedido.invitados() != null && !pedido.invitados().isEmpty()) {
+            cuerpo.put("attendees", pedido.invitados().stream().map(correo -> Map.of("email", correo)).toList());
+        }
         return cuerpo;
     }
 

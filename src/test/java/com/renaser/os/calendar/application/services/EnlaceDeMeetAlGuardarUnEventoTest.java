@@ -79,10 +79,10 @@ class EnlaceDeMeetAlGuardarUnEventoTest {
 
     // spec 040 FR-022
     @Test
-    @DisplayName("FR-022: a Google solo le llegan el id, el título, el inicio, el fin y la zona; nada de personas, audiencia ni descripción")
+    @DisplayName("FR-022: a Google solo le llegan el id, el título, el inicio, el fin, la zona y el correo de quien organiza (decisión 6); nada de audiencia ni descripción")
     void aGoogleSoloLlegaLoQueElCalendarioNecesita() {
         assertThat(List.of(PedidoDeSala.class.getRecordComponents()))
-                .extracting(c -> c.getName()).containsExactlyInAnyOrder("idGoogle", "titulo", "inicio", "fin", "zona");
+                .extracting(c -> c.getName()).containsExactlyInAnyOrder("idGoogle", "titulo", "inicio", "fin", "zona", "invitados");
 
         m.servicio.crear(comandoCrear(AccesoSalaMeet.ABIERTA, null, TipoUbicacion.MEET));
 

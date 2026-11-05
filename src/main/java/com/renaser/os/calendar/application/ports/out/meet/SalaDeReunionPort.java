@@ -1,6 +1,7 @@
 package com.renaser.os.calendar.application.ports.out.meet;
 
 import com.renaser.os.calendar.domain.model.meet.AccesoSalaMeet;
+import com.renaser.os.calendar.domain.model.meet.ArtefactosDeLaSala;
 
 import java.util.Optional;
 
@@ -31,4 +32,13 @@ public interface SalaDeReunionPort {
      * @return lo que Google confirmó; vacío si lo leído no es ninguno de los dos valores
      */
     Optional<AccesoSalaMeet> fijarAcceso(String enlace, AccesoSalaMeet acceso);
+
+    /**
+     * Pide que la sala grabe, transcriba y tome notas sola (FR-036) y la lee de vuelta. Si Google no lo deja —la cuenta conectada no tiene el plan—
+     * no es un error: se devuelve lo que la sala tiene, con {@code false} en lo que se pidió y no quedó (FR-037).
+     *
+     * @param pedidos lo que está en {@code true} se pide; lo que está en {@code null} no se toca
+     * @return lo que Google confirmó de lo pedido ({@code true} o {@code false}); {@code null} en lo que no se pidió
+     */
+    ArtefactosDeLaSala fijarArtefactos(String enlace, ArtefactosDeLaSala pedidos);
 }

@@ -8,6 +8,7 @@ import com.renaser.os.calendar.domain.model.meet.SalaMeet;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
@@ -23,6 +24,11 @@ final class ResumenesDeMeet {
     static final String FALLIDA = "No pudimos crear el enlace de Meet.";
     static final String CREANDOSE = "El enlace de Meet todavía se está creando.";
     static final String SIN_SINCRONIZAR = "Los cambios todavía no llegaron a Google.";
+
+    /** FR-037: qué hace falta en la cuenta de Google conectada para cada cosa que Google no dejó encender: {qué, plan}. */
+    static final String[] GRABAR = {"grabar", "Google One de 2 TB o más en la cuenta conectada"};
+    static final String[] TRANSCRIBIR = {"transcribir", "Google Workspace"};
+    static final String[] NOTAS = {"las notas automáticas", "Gemini en Google Workspace"};
 
     private ResumenesDeMeet() {
     }
@@ -43,7 +49,34 @@ final class ResumenesDeMeet {
         int conProblema = (int) cuentan.stream().filter(s -> gravedad(s) > 0).count();
         int conSala = (int) cuentan.stream().filter(s -> s.enlace() != null).count();
         boolean accesoAplicado = cuentan.stream().noneMatch(s -> s.estado() == EstadoSalaMeet.CREADO && s.accesoPendiente());
-        return new ResumenDeMeet(peor.estado(), evento.accesoSalaMeet(), accesoAplicado, mensajeDe(peor), conSala, conProblema);
+        return new ResumenDeMeet(peor.estado(), evento.accesoSalaMeet(), accesoAplicado, mensajeDe(peor), conSala, conProblema,
+                avisoDelPlan(cuentan));
+    }
+
+    /**
+     * FR-037: si en alguna fecha Google no dejó grabar, transcribir o tomar notas, una sola frase que dice qué hace falta, en el orden de la
+     * decisión del dueño («Para grabar hace falta Google One 2 TB o más en la cuenta conectada; para transcribir, Google Workspace.»). Lo que está
+     * encendido o no se pidió no se menciona.
+     */
+    static String avisoDelPlan(List<SalaMeet> salas) {
+        List<String[]> faltan = new ArrayList<>();
+        if (salas.stream().anyMatch(s -> Boolean.FALSE.equals(s.artefactos().grabacion()))) {
+            faltan.add(GRABAR);
+        }
+        if (salas.stream().anyMatch(s -> Boolean.FALSE.equals(s.artefactos().transcripcion()))) {
+            faltan.add(TRANSCRIBIR);
+        }
+        if (salas.stream().anyMatch(s -> Boolean.FALSE.equals(s.artefactos().notas()))) {
+            faltan.add(NOTAS);
+        }
+        if (faltan.isEmpty()) {
+            return null;
+        }
+        StringBuilder frase = new StringBuilder("Para ").append(faltan.get(0)[0]).append(" hace falta ").append(faltan.get(0)[1]);
+        for (String[] otro : faltan.subList(1, faltan.size())) {
+            frase.append("; para ").append(otro[0]).append(", ").append(otro[1]);
+        }
+        return frase.append('.').toString();
     }
 
     /** Cuánto pesa una fila para decidir el estado del evento: 0 = sin problema. */

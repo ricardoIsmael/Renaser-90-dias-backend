@@ -42,4 +42,5 @@ Resultado de SC-001: _pendiente (lo anota el dueño o quien haga la prueba)_.
 | FR-015, SC-008 | `ConectarLaCuentaDeGoogleTest`, `RevocacionYAutorizacionDeLasSalasTest` |
 | FR-022 | `GoogleCalendarMeetAdapterTest`, `EnlaceDeMeetAlGuardarUnEventoTest` |
 | SC-006 | `NingunSecretoEnLosRegistrosTest`, `AesGcmCifradoTest`, `CuentaDeGoogleControllerTest` |
+| FR-035, FR-036, FR-037, SC-014, SC-015 (decisión 6, 2026-11-05) | `GrabacionYAnfitrionDeLaSalaTest` (con el Google simulado), `GoogleCalendarMeetAdapterTest` (attendees, `artifactConfig`, rechazo y pedido de a uno), `SalasYCuentaDeGooglePersistenceTest` (V171); en la app, `meetApi`, `enlaceDeMeetAutomatico` y `enlaceDeMeetEnElFormulario` (el aviso del plan) |
 | FR-019, FR-021 | en la app (`Renaser-90-dias-frontend-`: `src/features/eventos` y `src/features/integraciones-google`; ver `enlaceDeMeetAutomatico`, `enlaceDeMeetEnElFormulario` y `paginaPoliticaDePrivacidad`) |

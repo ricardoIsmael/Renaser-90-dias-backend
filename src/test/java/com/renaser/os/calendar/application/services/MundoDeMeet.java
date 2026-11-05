@@ -127,6 +127,49 @@ final class MundoDeMeet {
         public int ventanaEnDias() {
             return 60;
         }
+
+        @Override
+        public boolean invitarAlCreador() {
+            return invitarAlCreador;
+        }
+
+        @Override
+        public boolean grabar() {
+            return grabar;
+        }
+
+        @Override
+        public boolean transcribir() {
+            return transcribir;
+        }
+
+        @Override
+        public boolean tomarNotas() {
+            return tomarNotas;
+        }
+    };
+
+    /** Las opciones de la sala (decisión 6 del dueño, FR-035 y FR-036): todo sí, como en producción. */
+    boolean invitarAlCreador = true;
+    boolean grabar = true;
+    boolean transcribir = true;
+    boolean tomarNotas = true;
+
+    /** El correo de inicio de sesión de cada persona de Renaser (users.api). */
+    final Map<UserId, String> correosDeLogin = new HashMap<>(Map.of(ADMIN, "admin@renaser.pe", ALQUIMISTA, "alquimista@gmail.com"));
+    /** Si no es nulo, buscar correos falla con esto. */
+    RuntimeException fallaAlBuscarCorreos;
+    final com.renaser.os.calendar.application.ports.out.persona.CorreosDePersonasPort correos = personas -> {
+        if (fallaAlBuscarCorreos != null) {
+            throw fallaAlBuscarCorreos;
+        }
+        Map<UserId, String> encontrados = new HashMap<>();
+        for (UserId id : personas) {
+            if (correosDeLogin.containsKey(id)) {
+                encontrados.put(id, correosDeLogin.get(id));
+            }
+        }
+        return encontrados;
     };
 
     final Map<UserId, RolUsuario> roles = new HashMap<>(Map.of(ADMIN, RolUsuario.ADMIN, ALQUIMISTA, RolUsuario.ALCHEMIST,
@@ -147,8 +190,8 @@ final class MundoDeMeet {
     MundoDeMeet() {
         ApplicationEventPublisher publicador = eventosPublicados::add;
         revocacion = new RevocacionDeLaCuenta(cuenta, cuenta, salas, auditor, publicador, mock(PlatformTransactionManager.class), reloj);
-        pasos = new PasosConGoogle(google, salas, auditor, revocacion, reloj, () -> 0.0);
-        sincronizador = new SincronizadorDeSalas(eventos, eventos, eventos, salas, salas, configuracion, pasos, reloj, ids);
+        pasos = new PasosConGoogle(google, salas, auditor, revocacion, reloj, () -> 0.0, configuracion);
+        sincronizador = new SincronizadorDeSalas(eventos, eventos, eventos, salas, salas, configuracion, pasos, reloj, ids, correos);
         acceso = new AccesoEventoService(this::progreso, null, null, (usuario, tipo) -> false, (celula, usuario) -> false,
                 new AlcanceDeFormacionSoloEscuela());
         disponibilidad = new DisponibilidadDeLasSalas(interruptores, configuracion, cuenta);

@@ -10,5 +10,7 @@ public enum AccionDeAuditoriaGoogle {
     REINTENTAR,
     CONECTAR,
     DESCONECTAR,
-    CUENTA_REVOCADA
+    CUENTA_REVOCADA,
+    /** Pedir la grabación, la transcripción y las notas automáticas de la sala (spec 040, FR-036). */
+    AJUSTAR_GRABACION
 }
