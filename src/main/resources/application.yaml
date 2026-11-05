@@ -302,7 +302,7 @@ renaser:
     api-key: ${WHATSAPP_API_KEY:}
     webhook-secreto: ${WHATSAPP_WEBHOOK_SECRETO:}
     numero-emisor: ${WHATSAPP_NUMERO_EMISOR:}
-    plantilla: ${WHATSAPP_PLANTILLA:renaser_evento_recordatorio_v1}
+    plantilla: ${WHATSAPP_PLANTILLA:renaser_evento_recordatorio_v2}
     idioma: ${WHATSAPP_IDIOMA:es}
   scheduling:
     shedlock:

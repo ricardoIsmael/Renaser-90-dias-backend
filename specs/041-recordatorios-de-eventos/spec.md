@@ -236,10 +236,12 @@ Como persona, toco «No recibir más» en el WhatsApp (o respondo «BAJA» a ese
 
 ## La plantilla de WhatsApp (propuesta; la aprueba Meta)
 
-Una sola, categoría **Utility**, idioma **Spanish (`es`)**, sin pie, con un botón *Quick reply*. Nombre propuesto: `renaser_evento_recordatorio_v1` (el nombre y el idioma se cambian por configuración si Meta los pide).
+Una sola, categoría **Utility**, idioma **Spanish (`es`)**, sin pie, con un botón *Quick reply*. Nombre: `renaser_evento_recordatorio_v2` (el nombre y el idioma se cambian por configuración si Meta los pide).
+
+> **Corregido 2026-11-05 (creación en YCloud con el dueño).** El primer intento, `renaser_evento_recordatorio_v1`, falló al enviarse y su nombre quedó bloqueado; además Meta rechazó el texto corto por «demasiadas variables para su longitud». Quedó creada como `renaser_evento_recordatorio_v2`, idioma `es`, con el texto fijo alargado de abajo. **Los 5 huecos y su orden no cambian**, así que el servidor arma lo mismo.
 
 ```text
-Hola {{1}}, te escribe {{2}}. Tu evento «{{3}}» {{4}}. {{5}} ¡Te esperamos!
+Hola {{1}}, te escribe {{2}} para recordarte un evento al que confirmaste tu asistencia. El evento «{{3}}» {{4}}. {{5}} Si ya no quieres recibir estos recordatorios por WhatsApp, toca el botón de abajo. ¡Te esperamos!
 Botón de respuesta rápida: No recibir más
 ```
 

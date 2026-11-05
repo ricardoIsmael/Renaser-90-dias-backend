@@ -19,7 +19,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 @ConfigurationProperties(prefix = "renaser.whatsapp")
 public record WhatsAppProperties(@DefaultValue("") String apiKey, @DefaultValue("") String webhookSecreto,
                                  @DefaultValue("") String numeroEmisor,
-                                 @DefaultValue("renaser_evento_recordatorio_v1") String plantilla,
+                                 @DefaultValue("renaser_evento_recordatorio_v2") String plantilla,
                                  @DefaultValue("es") String idioma,
                                  @DefaultValue("https://api.ycloud.com/v2") String url,
                                  @DefaultValue("10000") int timeoutMs) {
