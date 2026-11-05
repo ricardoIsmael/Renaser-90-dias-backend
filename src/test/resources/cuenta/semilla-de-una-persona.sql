@@ -55,6 +55,8 @@ VALUES (md5('{{P}}-ev')::uuid, now() - interval '1 day', now() - interval '1 day
 INSERT INTO renaser.notificaciones (usuario_id, tipo, titulo, cuerpo) VALUES ('{{P}}', 'ANUNCIO_SISTEMA', 'T', 'C');
 INSERT INTO renaser.preferencias_notificacion (usuario_id, tipo) VALUES ('{{P}}', 'ANUNCIO_SISTEMA');
 INSERT INTO renaser.tokens_push (usuario_id, token) VALUES ('{{P}}', 'token-{{P}}');
+INSERT INTO renaser.entregas_whatsapp (id, clave, evento_id, usuario_id, aviso_min, estado, creado_en, actualizado_en)
+VALUES (md5('{{P}}-wa')::uuid, md5('{{P}}-wa-clave')::uuid, md5('{{P}}-ev')::uuid, '{{P}}', 30, 'ENTREGADO', now(), now());
 
 -- support
 INSERT INTO renaser.tickets_soporte (usuario_id, categoria, asunto, mensaje, adjunto_bucket, adjunto_ruta)

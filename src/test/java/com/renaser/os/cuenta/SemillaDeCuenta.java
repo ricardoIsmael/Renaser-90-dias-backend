@@ -68,6 +68,8 @@ final class SemillaDeCuenta {
                 SELECT 'anomalias_acompanamiento', 'usuario_id'
                 UNION
                 SELECT 'revisiones_semanales_sin_celular', 'participante_id'
+                UNION
+                SELECT 'entregas_whatsapp', 'usuario_id'
                 """);
     }
 

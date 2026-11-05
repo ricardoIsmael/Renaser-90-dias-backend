@@ -178,6 +178,20 @@ class BorradoDeCuentaEnLosModulosIT {
         assertThat(semilla.filasCon("observaciones_mentor", "mentor_id", otra)).isEqualTo(deLaOtraAntes - 1);
     }
 
+    // spec 041 FR-030
+    @Test
+    @DisplayName("spec 041 (V168): el estado de los recordatorios por WhatsApp de la persona se va con ella, y los de otra persona se quedan")
+    void lasEntregasDeWhatsAppSeVanConLaCuenta() {
+        UUID otra = semilla.nuevaPersona();
+        UUID persona = semilla.nuevaPersona();
+        assertThat(semilla.filasCon("entregas_whatsapp", "usuario_id", persona)).as("la semilla siembra una entrega").isEqualTo(1);
+
+        borrarEnUnaTransaccion(persona);
+
+        assertThat(semilla.filasCon("entregas_whatsapp", "usuario_id", persona)).isZero();
+        assertThat(semilla.filasCon("entregas_whatsapp", "usuario_id", otra)).isEqualTo(1);
+    }
+
     @Test
     @DisplayName("sin claves compartidas, ningún módulo retiene un archivo de la persona")
     void sinClavesCompartidasNadaQuedaEnUso() {

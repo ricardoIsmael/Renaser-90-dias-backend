@@ -45,6 +45,14 @@ import java.util.UUID;
  *                       de pared correcta ("hoy a las 05:30") y no la hora UTC. Agregada con D-182:
  *                       no hay publicaciones viejas de este evento en el outbox, porque sin
  *                       consumidor Modulith no registraba ninguna
+ * @param avisoEnApp     si es un aviso del telefono (bandeja y push); {@code null} (una publicacion anterior a la spec 041) cuenta como
+ *                       {@code true}. Con {@code false} la fila solo existe para el mensaje y {@code notifications} no emite el
+ *                       aviso de la app (spec 041)
+ * @param avisoDeMensajeMin cuantos minutos antes del inicio es este aviso de MENSAJE (1440, 60, 30, 10; chat y WhatsApp), o {@code null}
+ *                       si la fila no es de mensaje (spec 041). {@code calendar} decide cuando; {@code notifications} decide a quien y por donde
+ * @param formacion      la formacion del evento, para decir su nombre en el mensaje (spec 041); {@code null} = la Escuela
+ * @param enlace         el enlace para entrar si el evento es en linea (Meet, Zoom u otro), leido del evento al despachar; {@code null} si no hay
+ * @param lugar          la direccion si el evento es presencial; {@code null} si no
  * @param asistenciaConfirmada la persona respondio "Voy" a ESTA ocurrencia, leido al despachar
  *                       (D-189). {@code calendar} ya no apaga los avisos al confirmar: la app del
  *                       telefono programa una alarma local, pero la web no, y solo {@code notifications}
@@ -57,7 +65,27 @@ import java.util.UUID;
 public record RecordatorioEventoDebidoEvent(Long recordatorioId, UUID eventoId, UserId destinatarioId,
                                              Instant inicioOcurrencia, String tituloEvento, boolean esAnuncio,
                                              Boolean asistenciaConfirmada, String zonaHoraria,
-                                             Instant occurredAt) implements DomainEvent {
+                                             Instant occurredAt, Boolean avisoEnApp, Integer avisoDeMensajeMin,
+                                             String formacion, String enlace,
+                                             String lugar) implements DomainEvent {
+
+    /** Un aviso del telefono, sin nada de mensaje (la forma de antes de la spec 041; las publicaciones viejas del outbox la usan). */
+    public RecordatorioEventoDebidoEvent(Long recordatorioId, UUID eventoId, UserId destinatarioId,
+                                         Instant inicioOcurrencia, String tituloEvento, boolean esAnuncio,
+                                         Boolean asistenciaConfirmada, String zonaHoraria, Instant occurredAt) {
+        this(recordatorioId, eventoId, destinatarioId, inicioOcurrencia, tituloEvento, esAnuncio,
+                asistenciaConfirmada, zonaHoraria, occurredAt, null, null, null, null, null);
+    }
+
+    /** {@code true} salvo que la fila sea SOLO de mensaje; {@code null} (publicacion vieja) cuenta como aviso del telefono. */
+    public boolean esAvisoEnApp() {
+        return !Boolean.FALSE.equals(avisoEnApp);
+    }
+
+    /** {@code true} si esta fila tambien es un aviso de MENSAJE (chat y WhatsApp). */
+    public boolean esAvisoDeMensaje() {
+        return avisoDeMensajeMin != null && avisoDeMensajeMin > 0;
+    }
 
     /** {@code true} solo si la persona dijo "Voy" a esta ocurrencia; {@code null} cuenta como no. */
     public boolean confirmoAsistencia() {

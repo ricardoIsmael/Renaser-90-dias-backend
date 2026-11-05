@@ -290,6 +290,7 @@ semana en curso de la persona; una semana futura, anterior a la primera de su pr
 | GET · DELETE | `/api/v1/admin/integraciones/google` (D-321: estado de la cuenta de Google; desconectar) |
 | POST | `/api/v1/admin/integraciones/google/connect` (D-321: devuelve la dirección de Google para conectar la cuenta) |
 | GET | `/api/v1/integraciones/google/callback` (D-321: regreso de Google, sin sesión; protegido por el `state` de un solo uso) |
+| GET | `/api/v1/calendar/events/{id}/whatsapp` (D-322, spec 041: conteos de los WhatsApp del evento; solo ADMIN y ALCHEMIST; `eventos.whatsapp`) |
 
 ### `chat`
 
@@ -311,7 +312,8 @@ semana en curso de la persona; una semana futura, anterior a la primera de su pr
 |---|---|
 | GET | `/api/v1/notifications` |
 | PUT | `/api/v1/notifications/{id}/read` · `/read-all` |
-| GET · PATCH | `/api/v1/notification-preferences` |
+| GET · PATCH | `/api/v1/notification-preferences` (suma el tipo `RECORDATORIO_EVENTO_WHATSAPP`, D-322) |
+| POST | `/api/v1/webhooks/whatsapp` (D-322, spec 041: webhook de YCloud, **sin sesión**; su puerta es la firma `YCloud-Signature`) |
 | POST | `/api/v1/push-tokens` |
 
 > El campo `type` viene con los valores del enum **en español** (`RECORDATORIO_HABITO`, `MENSAJE_CHAT`, `LOGRO_DESBLOQUEADO`…). La BD está congelada con esos valores: la traducción a etiquetas/íconos va en el cliente.

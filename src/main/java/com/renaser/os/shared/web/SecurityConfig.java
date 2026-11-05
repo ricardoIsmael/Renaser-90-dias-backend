@@ -133,6 +133,9 @@ public class SecurityConfig {
                         // credencial es el codigo que llega al correo. Solo esos dos POST.
                         .requestMatchers(HttpMethod.POST, "/api/v1/account-deletion/request-code",
                                 "/api/v1/account-deletion/confirm").permitAll()
+                        // El webhook de YCloud (spec 041): lo abre el proveedor, que no tiene sesion. Su credencial es la firma del proveedor en la cabecera, que
+                        // comprueba el controller; sin ella no se procesa nada. Solo ese POST.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/webhooks/whatsapp").permitAll()
                         // Listar, aprobar, rechazar y borrar son operaciones de ADMIN.
                         //
                         // Sin esta linea caian en el `permitAll()` de arriba y

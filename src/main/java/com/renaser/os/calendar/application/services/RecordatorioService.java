@@ -44,11 +44,14 @@ public class RecordatorioService implements GenerarRecordatoriosUseCase {
     private final LoadExcepcionPort loadExcepcionPort;
     private final SaveRecordatorioPort saveRecordatorioPort;
     private final AudienciaDelEventoService audiencia;
+    /** Spec 041: los avisos de mensaje (chat y WhatsApp) viajan por la misma cola, junto a los del telefono. */
+    private final PlanDeMensajesDelEvento mensajes;
     private final Clock clock;
 
     public RecordatorioService(LoadEventoPort loadEventoPort, LoadExcepcionPort loadExcepcionPort,
                                 SaveRecordatorioPort saveRecordatorioPort, AudienciaDelEventoService audiencia,
-                                Clock clock) {
+                                PlanDeMensajesDelEvento mensajes, Clock clock) {
+        this.mensajes = mensajes;
         this.loadEventoPort = loadEventoPort;
         this.loadExcepcionPort = loadExcepcionPort;
         this.saveRecordatorioPort = saveRecordatorioPort;
@@ -73,9 +76,10 @@ public class RecordatorioService implements GenerarRecordatoriosUseCase {
     private int generarParaEvento(Evento evento, Instant ahora) {
         List<ReglaRecordatorio> reglas = evento.reglasRecordatorioEfectivas();
         List<Excepcion> excepciones = loadExcepcionPort.porEvento(evento.id());
-        int diasVentana = CalculadoraRecordatorios.diasDeVentana(reglas, VENTANA_DIAS_DEFECTO);
+        int diasVentana = mensajes.diasDeVentana(CalculadoraRecordatorios.diasDeVentana(reglas, VENTANA_DIAS_DEFECTO));
         Instant hasta = ahora.plusSeconds(diasVentana * 86_400L);
-        List<Ocurrencia> ocurrencias = reglas.isEmpty() ? List.of()
+        // Los avisos de mensaje (spec 041) no dependen de las reglas del telefono: aunque el evento no avise al telefono, sigue habiendo ocurrencias.
+        List<Ocurrencia> ocurrencias = reglas.isEmpty() && !mensajes.hayAvisos() ? List.of()
                 : ExpansorOcurrencias.expandir(evento.iniciaEn(), evento.duracionMinutos(), evento.timezone(),
                         evento.recurrencia(), ahora, hasta, excepciones);
 
@@ -96,21 +100,25 @@ public class RecordatorioService implements GenerarRecordatoriosUseCase {
         // `notifications` al entregar (solo si tiene un telefono registrado); quien respondio desde
         // la web no tiene alarma local y necesita estos avisos.
         for (Ocurrencia occ : ocurrencias) {
-            List<InstanteRecordatorio> instantes = CalculadoraRecordatorios.instantesPara(occ.inicioOcurrencia(),
-                    reglas, evento.timezone(), ahora);
-            if (instantes.isEmpty()) {
-                continue;
-            }
-            List<RecordatorioEvento> filas = new ArrayList<>();
-            for (UserId u : usuarios) {
-                for (InstanteRecordatorio instante : instantes) {
-                    filas.add(RecordatorioEvento.programar(evento.id(), instante.inicioOcurrencia(), u,
-                            instante.enviarEn(), clock));
-                }
-            }
-            creados += saveRecordatorioPort.encolarSiFalta(filas);
+            creados += saveRecordatorioPort.encolarSiFalta(filasDeLaOcurrencia(evento, occ, reglas, usuarios, ahora));
         }
         return creados;
+    }
+
+    /** Primero los avisos del telefono y despues los de mensaje: si caen en el mismo instante, la cola junta las dos marcas en una fila. */
+    private List<RecordatorioEvento> filasDeLaOcurrencia(Evento evento, Ocurrencia occ, List<ReglaRecordatorio> reglas,
+                                                         List<UserId> usuarios, Instant ahora) {
+        List<InstanteRecordatorio> instantes = CalculadoraRecordatorios.instantesPara(occ.inicioOcurrencia(), reglas,
+                evento.timezone(), ahora);
+        List<RecordatorioEvento> filas = new ArrayList<>();
+        for (UserId u : usuarios) {
+            for (InstanteRecordatorio instante : instantes) {
+                filas.add(RecordatorioEvento.programar(evento.id(), instante.inicioOcurrencia(), u, instante.enviarEn(),
+                        clock));
+            }
+        }
+        filas.addAll(mensajes.filas(evento, mensajes.instantes(occ.inicioOcurrencia(), ahora), usuarios));
+        return filas;
     }
 
     /** anunciar() del repo viejo: clave FIJA (enviarEn = inicioOcurrencia = creadoEn del

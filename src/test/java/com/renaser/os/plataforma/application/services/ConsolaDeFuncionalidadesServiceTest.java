@@ -100,7 +100,7 @@ class ConsolaDeFuncionalidadesServiceTest {
     void listaElCatalogo() {
         var lista = service.listar(acceso());
 
-        assertThat(lista).hasSize(57); // 52 de la spec 002 + lider.cumplimiento (spec 005) + radar.fichas (spec 034) + ia.analisis (spec 031) + pagos (spec 032) + eventos.meet (spec 040)
+        assertThat(lista).hasSize(58); // 52 de la spec 002 + lider.cumplimiento (spec 005) + radar.fichas (spec 034) + ia.analisis (spec 031) + pagos (spec 032) + eventos.meet (spec 040) + eventos.whatsapp (spec 041)
         FuncionalidadEnConsola chatGrupos = lista.stream().filter(f -> f.clave().equals("chat.grupos")).findFirst()
                 .orElseThrow();
         assertThat(chatGrupos.madre()).isEqualTo("chat");
@@ -108,6 +108,22 @@ class ConsolaDeFuncionalidadesServiceTest {
         assertThat(chatGrupos.porRol()).hasSize(UserRole.values().length).doesNotContainValue(false);
         assertThat(chatGrupos.version()).isZero();
         assertThat(chatGrupos.actualizadoPor()).isNull();
+    }
+
+    // spec 041 FR-010
+    @Test
+    @DisplayName("041: eventos.whatsapp, hija de eventos, sin fila se lista APAGADA para todos los roles (nace apagada) y con la política SALTA")
+    void eventosWhatsappNaceApagada() {
+        FuncionalidadEnConsola whatsapp = service.listar(acceso()).stream().filter(f -> f.clave().equals("eventos.whatsapp"))
+                .findFirst().orElseThrow();
+
+        assertThat(whatsapp.madre()).isEqualTo("eventos");
+        assertThat(whatsapp.procesos().name()).isEqualTo("SALTA");
+        assertThat(whatsapp.porDefecto().name()).isEqualTo("APAGADA");
+        assertThat(whatsapp.prendidaGlobal()).as("sin fila, nace apagada para todos").isFalse();
+        assertThat(whatsapp.version()).isZero();
+        assertThat(service.listar(acceso()).stream().filter(f -> f.clave().equals("eventos")).findFirst().orElseThrow().prendidaGlobal())
+                .as("eventos sigue prendida: solo la hija nace apagada").isTrue();
     }
 
     @Test

@@ -64,7 +64,14 @@ public enum TipoNotificacion {
      * V154 (D-306, spec 031): tu análisis 80/20 de la semana o del mes está listo. Tipo propio y no {@code RESUMEN_SEMANAL} (el del
      * semáforo) para que se pueda silenciar por separado desde Yo → Notificaciones. El texto es fijo: nunca lleva el análisis.
      */
-    ANALISIS_80_20;
+    ANALISIS_80_20,
+
+    /**
+     * V166 (D-322, spec 041): los recordatorios de eventos por WhatsApp. <b>Solo es una preferencia</b>: nunca se emite una notificacion de este tipo (el aviso de la app y el
+     * mensaje del chat son {@link #RECORDATORIO_EVENTO}). Sirve para que la persona se de de baja del WhatsApp sin perder el aviso del telefono: el boton «No recibir más», un
+     * «BAJA» que responde a un mensaje nuestro y el interruptor de Yo → Notificaciones apagan ESTA preferencia. Sin fila esta encendida, como todas.
+     */
+    RECORDATORIO_EVENTO_WHATSAPP;
 
     /**
      * Si este aviso sale aunque Soporte TI haya apagado la funcionalidad {@code notificaciones} (spec 002). Solo el de

@@ -95,12 +95,26 @@ public record AvisoDeEvento(long recordatorioId, UUID eventoId, String tituloEve
                 : capitalizar(cuando) + ".";
     }
 
+    /**
+     * Lo mismo que dice {@link #cuerpo}, pero para el MENSAJE (chat y WhatsApp, spec 041), que es el mismo texto en un solo lugar: la unica diferencia
+     * es que la hora justa se dice «1 hora» y no «60 min» (los cuatro avisos del mensaje son «mañana», «1 hora», «30 min» y «10 min»). Sin mayuscula
+     * inicial ni punto, porque entra en medio de una frase («Tu evento «X» empieza en 10 min, a las 19:00.»).
+     */
+    public String cuandoEnElMensaje(Instant ahora) {
+        return cuando(ahora, true);
+    }
+
     private String cuando(Instant ahora) {
+        return cuando(ahora, false);
+    }
+
+    private String cuando(Instant ahora, boolean horaJustaEnPalabras) {
         ZonedDateTime inicioLocal = inicio.atZone(zona);
         String hora = HORA.format(inicioLocal);
         long minutos = minutosHastaElInicio(ahora);
         if (!esAnuncio && minutos > 0 && minutos <= MINUTOS_CUENTA_REGRESIVA) {
-            return "empieza en " + minutos + " min, a las " + hora;
+            String cuenta = horaJustaEnPalabras && minutos == MINUTOS_CUENTA_REGRESIVA ? "1 hora" : minutos + " min";
+            return "empieza en " + cuenta + ", a las " + hora;
         }
         LocalDate hoy = ahora.atZone(zona).toLocalDate();
         LocalDate dia = inicioLocal.toLocalDate();

@@ -396,3 +396,6 @@ Todo vive en `calendar/` y se prende con la funcionalidad `eventos.meet` (Soport
   el link de cada fecha en el listado de ocurrencias y `POST /{id}/meet/retry`.
 - **Privacidad.** A Google solo viajan el id, el título, el inicio, el fin y la zona; nunca invitados, audiencia ni descripción.
 
+## Avisos de mensaje en la misma cola (spec 041, D-322, 2026-11-04)
+
+`recordatorios_evento` lleva también los **avisos de mensaje** (chat de soporte y WhatsApp): 1 día, 1 hora, 30 y 10 minutos antes de cada ocurrencia, por persona y solo los que todavía llegan a tiempo (`renaser.eventos.mensajes.antelaciones-min`). Son independientes de las reglas del aviso del teléfono: `calendar` solo decide QUÉ y CUÁNDO (`PlanDeMensajesDelEvento`); `notifications` decide a quién y por dónde. Dos columnas nuevas (V167): `aviso_en_app` (`true` para todo lo anterior) y `mensaje_min_antes`; si una regla del teléfono cae en el mismo instante, es **una fila** con las dos marcas. El evento publicado (`RecordatorioEventoDebidoEvent`) suma `avisoEnApp`, `avisoDeMensajeMin`, `formacion`, `enlace` y `lugar` (el enlace o la dirección se leen del evento al despachar). Ni el formulario del evento ni la tabla `eventos` cambian. Detalle y decisiones en `docs/MODULOS_A_AVANZAR.md` §8, D-322.
