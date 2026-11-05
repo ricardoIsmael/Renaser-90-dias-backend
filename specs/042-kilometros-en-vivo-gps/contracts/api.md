@@ -48,10 +48,10 @@ de Health Connect).
 | `caloriasAprox` | opcional, `0 .. 6000` |
 | `tramos` | obligatorio (puede ir vacío), ≤ 61 elementos, `km` consecutivos desde 1, `segundos > 0` |
 | `metrosSinGps` | opcional, ≥ 0 y ≤ `distanciaMetros` (lo rellenado con pasos, FR-035) |
-| `ruta` | opcional (la persona puede no guardarla); `polyline` ≤ 100 KB, `puntos ≤ 3000`; ya viene sin los primeros y últimos 200 m |
+| `ruta` | opcional (la persona puede no guardarla); `polyline` ≤ 100 KB, `puntos ≤ 3000` al entrar hasta el doble; la ruta llega COMPLETA y el servidor le quita los primeros y últimos 200 m antes de guardar (FR-043, D-324); los topes de 3000 puntos y 100 KB se aplican a la recortada |
 | `appVersion` | opcional, texto ≤ 20 |
 
-**Huella:** el servidor calcula SHA-256 del cuerpo canónico (campos en orden fijo, números normalizados) y la guarda con la carrera.
+**Huella:** el servidor calcula SHA-256 del cuerpo canónico (campos en orden fijo, números normalizados, la ruta tal como llegó: completa) y la guarda con la carrera.
 
 **201** (primera vez) o **200** (repetida, misma huella):
 ```json

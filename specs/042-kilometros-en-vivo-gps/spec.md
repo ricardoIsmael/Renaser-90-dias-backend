@@ -254,7 +254,14 @@ primeros ni los últimos metros de la ruta (zona de privacidad, FR-043). Es un p
   como el diagnóstico de la spec 026). Nadie más (ni el Muro, salvo la imagen que la persona comparte).
 - **FR-042** La ruta se guarda 180 días desde la carrera; después se borra y queda solo el resumen (decisión 4 del dueño).
 - **FR-043** Zona de privacidad: los primeros y últimos 200 m de la ruta no se guardan en el servidor ni se muestran en la imagen del Muro
-  (la distancia sí cuenta).
+  (la distancia sí cuenta). **Los recorta el SERVIDOR, no el teléfono** (corregido 2026-11-05, D-324): el teléfono manda la ruta completa
+  (simplificada y codificada, por HTTPS) y el servidor le quita los primeros y los últimos 200 m antes de guardarla, cortando en el punto
+  exacto (interpola dentro del tramo que cruza los 200 m; el mismo algoritmo que tenía la app). Si después no quedan al menos 2 puntos, la
+  carrera se guarda sin ruta y cuenta igual. Recién después se aplican los topes de lo guardado (3000 puntos y 100 KB). **Por qué:** si
+  recortara el teléfono, una app modificada podría mandar la ruta entera y el servidor guardaría dónde empieza y termina la carrera, que
+  suele ser la casa de alguien. Nunca se recorta en los dos lados (se perderían 400 m por punta). Lo que devuelve `GET …/ruta` (la persona,
+  el mentor, el líder, Administración) ya viene recortado, y la regla de «por revisar» (FR-025) compara la ruta ya recortada. La huella
+  (FR-019) usa la ruta tal como la mandó el teléfono. Ningún log imprime la polilínea ni coordenadas.
 
 ### Lectura del acompañamiento y Administración
 
