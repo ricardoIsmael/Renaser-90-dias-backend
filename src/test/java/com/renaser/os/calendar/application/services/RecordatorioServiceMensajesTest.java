@@ -84,7 +84,8 @@ class RecordatorioServiceMensajesTest {
         var audiencia = new AudienciaDelEventoService(nivelPort, progresoPort, audienciaMasivaPort, celulaPort, cursoPort,
                 elegibilidadPort, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
         service = new RecordatorioService(loadEventoPort, loadExcepcionPort, saveRecordatorioPort, audiencia,
-                new PlanDeMensajesDelEvento(LOS_CUATRO, CLOCK), CLOCK);
+                new PlanDeMensajesDelEvento(LOS_CUATRO, CLOCK), CLOCK,
+                org.springframework.transaction.support.TransactionOperations.withoutTransaction());
         when(audienciaMasivaPort.traineesActivos()).thenReturn(List.of(aprendiz));
         when(saveRecordatorioPort.encolarSiFalta(anyList())).thenAnswer(inv -> ((List<?>) inv.getArgument(0)).size());
     }
@@ -154,6 +155,68 @@ class RecordatorioServiceMensajesTest {
                         INICIO_EN_DOS_DIAS.minusSeconds(1_800), INICIO_EN_DOS_DIAS.minusSeconds(600));
     }
 
+    // spec 041 FR-014, FR-016
+    @Test
+    @DisplayName("issue #85: un evento creado 15 minutos antes recibe el de 10 minutos aunque el barrido pase justo a esa hora")
+    void elDeDiezSaleAunqueElBarridoPaseJustoASuHora() {
+        Instant inicio = Instant.parse("2026-09-10T17:40:00Z");
+        Evento creadoALas1225 = sesion(inicio, true, FixedClock.at(Instant.parse("2026-09-10T17:25:10Z")));
+        when(loadEventoPort.candidatosParaRecordatorios(any(), any(), any())).thenReturn(List.of(creadoALas1225));
+
+        // El barrido corre en punto: a las 12:30:00 (Lima) el «10 min antes» ya no es posterior a «ahora».
+        service.generar(Instant.parse("2026-09-10T17:30:00.001Z"));
+
+        assertThat(todasLasFilas()).filteredOn(RecordatorioEvento::esDeMensaje).extracting(RecordatorioEvento::mensajeMinAntes)
+                .containsExactly(10);
+    }
+
+    // spec 041 FR-014, FR-016
+    @Test
+    @DisplayName("issue #85: lo que ya habia pasado cuando se creo el evento sigue sin generarse")
+    void loQueYaHabiaPasadoAlCrearloNoSeGenera() {
+        Evento creadoALas1231 = sesion(Instant.parse("2026-09-10T17:40:00Z"), true, FixedClock.at(Instant.parse("2026-09-10T17:31:00Z")));
+        when(loadEventoPort.candidatosParaRecordatorios(any(), any(), any())).thenReturn(List.of(creadoALas1231));
+
+        service.generar(Instant.parse("2026-09-10T17:35:00Z"));
+
+        assertThat(todasLasFilas()).filteredOn(RecordatorioEvento::esDeMensaje).as("el de 10 min era a las 12:30, antes de crearlo").isEmpty();
+    }
+
+    // spec 041 FR-014, FR-016
+    @Test
+    @DisplayName("issue #85: un aviso con mas de 15 minutos de atraso no se genera; el que lleva menos, si")
+    void elQueLlevaMasDeQuinceMinutosNoSeGenera() {
+        Evento creadoTemprano = sesion(Instant.parse("2026-09-10T17:50:00Z"), true, FixedClock.at(Instant.parse("2026-09-10T15:00:00Z")));
+        when(loadEventoPort.candidatosParaRecordatorios(any(), any(), any())).thenReturn(List.of(creadoTemprano));
+
+        // A las 12:40 (Lima): el de 30 min (12:20) lleva 20 de atraso y no se genera; el de 10 min (12:40) entra.
+        service.generar(Instant.parse("2026-09-10T17:40:00.001Z"));
+
+        assertThat(todasLasFilas()).filteredOn(RecordatorioEvento::esDeMensaje).extracting(RecordatorioEvento::mensajeMinAntes)
+                .containsExactly(10);
+    }
+
+    // spec 041 FR-014
+    @Test
+    @DisplayName("issue #86: un evento que falla al encolar no tumba el barrido: los demas eventos tienen sus avisos")
+    void unEventoQueFallaNoTumbaElBarrido() {
+        Evento malo = Evento.crear(EventoId.of(UUID.randomUUID()), "Falla", null, INICIO_EN_DOS_DIAS, 60, LIMA, TipoUbicacion.MEET,
+                "https://meet.google.com/abc-defg-hij", TipoAudiencia.TODOS, null, null, null, TipoEvento.SESION_ESPECIAL,
+                false, false, true, null, Set.of(), List.of(), aprendiz, CLOCK);
+        when(loadEventoPort.candidatosParaRecordatorios(any(), any(), any())).thenReturn(List.of(malo, sesion(INICIO_EN_DOS_DIAS, true)));
+        when(saveRecordatorioPort.encolarSiFalta(anyList())).thenAnswer(inv -> {
+            List<RecordatorioEvento> filas = inv.getArgument(0);
+            if (filas.get(0).eventoId().equals(malo.id())) {
+                throw new org.springframework.dao.DataIntegrityViolationException("ON CONFLICT DO UPDATE command cannot affect row a second time");
+            }
+            return filas.size();
+        });
+
+        int creados = service.generar(CLOCK.now());
+
+        assertThat(creados).as("los cuatro avisos de mensaje del evento sano").isEqualTo(4);
+    }
+
     private List<RecordatorioEvento> todasLasFilas() {
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<RecordatorioEvento>> filas = ArgumentCaptor.forClass(List.class);
@@ -165,8 +228,13 @@ class RecordatorioServiceMensajesTest {
 
     /** {@code sinReglas}: el evento decide no avisar al telefono (reglas propias vacias). */
     private Evento sesion(Instant inicio, boolean sinReglas) {
+        return sesion(inicio, sinReglas, CLOCK);
+    }
+
+    /** {@code creadoCon}: el reloj del momento en que se creo el evento (FR-014 mira si el aviso ya habia pasado entonces). */
+    private Evento sesion(Instant inicio, boolean sinReglas, FixedClock creadoCon) {
         return Evento.crear(eventoId, "Clase de manifestación", null, inicio, 60, LIMA, TipoUbicacion.MEET,
                 "https://meet.google.com/abc-defg-hij", TipoAudiencia.TODOS, null, null, null, TipoEvento.SESION_ESPECIAL,
-                false, false, sinReglas, null, Set.of(), List.of(), aprendiz, CLOCK);
+                false, false, sinReglas, null, Set.of(), List.of(), aprendiz, creadoCon);
     }
 }

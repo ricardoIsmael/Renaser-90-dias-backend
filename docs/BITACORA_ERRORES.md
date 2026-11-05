@@ -16032,3 +16032,23 @@ De las 78 tablas que compara la prueba, solo esa. A «la otra persona» no se le
 **Solución.** La prueba cuenta los avisos del teléfono (`aviso_en_app`) y suma lo de la 041: el verde tiene los de mensaje de 30 y 10 min, el amarillo ninguno, y al que dejó de estar en verde se le cancelan TODAS sus filas con `dejo_de_ser_elegible`, también la de mensaje (marca `spec 041 FR-015`). No cambió código de producción.
 
 **Cómo evitar que vuelva a pasar.** Una prueba que cuenta filas de `recordatorios_evento` dice qué filas cuenta (teléfono, mensaje o las dos): desde V167 la cola guarda las dos.
+
+## E-668 · El barrido de recordatorios fallaba entero con «ON CONFLICT DO UPDATE command cannot affect row a second time» y no encolaba nada para ningún evento (backend, issue #86, spec 041, 05/11, RESUELTO)
+
+**Síntoma literal** (E2E local de las specs 040+041, base `renaser_e2e_final`): `ERROR ... Unexpected error occurred in scheduled task` → `AggregatedBatchUpdateException: Batch entry 0 INSERT INTO renaser.recordatorios_evento (...) VALUES (...),(...) ON CONFLICT (evento_id, inicio_ocurrencia, usuario_id, enviar_en) DO UPDATE ...` → `PSQLException: ERROR: ON CONFLICT DO UPDATE command cannot affect row a second time`. Otros eventos (con «Voy») quedaron con 0 filas en la cola.
+
+**Causa real.** Tres cosas juntas. (1) Una Sesión especial, Mentoría o Encuentro sin reglas propias avisa al teléfono 10 min antes, y la 041 agrega su mensaje de 10 min: misma llave `(evento, ocurrencia, persona, enviar_en)` en el mismo lote. (2) El datasource tiene `reWriteBatchedInserts: true` (H-03): el driver junta el lote en UN `INSERT ... VALUES (...),(...)`, y Postgres no deja que un mismo comando toque dos veces la misma fila; el `ON CONFLICT` solo junta contra filas que YA estaban. (3) `generar()` era un `@Transactional` único: un evento así revertía el barrido entero. Las pruebas no lo vieron porque `src/test/resources/application.yaml` reemplaza al de main y no trae `reWriteBatchedInserts`: en sentencias separadas la segunda sí junta contra la primera.
+
+**Solución.** `RecordatorioPersistenceAdapter.encolarSiFalta` junta en memoria las filas con la misma llave (las marcas se suman como en el `ON CONFLICT`) antes del `batchUpdate`, y `RecordatorioService.generar` encola cada evento en su transacción, con `try/catch` por evento (regla 02 §4): uno que falla se anota en el log y los demás siguen.
+
+**Cómo evitar que vuelva a pasar.** `RecordatorioPersistenceAdapterLoteReescritoTest` corre con `reWriteBatchedInserts=true` (como producción) y falla contra el código anterior; `RecordatorioServiceMensajesTest.unEventoQueFallaNoTumbaElBarrido` fija el aislamiento. Pendiente de decidir: espejar `reWriteBatchedInserts` en el `application.yaml` de las pruebas para toda la suite (puede destapar otros lotes con la misma llave repetida). Nota: con el lote reescrito el driver no informa cuántas filas creó (`SUCCESS_NO_INFO`), así que el «creados» del log del barrido sale en 0; no afecta a nada más.
+
+## E-669 · El aviso de 10 minutos no se generaba si el evento se creaba entre 10 y 15 minutos antes (backend, issue #85, spec 041, 05/11, RESUELTO)
+
+**Síntoma literal** (E2E local): evento creado a las 12:25 (Lima) que empieza a las 12:40, aprendiz con «Voy»: el aviso de las 12:30 nunca entró a `recordatorios_evento` ni salió por chat ni por WhatsApp.
+
+**Causa real.** `CalculadoraRecordatorios.instantesDeMensaje` solo aceptaba `enviarEn.isAfter(ahora)`. El barrido corre cada 5 minutos en punto y las horas de los eventos van de 5 en 5, así que el «10 min antes» cae justo en un turno: a las 12:30:00.001 ya no es posterior, y el turno de las 12:25 corrió antes de que el evento existiera. No choca con la regla de FR-014/FR-016 («no se genera lo que ya había pasado al crear o editar el evento»; «más de 15 minutos de atraso no sale»): ese aviso no había pasado al crearlo y salía con 5 minutos de atraso. Era un bug.
+
+**Solución.** Un aviso de mensaje se genera si todavía no llega, o si llegó DESPUÉS del último cambio del evento (`actualizadoEn`) y lleva como mucho 15 minutos de atraso (`GRACIA_DE_GENERACION_DE_MENSAJE`, el mismo tope con que sale), con el evento sin empezar. El despachador lo manda en el turno siguiente. Los avisos del teléfono (reglas E2) no cambiaron.
+
+**Cómo evitar que vuelva a pasar.** Una regla «solo lo que todavía no pasó» en un barrido periódico se prueba con el barrido corriendo JUSTO a la hora del aviso. `RecordatorioServiceMensajesTest` (issue #85) fija los tres casos: creado 15 min antes, creado después de la hora del aviso y más de 15 min de atraso.
