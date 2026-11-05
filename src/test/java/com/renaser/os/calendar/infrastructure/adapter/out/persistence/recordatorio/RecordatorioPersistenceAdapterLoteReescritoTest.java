@@ -46,7 +46,7 @@ class RecordatorioPersistenceAdapterLoteReescritoTest {
 
     @Test
     @DisplayName("la prueba corre con el driver reescribiendo los lotes, como en produccion")
-    void elDriverReescribeLosLotes() {
+    void elDriverReescribeLosLotes() throws java.sql.SQLException {
         assertThat(dataSource.unwrap(HikariDataSource.class).getDataSourceProperties())
                 .containsEntry("reWriteBatchedInserts", "true");
     }
