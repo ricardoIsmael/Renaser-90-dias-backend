@@ -16,10 +16,22 @@ import java.util.List;
 @Component
 class RecordatorioPersistenceAdapter implements LoadRecordatorioPort, SaveRecordatorioPort {
 
+    /**
+     * Idempotente: la fila que ya existe no se duplica. Spec 041: si en el MISMO instante coinciden un aviso del telefono y uno de mensaje
+     * (10 minutos antes de una mentoria), la llave unica los junta en una sola fila y aca se le suman las dos marcas, en cualquier orden.
+     * Una fila ya enviada o cancelada no se toca. Dos pasadas iguales no cambian nada (el {@code WHERE} no encuentra que sumar).
+     */
     private static final String SQL_ENCOLAR = """
-            INSERT INTO renaser.recordatorios_evento (evento_id, inicio_ocurrencia, usuario_id, enviar_en, creado_en)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT (evento_id, inicio_ocurrencia, usuario_id, enviar_en) DO NOTHING
+            INSERT INTO renaser.recordatorios_evento (evento_id, inicio_ocurrencia, usuario_id, enviar_en, creado_en,
+                                                      aviso_en_app, mensaje_min_antes)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (evento_id, inicio_ocurrencia, usuario_id, enviar_en) DO UPDATE
+            SET aviso_en_app = recordatorios_evento.aviso_en_app OR EXCLUDED.aviso_en_app,
+                mensaje_min_antes = COALESCE(recordatorios_evento.mensaje_min_antes, EXCLUDED.mensaje_min_antes)
+            WHERE recordatorios_evento.enviado_en IS NULL
+              AND recordatorios_evento.motivo_cancelacion IS NULL
+              AND ((EXCLUDED.aviso_en_app AND NOT recordatorios_evento.aviso_en_app)
+                   OR (EXCLUDED.mensaje_min_antes IS NOT NULL AND recordatorios_evento.mensaje_min_antes IS NULL))
             """;
 
     private final SpringDataRecordatorioRepository repository;
@@ -42,10 +54,14 @@ class RecordatorioPersistenceAdapter implements LoadRecordatorioPort, SaveRecord
      * inserto) — se suma para saber cuantas se crearon de verdad, igual que
      * `res.count`/`skipDuplicates` del repo viejo (Prisma). */
     @Override
-    public int encolarSiFalta(List<RecordatorioEvento> recordatorios) {
-        if (recordatorios.isEmpty()) {
+    public int encolarSiFalta(List<RecordatorioEvento> pedidos) {
+        if (pedidos.isEmpty()) {
             return 0;
         }
+        // Issue #86: con `reWriteBatchedInserts` el driver junta el lote en UN `INSERT ... VALUES (...),(...) ON CONFLICT DO UPDATE`, y
+        // Postgres no deja que un mismo comando toque dos veces la misma fila («ON CONFLICT DO UPDATE command cannot affect row a second
+        // time»). El aviso del telefono y el de mensaje del mismo instante tienen la misma llave: se suman aca, antes de mandarlos.
+        List<RecordatorioEvento> recordatorios = unaFilaPorLlave(pedidos);
         // batchUpdate(sql, Collection, batchSize, setter) devuelve int[][]: una fila por lote.
         int[][] resultados = jdbcTemplate.batchUpdate(SQL_ENCOLAR, recordatorios, recordatorios.size(),
                 (ps, r) -> {
@@ -54,6 +70,8 @@ class RecordatorioPersistenceAdapter implements LoadRecordatorioPort, SaveRecord
                     ps.setObject(3, r.usuarioId().value());
                     ps.setTimestamp(4, Timestamp.from(r.enviarEn()));
                     ps.setTimestamp(5, Timestamp.from(r.creadoEn()));
+                    ps.setBoolean(6, r.avisoEnApp());
+                    ps.setObject(7, r.mensajeMinAntes(), java.sql.Types.INTEGER);
                 });
         int creados = 0;
         for (int[] lote : resultados) {
@@ -64,6 +82,21 @@ class RecordatorioPersistenceAdapter implements LoadRecordatorioPort, SaveRecord
             }
         }
         return creados;
+    }
+
+    /**
+     * Una fila por llave {@code (evento, inicio de la ocurrencia, persona, enviar_en)}, en el orden en que aparecio cada llave: las marcas
+     * se suman (aviso del telefono si alguna lo es; los minutos del primer aviso de mensaje que haya), igual que el {@code ON CONFLICT}.
+     */
+    static List<RecordatorioEvento> unaFilaPorLlave(List<RecordatorioEvento> lote) {
+        java.util.Map<java.util.List<Object>, RecordatorioEvento> porLlave = new java.util.LinkedHashMap<>();
+        for (RecordatorioEvento r : lote) {
+            java.util.List<Object> llave = java.util.List.of(r.eventoId(), r.inicioOcurrencia(), r.usuarioId(), r.enviarEn());
+            porLlave.merge(llave, r, (antes, ahora) -> RecordatorioEvento.rehydrate(null, antes.eventoId(), antes.inicioOcurrencia(),
+                    antes.usuarioId(), antes.enviarEn(), null, null, antes.creadoEn(), antes.avisoEnApp() || ahora.avisoEnApp(),
+                    antes.mensajeMinAntes() != null ? antes.mensajeMinAntes() : ahora.mensajeMinAntes()));
+        }
+        return porLlave.size() == lote.size() ? lote : java.util.List.copyOf(porLlave.values());
     }
 
     @Override
@@ -92,6 +125,6 @@ class RecordatorioPersistenceAdapter implements LoadRecordatorioPort, SaveRecord
     private static RecordatorioEvento toDomain(RecordatorioEventoJpaEntity e) {
         return RecordatorioEvento.rehydrate(e.getId(), EventoId.of(e.getEventoId()), e.getInicioOcurrencia(),
                 UserId.of(e.getUsuarioId()), e.getEnviarEn(), e.getEnviadoEn(), e.getMotivoCancelacion(),
-                e.getCreadoEn());
+                e.getCreadoEn(), e.isAvisoEnApp(), e.getMensajeMinAntes());
     }
 }

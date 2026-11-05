@@ -44,6 +44,7 @@ class PreferenciaNotificacionPersistenceMapper {
             case OPERACION_PLATAFORMA -> TipoNotificacionJpa.OPERACION_PLATAFORMA;
             case REVISION_DEL_LIDER -> TipoNotificacionJpa.REVISION_DEL_LIDER;
             case ANALISIS_80_20 -> TipoNotificacionJpa.ANALISIS_80_20;
+            case RECORDATORIO_EVENTO_WHATSAPP -> TipoNotificacionJpa.RECORDATORIO_EVENTO_WHATSAPP;
         };
     }
 
@@ -70,6 +71,7 @@ class PreferenciaNotificacionPersistenceMapper {
             case OPERACION_PLATAFORMA -> TipoNotificacion.OPERACION_PLATAFORMA;
             case REVISION_DEL_LIDER -> TipoNotificacion.REVISION_DEL_LIDER;
             case ANALISIS_80_20 -> TipoNotificacion.ANALISIS_80_20;
+            case RECORDATORIO_EVENTO_WHATSAPP -> TipoNotificacion.RECORDATORIO_EVENTO_WHATSAPP;
         };
     }
 }

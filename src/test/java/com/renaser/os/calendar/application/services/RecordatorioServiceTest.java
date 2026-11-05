@@ -79,7 +79,9 @@ class RecordatorioServiceTest {
     void setUp() {
         var audiencia = new AudienciaDelEventoService(nivelPort, progresoPort, audienciaMasivaPort, celulaPort,
                 cursoPort, elegibilidadPort, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
-        service = new RecordatorioService(loadEventoPort, loadExcepcionPort, saveRecordatorioPort, audiencia, CLOCK);
+        service = new RecordatorioService(loadEventoPort, loadExcepcionPort, saveRecordatorioPort, audiencia,
+                new PlanDeMensajesDelEvento(List.of(), CLOCK), CLOCK,
+                org.springframework.transaction.support.TransactionOperations.withoutTransaction());
     }
 
     /**

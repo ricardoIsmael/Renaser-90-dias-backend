@@ -14,8 +14,13 @@ import com.renaser.os.calendar.domain.model.recordatorio.InstanteRecordatorio;
 import com.renaser.os.calendar.domain.model.recordatorio.RecordatorioEvento;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionOperations;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -31,6 +36,10 @@ import java.util.List;
  *
  * <p>La audiencia (a quien le llegan los avisos) vive desde el 2026-10-06 en {@link AudienciaDelEventoService}:
  * la comparte con la hoja «Quien respondio» (D-256).
+ *
+ * <p><b>Cada evento en su transaccion (issue #86, 2026-11-05).</b> {@code generar()} era un {@code @Transactional} unico: un evento
+ * que fallaba al encolar revertia el barrido entero y no quedaba ningun aviso de ningun evento. Ahora cada evento va en la suya y un
+ * fallo se anota y no detiene a los demas (regla 02 §4).
  */
 @Service
 public class RecordatorioService implements GenerarRecordatoriosUseCase {
@@ -44,11 +53,27 @@ public class RecordatorioService implements GenerarRecordatoriosUseCase {
     private final LoadExcepcionPort loadExcepcionPort;
     private final SaveRecordatorioPort saveRecordatorioPort;
     private final AudienciaDelEventoService audiencia;
+    /** Spec 041: los avisos de mensaje (chat y WhatsApp) viajan por la misma cola, junto a los del telefono. */
+    private final PlanDeMensajesDelEvento mensajes;
     private final Clock clock;
+    private final TransactionOperations transaccionDelEvento;
 
+    private static final Logger log = LoggerFactory.getLogger(RecordatorioService.class);
+
+    @Autowired
     public RecordatorioService(LoadEventoPort loadEventoPort, LoadExcepcionPort loadExcepcionPort,
                                 SaveRecordatorioPort saveRecordatorioPort, AudienciaDelEventoService audiencia,
-                                Clock clock) {
+                                PlanDeMensajesDelEvento mensajes, Clock clock, PlatformTransactionManager transactionManager) {
+        this(loadEventoPort, loadExcepcionPort, saveRecordatorioPort, audiencia, mensajes, clock,
+                new TransactionTemplate(transactionManager));
+    }
+
+    /** Para las pruebas sin Spring: {@code TransactionOperations.withoutTransaction()}. */
+    RecordatorioService(LoadEventoPort loadEventoPort, LoadExcepcionPort loadExcepcionPort,
+                        SaveRecordatorioPort saveRecordatorioPort, AudienciaDelEventoService audiencia,
+                        PlanDeMensajesDelEvento mensajes, Clock clock, TransactionOperations transaccionDelEvento) {
+        this.transaccionDelEvento = transaccionDelEvento;
+        this.mensajes = mensajes;
         this.loadEventoPort = loadEventoPort;
         this.loadExcepcionPort = loadExcepcionPort;
         this.saveRecordatorioPort = saveRecordatorioPort;
@@ -57,7 +82,6 @@ public class RecordatorioService implements GenerarRecordatoriosUseCase {
     }
 
     @Override
-    @Transactional
     public int generar(Instant ahora) {
         Instant hastaMax = ahora.plusSeconds((ReglaRecordatorio.MAX_DIAS_ANTES + 1) * 86_400L);
         Instant desdeAnuncio = ahora.minusSeconds(ANUNCIO_VALIDEZ_HORAS * 3600);
@@ -65,7 +89,12 @@ public class RecordatorioService implements GenerarRecordatoriosUseCase {
 
         int creados = 0;
         for (Evento evento : eventos) {
-            creados += generarParaEvento(evento, ahora);
+            try {
+                Integer delEvento = transaccionDelEvento.execute(status -> generarParaEvento(evento, ahora));
+                creados += delEvento == null ? 0 : delEvento;
+            } catch (RuntimeException e) {
+                log.error("[RecordatorioService] no se pudieron encolar los avisos del evento {}; sigo con los demas", evento.id().value(), e);
+            }
         }
         return creados;
     }
@@ -73,9 +102,10 @@ public class RecordatorioService implements GenerarRecordatoriosUseCase {
     private int generarParaEvento(Evento evento, Instant ahora) {
         List<ReglaRecordatorio> reglas = evento.reglasRecordatorioEfectivas();
         List<Excepcion> excepciones = loadExcepcionPort.porEvento(evento.id());
-        int diasVentana = CalculadoraRecordatorios.diasDeVentana(reglas, VENTANA_DIAS_DEFECTO);
+        int diasVentana = mensajes.diasDeVentana(CalculadoraRecordatorios.diasDeVentana(reglas, VENTANA_DIAS_DEFECTO));
         Instant hasta = ahora.plusSeconds(diasVentana * 86_400L);
-        List<Ocurrencia> ocurrencias = reglas.isEmpty() ? List.of()
+        // Los avisos de mensaje (spec 041) no dependen de las reglas del telefono: aunque el evento no avise al telefono, sigue habiendo ocurrencias.
+        List<Ocurrencia> ocurrencias = reglas.isEmpty() && !mensajes.hayAvisos() ? List.of()
                 : ExpansorOcurrencias.expandir(evento.iniciaEn(), evento.duracionMinutos(), evento.timezone(),
                         evento.recurrencia(), ahora, hasta, excepciones);
 
@@ -96,21 +126,26 @@ public class RecordatorioService implements GenerarRecordatoriosUseCase {
         // `notifications` al entregar (solo si tiene un telefono registrado); quien respondio desde
         // la web no tiene alarma local y necesita estos avisos.
         for (Ocurrencia occ : ocurrencias) {
-            List<InstanteRecordatorio> instantes = CalculadoraRecordatorios.instantesPara(occ.inicioOcurrencia(),
-                    reglas, evento.timezone(), ahora);
-            if (instantes.isEmpty()) {
-                continue;
-            }
-            List<RecordatorioEvento> filas = new ArrayList<>();
-            for (UserId u : usuarios) {
-                for (InstanteRecordatorio instante : instantes) {
-                    filas.add(RecordatorioEvento.programar(evento.id(), instante.inicioOcurrencia(), u,
-                            instante.enviarEn(), clock));
-                }
-            }
-            creados += saveRecordatorioPort.encolarSiFalta(filas);
+            creados += saveRecordatorioPort.encolarSiFalta(filasDeLaOcurrencia(evento, occ, reglas, usuarios, ahora));
         }
         return creados;
+    }
+
+    /** Primero los avisos del telefono y despues los de mensaje: si caen en el mismo instante, la cola los junta en UNA fila con las dos marcas (issue #86). */
+    private List<RecordatorioEvento> filasDeLaOcurrencia(Evento evento, Ocurrencia occ, List<ReglaRecordatorio> reglas,
+                                                         List<UserId> usuarios, Instant ahora) {
+        List<InstanteRecordatorio> instantes = CalculadoraRecordatorios.instantesPara(occ.inicioOcurrencia(), reglas,
+                evento.timezone(), ahora);
+        List<RecordatorioEvento> filas = new ArrayList<>();
+        for (UserId u : usuarios) {
+            for (InstanteRecordatorio instante : instantes) {
+                filas.add(RecordatorioEvento.programar(evento.id(), instante.inicioOcurrencia(), u, instante.enviarEn(),
+                        clock));
+            }
+        }
+        Instant ultimoCambio = evento.actualizadoEn() != null ? evento.actualizadoEn() : evento.creadoEn();
+        filas.addAll(mensajes.filas(evento, mensajes.instantes(occ.inicioOcurrencia(), ahora, ultimoCambio), usuarios));
+        return filas;
     }
 
     /** anunciar() del repo viejo: clave FIJA (enviarEn = inicioOcurrencia = creadoEn del

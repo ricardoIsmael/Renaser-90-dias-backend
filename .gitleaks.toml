@@ -5,7 +5,8 @@
 # alguien pegue mañana en esos mismos archivos siga saltando. Las excepciones valen para todo el historial de
 # Git: gitleaks recorre los commits viejos y esos hallazgos no desaparecen aunque el archivo cambie.
 #
-# Estas 22 son las únicas que había el 02/11/2026 al escanear el historial completo. Ninguna es un secreto.
+# Estas 22 son las únicas que había el 02/11/2026 al escanear el historial completo; el 05/11/2026 se sumó una
+# (el id_token inventado de GoogleOAuthAdapterTest, spec 040). Ninguna es un secreto.
 # Un secreto de verdad NO se anota acá: se rota primero (ocultarlo no lo arregla) y recién después, si hace
 # falta, se deja constancia.
 title = "Renaser backend"
@@ -69,3 +70,19 @@ condition = "AND"
 targetRules = ["private-key"]
 paths = ['''src/test/java/com/renaser/os/users/infrastructure/adapter/out/oauth/AppleIdentidadAdapterTest\.java''']
 regexes = ['''System\.lineSeparator\(\)''']
+
+# ─── 1 hallazgo de la regla `generic-api-key`: un id_token inventado (spec 040) ─────────────────────────────
+#
+# GoogleOAuthAdapterTest arma el `id_token` que devuelve el Google simulado pegando tres trozos:
+#   "eyJhbGciOiJSUzI1NiJ9." + Base64(«{"email":…}») + ".firma"
+# El primer trozo es solo el base64 de la cabecera `{"alg":"RS256"}` y la firma es la palabra «firma». No es un
+# token emitido por Google ni sirve para entrar a nada: la prueba lo inventa para leer el correo del cuerpo. La
+# excepción exige ese archivo y esa línea exacta (la cabecera fija seguida de `Base64.getUrlEncoder`): un token de
+# verdad pegado en el mismo archivo no tiene esa forma y sigue saltando.
+[[allowlists]]
+description = "Prueba de Google OAuth (spec 040): id_token inventado, solo la cabecera RS256 en base64"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''src/test/java/com/renaser/os/calendar/infrastructure/adapter/out/google/GoogleOAuthAdapterTest\.java''']
+regexTarget = "line"
+regexes = ['''String idToken = "eyJhbGciOiJSUzI1NiJ9\." \+ Base64\.getUrlEncoder\(\)''']

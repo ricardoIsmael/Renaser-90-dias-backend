@@ -284,6 +284,26 @@ renaser:
     # Red de seguridad si algun entorno vuelve a completion-mode=UPDATE; con DELETE esta purga
     # normalmente no encuentra nada.
     retencion-completados: P7D
+    # Spec 041 (D-322): los recordatorios de un evento por el chat de soporte y por WhatsApp. TODO es configuracion, no codigo: cambiar un valor no exige
+    # desplegar nada nuevo ni migrar. Los avisos del telefono (bandeja y push) NO dependen de nada de esto.
+    mensajes:
+      # Cuantos minutos antes del inicio sale cada aviso de mensaje (separados por comas). 1 dia = exactamente 24 horas. El "ya comenzo" no se manda.
+      antelaciones-min: ${EVENTOS_MENSAJES_ANTELACIONES_MIN:1440,60,30,10}
+      # A quien le llega: VOY (quienes dijeron "Voy" a esa ocurrencia) o TODOS (toda la audiencia del evento). Decision del dueño del 04/11: VOY por ahora.
+      audiencia: ${EVENTOS_MENSAJES_AUDIENCIA:VOY}
+      # Que roles reciben, separados por comas: por ahora solo el aprendiz. Sumar mentores, guias, lideres o Administracion es agregar su rol aca.
+      roles: ${EVENTOS_MENSAJES_ROLES:TRAINEE}
+    whatsapp:
+      # Tope de mensajes de WhatsApp por mes calendario. Vacio = SIN tope (decision del dueño: el saldo de YCloud lo controla el).
+      tope-mensual: ${EVENTOS_WHATSAPP_TOPE_MENSUAL:}
+  # Spec 041 (D-322): YCloud (WhatsApp Business). Ninguna clave va en el repositorio: llegan por variable de entorno cargada desde SSM. Sin api-key, numero-emisor y
+  # plantilla el canal de WhatsApp no hace nada y el chat sigue funcionando; sin webhook-secreto el webhook no procesa nada.
+  whatsapp:
+    api-key: ${WHATSAPP_API_KEY:}
+    webhook-secreto: ${WHATSAPP_WEBHOOK_SECRETO:}
+    numero-emisor: ${WHATSAPP_NUMERO_EMISOR:}
+    plantilla: ${WHATSAPP_PLANTILLA:renaser_evento_recordatorio_v2}
+    idioma: ${WHATSAPP_IDIOMA:es}
   scheduling:
     shedlock:
       evidence-procesar-cola:
@@ -346,6 +366,10 @@ renaser:
       # D-224: completa los chats de los aprendices (soporte y chat de dos) a los 3 min de
       # arrancar y despues cada hora. Sin lock no duplicaria nada (UNIQUE de clave_directa), pero
       # recorreria el padron dos veces.
+      # Spec 041: retencion de 12 meses de las entregas de WhatsApp (DELETE por fecha, una vez al dia a las 04:40 UTC).
+      notifications-purgar-entregas-whatsapp:
+        lock-at-most-for: PT10M
+        lock-at-least-for: PT30S
       chat-completar-chats-de-aprendices:
         lock-at-most-for: PT20M
         lock-at-least-for: PT30S

@@ -51,6 +51,11 @@ import java.time.ZoneId;
  * <p><b>El push caduca al inicio (E-645, issue #22).</b> El recordatorio lleva {@link AvisoDeEvento#venceEn()}
  * (el inicio de la ocurrencia) para que el proveedor no lo entregue tarde si el telefono estaba sin red o en
  * reposo. El anuncio de un evento nuevo no caduca.
+ *
+ * <p><b>Spec 041.</b> La cola de recordatorios tambien lleva los avisos de MENSAJE (chat y WhatsApp), que salen por sus propios listeners
+ * ({@link RecordatorioEventoEnElChatListener}, {@link RecordatorioEventoPorWhatsAppListener}). Una fila que existe SOLO para el mensaje
+ * ({@code esAvisoEnApp() == false}) no genera aviso del telefono: el de la app no cambia. Una fila que coincide con una regla del evento sigue
+ * siendo un aviso del telefono, como siempre.
  */
 @Component
 class RecordatorioEventoNotificationListener {
@@ -70,6 +75,10 @@ class RecordatorioEventoNotificationListener {
 
     @ApplicationModuleListener
     void on(RecordatorioEventoDebidoEvent event) {
+        if (!event.esAvisoEnApp()) {
+            // Spec 041: una fila que existe solo para el mensaje (chat y WhatsApp) no es un aviso del telefono.
+            return;
+        }
         AvisoDeEvento aviso = new AvisoDeEvento(event.recordatorioId(), event.eventoId(), event.tituloEvento(),
                 event.inicioOcurrencia(), ZoneId.of(event.zonaHoraria()), event.esAnuncio());
         Instant ahora = clock.now();
