@@ -9,6 +9,7 @@ import com.renaser.os.calendar.application.ports.out.meet.GoogleRechazoException
 import com.renaser.os.calendar.application.ports.out.meet.PedidoDeSala;
 import com.renaser.os.calendar.application.ports.out.meet.ResultadoDeSala;
 import com.renaser.os.calendar.domain.model.meet.AccesoSalaMeet;
+import com.renaser.os.calendar.domain.model.meet.ArtefactosDeLaSala;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -91,7 +92,7 @@ class GoogleCalendarMeetAdapterTest {
 
     // spec 040 FR-022
     @Test
-    @DisplayName("FR-022: a Google solo viajan el id, el título, el inicio, el fin y el acceso a la conferencia: sin invitados, sin descripción, sin nombres")
+    @DisplayName("FR-022: sin invitados pedidos, a Google solo viajan el id, el título, el inicio, el fin y el acceso a la conferencia: sin descripción, sin nombres")
     void aGoogleNoLeLlegaNingunDatoDePersonas() {
         tokenDeAcceso();
         Set<String> campos = new TreeSet<>();
@@ -398,6 +399,125 @@ class GoogleCalendarMeetAdapterTest {
 
         assertThat(adapter.fijarAcceso(ENLACE, AccesoSalaMeet.ABIERTA)).isEqualTo(Optional.empty());
         assertThatThrownBy(() -> adapter.fijarAcceso("https://zoom.us/j/1", AccesoSalaMeet.ABIERTA)).isInstanceOf(GoogleRechazoException.class);
+    }
+
+    // ─── Decisión 6 del dueño (2026-11-05): invitado y grabación ───────────────
+
+    private static final String MASCARAS = "config.artifactConfig.recordingConfig.autoRecordingGeneration,"
+            + "config.artifactConfig.transcriptionConfig.autoTranscriptionGeneration,"
+            + "config.artifactConfig.smartNotesConfig.autoSmartNotesGeneration";
+
+    // spec 040 FR-035
+    @Test
+    @DisplayName("FR-035: el correo de quien crea el evento va en attendees, y Google no le manda correos (sendUpdates=none)")
+    void quienCreaVaComoInvitado() {
+        tokenDeAcceso();
+        PedidoDeSala conInvitado = new PedidoDeSala(PEDIDO.idGoogle(), PEDIDO.titulo(), PEDIDO.inicio(), PEDIDO.fin(), PEDIDO.zona(),
+                List.of("admin@renaser.pe"));
+        servidor.expect(requestTo(EVENTOS + "?conferenceDataVersion=1&sendUpdates=none")).andExpect(method(HttpMethod.POST))
+                .andExpect(jsonPath("$.attendees.length()").value(1))
+                .andExpect(jsonPath("$.attendees[0].email").value("admin@renaser.pe"))
+                .andExpect(jsonPath("$.description").doesNotExist())
+                .andRespond(withSuccess("{\"hangoutLink\":\"" + ENLACE + "\"}", MediaType.APPLICATION_JSON));
+
+        adapter.crear(conInvitado);
+
+        servidor.verify();
+    }
+
+    // spec 040 FR-035
+    @Test
+    @DisplayName("FR-035: al editar con invitados se manda la lista; sin lista (el proceso de fondo) el campo no viaja y Google conserva los que tenía")
+    void editarConYSinInvitados() {
+        tokenDeAcceso();
+        PedidoDeSala conInvitados = new PedidoDeSala(PEDIDO.idGoogle(), PEDIDO.titulo(), PEDIDO.inicio(), PEDIDO.fin(), PEDIDO.zona(),
+                List.of("admin@renaser.pe", "alquimista@gmail.com"));
+        servidor.expect(requestTo(EVENTOS + "/" + PEDIDO.idGoogle() + "?sendUpdates=none")).andExpect(method(HttpMethod.PATCH))
+                .andExpect(jsonPath("$.attendees[1].email").value("alquimista@gmail.com"))
+                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo(EVENTOS + "/" + PEDIDO.idGoogle() + "?sendUpdates=none")).andExpect(method(HttpMethod.PATCH))
+                .andExpect(jsonPath("$.attendees").doesNotExist())
+                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+
+        adapter.actualizar(conInvitados);
+        adapter.actualizar(PEDIDO);
+
+        servidor.verify();
+    }
+
+    // spec 040 FR-036, SC-014
+    @Test
+    @DisplayName("FR-036: grabar, transcribir y notas = UN PATCH de config.artifactConfig (ON) con su updateMask, y se lee la sala de vuelta")
+    void pedirGrabacionYTranscripcion() {
+        tokenDeAcceso();
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces/abc-defg-hij")).andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("{\"name\":\"spaces/Zk3jd8\"}", MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces/Zk3jd8?updateMask=" + MASCARAS)).andExpect(method(HttpMethod.PATCH))
+                .andExpect(jsonPath("$.config.artifactConfig.recordingConfig.autoRecordingGeneration").value("ON"))
+                .andExpect(jsonPath("$.config.artifactConfig.transcriptionConfig.autoTranscriptionGeneration").value("ON"))
+                .andExpect(jsonPath("$.config.artifactConfig.smartNotesConfig.autoSmartNotesGeneration").value("ON"))
+                .andExpect(jsonPath("$.config.accessType").doesNotExist())
+                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces/Zk3jd8")).andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("""
+                        {"config":{"accessType":"OPEN","artifactConfig":{"recordingConfig":{"autoRecordingGeneration":"ON"},
+                        "transcriptionConfig":{"autoTranscriptionGeneration":"ON"},"smartNotesConfig":{"autoSmartNotesGeneration":"ON"}}}}""",
+                        MediaType.APPLICATION_JSON));
+
+        ArtefactosDeLaSala quedo = adapter.fijarArtefactos(ENLACE, ArtefactosDeLaSala.pedir(true, true, true));
+
+        assertThat(quedo).isEqualTo(new ArtefactosDeLaSala(true, true, true));
+        servidor.verify();
+    }
+
+    // spec 040 FR-037, SC-015
+    @Test
+    @DisplayName("FR-037: si Google rechaza el pedido entero (cuenta sin plan) se piden de a uno; lo que no quedó se devuelve en false, sin error")
+    void sinPlanSePidenDeAUno() {
+        tokenDeAcceso();
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces/abc-defg-hij"))
+                .andRespond(withSuccess("{\"name\":\"spaces/Zk3jd8\"}", MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces/Zk3jd8?updateMask=" + MASCARAS)).andExpect(method(HttpMethod.PATCH))
+                .andRespond(withStatus(HttpStatus.FORBIDDEN).contentType(MediaType.APPLICATION_JSON).body("{\"error\":{\"code\":403}}"));
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces/Zk3jd8?updateMask=config.artifactConfig.recordingConfig.autoRecordingGeneration"))
+                .andExpect(method(HttpMethod.PATCH)).andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces/Zk3jd8?updateMask=config.artifactConfig.transcriptionConfig.autoTranscriptionGeneration"))
+                .andExpect(method(HttpMethod.PATCH)).andRespond(withStatus(HttpStatus.FORBIDDEN));
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces/Zk3jd8?updateMask=config.artifactConfig.smartNotesConfig.autoSmartNotesGeneration"))
+                .andExpect(method(HttpMethod.PATCH)).andRespond(withStatus(HttpStatus.BAD_REQUEST));
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces/Zk3jd8")).andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("{\"config\":{\"artifactConfig\":{\"recordingConfig\":{\"autoRecordingGeneration\":\"ON\"},"
+                        + "\"transcriptionConfig\":{\"autoTranscriptionGeneration\":\"OFF\"}}}}", MediaType.APPLICATION_JSON));
+
+        ArtefactosDeLaSala quedo = adapter.fijarArtefactos(ENLACE, ArtefactosDeLaSala.pedir(true, true, true));
+
+        assertThat(quedo).isEqualTo(new ArtefactosDeLaSala(true, false, false));
+        servidor.verify();
+    }
+
+    // spec 040 FR-036
+    @Test
+    @DisplayName("FR-036: un 200 no prueba que quedó: lo que Google dice al leer manda, y lo no pedido no se toca ni se informa")
+    void soloLoPedidoYLoLeido() {
+        tokenDeAcceso();
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces/abc-defg-hij"))
+                .andRespond(withSuccess("{\"name\":\"spaces/Zk3jd8\"}", MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces/Zk3jd8?updateMask=config.artifactConfig.recordingConfig.autoRecordingGeneration"))
+                .andExpect(jsonPath("$.config.artifactConfig.transcriptionConfig").doesNotExist())
+                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces/Zk3jd8")).andRespond(withSuccess("{\"config\":{}}", MediaType.APPLICATION_JSON));
+
+        assertThat(adapter.fijarArtefactos(ENLACE, ArtefactosDeLaSala.pedir(true, false, false)))
+                .isEqualTo(new ArtefactosDeLaSala(false, null, null));
+        servidor.verify();
+    }
+
+    // spec 040 FR-036
+    @Test
+    @DisplayName("FR-036: si no se pide nada, no se llama a Google")
+    void nadaQuePedir() {
+        assertThat(adapter.fijarArtefactos(ENLACE, ArtefactosDeLaSala.NADA)).isEqualTo(ArtefactosDeLaSala.NADA);
+        servidor.verify();
     }
 
     private static String pendiente() {

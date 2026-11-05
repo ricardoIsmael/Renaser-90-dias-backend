@@ -10,6 +10,7 @@ import com.renaser.os.habits.application.ports.out.participante.ConsultarProgres
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.RolParticipante;
 import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort;
+import com.renaser.os.habits.application.ports.out.registro.SaveRegistroHabitoPort;
 import com.renaser.os.habits.domain.model.habito.AmbitoHabito;
 import com.renaser.os.habits.domain.model.habito.ExigenciaEvidencia;
 import com.renaser.os.habits.domain.model.habito.Habito;
@@ -70,6 +71,8 @@ class MedicionAutomaticaServiceTest {
     private ConsultarProgresoParticipanteHabitsPort progresoPort;
     @Mock
     private CompletarRegistroUseCase completar;
+    @Mock
+    private SaveRegistroHabitoPort saveRegistroPort;
 
     private MedicionAutomaticaService service;
     private final UserId ana = UserId.of(UUID.randomUUID());
@@ -79,7 +82,7 @@ class MedicionAutomaticaServiceTest {
     @BeforeEach
     void preparar() {
         service = new MedicionAutomaticaService(loadRegistroPort, loadHabitoPort, metaPort, progresoPort, completar,
-                new PoliticaKilometros(), FixedClock.at(AHORA));
+                new PoliticaKilometros(), FixedClock.at(AHORA), saveRegistroPort);
         km = habito(PoliticaKilometros.CLAVE_SISTEMA);
         registro = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), ana, km.id(), DIA_DEL_REGISTRO, 12,
                 TipoDia.TODOS, true, Instant.EPOCH);
@@ -236,5 +239,34 @@ class MedicionAutomaticaServiceTest {
 
         service.registrar(comando("6", Instant.parse("2026-11-03T05:00:00Z")));
         verify(completar).completar(any());
+    }
+
+    // spec 042 FR-022
+    @Test
+    @DisplayName("sobre un día cerrado por las carreras con GPS, Health Connect con más km sube el número sin pagar de nuevo")
+    void healthConnectSubeSobreLasCarreras() {
+        registro.completar(8, null, null, null, MedicionDiaria.gps(new BigDecimal("6.00")), AHORA.minusSeconds(3600));
+        when(saveRegistroPort.save(registro)).thenReturn(registro);
+
+        RegistroHabito resultado = service.registrar(comando("9.00", AHORA.minusSeconds(60)));
+
+        assertThat(resultado.medicion().valor()).isEqualByComparingTo("9.00");
+        assertThat(resultado.medicion().esAutomatica()).isTrue();
+        assertThat(resultado.puntosOtorgados()).isEqualTo(8);
+        verify(completar, never()).completar(any());
+    }
+
+    // spec 042 FR-022, SC-008
+    @Test
+    @DisplayName("sobre un día cerrado por las carreras con más km, Health Connect no baja nada ni lo suma")
+    void healthConnectMenorNoCambiaNada() {
+        registro.completar(8, null, null, null, MedicionDiaria.gps(new BigDecimal("7.00")), AHORA.minusSeconds(3600));
+
+        RegistroHabito resultado = service.registrar(comando("3.00", AHORA.minusSeconds(60)));
+
+        assertThat(resultado.medicion().valor()).isEqualByComparingTo("7.00");
+        assertThat(resultado.medicion().esDelTelefono()).isTrue();
+        verifyNoInteractions(saveRegistroPort);
+        verify(completar, never()).completar(any());
     }
 }

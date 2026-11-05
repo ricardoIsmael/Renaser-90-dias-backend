@@ -161,7 +161,7 @@ class RevocacionYAutorizacionDeLasSalasTest {
         assertThat(queVeAdmin.meet()).isNotNull();
     }
 
-    // spec 040 FR-016, SC-010
+    // spec 040 FR-016, SC-010, FR-036
     @Test
     @DisplayName("SC-010: cada acción con Google deja su fila: qué, quién, sobre qué evento, cómo salió y el código HTTP; sin enlaces ni tokens")
     void cadaAccionDejaSuFilaDeAuditoria() {
@@ -173,7 +173,8 @@ class RevocacionYAutorizacionDeLasSalasTest {
         List<RegistroDeAuditoriaGoogle> filas = m.auditoriaDeGoogle.filas;
         EventoId id = creado.evento().evento().id();
         assertThat(filas).extracting(RegistroDeAuditoriaGoogle::accion)
-                .containsExactly(AccionDeAuditoriaGoogle.CREAR_SALA, AccionDeAuditoriaGoogle.CREAR_SALA, AccionDeAuditoriaGoogle.AJUSTAR_ACCESO);
+                .containsExactly(AccionDeAuditoriaGoogle.CREAR_SALA, AccionDeAuditoriaGoogle.CREAR_SALA, AccionDeAuditoriaGoogle.AJUSTAR_ACCESO,
+                        AccionDeAuditoriaGoogle.AJUSTAR_GRABACION);
         RegistroDeAuditoriaGoogle fallida = filas.get(0);
         assertThat(fallida.exito()).isFalse();
         assertThat(fallida.codigoHttp()).isEqualTo(503);

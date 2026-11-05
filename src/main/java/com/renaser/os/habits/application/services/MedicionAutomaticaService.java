@@ -8,9 +8,11 @@ import com.renaser.os.habits.application.ports.out.habito.LoadHabitoPort;
 import com.renaser.os.habits.application.ports.out.medicion.MetaDeMedicionPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort;
+import com.renaser.os.habits.application.ports.out.registro.SaveRegistroHabitoPort;
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.medicion.LecturaAutomatica;
 import com.renaser.os.habits.domain.model.medicion.MedicionDiaria;
+import com.renaser.os.habits.domain.model.medicion.OrigenMedicion;
 import com.renaser.os.habits.domain.model.politica.DecisionPolitica;
 import com.renaser.os.habits.domain.model.politica.GestoCompletar;
 import com.renaser.os.habits.domain.model.registro.EstadoRegistro;
@@ -36,6 +38,12 @@ import java.util.NoSuchElementException;
  * justo lo que este camino reemplaza, y trae su propia validación acá. El registro se lee CON cerrojo y en la misma
  * transacción que lo completa: dos envíos juntos se serializan y el segundo encuentra el hábito cumplido (idempotencia).
  *
+ * <p><b>Sobre las carreras con GPS (spec 042, FR-022).</b> Si el registro del día ya lo cerraron las carreras, la lectura de
+ * Health Connect no es un 409: rige «el mayor» de las dos fuentes, nunca la suma (los pasos del teléfono ya incluyen los de la
+ * carrera). Si Health Connect leyó más, el número sube y el origen pasa a Health Connect, sin pagar puntos otra vez; si leyó
+ * menos o igual, nada cambia. Un registro cerrado por Health Connect sigue como en la 037: no cambia el número (anotado en el plan
+ * de la 042, para no ampliar el alcance).
+ *
  * <p>La pertenencia se mira antes de leer nada más: si no, un actor ajeno sabría por el error si el registro existe.
  */
 @Service
@@ -51,11 +59,13 @@ public class MedicionAutomaticaService implements RegistrarMedicionAutomaticaUse
     private final CompletarRegistroUseCase completarRegistroUseCase;
     private final PoliticaKilometros politica;
     private final Clock clock;
+    private final SaveRegistroHabitoPort saveRegistroPort;
 
     public MedicionAutomaticaService(LoadRegistroHabitoPort loadRegistroPort, LoadHabitoPort loadHabitoPort,
                                      MetaDeMedicionPort metaPort, ConsultarProgresoParticipanteHabitsPort progresoPort,
                                      CompletarRegistroUseCase completarRegistroUseCase, PoliticaKilometros politica,
-                                     Clock clock) {
+                                     Clock clock, SaveRegistroHabitoPort saveRegistroPort) {
+        this.saveRegistroPort = saveRegistroPort;
         this.loadRegistroPort = loadRegistroPort;
         this.loadHabitoPort = loadHabitoPort;
         this.metaPort = metaPort;
@@ -77,7 +87,7 @@ public class MedicionAutomaticaService implements RegistrarMedicionAutomaticaUse
                 .orElseThrow(() -> new NoSuchElementException("Hábito no encontrado: " + registro.habitoId()));
         requireHabitoDeKilometros(habito);
         if (registro.estado() == EstadoRegistro.COMPLETADO) {
-            return yaCumplido(registro);
+            return yaCumplido(registro, command);
         }
         requireLecturaDeEseDia(command.leidoEn(), registro);
         MedicionDiaria medicion = medicionDe(command);
@@ -92,14 +102,47 @@ public class MedicionAutomaticaService implements RegistrarMedicionAutomaticaUse
         }
     }
 
-    /** Idempotencia: lo que ya cerró Health Connect se devuelve igual; lo que cerró la captura no se pisa. */
-    private static RegistroHabito yaCumplido(RegistroHabito registro) {
+    /**
+     * Idempotencia: lo que ya cerró Health Connect se devuelve igual; lo que cerraron las carreras con GPS sigue «el mayor»
+     * (spec 042); lo que cerró la captura no se pisa.
+     */
+    private RegistroHabito yaCumplido(RegistroHabito registro, RegistrarMedicionAutomaticaCommand command) {
         MedicionDiaria medicion = registro.medicion();
         if (medicion != null && medicion.esAutomatica()) {
             return registro;
         }
+        if (medicion != null && medicion.origen() == OrigenMedicion.GPS) {
+            return elMayorSobreLasCarreras(registro, command);
+        }
         throw new IllegalStateException(medicion == null ? "Este hábito ya está registrado."
                 : "Ya registraste este hábito con tu captura.");
+    }
+
+    /**
+     * Spec 042 (FR-022): sube el número si Health Connect leyó más que las carreras; sin puntos ni evento. Un día ya cerrado no se
+     * toca y responde el registro como está; la lectura igual tiene que ser de ese día y respetar los topes.
+     */
+    private RegistroHabito elMayorSobreLasCarreras(RegistroHabito registro, RegistrarMedicionAutomaticaCommand command) {
+        ZoneId zona = zonaDe(registro);
+        if (registro.suDiaYaTermino(zona, clock.now())) {
+            return registro;
+        }
+        requireLecturaDeEseDia(command.leidoEn(), registro);
+        MedicionDiaria lectura = medicionDe(command);
+        if (politica.validarMedicionAutomatica(lectura, BigDecimal.ZERO) instanceof DecisionPolitica.NoProcede(String motivo)) {
+            throw new IllegalArgumentException(motivo);
+        }
+        if (lectura.valor().compareTo(registro.medicion().valor()) <= 0) {
+            return registro;
+        }
+        registro.subirMedicion(politica.conRevision(lectura), clock.now());
+        return saveRegistroPort.save(registro);
+    }
+
+    private ZoneId zonaDe(RegistroHabito registro) {
+        return ZoneId.of(progresoPort.deParticipante(registro.participanteId())
+                .orElseThrow(() -> new NoSuchElementException("Participante no encontrado: " + registro.participanteId()))
+                .timezone());
     }
 
     /** Ni del futuro (más allá del reloj mal puesto) ni de antes de que empezara el día del registro, en la zona de la persona. */
@@ -108,9 +151,7 @@ public class MedicionAutomaticaService implements RegistrarMedicionAutomaticaUse
         if (leidoEn.isAfter(ahora.plus(TOLERANCIA_DEL_RELOJ))) {
             throw new IllegalArgumentException("La hora de la lectura no es válida. Revisa la hora de tu teléfono.");
         }
-        ZoneId zona = ZoneId.of(progresoPort.deParticipante(registro.participanteId())
-                .orElseThrow(() -> new NoSuchElementException("Participante no encontrado: " + registro.participanteId()))
-                .timezone());
+        ZoneId zona = zonaDe(registro);
         if (leidoEn.isBefore(registro.fechaEjecucion().atStartOfDay(zona).toInstant())) {
             throw new IllegalArgumentException("Esa lectura es de otro día. Actualiza y vuelve a intentarlo.");
         }

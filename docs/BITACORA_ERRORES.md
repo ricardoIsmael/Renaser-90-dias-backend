@@ -16052,3 +16052,23 @@ De las 78 tablas que compara la prueba, solo esa. A «la otra persona» no se le
 **Solución.** Un aviso de mensaje se genera si todavía no llega, o si llegó DESPUÉS del último cambio del evento (`actualizadoEn`) y lleva como mucho 15 minutos de atraso (`GRACIA_DE_GENERACION_DE_MENSAJE`, el mismo tope con que sale), con el evento sin empezar. El despachador lo manda en el turno siguiente. Los avisos del teléfono (reglas E2) no cambiaron.
 
 **Cómo evitar que vuelva a pasar.** Una regla «solo lo que todavía no pasó» en un barrido periódico se prueba con el barrido corriendo JUSTO a la hora del aviso. `RecordatorioServiceMensajesTest` (issue #85) fija los tres casos: creado 15 min antes, creado después de la hora del aviso y más de 15 min de atraso.
+
+## E-670 · Las rutas nuevas de las carreras con GPS quedaban fuera del filtro de sesión (backend, spec 042, RESUELTO antes de publicar, 05/11)
+
+**Síntoma literal** (`./mvnw clean verify`, `RutasCubiertasPorElFiltroTest.ningunaRutaQuedaFueraDelFiltro`): «Estas rutas no las alcanza ningun matcher .authenticated() de SecurityConfig y tampoco declaran @PublicEndpoint. […] Expecting empty but was: ["/api/v1/carreras", "/api/v1/carreras/{carreraId}/ruta"]».
+
+**Causa real.** `CarreraController` vive en una ruta base nueva (`/api/v1/carreras`) y `SecurityConfig` termina en `anyRequest().permitAll()`: sin su matcher, la ruta se atendía sin sesión y la identidad saldría del header `X-Actor-Id`. Las IT pasaban porque todas mandan una sesión real.
+
+**Solución.** `.requestMatchers("/api/v1/carreras", "/api/v1/carreras/**").authenticated()` en `SecurityConfig`, junto a las de hábitos.
+
+**Cómo evitar que vuelva a pasar.** Ya es ejecutable: la prueba lo atrapó. Toda ruta base nueva suma su matcher en el mismo cambio; correr `RutasCubiertasPorElFiltroTest` apenas se crea un controller, no al final.
+
+## E-671 · `VerComoDePuntaAPuntaIT.websocketsDeSoloLectura` fallaba a veces en el CI con «No llegó ERROR; llegó: []» (backend, issue #88, 05/11, RESUELTO en la prueba)
+
+**Síntoma literal** (CI del push dc99c4e8, run 42085927350): `AssertionError: No llegó ERROR; llegó: []` en la línea 203, tras ~10 s. La corrida del pull_request sobre el mismo contenido pasó.
+
+**Causa real** (leída en las fuentes de spring-websocket 7.0.9, sin reproducir en local). `StompSubProtocolHandler.sendErrorMessage` manda el ERROR y cierra la sesión en el acto. La sesión es un `ConcurrentWebSocketSessionDecorator`: si otro hilo todavía tiene tomado su `flushLock` (el hilo de salida terminando de escribir el CONNECTED, justo cuando el cliente ya lo leyó y mandó el SEND), el ERROR queda en el búfer, `close` marca `closeInProgress` y ese búfer ya no se vacía: el socket se cierra con 1002 y el ERROR nunca sale. La prueba, además, esperaba 10 s fijos aunque el socket ya estuviera cerrado.
+
+**Solución** (solo en la prueba; el rechazo del servidor funciona: el cierre con 1002 lo prueba). El cliente anota el cierre y `esperarOCierre` vuelve en cuanto el socket se cierra sin la trama (tope de 30 s si no pasa nada). Un cierre sin ERROR tiene que ser 1002; la prueba repite en otra conexión (hasta cinco) y exige ver el ERROR con `MODO_SOLO_LECTURA`.
+
+**Cómo evitar que vuelva a pasar.** Una prueba de WebSocket no espera un tiempo fijo: espera la trama O el cierre. Con STOMP de Spring, un ERROR seguido de cierre puede perderse si coincide con otro envío a la misma sesión; si algún día el cliente real depende de leer el código del ERROR, el cierre 1002 también hay que tratarlo como rechazo.

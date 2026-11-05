@@ -348,6 +348,11 @@ renaser:
       habits-despachar-avisos:
         lock-at-most-for: PT4M
         lock-at-least-for: PT10S
+      # Spec 042 (D-323): borra una vez al dia las rutas de carreras de mas de 180 dias, de a lotes de 500.
+      # Sin lock, dos instancias borran lo mismo dos veces (no hace dano, es trabajo doble).
+      habits-borrar-rutas-viejas:
+        lock-at-most-for: PT10M
+        lock-at-least-for: PT10S
       # D-168: barrido horario del semaforo del aprendiz (minuto 25). Sin lock, dos instancias
       # calculan el padron dos veces; la foto semanal no se duplica (PK + ON CONFLICT DO NOTHING)
       # ni el aviso (solo lo publica quien inserto la foto), pero es trabajo doble.
@@ -734,6 +739,15 @@ renaser:
       ventana-dias: ${EVENTOS_MEET_VENTANA_DIAS:60}
       # Tope propio de pedidos por minuto a Google (el de Google es 600): que un error de bucle no agote la cuota.
       pedidos-por-minuto: ${EVENTOS_MEET_PEDIDOS_POR_MINUTO:30}
+      # Decision 6 del duenio (2026-11-05, spec 040 FR-035 y FR-036). Todo SI por defecto:
+      # - quien crea o edita el evento (ADMIN o ALCHEMIST) va como invitado del evento de Calendar, sin correos de Google (sendUpdates=none);
+      # - la sala se graba, se transcribe y toma notas sola (Meet REST API, config.artifactConfig; mismo permiso meetings.space.settings).
+      #   Si la cuenta conectada no tiene el plan (grabar: Google One de 2 TB o mas; transcribir y notas: Google Workspace), el evento y la sala
+      #   se conservan y Administracion ve un aviso en el detalle del evento. Nunca bloquea.
+      invitar-al-creador: ${EVENTOS_MEET_INVITAR_AL_CREADOR:true}
+      grabar: ${EVENTOS_MEET_GRABAR:true}
+      transcribir: ${EVENTOS_MEET_TRANSCRIBIR:true}
+      notas: ${EVENTOS_MEET_NOTAS:true}
       # El permiso permanente de la cuenta se guarda CIFRADO (AES-256-GCM). La clave: 32 bytes en base64
       # (`openssl rand -base64 32`), en SSM. `version` identifica la clave; para rotar, la nueva pasa a `clave` con otra `version` y
       # la vieja queda en `clave-anterior` con su `version-anterior` mientras haya datos cifrados con ella.

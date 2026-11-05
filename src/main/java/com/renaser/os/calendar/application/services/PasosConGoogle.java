@@ -1,5 +1,6 @@
 package com.renaser.os.calendar.application.services;
 
+import com.renaser.os.calendar.application.ports.out.meet.ConfiguracionDeGooglePort;
 import com.renaser.os.calendar.application.ports.out.meet.CuentaGoogleNoConectadaException;
 import com.renaser.os.calendar.application.ports.out.meet.CuentaGoogleRevocadaException;
 import com.renaser.os.calendar.application.ports.out.meet.GoogleNoRespondeException;
@@ -10,6 +11,7 @@ import com.renaser.os.calendar.application.ports.out.meet.SalaDeReunionPort;
 import com.renaser.os.calendar.application.ports.out.meet.SaveSalaMeetPort;
 import com.renaser.os.calendar.domain.model.meet.AccesoSalaMeet;
 import com.renaser.os.calendar.domain.model.meet.AccionDeAuditoriaGoogle;
+import com.renaser.os.calendar.domain.model.meet.ArtefactosDeLaSala;
 import com.renaser.os.calendar.domain.model.meet.EstadoSalaMeet;
 import com.renaser.os.calendar.domain.model.meet.PlanDeSalas.OcurrenciaDeseada;
 import com.renaser.os.calendar.domain.model.meet.PoliticaDeReintentos;
@@ -23,6 +25,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.DoubleSupplier;
@@ -55,15 +58,17 @@ class PasosConGoogle {
     private final RevocacionDeLaCuenta revocacion;
     private final Clock clock;
     private final DoubleSupplier azar;
+    private final ConfiguracionDeGooglePort configuracion;
 
     @Autowired
     PasosConGoogle(SalaDeReunionPort google, SaveSalaMeetPort saveSalaPort, AuditoriaDeGoogle auditoria,
-                   RevocacionDeLaCuenta revocacion, Clock clock) {
-        this(google, saveSalaPort, auditoria, revocacion, clock, () -> ThreadLocalRandom.current().nextDouble());
+                   RevocacionDeLaCuenta revocacion, Clock clock, ConfiguracionDeGooglePort configuracion) {
+        this(google, saveSalaPort, auditoria, revocacion, clock, () -> ThreadLocalRandom.current().nextDouble(), configuracion);
     }
 
     PasosConGoogle(SalaDeReunionPort google, SaveSalaMeetPort saveSalaPort, AuditoriaDeGoogle auditoria,
-                   RevocacionDeLaCuenta revocacion, Clock clock, DoubleSupplier azar) {
+                   RevocacionDeLaCuenta revocacion, Clock clock, DoubleSupplier azar, ConfiguracionDeGooglePort configuracion) {
+        this.configuracion = configuracion;
         this.google = google;
         this.saveSalaPort = saveSalaPort;
         this.auditoria = auditoria;
@@ -72,9 +77,13 @@ class PasosConGoogle {
         this.azar = azar;
     }
 
-    /** Pide la sala de esa fecha; si Google ya la tenía, toma la suya (FR-007). Después la deja abierta o con permiso. */
-    void crear(SalaMeet sala, OcurrenciaDeseada fecha, ZoneId zona, Operacion operacion) {
-        PedidoDeSala pedido = new PedidoDeSala(sala.idGoogle(), fecha.titulo(), fecha.inicio(), fecha.fin(), zona);
+    /**
+     * Pide la sala de esa fecha; si Google ya la tenía, toma la suya (FR-007). Después la deja abierta y le pide que grabe y transcriba sola.
+     *
+     * @param invitados quién va como invitado del evento de Calendar (FR-035); {@code null} = no tocar los que haya
+     */
+    void crear(SalaMeet sala, OcurrenciaDeseada fecha, ZoneId zona, List<String> invitados, Operacion operacion) {
+        PedidoDeSala pedido = new PedidoDeSala(sala.idGoogle(), fecha.titulo(), fecha.inicio(), fecha.fin(), zona, invitados);
         try {
             ResultadoDeSala resultado = google.crear(pedido);
             Instant ahora = clock.now();
@@ -95,8 +104,8 @@ class PasosConGoogle {
     }
 
     /** Google se entera del cambio de título, hora o duración. El enlace no cambia. */
-    void actualizar(SalaMeet sala, OcurrenciaDeseada fecha, ZoneId zona, Operacion operacion) {
-        PedidoDeSala pedido = new PedidoDeSala(sala.idGoogle(), fecha.titulo(), fecha.inicio(), fecha.fin(), zona);
+    void actualizar(SalaMeet sala, OcurrenciaDeseada fecha, ZoneId zona, List<String> invitados, Operacion operacion) {
+        PedidoDeSala pedido = new PedidoDeSala(sala.idGoogle(), fecha.titulo(), fecha.inicio(), fecha.fin(), zona, invitados);
         try {
             google.actualizar(pedido);
             sala.sincronizada(clock.now());
@@ -141,6 +150,35 @@ class PasosConGoogle {
             auditar(AccionDeAuditoriaGoogle.AJUSTAR_ACCESO, sala, confirmado.orElse(null) == elegido, null, operacion);
         } catch (RuntimeException ex) {
             fallarElAcceso(sala, ex, operacion);
+            return;
+        }
+        pedirGrabacionSiHaceFalta(sala, operacion);
+    }
+
+    /**
+     * Pide que la sala grabe, transcriba y tome notas sola (FR-036) y anota lo que Google dejó. Nunca falla ni deja trabajo pendiente: si la cuenta no
+     * tiene el plan, la sala y el evento siguen como estaban y Administración ve el aviso (FR-037). Un fallo pasajero (red, 5xx) deja la sala «sin
+     * pedir» para que el próximo ajuste lo intente otra vez; una cuenta revocada la detecta el siguiente pedido a Google.
+     */
+    void pedirGrabacionSiHaceFalta(SalaMeet sala, Operacion operacion) {
+        ArtefactosDeLaSala pedidos = ArtefactosDeLaSala.pedir(configuracion.grabar(), configuracion.transcribir(), configuracion.tomarNotas());
+        if (!pedidos.algo() || !sala.artefactosSinPedir()) {
+            return;
+        }
+        try {
+            ArtefactosDeLaSala confirmados = google.fijarArtefactos(sala.enlace(), pedidos);
+            sala.registrarArtefactos(confirmados, clock.now());
+            saveSalaPort.guardar(sala);
+            auditar(AccionDeAuditoriaGoogle.AJUSTAR_GRABACION, sala, !confirmados.algunoRechazado(), null, operacion);
+        } catch (GoogleRechazoException rechazo) {
+            // Google dijo que no y ni siquiera dejó leer la sala: se anota como no disponible para no insistir en cada sincronización.
+            sala.registrarArtefactos(new ArtefactosDeLaSala(pedidos.grabacion() == null ? null : Boolean.FALSE,
+                    pedidos.transcripcion() == null ? null : Boolean.FALSE, pedidos.notas() == null ? null : Boolean.FALSE), clock.now());
+            saveSalaPort.guardar(sala);
+            auditar(AccionDeAuditoriaGoogle.AJUSTAR_GRABACION, sala, false, rechazo.codigoHttp(), operacion);
+        } catch (RuntimeException pasajero) {
+            Integer codigo = pasajero instanceof GoogleNoRespondeException nr ? nr.codigoHttp() : null;
+            auditar(AccionDeAuditoriaGoogle.AJUSTAR_GRABACION, sala, false, codigo, operacion);
         }
     }
 

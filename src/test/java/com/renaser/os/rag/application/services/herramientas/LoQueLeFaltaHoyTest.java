@@ -138,6 +138,15 @@ class LoQueLeFaltaHoyTest {
         assertThat(porCaptura).contains("| mide=km | meta=5 | lleva=7 | origen=captura");
     }
 
+    // spec 042 FR-022
+    @Test
+    @DisplayName("spec 042: un dia cerrado por carreras con GPS dice origen=carrera, no captura")
+    void kilometrosPorCarreras() {
+        String porCarrera = LoQueLeFaltaHoy.texto(List.of(kilometros("COMPLETADO", new java.math.BigDecimal("6.20"), "GPS", false)), AHORA);
+
+        assertThat(porCarrera).contains("| mide=km | meta=5 | lleva=6.2 | origen=carrera");
+    }
+
     @Test
     @DisplayName("spec 037: un habito que no mide nada no lleva mide, meta ni lleva")
     void otrosHabitosNoLlevanMedicion() {

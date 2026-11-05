@@ -53,7 +53,21 @@ public record MedicionDiaria(BigDecimal valor, OrigenMedicion origen, LecturaAut
         return new MedicionDiaria(valor, OrigenMedicion.HEALTH_CONNECT, Objects.requireNonNull(lectura, "lectura"));
     }
 
+    /** La suma de las carreras con GPS del día (spec 042). Sin lectura: el detalle vive en las carreras. */
+    public static MedicionDiaria gps(BigDecimal valor) {
+        return new MedicionDiaria(valor, OrigenMedicion.GPS);
+    }
+
+    /** {@code true} si la leyó el teléfono de Health Connect (spec 037). Una carrera con GPS no lo es: ver {@link #esDelTelefono()}. */
     public boolean esAutomatica() {
         return origen == OrigenMedicion.HEALTH_CONNECT;
+    }
+
+    /**
+     * {@code true} si el número lo midió el teléfono, por Health Connect o por una carrera con GPS (spec 042): las dos fuentes que
+     * siguen la regla «el mayor» del día (FR-022). La captura escrita a mano no.
+     */
+    public boolean esDelTelefono() {
+        return origen == OrigenMedicion.HEALTH_CONNECT || origen == OrigenMedicion.GPS;
     }
 }

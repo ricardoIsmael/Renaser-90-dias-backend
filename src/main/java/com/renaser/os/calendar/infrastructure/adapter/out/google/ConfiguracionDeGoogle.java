@@ -2,6 +2,7 @@ package com.renaser.os.calendar.infrastructure.adapter.out.google;
 
 import com.renaser.os.calendar.application.ports.out.meet.CifradoDeSecretosPort;
 import com.renaser.os.calendar.application.ports.out.meet.ConfiguracionDeGooglePort;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -32,6 +33,10 @@ class ConfiguracionDeGoogle implements ConfiguracionDeGooglePort {
     private final String correoEsperado;
     private final int ventanaEnDias;
     private final CifradoDeSecretosPort cifrado;
+    private boolean invitarAlCreador = true;
+    private boolean grabar = true;
+    private boolean transcribir = true;
+    private boolean tomarNotas = true;
 
     ConfiguracionDeGoogle(@Value("${renaser.calendar.meet.oauth.client-id:}") String clientId,
                           @Value("${renaser.calendar.meet.oauth.client-secret:}") String clientSecret,
@@ -47,6 +52,38 @@ class ConfiguracionDeGoogle implements ConfiguracionDeGooglePort {
         this.correoEsperado = correoEsperado.trim();
         this.ventanaEnDias = ventanaEnDias;
         this.cifrado = cifrado;
+    }
+
+    /** Decisión 6 del dueño (2026-11-05, FR-035 y FR-036): invitar a quien crea el evento, grabar, transcribir y tomar notas. Todo sí por defecto. */
+    @Autowired
+    void opcionesDeLaSala(@Value("${renaser.calendar.meet.invitar-al-creador:true}") boolean invitarAlCreador,
+                          @Value("${renaser.calendar.meet.grabar:true}") boolean grabar,
+                          @Value("${renaser.calendar.meet.transcribir:true}") boolean transcribir,
+                          @Value("${renaser.calendar.meet.notas:true}") boolean tomarNotas) {
+        this.invitarAlCreador = invitarAlCreador;
+        this.grabar = grabar;
+        this.transcribir = transcribir;
+        this.tomarNotas = tomarNotas;
+    }
+
+    @Override
+    public boolean invitarAlCreador() {
+        return invitarAlCreador;
+    }
+
+    @Override
+    public boolean grabar() {
+        return grabar;
+    }
+
+    @Override
+    public boolean transcribir() {
+        return transcribir;
+    }
+
+    @Override
+    public boolean tomarNotas() {
+        return tomarNotas;
     }
 
     @Override

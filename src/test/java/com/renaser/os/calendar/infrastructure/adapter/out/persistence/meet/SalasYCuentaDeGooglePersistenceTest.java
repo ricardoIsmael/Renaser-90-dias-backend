@@ -4,6 +4,7 @@ import com.renaser.os.TestcontainersConfiguration;
 import com.renaser.os.calendar.application.ports.out.meet.ConexionesEnCursoPort.ConexionEnCurso;
 import com.renaser.os.calendar.domain.model.evento.EventoId;
 import com.renaser.os.calendar.domain.model.meet.AccesoSalaMeet;
+import com.renaser.os.calendar.domain.model.meet.ArtefactosDeLaSala;
 import com.renaser.os.calendar.domain.model.meet.AccionDeAuditoriaGoogle;
 import com.renaser.os.calendar.domain.model.meet.CuentaDeGoogle;
 import com.renaser.os.calendar.domain.model.meet.EstadoDeLaCuenta;
@@ -79,6 +80,23 @@ class SalasYCuentaDeGooglePersistenceTest {
             salas.guardar(sala(evento, LocalDate.of(2026, 11, 10), "b".repeat(32)));
             jdbc.execute("SELECT 1");
         }).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    // spec 040 FR-036, FR-037
+    @Test
+    @DisplayName("FR-036: lo que Google confirmó de la grabación, la transcripción y las notas se guarda por sala con sus tres estados (V171)")
+    void laGrabacionConfirmadaSeGuarda() {
+        EventoId evento = EventoId.of(UUID.randomUUID());
+        SalaMeet creada = sala(evento, LocalDate.of(2026, 11, 12), "g".repeat(32));
+        creada.completarCon("https://meet.google.com/abc-defg-hij", AHORA);
+        creada.registrarArtefactos(new ArtefactosDeLaSala(true, false, null), AHORA);
+        salas.guardar(creada);
+
+        assertThat(salas.porEvento(evento)).singleElement().extracting(SalaMeet::artefactos)
+                .isEqualTo(new ArtefactosDeLaSala(true, false, null));
+        auditoria.registrar(new RegistroDeAuditoriaGoogle(UUID.randomUUID(), AHORA, AccionDeAuditoriaGoogle.AJUSTAR_GRABACION, null,
+                evento.value(), false, 403, "corr-grabacion"));
+        assertThat(auditoria.ultimos(50)).extracting(RegistroDeAuditoriaGoogle::correlacion).contains("corr-grabacion");
     }
 
     // spec 040 FR-007

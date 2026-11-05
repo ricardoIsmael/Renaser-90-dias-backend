@@ -6,6 +6,7 @@ import com.renaser.os.calendar.application.ports.out.evento.SaveEventoPort;
 import com.renaser.os.calendar.application.ports.out.meet.ConfiguracionDeGooglePort;
 import com.renaser.os.calendar.application.ports.out.meet.LoadSalaMeetPort;
 import com.renaser.os.calendar.application.ports.out.meet.SaveSalaMeetPort;
+import com.renaser.os.calendar.application.ports.out.persona.CorreosDePersonasPort;
 import com.renaser.os.calendar.application.services.PasosConGoogle.CuentaInutilizable;
 import com.renaser.os.calendar.application.services.PasosConGoogle.Operacion;
 import com.renaser.os.calendar.domain.model.evento.EstadoEvento;
@@ -30,6 +31,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -63,12 +65,14 @@ class SincronizadorDeSalas {
     private final PasosConGoogle pasos;
     private final Clock clock;
     private final IdGenerator idGenerator;
+    private final CorreosDePersonasPort correos;
     /** Candados rayados por evento: dos hilos sobre el mismo evento esperan; los de eventos distintos casi nunca chocan. Sin mapa que crezca. */
     private final ReentrantLock[] candados = IntStream.range(0, 64).mapToObj(i -> new ReentrantLock()).toArray(ReentrantLock[]::new);
 
     SincronizadorDeSalas(LoadEventoPort loadEventoPort, LoadExcepcionPort loadExcepcionPort, SaveEventoPort saveEventoPort,
                          LoadSalaMeetPort loadSalaPort, SaveSalaMeetPort saveSalaPort, ConfiguracionDeGooglePort configuracion,
-                         PasosConGoogle pasos, Clock clock, IdGenerator idGenerator) {
+                         PasosConGoogle pasos, Clock clock, IdGenerator idGenerator, CorreosDePersonasPort correos) {
+        this.correos = correos;
         this.loadEventoPort = loadEventoPort;
         this.loadExcepcionPort = loadExcepcionPort;
         this.saveEventoPort = saveEventoPort;
@@ -119,8 +123,9 @@ class SincronizadorDeSalas {
             alinearElAcceso(evento.get(), existentes, hoy, ahora);
         }
         List<Paso> plan = PlanDeSalas.calcular(vivo, hoy, deseadas, existentes, ahora, forzar);
+        Invitados invitados = new Invitados(evento.orElse(null), operacion.actor());
         for (Paso paso : plan) {
-            ejecutar(paso, evento.orElse(null), deseadas, zona, operacion, limite);
+            ejecutar(paso, evento.orElse(null), deseadas, zona, invitados, operacion, limite);
         }
         List<SalaMeet> resultado = loadSalaPort.porEvento(eventoId);
         if (vivo) {
@@ -129,7 +134,7 @@ class SincronizadorDeSalas {
         return resultado;
     }
 
-    private void ejecutar(Paso paso, Evento evento, Map<LocalDate, OcurrenciaDeseada> deseadas, ZoneId zona,
+    private void ejecutar(Paso paso, Evento evento, Map<LocalDate, OcurrenciaDeseada> deseadas, ZoneId zona, Invitados invitados,
                           Operacion operacion, Instant limite) {
         boolean sinTiempo = clock.now().isAfter(limite);
         switch (paso.accion()) {
@@ -138,12 +143,12 @@ class SincronizadorDeSalas {
                 if (sinTiempo) {
                     saveSalaPort.guardar(sala);
                 } else {
-                    pasos.crear(sala, deseadas.get(paso.fecha()), zona, operacion);
+                    pasos.crear(sala, deseadas.get(paso.fecha()), zona, invitados.alCrear(), operacion);
                 }
             }
             case ACTUALIZAR -> {
                 if (!sinTiempo) {
-                    pasos.actualizar(paso.sala(), deseadas.get(paso.fecha()), zona, operacion);
+                    pasos.actualizar(paso.sala(), deseadas.get(paso.fecha()), zona, invitados.alEditar(), operacion);
                 }
             }
             case AJUSTAR_ACCESO -> {
@@ -155,6 +160,64 @@ class SincronizadorDeSalas {
                 if (!sinTiempo) {
                     pasos.borrar(paso.sala(), operacion);
                 }
+            }
+        }
+    }
+
+    /**
+     * Quién va como invitado del evento de Calendar (decisión 6 del dueño, FR-035): quien creó el evento en Renaser y, si es otra persona, quien lo
+     * está editando ahora (los dos son ADMIN o ALCHEMIST: solo ellos crean y editan eventos con Meet). Se busca su correo una sola vez por
+     * sincronización y solo si hay algo que pedirle a Google. Si no se encuentra el correo, no se invita a nadie y la sala se crea igual.
+     */
+    private final class Invitados {
+
+        private final Evento evento;
+        private final UserId editor;
+        private List<String> correosDeLaOperacion;
+
+        Invitados(Evento evento, UserId editor) {
+            this.evento = evento;
+            this.editor = editor;
+        }
+
+        /** Al crear la sala siempre se dice la lista (el proceso de fondo invita al menos a quien creó el evento). */
+        List<String> alCrear() {
+            return configuracion.invitarAlCreador() ? correos() : List.of();
+        }
+
+        /**
+         * Al editar, solo cuando una persona edita: el proceso en segundo plano no sabe quién fue y no toca los invitados que Google ya tiene
+         * ({@code null}).
+         */
+        List<String> alEditar() {
+            return configuracion.invitarAlCreador() && editor != null ? correos() : null;
+        }
+
+        private List<String> correos() {
+            if (correosDeLaOperacion == null) {
+                correosDeLaOperacion = buscar();
+            }
+            return correosDeLaOperacion;
+        }
+
+        private List<String> buscar() {
+            if (evento == null) {
+                return List.of();
+            }
+            LinkedHashSet<UserId> personas = new LinkedHashSet<>();
+            if (evento.creadoPor() != null) {
+                personas.add(evento.creadoPor());
+            }
+            if (editor != null) {
+                personas.add(editor);
+            }
+            try {
+                Map<UserId, String> encontrados = correos.correosDe(personas);
+                return personas.stream().map(encontrados::get).filter(c -> c != null && !c.isBlank()).map(String::trim).distinct().toList();
+            } catch (RuntimeException ex) {
+                log.warn("[calendar.SincronizadorDeSalas] no se pudo leer el correo de quien organiza el evento {}: {}", evento.id(),
+                        ex.getClass().getSimpleName());
+                return List.of();
             }
         }
     }

@@ -151,6 +151,24 @@ public final class RegistroHabito {
     }
 
     /**
+     * Spec 042 (FR-022) — sube el número del día de un registro YA cumplido por el teléfono (Health Connect o carreras con GPS):
+     * «el mayor» de las dos fuentes, nunca la suma. No paga puntos, no cambia la hora de cumplimiento y no emite evento: el
+     * hábito ya estaba cumplido. Solo sube: un número igual o menor es un error de programación del llamador, que compara antes.
+     * Lo escrito con la captura no se pisa.
+     */
+    public void subirMedicion(MedicionDiaria nueva, Instant ahora) {
+        Objects.requireNonNull(nueva, "nueva medicion");
+        if (estado != EstadoRegistro.COMPLETADO || medicion == null || !medicion.esDelTelefono() || !nueva.esDelTelefono()) {
+            throw new IllegalStateException("Solo sube el número de un hábito cumplido por el teléfono");
+        }
+        if (nueva.valor().compareTo(medicion.valor()) <= 0) {
+            throw new IllegalArgumentException("El número del día solo sube");
+        }
+        this.medicion = nueva;
+        this.actualizadoEn = ahora;
+    }
+
+    /**
      * D-259 — {@code true} si el dia local de este registro ya termino para el participante (su zona, no la del
      * servidor ni UTC; regla 02 §1). Es la misma frontera que el barrido de expiracion ({@link CorteDeExpiracion}):
      * un habito se registra durante su dia, aunque se le haya pasado la hora, y no despues.
