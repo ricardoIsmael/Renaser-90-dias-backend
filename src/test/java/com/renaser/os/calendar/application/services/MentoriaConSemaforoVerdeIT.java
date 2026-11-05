@@ -193,9 +193,12 @@ class MentoriaConSemaforoVerdeIT {
 
         generar.generar(T0);
 
-        assertThat(recordatoriosDe(mentoria, verde)).as("el anuncio y el de 10 min antes").isEqualTo(2);
-        assertThat(recordatoriosDe(mentoria, mentor)).as("el personal sigue recibiendo los suyos").isEqualTo(2);
-        assertThat(recordatoriosDe(mentoria, amarillo)).isZero();
+        assertThat(avisosDelTelefonoDe(mentoria, verde)).as("el anuncio y el de 10 min antes").isEqualTo(2);
+        assertThat(avisosDelTelefonoDe(mentoria, mentor)).as("el personal sigue recibiendo los suyos").isEqualTo(2);
+        // spec 041 FR-015: los avisos de mensaje (chat y WhatsApp) salen de la misma audiencia con la elegibilidad del tipo: el verde
+        // tiene los que todavia llegan a tiempo (30 y 10 min antes; el de 1 dia y el de 1 hora ya pasaron) y el amarillo, ninguno.
+        assertThat(avisosDeMensajeDe(mentoria, verde)).containsExactly(30, 10);
+        assertThat(recordatoriosDe(mentoria, amarillo)).as("ni del telefono ni de mensaje").isZero();
 
         despachar.despachar(T0);
         esperar("la notificacion del anuncio al verde y al mentor",
@@ -235,8 +238,9 @@ class MentoriaConSemaforoVerdeIT {
         EventoId mentoria = mentoria(TipoAudiencia.TODOS, false);
         ponerSemaforo(amarillo, 10);
         generar.generar(T0);
-        assertThat(recordatoriosDe(mentoria, verde)).isEqualTo(1);
-        assertThat(recordatoriosDe(mentoria, amarillo)).isEqualTo(1);
+        assertThat(avisosDelTelefonoDe(mentoria, verde)).isEqualTo(1);
+        assertThat(avisosDelTelefonoDe(mentoria, amarillo)).isEqualTo(1);
+        assertThat(avisosDeMensajeDe(mentoria, amarillo)).as("los de mensaje de la spec 041, 30 y 10 min antes").containsExactly(30, 10);
 
         ponerSemaforo(amarillo, 7);
         clock.fijar(T0.plus(LUEGO_DEL_AVISO));
@@ -245,6 +249,8 @@ class MentoriaConSemaforoVerdeIT {
         esperar("el aviso del verde", () -> notificacionesDe(verde) >= 1);
         assertThat(estadoDelRecordatorio(mentoria, verde)).isEqualTo("enviado");
         assertThat(estadoDelRecordatorio(mentoria, amarillo)).isEqualTo(NO_ELEGIBLE);
+        // spec 041 FR-015: tambien su aviso de mensaje de 30 min antes se cancela al despacharlo; no sale ni por el chat ni por WhatsApp.
+        assertThat(filasQueNoSeCancelaronPorElegibilidad(mentoria, amarillo)).isZero();
         assertThat(notificacionesDe(amarillo)).isZero();
     }
 
@@ -332,6 +338,27 @@ class MentoriaConSemaforoVerdeIT {
     private int recordatoriosDe(EventoId evento, UserId usuario) {
         return jdbc.queryForObject("SELECT count(*) FROM renaser.recordatorios_evento WHERE evento_id = ? AND usuario_id = ?",
                 Integer.class, evento.value(), usuario.value());
+    }
+
+    /** Las filas que son aviso del telefono; la cola tambien guarda, desde la spec 041, las que solo existen para el mensaje. */
+    private int avisosDelTelefonoDe(EventoId evento, UserId usuario) {
+        return jdbc.queryForObject("SELECT count(*) FROM renaser.recordatorios_evento WHERE evento_id = ? AND usuario_id = ? AND aviso_en_app",
+                Integer.class, evento.value(), usuario.value());
+    }
+
+    /** Los minutos antes de cada aviso de mensaje (chat y WhatsApp, spec 041), del mas lejano al mas cercano. */
+    private List<Integer> avisosDeMensajeDe(EventoId evento, UserId usuario) {
+        return jdbc.queryForList("""
+                SELECT mensaje_min_antes FROM renaser.recordatorios_evento
+                WHERE evento_id = ? AND usuario_id = ? AND mensaje_min_antes IS NOT NULL ORDER BY enviar_en
+                """, Integer.class, evento.value(), usuario.value());
+    }
+
+    private int filasQueNoSeCancelaronPorElegibilidad(EventoId evento, UserId usuario) {
+        return jdbc.queryForObject("""
+                SELECT count(*) FROM renaser.recordatorios_evento
+                WHERE evento_id = ? AND usuario_id = ? AND motivo_cancelacion IS DISTINCT FROM ?
+                """, Integer.class, evento.value(), usuario.value(), NO_ELEGIBLE);
     }
 
     /** El del aviso de «10 min antes»: {@code enviado}, el motivo con que se cancelo, o {@code pendiente}. */
