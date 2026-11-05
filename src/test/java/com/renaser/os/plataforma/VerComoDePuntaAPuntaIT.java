@@ -191,16 +191,31 @@ class VerComoDePuntaAPuntaIT {
     @DisplayName("el SEND de STOMP de una sesión de solo lectura recibe ERROR MODO_SOLO_LECTURA; la voz en vivo no abre")
     void websocketsDeSoloLectura() throws Exception {
         String token = verComo("TRAINEE");
-        Cliente cliente = new Cliente();
-        WebSocket socket = HttpClient.newHttpClient().newWebSocketBuilder().header("X-Auth-Token", token)
-                .buildAsync(URI.create("ws://localhost:" + puerto + "/ws"), cliente).get(10, TimeUnit.SECONDS);
-        sockets.add(socket);
-        enviar(socket, "CONNECT\naccept-version:1.2\nhost:renaser\nheart-beat:0,0\n\n\u0000");
-        cliente.esperar("CONNECTED");
 
-        enviar(socket, "SEND\ndestination:/app/conversaciones/" + UUID.randomUUID() + "/mensajes\n\nhola\u0000");
+        // Issue #88: Spring manda el ERROR y cierra la sesión en el acto (StompSubProtocolHandler.sendErrorMessage). Si en ese
+        // instante el hilo de salida todavía tiene tomado el envío del CONNECTED, ConcurrentWebSocketSessionDecorator deja el
+        // ERROR en su búfer y el cierre lo descarta: el socket se cierra con 1002 y el frame nunca llega (en el CI: «No llegó
+        // ERROR; llegó: []» tras 10 s). Por eso: se espera el frame O el cierre (no un tiempo fijo), un cierre sin ERROR tiene
+        // que ser el 1002 del rechazo, y se repite en otra conexión hasta ver el ERROR con su código.
+        String errorStomp = null;
+        for (int intento = 1; intento <= 5 && errorStomp == null; intento++) {
+            Cliente cliente = new Cliente();
+            WebSocket socket = HttpClient.newHttpClient().newWebSocketBuilder().header("X-Auth-Token", token)
+                    .buildAsync(URI.create("ws://localhost:" + puerto + "/ws"), cliente).get(30, TimeUnit.SECONDS);
+            sockets.add(socket);
+            enviar(socket, "CONNECT\naccept-version:1.2\nhost:renaser\nheart-beat:0,0\n\n\u0000");
+            assertThat(cliente.esperarOCierre("CONNECTED")).as("el CONNECT de la sesión de solo lectura se acepta").isNotNull();
 
-        assertThat(cliente.esperar("ERROR")).contains("MODO_SOLO_LECTURA");
+            enviar(socket, "SEND\ndestination:/app/conversaciones/" + UUID.randomUUID() + "/mensajes\n\nhola\u0000");
+
+            errorStomp = cliente.esperarOCierre("ERROR");
+            if (errorStomp == null) {
+                assertThat(cliente.codigoDeCierre())
+                        .as("sin ERROR, el socket se cerró por el rechazo (1002), no por otra cosa")
+                        .isEqualTo(WebSocketCloseStatus.PROTOCOLO);
+            }
+        }
+        assertThat(errorStomp).as("en cinco conexiones nunca llegó el ERROR").isNotNull().contains("MODO_SOLO_LECTURA");
 
         assertThatThrownBy(() -> HttpClient.newHttpClient().newWebSocketBuilder().header("X-Auth-Token", token)
                 .buildAsync(URI.create("ws://localhost:" + puerto + "/api/v1/renasia/voz/en-vivo"), new Cliente())
@@ -398,9 +413,17 @@ class VerComoDePuntaAPuntaIT {
         socket.sendBinary(ByteBuffer.wrap(trama.getBytes(StandardCharsets.UTF_8)), true).join();
     }
 
+    /** Códigos de cierre de un WebSocket (RFC 6455) que miran estas pruebas. */
+    private static final class WebSocketCloseStatus {
+        static final int PROTOCOLO = 1002;
+    }
+
     private static final class Cliente implements WebSocket.Listener {
+        /** Tope generoso: en un runner cargado el primer frame puede tardar varios segundos. */
+        private static final long TOPE_SEGUNDOS = 30;
         private final BlockingQueue<String> tramas = new LinkedBlockingQueue<>();
         private final StringBuilder parcial = new StringBuilder();
+        private volatile Integer cierre;
 
         @Override
         public CompletionStage<?> onText(WebSocket socket, CharSequence datos, boolean ultimo) {
@@ -413,15 +436,35 @@ class VerComoDePuntaAPuntaIT {
             return null;
         }
 
-        String esperar(String comando) throws InterruptedException {
-            long limite = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        @Override
+        public CompletionStage<?> onClose(WebSocket socket, int codigo, String motivo) {
+            cierre = codigo;
+            return null;
+        }
+
+        Integer codigoDeCierre() {
+            return cierre;
+        }
+
+        /**
+         * Espera la trama que empieza con {@code comando}, hasta {@link #TOPE_SEGUNDOS}. Si el servidor cierra el socket sin
+         * mandarla, devuelve {@code null} en cuanto se vacía lo recibido (no espera el tope entero).
+         */
+        String esperarOCierre(String comando) throws InterruptedException {
+            long limite = System.nanoTime() + TimeUnit.SECONDS.toNanos(TOPE_SEGUNDOS);
+            List<String> vistas = new ArrayList<>();
             while (System.nanoTime() < limite) {
-                String trama = tramas.poll(200, TimeUnit.MILLISECONDS);
-                if (trama != null && trama.startsWith(comando + "\n")) {
-                    return trama;
+                String trama = tramas.poll(100, TimeUnit.MILLISECONDS);
+                if (trama != null) {
+                    if (trama.startsWith(comando + "\n")) {
+                        return trama;
+                    }
+                    vistas.add(trama);
+                } else if (cierre != null && tramas.isEmpty()) {
+                    return null;
                 }
             }
-            throw new AssertionError("No llegó " + comando + "; llegó: " + tramas);
+            throw new AssertionError("No llegó " + comando + " en " + TOPE_SEGUNDOS + " s; llegó: " + vistas);
         }
     }
 }
