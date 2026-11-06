@@ -50,7 +50,7 @@ La versión de la app (`../Renaser-90-dias-frontend-/docs/arnes/familias-de-erro
 7. Jackson: ningún bean inyecta el `ObjectMapper` de Jackson 2.
 8. Beans: dos componentes de Spring con el mismo nombre simple.
 9. Silencio: `catch` vacío sin comentario.
-10. Textos: mensajes de error sin tildes; la deuda (189 en 127 archivos, issue #95) solo puede bajar.
+10. Textos: mensajes de error sin tildes; la deuda (189 en 127 archivos, issue #95) quedó en 0 con #104: ya no hay ninguno permitido.
 11. Entorno: CRLF en archivos de texto (excepciones: `mvnw.cmd` y el CSV de la spec 026).
 
 **App** — `src/__tests__/harness/familiasDeErrores.test.ts` (7 pruebas): fechas UTC (2), `Alert` de react-native (2),
@@ -62,7 +62,7 @@ Cada chequeo se probó **contra una violación plantada** (falla) y **contra el 
 
 | Dónde | Qué | Issue |
 |---|---|---|
-| Backend | 189 mensajes de error sin tildes en 127 archivos | [#95](https://github.com/ricardoIsmael/Renaser-90-dias-backend/issues/95) |
+| Backend | 189 mensajes de error sin tildes en 127 archivos (arreglados en #104: la deuda está en 0) | [#95](https://github.com/ricardoIsmael/Renaser-90-dias-backend/issues/95) |
 | App | `AlumnoScreen` y `usePasosDelDia` usan el `Alert` de react-native (en la web no sale el aviso) | [RENASER-LAB#144](https://github.com/RENASER-LAB/Renaser-90-dias-frontend-/issues/144) |
 
 No se tocó código de producto: quedaron como excepciones con fecha.
