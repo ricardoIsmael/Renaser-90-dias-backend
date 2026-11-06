@@ -110,7 +110,7 @@ class DespliegueDeFuncionalidadTest {
                 .filter(definicion -> !DespliegueDeFuncionalidad.admite(definicion))
                 .map(DefinicionDeFuncionalidad::clave).toList();
 
-        assertThat(sinCuenta).as("sale de los roles del catálogo, no de un nombre fijo").containsExactly("registro");
+        assertThat(sinCuenta).as("sale de los roles del catálogo, no de un nombre fijo").containsExactly("registro", "auth.codigo_whatsapp"); // spec 043: el código por WhatsApp es público como el alta
         assertThat(CatalogoDeFuncionalidades.inicial().definicion("chat.grupos").map(DespliegueDeFuncionalidad::admite))
                 .contains(true);
     }

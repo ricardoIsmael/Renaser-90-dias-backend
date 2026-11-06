@@ -81,9 +81,9 @@ class ReglaDeDespliegueTest {
                 .extracting(e -> ((FuncionalidadNoDisponibleException) e).clave()).isEqualTo("chat");
         MisFuncionalidades deOtra = mias.mias(otra);
         assertThat(deOtra.noDisponibles()).containsExactlyInAnyOrder("chat", "chat.grupos", "chat.global",
-                "chat.soporte", "chat.directos", "chat.audio", "chat.fotos", "eventos.meet", "eventos.whatsapp");
+                "chat.soporte", "chat.directos", "chat.audio", "chat.fotos", "eventos.meet", "eventos.whatsapp", "auth.codigo_whatsapp");
         assertThat(deOtra.apagadas()).isEmpty();
-        assertThat(mias.mias(probadora).noDisponibles()).as("solo lo que nace apagado (specs 040 y 041)").containsExactlyInAnyOrder("eventos.meet", "eventos.whatsapp");
+        assertThat(mias.mias(probadora).noDisponibles()).as("solo lo que nace apagado (specs 040 y 041)").containsExactlyInAnyOrder("eventos.meet", "eventos.whatsapp", "auth.codigo_whatsapp");
         assertThat(interruptores.prendida("chat.grupos")).as("un proceso sin persona no ve el despliegue").isTrue();
     }
 
@@ -94,7 +94,7 @@ class ReglaDeDespliegueTest {
         despliegues.filas.clear();
         copia.recargar();
 
-        assertThat(mias.mias(otra).noDisponibles()).as("solo lo que nace apagado (specs 040 y 041)").containsExactlyInAnyOrder("eventos.meet", "eventos.whatsapp");
+        assertThat(mias.mias(otra).noDisponibles()).as("solo lo que nace apagado (specs 040 y 041)").containsExactlyInAnyOrder("eventos.meet", "eventos.whatsapp", "auth.codigo_whatsapp");
         assertThat(interruptores.prendidaPara("chat.grupos", otra)).isTrue();
     }
 
@@ -111,7 +111,7 @@ class ReglaDeDespliegueTest {
 
         assertThat(deLaProbadora.apagadas()).extracting(FuncionalidadApagada::clave).contains("chat", "chat.grupos");
         assertThat(deOtra.apagadas()).extracting(FuncionalidadApagada::aviso).containsOnly("Chat en mantenimiento");
-        assertThat(deOtra.noDisponibles()).as("solo lo que nace apagado (specs 040 y 041)").containsExactlyInAnyOrder("eventos.meet", "eventos.whatsapp");
+        assertThat(deOtra.noDisponibles()).as("solo lo que nace apagado (specs 040 y 041)").containsExactlyInAnyOrder("eventos.meet", "eventos.whatsapp", "auth.codigo_whatsapp");
     }
 
     @Test

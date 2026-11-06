@@ -5,6 +5,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.Optional;
 
 /**
  * Codigo de 6 digitos de RECUPERACION DE CONTRASENA (2026-09-04, D-102), bajo
@@ -32,6 +33,11 @@ class CodigoResetContrasenaRedisAdapter implements CodigoResetContrasenaPort {
     @Override
     public String generarCodigo(String email, Duration vigencia) {
         return almacen.generarCodigo(email, vigencia);
+    }
+
+    @Override
+    public Optional<String> vigente(String email) {
+        return almacen.vigente(email);
     }
 
     @Override
