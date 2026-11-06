@@ -16,7 +16,7 @@ del día (FR-022).
 ### Session 2026-11-05 (decisiones del dueño)
 
 - **Flujo elegido.** Tocar «Kilómetros» en Training → cuenta regresiva 3, 2, 1 (pitido, voz y vibración) → **Corriendo** (tiempo grande,
-  distancia, ritmo min/km, calorías; pestañas Mapa / Estadísticas / Tramos / Voz; mapa 3D inclinado con edificios, **sin botón 2D/3D**;
+  distancia, ritmo min/km, calorías; pestañas Mapa / Estadísticas / Tramos / Voz; mapa 3D inclinado con edificios, con botón 2D/3D (cambio del dueño del 05/11/2026; antes «sin botón 2D/3D»);
   barra «Desliza para pausar») → **Pausa** («Tu carrera queda guardada, aunque cierres la app»; tramos, estadísticas, voz y sonidos,
   bloquear pantalla; Seguir / Terminar / Descartar) → **Terminaste** (mapa, km, duración, ritmo, calorías, tramos, «Registrar X km en mi
   hábito», «Compartir en el Muro»).
@@ -151,7 +151,8 @@ primeros ni los últimos metros de la ruta (zona de privacidad, FR-043). Es un p
 - **FR-006** Al reabrir la app con una carrera sin terminar, se ofrece retomarla («Seguir» / «Terminar» / «Descartar»); el tiempo sin
   puntos mientras el proceso estuvo muerto no cuenta como tiempo activo.
 - **FR-007** Pantalla Corriendo: tiempo grande, distancia, ritmo (min/km) y calorías; pestañas Mapa / Estadísticas / Tramos / Voz; barra
-  «Desliza para pausar». Sin botón 2D/3D.
+  «Desliza para pausar». ~~Sin botón 2D/3D.~~ **Corregido 05/11/2026 (pedido del dueño):** el mapa lleva un botón redondo de 48 arriba a
+  la derecha para pasar entre 3D (por defecto) y 2D; se recuerda en el teléfono y por cuenta. Ver FR-037.
 - **FR-008** Estadísticas: distancia, ritmo medio, ritmo actual (últimos 30 s), velocidad, calorías aprox., pasos, pasos por minuto y subida
   acumulada (altitud suavizada; solo subidas mayores a 2 m entre lecturas suavizadas).
 - **FR-009** Tramos: un tramo por kilómetro completo con su tiempo y ritmo; el último, parcial.
@@ -237,6 +238,11 @@ primeros ni los últimos metros de la ruta (zona de privacidad, FR-043). Es un p
   estadísticas de pasos no se muestran.
 - **FR-037** **El mapa no calcula nada:** dibuja la ruta aceptada como una línea que crece (dorado `#B2924F`) y el avatar propio animado entre
   posiciones; la cámara inclinada (≈ 60°) con edificios sigue el rumbo de la persona.
+  **Corregido 05/11/2026 (pedidos del dueño en su teléfono):** (a) el mapa aparece en la cuenta 3, 2, 1, centrado en la última posición
+  conocida, la aproximada o el primer punto crudo del GPS, **solo para mirar** (no entra a la ruta, la distancia ni el cuerpo de la carrera);
+  (b) cámara en diagonal estilo navegación: 67,5° de inclinación, acercamiento 18,5 y el avatar en el tercio de abajo; (c) botón 2D/3D:
+  2D = desde arriba (0°), el rumbo hacia arriba y el avatar al centro; el cambio anima ~400 ms (en el acto con «reducir movimiento»); solo
+  con el mapa de Google, no en «Terminaste».
 - **FR-038** El avatar es hombre o mujer según `sexo` de la ficha inicial (`Masculino` / `Femenino`); sin dato u «Otro», el neutral. Camina
   solo mientras hay pasos o velocidad; en pausa queda quieto; con «reducir movimiento» se dibuja quieto (sin ciclo de caminata) y solo
   cambia de posición.
