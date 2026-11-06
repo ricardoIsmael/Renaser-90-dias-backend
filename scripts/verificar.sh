@@ -36,8 +36,8 @@ mal() { RESUMEN+=("✘ $1"); FALLO=1; }
 sin() { RESUMEN+=("– $1"); SIN_CORRER=1; }
 
 if [[ $MODO != ci ]]; then
-  echo "▶ Reglas del arnés (scripts/arnes.test.mjs) y pruebas del script de trazabilidad"
-  if node --test scripts/arnes.test.mjs scripts/trazabilidad-specs.test.mjs; then ok "Reglas del arnés y del script de trazabilidad"; else mal "Reglas del arnés o del script de trazabilidad"; fi
+  echo "▶ Reglas del arnés (scripts/arnes*.test.mjs, con las familias de errores) y pruebas del script de trazabilidad"
+  if node --test scripts/arnes.test.mjs scripts/arnes-familias.test.mjs scripts/trazabilidad-specs.test.mjs; then ok "Reglas del arnés y del script de trazabilidad"; else mal "Reglas del arnés o del script de trazabilidad"; fi
 
   APP=${RENASER_APP:-}
   if [[ -z $APP ]]; then
