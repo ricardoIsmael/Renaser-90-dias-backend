@@ -20,7 +20,7 @@ class CatalogoDeFuncionalidadesTest {
             "mapa", "plan", "habitos", "habitos.foto", "habitos.km", "habitos.km.carreras", "habitos.gimnasio", "habitos.espiritu",
             "habitos.ajustes", "clase_diaria", "muro", "muro.publicar", "muro.comentarios", "muro.reacciones", "chat",
             "chat.grupos", "chat.global", "chat.soporte", "chat.directos", "chat.audio", "chat.fotos", "eventos",
-            "eventos.gestion", "eventos.asistencia", "eventos.convocar", "eventos.meet", "eventos.whatsapp", "cursos", "ranking", "ranking.podio_semanal", "semaforo", "ia",
+            "eventos.gestion", "eventos.asistencia", "eventos.convocar", "eventos.meet", "eventos.meet.transcripcion", "eventos.whatsapp", "cursos", "ranking", "ranking.podio_semanal", "semaforo", "ia",
             "ia.chat", "ia.voz", "ia.propuestas", "ia.analisis", "evidencias", "radar.fichas", "caja", "pagos", "emergencia", "cuenta.eliminar",
             "notificaciones", "mentor.mi_grupo", "lider", "lider.cumplimiento", "tickets", "admin", "admin.solicitudes", "admin.equipo",
             "admin.grupos", "admin.personas", "admin.habitos", "admin.bienvenida", "admin.fases", "perfil");
@@ -56,7 +56,7 @@ class CatalogoDeFuncionalidadesTest {
     @DisplayName("todas nacen prendidas, salvo el enlace de Meet automático (spec 040) y los recordatorios por WhatsApp (spec 041), que nacen apagadas hasta que Soporte TI las prenda")
     void todasNacenPrendidasSalvoElEnlaceDeMeet() {
         assertThat(catalogo.todas()).filteredOn(f -> f.porDefecto() == ValorPorDefecto.APAGADA)
-                .extracting(DefinicionDeFuncionalidad::clave).containsExactlyInAnyOrder("eventos.meet", "eventos.whatsapp", "auth.codigo_whatsapp");
+                .extracting(DefinicionDeFuncionalidad::clave).containsExactlyInAnyOrder("eventos.meet", "eventos.meet.transcripcion", "eventos.whatsapp", "auth.codigo_whatsapp");
     }
 
     // spec 040 FR-014, SC-009
@@ -164,7 +164,7 @@ class CatalogoDeFuncionalidadesTest {
         assertThat(fichas.porDefecto()).isEqualTo(ValorPorDefecto.PRENDIDA);
         assertThat(fichas.critica()).isFalse();
         assertThat(catalogo.todas()).filteredOn(DefinicionDeFuncionalidad::seEsconde)
-                .extracting(DefinicionDeFuncionalidad::clave).containsExactlyInAnyOrder("radar.fichas", "eventos.meet", "eventos.whatsapp", "auth.codigo_whatsapp");
+                .extracting(DefinicionDeFuncionalidad::clave).containsExactlyInAnyOrder("radar.fichas", "eventos.meet", "eventos.meet.transcripcion", "eventos.whatsapp", "auth.codigo_whatsapp");
         assertThat(fichas.clave()).isEqualTo(com.renaser.os.shared.domain.ClavesDeFuncionalidad.RADAR_EN_FICHAS);
     }
 

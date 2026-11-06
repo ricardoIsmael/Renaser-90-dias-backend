@@ -1,6 +1,5 @@
 package com.renaser.os.calendar.application.ports.in.meet;
 
-import com.renaser.os.calendar.application.ports.out.meet.TranscripcionesDeMeetPort.EstadoPorFecha;
 import com.renaser.os.calendar.domain.model.evento.EventoId;
 import com.renaser.os.shared.domain.UserId;
 
@@ -18,7 +17,7 @@ public interface TranscripcionesDeMeetUseCase {
     int aplicarRetencion(Instant ahora);
 
     /** El estado de cada fecha del evento, sin texto (FR-012). Solo ADMIN y ALCHEMIST. */
-    List<EstadoPorFecha> estados(UserId actor, EventoId eventoId);
+    List<EstadoDeLaFecha> estados(UserId actor, EventoId eventoId);
 
     /** Sacar el texto de una fecha (P1-A): solo ADMIN y ALCHEMIST, con motivo, y queda constancia (FR-011, FR-013). */
     TranscripcionDescargada descargar(UserId actor, EventoId eventoId, LocalDate fecha, String motivo);
@@ -28,6 +27,10 @@ public interface TranscripcionesDeMeetUseCase {
      * constancia. Solo ADMIN y ALCHEMIST.
      */
     void borrarAPedido(UserId actor, EventoId eventoId, LocalDate fecha, String motivo);
+
+    /** El estado de una fecha, sin texto (FR-012). */
+    record EstadoDeLaFecha(LocalDate fecha, String estado, String motivo, Instant obtenidaEn, Instant borrarDespuesDe, boolean grabacion) {
+    }
 
     record TranscripcionDescargada(LocalDate fecha, String texto, String enlaceDeLaGrabacion, boolean recortada) {
 

@@ -1,6 +1,7 @@
 package com.renaser.os.calendar.application.services;
 
 import com.renaser.os.calendar.application.ports.in.meet.TranscripcionesDeMeetUseCase;
+import com.renaser.os.calendar.application.ports.in.meet.TranscripcionesDeMeetUseCase.EstadoDeLaFecha;
 import com.renaser.os.calendar.application.ports.out.evento.LoadEventoPort;
 import com.renaser.os.calendar.application.ports.out.meet.CifradoDeSecretosPort;
 import com.renaser.os.calendar.application.ports.out.meet.CuentaGoogleNoConectadaException;
@@ -10,7 +11,6 @@ import com.renaser.os.calendar.application.ports.out.meet.GoogleRechazoException
 import com.renaser.os.calendar.application.ports.out.meet.LoadCuentaGooglePort;
 import com.renaser.os.calendar.application.ports.out.meet.ReunionesDeMeetPort;
 import com.renaser.os.calendar.application.ports.out.meet.TranscripcionesDeMeetPort;
-import com.renaser.os.calendar.application.ports.out.meet.TranscripcionesDeMeetPort.EstadoPorFecha;
 import com.renaser.os.calendar.application.ports.out.meet.TranscripcionesDeMeetPort.ParaBorrar;
 import com.renaser.os.calendar.domain.model.evento.EventoId;
 import com.renaser.os.calendar.domain.model.meet.AccionDeAuditoriaGoogle;
@@ -155,10 +155,12 @@ class TranscripcionesDeMeetService implements TranscripcionesDeMeetUseCase {
     }
 
     @Override
-    public List<EstadoPorFecha> estados(UserId actor, EventoId eventoId) {
+    public List<EstadoDeLaFecha> estados(UserId actor, EventoId eventoId) {
         acceso.requireAdministraElCalendario(actor);
         exigirEvento(eventoId);
-        return transcripciones.estadosDelEvento(eventoId);
+        return transcripciones.estadosDelEvento(eventoId).stream()
+                .map(e -> new EstadoDeLaFecha(e.fecha(), e.estado(), e.motivo(), e.obtenidaEn(), e.borrarDespuesDe(), e.grabacion()))
+                .toList();
     }
 
     @Override
