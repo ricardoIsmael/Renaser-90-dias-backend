@@ -66,8 +66,8 @@ jobs:
           persist-credentials: false
 
       # Node ya viene en el runner (el script pide Node 18 o mas y no tiene dependencias).
-      - name: Pruebas del propio script
-        run: node --test scripts/trazabilidad-specs.test.mjs
+      - name: Pruebas del propio script y reglas del arnés (AGENTS.md corto, PROGRESO.md, sin .pyc)
+        run: node --test scripts/trazabilidad-specs.test.mjs scripts/arnes.test.mjs
 
       - name: Trazabilidad de las specs exigidas
         run: node scripts/trazabilidad-specs.mjs app --md "$GITHUB_STEP_SUMMARY"
