@@ -26,7 +26,7 @@
 
 ## Cómo funciona
 
-**Registro.** «Solicitar acceso» pide además el WhatsApp. Se pide el código al correo como siempre. En la pantalla del código, **60 segundos** después aparece «¿No te llegó? Envíamelo por WhatsApp» con el número enmascarado. Al tocarlo, el servidor manda **el mismo código** por WhatsApp y la persona lo escribe en las mismas casillas. Cuando Administración acepta la solicitud, el número queda en su Ficha Inicial.
+**Registro.** «Solicitar acceso» pide además el WhatsApp. Se pide el código al correo como siempre. En la pantalla del código, **60 segundos** después aparece «Por WhatsApp» junto a «¿No te llegó? Reenviar». Al tocarlo, el servidor manda **el mismo código** por WhatsApp y la persona lo escribe en las mismas casillas. Cuando Administración acepta la solicitud, el número queda en su Ficha Inicial.
 
 **Recuperar la contraseña.** En la pantalla del código, a los 60 segundos aparece el mismo enlace, **sin número**: el servidor manda el código al WhatsApp guardado de esa cuenta, si tiene uno, y responde igual en todos los casos.
 
@@ -47,7 +47,7 @@ El pedido de la brief fue: «si la cuenta no tiene WhatsApp, responde igual que 
 - **La app ofrece el enlace a todos** en la recuperación (con el interruptor prendido), sin número.
 - **El servidor responde 202 sin cuerpo siempre**: sin cuenta, sin contraseña (entra solo con Google o Apple), sin WhatsApp guardado, con el cupo de ese número agotado o si el proveedor falla.
 - **El envío corre en otro hilo** (`CodigoPorWhatsApp.enviarSinEsperar`): lo que tarda YCloud no se suma a la respuesta, así tampoco el tiempo lo delata. Lo que sí ocurre en el hilo del pedido (leer la cuenta y su ficha en Postgres) cuesta milisegundos, del mismo orden que lo que ya hace `/forgot`.
-- La app dice siempre lo mismo: «Si tu cuenta tiene un WhatsApp guardado, te enviamos el código ahí.».
+- La app dice siempre lo mismo: «Si tu cuenta tiene un WhatsApp guardado, te lo enviamos ahí».
 
 En el **registro** sí se muestra el número enmascarado: lo acaba de escribir la propia persona y el correo todavía no es de nadie.
 
@@ -69,9 +69,9 @@ En el **registro** sí se muestra el número enmascarado: lo acaba de escribir l
 ### App
 
 - **FR-003**: Con el canal disponible (`GET /auth/whatsapp-code` → `available: true`), «Solicitar acceso» suma el campo **WhatsApp** con el selector de país de la ficha (`PhoneCountryInput`) y la validación de la ficha (`validarWhatsapp`) más la forma internacional del servidor; es obligatorio y viaja como `phone` de la solicitud (`"+51 987654321"`).
-- **FR-012**: En la pantalla del código (alta y recuperación), **60 segundos** después de mandar el código aparece «¿No te llegó? Envíamelo por WhatsApp», un botón de **48** de alto. En el alta dice debajo a qué número va, enmascarado; en la recuperación no muestra ningún número.
+- **FR-012**: En la pantalla del código (alta y recuperación), **60 segundos** después de mandar el código aparece **«Por WhatsApp»** en la misma línea chica que «¿No te llegó? Reenviar», con **48** de alto táctil. En el alta el lector de pantalla oye además a qué número va, enmascarado; en la recuperación no se muestra ni se dice ningún número. La pantalla es la limpia que pidió el dueño el 06/11 («mucho texto, más limpio»): «Ingresa tu código», una línea con a dónde se envió, las casillas, esa línea y «Confirmar»; volver es la flecha de la cabecera.
 - **FR-013**: Sin el interruptor prendido, sin configuración o contra un backend anterior (404, error de red), la app **queda exactamente como hoy**: ni el campo en «Solicitar acceso» ni el enlace en la pantalla del código.
-- **FR-015**: Al tocarlo: en el alta, «Te enviamos el código por WhatsApp a +51 9•• ••• •21.»; en la recuperación, «Si tu cuenta tiene un WhatsApp guardado, te enviamos el código ahí.». Un error (429, 409, red) se muestra con el texto del servidor y se puede volver a tocar.
+- **FR-015**: Al tocarlo, una línea debajo: en el alta, «Te lo enviamos por WhatsApp a +51 9•• ••• •21»; en la recuperación, siempre «Si tu cuenta tiene un WhatsApp guardado, te lo enviamos ahí». Un error (429, 409, red) se muestra con el texto del servidor y se puede volver a tocar.
 - **FR-014**: La Política de privacidad dice que el WhatsApp se pide al solicitar acceso y que se usa también para mandar códigos de verificación.
 
 ### Criterios de éxito
