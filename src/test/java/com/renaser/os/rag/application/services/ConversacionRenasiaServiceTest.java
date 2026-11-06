@@ -827,7 +827,7 @@ class ConversacionRenasiaServiceTest {
 
         List<EventoRenasia> eventos = service.preguntar(pregunta(activo)).collectList().block();
 
-        String respaldo = "\n\nFoto para registrar 'Jugo verde': si no ves el botón de la cámara, súbela desde Training.";
+        String respaldo = "\n\nFoto para registrar 'Jugo verde': si no ves el botón de la cámara, súbela desde Entrenar.";
         assertThat(eventos).containsExactly(
                 new EventoRenasia.Texto("ok"),
                 new EventoRenasia.Texto("\n\nPropuesta: Meditar: de 06:00 a 07:00 desde manana"),
@@ -855,7 +855,7 @@ class ConversacionRenasiaServiceTest {
         assertThat(eventos).containsExactly(
                 new EventoRenasia.Texto("ok"),
                 new EventoRenasia.Texto("\n\nPara registrar 'Ritual de la mañana' cuenta cómo te sientes: si no ves el botón para escribir, "
-                        + "hazlo desde Training."),
+                        + "hazlo desde Entrenar."),
                 new EventoRenasia.Evidencia(registro, "RITUAL DE LA MAÑANA", finDelDia, true),
                 new EventoRenasia.Fin());
     }
@@ -878,7 +878,7 @@ class ConversacionRenasiaServiceTest {
         assertThat(eventos).containsExactly(
                 new EventoRenasia.Texto("ok"),
                 new EventoRenasia.Texto("\n\nFoto para registrar tu acción 'Llamar a 3 clientes': si no ves el "
-                        + "botón de la cámara, súbela desde Training."),
+                        + "botón de la cámara, súbela desde Entrenar."),
                 new EventoRenasia.Evidencia(roca, "Llamar a 3 clientes", finDelDia, false, DestinoDeEvidencia.ROCA),
                 new EventoRenasia.Fin());
     }

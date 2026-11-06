@@ -21,7 +21,7 @@ import org.springframework.stereotype.Component;
 class TicketMentorRespondidoNotificationListener {
 
     static final String TITULO = "Tu mentor te respondió";
-    static final String CUERPO = "Tu mentor respondió tu ticket. Ábrelo en la app para leer su respuesta.";
+    static final String CUERPO = "Tu mentor respondió tu consulta. Ábrela en la app para leer su respuesta.";
 
     private final EmitirNotificacionUseCase emitirNotificacionUseCase;
 

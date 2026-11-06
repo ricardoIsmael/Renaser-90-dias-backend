@@ -61,7 +61,7 @@ public class CompuertaParaProponer {
      * fecha con {@code INVALID_DATE}. Quien ya lo activo (empieza manana) si puede planificar: el servidor lo deja, asi que SER tambien.
      */
     static final String PROGRAMA_SIN_ACTIVAR = SIN_PROPUESTA + "todavía no activó su programa (no tiene Día 1), y sin él no hay días del programa "
-            + "que planificar: el servidor rechazaría cualquier día. Dile que lo active con el botón «Empezar mañana» (en Hoy, Plan o Training) y que, "
+            + "que planificar: el servidor rechazaría cualquier día. Dile que lo active con el botón «Empezar mañana» (en Hoy, Plan o Entrenar) y que, "
             + "cuando empiece, planificas su día. No le propongas ningún plan del día ni acción de objetivos hasta entonces.";
 
     private final ConsultarCompuertaDeRocasPort compuertaPort;
