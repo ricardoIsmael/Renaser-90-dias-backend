@@ -29,11 +29,11 @@ public record AccionDiaria(int orden, String descripcion) {
             throw new IllegalArgumentException("orden debe estar entre 1 y " + MAXIMO + ": " + orden);
         }
         if (descripcion == null || descripcion.isBlank()) {
-            throw new IllegalArgumentException("descripcion es obligatoria (accion " + orden + ")");
+            throw new IllegalArgumentException("La descripción es obligatoria (acción " + orden + ")");
         }
         descripcion = descripcion.trim();
         if (descripcion.length() > MAX_LEN) {
-            throw new IllegalArgumentException("descripcion supera " + MAX_LEN + " caracteres (accion " + orden + ")");
+            throw new IllegalArgumentException("La descripción supera " + MAX_LEN + " caracteres (acción " + orden + ")");
         }
     }
 

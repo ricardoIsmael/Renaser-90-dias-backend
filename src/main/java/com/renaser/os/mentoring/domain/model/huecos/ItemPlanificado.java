@@ -25,7 +25,7 @@ public record ItemPlanificado(LocalDateTime inicio, int minutos, TipoDeOcupado t
             throw new IllegalArgumentException("Un item dura al menos un minuto: " + minutos);
         }
         if (tipo == null || tipo == TipoDeOcupado.AGENDA) {
-            throw new IllegalArgumentException("Un item es un habito, una accion o un evento: " + tipo);
+            throw new IllegalArgumentException("Un ítem es un hábito, una acción o un evento: " + tipo);
         }
     }
 

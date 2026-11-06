@@ -41,7 +41,7 @@ public record PeriodoGrupo(LocalDate inicio, LocalDate fin) {
     /** Un periodo de N días contados desde {@code inicio}, con el primero incluido. */
     public static PeriodoGrupo desde(LocalDate inicio, int dias) {
         if (dias < 1) {
-            throw new IllegalArgumentException("Un grupo dura al menos un dia: " + dias);
+            throw new IllegalArgumentException("Un grupo dura al menos un día: " + dias);
         }
         // `dias - 1` porque el primer día ya cuenta. Sin el ajuste, "7 días desde el lunes"
         // terminaría el lunes siguiente y el grupo duraría ocho.

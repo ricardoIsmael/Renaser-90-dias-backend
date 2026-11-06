@@ -79,7 +79,7 @@ class GeminiLiveAdapter implements ConversacionEnVivoPort {
             throw new ConversacionEnVivoNoDisponibleException("interrumpido esperando a Gemini Live");
         } catch (ExecutionException | TimeoutException | RuntimeException e) {
             webSocket.abort();
-            throw new ConversacionEnVivoNoDisponibleException("Gemini Live no acepto la sesion: " + motivo(e));
+            throw new ConversacionEnVivoNoDisponibleException("Gemini Live no aceptó la sesión: " + motivo(e));
         }
     }
 

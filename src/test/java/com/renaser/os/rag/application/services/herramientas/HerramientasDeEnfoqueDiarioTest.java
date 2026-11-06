@@ -244,7 +244,7 @@ class HerramientasDeEnfoqueDiarioTest {
         assertThat(exito(confirmable.aplicar(APRENDIZ, propuesta))).contains("Santuario iniciado");
         verify(enfoque).iniciarSantuario(APRENDIZ, REGISTRO);
 
-        doThrow(new IllegalStateException("Todavia no es la hora de iniciar tu Santuario"))
+        doThrow(new IllegalStateException("Todavía no es la hora de iniciar tu Santuario"))
                 .when(enfoque).iniciarSantuario(APRENDIZ, REGISTRO);
         assertThat(fallo(confirmable.aplicar(APRENDIZ, propuesta))).contains("todavia no es su hora");
     }

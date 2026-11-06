@@ -37,7 +37,7 @@ public final class ReglaDelSemaforo {
     /** Solo para días con algo programado: un día vacío no tiene porcentaje, ni 0 ni 100. */
     public static int porcentajeDelDia(int cumplidos, int programados) {
         if (programados <= 0) {
-            throw new IllegalArgumentException("Un dia sin nada programado no tiene porcentaje");
+            throw new IllegalArgumentException("Un día sin nada programado no tiene porcentaje");
         }
         if (cumplidos < 0 || cumplidos > programados) {
             throw new IllegalArgumentException("cumplidos fuera de rango: " + cumplidos + "/" + programados);

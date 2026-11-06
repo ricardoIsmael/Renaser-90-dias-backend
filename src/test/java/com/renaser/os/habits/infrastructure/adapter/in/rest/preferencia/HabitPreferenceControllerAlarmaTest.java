@@ -157,7 +157,7 @@ class HabitPreferenceControllerAlarmaTest {
     @Test
     void unHabitoPersonalAjenoEs403() throws Exception {
         actor(UserStatus.ACTIVE);
-        doThrow(new NotAuthorizedException("Solo puedes editar tus propios habitos")).when(editar)
+        doThrow(new NotAuthorizedException("Solo puedes editar tus propios hábitos")).when(editar)
                 .fijarCombinacion(any(), any(), any());
 
         guardar(general(), SUENA).andExpect(status().isForbidden());
@@ -214,7 +214,7 @@ class HabitPreferenceControllerAlarmaTest {
                 .fijarCombinacion(any(), any(), any(), any());
         guardar(dia("SATURDAY"), SUENA).andExpect(status().isNotFound());
 
-        doThrow(new NotAuthorizedException("Solo puedes editar tus propios habitos")).when(horarioSemanal)
+        doThrow(new NotAuthorizedException("Solo puedes editar tus propios hábitos")).when(horarioSemanal)
                 .fijarCombinacion(any(), any(), any(), any());
         guardar(dia("SATURDAY"), SUENA).andExpect(status().isForbidden());
     }

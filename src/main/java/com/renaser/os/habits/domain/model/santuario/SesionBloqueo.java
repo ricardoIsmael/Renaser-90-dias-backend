@@ -115,7 +115,7 @@ public final class SesionBloqueo {
 
     private void requireActiva() {
         if (estado != EstadoSesionBloqueo.ACTIVA) {
-            throw new IllegalStateException("La sesion ya no esta activa: " + estado);
+            throw new IllegalStateException("La sesión ya no está activa: " + estado);
         }
     }
 

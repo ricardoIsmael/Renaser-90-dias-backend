@@ -88,7 +88,7 @@ class RegistroRadarTest {
         assertThatThrownBy(() -> registrar(demasiadoLargo, "p", "s", 5, "e"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("queHago")
-                .hasMessageContaining("maximo");
+                .hasMessageContaining("máximo");
     }
 
     @Test

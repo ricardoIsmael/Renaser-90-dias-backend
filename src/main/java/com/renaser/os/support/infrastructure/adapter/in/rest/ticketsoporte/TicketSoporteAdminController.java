@@ -59,7 +59,7 @@ public class TicketSoporteAdminController {
         return switch (status) {
             case "OPEN" -> EstadoTicketSoporte.ABIERTO;
             case "RESOLVED" -> EstadoTicketSoporte.RESUELTO;
-            default -> throw new IllegalArgumentException("status invalido: " + status);
+            default -> throw new IllegalArgumentException("status inválido: " + status);
         };
     }
 }

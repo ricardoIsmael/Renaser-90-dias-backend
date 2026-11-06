@@ -126,7 +126,7 @@ class SubscripcionAutorizadaInterceptor implements ChannelInterceptor {
     private UserId actorDeLaSesion(@Nullable Map<String, Object> sessionAttributes) {
         Object actorId = sessionAttributes == null ? null : sessionAttributes.get(ActorHandshakeInterceptor.ATRIBUTO_ACTOR_ID);
         if (!(actorId instanceof UUID uuid)) {
-            throw new org.springframework.messaging.MessagingException("Sesion sin actor identificado");
+            throw new org.springframework.messaging.MessagingException("Sesión sin actor identificado");
         }
         return UserId.of(uuid);
     }
@@ -155,7 +155,7 @@ class SubscripcionAutorizadaInterceptor implements ChannelInterceptor {
         Object idSesion = atributos == null ? null : atributos.get(ActorHandshakeInterceptor.ATRIBUTO_ID_SESION);
         String socketId = accessor.getSessionId();
         if (!(idSesion instanceof String id) || socketId == null || !sesionViva.sigueViva(socketId, id)) {
-            throw new org.springframework.messaging.MessagingException("Tu sesion ya no es valida");
+            throw new org.springframework.messaging.MessagingException("Tu sesión ya no es válida");
         }
         return socketId;
     }

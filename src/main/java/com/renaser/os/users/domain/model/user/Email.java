@@ -31,7 +31,7 @@ public record Email(String value) {
             // Sin el valor: este mensaje termina en el log Y en el cuerpo HTTP via
             // GlobalExceptionHandler.respond, y CLAUDE.MD §5.4.9 prohibe loguear correos
             // completos. Quien depura tiene el request; el log no necesita el dato personal.
-            throw new IllegalArgumentException("Formato de email invalido");
+            throw new IllegalArgumentException("Formato de email inválido");
         }
         return normalized;
     }

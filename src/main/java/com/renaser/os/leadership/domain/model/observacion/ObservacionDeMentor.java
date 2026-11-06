@@ -94,7 +94,7 @@ public final class ObservacionDeMentor {
 
     private static String claveValida(String clave) {
         if (clave == null || clave.isBlank() || clave.trim().length() > LARGO_MAXIMO_CLAVE) {
-            throw new IllegalArgumentException("La clave de operacion es obligatoria y de hasta "
+            throw new IllegalArgumentException("La clave de operación es obligatoria y de hasta "
                     + LARGO_MAXIMO_CLAVE + " caracteres");
         }
         return clave.trim();

@@ -12,7 +12,7 @@ public record SemanaDeHuecos(LocalDate lunes, List<DiaDeHuecos> dias, List<Hueco
 
     public SemanaDeHuecos {
         if (dias.size() != 7) {
-            throw new IllegalArgumentException("Una semana tiene siete dias: " + dias.size());
+            throw new IllegalArgumentException("Una semana tiene siete días: " + dias.size());
         }
         dias = List.copyOf(dias);
         repetidos = List.copyOf(repetidos);

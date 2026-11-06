@@ -100,7 +100,7 @@ public class AudioterapiaService implements ConsultarAudioterapiaSemanalUseCase 
     private Habito requireHabitoAudioterapia(ProgresoParticipanteHabits progreso) {
         return loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_AUDIOTERAPIA, progreso.formacion())
                 .orElseThrow(() -> new NoSuchElementException(
-                        "No existe en el catalogo un habito con claveSistema=" + CLAVE_SISTEMA_AUDIOTERAPIA));
+                        "No existe en el catálogo un hábito con claveSistema=" + CLAVE_SISTEMA_AUDIOTERAPIA));
     }
 
     /**

@@ -15,7 +15,7 @@ public record TramoDelDia(int desde, int hasta) {
 
     public TramoDelDia {
         if (desde < 0 || hasta > FIN_DEL_DIA || desde >= hasta) {
-            throw new IllegalArgumentException("Tramo invalido: " + desde + "-" + hasta);
+            throw new IllegalArgumentException("Tramo inválido: " + desde + "-" + hasta);
         }
     }
 

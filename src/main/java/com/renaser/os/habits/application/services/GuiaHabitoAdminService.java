@@ -188,7 +188,7 @@ public class GuiaHabitoAdminService implements ConsultarGuiasDeHabitoUseCase, Up
     }
 
     private void requireHabito(HabitoId id) {
-        loadHabitoPort.byId(id).orElseThrow(() -> new NoSuchElementException("Habito no encontrado: " + id));
+        loadHabitoPort.byId(id).orElseThrow(() -> new NoSuchElementException("Hábito no encontrado: " + id));
     }
 
     private void requireGuia(GuiaHabitoId id) {

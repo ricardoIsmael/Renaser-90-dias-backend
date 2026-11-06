@@ -16,7 +16,7 @@ public enum TipoObservacion {
         try {
             return valueOf(valor.trim().toUpperCase());
         } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Tipo de observacion invalido: " + valor
+            throw new IllegalArgumentException("Tipo de observación inválido: " + valor
                     + ". Usa RECONOCIMIENTO, SUGERENCIA o ALERTA");
         }
     }

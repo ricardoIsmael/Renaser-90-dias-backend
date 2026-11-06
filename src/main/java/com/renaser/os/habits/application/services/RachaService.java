@@ -121,7 +121,7 @@ public class RachaService implements IniciarRachaUseCase, CerrarRachaUseCase, Ro
         requireSelf(command.actorId(), registro.participanteId());
         Habito habito = requireHabito(registro);
         if (!esHabitoSinCelular(habito)) {
-            throw new IllegalArgumentException("Este habito no lleva rachas sin celular");
+            throw new IllegalArgumentException("Este hábito no lleva rachas sin celular");
         }
         requireProgreso(registro.participanteId());
 
@@ -146,7 +146,7 @@ public class RachaService implements IniciarRachaUseCase, CerrarRachaUseCase, Ro
         Instant ahora = clock.now();
 
         if (racha.minutosTranscurridos(ahora) < RachaSinCelular.MINUTOS_MINIMOS_CIERRE) {
-            throw new IllegalStateException("Todavia no llegas al primer hito de 3 horas");
+            throw new IllegalStateException("Todavía no llegas al primer hito de 3 horas");
         }
         if (ahora.isAfter(racha.plazoCierre(EXTENSION_DEFAULT_HORAS))) {
             // C-9: igual que en RegistroService.completar — sin el noRollbackFor de arriba
@@ -285,7 +285,7 @@ public class RachaService implements IniciarRachaUseCase, CerrarRachaUseCase, Ro
 
     private Habito requireHabito(RegistroHabito registro) {
         return loadHabitoPort.byId(registro.habitoId())
-                .orElseThrow(() -> new NoSuchElementException("Habito no encontrado: " + registro.habitoId()));
+                .orElseThrow(() -> new NoSuchElementException("Hábito no encontrado: " + registro.habitoId()));
     }
 
     private ProgresoParticipanteHabits requireProgreso(UserId participanteId) {

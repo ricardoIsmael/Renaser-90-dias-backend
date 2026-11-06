@@ -12,7 +12,7 @@ package com.renaser.os.shared.domain;
 public class RegistroPendienteSocialInvalidoException extends RuntimeException {
 
     public RegistroPendienteSocialInvalidoException() {
-        super("El registro pendiente no es valido, ya vencio o ya se uso: volve a iniciar sesion con tu "
+        super("El registro pendiente no es válido, ya venció o ya se usó: vuelve a iniciar sesión con tu "
                 + "proveedor social para continuar");
     }
 }

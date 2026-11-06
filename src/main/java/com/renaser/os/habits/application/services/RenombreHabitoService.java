@@ -96,13 +96,13 @@ public class RenombreHabitoService implements RenombrarHabitoUseCase, QuitarReno
     private Habito requireRenombrable(HabitoId habitoId) {
         Habito habito = requireHabito(habitoId);
         if (habito.claveSistema() == null || !CLAVES_RENOMBRABLES.contains(habito.claveSistema())) {
-            throw new IllegalArgumentException("Este habito no se puede reemplazar");
+            throw new IllegalArgumentException("Este hábito no se puede reemplazar");
         }
         return habito;
     }
 
     private Habito requireHabito(HabitoId id) {
-        return loadHabitoPort.byId(id).orElseThrow(() -> new NoSuchElementException("Habito no encontrado: " + id));
+        return loadHabitoPort.byId(id).orElseThrow(() -> new NoSuchElementException("Hábito no encontrado: " + id));
     }
 
     private ProgresoParticipanteHabits requireProgreso(UserId participanteId) {

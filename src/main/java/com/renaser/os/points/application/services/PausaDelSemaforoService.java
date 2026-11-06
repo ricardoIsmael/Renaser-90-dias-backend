@@ -86,7 +86,7 @@ public class PausaDelSemaforoService implements PausarSemaforoUseCase {
             throw new NotAuthorizedException("La cuenta esta suspendida");
         }
         if (actor.role() == UserRole.TRAINEE) {
-            throw new NotAuthorizedException("Para el aprendiz el semaforo es obligatorio: no se puede pausar");
+            throw new NotAuthorizedException("Para el aprendiz el semáforo es obligatorio: no se puede pausar");
         }
         return programasFinder.de(actorId)
                 .filter(p -> p.primeraFecha() != null)

@@ -28,10 +28,10 @@ public record FotoSemanal(LocalDate semanaHasta, LocalDate semanaDesde, BigDecim
             throw new IllegalArgumentException("La semana va de sabado a viernes: " + semanaDesde + ".." + semanaHasta);
         }
         if ((porcentaje == null) != (diasConDatos == 0)) {
-            throw new IllegalArgumentException("Sin dias con datos no hay porcentaje, y viceversa");
+            throw new IllegalArgumentException("Sin días con datos no hay porcentaje, y viceversa");
         }
         if (diasConDatos < 0 || diasConDatos > diasMedidos || diasMedidos > SemanaDelSemaforo.DIAS) {
-            throw new IllegalArgumentException("Dias fuera de rango: " + diasConDatos + "/" + diasMedidos);
+            throw new IllegalArgumentException("Días fuera de rango: " + diasConDatos + "/" + diasMedidos);
         }
         Objects.requireNonNull(versionFormula, "versionFormula es obligatoria");
         Objects.requireNonNull(cerradaEn, "cerradaEn es obligatorio");

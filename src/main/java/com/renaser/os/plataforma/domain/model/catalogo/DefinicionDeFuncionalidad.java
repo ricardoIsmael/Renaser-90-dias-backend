@@ -37,7 +37,7 @@ public record DefinicionDeFuncionalidad(String clave, String madre, String area,
 
     public DefinicionDeFuncionalidad {
         if (clave == null || !clave.matches("[a-z_]+(\\.[a-z_]+)*")) {
-            throw new IllegalArgumentException("Clave de funcionalidad invalida: " + clave);
+            throw new IllegalArgumentException("Clave de funcionalidad inválida: " + clave);
         }
         if (madre != null && !clave.startsWith(madre + ".")) {
             throw new IllegalArgumentException("La madre de " + clave + " tiene que ser su prefijo: " + madre);

@@ -65,7 +65,7 @@ public class ConfirmacionService implements ConfirmarAsistenciaUseCase {
 
         Instant ahora = clock.now();
         if (PlazoParaResponder.yaVencio(inicioOcurrencia, ahora, evento.timezone())) {
-            throw new IllegalStateException("No puedes confirmar asistencia a una ocurrencia de dias pasados");
+            throw new IllegalStateException("No puedes confirmar asistencia a una ocurrencia de días pasados");
         }
 
         boolean cambia = loadConfirmacionPort.estadoDe(eventoId, inicioOcurrencia, actorId)

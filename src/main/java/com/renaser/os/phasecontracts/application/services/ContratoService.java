@@ -179,7 +179,7 @@ public class ContratoService implements FirmarContratoUseCase, ConsultarContrato
      */
     private static RuntimeException sinPactoQueFirmar(FasePrograma actual, int dia) {
         if (actual == FasePrograma.FASE_1_RENACER || !actual.firmaDesbloqueadaEnDia(dia)) {
-            return new IllegalArgumentException("Todavia no corresponde firmar ningun pacto de fase");
+            return new IllegalArgumentException("Todavía no corresponde firmar ningún pacto de fase");
         }
         return new IllegalStateException("El pacto de la fase " + actual.numero() + " ya fue firmado");
     }
@@ -211,7 +211,7 @@ public class ContratoService implements FirmarContratoUseCase, ConsultarContrato
             throw new NotAuthorizedException("Cuenta suspendida");
         }
         if (!rolesPermitidos.contains(progreso.rol())) {
-            throw new NotAuthorizedException("Rol sin permiso para esta operacion: " + progreso.rol());
+            throw new NotAuthorizedException("Rol sin permiso para esta operación: " + progreso.rol());
         }
         /* Para el aprendiz el programa es obligatorio y el reloj arranca solo; para el resto es
            opcional, y sin activarlo no hay dia de programa contra el cual medir la fase. Devolver
@@ -219,7 +219,7 @@ public class ContratoService implements FirmarContratoUseCase, ConsultarContrato
            dejo en rocks/habits/academy. */
         if (progreso.rol() != RolParticipante.TRAINEE && !progreso.programaActivado()) {
             throw new NotAuthorizedException(
-                    "Tu programa personal todavia no esta activado: no hay contrato de fase que firmar");
+                    "Tu programa personal todavía no está activado: no hay contrato de fase que firmar");
         }
         return progreso;
     }

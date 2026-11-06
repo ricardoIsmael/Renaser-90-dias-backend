@@ -64,7 +64,7 @@ public final class Cohorte {
     public void transicionarA(EstadoCohorte destino, Instant ahora) {
         Objects.requireNonNull(destino, "destino es obligatorio");
         if (!estado.puedeTransicionarA(destino)) {
-            throw new IllegalArgumentException("Transicion de estado invalida: " + estado + " -> " + destino);
+            throw new IllegalArgumentException("Transición de estado inválida: " + estado + " -> " + destino);
         }
         this.estado = destino;
         this.actualizadoEn = ahora;

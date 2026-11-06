@@ -88,7 +88,7 @@ public final class RegistroRadar {
         }
         String recortado = value.trim();
         if (recortado.length() > TEXTO_MAX_LENGTH) {
-            throw new IllegalArgumentException(campo + " supera el maximo de " + TEXTO_MAX_LENGTH + " caracteres");
+            throw new IllegalArgumentException(campo + " supera el máximo de " + TEXTO_MAX_LENGTH + " caracteres");
         }
         return recortado;
     }

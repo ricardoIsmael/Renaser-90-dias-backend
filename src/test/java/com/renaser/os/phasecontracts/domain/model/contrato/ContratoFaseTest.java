@@ -56,7 +56,7 @@ class ContratoFaseTest {
         // dia 10: ya es Fase II (arranca dia 8) pero el pacto se desbloquea recien el 17.
         assertThatThrownBy(() -> ContratoFase.firmar(newContratoId(), participanteId, 10, CLOCK))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Todavia no te toca");
+                .hasMessageContaining("Todavía no te toca");
     }
 
     @Test

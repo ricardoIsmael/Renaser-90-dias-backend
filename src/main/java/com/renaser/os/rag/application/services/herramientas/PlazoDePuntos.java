@@ -21,7 +21,7 @@ record PlazoDePuntos(HabitoDelDia habito) {
     PlazoDePuntos {
         Objects.requireNonNull(habito, "habito es obligatorio");
         if (!habito.sigueEnJuego()) {
-            throw new IllegalArgumentException("Solo un habito con puntos en juego tiene plazo de puntos");
+            throw new IllegalArgumentException("Solo un hábito con puntos en juego tiene plazo de puntos");
         }
     }
 

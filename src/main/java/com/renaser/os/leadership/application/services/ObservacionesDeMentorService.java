@@ -113,7 +113,7 @@ public class ObservacionesDeMentorService implements RegistrarObservacionUseCase
     private static ObservacionDeMentor mismaOperacion(ObservacionDeMentor existente, RegistrarObservacionCommand comando) {
         if (!existente.mentorId().equals(comando.mentorId())
                 || !Objects.equals(existente.personaId(), comando.personaId())) {
-            throw new IllegalArgumentException("Esa clave de operacion ya se uso para otra observacion");
+            throw new IllegalArgumentException("Esa clave de operación ya se usó para otra observación");
         }
         return existente;
     }

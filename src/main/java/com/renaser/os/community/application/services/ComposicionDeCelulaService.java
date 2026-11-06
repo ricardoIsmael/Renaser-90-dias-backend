@@ -457,7 +457,7 @@ public class ComposicionDeCelulaService implements AsignarMentorCelulaUseCase, Q
         }
         if (!existePerfilMentorPort.existe(mentorId)) {
             throw new IllegalStateException(
-                    "El usuario todavia no tiene un perfil de mentor (perfiles_mentor) — debe crearse desde "
+                    "El usuario todavía no tiene un perfil de mentor (perfiles_mentor) — debe crearse desde "
                             + "el modulo de usuarios antes de poder liderar una celula");
         }
         formacionDelGrupo.exigirQueElMentorSea(mentorId, lider.role(), grupo);

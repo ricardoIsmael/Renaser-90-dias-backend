@@ -90,7 +90,7 @@ public class HorarioHabitoAdminService implements ConsultarHorariosDeHabitoUseCa
     }
 
     private void requireHabito(HabitoId id) {
-        loadHabitoPort.byId(id).orElseThrow(() -> new NoSuchElementException("Habito no encontrado: " + id));
+        loadHabitoPort.byId(id).orElseThrow(() -> new NoSuchElementException("Hábito no encontrado: " + id));
     }
 
     private HorarioHabito requireHorario(HorarioHabitoId id) {

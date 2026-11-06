@@ -427,7 +427,7 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
         }
         boolean existe = nivelPort.listar().stream().anyMatch(n -> n.id() == nivelMinimoId);
         if (!existe) {
-            throw new IllegalArgumentException("El nivel minimo indicado no existe: " + nivelMinimoId);
+            throw new IllegalArgumentException("El nivel mínimo indicado no existe: " + nivelMinimoId);
         }
     }
 

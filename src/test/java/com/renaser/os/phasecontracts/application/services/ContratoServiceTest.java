@@ -465,7 +465,7 @@ class ContratoServiceTest {
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("onboarding");
         assertThatThrownBy(() -> service.firmar(
                 new FirmarContratoCommand(participanteId, FasePrograma.FASE_3_GUERRERO_ALQUIMISTA)))
-                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("dia 35");
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("día 35");
         verify(saveContratoPort, never()).save(any());
     }
 }

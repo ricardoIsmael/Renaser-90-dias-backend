@@ -32,6 +32,6 @@ public enum MomentoAccion {
                 return momento;
             }
         }
-        throw new IllegalArgumentException("Momento de accion desconocido: " + clave);
+        throw new IllegalArgumentException("Momento de acción desconocido: " + clave);
     }
 }
