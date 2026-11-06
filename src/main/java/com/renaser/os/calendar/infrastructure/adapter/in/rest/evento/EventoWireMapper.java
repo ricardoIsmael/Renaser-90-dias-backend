@@ -33,6 +33,7 @@ final class EventoWireMapper {
             case CURSO -> "COURSE";
             case ROLES -> "ROLES";
             case CELULA -> "CELL";
+            case SELECCION -> "SELECTION";
         };
     }
 
@@ -43,6 +44,7 @@ final class EventoWireMapper {
             case "COURSE" -> TipoAudiencia.CURSO;
             case "ROLES" -> TipoAudiencia.ROLES;
             case "CELL" -> TipoAudiencia.CELULA;
+            case "SELECTION" -> TipoAudiencia.SELECCION;
             default -> throw new IllegalArgumentException("audienceType invalido: " + wire);
         };
     }

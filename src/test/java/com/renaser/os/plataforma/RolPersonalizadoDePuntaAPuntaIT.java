@@ -164,7 +164,7 @@ class RolPersonalizadoDePuntaAPuntaIT {
         assertThat(pedidos.json(bloqueado).get("funcionalidad").asText()).isEqualTo("eventos");
         // «radar.fichas» (spec 034) nace oculta para todo mentor, con o sin rol personalizado, mientras Administración no la encienda.
         assertThat(noDisponiblesDe(sesionConRol)).containsExactlyInAnyOrder("radar.fichas", "eventos", "eventos.gestion",
-                "eventos.asistencia", "eventos.meet", "eventos.whatsapp");
+                "eventos.asistencia", "eventos.meet", "eventos.whatsapp", "eventos.convocar");
         JsonNode mias = pedidos.json(pedidos.enviar("GET", "/api/v1/funcionalidades/mias", sesionConRol, null));
         assertThat(mias.get("apagadas")).as("no es mantenimiento").isEmpty();
         assertThat(pedidos.enviar("GET", "/api/v1/me/cells", sesionConRol, null).statusCode())

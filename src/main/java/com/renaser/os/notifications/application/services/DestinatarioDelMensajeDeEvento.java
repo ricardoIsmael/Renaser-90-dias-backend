@@ -31,7 +31,9 @@ class DestinatarioDelMensajeDeEvento {
         return usuarios.findById(aviso.destinatarioId())
                 .filter(persona -> persona.status().allowsAccess())
                 .filter(persona -> !persona.esCuentaDePrueba())
-                .filter(persona -> reglas.roles().contains(persona.role()))
-                .filter(persona -> reglas.audiencia().admite(aviso.dijoVoy()));
+                // Spec 044 (FR-021, FR-024): en un evento con audiencia elegida le llega a todo invitado, de cualquier rol, haya dicho «Voy» o no;
+                // a quien dijo «No voy» ya no le llega porque calendar le canceló el aviso al despacharlo (FR-022).
+                .filter(persona -> aviso.audienciaElegida() || reglas.roles().contains(persona.role()))
+                .filter(persona -> aviso.audienciaElegida() || reglas.audiencia().admite(aviso.dijoVoy()));
     }
 }

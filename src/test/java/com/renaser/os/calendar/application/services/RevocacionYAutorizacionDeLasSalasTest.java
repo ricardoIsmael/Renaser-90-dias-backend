@@ -115,12 +115,11 @@ class RevocacionYAutorizacionDeLasSalasTest {
     }
 
     // spec 040 FR-015, SC-008
-    @ParameterizedTest(name = "{0}")
-    @EnumSource(value = RolUsuario.class, names = {"TRAINEE", "MENTOR", "MENTOR_LEAD"})
-    @DisplayName("SC-008: aprendiz, mentor y líder no crean, editan, borran, cancelan ni reintentan con Meet (403)")
-    void soloAdministracionUsaElEnlaceAutomatico(RolUsuario rol) {
+    @Test
+    @DisplayName("SC-008: el aprendiz no crea, edita, borra, cancela ni reintenta con Meet (403)")
+    void elAprendizNoUsaElEnlaceAutomatico() {
         UserId persona = UserId.of(UUID.randomUUID());
-        m.roles.put(persona, rol);
+        m.roles.put(persona, RolUsuario.TRAINEE);
         Evento existente = m.eventoDeUnDia(AccesoSalaMeet.ABIERTA, HOY_19H_LIMA);
 
         assertThatThrownBy(() -> m.servicio.crear(comando(persona, AccesoSalaMeet.ABIERTA))).isInstanceOf(NotAuthorizedException.class);
@@ -129,6 +128,28 @@ class RevocacionYAutorizacionDeLasSalasTest {
         assertThatThrownBy(() -> m.reintento.reintentar(persona, existente.id())).isInstanceOf(NotAuthorizedException.class);
         assertThatThrownBy(() -> new DisponibilidadDeMeetService(m.acceso, m.disponibilidad).consultar(persona))
                 .isInstanceOf(NotAuthorizedException.class);
+
+        assertThat(m.eventos.porId).hasSize(1);
+        assertThat(m.google.llamadas).isEmpty();
+    }
+
+    /**
+     * Spec 044 (FR-006, FR-026): el mentor y el líder ahora crean eventos (con Meet automático también) y consultan si se puede, pero no tocan el
+     * evento de otra persona que no es su mentor: borrar, cancelar y reintentar siguen en 403.
+     */
+    // spec 040 FR-015; spec 044 FR-006, FR-026
+    @ParameterizedTest(name = "{0}")
+    @EnumSource(value = RolUsuario.class, names = {"MENTOR", "MENTOR_LEAD"})
+    @DisplayName("spec 044: mentor y líder consultan el Meet automático, pero no tocan el evento de Administración (403)")
+    void mentorYLiderNoTocanElEventoDeOtro(RolUsuario rol) {
+        UserId persona = UserId.of(UUID.randomUUID());
+        m.roles.put(persona, rol);
+        Evento existente = m.eventoDeUnDia(AccesoSalaMeet.ABIERTA, HOY_19H_LIMA);
+
+        assertThatThrownBy(() -> m.servicio.eliminar(persona, existente.id())).isInstanceOf(NotAuthorizedException.class);
+        assertThatThrownBy(() -> m.servicio.cancelarOcurrencia(persona, existente.id(), HOY_19H_LIMA)).isInstanceOf(NotAuthorizedException.class);
+        assertThatThrownBy(() -> m.reintento.reintentar(persona, existente.id())).isInstanceOf(NotAuthorizedException.class);
+        new DisponibilidadDeMeetService(m.acceso, m.disponibilidad).consultar(persona);
 
         assertThat(m.eventos.porId).hasSize(1);
         assertThat(m.google.llamadas).isEmpty();

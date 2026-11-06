@@ -47,7 +47,7 @@ Respuestas:
 | 400 | `AUDIENCIA_INVALIDA` | `SELECTION` sin partes al crear; parte sin su campo; color desconocido; más de 500 personas por nombre. |
 | 403 | `FUERA_DE_TU_ALCANCE` | Alguna persona o grupo no le corresponde al actor. Cuerpo: `{ "ids": ["…"] }`. No se guarda nada. |
 | 403 | — | El rol no puede crear, o un mentor manda `ALL_MEMBERS`, `ROLES` u otro tipo de evento (FR-007). |
-| 404 | `FUNCIONALIDAD_NO_DISPONIBLE` | `eventos.convocar` apagado o no disponible para el rol. |
+| 503 / 404 | `FUNCIONALIDAD_NO_DISPONIBLE` | `eventos.convocar` apagado (503 con el aviso de mantenimiento) o no disponible para el rol (404). Administración sigue con `eventos.gestion`. |
 
 **Editar desde una app anterior** (FR-030): `audienceType: "SELECTION"` sin `audience` → se conservan las partes guardadas.
 
@@ -115,7 +115,9 @@ Solo para el **creador, ADMIN y ALCHEMIST** (FR-018); para cualquier otro, `audi
 }
 ```
 
-Un evento `SELECTION` que el visor no ve: **404** en el detalle y ausente de la lista (FR-013).
+Un evento `SELECTION` que el visor no ve: el **403** de siempre en el detalle («Este evento ya no está disponible») y ausente de la lista (FR-013).
+
+`organizer` viaja para todos (FR-019): `{ "id", "name", "photoUrl", "role", "groupName" }`, para «Te invitó Rocío, líder de mentores».
 
 ## 4. Asistencia (`/calendar/events/{id}/responses` y `/attendance`, D-256)
 

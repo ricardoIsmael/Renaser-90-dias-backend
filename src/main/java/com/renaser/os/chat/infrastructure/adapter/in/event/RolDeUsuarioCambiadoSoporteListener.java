@@ -3,6 +3,7 @@ package com.renaser.os.chat.infrastructure.adapter.in.event;
 import com.renaser.os.chat.application.ports.in.conversacion.IncorporarUsuarioAlSoporteUseCase;
 import com.renaser.os.chat.application.ports.in.conversacion.RetirarDelSoporteUseCase;
 import com.renaser.os.users.api.RolDeUsuarioCambiadoEvent;
+import com.renaser.os.users.api.UserRole;
 import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Component;
 
@@ -48,6 +49,10 @@ class RolDeUsuarioCambiadoSoporteListener {
         // ConversacionSoporteService.STAFF_ADMINISTRATIVO: no hace falta un predicado nuevo que
         // despues se desincronice de aquel.
         if (event.rolAnterior().canManageRoles() && !event.rolNuevo().canManageRoles()) {
+            retirarUseCase.retirarPorBajaDeStaff(event.usuarioId());
+        }
+        // Spec 044 (FR-039): el líder de mentores que deja de serlo sale de los soportes de su formación.
+        if (event.rolAnterior() == UserRole.MENTOR_LEAD && event.rolNuevo() != UserRole.MENTOR_LEAD && !event.rolNuevo().canManageRoles()) {
             retirarUseCase.retirarPorBajaDeStaff(event.usuarioId());
         }
     }

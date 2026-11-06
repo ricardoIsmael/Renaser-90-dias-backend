@@ -67,6 +67,9 @@ class EventoConMeetControllerTest {
     private ConfirmarPortadaUseCase confirmarPortadaUseCase;
     @MockitoBean
     private ConfirmarAsistenciaUseCase confirmarAsistenciaUseCase;
+    /** Spec 044: «Para quién es» y el organizador; sin stubs devuelve vacío. */
+    @MockitoBean
+    private com.renaser.os.calendar.application.ports.in.audiencia.ConvocatoriaUseCase convocatoriaUseCase;
 
     private static Evento evento(UserId creador, String enlace, AccesoSalaMeet acceso) {
         return Evento.crear(EventoId.of(UUID.randomUUID()), "Clase en vivo", null, Instant.parse("2026-11-10T01:00:00Z"), 90,

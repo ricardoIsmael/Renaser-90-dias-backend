@@ -135,8 +135,9 @@ public class SoportesPaginadosService implements ListarSoportesUseCase {
         if (actor.status() != UserStatus.ACTIVE) {
             throw new NotAuthorizedException("La cuenta esta suspendida");
         }
-        if (!actor.role().canManageRoles()) {
-            throw new NotAuthorizedException("Solo Administración y Alquimista ven todos los chats de soporte");
+        // Spec 044 (FR-040): también el líder de mentores, con los soportes de su formación (el alcance de formacionesConSoporte).
+        if (!StaffDelSoporte.acompana(actor.role())) {
+            throw new NotAuthorizedException("Solo Administración, Alquimista y el líder de mentores ven los chats de soporte");
         }
     }
 }

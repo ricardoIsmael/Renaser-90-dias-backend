@@ -68,8 +68,8 @@ class SoportesPaginadosServiceTest {
     }
 
     @ParameterizedTest
-    @EnumSource(value = UserRole.class, names = {"TRAINEE", "MENTOR", "MENTOR_LEAD"})
-    @DisplayName("D-249: aprendiz, mentor y líder de mentores reciben 403")
+    @EnumSource(value = UserRole.class, names = {"TRAINEE", "MENTOR"})
+    @DisplayName("D-249: aprendiz y mentor reciben 403 (el líder ya no: spec 044 FR-040)")
     void otrosRolesNo(UserRole rol) {
         UserId quien = UserId.of(UUID.randomUUID());
         conRol(quien, rol, UserStatus.ACTIVE);
@@ -77,6 +77,19 @@ class SoportesPaginadosServiceTest {
         assertThatThrownBy(() -> servicio.listar(new PedidoDeSoportes(quien, null, null, 25)))
                 .isInstanceOf(NotAuthorizedException.class);
         verify(soportes, never()).pagina(any());
+    }
+
+    // spec 044 FR-040
+    @Test
+    @DisplayName("spec 044 FR-040: el líder de mentores ve la sección «Soporte» (con los soportes de su formación)")
+    void elLiderSiVe() {
+        UserId lider = UserId.of(UUID.randomUUID());
+        conRol(lider, UserRole.MENTOR_LEAD, UserStatus.ACTIVE);
+        List<SoporteConActividad> filas = filas(2);
+        when(soportes.pagina(any())).thenReturn(filas);
+        conversacionesDe(filas);
+
+        assertThat(servicio.listar(new PedidoDeSoportes(lider, null, null, 25)).conversaciones()).hasSize(2);
     }
 
     @Test

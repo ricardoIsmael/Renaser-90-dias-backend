@@ -188,11 +188,12 @@ class SoportesPaginadosIT {
         assertThat(vistos).hasSize(110);
     }
 
+    // spec 044 FR-040
     @Test
-    @DisplayName("D-249: 403 para aprendiz, mentor, líder de mentores y un ADMIN suspendido; 200 para el Alquimista")
+    @DisplayName("D-249 y spec 044: 403 para aprendiz, mentor y un ADMIN suspendido; 200 para el Alquimista (el líder de mentores ya no es 403: FR-040)")
     void soloAdministracionYAlquimista() throws Exception {
         for (String[] rolYEstado : List.of(new String[] {"APRENDIZ", "ACTIVO"}, new String[] {"MENTOR", "ACTIVO"},
-                new String[] {"LIDER_MENTORES", "ACTIVO"}, new String[] {"ADMIN", "SUSPENDIDO"})) {
+                new String[] {"ADMIN", "SUSPENDIDO"})) {
             UUID quien = usuario(rolYEstado[0], rolYEstado[1], "Sin permiso " + rolYEstado[0]);
             pedir(sesionDe(quien), "size=5", 403);
         }

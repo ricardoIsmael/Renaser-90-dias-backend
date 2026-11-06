@@ -15,6 +15,9 @@ import com.renaser.os.calendar.domain.model.nivelmembresia.ProgresoNivel;
 import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.AlcanceDeFormacionFinder;
+import com.renaser.os.calendar.application.ports.out.audiencia.AudienciaElegidaPort;
+import com.renaser.os.calendar.domain.model.evento.TipoAudiencia;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -49,10 +52,25 @@ class AudienciaDelEventoService {
     /** Spec 024: la audiencia de un evento se resuelve DENTRO de su formación («todos» = todos los de la formación). */
     private final AlcanceDeFormacionFinder formaciones;
 
+    /** Spec 044: la audiencia elegida guardada y sus reglas. {@code null} en las pruebas que no la usan. */
+    private final AudienciaElegidaPort audienciaPort;
+    private final AudienciaElegidaService audienciaElegida;
+
     AudienciaDelEventoService(LoadNivelMembresiaPort nivelPort, ConsultarProgresoParticipanteCalendarPort progresoPort,
                               ResolverAudienciaMasivaPort audienciaMasivaPort, ConsultarMiembrosCelulaPort celulaPort,
                               ResolverAudienciaCursoPort cursoPort, ConsultarElegibilidadEventoPort elegibilidadPort,
                               AlcanceDeFormacionFinder formaciones) {
+        this(nivelPort, progresoPort, audienciaMasivaPort, celulaPort, cursoPort, elegibilidadPort, formaciones, null, null);
+    }
+
+    @Autowired
+    AudienciaDelEventoService(LoadNivelMembresiaPort nivelPort, ConsultarProgresoParticipanteCalendarPort progresoPort,
+                              ResolverAudienciaMasivaPort audienciaMasivaPort, ConsultarMiembrosCelulaPort celulaPort,
+                              ResolverAudienciaCursoPort cursoPort, ConsultarElegibilidadEventoPort elegibilidadPort,
+                              AlcanceDeFormacionFinder formaciones, AudienciaElegidaPort audienciaPort,
+                              AudienciaElegidaService audienciaElegida) {
+        this.audienciaPort = audienciaPort;
+        this.audienciaElegida = audienciaElegida;
         this.formaciones = formaciones;
         this.nivelPort = nivelPort;
         this.progresoPort = progresoPort;
@@ -118,7 +136,28 @@ class AudienciaDelEventoService {
                     : celulaPort.miembrosActivos(evento.celulaDestinoId()), evento);
             case NIVEL_MINIMO -> dentroDeLaFormacion(audienciaNivelMinimo(evento), evento);
             case CURSO -> dentroDeLaFormacion(audienciaCurso(evento), evento);
+            case SELECCION -> audienciaElegida(evento);
         };
+    }
+
+    /**
+     * Spec 044 (FR-020): la audiencia elegida de hoy (sus reglas se leen en cada momento, su lista fija tal cual) más quien creó el evento, que
+     * siempre está dentro como organizador (S5).
+     */
+    private List<UserId> audienciaElegida(Evento evento) {
+        if (audienciaElegida == null) {
+            return List.of();
+        }
+        java.util.LinkedHashSet<UserId> todos = new java.util.LinkedHashSet<>(audienciaElegida.miembros(evento, audienciaPort.de(evento.id())));
+        if (evento.creadoPor() != null) {
+            todos.add(evento.creadoPor());
+        }
+        return List.copyOf(todos);
+    }
+
+    /** Si el evento tiene audiencia elegida (los mensajes de la 041 siguen otra regla con él, FR-021). */
+    static boolean esElegida(Evento evento) {
+        return evento.tipoAudiencia() == TipoAudiencia.SELECCION;
     }
 
     /**

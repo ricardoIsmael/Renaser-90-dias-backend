@@ -55,9 +55,13 @@ class ProximoEventoService implements ProximoEventoFinder {
         Instant hasta = ahora.plus(ListarEventosParaVisorUseCase.RANGO_MAXIMO_DIAS, ChronoUnit.DAYS);
 
         AlcanceDeFormacion alcance = accesoEventoService.alcanceDe(participanteId, null);
-        List<Evento> visibles = loadEventoPort.candidatosParaVisor(ahora, hasta).stream()
+        List<Evento> candidatos = loadEventoPort.candidatosParaVisor(ahora, hasta).stream()
                 .filter(e -> alcance.incluye(e.formacion()))
-                .filter(e -> accesoEventoService.puedeAcceder(participanteId, progreso, visor, e))
+                .toList();
+        // Spec 044: la audiencia elegida de todos en una lectura.
+        var elegidas = accesoEventoService.precargar(candidatos);
+        List<Evento> visibles = candidatos.stream()
+                .filter(e -> accesoEventoService.puedeAcceder(participanteId, progreso, visor, e, elegidas))
                 .toList();
         if (visibles.isEmpty()) {
             return Optional.empty();

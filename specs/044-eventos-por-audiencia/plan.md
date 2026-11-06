@@ -2,9 +2,12 @@
 
 **Branch**: `044-eventos-por-audiencia` (backend y app) | **Date**: 2026-11-06 | **Spec**: [spec.md](./spec.md) | **Contrato**: [contracts/api.md](./contracts/api.md)
 
-> Plan de alto nivel para que el dueño apruebe la spec. Se escribe con las opciones **recomendadas** de las preguntas P1 a P9; si el dueño
-> elige otra, cambia lo marcado «(según P…)». Las migraciones se describen, **no se crean** todavía: su número es el siguiente libre al
-> implementar (hoy el último en `master` es V171, y hay ramas abiertas que pueden tomar V172 y siguientes).
+> **Corregido 2026-11-06 (implementado, D-326).** El dueño eligió las opciones recomendadas salvo P5 (prendido para todos) y P7 (el líder sí
+> edita los eventos de sus mentores). Las migraciones son **V172** (el valor `SELECCION`) y **V173** (`reglas_audiencia_evento` e
+> `invitados_evento`; la primera se llamaba `reglas_audiencia_evento` en este plan). Ninguna otra rama abierta tenía migraciones nuevas al
+> 2026-11-06; si una entra antes con V172, hay que renumerar estas. Los endpoints de gestión no cambiaron de clave: quedan con
+> `@Funcionalidad(value = "eventos.gestion", laResuelveElCasoDeUso = true)` y el servicio exige el interruptor según el rol. El líder en el
+> chat de soporte (FR-037 a FR-042) se sumó con `StaffDelSoporte`.
 
 ## Summary
 
@@ -43,7 +46,7 @@ Jest del paso «¿Para quién es?», del conteo y de los permisos; Maestro escri
 
 1. **Migración A** — `ALTER TYPE renaser.tipo_audiencia ADD VALUE IF NOT EXISTS 'SELECCION';` (sola).
 2. **Migración B**:
-   - `renaser.partes_audiencia_evento`
+   - `renaser.reglas_audiencia_evento`
      | columna | tipo | nota |
      |---|---|---|
      | `id` | uuid PK | |

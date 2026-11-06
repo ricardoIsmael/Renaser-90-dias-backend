@@ -130,7 +130,7 @@ public class ParticipantesDeConversacionService implements VerParticipantesDeCon
     /** Un soporte es del aprendiz y del staff de AHORA: la fila sola no alcanza (mismo criterio que la autorización). */
     private static boolean pertenece(Conversacion conversacion, UserSummary usuario) {
         return conversacion.tipo() != TipoConversacion.SOPORTE
-                || conversacion.esAprendizDeSoporte(usuario.id()) || usuario.role().canManageRoles();
+                || conversacion.esAprendizDeSoporte(usuario.id()) || StaffDelSoporte.acompana(usuario.role());
     }
 
     private UserId mentorVigenteDe(Conversacion conversacion) {

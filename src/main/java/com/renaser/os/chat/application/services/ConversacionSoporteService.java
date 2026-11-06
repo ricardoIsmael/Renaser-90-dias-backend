@@ -71,8 +71,9 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
 
     private static final Logger log = LoggerFactory.getLogger(ConversacionSoporteService.class);
 
-    /** Quienes acompañan a TODO aprendiz desde su chat de soporte. Confirmado por el dueño del
-     * proyecto: administrador o alquimista, nadie mas — ni mentor, ni lider de mentores.
+    /** Quienes acompañan a TODO aprendiz desde su chat de soporte: administrador o alquimista. Desde la spec 044 (2026-11-06) el líder de
+     * mentores también entra, pero solo a los soportes de su formación ({@link #staffDe}); el mentor sigue sin estar.
+     * <p>Decía «Confirmado por el dueño del proyecto: administrador o alquimista, nadie mas — ni mentor, ni lider de mentores».
      * (Hasta el 2026-09-27 {@code BienvenidaEnSoporteService} exigia lo mismo al remitente de la
      * bienvenida, E-330; desde D-199 la bienvenida la firma el programa y ya no hay remitente.) */
     static final Set<UserRole> STAFF_ADMINISTRATIVO = Set.of(UserRole.ADMIN, UserRole.ALCHEMIST);
@@ -138,6 +139,8 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
         }
         if (STAFF_ADMINISTRATIVO.contains(participacion.rol())) {
             sumarStaffALasQueYaExisten(usuarioId);
+        } else if (participacion.rol() == UserRole.MENTOR_LEAD) {
+            sumarLiderALosDeSuFormacion(usuarioId);
         }
     }
 
@@ -159,8 +162,7 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
             return;
         }
         String nombre = nombreDelSoporteDe(aprendizId);
-        crearSoporte(aprendizId, nombre, participacionProgramaFinder.usuariosActivosConRol(STAFF_ADMINISTRATIVO), true,
-                formacion);
+        crearSoporte(aprendizId, nombre, staffDe(formacion), true, formacion);
     }
 
     /**
@@ -256,6 +258,12 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
      */
     @Override
     public void retirarPorBajaDeStaff(UserId exStaffId) {
+        Optional<UserSummary> ahora = userSummaryFinder.findById(exStaffId);
+        if (ahora.map(u -> u.role() == UserRole.MENTOR_LEAD).orElse(false)) {
+            // Spec 044: sigue siendo líder (o volvió a serlo): solo sale de los soportes que ya no son de su formación.
+            retirarDeLosDeOtraFormacion(exStaffId);
+            return;
+        }
         if (sigueSiendoStaffAdministrativo(exStaffId)) {
             // El outbox entrega al-menos-una-vez y SIN ORDEN: un evento de baja viejo puede llegar
             // despues de un ascenso posterior, o reentregarse cuando la persona ya volvio al staff.
@@ -288,6 +296,67 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
                 .orElse(false);
     }
 
+    // ─── El líder de mentores en el soporte (spec 044, FR-037 a FR-039) ─────────────────
+
+    /** Administración y Alquimista activos, más los líderes de mentores activos de esa formación. */
+    private List<UserId> staffDe(Formacion formacion) {
+        return conLideres(participacionProgramaFinder.usuariosActivosConRol(STAFF_ADMINISTRATIVO), lideresConSusFormaciones(), formacion);
+    }
+
+    private static List<UserId> conLideres(List<UserId> staff, Map<UserId, Set<Formacion>> lideres, Formacion formacion) {
+        List<UserId> todos = new java.util.ArrayList<>(staff);
+        lideres.forEach((lider, susFormaciones) -> {
+            if (susFormaciones.contains(formacion) && !todos.contains(lider)) {
+                todos.add(lider);
+            }
+        });
+        return todos;
+    }
+
+    /** Los líderes de mentores activos y las formaciones a las que pertenece cada uno (pocos: una lectura por líder). */
+    private Map<UserId, Set<Formacion>> lideresConSusFormaciones() {
+        Map<UserId, Set<Formacion>> lideres = new HashMap<>();
+        for (UserId lider : participacionProgramaFinder.usuariosActivosConRol(Set.of(UserRole.MENTOR_LEAD))) {
+            lideres.put(lider, formaciones.formacionesDe(lider));
+        }
+        return lideres;
+    }
+
+    /** Un líder (nuevo, recién promovido o en el relleno) entra a los soportes que ya existen de los aprendices de su formación (FR-037). */
+    private void sumarLiderALosDeSuFormacion(UserId liderId) {
+        Set<Formacion> suyas = formaciones.formacionesDe(liderId);
+        int sumadas = 0;
+        for (Conversacion soporte : loadConversacionPort.deSoporte()) {
+            if (suyas.contains(soporte.formacion()) && !soporte.esAprendizDeSoporte(liderId)
+                    && !esParticipantePort.esParticipante(soporte.id(), liderId)) {
+                agregarParticipantePort.agregar(Participante.unirse(soporte.id(), liderId, clock.now()));
+                sumadas++;
+            }
+        }
+        if (sumadas > 0) {
+            log.info("[chat.soporte] lider {} sumado a {} conversacion(es) de soporte de su formacion", liderId, sumadas);
+        }
+    }
+
+    private void sumarLiderALosDeSuFormacionSinFallar(UserId liderId) {
+        try {
+            sumarLiderALosDeSuFormacion(liderId);
+        } catch (RuntimeException e) {
+            log.warn("[chat.soporte] relleno: no se pudo sumar al lider {} a los soportes", liderId, e);
+        }
+    }
+
+    /** El líder sigue siéndolo pero cambió de formación: sale de los soportes de las que ya no son suyas (FR-039). */
+    private void retirarDeLosDeOtraFormacion(UserId liderId) {
+        Set<Formacion> suyas = formaciones.formacionesDe(liderId);
+        for (Conversacion soporte : loadConversacionPort.deSoporte()) {
+            if (!suyas.contains(soporte.formacion()) && !soporte.esAprendizDeSoporte(liderId)
+                    && esParticipantePort.esParticipante(soporte.id(), liderId)) {
+                quitarParticipantePort.quitar(soporte.id(), liderId);
+            }
+        }
+    }
+
     /** {@inheritDoc} El cuerpo es {@link #rellenarPendientes}; aca solo se exige el actor. */
     @Override
     public ResultadoRelleno rellenar(UserId actorId) {
@@ -312,6 +381,7 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
         Set<UserId> inscritos = Set.copyOf(participacionProgramaFinder.participantesInscritosActivos());
         Set<String> yaTienen = clavesDeSoporteExistentes();
         List<UserId> staff = participacionProgramaFinder.usuariosActivosConRol(STAFF_ADMINISTRATIVO);
+        Map<UserId, Set<Formacion>> lideres = lideresConSusFormaciones();
         Map<UserId, Formacion> formacionDe = formacionesDe(padron);
         Set<Formacion> conSoporte = formacionesConSoporte();
 
@@ -330,7 +400,7 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
                 existentes++;
                 continue;
             }
-            switch (intentarCrearEnElRelleno(aprendiz, staff, formacion)) {
+            switch (intentarCrearEnElRelleno(aprendiz, conLideres(staff, lideres, formacion), formacion)) {
                 case CREADA -> creadas++;
                 case YA_EXISTIA -> existentes++;
                 case FALLO -> fallidas++;
@@ -338,6 +408,7 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
         }
         log.info("[chat.soporte] relleno: {} aprendices, {} creadas, {} ya existian, {} fallidas",
                 padron.size(), creadas, existentes, fallidas);
+        lideres.keySet().forEach(this::sumarLiderALosDeSuFormacionSinFallar);
         return new ResultadoRelleno(padron.size(), creadas, existentes, fallidas);
     }
 
@@ -362,8 +433,7 @@ public class ConversacionSoporteService implements IncorporarUsuarioAlSoporteUse
                 || loadConversacionPort.porClaveDirecta(Conversacion.claveSoporteDe(aprendizId, formacion)).isPresent()) {
             return false;
         }
-        return crearSoporte(aprendizId, nombreDeSoporte(cuenta.get().fullName()),
-                participacionProgramaFinder.usuariosActivosConRol(STAFF_ADMINISTRATIVO), false, formacion).isPresent();
+        return crearSoporte(aprendizId, nombreDeSoporte(cuenta.get().fullName()), staffDe(formacion), false, formacion).isPresent();
     }
 
     /** La formación de cada aprendiz del padrón, en una consulta por formación (nunca una por persona). */

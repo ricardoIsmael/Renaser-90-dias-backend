@@ -53,6 +53,7 @@ import java.util.UUID;
  * @param formacion      la formacion del evento, para decir su nombre en el mensaje (spec 041); {@code null} = la Escuela
  * @param enlace         el enlace para entrar si el evento es en linea (Meet, Zoom u otro), leido del evento al despachar; {@code null} si no hay
  * @param lugar          la direccion si el evento es presencial; {@code null} si no
+ * @param audienciaElegida el evento tiene audiencia elegida (spec 044); {@code null} en una publicación anterior
  * @param asistenciaConfirmada la persona respondio "Voy" a ESTA ocurrencia, leido al despachar
  *                       (D-189). {@code calendar} ya no apaga los avisos al confirmar: la app del
  *                       telefono programa una alarma local, pero la web no, y solo {@code notifications}
@@ -67,14 +68,31 @@ public record RecordatorioEventoDebidoEvent(Long recordatorioId, UUID eventoId, 
                                              Boolean asistenciaConfirmada, String zonaHoraria,
                                              Instant occurredAt, Boolean avisoEnApp, Integer avisoDeMensajeMin,
                                              String formacion, String enlace,
-                                             String lugar) implements DomainEvent {
+                                             String lugar, Boolean audienciaElegida) implements DomainEvent {
+
+    /** Sin la marca de audiencia elegida (la forma de la spec 041; las publicaciones viejas del outbox la usan). */
+    public RecordatorioEventoDebidoEvent(Long recordatorioId, UUID eventoId, UserId destinatarioId,
+                                         Instant inicioOcurrencia, String tituloEvento, boolean esAnuncio,
+                                         Boolean asistenciaConfirmada, String zonaHoraria, Instant occurredAt, Boolean avisoEnApp,
+                                         Integer avisoDeMensajeMin, String formacion, String enlace, String lugar) {
+        this(recordatorioId, eventoId, destinatarioId, inicioOcurrencia, tituloEvento, esAnuncio, asistenciaConfirmada, zonaHoraria,
+                occurredAt, avisoEnApp, avisoDeMensajeMin, formacion, enlace, lugar, null);
+    }
+
+    /**
+     * {@code true} si el evento tiene audiencia elegida (spec 044): su chat y su WhatsApp le llegan a todos los invitados que no dijeron «No voy»
+     * y de cualquier rol (FR-021, FR-024). {@code null} (una publicación anterior) cuenta como no.
+     */
+    public boolean esDeAudienciaElegida() {
+        return Boolean.TRUE.equals(audienciaElegida);
+    }
 
     /** Un aviso del telefono, sin nada de mensaje (la forma de antes de la spec 041; las publicaciones viejas del outbox la usan). */
     public RecordatorioEventoDebidoEvent(Long recordatorioId, UUID eventoId, UserId destinatarioId,
                                          Instant inicioOcurrencia, String tituloEvento, boolean esAnuncio,
                                          Boolean asistenciaConfirmada, String zonaHoraria, Instant occurredAt) {
         this(recordatorioId, eventoId, destinatarioId, inicioOcurrencia, tituloEvento, esAnuncio,
-                asistenciaConfirmada, zonaHoraria, occurredAt, null, null, null, null, null);
+                asistenciaConfirmada, zonaHoraria, occurredAt, null, null, null, null, null, null);
     }
 
     /** {@code true} salvo que la fila sea SOLO de mensaje; {@code null} (publicacion vieja) cuenta como aviso del telefono. */

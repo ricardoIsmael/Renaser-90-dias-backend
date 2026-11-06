@@ -103,7 +103,7 @@ class ReglaDeRolPersonalizadoTest {
         MisFuncionalidades suyas = mias.mias(mentorJunior);
 
         assertThat(suyas.noDisponibles()).containsExactlyInAnyOrder("eventos", "eventos.gestion",
-                "eventos.asistencia", "eventos.meet", "eventos.whatsapp");
+                "eventos.asistencia", "eventos.convocar", "eventos.meet", "eventos.whatsapp");
         assertThat(suyas.apagadas()).isEmpty();
         assertThat(mias.mias(mentor).noDisponibles()).as("solo lo que nace apagado (specs 040 y 041)").containsExactlyInAnyOrder("eventos.meet", "eventos.whatsapp");
         // Desde la spec 034 `radar.fichas` apaga por defecto a ciertos roles, y evaluarla obliga a leer el rol: una lectura por llamada

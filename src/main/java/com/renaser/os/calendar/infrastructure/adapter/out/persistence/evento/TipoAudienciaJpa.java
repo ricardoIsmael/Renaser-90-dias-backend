@@ -6,5 +6,6 @@ public enum TipoAudienciaJpa {
     NIVEL_MINIMO,
     CURSO,
     ROLES,
-    CELULA
+    CELULA,
+    SELECCION
 }

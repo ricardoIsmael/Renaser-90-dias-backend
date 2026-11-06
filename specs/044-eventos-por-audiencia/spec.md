@@ -234,7 +234,7 @@ lee ahí los recordatorios que la 041 escribe a cada aprendiz.
   la audiencia elegida.
 - **FR-028**: Interruptor nuevo de Soporte TI, `eventos.convocar` («Eventos para personas elegidas»), hijo de `eventos`, para MENTOR, TRAINEE_GUIDE,
   MENTOR_LEAD, ADMIN, ALCHEMIST e IT_SUPPORT, **prendido al publicar** (P5). Apagado: el mentor, la guía y el líder no pueden crear ni editar
-  (404 `FUNCIONALIDAD_NO_DISPONIBLE`) y la app no les muestra «Crear evento»; Administración crea como hoy, sin audiencia elegida. Los eventos ya
+  (503 con el aviso de mantenimiento, como cualquier funcionalidad apagada) y la app no les muestra «Crear evento»; Administración crea como hoy, sin audiencia elegida. Los eventos ya
   creados siguen visibles solo para su audiencia.
 - **FR-029**: La app no decide quién crea con una lista de roles: lo pregunta al servidor (`GET /api/v1/calendar/audience/options`).
 
@@ -272,11 +272,11 @@ lee ahí los recordatorios que la 041 escribe a cada aprendiz.
 - **SC-003**: Un mentor no puede crear un evento con una persona que no es su alumna: 403 y ninguna fila escrita.
 - **SC-004**: Ningún texto que recibe un invitado (aviso, chat, WhatsApp, respuesta del evento) contiene el color, «semáforo» ni la lista.
 - **SC-005**: Un evento editado sin `audience` (app anterior) conserva su audiencia elegida.
-- **SC-006**: Con `eventos.convocar` apagado, el mentor recibe 404 al crear y Administración crea como hoy.
+- **SC-006**: Con `eventos.convocar` apagado, el mentor no puede crear (503) y Administración crea como hoy.
 - **SC-007**: Elegir «Rojo» hace una lectura del semáforo, no una por aprendiz.
 - **SC-008**: Los eventos de antes reciben exactamente los mismos avisos que antes.
 - **SC-009**: El WhatsApp de un recordatorio llega al número de la ficha de cada invitado y de nadie más (probado con un YCloud falso; el envío real
-  lo prueba el dueño con un teléfono de prueba). [sin prueba automática del envío real: necesita el número, la plantilla aprobada y saldo]
+  lo prueba el dueño con un teléfono de prueba). [sin prueba automática: el número sale de la ficha con el código de la 041, sin cambios; se comprueba en el E2E con un YCloud falso, y el envío real necesita el número, la plantilla aprobada y saldo]
 - **SC-010**: El líder de una formación lee el soporte de un aprendiz de su formación y no el de otra.
 
 ## Fuera de alcance

@@ -32,6 +32,10 @@ public final class RecordatorioEvento {
     public static final String MOTIVO_ASISTIRA = "confirmo_asistencia";
     public static final String MOTIVO_NO_ELEGIBLE = "dejo_de_ser_elegible";
     public static final String MOTIVO_EVENTO_CANCELADO = "evento_cancelado";
+    /** Spec 044 (FR-022): la persona respondió «No voy» a esa fecha de un evento con audiencia elegida. */
+    public static final String MOTIVO_DIJO_NO_VOY = "dijo_no_voy";
+    /** Spec 044 (FR-023): la persona ya no está en la audiencia elegida del evento al despacharlo. */
+    public static final String MOTIVO_FUERA_DE_LA_AUDIENCIA = "fuera_de_la_audiencia";
 
     private final Long id;
     private final EventoId eventoId;

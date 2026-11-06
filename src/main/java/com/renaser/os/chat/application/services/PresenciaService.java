@@ -200,8 +200,9 @@ public class PresenciaService implements ConsultarPresenciaUseCase, RegistrarPre
      * staff: falla cerrado.
      */
     private boolean esStaffAdministrativo(UserId usuarioId) {
+        // Spec 044: también el líder de mentores; su formación ya la exigió VisibilidadPorFormacion antes de esta pregunta.
         return userSummaryFinder.findById(usuarioId)
-                .map(usuario -> usuario.role().canManageRoles())
+                .map(usuario -> StaffDelSoporte.acompana(usuario.role()))
                 .orElse(false);
     }
 
