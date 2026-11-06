@@ -59,6 +59,9 @@ class ConsolaSoporteTiIT {
     @BeforeEach
     void armar() {
         pedidos = new PedidosDePrueba(puerto, jdbc, sesiones, passwordEncoder);
+        // V185 prende eventos.meet, .transcripcion y eventos.whatsapp: esta prueba mira el catálogo sin filas (nacen apagadas).
+        jdbc.update("DELETE FROM renaser.funcionalidades_estado");
+        copia.recargar();
     }
 
     @AfterEach

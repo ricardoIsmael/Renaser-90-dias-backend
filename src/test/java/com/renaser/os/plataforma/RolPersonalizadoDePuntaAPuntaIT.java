@@ -2,6 +2,7 @@ package com.renaser.os.plataforma;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.renaser.os.TestcontainersConfiguration;
+import com.renaser.os.plataforma.application.services.CopiaDeEstados;
 import com.renaser.os.plataforma.application.services.CopiaDeRolesPersonalizados;
 import com.renaser.os.plataforma.infrastructure.adapter.in.redis.SuscripcionAlCanalDeRolesPersonalizados;
 import com.renaser.os.plataforma.infrastructure.adapter.out.redis.CanalDeRolesPersonalizados;
@@ -59,6 +60,8 @@ class RolPersonalizadoDePuntaAPuntaIT {
     private RolesPersonalizadosFinder finder;
     @Autowired
     private RedisConnectionFactory conexiones;
+    @Autowired
+    private CopiaDeEstados copiaDeEstados;
 
     private PedidosDePrueba pedidos;
     private String soporte;
@@ -72,6 +75,10 @@ class RolPersonalizadoDePuntaAPuntaIT {
     @BeforeEach
     void armar() throws Exception {
         pedidos = new PedidosDePrueba(puerto, jdbc, sesiones, passwordEncoder);
+        // V185 prende eventos.meet, .transcripcion y eventos.whatsapp: esta prueba mira el catálogo sin filas (nacen apagadas).
+        jdbc.update("DELETE FROM renaser.funcionalidades_estado WHERE clave IN "
+                + "('eventos.meet', 'eventos.meet.transcripcion', 'eventos.whatsapp')");
+        copiaDeEstados.recargar();
         soporte = pedidos.sesionDe(pedidos.usuario("SOPORTE_TI"));
         consola = Map.of("X-Consola-Token", pedidos.desbloquear(soporte));
         admin = pedidos.sesionDe(pedidos.usuario("ADMIN"));
