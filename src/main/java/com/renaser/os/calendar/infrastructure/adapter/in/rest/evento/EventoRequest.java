@@ -36,7 +36,7 @@ record EventoRequest(@NotBlank String title, @NotBlank String eventType, String 
                       List<EventoWireMapper.ReglaRecordatorioWire> reminderRules, Boolean notifyOnCreate,
                       Boolean remindByEmail, String recurrenceFrequency, Integer recurrenceInterval,
                       List<Integer> recurrenceByWeekday, String recurrenceUntil, Integer recurrenceCount,
-                      String formation, Boolean crearEnlaceMeet) {
+                      String formation, Boolean crearEnlaceMeet, AudienciaWire audience) {
 
     EventoRequest {
         if (audienceType == null || audienceType.isBlank()) {
@@ -65,6 +65,11 @@ record EventoRequest(@NotBlank String title, @NotBlank String eventType, String 
     /** Spec 040: {@code null} si el evento no pide el enlace automático; si lo pide, la sala es siempre {@code ABIERTA}. */
     AccesoSalaMeet accesoPedido() {
         return Boolean.TRUE.equals(crearEnlaceMeet) ? AccesoSalaMeet.porDefecto() : null;
+    }
+
+    /** Spec 044: la audiencia elegida, o {@code null} si el pedido no la trae (al editar, se conserva la guardada, FR-030). */
+    com.renaser.os.calendar.application.ports.in.audiencia.PedidoDeAudiencia audienciaPedida() {
+        return audience == null ? null : audience.aPedido();
     }
 
     Instant startsAtInstant() {

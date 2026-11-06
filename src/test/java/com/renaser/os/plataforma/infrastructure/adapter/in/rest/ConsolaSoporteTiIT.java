@@ -151,7 +151,7 @@ class ConsolaSoporteTiIT {
 
         assertThat(respuesta.statusCode()).isEqualTo(200);
         JsonNode lista = pedidos.json(respuesta);
-        assertThat(lista.size()).isEqualTo(60); // auth.codigo_whatsapp (spec 043) + 52 de la spec 002 + lider.cumplimiento (spec 005) + radar.fichas (spec 034) + ia.analisis (spec 031) + pagos (spec 032) + eventos.meet (spec 040) + eventos.whatsapp (spec 041) + habitos.km.carreras (spec 042)
+        assertThat(lista.size()).isEqualTo(61); // auth.codigo_whatsapp (spec 043) + 52 de la spec 002 + lider.cumplimiento (spec 005) + radar.fichas (spec 034) + ia.analisis (spec 031) + pagos (spec 032) + eventos.meet (spec 040) + eventos.whatsapp (spec 041) + habitos.km.carreras (spec 042) + eventos.convocar (spec 044)
         JsonNode chat = buscar(lista, "chat");
         assertThat(chat.get("critica").asBoolean()).isTrue();
         assertThat(chat.get("prendidaGlobal").asBoolean()).isTrue();

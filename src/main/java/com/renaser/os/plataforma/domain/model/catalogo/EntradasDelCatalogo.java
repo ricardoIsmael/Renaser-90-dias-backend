@@ -78,16 +78,19 @@ final class EntradasDelCatalogo {
                 critica("chat", "Chat", "Chat", "El chat entero: Tribu, salas y mensajes.", TODOS, POSPONE),
                 normal("chat.grupos", "Chat", "Chat de grupo", "Las conversaciones de grupo (célula) y la tarjeta del grupo.", TODOS, NO_APLICA),
                 normal("chat.global", "Chat", "Formación Renaser Global", "La conversación global.", TODOS, POSPONE),
-                normal("chat.soporte", "Chat", "Chat de soporte", "Las conversaciones de soporte.", EnumSet.of(TRAINEE, ADMIN, ALCHEMIST, IT_SUPPORT), SALTA),
+                normal("chat.soporte", "Chat", "Chat de soporte", "Las conversaciones de soporte.", EnumSet.of(TRAINEE, MENTOR_LEAD, ADMIN, ALCHEMIST, IT_SUPPORT), SALTA),
                 normal("chat.directos", "Chat", "Chats 1 a 1", "Las conversaciones directas.", TODOS, NO_APLICA),
                 normal("chat.audio", "Chat", "Notas de voz", "Mandar notas de voz.", TODOS, NO_APLICA),
                 normal("chat.fotos", "Chat", "Fotos y stickers", "Mandar fotos y stickers.", TODOS, NO_APLICA),
                 normal("eventos", "Eventos", "Eventos", "Ver los eventos y confirmar asistencia.", TODOS, SALTA),
                 normal("eventos.gestion", "Eventos", "Crear y editar eventos", "Crear, editar y cancelar eventos.", ADMINISTRACION, NO_APLICA),
-                normal("eventos.asistencia", "Eventos", "Asistencia", "Quién respondió y pasar lista.", EnumSet.of(MENTOR_LEAD, ADMIN, ALCHEMIST, IT_SUPPORT), NO_APLICA),
+                // Spec 044: quien creó el evento (también un mentor o una guía) ve quién respondió y pasa lista de SU evento.
+                normal("eventos.asistencia", "Eventos", "Asistencia", "Quién respondió y pasar lista.", EnumSet.of(MENTOR, TRAINEE_GUIDE, MENTOR_LEAD, ADMIN, ALCHEMIST, IT_SUPPORT), NO_APLICA),
+                // Spec 044 (FR-028, P5 del dueño): crear eventos para personas elegidas. Nace prendida; Soporte TI la apaga si algo falla.
+                normal("eventos.convocar", "Eventos", "Eventos para personas elegidas", "Crear eventos para personas, un grupo, un color del semáforo o el personal (líder, mentor y guía de aprendiz; y la audiencia elegida de Administración).", EnumSet.of(MENTOR, TRAINEE_GUIDE, MENTOR_LEAD, ADMIN, ALCHEMIST, IT_SUPPORT), NO_APLICA),
                 // Spec 040 (D-321): el enlace de Meet que el servidor crea solo. Nace APAGADA y no se prende en producción hasta pasar SC-001
                 // (reunión de más de 60 minutos con 3 o más personas). Apagada se esconde (404), y los procesos de fondo saltan su turno.
-                apagadaDeFabrica("eventos.meet", "Eventos", "Enlace de Meet automático", "Crear solo la sala de Meet de un evento al guardarlo.", ADMINISTRACION, SALTA),
+                apagadaDeFabrica("eventos.meet", "Eventos", "Enlace de Meet automático", "Crear solo la sala de Meet de un evento al guardarlo.", EnumSet.of(MENTOR, TRAINEE_GUIDE, MENTOR_LEAD, ADMIN, ALCHEMIST, IT_SUPPORT), SALTA),
                 // Spec 041 (D-322): el WhatsApp de los recordatorios de eventos nace APAGADO (sin el numero, la clave y la plantilla aprobada no hay como enviar) y se prende a proposito.
                 naceApagada("eventos.whatsapp", "Eventos", "Recordatorios por WhatsApp", "Los recordatorios de los eventos por WhatsApp (1 día, 1 hora, 30 y 10 minutos antes) y su resumen.", ADMINISTRACION, SALTA),
                 normal("cursos", "Cursos", "Cursos", "Los cursos y sus lecciones.", TODOS, NO_APLICA),

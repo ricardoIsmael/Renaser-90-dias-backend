@@ -49,9 +49,10 @@ class ReintentoDeSalaDeMeetService implements ReintentarSalaDeMeetUseCase {
 
     @Override
     public EventoConMeetVista reintentar(UserId actor, EventoId eventoId) {
-        accesoEventoService.requireAdministraElCalendario(actor);
         Evento evento = loadEventoPort.byId(eventoId)
                 .orElseThrow(() -> new NoSuchElementException("Evento no encontrado: " + eventoId));
+        // Spec 044 (FR-006): reintenta quien gestiona el evento, también el mentor que lo creó.
+        accesoEventoService.requireGestiona(actor, evento);
         if (!evento.usaSalaDeMeetAutomatica()) {
             throw new IllegalStateException(EVENTO_SIN_MEET);
         }

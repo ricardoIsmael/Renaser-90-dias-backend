@@ -198,6 +198,10 @@ public enum Permission {
      * "Solo puedes editar/eliminar/cancelar los eventos que creaste"). El dueño del proyecto
      * saco al MENTOR de la administracion del calendario; esas dos restricciones ya no
      * existen.</blockquote>
+     *
+     * <blockquote><b>Corregido 2026-11-06 (spec 044).</b> El líder de mentores, el mentor y la guía de aprendiz vuelven a crear eventos, cada uno
+     * para su gente: MENTOR_LEAD suma este permiso, y el servicio ({@code EventoService.requirePuedeCrear} y
+     * {@code AccesoEventoService.gestiona}) acota qué audiencia y qué eventos puede tocar cada rol.</blockquote>
      */
     MANAGE_CALENDAR,
 

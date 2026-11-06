@@ -17,9 +17,18 @@ import java.util.UUID;
  * @param formacion      el codigo de la formacion del evento ({@code ESCUELA}, {@code DIPLOMADO}, {@code CERTIFICACION}); {@code null} = la Escuela
  * @param enlace         el enlace para entrar si el evento es en linea, o {@code null}
  * @param lugar          la direccion si es presencial, o {@code null}
+ * @param audienciaElegida el evento tiene audiencia elegida (spec 044): el mensaje le llega a todo invitado de cualquier rol; quien dijo «No voy»
+ *                       ya no tiene el aviso (lo canceló {@code calendar} al despachar)
  */
 public record AvisoDeMensajeDelEvento(long recordatorioId, UUID eventoId, UserId destinatarioId, Instant inicio, String zonaHoraria,
-                                      String titulo, int avisoMin, boolean dijoVoy, String formacion, String enlace, String lugar) {
+                                      String titulo, int avisoMin, boolean dijoVoy, String formacion, String enlace, String lugar,
+                                      boolean audienciaElegida) {
+
+    /** Sin audiencia elegida: el evento de siempre (spec 041). */
+    public AvisoDeMensajeDelEvento(long recordatorioId, UUID eventoId, UserId destinatarioId, Instant inicio, String zonaHoraria,
+                                   String titulo, int avisoMin, boolean dijoVoy, String formacion, String enlace, String lugar) {
+        this(recordatorioId, eventoId, destinatarioId, inicio, zonaHoraria, titulo, avisoMin, dijoVoy, formacion, enlace, lugar, false);
+    }
 
     /** El mismo aviso que ve la app (el texto de «cuando» vive en un solo lugar), no un anuncio de evento nuevo. */
     public AvisoDeEvento avisoDeEvento() {

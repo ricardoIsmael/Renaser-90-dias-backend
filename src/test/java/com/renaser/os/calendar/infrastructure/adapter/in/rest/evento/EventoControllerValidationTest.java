@@ -70,6 +70,9 @@ class EventoControllerValidationTest {
     private ConfirmarPortadaUseCase confirmarPortadaUseCase;
     @MockitoBean
     private ConfirmarAsistenciaUseCase confirmarAsistenciaUseCase;
+    /** Spec 044: «Para quién es» y el organizador; sin stubs devuelve vacío. */
+    @MockitoBean
+    private com.renaser.os.calendar.application.ports.in.audiencia.ConvocatoriaUseCase convocatoriaUseCase;
 
     @Test
     void rsvpConCuerpoSinCamposObligatoriosDevuelve400YNoLlegaAlCasoDeUso() throws Exception {

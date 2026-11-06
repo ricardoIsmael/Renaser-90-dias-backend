@@ -470,8 +470,9 @@ class ConversacionSoporteServiceTest {
 
         verify(userSummaryFinder, times(1)).aprendicesActivos();
         verify(participacionProgramaFinder, times(1)).participantesInscritosActivos();
-        verify(loadConversacionPort, times(1)).deSoporte();
-        verify(participacionProgramaFinder, times(1)).usuariosActivosConRol(any());
+        // spec 044 FR-037: una lectura más de los soportes y otra de los líderes, por líder, nunca por aprendiz.
+        verify(loadConversacionPort, times(2)).deSoporte();
+        verify(participacionProgramaFinder, times(2)).usuariosActivosConRol(any());
         verify(loadConversacionPort, never()).porClaveDirecta(anyString());
         verify(participacionProgramaFinder, never()).deParticipante(any());
     }

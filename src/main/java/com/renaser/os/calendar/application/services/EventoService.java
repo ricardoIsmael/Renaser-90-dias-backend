@@ -34,6 +34,14 @@ import com.renaser.os.shared.domain.FormacionDelContenido;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.calendar.application.ports.in.audiencia.AudienciaRechazadaException;
+import com.renaser.os.calendar.application.ports.in.audiencia.PedidoDeAudiencia;
+import com.renaser.os.calendar.application.ports.out.audiencia.AudienciaElegidaPort;
+import com.renaser.os.calendar.domain.model.evento.TipoEvento;
+import com.renaser.os.calendar.domain.model.evento.audiencia.AudienciaElegida;
+import com.renaser.os.calendar.domain.model.evento.audiencia.QuienConvoca;
+import com.renaser.os.shared.application.Interruptores;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -75,12 +83,35 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
     private final AccesoEventoService accesoEventoService;
     private final Clock clock;
     private final IdGenerator idGenerator;
+    /** Spec 044: la audiencia elegida (las reglas y lo guardado) y el interruptor {@code eventos.convocar}. {@code null} en pruebas viejas. */
+    private final AudienciaElegidaService audienciaElegida;
+    private final AudienciaElegidaPort audienciaPort;
+    private final Interruptores interruptores;
+
+    /** Interruptor de Soporte TI de los eventos para personas elegidas (spec 044, FR-028). */
+    static final String CLAVE_CONVOCAR = "eventos.convocar";
+    /** Interruptor de Administración del calendario (lo de siempre). */
+    static final String CLAVE_GESTION = "eventos.gestion";
 
     public EventoService(LoadEventoPort loadEventoPort, SaveEventoPort saveEventoPort,
                           LoadExcepcionPort loadExcepcionPort, SaveExcepcionPort saveExcepcionPort,
                           LoadConfirmacionPort loadConfirmacionPort, SaveRecordatorioPort saveRecordatorioPort,
                           LoadNivelMembresiaPort nivelPort, AlmacenamientoPort almacenamientoPort,
                           AccesoEventoService accesoEventoService, Clock clock, IdGenerator idGenerator) {
+        this(loadEventoPort, saveEventoPort, loadExcepcionPort, saveExcepcionPort, loadConfirmacionPort, saveRecordatorioPort, nivelPort,
+                almacenamientoPort, accesoEventoService, clock, idGenerator, null, null, null);
+    }
+
+    @Autowired
+    public EventoService(LoadEventoPort loadEventoPort, SaveEventoPort saveEventoPort,
+                          LoadExcepcionPort loadExcepcionPort, SaveExcepcionPort saveExcepcionPort,
+                          LoadConfirmacionPort loadConfirmacionPort, SaveRecordatorioPort saveRecordatorioPort,
+                          LoadNivelMembresiaPort nivelPort, AlmacenamientoPort almacenamientoPort,
+                          AccesoEventoService accesoEventoService, Clock clock, IdGenerator idGenerator,
+                          AudienciaElegidaService audienciaElegida, AudienciaElegidaPort audienciaPort, Interruptores interruptores) {
+        this.audienciaElegida = audienciaElegida;
+        this.audienciaPort = audienciaPort;
+        this.interruptores = interruptores;
         this.loadEventoPort = loadEventoPort;
         this.saveEventoPort = saveEventoPort;
         this.loadExcepcionPort = loadExcepcionPort;
@@ -100,10 +131,11 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
         var visor = accesoEventoService.buildVisor(progreso);
         AlcanceDeFormacion alcance = accesoEventoService.alcanceDe(actorId, formacion);
 
-        List<Evento> candidatos = loadEventoPort.candidatosParaVisor(desde, hasta);
+        List<Evento> candidatos = loadEventoPort.candidatosParaVisor(desde, hasta).stream()
+                .filter(e -> alcance.incluye(e.formacion())).toList();
+        Map<EventoId, AudienciaElegida> elegidas = accesoEventoService.precargar(candidatos);
         List<Evento> visibles = candidatos.stream()
-                .filter(e -> alcance.incluye(e.formacion()))
-                .filter(e -> accesoEventoService.puedeAcceder(actorId, progreso, visor, e))
+                .filter(e -> accesoEventoService.puedeAcceder(actorId, progreso, visor, e, elegidas))
                 .toList();
         Set<EventoId> visibleIds = visibles.stream().map(Evento::id).collect(java.util.stream.Collectors.toSet());
 
@@ -142,10 +174,21 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
     @Override
     @Transactional
     public EventoVista crear(CrearEventoCommand cmd) {
-        requireRolCreador(cmd.actorId());
+        ProgresoParticipanteCalendar progreso = accesoEventoService.requireProgreso(cmd.actorId());
+        RolUsuario rol = progreso.rol();
+        boolean elegida = cmd.tipoAudiencia() == TipoAudiencia.SELECCION;
+        requirePuedeCrear(cmd.actorId(), rol, elegida, cmd.tipoEvento());
         requireNivelExiste(cmd.tipoAudiencia(), cmd.nivelMinimoId());
         // Spec 024 (FR-017): Administración no pertenece a una formación; elige siempre en cuál nace el evento.
         Formacion donde = FormacionDelContenido.paraCrear(accesoEventoService.alcanceDe(cmd.actorId(), null), cmd.formacion());
+
+        AudienciaElegida audiencia = null;
+        if (elegida) {
+            List<com.renaser.os.calendar.domain.model.evento.audiencia.ParteDeAudiencia> partes =
+                    cmd.audiencia() == null ? List.of() : cmd.audiencia().partes();
+            audiencia = audienciaElegida.armar(cmd.actorId(), rol, donde, partes, rol == RolUsuario.MENTOR ? cmd.actorId() : null,
+                    AudienciaElegida.vacia(), true, clock.now());
+        }
 
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD 5.4.7).
         Evento evento = Evento.crear(EventoId.of(idGenerator.newId()), cmd.titulo(), cmd.descripcion(),
@@ -154,15 +197,24 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
                 cmd.notificarAlCrear(), cmd.recordarPorEmail(), cmd.recordatoriosPersonalizados(), cmd.recurrencia(),
                 cmd.rolesDestino(), cmd.reglasRecordatorio(), cmd.actorId(), clock, donde, cmd.accesoSalaMeet());
         Evento guardado = saveEventoPort.guardar(evento);
+        if (audiencia != null) {
+            audienciaPort.reemplazar(guardado.id(), audiencia);
+        }
         return new EventoVista(guardado, coverUrlDe(guardado));
     }
 
     @Override
     @Transactional
     public EventoVista actualizar(ActualizarEventoCommand cmd) {
-        requireRolCreador(cmd.actorId());
         Evento evento = requireEvento(cmd.eventoId());
+        ProgresoParticipanteCalendar progreso = accesoEventoService.requireProgreso(cmd.actorId());
+        RolUsuario rol = progreso.rol();
+        requireGestiona(cmd.actorId(), evento);
+        boolean elegida = cmd.tipoAudiencia() == TipoAudiencia.SELECCION;
+        requirePuedeCrear(cmd.actorId(), rol, elegida, evento.tipoEvento());
         requireNivelExiste(cmd.tipoAudiencia(), cmd.nivelMinimoId());
+
+        AudienciaElegida nueva = audienciaAlEditar(cmd, evento, rol);
 
         evento.actualizar(cmd.titulo(), cmd.descripcion(), cmd.iniciaEn(), cmd.duracionMinutos(), cmd.timezone(),
                 cmd.tipoUbicacion(), cmd.valorUbicacion(), cmd.tipoAudiencia(), cmd.nivelMinimoId(), cmd.cursoId(),
@@ -170,10 +222,14 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
                 cmd.recordatoriosPersonalizados(), cmd.recurrencia(), cmd.rolesDestino(), cmd.reglasRecordatorio(),
                 clock, cmd.accesoSalaMeet());
         Evento guardado = saveEventoPort.guardar(evento);
+        if (nueva != null) {
+            audienciaPort.reemplazar(guardado.id(), nueva);
+        }
 
         // Los avisos ya generados nacieron de la version ANTERIOR — fuera del camino de
         // error a proposito (el evento ya se guardo), mismo criterio que updateEvent() del
         // repo viejo: si esto falla, el cron los recalcula igual en su siguiente pasada.
+        // Spec 044 (FR-022): es tambien lo que deja sin avisos a quien salio de la audiencia elegida.
         try {
             saveRecordatorioPort.borrarPendientesFuturos(cmd.eventoId(), clock.now());
         } catch (RuntimeException ex) {
@@ -183,11 +239,38 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
         return new EventoVista(guardado, coverUrlDe(guardado));
     }
 
+    /**
+     * La audiencia elegida que queda al editar (spec 044): {@code null} = no se toca lo guardado. Sin {@code audience} en el pedido se conserva la
+     * guardada (FR-030: una app anterior reenvía el evento sin ella); un evento que deja de ser {@code SELECCION} se queda sin partes.
+     */
+    private AudienciaElegida audienciaAlEditar(ActualizarEventoCommand cmd, Evento evento, RolUsuario rol) {
+        boolean eraElegida = evento.tipoAudiencia() == TipoAudiencia.SELECCION;
+        boolean esElegida = cmd.tipoAudiencia() == TipoAudiencia.SELECCION;
+        if (!esElegida) {
+            return eraElegida ? AudienciaElegida.vacia() : null;
+        }
+        PedidoDeAudiencia pedido = cmd.audiencia();
+        AudienciaElegida previa = eraElegida ? audienciaPort.de(evento.id()) : AudienciaElegida.vacia();
+        if (pedido == null || pedido.partes().isEmpty()) {
+            if (eraElegida) {
+                return null;
+            }
+            throw AudienciaRechazadaException.invalida("Elige para quién es el evento.");
+        }
+        UserId mentor = creadorActuaComoMentor(evento) ? evento.creadoPor() : null;
+        return audienciaElegida.armar(cmd.actorId(), rol, evento.formacion(), pedido.partes(), mentor, previa, pedido.recalcular(),
+                clock.now());
+    }
+
+    private boolean creadorActuaComoMentor(Evento evento) {
+        return evento.creadoPor() != null && accesoEventoService.rolDe(evento.creadoPor()).filter(r -> r == RolUsuario.MENTOR).isPresent();
+    }
+
     @Override
     @Transactional
     public void eliminar(UserId actorId, EventoId eventoId) {
-        requireRolCreador(actorId);
         Evento evento = requireEvento(eventoId);
+        requireGestiona(actorId, evento);
 
         if (evento.portadaRuta() != null) {
             try {
@@ -202,8 +285,8 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
     @Override
     @Transactional
     public void cancelar(UserId actorId, EventoId eventoId, Instant inicioOcurrencia) {
-        requireRolCreador(actorId);
         Evento evento = requireEvento(eventoId);
+        requireGestiona(actorId, evento);
 
         if (!evento.esRecurrente()) {
             throw new IllegalArgumentException(
@@ -232,8 +315,8 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
 
     @Override
     public UrlPortada solicitar(UserId actorId, EventoId eventoId, String tipoContenido) {
-        requireRolCreador(actorId);
-        requireEvento(eventoId); // 404 si no existe: no se firma subida para un evento inexistente
+        // 404 si no existe: no se firma subida para un evento inexistente
+        requireGestiona(actorId, requireEvento(eventoId));
 
         String ruta = PREFIJO_RUTA + "/" + eventoId + "/portada-" + clock.now().toEpochMilli();
         URI url = almacenamientoPort.firmarSubida(ruta, tipoContenido, VALIDEZ_URL_SUBIDA);
@@ -243,8 +326,8 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
     @Override
     @Transactional
     public EventoVista confirmar(UserId actorId, EventoId eventoId, String ruta) {
-        requireRolCreador(actorId);
         Evento evento = requireEvento(eventoId);
+        requireGestiona(actorId, evento);
 
         evento.fijarPortada(exigirPortadaDeEsteEvento(ruta, eventoId));
         Evento guardado = saveEventoPort.guardar(evento);
@@ -298,20 +381,43 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
                 .orElseThrow(() -> new NoSuchElementException("Evento no encontrado: " + eventoId));
     }
 
-    /** Crear, editar, eliminar y cancelar eventos es SOLO de ADMIN/ALCHEMIST (D-186) — ni
-     * TRAINEE, ni MENTOR, ni MENTOR_LEAD administran el calendario. Todos siguen VIENDO los
-     * eventos de su audiencia: eso lo decide {@code AccesoEventoService}, no este guard.
+    /**
+     * Quién crea (spec 044, FR-001, FR-007 y FR-028). ADMIN y ALCHEMIST, lo de siempre con {@code eventos.gestion}; con audiencia elegida, además
+     * {@code eventos.convocar}. El líder, el mentor y la guía, solo con {@code eventos.convocar}, solo con audiencia elegida y solo «Sesión especial» o
+     * «Espontáneo». El aprendiz, nunca.
      *
-     * <blockquote><b>Corregido 2026-09-26 (D-186).</b> Decia <i>"Crear/editar eventos es de rol
-     * administrativo (ADMIN/ALCHEMIST) o MENTOR (acotado a su propia celula)"</i>: el MENTOR
-     * creaba sesiones forzadas a la celula que lidera y solo tocaba las que el habia creado
-     * ({@code requirePropioSiMentor}/{@code requireCelulaLiderada}). El dueño del proyecto
-     * decidio sacarle esa capacidad; los eventos que un mentor ya creo quedan como estan.</blockquote> */
-    private void requireRolCreador(UserId actorId) {
-        ProgresoParticipanteCalendar progreso = accesoEventoService.requireProgreso(actorId);
-        boolean autorizado = progreso.rol() == RolUsuario.ADMIN || progreso.rol() == RolUsuario.ALCHEMIST;
-        if (!autorizado) {
-            throw new NotAuthorizedException("No tienes permiso para administrar el calendario");
+     * <blockquote><b>Corregido 2026-11-06 (spec 044).</b> Desde D-186 (2026-09-26) crear era solo de ADMIN y ALCHEMIST y el mentor no podía. El dueño
+     * pidió que el líder, el mentor y la guía vuelvan a crear eventos, cada uno para su gente.</blockquote>
+     */
+    private void requirePuedeCrear(UserId actorId, RolUsuario rol, boolean conAudienciaElegida, TipoEvento tipo) {
+        if (!QuienConvoca.puedeCrear(rol)) {
+            throw new NotAuthorizedException("No tienes permiso para crear eventos");
+        }
+        boolean administra = QuienConvoca.administra(rol);
+        if (interruptores != null) {
+            if (administra) {
+                interruptores.exigirPrendidaPara(CLAVE_GESTION, actorId);
+            }
+            if (!administra || conAudienciaElegida) {
+                interruptores.exigirPrendidaPara(CLAVE_CONVOCAR, actorId);
+            }
+        }
+        if (administra) {
+            return;
+        }
+        if (!conAudienciaElegida) {
+            throw new NotAuthorizedException("Elige para quién es el evento");
+        }
+        if (!QuienConvoca.tiposDe(rol).contains(tipo)) {
+            throw new NotAuthorizedException("No puedes crear un evento de ese tipo");
+        }
+    }
+
+    /** FR-006: quien lo creó, Administración, Alquimista, o el líder de quien lo creó. */
+    private void requireGestiona(UserId actorId, Evento evento) {
+        accesoEventoService.requireGestiona(actorId, evento);
+        if (interruptores != null) {
+            interruptores.exigirPrendidaPara(accesoEventoService.administraElCalendario(actorId) ? CLAVE_GESTION : CLAVE_CONVOCAR, actorId);
         }
     }
 

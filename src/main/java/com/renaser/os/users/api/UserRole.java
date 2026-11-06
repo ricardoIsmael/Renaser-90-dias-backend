@@ -122,7 +122,9 @@ public enum UserRole {
             Permission.VIEW_MENTOR_REPORT,
             Permission.FOLLOW_UP_MENTOR,
             Permission.SET_MENTOR_OPERATIONAL_STATUS,
-            Permission.EXPORT_RANKING);
+            Permission.EXPORT_RANKING,
+            // Spec 044 (FR-001): el líder crea eventos para su gente y edita los de sus mentores; el servicio acota el alcance.
+            Permission.MANAGE_CALENDAR);
 
     /**
      * Nombre para mostrar en español (spec 001 de hábitos por rol, D-264). Vive junto al enum para que un rol nuevo

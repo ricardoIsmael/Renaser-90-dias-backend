@@ -1,5 +1,6 @@
 package com.renaser.os.calendar.application.ports.in.evento;
 
+import com.renaser.os.calendar.application.ports.in.audiencia.PedidoDeAudiencia;
 import com.renaser.os.calendar.domain.model.evento.EventoId;
 import com.renaser.os.calendar.domain.model.evento.Recurrencia;
 import com.renaser.os.calendar.domain.model.evento.ReglaRecordatorio;
@@ -28,11 +29,26 @@ public interface ActualizarEventoUseCase {
                                     boolean notificarAlCrear, boolean recordarPorEmail,
                                     boolean recordatoriosPersonalizados, Recurrencia recurrencia,
                                     Set<RolUsuario> rolesDestino, List<ReglaRecordatorio> reglasRecordatorio,
-                                    AccesoSalaMeet accesoSalaMeet) {
+                                    AccesoSalaMeet accesoSalaMeet, PedidoDeAudiencia audiencia) {
 
         public ActualizarEventoCommand {
             Objects.requireNonNull(actorId, "actorId es obligatorio");
             Objects.requireNonNull(eventoId, "eventoId es obligatorio");
+        }
+
+        /** Sin tocar la audiencia elegida (spec 044): si el evento la tiene, se conserva (FR-030). */
+        public ActualizarEventoCommand(UserId actorId, EventoId eventoId, String titulo, String descripcion,
+                                       Instant iniciaEn, Integer duracionMinutos, ZoneId timezone,
+                                       TipoUbicacion tipoUbicacion, String valorUbicacion, TipoAudiencia tipoAudiencia,
+                                       Integer nivelMinimoId, String cursoId, UUID celulaDestinoId,
+                                       boolean notificarAlCrear, boolean recordarPorEmail,
+                                       boolean recordatoriosPersonalizados, Recurrencia recurrencia,
+                                       Set<RolUsuario> rolesDestino, List<ReglaRecordatorio> reglasRecordatorio,
+                                       AccesoSalaMeet accesoSalaMeet) {
+            this(actorId, eventoId, titulo, descripcion, iniciaEn, duracionMinutos, timezone, tipoUbicacion,
+                    valorUbicacion, tipoAudiencia, nivelMinimoId, cursoId, celulaDestinoId, notificarAlCrear,
+                    recordarPorEmail, recordatoriosPersonalizados, recurrencia, rolesDestino, reglasRecordatorio,
+                    accesoSalaMeet, null);
         }
 
         /**
@@ -48,7 +64,7 @@ public interface ActualizarEventoUseCase {
                                        Set<RolUsuario> rolesDestino, List<ReglaRecordatorio> reglasRecordatorio) {
             this(actorId, eventoId, titulo, descripcion, iniciaEn, duracionMinutos, timezone, tipoUbicacion,
                     valorUbicacion, tipoAudiencia, nivelMinimoId, cursoId, celulaDestinoId, notificarAlCrear,
-                    recordarPorEmail, recordatoriosPersonalizados, recurrencia, rolesDestino, reglasRecordatorio, null);
+                    recordarPorEmail, recordatoriosPersonalizados, recurrencia, rolesDestino, reglasRecordatorio, null, null);
         }
     }
 }

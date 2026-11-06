@@ -20,7 +20,7 @@ class CatalogoDeFuncionalidadesTest {
             "mapa", "plan", "habitos", "habitos.foto", "habitos.km", "habitos.km.carreras", "habitos.gimnasio", "habitos.espiritu",
             "habitos.ajustes", "clase_diaria", "muro", "muro.publicar", "muro.comentarios", "muro.reacciones", "chat",
             "chat.grupos", "chat.global", "chat.soporte", "chat.directos", "chat.audio", "chat.fotos", "eventos",
-            "eventos.gestion", "eventos.asistencia", "eventos.meet", "eventos.whatsapp", "cursos", "ranking", "ranking.podio_semanal", "semaforo", "ia",
+            "eventos.gestion", "eventos.asistencia", "eventos.convocar", "eventos.meet", "eventos.whatsapp", "cursos", "ranking", "ranking.podio_semanal", "semaforo", "ia",
             "ia.chat", "ia.voz", "ia.propuestas", "ia.analisis", "evidencias", "radar.fichas", "caja", "pagos", "emergencia", "cuenta.eliminar",
             "notificaciones", "mentor.mi_grupo", "lider", "lider.cumplimiento", "tickets", "admin", "admin.solicitudes", "admin.equipo",
             "admin.grupos", "admin.personas", "admin.habitos", "admin.bienvenida", "admin.fases", "perfil");
@@ -69,7 +69,9 @@ class CatalogoDeFuncionalidadesTest {
         assertThat(meet.porDefecto()).isEqualTo(ValorPorDefecto.APAGADA);
         assertThat(meet.seEsconde()).isTrue();
         assertThat(meet.critica()).isFalse();
-        assertThat(meet.rolesQueLaUsan()).containsExactlyInAnyOrder(UserRole.ADMIN, UserRole.ALCHEMIST, UserRole.IT_SUPPORT);
+        // spec 044 FR-026: el líder, el mentor y la guía también crean eventos con Meet automático.
+        assertThat(meet.rolesQueLaUsan()).containsExactlyInAnyOrder(UserRole.ADMIN, UserRole.ALCHEMIST, UserRole.IT_SUPPORT,
+                UserRole.MENTOR_LEAD, UserRole.MENTOR, UserRole.TRAINEE_GUIDE);
         assertThat(meet.procesos()).isEqualTo(PoliticaDeProcesos.SALTA);
     }
 
