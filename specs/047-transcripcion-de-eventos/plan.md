@@ -15,7 +15,7 @@
 | Servicio | `RetencionDeTranscripcionesService` (diario, FR-014) y borrado al borrar evento o fecha (FR-015, por la FK en cascada + constancia antes) | idem |
 | Servicio | `DescargaDeTranscripcionService` (P1-A: ADMIN/ALCHEMIST, motivo de 10 a 500 caracteres, auditoría `TRANSCRIPCION_LEIDA`) | idem |
 | Entrada | `TranscripcionesScheduler` (cada 5 min, con el bloqueo que ya usa `SalasDeMeetScheduler`) y `RetencionDeTranscripcionesScheduler` (diario, 03:30 Lima) | `calendar/infrastructure/adapter/in/scheduler/` |
-| Entrada REST | `POST /api/v1/admin/events/{id}/meet/{fecha}/transcripcion/descarga` (cuerpo `{motivo}`, responde `text/plain` con `Cache-Control: no-store`) y `estadoDeLaTranscripcion` dentro del detalle `meet` del evento para Administración | `calendar/infrastructure/adapter/in/rest/evento/` |
+| Entrada REST | `GET /api/v1/calendar/events/{id}/meet/transcripciones` (estado por fecha, sin texto), `POST …/{fecha}/descarga` (cuerpo `{motivo}`, `text/plain` con `Cache-Control: no-store`) y `POST …/{fecha}/borrar` (FR-016). `recordingNotice` en el detalle del evento (P4-B) | `calendar/infrastructure/adapter/in/rest/evento/` |
 | Catálogo Soporte TI | `eventos.meet.transcripcion`, hija de `eventos.meet`, `apagadaDeFabrica` | `plataforma/domain/model/catalogo/EntradasDelCatalogo.java` (editar) |
 | Configuración | `meetings.space.readonly` en `EVENTOS_GOOGLE_PERMISOS` por defecto; `CuentaDeGoogle` suma `PERMISO_LEER_REUNIONES` y el estado dice si falta | `application.yaml`, `CuentaDeGoogle.java` (editar) |
 
@@ -39,7 +39,7 @@ CREATE INDEX ON eventos_meet_transcripciones (proximo_intento_en) WHERE estado =
 CREATE INDEX ON eventos_meet_transcripciones (borrar_despues_de) WHERE estado = 'LISTA';
 ```
 
-Auditoría: se reemplaza el CHECK de `integracion_google_auditoria.accion` (como V171) sumando `TRANSCRIPCION_GUARDADA`, `TRANSCRIPCION_SIN_DATOS`, `TRANSCRIPCION_LEIDA`, `TRANSCRIPCION_BORRADA`; se suma una columna `motivo varchar(500)` nulable. Sin texto ni enlaces.
+Auditoría: se reemplaza el CHECK de `integracion_google_auditoria.accion` (como V171) sumando `TRANSCRIPCION_GUARDADA`, `TRANSCRIPCION_SIN_DATOS`, `TRANSCRIPCION_LEIDA`, `TRANSCRIPCION_BORRADA`. El motivo de quién sacó o borró a pedido una transcripción va en `eventos_meet_transcripciones_accesos` (V184: actor, evento, fecha, `LECTURA`/`BORRADO`, motivo; 12 meses). Sin texto ni enlaces. Lo implementado está en V184.
 
 ## Reglas clave
 

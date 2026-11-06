@@ -2,9 +2,19 @@
 
 **Feature Branch**: `047-transcripcion-de-eventos`
 **Created**: 2026-11-06
-**Status**: Borrador para el dueño. Las preguntas cerradas están en «[DECISIÓN DEL DUEÑO]»; mientras no responda, el plan y las tareas usan la opción recomendada.
+**Status**: Aprobada por el dueño (2026-11-06) con las decisiones de abajo. Implementada (D-332): backend V184 y la línea de la app.
 **Input**: Pedido del dueño (2026-11-06), textual: «el link es automático pero lo más importante: que puede ingresar cualquier persona si está abierto y se guarde la transcripción, igual que el repo que te pasé guarda muy bien esa información, no mostrándola, pero que cumpla». Y después: «lo de RenaserOs funciona SIN Google Workspace, con una cuenta de Gmail normal».
 **Se apoya en**: spec 040 (salas de Meet automáticas, V169 y V171). No cambia nada de lo que la 040 ya hace.
+
+## Decisiones del dueño (2026-11-06)
+
+| Pregunta | Decisión |
+|---|---|
+| P1 · Quién la ve | **A**: nadie en la app; ADMIN y ALCHEMIST la descargan desde el servidor con un motivo escrito y queda constancia. |
+| P2 · Qué se guarda | **B**: la transcripción y el enlace a la grabación (el video sigue en el Drive de la cuenta). |
+| P3 · Cuánto tiempo | **B**: 6 meses. |
+| P4 · Cómo se avisa | **B**: la Política de privacidad, el aviso de Meet y una línea en el detalle del evento: «Esta sesión se graba y se transcribe.» (autorizado tocar Comunidad → Eventos solo para esa línea). |
+| P5 · Sin transcripción de Meet | **A**: nada más; queda «Sin transcripción». |
 
 ## Resumen
 
@@ -100,12 +110,12 @@ El evento, el enlace y la sala siguen igual. Administración ve en el detalle de
 - **FR-009** **Sin plan**: si la 040 ya confirmó `transcripcion_confirmada = false` para esa sala, no se busca: queda `SIN_TRANSCRIPCION` con «La cuenta no dejó transcribir esta sala». Si la confirmó `true` o `NULL`, se busca igual.
 - **FR-010** **Cifrado en reposo**: el mismo `CifradoDeSecretosPort` / `AesGcmCifrado` de la 040 (AES-GCM, la clave fuera de la base y del repo, versión de clave guardada con el dato para rotarla). Sin clave configurada no se guarda nada. La transcripción **nunca** se escribe en logs, trazas, errores, auditoría, avisos ni métricas (lo frena una prueba).
 - **FR-011** **Quién accede**: según P1. En ningún caso el aprendiz, el mentor, la guía ni el líder; nunca en la app ni en un endpoint de lectura general de eventos.
-- **FR-012** Administración (ADMIN, ALCHEMIST) ve en el detalle del evento, por fecha, solo el **estado** en palabras («Transcripción guardada», «Sin transcripción: la cuenta no la dejó», «Falta volver a conectar Google»…). Sin el texto.
+- **FR-012** ADMIN y ALCHEMIST leen del servidor, por fecha, solo el **estado** y su motivo en palabras (`GET /api/v1/calendar/events/{id}/meet/transcripciones`: «LISTA», «SIN_TRANSCRIPCION: La cuenta no dejó transcribir esta sala.», «SIN_PERMISO: Falta volver a conectar Google…»). Sin el texto. Dibujarlo en la pantalla de Administración queda para una entrega aparte.
 - **FR-013** **Auditoría** (tabla nueva o la de la 040 con acciones nuevas, solo INSERT): `TRANSCRIPCION_GUARDADA`, `TRANSCRIPCION_SIN_DATOS`, `TRANSCRIPCION_LEIDA` (quién, rol, motivo, evento, fecha), `TRANSCRIPCION_BORRADA` (por retención, por evento borrado, por pedido ARCO). Sin texto ni enlaces. Retención de la auditoría: 12 meses, como la 040.
 - **FR-014** **Retención**: según P3. Un trabajo diario borra (pone a `NULL` lo cifrado y marca `BORRADA`) lo vencido.
-- **FR-015** Al borrar un evento o una fecha, su transcripción se borra en el acto (no espera a la retención).
-- **FR-016** **Derechos ARCO** (Ley 29733 y su reglamento): ante un pedido de cancelación de una persona, Soporte TI puede borrar las transcripciones de las fechas a las que asistió con un motivo; queda en la auditoría. Al eliminarse una cuenta (D-243) **no** se borran solas (son de la sesión, con varias personas), salvo que el dueño decida otra cosa.
-- **FR-017** **Lo que queda en Google**: la grabación, el documento de transcripción y las notas siguen en el Drive de la cuenta conectada (Meet los guarda ahí). Esta spec no los borra; el plan anota si se ofrece borrarlos del Drive al vencer la retención (queda como tarea opcional).
+- **FR-015** Al borrar un evento o una fecha, su transcripción se borra: si la fila de la sala se elimina, en el acto (`ON DELETE CASCADE`); si la sala queda `BORRADO`, en la siguiente corrida de la retención.
+- **FR-016** **Derechos ARCO** (Ley 29733 y su reglamento): ante un pedido de cancelación, ADMIN o ALCHEMIST borran la transcripción de una fecha con un motivo (`POST …/transcripciones/{fecha}/borrar`); queda la constancia (`BORRADO`) y la auditoría. Al eliminarse una cuenta (D-243) **no** se borran solas (son de la sesión, con varias personas), salvo que el dueño decida otra cosa.
+- **FR-017** **Lo que queda en Google**: la grabación, el documento de transcripción y las notas siguen en el Drive de la cuenta conectada (Meet los guarda ahí). Esta spec no los borra; el plan anota si se ofrece borrarlos del Drive al vencer la retención (queda como tarea opcional). [sin prueba automática: Renaser no toca el Drive de la cuenta]
 - **FR-018** **Política de privacidad** (`public/privacidad/` de la app, y la del servidor si la hay): suma que las sesiones por Meet se graban y se transcriben, para qué (constancia y calidad del programa, según P1), quién accede, cuánto tiempo se guarda, que se guarda cifrado y cómo pedir su borrado. Según P4, también una línea en el detalle del evento. **Se publica antes de encender el interruptor.**
 - **FR-019** La 040 pide hoy `meetings.space.settings`; esta spec suma `meetings.space.readonly` a los permisos por defecto (variable `EVENTOS_GOOGLE_PERMISOS`). La cuenta tiene que volver a conectarse; hasta entonces las filas quedan `SIN_PERMISO` y el estado de la cuenta (`GET /events/meet/status`) dice «Falta el permiso de leer las reuniones».
 - **FR-020** Las respuestas de Google se leen con tolerancia: una entrada rota se pierde ella, no la transcripción.
@@ -116,8 +126,8 @@ El evento, el enlace y la sala siguen igual. Administración ve en el detalle de
 
 ## Success Criteria *(mandatory)*
 
-- **SC-001** Con la cuenta de Renaser y una sala de **prueba** (personas del equipo, nada de producción), una sesión de 10 min con dos personas deja una fila `LISTA` en menos de 2 h, con los nombres y las frases.
-- **SC-002** En esa sala, una persona **no invitada** entra con el link desde un navegador sin sesión de Google y desde otra cuenta de Gmail **sin pedir permiso** y sin que nadie la admita. Se anota con capturas.
+- **SC-001** [sin prueba automática: prueba manual con la cuenta real de Google y una sala de prueba] Con la cuenta de Renaser y una sala de **prueba** (personas del equipo, nada de producción), una sesión de 10 min con dos personas deja una fila `LISTA` en menos de 2 h, con los nombres y las frases.
+- **SC-002** [sin prueba automática: prueba manual con navegadores reales] En esa sala, una persona **no invitada** entra con el link desde un navegador sin sesión de Google y desde otra cuenta de Gmail **sin pedir permiso** y sin que nadie la admita. Se anota con capturas.
 - **SC-003** Ninguna respuesta de la API para roles distintos de P1 contiene el texto (prueba sobre todos los endpoints de eventos y Administración).
 - **SC-004** El texto no aparece en claro en la base, en logs ni en la auditoría (prueba con un texto testigo).
 - **SC-005** Con el interruptor apagado, sin permiso, sin plan o sin clave, crear y editar eventos funciona igual que antes (pruebas de la 040 sin cambios).
@@ -130,7 +140,7 @@ El evento, el enlace y la sala siguen igual. Administración ve en el detalle de
 - Bajar el video a Renaser.
 - Salas que no creó Renaser (un link pegado a mano, Zoom).
 
-## [DECISIÓN DEL DUEÑO]
+## [DECISIÓN DEL DUEÑO] (respondidas el 06/11: ver «Decisiones del dueño» arriba)
 
 **P1 · ¿Quién puede ver la transcripción guardada?**
 - **A (recomendada)**: nadie en la app. ADMIN y ALCHEMIST pueden **descargarla** desde el servidor solo con un motivo escrito; queda la constancia (quién, cuándo, por qué).
