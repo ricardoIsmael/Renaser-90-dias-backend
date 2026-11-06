@@ -51,6 +51,9 @@ final class EntradasDelCatalogo {
     static List<DefinicionDeFuncionalidad> iniciales() {
         return List.of(
                 critica("registro", "Acceso", "Solicitar acceso", "El alta pública: «Solicitar acceso» y la verificación del correo.", NADIE, NO_APLICA),
+                // Spec 043 (D-325): el código por WhatsApp del alta y de recuperar la contraseña. Nace APAGADO hasta que Meta apruebe la plantilla de
+                // autenticación; apagado se esconde (404) y la app no lo ofrece. Pública, como el alta: no es de ningún rol.
+                raizQueNaceApagada("auth.codigo_whatsapp", "Acceso", "Código por WhatsApp", "Mandar el código de verificación por WhatsApp cuando no llega al correo: al solicitar acceso y al recuperar la contraseña.", NADIE),
                 normal("onboarding", "Programa", "Onboarding", "Ficha inicial, términos, pacto y cuestionario.", TODOS, NO_APLICA),
                 // Issue #62: la clave `dia_uno` NO cambia (hay interruptores y despliegues guardados con ella); solo lo que lee Soporte TI. Ya no se elige el Día 1 (spec 036).
                 normal("dia_uno", "Programa", "Empezar mi programa", "Activar el programa propio; empieza al día siguiente.", TODOS, NO_APLICA),
@@ -169,6 +172,12 @@ final class EntradasDelCatalogo {
                                                   Set<UserRole> roles, PoliticaDeProcesos procesos) {
         return new DefinicionDeFuncionalidad(clave, null, area, nombre, descripcion, roles, false,
                 ValorPorDefecto.PRENDIDA, procesos);
+    }
+
+    /** Una clave con punto cuyo prefijo no es una funcionalidad ({@code auth.codigo_whatsapp}) y que nace APAGADA para todos (spec 043): apagada se esconde. */
+    private static DefinicionDeFuncionalidad raizQueNaceApagada(String clave, String area, String nombre, String descripcion, Set<UserRole> roles) {
+        return new DefinicionDeFuncionalidad(clave, null, area, nombre, descripcion, roles, false,
+                ValorPorDefecto.APAGADA, NO_APLICA, Set.of(), true);
     }
 
     private static String prefijo(String clave) {

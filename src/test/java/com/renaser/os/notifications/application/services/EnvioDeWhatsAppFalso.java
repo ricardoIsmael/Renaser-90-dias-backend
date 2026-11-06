@@ -30,6 +30,19 @@ final class EnvioDeWhatsAppFalso implements EnvioDeWhatsAppPort {
         return respuesta.get();
     }
 
+    final List<String[]> codigos = new ArrayList<>();
+
+    @Override
+    public boolean configuradoParaCodigos() {
+        return configurado;
+    }
+
+    @Override
+    public ResultadoDelEnvio enviarCodigo(String destino, String codigo) {
+        codigos.add(new String[] {destino, codigo});
+        return respuesta.get();
+    }
+
     @Override
     public void enviarTexto(String destino, String texto) {
         textos.add(new String[] {destino, texto});

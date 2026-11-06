@@ -7,6 +7,7 @@ import org.springframework.data.redis.core.script.RedisScript;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Codigo numerico de un solo uso + contador de intentos, en dos claves de Redis bajo un prefijo
@@ -77,6 +78,14 @@ final class AlmacenCodigoNumericoRedis {
         redisTemplate.delete(claveIntentos(email));
         redisTemplate.opsForValue().set(claveCodigo(email), codigo, vigencia);
         return codigo;
+    }
+
+    /**
+     * El codigo que sigue vivo para {@code email}, sin tocarlo ni gastar un intento (spec 043): el WhatsApp manda EL MISMO codigo que el correo
+     * mientras siga vigente, asi pedirlo por otro canal no reinicia el contador de intentos ni deja dos codigos validos a la vez.
+     */
+    Optional<String> vigente(String email) {
+        return Optional.ofNullable(redisTemplate.opsForValue().get(claveCodigo(email)));
     }
 
     boolean verificarCodigo(String email, String codigo, int maxIntentos) {
