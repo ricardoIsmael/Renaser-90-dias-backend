@@ -76,3 +76,6 @@ __pycache__/
 
 ### Salida de scripts/verificar.sh (la evidencia va resumida en el PR, no en git) ###
 salida-maven.log
+
+### Estado de la tarea del arnés de agentes: es de cada worktree, no se versiona ###
+.arnes/

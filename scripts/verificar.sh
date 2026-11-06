@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Verificación estándar del backend: el mismo camino para cualquier persona, agente o el CI (arnés propio, 2026-11-06).
 #
-#   scripts/verificar.sh            reglas del arnés + trazabilidad de specs + ./mvnw -B -ntp clean verify (con la guarda de E-111)
+#   scripts/verificar.sh            reglas del arnés + trazabilidad de specs + grafo de agentes + ./mvnw -B -ntp clean verify (con la guarda de E-111)
 #   scripts/verificar.sh --rapido   reglas del arnés + trazabilidad + compilar: no cierra nada (sale con 2)
 #   scripts/verificar.sh --nube     como el primero, con los contenedores en Testcontainers Cloud (scripts/test-cloud.sh)
 #   scripts/verificar.sh --ci       lo que corre ci.yml: solo Maven y su guarda (el arnés y la trazabilidad tienen su
@@ -55,6 +55,17 @@ if [[ $MODO != ci ]]; then
     else echo "$SALIDA"; mal "Trazabilidad de specs contra la app @ $APP_COMMIT (salida $ESTADO): un requisito exigido sin prueba o una marca que no existe. Si esa app está atrás de su origin/master, actualízala o usa RENASER_APP"; fi
   else
     sin "Trazabilidad de specs: no encontré la app (pon RENASER_APP=<ruta>)"
+  fi
+
+  # El grafo del flujo de agentes y el perfil de este repo (arnes.perfil.yaml). El núcleo del arnés es genérico y vive
+  # fuera de este repositorio (ARNES_DIR, o ~/Documentos/arnes): valida que no haya bucles sin tope ni camino a la fusión
+  # sin el dueño, y que el perfil traiga un comando para cada nodo que lo pide.
+  ARNES=${ARNES_DIR:-$HOME/Documentos/arnes}
+  if [[ -f $ARNES/bin/arnes.mjs ]]; then
+    echo "▶ Grafo de agentes y perfil del arnés ($ARNES)"
+    if node "$ARNES/bin/arnes.mjs" validar --perfil arnes.perfil.yaml; then ok "Grafo de agentes y perfil del arnés (arnes validar)"; else mal "Grafo de agentes o perfil del arnés: arnes validar falló"; fi
+  else
+    sin "Grafo de agentes y perfil del arnés: no encontré el núcleo (pon ARNES_DIR=<ruta>)"
   fi
 fi
 
