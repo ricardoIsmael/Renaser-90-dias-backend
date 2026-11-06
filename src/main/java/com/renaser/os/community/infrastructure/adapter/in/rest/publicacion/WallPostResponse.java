@@ -22,11 +22,14 @@ import java.util.Map;
  *
  * <p>{@code formation} (spec 024) es el código de la formación del Muro donde se publicó: lo usa la app de Administración para rotular cada
  * fila cuando lee «Todas». Un cliente anterior lo ignora.
+ *
+ * <p>Spec 046: {@code authorName} es como se le nombra en el Muro (su sobrenombre si tiene uno) y {@code authorRealName} su nombre real,
+ * solo para el equipo que acompaña y solo si tiene sobrenombre ({@code null} para todos los demás).
  */
 public record WallPostResponse(String id, String authorId, String authorName, String authorAvatarUrl, String type,
                                 String category, String text, List<MediaItemResponse> media, String createdAt,
                                 Map<String, Integer> reactionCounts, List<String> myReactions, int commentCount,
-                                Integer programDay, String formation) {
+                                Integer programDay, String formation, String authorRealName) {
 
     public static WallPostResponse from(PublicacionVista vista) {
         Publicacion p = vista.publicacion();
@@ -35,7 +38,7 @@ public record WallPostResponse(String id, String authorId, String authorName, St
                 vista.autorAvatarUrl(), toWireTipoPublicacion(p.tipo()), p.categoriaClave(), p.texto(),
                 vista.media().stream().map(MediaItemResponse::from).toList(), p.creadoEn().toString(),
                 Map.of("LIKE", vista.likes(), "DISLIKE", vista.dislikes()), misReacciones,
-                vista.cantidadComentarios(), p.diaPrograma(), p.formacion().codigo());
+                vista.cantidadComentarios(), p.diaPrograma(), p.formacion().codigo(), vista.autorNombreReal());
     }
 
     private static String toWireTipoPublicacion(TipoPublicacion tipo) {

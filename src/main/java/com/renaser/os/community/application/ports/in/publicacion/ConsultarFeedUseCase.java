@@ -34,9 +34,18 @@ public interface ConsultarFeedUseCase {
     record PaginaPublicaciones(List<PublicacionVista> publicaciones, Instant siguienteCursor) {
     }
 
+    /**
+     * @param autorNombre     spec 046: como se le nombra en el Muro (su sobrenombre si tiene uno)
+     * @param autorNombreReal spec 046: su nombre real, SOLO para el equipo que acompaña y solo si tiene sobrenombre; si no, {@code null}
+     */
     record PublicacionVista(Publicacion publicacion, String autorNombre, String autorAvatarUrl, int likes,
                              int dislikes, TipoReaccion miReaccion, int cantidadComentarios,
-                             List<MediaFirmada> media) {
+                             List<MediaFirmada> media, String autorNombreReal) {
+
+        public PublicacionVista(Publicacion publicacion, String autorNombre, String autorAvatarUrl, int likes, int dislikes,
+                                TipoReaccion miReaccion, int cantidadComentarios, List<MediaFirmada> media) {
+            this(publicacion, autorNombre, autorAvatarUrl, likes, dislikes, miReaccion, cantidadComentarios, media, null);
+        }
     }
 
     record MediaFirmada(URI url, String mime, int orden) {
