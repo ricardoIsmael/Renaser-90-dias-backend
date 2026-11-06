@@ -21,6 +21,9 @@
 | D6 · El saludo | **A, «Te damos la bienvenida»**, sin género. |
 | D7 · El confeti | **A, solo en el primer post.** |
 | D8 · Los textos en inglés | **A, corregirlos todos en un commit aparte**: Ranking → «Tabla», Stickers → «Figuritas», checklist → «lista», Tickets → «Consultas», «Mi onboarding» → «Mis documentos», «· auto» → «· del teléfono». «chat» se queda. |
+| D9 · El primer post (06/11, tras probarlo) | **Obligatorio para una cuenta nueva.** Mientras no publica, el resto de la app queda bloqueado: el paso del Muro tapa las cinco pestañas y las demás secciones, con un candado sobre Hoy, Plan, Entrenar y Yo y la línea «Lo demás se abre cuando publiques.». Puede volver al compositor y nada más. **Se quitan «Ahora no», «Saltar» y toda forma de saltarlo** (el atrás del sistema no lo cierra: en el primer paso y en el del Muro no hace nada). Cerrar la app y abrirla vuelve al paso del Muro, bloqueado. Mientras dura es una **capa obligatoria**: los avisos del teléfono esperan; el Código Renaser y el panel de SER lo pausan y vuelve al cerrarse. Repetido desde Yo → Ajustes sí se puede cerrar. **Cambia FR-004 y FR-005**: saltar el recorrido ya no vale para una cuenta nueva. |
+| D10 · Modo oscuro (06/11) | El velo, el foco, las tarjetas de los pasos, los candados y la felicitación con confeti usan los colores del tema (`useTheme`), nunca colores fijos: el velo es el token `velo` (72 % en claro, 78 % en oscuro), la tarjeta `cardBgAlt` y el confeti sale de `coloresDelConfeti(tema)`. Se revisa con capturas en claro y en oscuro. |
+| D11 · «Se reinicia cada rato» (06/11) | Causas encontradas: (1) el recorrido se cerraba y volvía al paso 1 cuando la sesión parpadeaba (se relee el ingreso al volver al frente); ahora solo se reinicia al cambiar de **cuenta**; (2) el paso se guardaba en el servidor sin esperar ni reintentar, y si no llegaba (sin red) al reabrir la app volvía a uno anterior; ahora también se guarda en el teléfono por cuenta y se retoma desde el más adelantado (`max(servidor, teléfono)`); (3) en desarrollo, Fast Refresh recargaba la app (no pasa en el APK). |
 
 **Autorización de los cinco tabs**: concedida por el dueño el 06/11 para todo lo listado en la sección «Autorización de los cinco tabs» y para el nombre «Entrenar».
 
@@ -196,8 +199,8 @@ Como persona que lo saltó, puedo verlo otra vez desde **Yo → Ajustes → «Ve
 - **FR-001**: Tras el ingreso, la app MUST mostrar un recorrido de 5 pasos (4 si ya publicó o si el Muro no está disponible), una vez por cuenta, recordado en el servidor.
 - **FR-002**: Los pasos 2 a 5 MUST oscurecer la pantalla dejando un foco circular sobre la pestaña correspondiente, medido en tiempo de ejecución.
 - **FR-003**: Cada paso MUST tener un título y **una** frase de hasta 90 caracteres, en español, tipo oración y tuteo.
-- **FR-004**: El recorrido MUST poder saltarse en cualquier paso, con una confirmación, y MUST poder repetirse desde Yo → Ajustes.
-- **FR-005**: El gesto atrás MUST retroceder un paso; en el primero, equivale a «Saltar».
+- **FR-004**: El recorrido MUST poder repetirse desde Yo → Ajustes, y ahí sí se puede saltar con una confirmación. **Para una cuenta nueva MUST NOT poder saltarse** (D9).
+- **FR-005**: El gesto atrás MUST retroceder un paso. En el primero y en el del Muro de una cuenta nueva no hace nada (D9); repetido desde Yo, en el primero equivale a «Saltar».
 - **FR-006**: El paso del Muro MUST abrir el compositor real; nada se publica sin que la persona toque «Publicar».
 - **FR-007**: Al confirmar el servidor el primer post, la app MUST mostrar la celebración con confeti de 1,4 s, una sola vibración, sin bloquear toques, y sin confeti con «reducir movimiento».
 - **FR-008**: El recorrido MUST NOT montarse encima de una capa obligatoria ni del panel de SER.
@@ -205,6 +208,9 @@ Como persona que lo saltó, puedo verlo otra vez desde **Yo → Ajustes → «Ve
 - **FR-010**: Ningún texto del recorrido MUST contener palabras en inglés (salvo nombres de marca).
 - **FR-011**: La guía SER actual MUST quedar según D1, sin dos guías sobre el Muro a la vez.
 - **FR-012**: La barra de pestañas MUST quedar visible y fija mientras dura el recorrido.
+- **FR-013**: El velo, el foco, las tarjetas, los candados y el confeti MUST usar los colores del tema, en claro y en oscuro (D10).
+- **FR-014**: Mientras una cuenta nueva no publique su primer post, el resto de la app MUST quedar bloqueado (D9), también al cambiar de pestaña, al volver del compositor sin publicar y al cerrar y reabrir la app; los avisos del teléfono MUST esperar.
+- **FR-015**: El recorrido MUST NOT volver a un paso anterior al alcanzado por perder la red al guardar, por cerrar la app ni porque la sesión se relea; dos lecturas que llegan al revés MUST NOT pisar la vigente (D11).
 
 ### Success Criteria
 
