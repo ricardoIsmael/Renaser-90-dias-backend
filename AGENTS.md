@@ -34,6 +34,7 @@ valen siempre. Mantenlo corto (≤ 150 líneas, `scripts/arnes.test.mjs`): un di
 | Lo que el dueño autorizó en los tabs de la app | `../Renaser-90-dias-frontend-/docs/decisiones/` |
 | El arnés: metodología (spec-kit), ciclo completo, módulos, grafo y fuentes | `docs/arnes/README.md` |
 | Familias de errores que se repiten y el chequeo que frena cada una | `docs/arnes/familias-de-errores.md` |
+| El perfil de este repo en el grafo de agentes (núcleo aparte) y las 14 fases del arnés | `arnes.perfil.yaml`, `docs/arnes/fases.md` |
 
 ## Reglas que no se negocian
 

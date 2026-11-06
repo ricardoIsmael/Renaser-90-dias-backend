@@ -69,9 +69,9 @@ Siempre se carga: `AGENTS.md` (mapa) y las reglas generales. El resto se carga *
 | Un tab de la app | `../Renaser-90-dias-frontend-/docs/decisiones/<tab>.md` | en la app: `graphify query "<Pantalla> <tema>"` |
 | Un error conocido | `docs/BITACORA_ERRORES.md` (busca el texto literal) y `docs/arnes/familias-de-errores.md` | — |
 
-## 4. Grafo primero (graph engineering)
+## 4. Grafo de código primero (búsqueda con graphify)
 
-El grafo de graphify es la **primera** fuente de navegación: `graphify query`, `path` y `explain` antes que abrir
+El grafo de graphify (un grafo del **código**, no el grafo del flujo de agentes de §5) es la **primera** fuente de navegación: `graphify query`, `path` y `explain` antes que abrir
 archivos. Para que eso sea cierto en cualquier carpeta:
 
 - `scripts/worktree-nuevo.sh` arma el grafo **antes que nada** (copia la caché y los nombres de comunidades del checkout
@@ -92,6 +92,14 @@ archivos. Para que eso sea cierto en cualquier carpeta:
 
 El benchmark de graphify compara contra leer el corpus entero (que nadie hace), así que la cifra útil es la de la
 pregunta concreta: el grafo da el mapa en una respuesta, y después se leen 2–3 archivos en vez de buscar a ciegas.
+
+## 5. El grafo del flujo de agentes y sus bucles (graph y loop engineering)
+
+El ciclo de §2 ya no es solo una tabla: es el grafo del **núcleo genérico del arnés** de Ricardo (fuera de estos
+repositorios, `~/Documentos/arnes/grafo/grafo.yaml`), con nodos, aristas con condición (`ok`, `falla`, `aprobado`,
+`rechazado`, `ayuda`), estado compartido por worktree (`.arnes/`) y cinco bucles con parada medible y presupuesto. Este
+repositorio es un **perfil** (`arnes.perfil.yaml`), y `scripts/verificar.sh` lo valida con `arnes validar`. Las 14
+fases del curso en los dos repos: `docs/arnes/fases.md`. Fuentes académicas y de Anthropic: `docs/fuentes.md` del núcleo.
 
 ## Fuentes (2026)
 
