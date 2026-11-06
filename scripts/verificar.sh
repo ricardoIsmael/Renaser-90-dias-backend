@@ -46,10 +46,13 @@ if [[ $MODO != ci ]]; then
     done
   fi
   if [[ -n $APP ]]; then
-    echo "▶ Trazabilidad de specs contra $APP"
+    # Ojo: se lee la app TAL COMO ESTÁ en esa carpeta. Si ese checkout quedó atrás de su origin/master, faltan marcas de
+    # specs nuevas y esto sale en rojo sin que el backend tenga la culpa: por eso se dice qué commit de la app se leyó.
+    APP_COMMIT=$(git -C "$APP" log -1 --format='%h %cs' 2>/dev/null || echo '?')
+    echo "▶ Trazabilidad de specs contra $APP ($APP_COMMIT; otra carpeta: RENASER_APP=<ruta>)"
     SALIDA=$(node scripts/trazabilidad-specs.mjs "$APP" 2>&1); ESTADO=$?
-    if [[ $ESTADO -eq 0 ]]; then echo "$SALIDA" | tail -1; ok "Trazabilidad de specs ($(echo "$SALIDA" | tail -1))"
-    else echo "$SALIDA"; mal "Trazabilidad de specs (salida $ESTADO): un requisito exigido sin prueba o una marca que no existe"; fi
+    if [[ $ESTADO -eq 0 ]]; then echo "$SALIDA" | tail -1; ok "Trazabilidad de specs contra la app @ $APP_COMMIT ($(echo "$SALIDA" | tail -1))"
+    else echo "$SALIDA"; mal "Trazabilidad de specs contra la app @ $APP_COMMIT (salida $ESTADO): un requisito exigido sin prueba o una marca que no existe. Si esa app está atrás de su origin/master, actualízala o usa RENASER_APP"; fi
   else
     sin "Trazabilidad de specs: no encontré la app (pon RENASER_APP=<ruta>)"
   fi
