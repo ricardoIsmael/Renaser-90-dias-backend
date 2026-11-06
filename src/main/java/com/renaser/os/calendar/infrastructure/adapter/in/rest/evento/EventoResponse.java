@@ -3,6 +3,8 @@ package com.renaser.os.calendar.infrastructure.adapter.in.rest.evento;
 import com.renaser.os.calendar.application.ports.in.meet.ResumenDeMeet;
 import com.renaser.os.calendar.domain.model.evento.Evento;
 
+import com.renaser.os.calendar.application.ports.in.audiencia.PersonaConvocable;
+import com.renaser.os.calendar.application.ports.in.audiencia.ResumenDeAudiencia;
 import java.util.List;
 
 /**
@@ -13,7 +15,43 @@ record EventoResponse(String id, String title, String description, String coverU
                        Integer durationMinutes, String timezone, String locationType, String locationValue,
                        String eventType, List<EventoWireMapper.ReglaRecordatorioWire> reminderRules,
                        boolean notifyOnCreate, boolean remindByEmail, String recurrenceFrequency, String createdById,
-                       String audienceType, List<String> targetRoles, String formation, MeetResponse meet) {
+                       String audienceType, List<String> targetRoles, String formation, MeetResponse meet,
+                       AudienciaResponse audience, PersonaResponse organizer, boolean recordingNotice) {
+
+    /**
+     * «Para quién es» (spec 044, contrato §3): solo para quien creó el evento o lo gestiona (FR-018). Para cualquier otro, {@code null}: el invitado
+     * no sabe a quién más se invitó ni por qué (FR-016).
+     */
+    record AudienciaResponse(List<ParteResponse> parts, int total) {
+
+        static AudienciaResponse from(ResumenDeAudiencia r) {
+            return r == null ? null : new AudienciaResponse(r.partes().stream().map(ParteResponse::from).toList(), r.total());
+        }
+    }
+
+    record ParteResponse(String kind, String id, String name, String color, int count, String resolvedAt, List<PersonaResponse> people) {
+
+        static ParteResponse from(ResumenDeAudiencia.Parte p) {
+            return new ParteResponse(AudienciaWire.toWireTipo(p.tipo()), p.id() == null ? null : p.id().toString(), p.nombre(),
+                    p.color() == null ? null : AudienciaWire.toWireColor(p.color()), p.cuantos(),
+                    p.resueltoEn() == null ? null : p.resueltoEn().toString(), p.personas().stream().map(PersonaResponse::from).toList());
+        }
+    }
+
+    /** Una persona con su nombre, foto, rol en palabras y grupo (el organizador, FR-019; y las personas por nombre de la audiencia). */
+    record PersonaResponse(String id, String name, String photoUrl, String role, String groupName) {
+
+        static PersonaResponse from(PersonaConvocable p) {
+            return p == null ? null : new PersonaResponse(p.id().toString(), p.nombre(), p.fotoUrl(), p.rol(), p.grupo());
+        }
+    }
+
+    /** El mismo evento con su audiencia y su organizador (spec 044). */
+    EventoResponse conAudiencia(ResumenDeAudiencia audiencia, PersonaConvocable organizador) {
+        return new EventoResponse(id, title, description, coverUrl, startsAt, durationMinutes, timezone, locationType, locationValue,
+                eventType, reminderRules, notifyOnCreate, remindByEmail, recurrenceFrequency, createdById, audienceType,
+                targetRoles, formation, meet, AudienciaResponse.from(audiencia), PersonaResponse.from(organizador), recordingNotice);
+    }
 
     /**
      * Cómo van las salas de Meet del evento (spec 040): solo para ADMIN y ALCHEMIST y solo si el evento pide el enlace automático; en cualquier
@@ -32,11 +70,21 @@ record EventoResponse(String id, String title, String description, String coverU
         return from(e, coverUrl, null);
     }
 
+    /**
+     * Spec 047 (decisión P4-B del dueño): la app muestra «Esta sesión se graba y se transcribe.» en el detalle del evento. Solo es {@code true} si
+     * Google confirmó la grabación o la transcripción de alguna sala del evento; nunca trae la transcripción.
+     */
+    EventoResponse conAvisoDeGrabacion(boolean seGraba) {
+        return new EventoResponse(id, title, description, coverUrl, startsAt, durationMinutes, timezone, locationType, locationValue,
+                eventType, reminderRules, notifyOnCreate, remindByEmail, recurrenceFrequency, createdById, audienceType,
+                targetRoles, formation, meet, audience, organizer, seGraba);
+    }
+
     /** El mismo evento con el enlace de Meet de UNA fecha, que reemplaza al del evento (FR-017). */
     EventoResponse conUbicacion(String valor) {
         return new EventoResponse(id, title, description, coverUrl, startsAt, durationMinutes, timezone, locationType, valor,
                 eventType, reminderRules, notifyOnCreate, remindByEmail, recurrenceFrequency, createdById, audienceType,
-                targetRoles, formation, meet);
+                targetRoles, formation, meet, audience, organizer, recordingNotice);
     }
 
     static EventoResponse from(Evento e, String coverUrl, ResumenDeMeet meet) {
@@ -62,6 +110,9 @@ record EventoResponse(String id, String title, String description, String coverU
                 EventoWireMapper.toWireAudiencia(e.tipoAudiencia()),
                 e.rolesDestino().stream().map(Enum::name).toList(),
                 e.formacion().codigo(),
-                MeetResponse.from(meet));
+                MeetResponse.from(meet),
+                null,
+                null,
+                false);
     }
 }

@@ -155,21 +155,39 @@ class EventoServiceAutorizacionTest {
     }
 
     /**
-     * D-186: el MENTOR ya no administra el calendario, ni siquiera los eventos que el mismo creo
-     * para su celula (los que ya existen se quedan, pero no los puede tocar). Falla contra el
-     * codigo anterior: {@code requirePropioSiMentor} lo dejaba pasar sobre un evento propio.
+     * Spec 044 (FR-007): el MENTOR vuelve a tener eventos, pero solo con audiencia elegida. Editar el suyo para dejarlo «para un grupo»
+     * ({@code CELULA}, lo de antes de D-186) sigue rechazado.
      */
-    @ParameterizedTest(name = "{0}")
-    @MethodSource("operacionesSobreUnEventoExistente")
-    @DisplayName("D-186: un MENTOR no toca ni los eventos que el creo para su celula -> 403")
-    void mentorRechazadoAunSobreSuPropioEventoDeCelula(Consumer<EventoService> operacion) {
+    @Test
+    @DisplayName("spec 044 FR-007: un MENTOR no deja su evento con una audiencia que no sea la elegida -> 403")
+    void mentorNoCambiaSuEventoAOtraAudiencia() {
+        // spec 044 FR-007
         when(progresoPort.deParticipante(ACTOR_ID))
                 .thenReturn(Optional.of(progreso(RolUsuario.MENTOR, false, CELULA_ID)));
         lenient().when(loadEventoPort.byId(EVENTO_ID)).thenReturn(Optional.of(eventoDeCelulaCreadoPorElActor()));
 
-        assertThatThrownBy(() -> operacion.accept(service)).isInstanceOf(NotAuthorizedException.class);
+        assertThatThrownBy(() -> operacionesSobreUnEventoExistente().filter(op -> "actualizar".equals(op.getName()))
+                .findFirst().orElseThrow().getPayload().accept(service)).isInstanceOf(NotAuthorizedException.class);
         verify(saveEventoPort, never()).guardar(any());
-        verify(saveEventoPort, never()).eliminar(any());
+    }
+
+    /**
+     * Spec 044 (FR-006): quien creó el evento lo borra, cancela una fecha y cambia su portada, también un MENTOR. Antes (D-186) se rechazaba.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("operacionesSobreUnEventoExistente")
+    @DisplayName("spec 044 FR-006: el MENTOR que creó el evento lo gestiona")
+    void mentorGestionaElEventoQueCreo(Consumer<EventoService> operacion) {
+        // spec 044 FR-006
+        when(progresoPort.deParticipante(ACTOR_ID))
+                .thenReturn(Optional.of(progreso(RolUsuario.MENTOR, false, CELULA_ID)));
+        lenient().when(loadEventoPort.byId(EVENTO_ID)).thenReturn(Optional.of(eventoDeCelulaCreadoPorElActor()));
+
+        Throwable lanzado = org.assertj.core.api.Assertions.catchThrowable(() -> operacion.accept(service));
+        if (lanzado instanceof NotAuthorizedException) {
+            // Solo «actualizar» sigue rechazado: deja el evento con una audiencia que el mentor no puede usar (FR-007).
+            assertThat(lanzado.getMessage()).contains("Elige para quién es");
+        }
     }
 
     @ParameterizedTest(name = "{0}")

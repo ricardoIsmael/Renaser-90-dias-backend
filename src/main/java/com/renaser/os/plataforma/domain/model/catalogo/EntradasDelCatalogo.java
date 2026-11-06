@@ -51,6 +51,9 @@ final class EntradasDelCatalogo {
     static List<DefinicionDeFuncionalidad> iniciales() {
         return List.of(
                 critica("registro", "Acceso", "Solicitar acceso", "El alta pública: «Solicitar acceso» y la verificación del correo.", NADIE, NO_APLICA),
+                // Spec 043 (D-325): el código por WhatsApp del alta y de recuperar la contraseña. Nace APAGADO hasta que Meta apruebe la plantilla de
+                // autenticación; apagado se esconde (404) y la app no lo ofrece. Pública, como el alta: no es de ningún rol.
+                raizQueNaceApagada("auth.codigo_whatsapp", "Acceso", "Código por WhatsApp", "Mandar el código de verificación por WhatsApp cuando no llega al correo: al solicitar acceso y al recuperar la contraseña.", NADIE),
                 normal("onboarding", "Programa", "Onboarding", "Ficha inicial, términos, pacto y cuestionario.", TODOS, NO_APLICA),
                 // Issue #62: la clave `dia_uno` NO cambia (hay interruptores y despliegues guardados con ella); solo lo que lee Soporte TI. Ya no se elige el Día 1 (spec 036).
                 normal("dia_uno", "Programa", "Empezar mi programa", "Activar el programa propio; empieza al día siguiente.", TODOS, NO_APLICA),
@@ -64,7 +67,7 @@ final class EntradasDelCatalogo {
                 normal("habitos.foto", "Hábitos", "Evidencia con foto", "Subir la foto de un hábito.", TODOS, NO_APLICA),
                 normal("habitos.km", "Hábitos", "Kilómetros diarios", "Registrar los kilómetros del día.", TODOS, SALTA),
                 // Spec 042 (D-323): la carrera con GPS desde Training y la lectura de su ruta. Hija de habitos.km: apagar los km la apaga.
-                normal("habitos.km.carreras", "Hábitos", "Carreras con GPS", "Salir a correr o caminar con GPS desde Training, registrar la carrera y ver su ruta.", TODOS, NO_APLICA),
+                normal("habitos.km.carreras", "Hábitos", "Carreras con GPS", "Salir a correr o caminar con GPS desde Entrenar, registrar la carrera y ver su ruta.", TODOS, NO_APLICA),
                 normal("habitos.gimnasio", "Hábitos", "Gimnasio", "El hábito de gimnasio.", TODOS, SALTA),
                 normal("habitos.espiritu", "Hábitos", "Pastilla y audioterapia", "La Pastilla Renacer y la audioterapia semanal.", TODOS, NO_APLICA),
                 normal("habitos.ajustes", "Hábitos", "Ajustes de hábitos", "Horarios, pausa y renombre de hábitos.", TODOS, NO_APLICA),
@@ -75,21 +78,27 @@ final class EntradasDelCatalogo {
                 critica("chat", "Chat", "Chat", "El chat entero: Tribu, salas y mensajes.", TODOS, POSPONE),
                 normal("chat.grupos", "Chat", "Chat de grupo", "Las conversaciones de grupo (célula) y la tarjeta del grupo.", TODOS, NO_APLICA),
                 normal("chat.global", "Chat", "Formación Renaser Global", "La conversación global.", TODOS, POSPONE),
-                normal("chat.soporte", "Chat", "Chat de soporte", "Las conversaciones de soporte.", EnumSet.of(TRAINEE, ADMIN, ALCHEMIST, IT_SUPPORT), SALTA),
+                normal("chat.soporte", "Chat", "Chat de soporte", "Las conversaciones de soporte.", EnumSet.of(TRAINEE, MENTOR_LEAD, ADMIN, ALCHEMIST, IT_SUPPORT), SALTA),
                 normal("chat.directos", "Chat", "Chats 1 a 1", "Las conversaciones directas.", TODOS, NO_APLICA),
                 normal("chat.audio", "Chat", "Notas de voz", "Mandar notas de voz.", TODOS, NO_APLICA),
                 normal("chat.fotos", "Chat", "Fotos y stickers", "Mandar fotos y stickers.", TODOS, NO_APLICA),
                 normal("eventos", "Eventos", "Eventos", "Ver los eventos y confirmar asistencia.", TODOS, SALTA),
                 normal("eventos.gestion", "Eventos", "Crear y editar eventos", "Crear, editar y cancelar eventos.", ADMINISTRACION, NO_APLICA),
-                normal("eventos.asistencia", "Eventos", "Asistencia", "Quién respondió y pasar lista.", EnumSet.of(MENTOR_LEAD, ADMIN, ALCHEMIST, IT_SUPPORT), NO_APLICA),
+                // Spec 044: quien creó el evento (también un mentor o una guía) ve quién respondió y pasa lista de SU evento.
+                normal("eventos.asistencia", "Eventos", "Asistencia", "Quién respondió y pasar lista.", EnumSet.of(MENTOR, TRAINEE_GUIDE, MENTOR_LEAD, ADMIN, ALCHEMIST, IT_SUPPORT), NO_APLICA),
+                // Spec 044 (FR-028, P5 del dueño): crear eventos para personas elegidas. Nace prendida; Soporte TI la apaga si algo falla.
+                normal("eventos.convocar", "Eventos", "Eventos para personas elegidas", "Crear eventos para personas, un grupo, un color del semáforo o el personal (líder, mentor y guía de aprendiz; y la audiencia elegida de Administración).", EnumSet.of(MENTOR, TRAINEE_GUIDE, MENTOR_LEAD, ADMIN, ALCHEMIST, IT_SUPPORT), NO_APLICA),
                 // Spec 040 (D-321): el enlace de Meet que el servidor crea solo. Nace APAGADA y no se prende en producción hasta pasar SC-001
                 // (reunión de más de 60 minutos con 3 o más personas). Apagada se esconde (404), y los procesos de fondo saltan su turno.
-                apagadaDeFabrica("eventos.meet", "Eventos", "Enlace de Meet automático", "Crear solo la sala de Meet de un evento al guardarlo.", ADMINISTRACION, SALTA),
+                apagadaDeFabrica("eventos.meet", "Eventos", "Enlace de Meet automático", "Crear solo la sala de Meet de un evento al guardarlo.", EnumSet.of(MENTOR, TRAINEE_GUIDE, MENTOR_LEAD, ADMIN, ALCHEMIST, IT_SUPPORT), SALTA),
+                // Spec 047 (D-332): guardar CIFRADA la transcripción de cada sesión por Meet, sin mostrarla. Nace APAGADA: se prende recién con la
+                // Política de privacidad publicada (FR-018) y la cuenta reconectada con meetings.space.readonly. Apagada, el reloj salta su turno.
+                apagadaDeFabrica("eventos.meet.transcripcion", "Eventos", "Transcripción de las sesiones de Meet", "Guardar cifrada la transcripción de cada sesión por Meet (no se muestra en la app).", ADMINISTRACION, SALTA),
                 // Spec 041 (D-322): el WhatsApp de los recordatorios de eventos nace APAGADO (sin el numero, la clave y la plantilla aprobada no hay como enviar) y se prende a proposito.
                 naceApagada("eventos.whatsapp", "Eventos", "Recordatorios por WhatsApp", "Los recordatorios de los eventos por WhatsApp (1 día, 1 hora, 30 y 10 minutos antes) y su resumen.", ADMINISTRACION, SALTA),
                 normal("cursos", "Cursos", "Cursos", "Los cursos y sus lecciones.", TODOS, NO_APLICA),
-                normal("ranking", "Ranking", "Ranking", "Las tablas del ranking.", TODOS, NO_APLICA),
-                normal("ranking.podio_semanal", "Ranking", "Podio de los lunes", "El podio semanal en el chat global.", TODOS, POSPONE),
+                normal("ranking", "Tabla", "Tabla", "Las tablas de posiciones.", TODOS, NO_APLICA),
+                normal("ranking.podio_semanal", "Tabla", "Podio de los lunes", "El podio semanal en el chat global.", TODOS, POSPONE),
                 normal("semaforo", "Semáforo", "Semáforo", "El semáforo propio, del mentor, por grupos y de Administración.", EnumSet.of(TRAINEE, MENTOR, TRAINEE_GUIDE, MENTOR_LEAD, ADMIN, ALCHEMIST, IT_SUPPORT), POSPONE),
                 critica("ia", "SER (IA)", "SER", "SER entera, con su memoria y sus mensajes automáticos.", TODOS, SALTA),
                 normal("ia.chat", "SER (IA)", "Chat de SER", "El chat de SER y el del curso.", TODOS, NO_APLICA),
@@ -169,6 +178,12 @@ final class EntradasDelCatalogo {
                                                   Set<UserRole> roles, PoliticaDeProcesos procesos) {
         return new DefinicionDeFuncionalidad(clave, null, area, nombre, descripcion, roles, false,
                 ValorPorDefecto.PRENDIDA, procesos);
+    }
+
+    /** Una clave con punto cuyo prefijo no es una funcionalidad ({@code auth.codigo_whatsapp}) y que nace APAGADA para todos (spec 043): apagada se esconde. */
+    private static DefinicionDeFuncionalidad raizQueNaceApagada(String clave, String area, String nombre, String descripcion, Set<UserRole> roles) {
+        return new DefinicionDeFuncionalidad(clave, null, area, nombre, descripcion, roles, false,
+                ValorPorDefecto.APAGADA, NO_APLICA, Set.of(), true);
     }
 
     private static String prefijo(String clave) {

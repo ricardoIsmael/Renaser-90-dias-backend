@@ -142,7 +142,7 @@ class GrabacionYAnfitrionDeLaSalaTest {
         assertThat(creado.meet().estado()).isEqualTo(EstadoSalaMeet.CREADO);
         assertThat(creado.meet().mensaje()).isNull();
         assertThat(creado.meet().avisoDelPlan()).isEqualTo("Para grabar hace falta Google One de 2 TB o más en la cuenta conectada; "
-                + "para transcribir, Google Workspace; para las notas automáticas, Gemini en Google Workspace.");
+                + "para transcribir, un plan de Google One que incluya la transcripción de Meet; para las notas automáticas, Gemini en Google Workspace.");
         assertThat(m.salas.todas()).singleElement().satisfies(s -> {
             assertThat(s.proximoIntento()).as("no deja trabajo pendiente").isNull();
             assertThat(s.artefactos()).isEqualTo(new ArtefactosDeLaSala(false, false, false));
@@ -153,7 +153,7 @@ class GrabacionYAnfitrionDeLaSalaTest {
         assertThat(m.google.llamadasDe("grabacion:")).as("reintentar no cambia el plan de la cuenta").isEqualTo(1);
     }
 
-    // spec 040 FR-037
+    // spec 040 FR-037; spec 047 (corrige el plan que se nombra para transcribir)
     @Test
     @DisplayName("FR-037: con Google One de 2 TB graba pero no transcribe: el aviso solo nombra lo que falta")
     void avisoSoloDeLoQueFalta() {
@@ -162,7 +162,7 @@ class GrabacionYAnfitrionDeLaSalaTest {
         EventoConMeetVista creado = m.servicio.crear(comando(ADMIN));
 
         assertThat(creado.meet().avisoDelPlan())
-                .isEqualTo("Para transcribir hace falta Google Workspace; para las notas automáticas, Gemini en Google Workspace.");
+                .isEqualTo("Para transcribir hace falta un plan de Google One que incluya la transcripción de Meet; para las notas automáticas, Gemini en Google Workspace.");
     }
 
     // spec 040 FR-036

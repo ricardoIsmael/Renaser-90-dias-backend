@@ -100,7 +100,7 @@ class ConsolaDeFuncionalidadesServiceTest {
     void listaElCatalogo() {
         var lista = service.listar(acceso());
 
-        assertThat(lista).hasSize(59); // 52 de la spec 002 + lider.cumplimiento (spec 005) + radar.fichas (spec 034) + ia.analisis (spec 031) + pagos (spec 032) + eventos.meet (spec 040) + eventos.whatsapp (spec 041) + habitos.km.carreras (spec 042)
+        assertThat(lista).hasSize(62); // auth.codigo_whatsapp (spec 043) + 52 de la spec 002 + lider.cumplimiento (spec 005) + radar.fichas (spec 034) + ia.analisis (spec 031) + pagos (spec 032) + eventos.meet (spec 040) + eventos.whatsapp (spec 041) + habitos.km.carreras (spec 042) + eventos.convocar (spec 044) + eventos.meet.transcripcion (spec 047)
         FuncionalidadEnConsola chatGrupos = lista.stream().filter(f -> f.clave().equals("chat.grupos")).findFirst()
                 .orElseThrow();
         assertThat(chatGrupos.madre()).isEqualTo("chat");

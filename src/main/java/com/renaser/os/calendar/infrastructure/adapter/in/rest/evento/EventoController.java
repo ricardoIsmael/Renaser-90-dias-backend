@@ -20,6 +20,7 @@ import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
 import com.renaser.os.shared.web.security.Funcionalidad;
+import com.renaser.os.calendar.application.ports.in.audiencia.ConvocatoriaUseCase;
 import com.renaser.os.shared.web.security.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -63,12 +64,15 @@ class EventoController {
     private final ConfirmarAsistenciaUseCase confirmarAsistenciaUseCase;
     private final DisponibilidadDeMeetUseCase disponibilidadDeMeetUseCase;
     private final ReintentarSalaDeMeetUseCase reintentarSalaUseCase;
+    /** Spec 044: «Para quién es» y quién lo organizó. */
+    private final ConvocatoriaUseCase convocatoriaUseCase;
 
     EventoController(EventosConMeetUseCase eventosUseCase, SolicitarUrlPortadaUseCase solicitarUrlPortadaUseCase,
                       ConfirmarPortadaUseCase confirmarPortadaUseCase,
                       ConfirmarAsistenciaUseCase confirmarAsistenciaUseCase,
                       DisponibilidadDeMeetUseCase disponibilidadDeMeetUseCase,
-                      ReintentarSalaDeMeetUseCase reintentarSalaUseCase) {
+                      ReintentarSalaDeMeetUseCase reintentarSalaUseCase, ConvocatoriaUseCase convocatoriaUseCase) {
+        this.convocatoriaUseCase = convocatoriaUseCase;
         this.eventosUseCase = eventosUseCase;
         this.solicitarUrlPortadaUseCase = solicitarUrlPortadaUseCase;
         this.confirmarPortadaUseCase = confirmarPortadaUseCase;
@@ -91,27 +95,27 @@ class EventoController {
     @RequiresPermission(value = Permission.USE_APP, scope = "el actor tiene que estar en la audiencia del evento")
     @GetMapping("/{id}")
     public EventoResponse obtener(@ActorAutenticado UserId actor, @PathVariable UUID id) {
-        return aRespuesta(eventosUseCase.obtener(actor, EventoId.of(id)));
+        return aRespuesta(actor, eventosUseCase.obtener(actor, EventoId.of(id)));
     }
 
-    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "solo ADMIN/ALCHEMIST (D-186): el servicio rechaza a MENTOR, MENTOR_LEAD y TRAINEE")
-    @Funcionalidad("eventos.gestion")
+    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "spec 044: ADMIN/ALCHEMIST, y el líder, el mentor y la guía en sus propios eventos (y el líder en los de sus mentores); el servicio rechaza al aprendiz")
+    @Funcionalidad(value = "eventos.gestion", laResuelveElCasoDeUso = true)
     @PostMapping
     public ResponseEntity<EventoResponse> crear(@ActorAutenticado UserId actor,
                                                  @Valid @RequestBody EventoRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(aRespuesta(eventosUseCase.crear(aComandoCrear(actor, request))));
+        return ResponseEntity.status(HttpStatus.CREATED).body(aRespuesta(actor, eventosUseCase.crear(aComandoCrear(actor, request))));
     }
 
-    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "solo ADMIN/ALCHEMIST (D-186): el servicio rechaza a MENTOR, MENTOR_LEAD y TRAINEE")
-    @Funcionalidad("eventos.gestion")
+    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "spec 044: ADMIN/ALCHEMIST, y el líder, el mentor y la guía en sus propios eventos (y el líder en los de sus mentores); el servicio rechaza al aprendiz")
+    @Funcionalidad(value = "eventos.gestion", laResuelveElCasoDeUso = true)
     @PutMapping("/{id}")
     public EventoResponse actualizar(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                       @Valid @RequestBody EventoRequest request) {
-        return aRespuesta(eventosUseCase.actualizar(aComandoActualizar(actor, id, request)));
+        return aRespuesta(actor, eventosUseCase.actualizar(aComandoActualizar(actor, id, request)));
     }
 
-    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "solo ADMIN/ALCHEMIST (D-186): el servicio rechaza a MENTOR, MENTOR_LEAD y TRAINEE")
-    @Funcionalidad("eventos.gestion")
+    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "spec 044: ADMIN/ALCHEMIST, y el líder, el mentor y la guía en sus propios eventos (y el líder en los de sus mentores); el servicio rechaza al aprendiz")
+    @Funcionalidad(value = "eventos.gestion", laResuelveElCasoDeUso = true)
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminar(@ActorAutenticado UserId actor, @PathVariable UUID id) {
         eventosUseCase.eliminar(actor, EventoId.of(id));
@@ -127,8 +131,8 @@ class EventoController {
         return ResponseEntity.ok().build();
     }
 
-    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "solo ADMIN/ALCHEMIST (D-186): el servicio rechaza a MENTOR, MENTOR_LEAD y TRAINEE")
-    @Funcionalidad("eventos.gestion")
+    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "spec 044: ADMIN/ALCHEMIST, y el líder, el mentor y la guía en sus propios eventos (y el líder en los de sus mentores); el servicio rechaza al aprendiz")
+    @Funcionalidad(value = "eventos.gestion", laResuelveElCasoDeUso = true)
     @PostMapping("/{id}/cancel-occurrence")
     public ResponseEntity<Void> cancelarOcurrencia(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                                     @Valid @RequestBody CancelarOcurrenciaRequest request) {
@@ -136,8 +140,8 @@ class EventoController {
         return ResponseEntity.ok().build();
     }
 
-    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "solo ADMIN/ALCHEMIST (D-186): el servicio rechaza a MENTOR, MENTOR_LEAD y TRAINEE")
-    @Funcionalidad("eventos.gestion")
+    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "spec 044: ADMIN/ALCHEMIST, y el líder, el mentor y la guía en sus propios eventos (y el líder en los de sus mentores); el servicio rechaza al aprendiz")
+    @Funcionalidad(value = "eventos.gestion", laResuelveElCasoDeUso = true)
     @PostMapping("/{id}/portada/upload-url")
     public UrlPortadaResponse solicitarUrlPortada(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                                    @Valid @RequestBody SolicitarUrlPortadaRequest request) {
@@ -145,8 +149,8 @@ class EventoController {
         return UrlPortadaResponse.from(url);
     }
 
-    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "solo ADMIN/ALCHEMIST (D-186): el servicio rechaza a MENTOR, MENTOR_LEAD y TRAINEE")
-    @Funcionalidad("eventos.gestion")
+    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "spec 044: ADMIN/ALCHEMIST, y el líder, el mentor y la guía en sus propios eventos (y el líder en los de sus mentores); el servicio rechaza al aprendiz")
+    @Funcionalidad(value = "eventos.gestion", laResuelveElCasoDeUso = true)
     @PostMapping("/{id}/portada/confirm")
     public EventoResponse confirmarPortada(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                             @Valid @RequestBody ConfirmarPortadaRequest request) {
@@ -158,26 +162,28 @@ class EventoController {
      * Si el formulario puede ofrecer «Crear enlace de Meet» (spec 040, FR-014): hay cuenta de Google activa y Soporte TI prendió {@code eventos.meet}.
      * Solo ADMIN y ALCHEMIST. Un backend anterior responde 404 y la app no dibuja la opción.
      */
-    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "solo ADMIN/ALCHEMIST (D-186): el servicio rechaza a MENTOR, MENTOR_LEAD y TRAINEE")
-    @Funcionalidad("eventos.gestion")
+    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "spec 044: ADMIN/ALCHEMIST, y el líder, el mentor y la guía en sus propios eventos (y el líder en los de sus mentores); el servicio rechaza al aprendiz")
+    @Funcionalidad(value = "eventos.gestion", laResuelveElCasoDeUso = true)
     @GetMapping("/meet/status")
     public DisponibilidadDeMeetResponse disponibilidadDeMeet(@ActorAutenticado UserId actor) {
         return DisponibilidadDeMeetResponse.from(disponibilidadDeMeetUseCase.consultar(actor));
     }
 
     /** «Reintentar» el enlace de Meet de un evento (spec 040, FR-008): vuelve a pedir lo que quedó sin hacer, sin duplicar nada (FR-007). */
-    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "solo ADMIN/ALCHEMIST (D-186): el servicio rechaza a MENTOR, MENTOR_LEAD y TRAINEE")
+    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "spec 044: ADMIN/ALCHEMIST, y el líder, el mentor y la guía en sus propios eventos (y el líder en los de sus mentores); el servicio rechaza al aprendiz")
     @Funcionalidad("eventos.meet")
     @PostMapping("/{id}/meet/retry")
     public EventoResponse reintentarMeet(@ActorAutenticado UserId actor, @PathVariable UUID id) {
-        return aRespuesta(reintentarSalaUseCase.reintentar(actor, EventoId.of(id)));
+        return aRespuesta(actor, reintentarSalaUseCase.reintentar(actor, EventoId.of(id)));
     }
 
     // ─── Traduccion wire -> comando ─────────────────────────────────────────────
 
-    private static EventoResponse aRespuesta(EventoConMeetVista vista) {
+    private EventoResponse aRespuesta(UserId actor, EventoConMeetVista vista) {
         EventoVista evento = vista.evento();
-        return EventoResponse.from(evento.evento(), evento.coverUrl(), vista.meet());
+        return EventoResponse.from(evento.evento(), evento.coverUrl(), vista.meet()).conAudiencia(
+                convocatoriaUseCase.resumenPara(actor, evento.evento()).orElse(null),
+                convocatoriaUseCase.organizador(evento.evento()).orElse(null)).conAvisoDeGrabacion(vista.seGrabaOTranscribe());
     }
 
     private CrearEventoCommand aComandoCrear(UserId actorId, EventoRequest r) {
@@ -186,7 +192,7 @@ class EventoController {
                 EventoWireMapper.fromWireAudiencia(r.audienceType()), r.minLevelId(), r.courseId(),
                 r.targetCellId() == null ? null : UUID.fromString(r.targetCellId()), TipoEvento.valueOf(r.eventType()),
                 r.notifyOnCreate(), r.remindByEmail(), r.reminderRules() != null, recurrenciaDe(r), rolesDestinoDe(r),
-                reglasDe(r), FormacionDelContenido.pedida(r.formation()), r.accesoPedido());
+                reglasDe(r), FormacionDelContenido.pedida(r.formation()), r.accesoPedido(), r.audienciaPedida());
     }
 
     private ActualizarEventoCommand aComandoActualizar(UserId actorId, UUID id, EventoRequest r) {
@@ -194,7 +200,8 @@ class EventoController {
                 r.durationMinutes(), ZoneId.of(r.timezone()), EventoWireMapper.fromWireUbicacion(r.locationType()),
                 r.locationValue(), EventoWireMapper.fromWireAudiencia(r.audienceType()), r.minLevelId(), r.courseId(),
                 r.targetCellId() == null ? null : UUID.fromString(r.targetCellId()), r.notifyOnCreate(),
-                r.remindByEmail(), r.reminderRules() != null, recurrenciaDe(r), rolesDestinoDe(r), reglasDe(r), r.accesoPedido());
+                r.remindByEmail(), r.reminderRules() != null, recurrenciaDe(r), rolesDestinoDe(r), reglasDe(r), r.accesoPedido(),
+                r.audienciaPedida());
     }
 
     private static Recurrencia recurrenciaDe(EventoRequest r) {

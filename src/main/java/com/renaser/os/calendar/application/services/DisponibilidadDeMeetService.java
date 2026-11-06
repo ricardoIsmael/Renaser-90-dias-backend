@@ -18,7 +18,7 @@ class DisponibilidadDeMeetService implements DisponibilidadDeMeetUseCase {
 
     @Override
     public DisponibilidadDeMeet consultar(UserId actor) {
-        accesoEventoService.requireAdministraElCalendario(actor);
+        accesoEventoService.requirePuedeCrearEventos(actor);
         return disponibilidad.de(actor);
     }
 }

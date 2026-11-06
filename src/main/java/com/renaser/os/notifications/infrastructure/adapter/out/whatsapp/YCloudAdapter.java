@@ -73,6 +73,48 @@ class YCloudAdapter implements EnvioDeWhatsAppPort {
     }
 
     @Override
+    public boolean configuradoParaCodigos() {
+        return propiedades.listoParaCodigos();
+    }
+
+    /** Spec 043: la plantilla de AUTENTICACION. Nunca escribe el codigo ni el numero en el registro. */
+    @Override
+    public ResultadoDelEnvio enviarCodigo(String destino, String codigo) {
+        if (!configuradoParaCodigos()) {
+            return ResultadoDelEnvio.fallido(CausaDeFalla.OTRA, "WhatsApp sin configurar");
+        }
+        try {
+            HttpResponse<String> respuesta = http.send(pedido(cuerpoDelCodigo(destino, codigo)),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            return interpretar(respuesta.statusCode(), respuesta.body());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return ResultadoDelEnvio.noSeSupo("Envío interrumpido");
+        } catch (IOException | RuntimeException e) {
+            log.warn("[notifications.ycloud] no se supo si salio el codigo ({})", e.getClass().getSimpleName());
+            return ResultadoDelEnvio.noSeSupo("YCloud no contestó a tiempo");
+        }
+    }
+
+    /**
+     * La plantilla de AUTENTICACION de Meta (spec 043, FR-004): el codigo va en el unico hueco del cuerpo y otra vez en el boton «Copiar código», que
+     * Meta exige como un boton {@code url} con el codigo de parametro. Sin {@code externalId}: un codigo no tiene fila de entrega que seguir.
+     */
+    Map<String, Object> cuerpoDelCodigo(String destino, String codigo) {
+        List<Map<String, Object>> componentes = List.of(
+                Map.of("type", "body", "parameters", List.of(Map.of("type", "text", "text", codigo))),
+                Map.of("type", "button", "sub_type", "url", "index", "0",
+                        "parameters", List.of(Map.of("type", "text", "text", codigo))));
+        Map<String, Object> cuerpo = new LinkedHashMap<>();
+        cuerpo.put("from", propiedades.numeroEmisor());
+        cuerpo.put("to", destino);
+        cuerpo.put("type", "template");
+        cuerpo.put("template", Map.of("name", propiedades.plantillaCodigo(), "language", Map.of("code", propiedades.idioma()),
+                "components", componentes));
+        return cuerpo;
+    }
+
+    @Override
     public void enviarTexto(String destino, String texto) {
         if (!configurado()) {
             return;

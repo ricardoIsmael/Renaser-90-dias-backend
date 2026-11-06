@@ -54,7 +54,7 @@ public class PropuestaDeCrearHabitoPersonal implements HerramientaAgente {
             "Propone crear un habito PROPIO nuevo en el plan de la persona. Usala solo si pide agregar o crear "
                     + "un habito que no tiene. NO lo crea: deja una propuesta y la persona tiene que tocar "
                     + "Confirmar en la app; nunca digas que ya quedo creado. La categoria es la dimension de "
-                    + "Training de SU formacion (Cuerpo, Mente...: cada formacion tiene las suyas): si la persona no la dijo, NO llames "
+                    + "Entrenar de SU formacion (Cuerpo, Mente...: cada formacion tiene las suyas): si la persona no la dijo, NO llames "
                     + "todavia, preguntasela primero en una frase; si no existe en su formacion, la herramienta te dice cuales hay. Hora, "
                     + "dias y meta solo si los dijo: nunca los inventes.",
             List.of(ParametroHerramienta.obligatorio(ArgumentosDeHabitoPersonal.NOMBRE, TipoParametroHerramienta.TEXTO,
@@ -139,6 +139,6 @@ public class PropuestaDeCrearHabitoPersonal implements HerramientaAgente {
 
     private static String horaPorDefecto(HabitoPersonalPedido pedido) {
         return "No dio hora: quedo propuesto a las " + ArgumentosDeHorario.texto(pedido.hora())
-                + ", como en Training; si quiere otra, puede decirtela antes de confirmar.";
+                + ", como en Entrenar; si quiere otra, puede decirtela antes de confirmar.";
     }
 }

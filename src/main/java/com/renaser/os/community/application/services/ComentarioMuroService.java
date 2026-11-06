@@ -120,7 +120,8 @@ public class ComentarioMuroService implements EscribirComentarioUseCase, EditarC
         // 30 comentarios, 30 consultas a `usuarios`.
         Map<UserId, PerfilUsuario> autores = consultarPerfilUsuarioPort.porIds(
                 pagina.stream().map(Comentario::autorId).collect(Collectors.toSet()));
-        return new PaginaComentarios(pagina.stream().map(c -> aVista(c, autores.get(c.autorId()))).toList(),
+        boolean veNombreReal = new QuienVeElNombreReal(userSummaryFinder).ve(actorId);
+        return new PaginaComentarios(pagina.stream().map(c -> aVista(c, autores.get(c.autorId()), veNombreReal)).toList(),
                 siguiente, total);
     }
 
@@ -135,12 +136,14 @@ public class ComentarioMuroService implements EscribirComentarioUseCase, EditarC
     }
 
     private ComentarioVista aVista(Comentario comentario) {
-        return aVista(comentario, consultarPerfilUsuarioPort.porId(comentario.autorId()).orElse(null));
+        return aVista(comentario, consultarPerfilUsuarioPort.porId(comentario.autorId()).orElse(null), false);
     }
 
-    private static ComentarioVista aVista(Comentario comentario, PerfilUsuario autor) {
-        return new ComentarioVista(comentario, autor != null ? autor.nombreCompleto() : null,
-                autor != null ? autor.avatarUrl() : null);
+    /** Spec 046 (D3): en el Muro se le nombra por su sobrenombre; el nombre real, solo para el equipo y si tiene sobrenombre. */
+    private static ComentarioVista aVista(Comentario comentario, PerfilUsuario autor, boolean veNombreReal) {
+        return new ComentarioVista(comentario, autor != null ? autor.nombreEnElMuro() : null,
+                autor != null ? autor.avatarUrl() : null,
+                veNombreReal && autor != null && autor.sobrenombre() != null ? autor.nombreCompleto() : null);
     }
 
     private Publicacion requireVisible(PublicacionId publicacionId, UserId actorId) {

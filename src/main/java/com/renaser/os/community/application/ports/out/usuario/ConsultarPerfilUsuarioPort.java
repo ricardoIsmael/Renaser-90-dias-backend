@@ -23,6 +23,19 @@ public interface ConsultarPerfilUsuarioPort {
     /** Evita N+1 al enriquecer un feed/pagina completa de una sola pasada. */
     Map<UserId, PerfilUsuario> porIds(Collection<UserId> ids);
 
-    record PerfilUsuario(UserId id, String nombreCompleto, String avatarUrl) {
+    /**
+     * @param sobrenombre spec 046: el sobrenombre que reemplaza su nombre en el Muro, o {@code null}. Solo lo usa el Muro: el resto de
+     *                    la Comunidad (grupos, chat, ranking) sigue con el nombre real.
+     */
+    record PerfilUsuario(UserId id, String nombreCompleto, String avatarUrl, String sobrenombre) {
+
+        public PerfilUsuario(UserId id, String nombreCompleto, String avatarUrl) {
+            this(id, nombreCompleto, avatarUrl, null);
+        }
+
+        /** Spec 046 (D3): cómo se le nombra en el Muro: su sobrenombre si tiene uno; si no, su nombre. */
+        public String nombreEnElMuro() {
+            return sobrenombre != null ? sobrenombre : nombreCompleto;
+        }
     }
 }

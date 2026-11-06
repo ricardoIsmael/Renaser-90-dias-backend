@@ -13,5 +13,7 @@ public enum TipoAudiencia {
     NIVEL_MINIMO,
     CURSO,
     ROLES,
-    CELULA
+    CELULA,
+    /** Spec 044 (wire {@code SELECTION}): personas, grupos, colores del semáforo o personal elegidos por quien crea el evento. */
+    SELECCION
 }

@@ -1,5 +1,6 @@
 package com.renaser.os.calendar.application.ports.in.evento;
 
+import com.renaser.os.calendar.application.ports.in.audiencia.PedidoDeAudiencia;
 import com.renaser.os.calendar.domain.model.evento.Recurrencia;
 import com.renaser.os.calendar.domain.model.evento.ReglaRecordatorio;
 import com.renaser.os.calendar.domain.model.evento.RolUsuario;
@@ -34,11 +35,25 @@ public interface CrearEventoUseCase {
                                String cursoId, UUID celulaDestinoId, TipoEvento tipoEvento, boolean notificarAlCrear,
                                boolean recordarPorEmail, boolean recordatoriosPersonalizados, Recurrencia recurrencia,
                                Set<RolUsuario> rolesDestino, List<ReglaRecordatorio> reglasRecordatorio,
-                               Formacion formacion, AccesoSalaMeet accesoSalaMeet) {
+                               Formacion formacion, AccesoSalaMeet accesoSalaMeet, PedidoDeAudiencia audiencia) {
 
         public CrearEventoCommand {
             Objects.requireNonNull(actorId, "actorId es obligatorio");
             Objects.requireNonNull(tipoEvento, "tipoEvento es obligatorio");
+        }
+
+        /** Sin audiencia elegida (spec 044): un evento de los de siempre. */
+        public CrearEventoCommand(UserId actorId, String titulo, String descripcion, Instant iniciaEn,
+                                  Integer duracionMinutos, ZoneId timezone, TipoUbicacion tipoUbicacion,
+                                  String valorUbicacion, TipoAudiencia tipoAudiencia, Integer nivelMinimoId,
+                                  String cursoId, UUID celulaDestinoId, TipoEvento tipoEvento, boolean notificarAlCrear,
+                                  boolean recordarPorEmail, boolean recordatoriosPersonalizados, Recurrencia recurrencia,
+                                  Set<RolUsuario> rolesDestino, List<ReglaRecordatorio> reglasRecordatorio,
+                                  Formacion formacion, AccesoSalaMeet accesoSalaMeet) {
+            this(actorId, titulo, descripcion, iniciaEn, duracionMinutos, timezone, tipoUbicacion, valorUbicacion,
+                    tipoAudiencia, nivelMinimoId, cursoId, celulaDestinoId, tipoEvento, notificarAlCrear,
+                    recordarPorEmail, recordatoriosPersonalizados, recurrencia, rolesDestino, reglasRecordatorio,
+                    formacion, accesoSalaMeet, null);
         }
 
         /**
@@ -55,7 +70,7 @@ public interface CrearEventoUseCase {
             this(actorId, titulo, descripcion, iniciaEn, duracionMinutos, timezone, tipoUbicacion, valorUbicacion,
                     tipoAudiencia, nivelMinimoId, cursoId, celulaDestinoId, tipoEvento, notificarAlCrear,
                     recordarPorEmail, recordatoriosPersonalizados, recurrencia, rolesDestino, reglasRecordatorio,
-                    formacion, null);
+                    formacion, null, null);
         }
 
         /**
@@ -70,7 +85,7 @@ public interface CrearEventoUseCase {
                                   Set<RolUsuario> rolesDestino, List<ReglaRecordatorio> reglasRecordatorio) {
             this(actorId, titulo, descripcion, iniciaEn, duracionMinutos, timezone, tipoUbicacion, valorUbicacion,
                     tipoAudiencia, nivelMinimoId, cursoId, celulaDestinoId, tipoEvento, notificarAlCrear,
-                    recordarPorEmail, recordatoriosPersonalizados, recurrencia, rolesDestino, reglasRecordatorio, null, null);
+                    recordarPorEmail, recordatoriosPersonalizados, recurrencia, rolesDestino, reglasRecordatorio, null, null, null);
         }
     }
 }

@@ -112,15 +112,22 @@ class EventoConSalaDeMeetService implements EventosConMeetUseCase {
     @Override
     public EventoConMeetVista obtener(UserId actor, EventoId eventoId) {
         EventoVista vista = obtenerUseCase.obtener(actor, eventoId);
-        if (!vista.evento().usaSalaDeMeetAutomatica() || !accesoEventoService.administraElCalendario(actor)) {
+        if (!vista.evento().usaSalaDeMeetAutomatica()) {
             return new EventoConMeetVista(vista, null);
         }
-        return new EventoConMeetVista(vista, ResumenesDeMeet.de(vista.evento(), loadSalaPort.porEvento(eventoId), clock.now()));
+        List<SalaMeet> salas = loadSalaPort.porEvento(eventoId);
+        // Spec 047 (P4-B): «Esta sesión se graba y se transcribe.» para todo el que ve el evento, solo si Google lo confirmó en alguna fecha.
+        boolean seGraba = ResumenesDeMeet.seGrabaOTranscribe(salas);
+        if (!accesoEventoService.gestiona(actor, vista.evento())) {
+            return new EventoConMeetVista(vista, null, seGraba);
+        }
+        return new EventoConMeetVista(vista, ResumenesDeMeet.de(vista.evento(), salas, clock.now()), seGraba);
     }
 
     @Override
     public EventoConMeetVista crear(CrearEventoCommand comando) {
-        accesoEventoService.requireAdministraElCalendario(comando.actorId());
+        // Spec 044 (FR-001): crean también el líder, el mentor y la guía; las reglas de cada rol las aplica EventoService.
+        accesoEventoService.requirePuedeCrearEventos(comando.actorId());
         boolean pide = comando.accesoSalaMeet() != null;
         if (pide) {
             exigirUnaSolicitudCoherente(comando.tipoUbicacion(), comando.valorUbicacion(), null);
@@ -132,9 +139,9 @@ class EventoConSalaDeMeetService implements EventosConMeetUseCase {
 
     @Override
     public EventoConMeetVista actualizar(ActualizarEventoCommand comando) {
-        accesoEventoService.requireAdministraElCalendario(comando.actorId());
         Evento previo = loadEventoPort.byId(comando.eventoId())
                 .orElseThrow(() -> new NoSuchElementException("Evento no encontrado: " + comando.eventoId()));
+        accesoEventoService.requireGestiona(comando.actorId(), previo);
         boolean pedia = previo.usaSalaDeMeetAutomatica();
         boolean pide = comando.accesoSalaMeet() != null;
         if (pide) {
@@ -153,7 +160,7 @@ class EventoConSalaDeMeetService implements EventosConMeetUseCase {
 
     @Override
     public void eliminar(UserId actor, EventoId eventoId) {
-        accesoEventoService.requireAdministraElCalendario(actor);
+        accesoEventoService.requireGestiona(actor, requireEvento(eventoId));
         saveSalaPort.marcarParaSincronizar(eventoId, clock.now());
         eliminarUseCase.eliminar(actor, eventoId);
         sincronizador.reconciliar(eventoId, actor, auditoria.nuevaCorrelacion(), false, SincronizadorDeSalas.PRESUPUESTO_DE_UNA_PETICION);
@@ -161,7 +168,7 @@ class EventoConSalaDeMeetService implements EventosConMeetUseCase {
 
     @Override
     public void cancelarOcurrencia(UserId actor, EventoId eventoId, Instant inicioOcurrencia) {
-        accesoEventoService.requireAdministraElCalendario(actor);
+        accesoEventoService.requireGestiona(actor, requireEvento(eventoId));
         cancelarUseCase.cancelar(actor, eventoId, inicioOcurrencia);
         sincronizador.reconciliar(eventoId, actor, auditoria.nuevaCorrelacion(), false, SincronizadorDeSalas.PRESUPUESTO_DE_UNA_PETICION);
     }
@@ -182,11 +189,16 @@ class EventoConSalaDeMeetService implements EventosConMeetUseCase {
         }
     }
 
+    private Evento requireEvento(EventoId eventoId) {
+        return loadEventoPort.byId(eventoId).orElseThrow(() -> new NoSuchElementException("Evento no encontrado: " + eventoId));
+    }
+
     private static ActualizarEventoCommand conElEnlaceQueYaTenia(ActualizarEventoCommand c, Evento previo) {
         return new ActualizarEventoCommand(c.actorId(), c.eventoId(), c.titulo(), c.descripcion(), c.iniciaEn(),
                 c.duracionMinutos(), c.timezone(), c.tipoUbicacion(), previo.valorUbicacion(), c.tipoAudiencia(),
                 c.nivelMinimoId(), c.cursoId(), c.celulaDestinoId(), c.notificarAlCrear(), c.recordarPorEmail(),
-                c.recordatoriosPersonalizados(), c.recurrencia(), c.rolesDestino(), c.reglasRecordatorio(), c.accesoSalaMeet());
+                c.recordatoriosPersonalizados(), c.recurrencia(), c.rolesDestino(), c.reglasRecordatorio(), c.accesoSalaMeet(),
+                c.audiencia());
     }
 
     /** Ya guardado el evento: pide las salas (sin transacción) y devuelve el evento con su enlace y cómo quedó cada sala. */
@@ -197,6 +209,6 @@ class EventoConSalaDeMeetService implements EventosConMeetUseCase {
         Optional<Evento> reciente = loadEventoPort.byId(id);
         Evento evento = reciente.orElse(guardado.evento());
         ResumenDeMeet resumen = ResumenesDeMeet.de(evento, salas, clock.now());
-        return new EventoConMeetVista(new EventoVista(evento, guardado.coverUrl()), resumen);
+        return new EventoConMeetVista(new EventoVista(evento, guardado.coverUrl()), resumen, ResumenesDeMeet.seGrabaOTranscribe(salas));
     }
 }

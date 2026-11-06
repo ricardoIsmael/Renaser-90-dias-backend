@@ -129,9 +129,9 @@ public class AvisosDeMensajesService implements AvisosDeMensajesFinder {
         };
     }
 
-    /** El mismo conjunto que {@code ConversacionSoporteService.STAFF_ADMINISTRATIVO}. Sin perfil, no. */
+    /** El mismo conjunto que {@link StaffDelSoporte} (spec 044: también el líder; sus filas son solo las de su formación). Sin perfil, no. */
     private static boolean esStaffAhora(UserSummary perfil) {
-        return perfil != null && perfil.role().canManageRoles();
+        return perfil != null && StaffDelSoporte.acompana(perfil.role());
     }
 
     private String autorDe(Mensaje mensaje, Conversacion conversacion) {

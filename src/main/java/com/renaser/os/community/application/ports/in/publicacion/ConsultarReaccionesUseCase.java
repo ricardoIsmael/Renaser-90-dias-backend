@@ -28,6 +28,11 @@ public interface ConsultarReaccionesUseCase {
      * encuentra (nunca lanza), asi que esta vista tiene que tolerar el hueco en vez de asumir
      * que el JOIN siempre completa.
      */
-    record ReaccionVista(UserId usuarioId, String nombre, String avatarUrl, UserRole rol, TipoReaccion tipo) {
+    /** Spec 046: {@code nombre} es el del Muro (su sobrenombre); {@code nombreReal}, solo para el equipo y si tiene sobrenombre. */
+    record ReaccionVista(UserId usuarioId, String nombre, String avatarUrl, UserRole rol, TipoReaccion tipo, String nombreReal) {
+
+        public ReaccionVista(UserId usuarioId, String nombre, String avatarUrl, UserRole rol, TipoReaccion tipo) {
+            this(usuarioId, nombre, avatarUrl, rol, tipo, null);
+        }
     }
 }

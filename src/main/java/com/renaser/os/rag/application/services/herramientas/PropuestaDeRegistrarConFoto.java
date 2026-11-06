@@ -114,7 +114,7 @@ public class PropuestaDeRegistrarConFoto implements HerramientaAgente {
         } else if (motivo == null && habito.seMideSolo()) {
             // Spec 037 (T021 de la 038): con sus pasos conectados los km los lee su telefono; la foto sobra y el boton de la camara llevaria a algo que no es.
             motivo = titulo + " mide los kilometros solo, con los pasos que la persona conecto en su telefono: no hay foto que pedir. No dejes "
-                    + "boton de camara. Dile que abra Training y toque «Registrar» en la fila de Kilometros diarios cuando llegue a su meta"
+                    + "boton de camara. Dile que abra Entrenar y toque «Registrar» en la fila de Kilometros diarios cuando llegue a su meta"
                     + (habito.medicion().meta() == null ? "" : " de " + habito.medicion().meta().stripTrailingZeros().toPlainString() + " km")
                     + " (si ahi ve «Subir captura», tambien puede subirla desde esa fila). No digas que ya quedo registrado.";
         } else if (motivo == null && !habito.exigeEvidencia()) {

@@ -2,6 +2,13 @@ package com.renaser.os.calendar.application.ports.in.meet;
 
 import com.renaser.os.calendar.application.ports.in.evento.EventoVista;
 
-/** Un evento y, si quien pregunta administra el calendario y el evento pide Meet, cómo van sus salas ({@code null} en cualquier otro caso). */
-public record EventoConMeetVista(EventoVista evento, ResumenDeMeet meet) {
+/**
+ * El evento con cómo van sus salas de Meet (spec 040, solo para quien lo gestiona) y si la sesión se graba o se transcribe (spec 047, decisión P4-B
+ * del dueño: lo ve TODO el que ve el evento, para avisarle antes de entrar).
+ */
+public record EventoConMeetVista(EventoVista evento, ResumenDeMeet meet, boolean seGrabaOTranscribe) {
+
+    public EventoConMeetVista(EventoVista evento, ResumenDeMeet meet) {
+        this(evento, meet, false);
+    }
 }

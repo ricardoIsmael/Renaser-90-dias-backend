@@ -87,6 +87,8 @@ public class DespachoDeRecordatoriosService implements DespacharRecordatoriosUse
     private final LoadExcepcionPort loadExcepcionPort;
     private final LoadConfirmacionPort loadConfirmacionPort;
     private final ElegibilidadDeLosAvisos elegibilidad;
+    /** Spec 044: quien salió de la audiencia elegida o dijo «No voy». {@code null} en pruebas anteriores. */
+    private final AudienciaDeLosAvisos audienciaDeLosAvisos;
     private final ApplicationEventPublisher events;
     private final TransactionTemplate transaccionDelLote;
 
@@ -96,6 +98,18 @@ public class DespachoDeRecordatoriosService implements DespacharRecordatoriosUse
                                           LoadConfirmacionPort loadConfirmacionPort,
                                           ElegibilidadDeLosAvisos elegibilidad, ApplicationEventPublisher events,
                                           PlatformTransactionManager transactionManager) {
+        this(loadRecordatorioPort, saveRecordatorioPort, loadEventoPort, loadExcepcionPort, loadConfirmacionPort, elegibilidad, null, events,
+                transactionManager);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public DespachoDeRecordatoriosService(LoadRecordatorioPort loadRecordatorioPort,
+                                          SaveRecordatorioPort saveRecordatorioPort, LoadEventoPort loadEventoPort,
+                                          LoadExcepcionPort loadExcepcionPort,
+                                          LoadConfirmacionPort loadConfirmacionPort,
+                                          ElegibilidadDeLosAvisos elegibilidad, AudienciaDeLosAvisos audienciaDeLosAvisos,
+                                          ApplicationEventPublisher events, PlatformTransactionManager transactionManager) {
+        this.audienciaDeLosAvisos = audienciaDeLosAvisos;
         this.loadRecordatorioPort = loadRecordatorioPort;
         this.saveRecordatorioPort = saveRecordatorioPort;
         this.loadEventoPort = loadEventoPort;
@@ -148,6 +162,7 @@ public class DespachoDeRecordatoriosService implements DespacharRecordatoriosUse
         if (!lote.noElegibles.isEmpty()) {
             saveRecordatorioPort.cancelarPorIds(lote.noElegibles, RecordatorioEvento.MOTIVO_NO_ELEGIBLE);
         }
+        lote.porAudiencia.forEach((motivo, ids) -> saveRecordatorioPort.cancelarPorIds(ids, motivo));
         if (!lote.avisos.isEmpty()) {
             saveRecordatorioPort.marcarEnviados(lote.avisos.stream().map(RecordatorioEventoDebidoEvent::recordatorioId)
                     .toList(), ahora);
@@ -188,6 +203,8 @@ public class DespachoDeRecordatoriosService implements DespacharRecordatoriosUse
         private final List<Long> noElegibles = new ArrayList<>();
         /** Los avisos cuyo destinatario ya no pasa la elegibilidad del tipo del evento (D-293). */
         private Set<Long> sinElegibilidad = Set.of();
+        private Map<Long, String> motivosDeAudiencia = Map.of();
+        private final Map<String, List<Long>> porAudiencia = new HashMap<>();
 
         private Lote(AsistenciasConfirmadasDelLote asistencias, Instant ahora) {
             this.asistencias = asistencias;
@@ -201,6 +218,9 @@ public class DespachoDeRecordatoriosService implements DespacharRecordatoriosUse
         private void prepararse(List<RecordatorioEvento> pendientes) {
             pendientes.forEach(r -> eventos.computeIfAbsent(r.eventoId(), loadEventoPort::byId));
             sinElegibilidad = elegibilidad.dejaronDeSerElegibles(pendientes, eventos);
+            if (audienciaDeLosAvisos != null) {
+                motivosDeAudiencia = audienciaDeLosAvisos.aCancelar(pendientes, eventos);
+            }
         }
 
         /** Arma el aviso o anota la cancelacion; todavia no publica ni escribe nada. */
@@ -218,6 +238,11 @@ public class DespachoDeRecordatoriosService implements DespacharRecordatoriosUse
                 noElegibles.add(recordatorio.id());
                 return;
             }
+            String motivo = motivosDeAudiencia.get(recordatorio.id());
+            if (motivo != null) {
+                porAudiencia.computeIfAbsent(motivo, m -> new ArrayList<>()).add(recordatorio.id());
+                return;
+            }
             avisos.add(aviso(recordatorio, evento.get()));
         }
 
@@ -231,7 +256,8 @@ public class DespachoDeRecordatoriosService implements DespacharRecordatoriosUse
                     inicio, evento.titulo(), esAnuncio, asistenciaConfirmada, evento.timezone().getId(), ahora,
                     recordatorio.avisoEnApp(), recordatorio.mensajeMinAntes(), evento.formacion().name(),
                     UbicacionDelAviso.enlace(evento.tipoUbicacion(), evento.valorUbicacion()),
-                    UbicacionDelAviso.lugar(evento.tipoUbicacion(), evento.valorUbicacion()));
+                    UbicacionDelAviso.lugar(evento.tipoUbicacion(), evento.valorUbicacion()),
+                    AudienciaDelEventoService.esElegida(evento));
         }
     }
 }

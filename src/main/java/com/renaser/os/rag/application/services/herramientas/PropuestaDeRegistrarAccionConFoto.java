@@ -154,6 +154,6 @@ public class PropuestaDeRegistrarAccionConFoto implements HerramientaAgente {
                 + "TODAVIA NO esta registrada: se registra, y suma sus puntos, cuando la persona saque la foto, "
                 + "en la app. Dilo en una sola frase corta, por ejemplo \"Te deje abajo el boton para sacarle "
                 + "foto a " + roca.titulo() + "\". No preguntes si quiere, no digas que ya quedo y no la "
-                + "mandes a Training.");
+                + "mandes a Entrenar.");
     }
 }

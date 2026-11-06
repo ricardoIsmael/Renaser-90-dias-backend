@@ -125,7 +125,7 @@ class LoQueLeFaltaHoyTest {
 
         assertThat(texto).contains("| mide=km | meta=5 | lleva=0").contains("registro=automatico")
                 .contains("No pidas foto ni captura").contains("proponer_registrar_con_foto")
-                .contains("«Registrar» en la fila de Kilometros diarios en Training").doesNotContain("exige_evidencia=si");
+                .contains("«Registrar» en la fila de Kilometros diarios en Entrenar").doesNotContain("exige_evidencia=si");
     }
 
     @Test

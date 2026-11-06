@@ -74,7 +74,9 @@ class UserRoleTest {
             Permission.VIEW_MENTOR_REPORT,
             Permission.FOLLOW_UP_MENTOR,
             Permission.SET_MENTOR_OPERATIONAL_STATUS,
-            Permission.EXPORT_RANKING);
+            Permission.EXPORT_RANKING,
+            // spec 044 FR-001: el líder crea eventos para su gente (el servicio acota el alcance).
+            Permission.MANAGE_CALENDAR);
 
     @ParameterizedTest
     @EnumSource(value = Permission.class, names = {
@@ -94,7 +96,7 @@ class UserRoleTest {
     @ParameterizedTest
     @EnumSource(value = Permission.class, names = {
             "MANAGE_STAFF", "MANAGE_ROLES", "MANAGE_CELLS", "MANAGE_COHORTS", "MANAGE_TRAINEES",
-            "MANAGE_MENTOR_PROFILE", "MANAGE_CALENDAR", "MANAGE_HABIT_CATALOG", "MANAGE_EVIDENCE",
+            "MANAGE_MENTOR_PROFILE", "MANAGE_HABIT_CATALOG", "MANAGE_EVIDENCE",
             "MANAGE_KNOWLEDGE_BASE", "MANAGE_SUPPORT_TICKETS", "MANAGE_WALL_CATEGORIES",
             "MODERATE_WALL", "PROMOTE_TESTIMONIAL", "APPROVE_ACCOUNT_REQUEST", "ASSIGN_MENTOR",
             "ADJUST_POINTS", "RENAME_GLOBAL_CHAT", "VIEW_ONBOARDING_DASHBOARD", "MANAGE_WELCOME",

@@ -50,6 +50,8 @@ public final class ResolverAudiencia {
             case ROLES -> evento.rolesDestino().contains(visor.rol());
             case CELULA -> evento.celulaDestinoId() != null
                     && (evento.celulaDestinoId().equals(visor.celulaId()) || perteneceAlDestino);
+            // Spec 044: la audiencia elegida la resuelve la aplicación (grupos, alumnos, la lista fija y quien creó el evento).
+            case SELECCION -> perteneceAlDestino;
         };
     }
 }

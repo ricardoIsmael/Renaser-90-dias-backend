@@ -12,11 +12,12 @@ import com.renaser.os.community.domain.model.publicacion.TipoReaccion;
  * (`chat/api/chatMappers.ts:ETIQUETA_ROL`), asi que no hace falta duplicarla del lado del
  * servidor.
  */
-public record WallReactionItemResponse(String userId, String name, String avatarUrl, String role, String type) {
+/** Spec 046: {@code name} es el del Muro (su sobrenombre); {@code realName}, solo para el equipo y si tiene sobrenombre. */
+public record WallReactionItemResponse(String userId, String name, String avatarUrl, String role, String type, String realName) {
 
     public static WallReactionItemResponse from(ReaccionVista vista) {
         return new WallReactionItemResponse(vista.usuarioId().toString(), vista.nombre(), vista.avatarUrl(),
-                vista.rol() != null ? vista.rol().name() : null, toWireTipo(vista.tipo()));
+                vista.rol() != null ? vista.rol().name() : null, toWireTipo(vista.tipo()), vista.nombreReal());
     }
 
     private static String toWireTipo(TipoReaccion tipo) {

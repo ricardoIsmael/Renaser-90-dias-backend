@@ -293,7 +293,7 @@ class GoogleGenAiRenasiaChatAdapter implements ChatIAPort {
         LocalDate diaUno = situacion.diaUno();
         if (diaUno == null) {
             return "Todavia no activo su programa de " + plazo + ": empieza al dia siguiente de confirmarlo, con el boton «Empezar manana» "
-                    + "(en Hoy, Plan o Training)." + noHables;
+                    + "(en Hoy, Plan o Entrenar)." + noHables;
         }
         String cuando = "empieza " + InicioDelPrograma.de(situacion).map(InicioDelPrograma::cuandoSinEnie)
                 .orElseGet(() -> "el " + diaUno);

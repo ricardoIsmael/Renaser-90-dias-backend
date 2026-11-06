@@ -69,7 +69,7 @@ class MisFuncionalidadesServiceTest {
 
         assertThat(mias.apagadas()).isEmpty();
         // spec 040 FR-014: `eventos.meet` nace apagada para todos, así que es lo único que la app no ve de fábrica.
-        assertThat(mias.noDisponibles()).as("el aprendiz ve radar.fichas prendida; eventos.meet nace apagada (specs 040 y 041)").containsExactlyInAnyOrder("eventos.meet", "eventos.whatsapp");
+        assertThat(mias.noDisponibles()).as("el aprendiz ve radar.fichas prendida; eventos.meet nace apagada (specs 040, 041 y 047)").containsExactlyInAnyOrder("eventos.meet", "eventos.meet.transcripcion", "eventos.whatsapp", "auth.codigo_whatsapp");
         assertThat(mias.version()).isZero();
         verify(usuarios, times(1)).findById(any());
     }
@@ -83,9 +83,9 @@ class MisFuncionalidadesServiceTest {
 
         MisFuncionalidades delMentor = service.mias(mentor);
 
-        assertThat(delMentor.noDisponibles()).containsExactlyInAnyOrder("radar.fichas", "eventos.meet", "eventos.whatsapp");
+        assertThat(delMentor.noDisponibles()).containsExactlyInAnyOrder("radar.fichas", "eventos.meet", "eventos.meet.transcripcion", "eventos.whatsapp", "auth.codigo_whatsapp");
         assertThat(delMentor.apagadas()).isEmpty();
-        assertThat(service.mias(aprendiz).noDisponibles()).containsExactlyInAnyOrder("eventos.meet", "eventos.whatsapp");
+        assertThat(service.mias(aprendiz).noDisponibles()).containsExactlyInAnyOrder("eventos.meet", "eventos.meet.transcripcion", "eventos.whatsapp", "auth.codigo_whatsapp");
     }
 
     @Test
@@ -129,7 +129,7 @@ class MisFuncionalidadesServiceTest {
 
         assertThat(mias.apagadas()).isEmpty();
         assertThat(mias.noDisponibles()).isNotEmpty().allMatch(clave -> clave.equals("eventos")
-                || clave.startsWith("eventos."));
+                || clave.startsWith("eventos.") || clave.equals("auth.codigo_whatsapp"));
         verify(usuarios, times(1)).findById(any()); // solo por radar.fichas: lo que deja fuera una regla no lee el rol
     }
 
@@ -140,7 +140,7 @@ class MisFuncionalidadesServiceTest {
             throw new IllegalStateException("se cayó la copia del despliegue");
         });
 
-        assertThat(service.mias(aprendiz).noDisponibles()).containsExactlyInAnyOrder("eventos.meet", "eventos.whatsapp");
+        assertThat(service.mias(aprendiz).noDisponibles()).containsExactlyInAnyOrder("eventos.meet", "eventos.meet.transcripcion", "eventos.whatsapp", "auth.codigo_whatsapp");
     }
 
     @Test
