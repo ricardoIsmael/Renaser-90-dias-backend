@@ -5,6 +5,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.Optional;
 
 /**
  * Codigo de 6 digitos del ALTA, bajo {@code email-verification:*}. Toda la mecanica (codigo +
@@ -28,6 +29,11 @@ class CodigoVerificacionEmailRedisAdapter implements CodigoVerificacionEmailPort
     @Override
     public String generarCodigo(String email, Duration vigencia) {
         return almacen.generarCodigo(email, vigencia);
+    }
+
+    @Override
+    public Optional<String> vigente(String email) {
+        return almacen.vigente(email);
     }
 
     @Override

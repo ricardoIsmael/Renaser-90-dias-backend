@@ -15,6 +15,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param plantilla el nombre de la plantilla aprobada por Meta; se cambia aca si Meta pide otro nombre
  * @param idioma    el idioma de la plantilla ({@code es})
  * @param timeoutMs lo maximo que se espera la respuesta de YCloud antes de dar el envio por «no se supo»
+ * @param plantillaCodigo la plantilla de categoria AUTENTICACION del codigo de verificacion (spec 043, {@code WHATSAPP_PLANTILLA_CODIGO}); la crea el dueño en
+ *                        YCloud y Meta la aprueba. Mientras no este aprobada, el interruptor {@code auth.codigo_whatsapp} sigue apagado.
  */
 @ConfigurationProperties(prefix = "renaser.whatsapp")
 public record WhatsAppProperties(@DefaultValue("") String apiKey, @DefaultValue("") String webhookSecreto,
@@ -22,11 +24,17 @@ public record WhatsAppProperties(@DefaultValue("") String apiKey, @DefaultValue(
                                  @DefaultValue("renaser_evento_recordatorio_v2") String plantilla,
                                  @DefaultValue("es") String idioma,
                                  @DefaultValue("https://api.ycloud.com/v2") String url,
-                                 @DefaultValue("10000") int timeoutMs) {
+                                 @DefaultValue("10000") int timeoutMs,
+                                 @DefaultValue("renaser_codigo_v1") String plantillaCodigo) {
 
     /** Hay con que enviar: clave, numero de emision y plantilla. */
     public boolean listoParaEnviar() {
         return !apiKey.isBlank() && !numeroEmisor.isBlank() && !plantilla.isBlank();
+    }
+
+    /** Hay con que mandar un codigo de verificacion (spec 043): clave, numero de emision y la plantilla del codigo. */
+    public boolean listoParaCodigos() {
+        return !apiKey.isBlank() && !numeroEmisor.isBlank() && !plantillaCodigo.isBlank();
     }
 
     /** Hay con que comprobar la firma del webhook. */
@@ -37,6 +45,6 @@ public record WhatsAppProperties(@DefaultValue("") String apiKey, @DefaultValue(
     /** Nunca imprime la clave ni el secreto. */
     @Override
     public String toString() {
-        return "WhatsAppProperties[plantilla=" + plantilla + ", idioma=" + idioma + ", url=" + url + ", configurado=" + listoParaEnviar() + "]";
+        return "WhatsAppProperties[plantilla=" + plantilla + ", plantillaCodigo=" + plantillaCodigo + ", idioma=" + idioma + ", url=" + url + ", configurado=" + listoParaEnviar() + "]";
     }
 }

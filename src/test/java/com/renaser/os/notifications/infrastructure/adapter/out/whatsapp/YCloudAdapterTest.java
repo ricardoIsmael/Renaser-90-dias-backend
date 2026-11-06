@@ -93,7 +93,7 @@ class YCloudAdapterTest {
 
     private YCloudAdapter adaptador(String clave, String emisor, int timeoutMs) {
         String url = "http://127.0.0.1:" + servidor.getAddress().getPort() + "/v2";
-        return new YCloudAdapter(new WhatsAppProperties(clave, "secreto-del-webhook", emisor, "renaser_evento_recordatorio_v1", "es", url, timeoutMs));
+        return new YCloudAdapter(new WhatsAppProperties(clave, "secreto-del-webhook", emisor, "renaser_evento_recordatorio_v1", "es", url, timeoutMs, "renaser_codigo_v1"));
     }
 
     private ResultadoDelEnvio enviar(YCloudAdapter adaptador, UUID externalId) {

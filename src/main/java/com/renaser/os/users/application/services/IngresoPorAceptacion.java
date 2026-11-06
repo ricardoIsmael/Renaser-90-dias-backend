@@ -8,6 +8,7 @@ import com.renaser.os.users.api.FormacionConfigurada;
 import com.renaser.os.users.api.PagosAlAceptar;
 import com.renaser.os.users.api.TerminosPublicados;
 import com.renaser.os.users.api.UserRole;
+import com.renaser.os.users.api.WhatsappDelRegistro;
 import com.renaser.os.users.application.ports.out.formacion.CatalogoDeFormacionesPort;
 import com.renaser.os.users.application.ports.out.formacion.FormacionesDelPersonalPort;
 import com.renaser.os.users.application.ports.out.participante.SaveParticipacionProgramaPort;
@@ -43,11 +44,14 @@ class IngresoPorAceptacion {
     private final PagosAlAceptar pagos;
     /** Spec 027: los términos editables los implementa {@code onboarding}; una formación sin términos publicados no recibe personas nuevas. */
     private final TerminosPublicados terminos;
+    /** Spec 043: el WhatsApp que se escribio al solicitar acceso pasa a la Ficha Inicial; lo implementa {@code onboarding}. */
+    private final WhatsappDelRegistro whatsappDelRegistro;
     private final Clock clock;
 
     IngresoPorAceptacion(CatalogoDeFormacionesPort catalogo, SaveParticipacionProgramaPort participaciones,
                          FormacionesDelPersonalPort personal, CargarRolesPersonalizadosPort rolesPersonalizados,
-                         FichaAlAceptar ficha, PagosAlAceptar pagos, TerminosPublicados terminos, Clock clock) {
+                         FichaAlAceptar ficha, PagosAlAceptar pagos, TerminosPublicados terminos,
+                         WhatsappDelRegistro whatsappDelRegistro, Clock clock) {
         this.catalogo = catalogo;
         this.participaciones = participaciones;
         this.personal = personal;
@@ -55,6 +59,7 @@ class IngresoPorAceptacion {
         this.ficha = ficha;
         this.pagos = pagos;
         this.terminos = terminos;
+        this.whatsappDelRegistro = whatsappDelRegistro;
         this.clock = clock;
     }
 
@@ -80,6 +85,16 @@ class IngresoPorAceptacion {
             pagos.anotar(persona, actor, pedido.pago());
         }
         return conSuRolPersonalizado(resultado.eleccion(), rolPersonalizadoId);
+    }
+
+    /**
+     * Spec 043, FR-006: el WhatsApp que la persona escribio al solicitar acceso ({@code solicitudes_cuenta.telefono}) queda en su Ficha Inicial, sin
+     * pisar uno que ya tenga. Sin numero (un alta de antes o por un proveedor social), nada.
+     */
+    void llevarElWhatsappALaFicha(UserId persona, String whatsapp) {
+        if (whatsapp != null && !whatsapp.isBlank()) {
+            whatsappDelRegistro.llevarALaFicha(persona, whatsapp);
+        }
     }
 
     private EleccionDeIngreso conSuRolPersonalizado(EleccionDeIngreso eleccion, UUID rolPersonalizadoId) {

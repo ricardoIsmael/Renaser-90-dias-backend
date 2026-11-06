@@ -16,7 +16,7 @@ class CatalogoDeFuncionalidadesTest {
     private final CatalogoDeFuncionalidades catalogo = CatalogoDeFuncionalidades.inicial();
 
     /** Las 52 claves de la tabla de la spec 002 y las que se sumaron después (radar.fichas, ia.analisis…), en su orden. Una clave nueva se suma acá y en el catálogo. */
-    private static final List<String> CLAVES_DE_LA_SPEC = List.of("registro", "onboarding", "dia_uno", "radar",
+    private static final List<String> CLAVES_DE_LA_SPEC = List.of("registro", "auth.codigo_whatsapp", "onboarding", "dia_uno", "radar",
             "mapa", "plan", "habitos", "habitos.foto", "habitos.km", "habitos.km.carreras", "habitos.gimnasio", "habitos.espiritu",
             "habitos.ajustes", "clase_diaria", "muro", "muro.publicar", "muro.comentarios", "muro.reacciones", "chat",
             "chat.grupos", "chat.global", "chat.soporte", "chat.directos", "chat.audio", "chat.fotos", "eventos",
@@ -56,7 +56,7 @@ class CatalogoDeFuncionalidadesTest {
     @DisplayName("todas nacen prendidas, salvo el enlace de Meet automático (spec 040) y los recordatorios por WhatsApp (spec 041), que nacen apagadas hasta que Soporte TI las prenda")
     void todasNacenPrendidasSalvoElEnlaceDeMeet() {
         assertThat(catalogo.todas()).filteredOn(f -> f.porDefecto() == ValorPorDefecto.APAGADA)
-                .extracting(DefinicionDeFuncionalidad::clave).containsExactlyInAnyOrder("eventos.meet", "eventos.whatsapp");
+                .extracting(DefinicionDeFuncionalidad::clave).containsExactlyInAnyOrder("eventos.meet", "eventos.whatsapp", "auth.codigo_whatsapp");
     }
 
     // spec 040 FR-014, SC-009
@@ -136,11 +136,15 @@ class CatalogoDeFuncionalidadesTest {
         assertThat(catalogo.definicion("mentor.mi_grupo").orElseThrow().rolesQueLaUsan())
                 .containsExactlyInAnyOrder(UserRole.MENTOR, UserRole.TRAINEE_GUIDE);
         assertThat(catalogo.definicion("registro").orElseThrow().rolesQueLaUsan()).isEmpty();
+        // spec 043 FR-001: el código por WhatsApp es público como el alta y nace apagado, escondido
+        assertThat(catalogo.definicion("auth.codigo_whatsapp").orElseThrow().rolesQueLaUsan()).isEmpty();
+        assertThat(catalogo.definicion("auth.codigo_whatsapp").orElseThrow().porDefecto()).isEqualTo(ValorPorDefecto.APAGADA);
+        assertThat(catalogo.definicion("auth.codigo_whatsapp").orElseThrow().seEsconde()).isTrue();
         assertThat(catalogo.definicion("caja").orElseThrow().rolesQueLaUsan())
                 .as("E-620: el mentor y la guía ven la caja en la ficha de su aprendiz; el Alquimista no la gestiona")
                 .containsExactlyInAnyOrder(UserRole.TRAINEE, UserRole.MENTOR, UserRole.TRAINEE_GUIDE, UserRole.ADMIN,
                         UserRole.IT_SUPPORT);
-        assertThat(catalogo.todas()).filteredOn(f -> !f.clave().equals("registro")
+        assertThat(catalogo.todas()).filteredOn(f -> !f.clave().equals("registro") && !f.clave().equals("auth.codigo_whatsapp")
                         && !f.clave().equals("mentor.mi_grupo") && !f.clave().equals("radar.fichas"))
                 .allMatch(f -> f.rolesQueLaUsan().contains(UserRole.IT_SUPPORT));
     }
@@ -158,7 +162,7 @@ class CatalogoDeFuncionalidadesTest {
         assertThat(fichas.porDefecto()).isEqualTo(ValorPorDefecto.PRENDIDA);
         assertThat(fichas.critica()).isFalse();
         assertThat(catalogo.todas()).filteredOn(DefinicionDeFuncionalidad::seEsconde)
-                .extracting(DefinicionDeFuncionalidad::clave).containsExactlyInAnyOrder("radar.fichas", "eventos.meet", "eventos.whatsapp");
+                .extracting(DefinicionDeFuncionalidad::clave).containsExactlyInAnyOrder("radar.fichas", "eventos.meet", "eventos.whatsapp", "auth.codigo_whatsapp");
         assertThat(fichas.clave()).isEqualTo(com.renaser.os.shared.domain.ClavesDeFuncionalidad.RADAR_EN_FICHAS);
     }
 
