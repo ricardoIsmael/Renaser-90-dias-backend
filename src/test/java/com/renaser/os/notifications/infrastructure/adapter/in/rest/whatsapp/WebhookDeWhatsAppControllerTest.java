@@ -38,7 +38,7 @@ class WebhookDeWhatsAppControllerTest {
     }
 
     private WebhookDeWhatsAppController controllerConSecreto(String secreto) {
-        var propiedades = new WhatsAppProperties("clave", secreto, "+51900000000", "plantilla", "es", "http://localhost", 1000);
+        var propiedades = new WhatsAppProperties("clave", secreto, "+51900000000", "plantilla", "es", "http://localhost", 1000, "renaser_codigo_v1");
         var atender = new AtenderWebhookDeWhatsAppUseCase() {
             @Override
             public void estadoDeUnMensaje(EstadoDeUnMensaje estado) {

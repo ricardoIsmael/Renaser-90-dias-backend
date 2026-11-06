@@ -27,6 +27,18 @@ public interface EnvioDeWhatsAppPort {
      */
     ResultadoDelEnvio enviarRecordatorio(String destino, UUID externalId, List<String> huecos, String cargaDelBoton);
 
+    /** Hay con que mandar un codigo de verificacion (spec 043): la clave, el numero de emision y la plantilla del codigo. */
+    boolean configuradoParaCodigos();
+
+    /**
+     * Manda la plantilla de AUTENTICACION con el codigo en el cuerpo y en el boton «Copiar código» (spec 043, FR-004). <b>Nunca lanza</b>, igual que
+     * {@link #enviarRecordatorio}: no se reintenta nada.
+     *
+     * @param destino el numero en formato internacional ({@code +51987654321})
+     * @param codigo  los 6 digitos
+     */
+    ResultadoDelEnvio enviarCodigo(String destino, String codigo);
+
     /** Un texto libre, solo valido dentro de las 24 horas que abre un mensaje de la persona (la confirmacion de la baja). Mejor esfuerzo: nunca lanza. */
     void enviarTexto(String destino, String texto);
 }

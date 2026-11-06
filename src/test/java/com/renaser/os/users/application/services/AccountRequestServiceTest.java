@@ -106,6 +106,8 @@ class AccountRequestServiceTest {
     private com.renaser.os.users.api.PagosAlAceptar pagosAlAceptar;
     @Mock
     private com.renaser.os.users.api.TerminosPublicados terminosPublicados;
+    @Mock
+    private com.renaser.os.users.api.WhatsappDelRegistro whatsappDelRegistro;
 
     private AccountRequestService service;
 
@@ -115,7 +117,7 @@ class AccountRequestServiceTest {
                 loadUserPort, saveUserPort, deleteUserPort, saveCredencialPort, saveIdentidadExternaPort,
                 passwordEncoder,
                 new IngresoPorAceptacion(catalogoDeFormaciones, saveParticipacionProgramaPort, formacionesDelPersonal,
-                        rolesPersonalizados, fichaAlAceptar, pagosAlAceptar, terminosPublicados, CLOCK),
+                        rolesPersonalizados, fichaAlAceptar, pagosAlAceptar, terminosPublicados, whatsappDelRegistro, CLOCK),
                 tokenVerificacionEmailPort,
                 limitarSolicitudesResetPort, new RequireActiveUserGuard(loadUserPort),
                 new RequireAdminGuard(loadUserPort), updateUserRole, events, CLOCK, idGenerator);
@@ -441,6 +443,38 @@ class AccountRequestServiceTest {
         verify(saveAccountRequestPort).save(guardada.capture());
         assertThat(guardada.getValue().eleccion().rolPersonalizadoId()).isEqualTo(rolPersonalizado);
         assertThat(guardada.getValue().eleccion().rolPersonalizadoNombre()).isEqualTo("Mentor junior");
+    }
+
+    // spec 043 FR-006
+    @Test
+    @DisplayName("spec 043: aceptar lleva a la ficha el WhatsApp que la persona escribió al solicitar acceso")
+    void approveLlevaElWhatsappDelRegistroALaFicha() {
+        AccountRequest request = AccountRequest.submit(AccountRequestId.of(UUID.randomUUID()), UserId.of(UUID.randomUUID()),
+                new Email("solicitante@renaser.dev"), "Solicitante", "+51 987654321", null, null, null, CLOCK);
+        UserId actorId = id();
+        when(loadAccountRequestPort.byId(request.id())).thenReturn(Optional.of(request));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+        stubUsuarioPendiente(request);
+
+        service.approve(new ApproveAccountRequestCommand(request.id(), actorId));
+
+        verify(whatsappDelRegistro).llevarALaFicha(request.usuarioId(), "+51 987654321");
+    }
+
+    // spec 043 FR-006
+    @Test
+    @DisplayName("spec 043: sin WhatsApp en la solicitud (un alta de antes) no se toca la ficha")
+    void approveSinWhatsappNoTocaLaFicha() {
+        AccountRequest request = AccountRequest.submit(AccountRequestId.of(UUID.randomUUID()), UserId.of(UUID.randomUUID()),
+                new Email("solicitante@renaser.dev"), "Solicitante", null, null, null, null, CLOCK);
+        UserId actorId = id();
+        when(loadAccountRequestPort.byId(request.id())).thenReturn(Optional.of(request));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+        stubUsuarioPendiente(request);
+
+        service.approve(new ApproveAccountRequestCommand(request.id(), actorId));
+
+        verify(whatsappDelRegistro, never()).llevarALaFicha(any(), any());
     }
 
     @Test

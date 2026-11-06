@@ -1,6 +1,7 @@
 package com.renaser.os.users.application.ports.out.autenticacion;
 
 import java.time.Duration;
+import java.util.Optional;
 
 /**
  * Codigo de un solo uso para probar que el solicitante controla una casilla de correo, ANTES
@@ -36,4 +37,10 @@ public interface CodigoVerificacionEmailPort {
      * hasta que venza el TTL.
      */
     boolean verificarCodigo(String email, String codigo, int maxIntentos);
+
+    /**
+     * El codigo que sigue vigente para {@code email}, sin consumirlo ni gastar un intento (spec 043): pedirlo por WhatsApp manda el mismo que el
+     * correo, asi no se reinicia el contador de intentos ni quedan dos codigos validos. Vacio si vencio, se uso o nunca se pidio.
+     */
+    Optional<String> vigente(String email);
 }
