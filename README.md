@@ -2,7 +2,7 @@
 
 Backend del programa de transformación de 90 días **Renaser OS**, migrado de Next.js/Prisma/Supabase a **Java 25 + Spring Boot 4.1 + Spring Modulith**, consumido por la app móvil **RenaserPlayStore** (React Native). Los 14 módulos del dominio están construidos, auditados y probados de punta a punta contra Postgres/Redis reales.
 
-> Documentos hermanos: [`docs/MODULOS_A_AVANZAR.md`](docs/MODULOS_A_AVANZAR.md) (qué se construyó y en qué orden), [`CLAUDE.md`](CLAUDE.md) (por qué se decidió cada pieza de la arquitectura), [`docs/BITACORA_ERRORES.md`](docs/BITACORA_ERRORES.md) (cada bug real encontrado, su causa y cómo evitarlo), [`docs/CUMPLIMIENTO_REQUISITOS.md`](docs/CUMPLIMIENTO_REQUISITOS.md) (los 45 requisitos del cliente contrastados uno por uno contra lo construido).
+> Documentos hermanos: [`docs/MODULOS_A_AVANZAR.md`](docs/MODULOS_A_AVANZAR.md) (qué se construyó y en qué orden), [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md) (por qué se decidió cada pieza de la arquitectura; antes se llamaba `CLAUDE.MD`), [`docs/BITACORA_ERRORES.md`](docs/BITACORA_ERRORES.md) (cada bug real encontrado, su causa y cómo evitarlo), [`docs/CUMPLIMIENTO_REQUISITOS.md`](docs/CUMPLIMIENTO_REQUISITOS.md) (los 45 requisitos del cliente contrastados uno por uno contra lo construido).
 
 ---
 
@@ -10,7 +10,7 @@ Backend del programa de transformación de 90 días **Renaser OS**, migrado de N
 
 Renaser es un programa de acompañamiento de 90 días que combina hábitos diarios, metas semanales ("Rocas"), formación (Academia), comunidad, mentoría y un asistente de IA (**Renasia**) que ayuda al aprendiz a reflexionar sobre su propio proceso. El backend expone esa lógica de negocio a la app móvil vía una API REST versionada (`/api/v1/...`), preservando el contrato que la app ya consume.
 
-**Por qué Java/Spring y no seguir en Next.js:** el driver fue rendimiento bajo alta concurrencia I/O-bound (Postgres, Redis, llamadas a IA) con **Virtual Threads** de Java 25, y la posibilidad de imponer límites de arquitectura *verificables en CI* (Spring Modulith + ArchUnit) en un dominio que ya tenía 14 features creciendo sin fricción entre sí. El detalle completo de esa decisión está en `CLAUDE.md`.
+**Por qué Java/Spring y no seguir en Next.js:** el driver fue rendimiento bajo alta concurrencia I/O-bound (Postgres, Redis, llamadas a IA) con **Virtual Threads** de Java 25, y la posibilidad de imponer límites de arquitectura *verificables en CI* (Spring Modulith + ArchUnit) en un dominio que ya tenía 14 features creciendo sin fricción entre sí. El detalle completo de esa decisión está en `docs/ARQUITECTURA.md`.
 
 **Los 5 roles del sistema:** `TRAINEE` (aprendiz), `MENTOR`, `MENTOR_LEAD` (líder de mentores), `ADMIN` y `ALCHEMIST` (alquimista — el rol de mayor jerarquía).
 
@@ -18,7 +18,7 @@ Renaser es un programa de acompañamiento de 90 días que combina hábitos diari
 
 ## 2. Arquitectura: monolito modular + hexagonal
 
-**Un solo proceso JVM, 14 módulos, cero microservicios.** La razón no es moda: una llamada entre módulos dentro del mismo proceso cuesta nanosegundos; entre microservicios cuesta milisegundos de red — y varias operaciones de negocio (completar un hábito → sumar puntos → revisar fase → notificar) necesitan ser una única transacción de base de datos, algo gratis en un monolito y costoso (patrón Saga) entre servicios separados. El razonamiento completo, con sus números, está en `CLAUDE.md` §3–§4.
+**Un solo proceso JVM, 14 módulos, cero microservicios.** La razón no es moda: una llamada entre módulos dentro del mismo proceso cuesta nanosegundos; entre microservicios cuesta milisegundos de red — y varias operaciones de negocio (completar un hábito → sumar puntos → revisar fase → notificar) necesitan ser una única transacción de base de datos, algo gratis en un monolito y costoso (patrón Saga) entre servicios separados. El razonamiento completo, con sus números, está en `docs/ARQUITECTURA.md` §3–§4.
 
 **Spring Modulith** hace cumplir en cada build que un módulo *solo* puede importar el paquete público (`<modulo>.api`) de otro módulo — nunca su dominio, sus casos de uso ni sus adaptadores internos. `ArchitectureTest` rompe el CI si esa regla se viola.
 
@@ -82,7 +82,7 @@ habits/
 │   ├── ports/{in,out}/<agregado>/ ← interfaces (casos de uso / lo que se necesita de afuera)
 │   └── services/                  ← implementación de los casos de uso
 └── infrastructure/adapter/
-    ├── in/rest/<agregado>/        ← @RestController, tonto (CLAUDE.md §5.4.6)
+    ├── in/rest/<agregado>/        ← @RestController, tonto (docs/ARQUITECTURA.md §5.4.6)
     ├── in/scheduler/              ← @Scheduled
     └── out/persistence/<agregado>/← @Entity JPA + Mapper + Adapter
 ```
@@ -300,7 +300,7 @@ docker compose up -d              # Postgres + pgvector, Redis
 
 Variables de entorno relevantes (ver `src/main/resources/application.yaml`): `DB_URL`/`DB_USERNAME`/`DB_PASSWORD`, `REDIS_HOST`/`REDIS_PORT`/`REDIS_USERNAME`/`REDIS_PASSWORD`/`REDIS_SSL_ENABLED`/`REDIS_SESSION_NAMESPACE`, `GOOGLE_GENAI_API_KEY` (opcional — sin ella, `rag`/`evidence`/`onboarding` usan adaptadores NoOp sin romper nada), `AWS_S3_BUCKET`/`AWS_REGION`, `CORS_ORIGENES`, `RENASIA_LIMITE_DIARIO`.
 
-> **Corregido 2026-09-05.** Esta lista incluía `SUPABASE_JWKS_URL`, una variable que no existe en `application.yaml` ni en el código: Supabase quedó descartado el 2026-08-31 (`CLAUDE.md` §11) y la identidad es propia (`docs/MODULO_AUTH.md`).
+> **Corregido 2026-09-05.** Esta lista incluía `SUPABASE_JWKS_URL`, una variable que no existe en `application.yaml` ni en el código: Supabase quedó descartado el 2026-08-31 (`docs/ARQUITECTURA.md` §11) y la identidad es propia (`docs/MODULO_AUTH.md`).
 
 ### 6.1 Build, CI/CD y configuración de producción
 
@@ -312,4 +312,4 @@ Todo lo que tiene que ver con empaquetar y desplegar está en **[`docs/DESPLIEGU
 
 ## 7. Estado actual
 
-Los 14 módulos están construidos, con `./mvnw clean verify` en verde (al 2026-09-27: 4889 pruebas unitarias y 130 de integración; *corregido 2026-09-27, decía «`./mvnw clean test` en verde (1112 tests)»*), auditados por agentes adversariales (seguridad, concurrencia, invariantes de dominio, límites de Modulith) y probados de punta a punta contra la app real — ver `docs/BITACORA_ERRORES.md` y `docs/PRUEBAS_ENDPOINTS_RAG.md`. Preguntas de negocio abiertas, pendientes de decisión del producto (no inventadas por diseño, CLAUDE.md §0.6): `docs/MODULO_ONBOARDING.md` (Q-O1) y `docs/MODULO_POINTS.md` (Q-6).
+Los 14 módulos están construidos, con `./mvnw clean verify` en verde (al 2026-09-27: 4889 pruebas unitarias y 130 de integración; *corregido 2026-09-27, decía «`./mvnw clean test` en verde (1112 tests)»*), auditados por agentes adversariales (seguridad, concurrencia, invariantes de dominio, límites de Modulith) y probados de punta a punta contra la app real — ver `docs/BITACORA_ERRORES.md` y `docs/PRUEBAS_ENDPOINTS_RAG.md`. Preguntas de negocio abiertas, pendientes de decisión del producto (no inventadas por diseño, .claude/rules/00-commits-y-alcance.md (antes CLAUDE.MD §0.6)): `docs/MODULO_ONBOARDING.md` (Q-O1) y `docs/MODULO_POINTS.md` (Q-6).
