@@ -123,8 +123,8 @@ class TicketMentorAbiertoNotificationListenerTest {
         listener().on(evento());
 
         EmitirNotificacionCommand comando = comandoEmitido();
-        assertThat(comando.titulo()).isEqualTo("Nuevo ticket de un aprendiz");
-        assertThat(comando.cuerpo()).isEqualTo("Ana Quispe te abrió un ticket y espera tu respuesta.");
+        assertThat(comando.titulo()).isEqualTo("Nueva consulta de un aprendiz");
+        assertThat(comando.cuerpo()).isEqualTo("Ana Quispe te hizo una consulta y espera tu respuesta.");
     }
 
     @Test
@@ -135,6 +135,6 @@ class TicketMentorAbiertoNotificationListenerTest {
 
         listener().on(evento());
 
-        assertThat(comandoEmitido().cuerpo()).isEqualTo("Un aprendiz te abrió un ticket y espera tu respuesta.");
+        assertThat(comandoEmitido().cuerpo()).isEqualTo("Un aprendiz te hizo una consulta y espera tu respuesta.");
     }
 }

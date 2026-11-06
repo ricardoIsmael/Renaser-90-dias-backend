@@ -37,7 +37,7 @@ class TicketMentorAbiertoNotificationListener {
 
     private static final Logger log = LoggerFactory.getLogger(TicketMentorAbiertoNotificationListener.class);
 
-    private static final String TITULO = "Nuevo ticket de un aprendiz";
+    private static final String TITULO = "Nueva consulta de un aprendiz";
     private static final String QUIEN_SIN_NOMBRE = "Un aprendiz";
 
     private final EmitirNotificacionUseCase emitirNotificacionUseCase;
@@ -73,6 +73,6 @@ class TicketMentorAbiertoNotificationListener {
                 .map(UserSummary::fullName)
                 .filter(nombre -> !nombre.isBlank())
                 .orElse(QUIEN_SIN_NOMBRE);
-        return quien + " te abrió un ticket y espera tu respuesta.";
+        return quien + " te hizo una consulta y espera tu respuesta.";
     }
 }

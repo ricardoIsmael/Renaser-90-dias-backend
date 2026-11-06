@@ -28,7 +28,7 @@ class RespaldosDeEvidenciaConTildesTest {
     void fotoDeUnHabito() {
         String texto = ConversacionRenasiaService.textoDeEvidencia("JUGO VERDE");
 
-        assertThat(texto).isEqualTo("\n\nFoto para registrar 'Jugo verde': si no ves el botón de la cámara, súbela desde Training.");
+        assertThat(texto).isEqualTo("\n\nFoto para registrar 'Jugo verde': si no ves el botón de la cámara, súbela desde Entrenar.");
         assertThat(texto).doesNotContain(SIN_TILDES);
     }
 
@@ -39,7 +39,7 @@ class RespaldosDeEvidenciaConTildesTest {
         String texto = ConversacionRenasiaService.textoDeRitual("RITUAL TIERRA - AGUA - FUEGO (mañana)");
 
         assertThat(texto).isEqualTo("\n\nPara registrar 'Ritual tierra - agua - fuego (mañana)' cuenta cómo te sientes: "
-                + "si no ves el botón para escribir, hazlo desde Training.");
+                + "si no ves el botón para escribir, hazlo desde Entrenar.");
         assertThat(texto).doesNotContain("cuenta como te sientes").doesNotContain("boton");
     }
 
@@ -66,7 +66,7 @@ class RespaldosDeEvidenciaConTildesTest {
     void accionDelDia() {
         String texto = ConversacionRenasiaService.textoDeEvidencia(pedido("Llamar a 3 clientes", false, DestinoDeEvidencia.ROCA));
 
-        assertThat(texto).isEqualTo("\n\nFoto para registrar tu acción 'Llamar a 3 clientes': si no ves el botón de la cámara, súbela desde Training.");
+        assertThat(texto).isEqualTo("\n\nFoto para registrar tu acción 'Llamar a 3 clientes': si no ves el botón de la cámara, súbela desde Entrenar.");
         assertThat(texto).doesNotContain(SIN_TILDES);
         assertThat(ConversacionRenasiaService.textoDeEvidencia(pedido("LLAMAR A 3 CLIENTES", false, DestinoDeEvidencia.ROCA)))
                 .contains("tu acción 'LLAMAR A 3 CLIENTES'");

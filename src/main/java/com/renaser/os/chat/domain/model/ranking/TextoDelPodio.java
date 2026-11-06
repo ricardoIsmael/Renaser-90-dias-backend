@@ -58,7 +58,7 @@ public final class TextoDelPodio {
     private static List<String> plantillaB(List<Puesto> podio) {
         List<String> primeros = nombres(primeros(podio), Puesto::nombre);
         List<String> lineas = new ArrayList<>();
-        lineas.add("✨ Ranking general de la semana ✨");
+        lineas.add("✨ Tabla general de la semana ✨");
         lineas.add(primeros.size() == 1
                 ? "👑 " + primeros.get(0) + " se queda con el 1.er puesto, ¡felicidades!"
                 : "👑 " + lista(primeros) + " comparten el 1.er puesto, ¡felicidades!");

@@ -143,12 +143,12 @@ class SerEnLasTresFormacionesTest {
                 .doesNotContain("Classroom").contains("Cursos (en Comunidad)");
         assertThat(prompt).as(nombre).contains("su dia 12 de " + dias);
         // Al lugar correcto: los habitos estan en Training, los objetivos y "Cierra tu dia" en Plan.
-        assertThat(prompt).as(nombre).contains("- **Training**: sus habitos del dia con su hora.")
+        assertThat(prompt).as(nombre).contains("- **Entrenar**: sus habitos del dia con su hora.")
                 .contains("Los habitos NO estan en\n  Plan ni en Hoy.")
                 .contains("- **Plan**: sus objetivos")
                 .contains("\"Cierra tu dia\" (opcional, no da puntos)")
                 .contains("Eso lo armas en Plan, en el eje que quieras")
-                .contains("desde la pestana Training, tocando el habito")
+                .contains("desde la pestana Entrenar, tocando el habito")
                 .contains("dile siempre Negocio");
         // Nunca manda al Mapa.
         assertThat(prompt).as(nombre).doesNotContain("Ir al Mapa").doesNotContain("completarlo en Plan")

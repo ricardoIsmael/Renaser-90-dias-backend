@@ -76,7 +76,7 @@ public class CrearHabitoPersonalConfirmable implements AccionConfirmable {
         }
         return ResultadoHerramienta.exito("Hábito '" + pedido.nombre() + "' creado en " + pedido.categoria().nombre()
                 + ", a las " + ArgumentosDeHorario.texto(pedido.hora()) + ", " + pedido.diasLegibles()
-                + ". Ya lo ves en Training.");
+                + ". Ya lo ves en Entrenar.");
     }
 
     /** El detalle va al log; a la persona, un motivo que se pueda leer. */

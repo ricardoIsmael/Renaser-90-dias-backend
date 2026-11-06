@@ -166,7 +166,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
      * ({@link TituloEnTipoOracion}). Solo cambia lo que se lee en este texto; el evento y lo guardado siguen con el titulo del catalogo.
      */
     public static String textoDeEvidencia(String titulo) {
-        return "\n\nFoto para registrar '" + TituloEnTipoOracion.de(titulo) + "': si no ves el botón de la cámara, súbela desde Training.";
+        return "\n\nFoto para registrar '" + TituloEnTipoOracion.de(titulo) + "': si no ves el botón de la cámara, súbela desde Entrenar.";
     }
 
     /**
@@ -174,7 +174,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
      * Issue #65: su titulo («RITUAL TIERRA - AGUA - FUEGO (noche)») se lee en tipo oracion, como en la app.
      */
     public static String textoDeRitual(String titulo) {
-        return "\n\nPara registrar '" + TituloEnTipoOracion.de(titulo) + "' cuenta cómo te sientes: si no ves el botón para escribir, hazlo desde Training.";
+        return "\n\nPara registrar '" + TituloEnTipoOracion.de(titulo) + "' cuenta cómo te sientes: si no ves el botón para escribir, hazlo desde Entrenar.";
     }
 
     /**
@@ -185,7 +185,7 @@ public class ConversacionRenasiaService implements PreguntarRenasiaUseCase, Obte
     public static String textoDeEvidencia(PedidoDeEvidencia pedido) {
         if (pedido.destino() == DestinoDeEvidencia.ROCA) {
             return "\n\nFoto para registrar tu acción '" + pedido.titulo()
-                    + "': si no ves el botón de la cámara, súbela desde Training.";
+                    + "': si no ves el botón de la cámara, súbela desde Entrenar.";
         }
         return pedido.conPregunta() ? textoDeRitual(pedido.titulo()) : textoDeEvidencia(pedido.titulo());
     }
