@@ -25,5 +25,5 @@ Cada FR y SC lleva su marca `spec 044 FR-NNN` en una prueba que falla si el requ
 ## Qué corrió
 
 - Unitarias de `calendar`, `chat`, `notifications`, `plataforma` y `users`, más `ArchitectureTest` y `EndpointAuthorizationDeclarationTest`.
-- `EventosPorAudienciaIT` contra Postgres de verdad (las tablas V172/V173, el filtro de la lista, el «No voy», el interruptor, la edición sin audiencia y los eventos de antes).
+- `EventosPorAudienciaIT` contra Postgres de verdad (las tablas V182/V183, el filtro de la lista, el «No voy», el interruptor, la edición sin audiencia y los eventos de antes).
 - `./mvnw verify` completo: ver el PR.

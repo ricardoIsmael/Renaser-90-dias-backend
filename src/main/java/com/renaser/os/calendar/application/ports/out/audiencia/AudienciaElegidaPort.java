@@ -6,7 +6,7 @@ import com.renaser.os.calendar.domain.model.evento.audiencia.AudienciaElegida;
 import java.util.Collection;
 import java.util.Map;
 
-/** Las partes y la lista fija de la audiencia elegida de cada evento (spec 044, V173). */
+/** Las partes y la lista fija de la audiencia elegida de cada evento (spec 044, V183). */
 public interface AudienciaElegidaPort {
 
     /** La audiencia guardada; vacía si el evento no tiene ninguna. */

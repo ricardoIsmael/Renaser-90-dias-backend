@@ -1,8 +1,8 @@
--- V173 — Las partes y la lista fija de la audiencia elegida de un evento (spec 044, pedido del dueño del 2026-11-06)
+-- V183 — Las partes y la lista fija de la audiencia elegida de un evento (spec 044, pedido del dueño del 2026-11-06)
 --
 -- Por qué se toca la base
 -- -----------------------
--- Un evento `SELECCION` (V172) tiene una audiencia hecha de partes que se suman: personas por su nombre, los alumnos de un mentor, un grupo, los
+-- Un evento `SELECCION` (V182) tiene una audiencia hecha de partes que se suman: personas por su nombre, los alumnos de un mentor, un grupo, los
 -- mentores de la formación, los aprendices de un color del semáforo o el personal (Administración y Alquimista). Hay dos clases de partes y por eso
 -- dos tablas:
 --

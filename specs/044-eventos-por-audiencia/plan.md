@@ -3,9 +3,9 @@
 **Branch**: `044-eventos-por-audiencia` (backend y app) | **Date**: 2026-11-06 | **Spec**: [spec.md](./spec.md) | **Contrato**: [contracts/api.md](./contracts/api.md)
 
 > **Corregido 2026-11-06 (implementado, D-326).** El dueño eligió las opciones recomendadas salvo P5 (prendido para todos) y P7 (el líder sí
-> edita los eventos de sus mentores). Las migraciones son **V172** (el valor `SELECCION`) y **V173** (`reglas_audiencia_evento` e
-> `invitados_evento`; la primera se llamaba `reglas_audiencia_evento` en este plan). Ninguna otra rama abierta tenía migraciones nuevas al
-> 2026-11-06; si una entra antes con V172, hay que renumerar estas. Los endpoints de gestión no cambiaron de clave: quedan con
+> edita los eventos de sus mentores). Las migraciones son **V182** (el valor `SELECCION`) y **V183** (`reglas_audiencia_evento` e
+> `invitados_evento`; la primera se llamaba `reglas_audiencia_evento` en este plan). Se renumeraron de V172 y V173 a V182 y V183 porque las
+> specs 045 y 046 usan V180 y V181 y producción corre Flyway sin `out-of-order`. Los endpoints de gestión no cambiaron de clave: quedan con
 > `@Funcionalidad(value = "eventos.gestion", laResuelveElCasoDeUso = true)` y el servicio exige el interruptor según el rol. El líder en el
 > chat de soporte (FR-037 a FR-042) se sumó con `StaffDelSoporte`.
 

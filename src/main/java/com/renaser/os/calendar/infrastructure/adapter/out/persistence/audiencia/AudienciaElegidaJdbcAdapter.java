@@ -24,7 +24,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * {@code reglas_audiencia_evento} e {@code invitados_evento} (V173, spec 044) con {@link JdbcClient}. Guardar reemplaza todo lo del evento: la app
+ * {@code reglas_audiencia_evento} e {@code invitados_evento} (V183, spec 044) con {@link JdbcClient}. Guardar reemplaza todo lo del evento: la app
  * siempre manda la audiencia completa, nunca un cambio parcial.
  */
 @Component
