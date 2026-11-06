@@ -139,7 +139,7 @@ public final class LoQueLeFaltaHoy {
         }
         if (habito.seMideSolo()) {
             return linea.append(" | registro=automatico (conecto sus pasos: los km se miden solos. No pidas foto ni captura ni uses "
-                    + "proponer_registrar_con_foto; que toque «Registrar» en la fila de Kilometros diarios en Training cuando llegue a su meta)")
+                    + "proponer_registrar_con_foto; que toque «Registrar» en la fila de Kilometros diarios en Entrenar cuando llegue a su meta)")
                     .toString();
         }
         if (habito.exigeEvidencia()) {

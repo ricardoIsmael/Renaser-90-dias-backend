@@ -102,7 +102,7 @@ final class HabitosDeHoyEnElPrompt {
             return palabra + ", pide escribir";
         }
         if (habito.seMideSolo()) {
-            return palabra + ", se mide solo con sus pasos (sin foto: lo registra en Training con «Registrar»)";
+            return palabra + ", se mide solo con sus pasos (sin foto: lo registra en Entrenar con «Registrar»)";
         }
         return habito.pideFoto() ? palabra + ", pide foto" : palabra;
     }

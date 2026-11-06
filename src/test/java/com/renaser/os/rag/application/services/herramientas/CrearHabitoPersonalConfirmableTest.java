@@ -59,7 +59,7 @@ class CrearHabitoPersonalConfirmableTest {
         verify(crearPort).crear(APRENDIZ, new HabitoPersonalPedido("Correr", DimensionDelHabito.CUERPO,
                 LocalTime.of(7, 30), true, EnumSet.of(DayOfWeek.MONDAY, DayOfWeek.FRIDAY), "5 km"));
         assertThat(((ResultadoHerramienta.Exito) resultado).contenido())
-                .isEqualTo("Hábito 'Correr' creado en Cuerpo, a las 07:30, lunes y viernes. Ya lo ves en Training.");
+                .isEqualTo("Hábito 'Correr' creado en Cuerpo, a las 07:30, lunes y viernes. Ya lo ves en Entrenar.");
         assertThat(confirmable.herramienta()).isEqualTo(PropuestaDeCrearHabitoPersonal.NOMBRE);
     }
 

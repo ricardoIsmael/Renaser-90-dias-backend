@@ -197,7 +197,7 @@ class HabitosDeHoyEnElPromptTest {
                 new HabitoDeHoy("KILOMETROS DIARIOS", EstadoDeHoy.PENDIENTE, false, null, false, true),
                 new HabitoDeHoy("KILOMETROS DIARIOS", EstadoDeHoy.HECHO, false, null, false, true)), List.of()));
 
-        assertThat(texto).contains("- KILOMETROS DIARIOS: pendiente, se mide solo con sus pasos (sin foto: lo registra en Training con «Registrar»)")
+        assertThat(texto).contains("- KILOMETROS DIARIOS: pendiente, se mide solo con sus pasos (sin foto: lo registra en Entrenar con «Registrar»)")
                 .doesNotContain("pide foto");
         // Ya hecho no necesita explicacion: queda en «Ya hechos hoy».
         assertThat(texto).contains("Ya hechos hoy (no le propongas hacerlos, saltarlos ni registrarlos otra vez): KILOMETROS DIARIOS.");

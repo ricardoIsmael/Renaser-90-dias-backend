@@ -603,7 +603,7 @@ class PromptSistemaRenasiaTest {
         String render = renderizar("(vacio)");
 
         assertThat(render).contains("## Donde esta cada cosa en la app")
-                .contains("- **Training**: sus habitos del dia con su hora.")
+                .contains("- **Entrenar**: sus habitos del dia con su hora.")
                 .contains("Los habitos NO estan en\n  Plan ni en Hoy.")
                 .contains("\"Cierra tu dia\" (opcional, no da puntos)")
                 .contains("El eje que en tus herramientas se llama TRABAJO, en la app se llama Negocio")
@@ -611,8 +611,8 @@ class PromptSistemaRenasiaTest {
                 .contains("No tienes herramienta para escribir\n  ni confirmar el objetivo grande de su programa")
                 .contains("Eso lo armas en Plan, en el eje que quieras")
                 .contains("\"Cierra tu dia\" tambien\n  esta en Plan")
-                .contains("entra a Training, ahi estan tus\n  habitos del dia")
-                .contains("desde la pestana Training, tocando el habito")
+                .contains("entra a Entrenar, ahi estan tus\n  habitos del dia")
+                .contains("desde la pestana Entrenar, tocando el habito")
                 .contains("Tu no ves sus pagos ni\n  hablas de ellos");
         assertThat(render).doesNotContain("entra a Plan, ahi estan tus habitos").doesNotContain("pantalla de Hoy, tocando el habito");
     }
