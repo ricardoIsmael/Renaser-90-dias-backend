@@ -206,6 +206,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/me/caja", "/api/v1/me/caja/**").authenticated()
                         // «Mi ingreso» (spec 032): los pasos y el cronograma de pagos propios; el id sale de la sesion.
                         .requestMatchers("/api/v1/me/ingreso", "/api/v1/me/ingreso/**").authenticated()
+                        // Spec 046: el sobrenombre propio en el Muro; el id sale de la sesion.
+                        .requestMatchers("/api/v1/me/sobrenombre", "/api/v1/me/sobrenombre/**").authenticated()
                         // D-244: el pedido de emergencia del aprendiz. Sin esta linea quedaba bajo
                         // anyRequest().permitAll() y la identidad salia del X-Actor-Id del cliente.
                         .requestMatchers("/api/v1/me/emergency-request").authenticated()
