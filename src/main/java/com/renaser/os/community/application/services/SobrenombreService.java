@@ -18,6 +18,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.text.Normalizer;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -69,6 +70,12 @@ public class SobrenombreService implements MiSobrenombreUseCase, AdministrarSobr
     public MiSobrenombre elegir(UserId persona, String crudo) {
         FilaDeSobrenombre actual = sobrenombres.de(persona).orElse(null);
         Instant ahora = clock.now();
+        // Issue #99: mandar el MISMO sobrenombre otra vez (doble toque, o reintento tras perder la respuesta) no es un cambio:
+        // responde lo de siempre en vez de un 409 de espera.
+        if (actual != null && actual.sobrenombre() != null && crudo != null
+                && actual.sobrenombre().equals(Normalizer.normalize(crudo, Normalizer.Form.NFC).strip())) {
+            return vista(actual);
+        }
         Instant desde = puedeCambiarDesde(actual, ahora);
         if (desde != null) {
             throw new SobrenombreRechazadoException(Motivo.ESPERA,

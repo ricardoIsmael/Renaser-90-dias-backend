@@ -129,6 +129,9 @@ class SobrenombreEnElMuroIT {
         assertThatThrownBy(() -> mio.elegir(ana, "Otro " + ana.value().toString().substring(0, 6)))
                 .isInstanceOf(SobrenombreRechazadoException.class)
                 .extracting(e -> ((SobrenombreRechazadoException) e).motivo()).isEqualTo(Motivo.ESPERA);
+        // Issue #99: mandar el MISMO otra vez (doble toque, reintento) no es un cambio: responde lo de siempre, sin 409 de espera.
+        assertThat(mio.elegir(ana, apodo).sobrenombre()).isEqualTo(apodo);
+        assertThat(mio.elegir(ana, "  " + apodo + " ").sobrenombre()).isEqualTo(apodo);
         assertThat(mio.mio(ana).puedeCambiarDesde()).isEqualTo(AHORA.plus(Duration.ofDays(30)));
         reloj.fijar(AHORA.plus(Duration.ofDays(31)));
         assertThat(mio.elegir(ana, "Otro " + ana.value().toString().substring(0, 6)).puedeCambiarDesde()).isNotNull();

@@ -49,4 +49,20 @@ class SobrenombreTest {
         assertThatThrownBy(() -> Sobrenombre.de("Tigre", List.of("tigre"))).isInstanceOf(SobrenombreRechazadoException.class)
                 .hasMessage("Elige otro: ese no se puede usar.");
     }
+
+    // spec 046 FR-004 — issue #100
+    @Test
+    void laTildeCombinableNFDSeAceptaYSeGuardaComoNFC() {
+        Sobrenombre s = Sobrenombre.de("Jose\u0301 Luis", List.of());
+        assertThat(s.texto()).isEqualTo("José Luis");
+        assertThat(s.normalizado()).isEqualTo("jose luis");
+    }
+
+    // spec 046 FR-004 — issue #100
+    @Test
+    void dosEspaciosSeguidosDicenQueUseUnSoloEspacio() {
+        assertThatThrownBy(() -> Sobrenombre.de("Fénix  doble", List.of())).isInstanceOf(SobrenombreRechazadoException.class)
+                .hasMessage("Usa un solo espacio entre palabras.");
+        assertThatThrownBy(() -> Sobrenombre.de("Yo", List.of())).hasMessage("Usa de 3 a 20 letras.");
+    }
 }

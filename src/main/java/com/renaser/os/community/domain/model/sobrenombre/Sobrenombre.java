@@ -22,9 +22,15 @@ public record Sobrenombre(String texto, String normalizado) {
 
     /** Valida la forma y las palabras prohibidas. Nunca devuelve un sobrenombre inválido. */
     public static Sobrenombre de(String crudo, Collection<String> prohibidasNormalizadas) {
-        String texto = crudo == null ? "" : crudo.strip();
-        if (texto.length() < MINIMO || texto.length() > MAXIMO || texto.contains("  ")) {
+        // Issue #100: NFC primero. Una tilde escrita como carácter combinable («e» + U+0301, que mandan algunos teclados y el
+        // copiar y pegar) se ve igual que «é», pero sin esto no pasaba el patrón de letras y se rechazaba como «caracteres».
+        String texto = crudo == null ? "" : Normalizer.normalize(crudo, Normalizer.Form.NFC).strip();
+        if (texto.length() < MINIMO || texto.length() > MAXIMO) {
             throw new SobrenombreRechazadoException(Motivo.LARGO, "Usa de 3 a 20 letras.");
+        }
+        if (texto.matches(".*\\s{2,}.*")) {
+            // Issue #100: antes decía «Usa de 3 a 20 letras.», que no explica el problema (el largo estaba bien).
+            throw new SobrenombreRechazadoException(Motivo.LARGO, "Usa un solo espacio entre palabras.");
         }
         if (!PERMITIDOS.matcher(texto).matches()) {
             throw new SobrenombreRechazadoException(Motivo.CARACTERES, "Usa solo letras, números, espacios, puntos o guiones.");
