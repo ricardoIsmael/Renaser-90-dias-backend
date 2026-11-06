@@ -79,10 +79,10 @@ class ConvocatoriaService implements ConvocatoriaUseCase {
             for (ColorDeAudiencia color : ColorDeAudiencia.values()) {
                 porColor.put(color.name(), 0);
             }
-            colores.colores(rol == RolUsuario.MENTOR ? padron.alumnosDe(actor) : padron.aprendicesDeLaFormacion(formacion))
+            colores.colores(rol == RolUsuario.MENTOR ? audienciaElegida.alumnosEnLaFormacion(actor, formacion) : padron.aprendicesDeLaFormacion(formacion))
                     .values().forEach(c -> porColor.merge(c.name(), 1, Integer::sum));
         }
-        int misAlumnos = partes.contains(TipoDeParte.MIS_ALUMNOS) ? padron.alumnosDe(actor).size() : 0;
+        int misAlumnos = partes.contains(TipoDeParte.MIS_ALUMNOS) ? audienciaElegida.alumnosEnLaFormacion(actor, formacion).size() : 0;
         List<Grupo> grupos = partes.contains(TipoDeParte.GRUPO)
                 ? padron.gruposDe(formacion).stream().map(g -> new Grupo(g.id(), g.nombre(), g.integrantes().size()))
                         .sorted(Comparator.comparing(Grupo::nombre, POR_NOMBRE)).toList()
@@ -98,7 +98,7 @@ class ConvocatoriaService implements ConvocatoriaUseCase {
     public PaginaDePersonas personas(UserId actor, Formacion pedida, String texto, int pagina, int tamano) {
         RolUsuario rol = requireConvoca(actor);
         Formacion formacion = formacionDe(actor, pedida);
-        Set<UserId> alcance = rol == RolUsuario.MENTOR ? padron.alumnosDe(actor) : padron.personasDeLaFormacion(formacion);
+        Set<UserId> alcance = rol == RolUsuario.MENTOR ? audienciaElegida.alumnosEnLaFormacion(actor, formacion) : padron.personasDeLaFormacion(formacion);
         Set<UserId> candidatos = new java.util.HashSet<>(alcance);
         if (texto != null && !texto.isBlank()) {
             candidatos.retainAll(padron.buscar(texto));

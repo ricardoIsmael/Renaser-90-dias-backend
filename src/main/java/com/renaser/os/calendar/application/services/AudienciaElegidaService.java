@@ -176,7 +176,7 @@ class AudienciaElegidaService {
         /** El mentor y la guía, sus alumnos; el líder y Administración, las personas de la formación. Más quienes ya estaban invitados. */
         Set<UserId> personasQuePuede() {
             if (personas == null) {
-                personas = new LinkedHashSet<>(rol == RolUsuario.MENTOR ? padron.alumnosDe(actor) : padron.personasDeLaFormacion(formacion));
+                personas = new LinkedHashSet<>(rol == RolUsuario.MENTOR ? alumnosEnLaFormacion(actor, formacion) : padron.personasDeLaFormacion(formacion));
                 previa.invitadosDe(OrigenDelInvitado.PERSONA).forEach(i -> personas.add(i.persona()));
             }
             return personas;
@@ -200,7 +200,7 @@ class AudienciaElegidaService {
         Set<UserId> candidatosAlColor() {
             if (conSemaforo == null) {
                 conSemaforo = mentorDeLosAlumnos != null
-                        ? padron.alumnosDe(mentorDeLosAlumnos)
+                        ? alumnosEnLaFormacion(mentorDeLosAlumnos, formacion)
                         : padron.aprendicesDeLaFormacion(formacion);
             }
             return conSemaforo;
@@ -288,6 +288,14 @@ class AudienciaElegidaService {
         return resultado;
     }
 
+    /**
+     * Los alumnos de un mentor que son de esta formación. Un mentor puede acompañar grupos de dos formaciones (spec 022); el evento es de una sola,
+     * así que «Mis alumnos», su color y a quién puede invitar por nombre se cuentan con los de esa formación: las cifras del paso coinciden con «Llega a».
+     */
+    Set<UserId> alumnosEnLaFormacion(UserId mentor, Formacion formacion) {
+        return new LinkedHashSet<>(dentroDeLaFormacion(padron.alumnosDe(mentor), formacion));
+    }
+
     private Collection<UserId> dentroDeLaFormacion(Set<UserId> candidatos, Formacion formacion) {
         if (candidatos.isEmpty()) {
             return candidatos;
@@ -347,7 +355,7 @@ class AudienciaElegidaService {
                         null, dentroDeLaFormacion(new LinkedHashSet<>(celulas.miembrosActivos(regla.grupoId())), formacion).size(), null,
                         List.of()));
                 case MIS_ALUMNOS -> partes.add(new ResumenDeAudiencia.Parte(TipoDeParte.MIS_ALUMNOS, null, null, null,
-                        padron.alumnosDe(regla.mentorId()).size(), null, List.of()));
+                        alumnosEnLaFormacion(regla.mentorId(), formacion).size(), null, List.of()));
                 case MENTORES -> partes.add(new ResumenDeAudiencia.Parte(TipoDeParte.MENTORES, null, null, null,
                         padron.mentoresDeLaFormacion(formacion).size(), null, List.of()));
                 case PERSONAL -> partes.add(new ResumenDeAudiencia.Parte(TipoDeParte.PERSONAL, null, null, null,

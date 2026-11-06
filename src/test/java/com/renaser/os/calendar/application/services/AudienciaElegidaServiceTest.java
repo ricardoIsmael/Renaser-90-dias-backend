@@ -13,14 +13,18 @@ import com.renaser.os.calendar.domain.model.evento.audiencia.ColorDeAudiencia;
 import com.renaser.os.calendar.domain.model.evento.audiencia.OrigenDelInvitado;
 import com.renaser.os.calendar.domain.model.evento.audiencia.ParteDeAudiencia;
 import com.renaser.os.calendar.domain.model.evento.audiencia.TipoDeParte;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.AlcanceDeFormacionPermisivo;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -226,5 +230,29 @@ class AudienciaElegidaServiceTest {
         ResumenDeAudiencia r = m.servicio.vistaPrevia(m.mentor, RolUsuario.MENTOR, ESCUELA, List.of(ParteDeAudiencia.sola(TipoDeParte.MIS_ALUMNOS)));
 
         assertThat(r.total()).isEqualTo(4);
+    }
+
+    // spec 044 FR-033
+    @Test
+    @DisplayName("FR-033: el mentor que acompaña grupos de dos formaciones ve «Mis alumnos» y «Llega a» con los de la formación del evento")
+    void misAlumnosDeLaFormacionDelEvento() {
+        // El amarillo es de otra formación (el mentor acompaña también un grupo del Diplomado).
+        AudienciaElegidaService servicio = new AudienciaElegidaService(m.padron, m.colores, m.celulas, m.pertenencia,
+                new AlcanceDeFormacionPermisivo() {
+                    @Override
+                    public Set<UserId> dentroDelAlcance(Collection<UserId> personas, AlcanceDeFormacion alcance) {
+                        Set<UserId> r = new HashSet<>(personas);
+                        r.remove(m.amarillo);
+                        return r;
+                    }
+                }, FixedClock.at(MundoDeAudiencia.AHORA));
+
+        assertThat(servicio.alumnosEnLaFormacion(m.mentor, ESCUELA)).containsExactlyInAnyOrder(m.rojo1, m.rojo2, m.verde);
+        assertThat(servicio.vistaPrevia(m.mentor, RolUsuario.MENTOR, ESCUELA, List.of(ParteDeAudiencia.sola(TipoDeParte.MIS_ALUMNOS))).total())
+                .isEqualTo(3);
+        assertThatThrownBy(() -> servicio.armar(m.mentor, RolUsuario.MENTOR, ESCUELA, List.of(ParteDeAudiencia.persona(m.amarillo.value())), m.mentor,
+                AudienciaElegida.vacia(), true, MundoDeAudiencia.AHORA))
+                .isInstanceOfSatisfying(AudienciaRechazadaException.class,
+                        e -> assertThat(e.codigo()).isEqualTo(AudienciaRechazadaException.FUERA_DE_TU_ALCANCE));
     }
 }
