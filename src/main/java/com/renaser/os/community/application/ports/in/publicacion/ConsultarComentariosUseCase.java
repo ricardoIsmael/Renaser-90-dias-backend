@@ -15,6 +15,11 @@ public interface ConsultarComentariosUseCase {
     record PaginaComentarios(List<ComentarioVista> comentarios, Instant siguienteCursor, int total) {
     }
 
-    record ComentarioVista(Comentario comentario, String autorNombre, String autorAvatarUrl) {
+    /** Spec 046: {@code autorNombre} es el del Muro (su sobrenombre); {@code autorNombreReal}, solo para el equipo y si tiene sobrenombre. */
+    record ComentarioVista(Comentario comentario, String autorNombre, String autorAvatarUrl, String autorNombreReal) {
+
+        public ComentarioVista(Comentario comentario, String autorNombre, String autorAvatarUrl) {
+            this(comentario, autorNombre, autorAvatarUrl, null);
+        }
     }
 }

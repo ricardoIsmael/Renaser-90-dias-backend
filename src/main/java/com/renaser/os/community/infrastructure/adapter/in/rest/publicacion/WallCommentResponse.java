@@ -4,11 +4,12 @@ import com.renaser.os.community.application.ports.in.publicacion.ConsultarComent
 import com.renaser.os.community.domain.model.publicacion.Comentario;
 
 public record WallCommentResponse(String id, String postId, String authorId, String authorName,
-                                   String authorAvatarUrl, String text, String createdAt) {
+                                   String authorAvatarUrl, String text, String createdAt, String authorRealName) {
 
     public static WallCommentResponse from(ComentarioVista vista) {
         Comentario c = vista.comentario();
         return new WallCommentResponse(c.id().toString(), c.publicacionId().toString(), c.autorId().toString(),
-                vista.autorNombre(), vista.autorAvatarUrl(), c.texto(), c.creadoEn().toString());
+                vista.autorNombre(), vista.autorAvatarUrl(), c.texto(), c.creadoEn().toString(),
+                vista.autorNombreReal());
     }
 }

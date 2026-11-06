@@ -359,14 +359,22 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
         if (filas.isEmpty()) {
             return List.of();
         }
-        Map<UserId, UserSummary> usuarios = userSummaryFinder.findByIds(
-                filas.stream().map(ReaccionMuro::usuarioId).distinct().toList());
-        return filas.stream().map(fila -> aReaccionVista(fila, usuarios.get(fila.usuarioId()))).toList();
+        List<UserId> ids = filas.stream().map(ReaccionMuro::usuarioId).distinct().toList();
+        Map<UserId, UserSummary> usuarios = userSummaryFinder.findByIds(ids);
+        // Spec 046 (D3): «quién reaccionó» también nombra por el sobrenombre; el equipo ve además el nombre real.
+        Map<UserId, PerfilUsuario> perfiles = consultarPerfilUsuarioPort.porIds(ids);
+        boolean veNombreReal = new QuienVeElNombreReal(userSummaryFinder).ve(actorId);
+        return filas.stream()
+                .map(fila -> aReaccionVista(fila, usuarios.get(fila.usuarioId()), perfiles.get(fila.usuarioId()), veNombreReal))
+                .toList();
     }
 
-    private static ReaccionVista aReaccionVista(ReaccionMuro fila, UserSummary usuario) {
-        return new ReaccionVista(fila.usuarioId(), usuario != null ? usuario.fullName() : null,
-                usuario != null ? usuario.avatarUrl() : null, usuario != null ? usuario.role() : null, fila.tipo());
+    private static ReaccionVista aReaccionVista(ReaccionMuro fila, UserSummary usuario, PerfilUsuario perfil, boolean veNombreReal) {
+        String sobrenombre = perfil != null ? perfil.sobrenombre() : null;
+        String nombreReal = usuario != null ? usuario.fullName() : null;
+        return new ReaccionVista(fila.usuarioId(), sobrenombre != null ? sobrenombre : nombreReal,
+                usuario != null ? usuario.avatarUrl() : null, usuario != null ? usuario.role() : null, fila.tipo(),
+                veNombreReal && sobrenombre != null ? nombreReal : null);
     }
 
     /**
@@ -503,12 +511,12 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
         // visible de otra cuenta, buscado en la primera página del feed (una consulta más, solo entonces).
         Optional<Publicacion> ultima = loadPublicacionPort.ultimaVisible(alcance);
         if (ultima.isPresent() && !sinCerradas.de(List.of(ultima.get()), Publicacion::autorId).isEmpty()) {
-            return ultima.flatMap(p -> consultarPerfilUsuarioPort.porId(p.autorId())).map(PerfilUsuario::nombreCompleto);
+            return ultima.flatMap(p -> consultarPerfilUsuarioPort.porId(p.autorId())).map(PerfilUsuario::nombreEnElMuro);
         }
         return sinCerradas.de(loadPublicacionPort.feed(null, TAMANO_PAGINA, null, alcance), Publicacion::autorId).stream()
                 .findFirst()
                 .flatMap(p -> consultarPerfilUsuarioPort.porId(p.autorId()))
-                .map(PerfilUsuario::nombreCompleto);
+                .map(PerfilUsuario::nombreEnElMuro);
     }
 
     @Override
@@ -632,21 +640,25 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
         Map<PublicacionId, Map<TipoReaccion, Integer>> conteos = reaccionMuroPort.contarPorTipoDeVarias(ids);
         Map<PublicacionId, TipoReaccion> misReacciones = reaccionMuroPort.deUsuarioEnVarias(ids, viewerId);
         Map<PublicacionId, Integer> comentarios = loadComentarioPort.contarDeVarias(ids);
+        // Spec 046: el equipo que acompaña ve también el nombre real de quien tiene sobrenombre.
+        boolean veNombreReal = new QuienVeElNombreReal(userSummaryFinder).ve(viewerId);
         return publicaciones.stream()
-                .map(p -> aVista(p, autores.get(p.autorId()), conteos.getOrDefault(p.id(), Map.of()),
+                .map(p -> aVista(p, autores.get(p.autorId()), veNombreReal, conteos.getOrDefault(p.id(), Map.of()),
                         misReacciones.get(p.id()), comentarios.getOrDefault(p.id(), 0)))
                 .toList();
     }
 
-    private PublicacionVista aVista(Publicacion publicacion, PerfilUsuario autor,
+    private PublicacionVista aVista(Publicacion publicacion, PerfilUsuario autor, boolean veNombreReal,
                                      Map<TipoReaccion, Integer> conteo, TipoReaccion miReaccion, int comentarios) {
         List<MediaFirmada> media = publicacion.media().stream()
                 .map(m -> new MediaFirmada(almacenamientoPort.firmarLectura(m.ruta(), VALIDEZ_URL_LECTURA), m.mime(),
                         m.orden()))
                 .toList();
-        return new PublicacionVista(publicacion, autor != null ? autor.nombreCompleto() : null,
+        // Spec 046 (D3): en el Muro se le nombra por su sobrenombre; el nombre real va aparte y solo para el equipo.
+        return new PublicacionVista(publicacion, autor != null ? autor.nombreEnElMuro() : null,
                 autor != null ? autor.avatarUrl() : null, conteo.getOrDefault(TipoReaccion.ME_GUSTA, 0),
-                conteo.getOrDefault(TipoReaccion.NO_ME_GUSTA, 0), miReaccion, comentarios, media);
+                conteo.getOrDefault(TipoReaccion.NO_ME_GUSTA, 0), miReaccion, comentarios, media,
+                veNombreReal && autor != null && autor.sobrenombre() != null ? autor.nombreCompleto() : null);
     }
 
     private List<MediaPublicacion> aMedia(List<ArchivoEntrada> entradas, UserId autorId) {
