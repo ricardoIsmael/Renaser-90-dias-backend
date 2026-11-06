@@ -1,6 +1,7 @@
 package com.renaser.os.users.application.ports.out.autenticacion;
 
 import java.time.Duration;
+import java.util.Optional;
 
 /**
  * Codigo de 6 digitos para recuperar la contrasena desde la app, sin salir a un navegador
@@ -29,4 +30,10 @@ public interface CodigoResetContrasenaPort {
      * al llegar a {@code maxIntentos} borra el codigo entero para forzar pedir uno nuevo.
      */
     boolean verificarCodigo(String email, String codigo, int maxIntentos);
+
+    /**
+     * El codigo que sigue vigente para {@code email}, sin consumirlo ni gastar un intento (spec 043): pedirlo por WhatsApp manda el mismo que el
+     * correo, asi no se reinicia el contador de intentos ni quedan dos codigos validos. Vacio si vencio, se uso o nunca se pidio.
+     */
+    Optional<String> vigente(String email);
 }

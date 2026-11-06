@@ -304,6 +304,9 @@ renaser:
     numero-emisor: ${WHATSAPP_NUMERO_EMISOR:}
     plantilla: ${WHATSAPP_PLANTILLA:renaser_evento_recordatorio_v2}
     idioma: ${WHATSAPP_IDIOMA:es}
+    # Spec 043 (D-325): la plantilla de categoria AUTENTICACION del codigo de verificacion. La crea el dueño en YCloud; hasta que Meta la apruebe,
+    # el interruptor auth.codigo_whatsapp sigue apagado.
+    plantilla-codigo: ${WHATSAPP_PLANTILLA_CODIGO:renaser_codigo_v1}
   scheduling:
     shedlock:
       # Spec 040: los reintentos de las salas de Meet (cada minuto) y su mantenimiento (cada hora). Sin lock, dos instancias le pedirian lo
