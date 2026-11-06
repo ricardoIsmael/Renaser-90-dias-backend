@@ -91,6 +91,9 @@ final class EntradasDelCatalogo {
                 // Spec 040 (D-321): el enlace de Meet que el servidor crea solo. Nace APAGADA y no se prende en producción hasta pasar SC-001
                 // (reunión de más de 60 minutos con 3 o más personas). Apagada se esconde (404), y los procesos de fondo saltan su turno.
                 apagadaDeFabrica("eventos.meet", "Eventos", "Enlace de Meet automático", "Crear solo la sala de Meet de un evento al guardarlo.", EnumSet.of(MENTOR, TRAINEE_GUIDE, MENTOR_LEAD, ADMIN, ALCHEMIST, IT_SUPPORT), SALTA),
+                // Spec 047 (D-332): guardar CIFRADA la transcripción de cada sesión por Meet, sin mostrarla. Nace APAGADA: se prende recién con la
+                // Política de privacidad publicada (FR-018) y la cuenta reconectada con meetings.space.readonly. Apagada, el reloj salta su turno.
+                apagadaDeFabrica("eventos.meet.transcripcion", "Eventos", "Transcripción de las sesiones de Meet", "Guardar cifrada la transcripción de cada sesión por Meet (no se muestra en la app).", ADMINISTRACION, SALTA),
                 // Spec 041 (D-322): el WhatsApp de los recordatorios de eventos nace APAGADO (sin el numero, la clave y la plantilla aprobada no hay como enviar) y se prende a proposito.
                 naceApagada("eventos.whatsapp", "Eventos", "Recordatorios por WhatsApp", "Los recordatorios de los eventos por WhatsApp (1 día, 1 hora, 30 y 10 minutos antes) y su resumen.", ADMINISTRACION, SALTA),
                 normal("cursos", "Cursos", "Cursos", "Los cursos y sus lecciones.", TODOS, NO_APLICA),

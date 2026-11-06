@@ -65,6 +65,6 @@ class ReintentoDeSalaDeMeetService implements ReintentarSalaDeMeetUseCase {
         ResumenDeMeet resumen = ResumenesDeMeet.de(vista.evento(), salas, clock.now());
         auditoria.registrar(AccionDeAuditoriaGoogle.REINTENTAR, actor, eventoId.value(),
                 resumen != null && resumen.fechasConProblema() == 0, null, correlacion);
-        return new EventoConMeetVista(vista, resumen);
+        return new EventoConMeetVista(vista, resumen, ResumenesDeMeet.seGrabaOTranscribe(salas));
     }
 }

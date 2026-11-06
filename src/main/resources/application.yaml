@@ -735,7 +735,7 @@ renaser:
         redirect-uri: ${EVENTOS_GOOGLE_REDIRECT_URI:}
         # Por defecto el calendario propio de la app (calendar.app.created) y los ajustes de la sala (meetings.space.settings), mas
         # `openid email` para saber de que cuenta es el permiso. Si SC-001 muestra que el permiso reducido no alcanza: calendar.events.
-        permisos: ${EVENTOS_GOOGLE_PERMISOS:https://www.googleapis.com/auth/calendar.app.created https://www.googleapis.com/auth/meetings.space.settings openid email}
+        permisos: ${EVENTOS_GOOGLE_PERMISOS:https://www.googleapis.com/auth/calendar.app.created https://www.googleapis.com/auth/meetings.space.settings https://www.googleapis.com/auth/meetings.space.readonly openid email}
       # Si se pone, solo se puede conectar ESA cuenta (renasercorporation@gmail.com): evita conectar otra por error.
       correo-esperado: ${EVENTOS_GOOGLE_CORREO:}
       # Cuantos dias hacia adelante se crean las salas de un evento que se repite (un enlace distinto por fecha).
@@ -745,12 +745,18 @@ renaser:
       # Decision 6 del duenio (2026-11-05, spec 040 FR-035 y FR-036). Todo SI por defecto:
       # - quien crea o edita el evento (ADMIN o ALCHEMIST) va como invitado del evento de Calendar, sin correos de Google (sendUpdates=none);
       # - la sala se graba, se transcribe y toma notas sola (Meet REST API, config.artifactConfig; mismo permiso meetings.space.settings).
-      #   Si la cuenta conectada no tiene el plan (grabar: Google One de 2 TB o mas; transcribir y notas: Google Workspace), el evento y la sala
-      #   se conservan y Administracion ve un aviso en el detalle del evento. Nunca bloquea.
+      #   Si la cuenta conectada no tiene el plan (grabar y transcribir: Google One con Meet premium, sin Workspace, como RenaserOs; spec 047
+      #   corrige lo que decia la 040), el evento y la sala se conservan y Administracion ve un aviso en el detalle del evento. Nunca bloquea.
       invitar-al-creador: ${EVENTOS_MEET_INVITAR_AL_CREADOR:true}
       grabar: ${EVENTOS_MEET_GRABAR:true}
       transcribir: ${EVENTOS_MEET_TRANSCRIBIR:true}
       notas: ${EVENTOS_MEET_NOTAS:true}
+      # Spec 047: la transcripcion de cada sesion se lee de Google (Meet REST API, meetings.space.readonly) y se guarda CIFRADA, sin mostrarse
+      # en la app. Se prende con el interruptor de Soporte TI `eventos.meet.transcripcion` (nace apagado). Se guarda `retencion-dias` (decision
+      # P3 del duenio: 6 meses) y despues se borra sola.
+      transcripcion:
+        retencion-dias: ${EVENTOS_MEET_TRANSCRIPCION_RETENCION_DIAS:180}
+        por-vuelta: ${EVENTOS_MEET_TRANSCRIPCION_POR_VUELTA:5}
       # El permiso permanente de la cuenta se guarda CIFRADO (AES-256-GCM). La clave: 32 bytes en base64
       # (`openssl rand -base64 32`), en SSM. `version` identifica la clave; para rotar, la nueva pasa a `clave` con otra `version` y
       # la vieja queda en `clave-anterior` con su `version-anterior` mientras haya datos cifrados con ella.
