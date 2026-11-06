@@ -43,7 +43,7 @@ public final class RegistroEspiritu {
         Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(participanteId, "participanteId es obligatorio");
         if (dia < 1 || dia > 90) {
-            throw new IllegalArgumentException("dia fuera de rango 1..90: " + dia);
+            throw new IllegalArgumentException("Día fuera de rango 1..90: " + dia);
         }
         return new RegistroEspiritu(id, participanteId, dia, desbloqueadoEn, fechaLimite,
                 null, null, EstadoRegistroEspiritu.PENDIENTE, ahora, ahora);

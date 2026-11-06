@@ -46,7 +46,7 @@ public record MesDelReporte(YearMonth mes, ZoneId zona, Instant desde, Instant h
             throw new IllegalArgumentException("El mes va como AAAA-MM, por ejemplo 2026-10: " + texto);
         }
         if (mes.isAfter(YearMonth.from(ahora.atZone(zona)))) {
-            throw new IllegalArgumentException("Ese mes todavia no empezo: " + texto);
+            throw new IllegalArgumentException("Ese mes todavía no empezó: " + texto);
         }
         return de(mes, zona, ahora);
     }

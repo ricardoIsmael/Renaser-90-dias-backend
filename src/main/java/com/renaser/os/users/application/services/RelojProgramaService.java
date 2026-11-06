@@ -228,7 +228,7 @@ public class RelojProgramaService
         return loadParticipacionProgramaPort.byParticipanteId(actor.id())
                 .or(() -> filaNuevaSiEsDelPersonal(actor))
                 .orElseThrow(() -> new NoSuchElementException(
-                        "No tenes una inscripcion al programa de 90 dias: " + actor.id()));
+                        "No tienes una inscripción al programa de 90 días: " + actor.id()));
     }
 
     private Optional<ParticipacionPrograma> filaNuevaSiEsDelPersonal(User actor) {

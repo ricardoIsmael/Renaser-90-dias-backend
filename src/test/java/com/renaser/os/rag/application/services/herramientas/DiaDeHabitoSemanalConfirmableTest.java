@@ -52,7 +52,7 @@ class DiaDeHabitoSemanalConfirmableTest {
     @Test
     @DisplayName("si al confirmar el dia ya paso, habits lo rechaza y vuelve un Fallo legible")
     void diaYaPasado() {
-        doThrow(new IllegalArgumentException("Elige un dia de esta semana que no haya pasado todavia"))
+        doThrow(new IllegalArgumentException("Elige un día de esta semana que no haya pasado todavía"))
                 .when(planPort).elegirDiaSemanal(APRENDIZ, HABITO, JUEVES);
 
         ResultadoHerramienta resultado = confirmable.aplicar(APRENDIZ, invocacion("2026-09-24"));

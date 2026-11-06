@@ -13,7 +13,7 @@ public record VentanaDelDia(int desde, int hasta) {
 
     public VentanaDelDia {
         if (desde < 0 || hasta > TramoDelDia.FIN_DEL_DIA || desde >= hasta) {
-            throw new IllegalArgumentException("Ventana invalida: " + desde + "-" + hasta);
+            throw new IllegalArgumentException("Ventana inválida: " + desde + "-" + hasta);
         }
     }
 

@@ -48,7 +48,7 @@ public class CategoriaMuroService implements CrearCategoriaMuroUseCase, Actualiz
     public CategoriaFilaAdmin crear(CrearCategoriaMuroCommand command) {
         requireAdmin(command.actorId());
         if (loadPort.porClave(command.clave()).isPresent()) {
-            throw new IllegalStateException("Ya existe una categoria con la clave \"" + command.clave() + "\"");
+            throw new IllegalStateException("Ya existe una categoría con la clave \"" + command.clave() + "\"");
         }
         int siguienteOrden = loadPort.listarTodas().size() + 1;
         CategoriaMuro categoria = CategoriaMuro.crear(command.clave(), command.etiqueta(), command.emoji(),
@@ -112,7 +112,7 @@ public class CategoriaMuroService implements CrearCategoriaMuroUseCase, Actualiz
 
     private CategoriaMuro requireCategoria(String clave) {
         return loadPort.porClave(clave)
-                .orElseThrow(() -> new NoSuchElementException("Categoria no encontrada: " + clave));
+                .orElseThrow(() -> new NoSuchElementException("Categoría no encontrada: " + clave));
     }
 
     private void requireAdmin(UserId actorId) {

@@ -438,7 +438,7 @@ public class ConversacionService implements CrearConversacionDirectaUseCase, Lis
         requireActivoAdmin(command.actorId());
         Formacion formacion = command.formacion() == null ? Formacion.POR_DEFECTO : command.formacion();
         Conversacion global = loadConversacionPort.global(formacion)
-                .orElseThrow(() -> new NoSuchElementException("La conversacion GLOBAL todavia no existe"));
+                .orElseThrow(() -> new NoSuchElementException("La conversación GLOBAL todavía no existe"));
         return saveConversacionPort.save(global.renombrada(command.nuevoNombre()));
     }
 

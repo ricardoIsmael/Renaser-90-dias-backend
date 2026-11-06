@@ -43,7 +43,7 @@ record HorarioSemanalPedido(UUID habitoId, DayOfWeek diaSemana, Accion accion, L
         if (horaLimite != null && !horaLimite.isAfter(horaInicio)) {
             // habits no lo rechaza, lo acomoda a fin del dia (D-122): el boton mostraria otra hora.
             throw new PropuestaImposibleException("La hora_limite tiene que ser posterior a la hora_inicio. "
-                    + "Preguntale a la persona hasta que hora quiere tener el habito.");
+                    + "Pregúntale a la persona hasta qué hora quiere tener el hábito.");
         }
         return new HorarioSemanalPedido(habitoId, dia, accion, horaInicio, horaLimite);
     }
@@ -52,7 +52,7 @@ record HorarioSemanalPedido(UUID habitoId, DayOfWeek diaSemana, Accion accion, L
         try {
             return Accion.valueOf(String.valueOf(texto).trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException accionDesconocida) {
-            throw new PropuestaImposibleException("La accion tiene que ser 'fijar', 'apagar' o 'quitar'.");
+            throw new PropuestaImposibleException("La acción tiene que ser 'fijar', 'apagar' o 'quitar'.");
         }
     }
 

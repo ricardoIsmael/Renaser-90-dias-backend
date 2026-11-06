@@ -39,7 +39,7 @@ final class RegistroVerificadoresIdentidad {
     VerificadorIdentidadProveedor para(ProveedorIdentidad proveedor) {
         VerificadorIdentidadProveedor verificador = porProveedor.get(proveedor);
         if (verificador == null) {
-            throw new IllegalArgumentException("Login con " + proveedor + " no esta disponible todavia");
+            throw new IllegalArgumentException("Login con " + proveedor + " no está disponible todavía");
         }
         return verificador;
     }

@@ -75,7 +75,7 @@ public final class TicketSoporte {
     private static String requireMensaje(String mensaje) {
         String trimmed = requireNotBlank(mensaje, "El mensaje es obligatorio");
         if (trimmed.length() < 10) {
-            throw new IllegalArgumentException("Cuentanos un poco mas - minimo 10 caracteres");
+            throw new IllegalArgumentException("Cuéntanos un poco más - mínimo 10 caracteres");
         }
         return trimmed;
     }

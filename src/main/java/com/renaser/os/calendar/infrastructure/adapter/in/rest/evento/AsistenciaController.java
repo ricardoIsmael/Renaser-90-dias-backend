@@ -95,7 +95,7 @@ class AsistenciaController {
         return switch (wire) {
             case "A_TIEMPO" -> EstadoAsistencia.A_TIEMPO;
             case "TARDE" -> EstadoAsistencia.TARDE;
-            default -> throw new IllegalArgumentException("estado invalido: " + wire + " (A_TIEMPO, TARDE o null)");
+            default -> throw new IllegalArgumentException("estado inválido: " + wire + " (A_TIEMPO, TARDE o null)");
         };
     }
 }

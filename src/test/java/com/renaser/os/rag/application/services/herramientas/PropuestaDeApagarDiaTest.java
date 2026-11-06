@@ -160,8 +160,8 @@ class PropuestaDeApagarDiaTest {
 
         ResultadoHerramienta resultado = herramienta.ejecutar(APRENDIZ, pedido(despues, "apagar"));
 
-        assertThat(((ResultadoHerramienta.Fallo) resultado).motivo()).contains("queda fuera de sus 90 dias")
-                .contains("Hoy es miércoles 2026-09-09, su dia 12 de 90").contains("revisa el año y la fecha");
+        assertThat(((ResultadoHerramienta.Fallo) resultado).motivo()).contains("queda fuera de sus 90 días")
+                .contains("Hoy es miércoles 2026-09-09, su día 12 de 90").contains("revisa el año y la fecha");
     }
 
     /** E-276: "apaga escritura libre el martes 29 de septiembre" llego con el año de entrenamiento del modelo. */

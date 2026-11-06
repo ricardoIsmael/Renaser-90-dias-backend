@@ -17,7 +17,7 @@ public record VentanaEvaluacion(Instant desde, Instant hasta) {
     public VentanaEvaluacion {
         Objects.requireNonNull(desde, "desde es obligatorio");
         if (hasta != null && !hasta.isAfter(desde)) {
-            throw new IllegalArgumentException("Una ventana de evaluacion no puede durar cero ni ir hacia atras");
+            throw new IllegalArgumentException("Una ventana de evaluación no puede durar cero ni ir hacia atrás");
         }
     }
 

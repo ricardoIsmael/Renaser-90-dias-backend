@@ -73,7 +73,7 @@ public class TicketSoporteController {
             case "PROGRAM" -> CategoriaSoporte.PROGRAMA;
             case "BILLING" -> CategoriaSoporte.FACTURACION;
             case "OTHER" -> CategoriaSoporte.OTRO;
-            default -> throw new IllegalArgumentException("category invalida: " + category);
+            default -> throw new IllegalArgumentException("category inválida: " + category);
         };
     }
 }

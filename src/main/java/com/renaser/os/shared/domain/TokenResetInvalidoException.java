@@ -9,6 +9,6 @@ package com.renaser.os.shared.domain;
 public class TokenResetInvalidoException extends RuntimeException {
 
     public TokenResetInvalidoException() {
-        super("El enlace de reseteo de contrasena no es valido o ya vencio");
+        super("El enlace de reseteo de contraseña no es válido o ya venció");
     }
 }

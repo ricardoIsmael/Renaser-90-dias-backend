@@ -320,13 +320,13 @@ public final class Evento {
         switch (tipo) {
             case ZOOM, MEET, ENLACE -> {
                 if (blank) {
-                    throw new IllegalArgumentException("La URL es obligatoria para este tipo de ubicacion");
+                    throw new IllegalArgumentException("La URL es obligatoria para este tipo de ubicación");
                 }
                 requireLinkWeb(valor);
             }
             case DIRECCION -> {
                 if (blank) {
-                    throw new IllegalArgumentException("La direccion es obligatoria");
+                    throw new IllegalArgumentException("La dirección es obligatoria");
                 }
             }
             case LLAMADA_INTERNA, WEBINAR -> {

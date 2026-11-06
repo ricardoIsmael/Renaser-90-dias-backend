@@ -44,7 +44,7 @@ public record HorarioSemanal(DayOfWeek diaSemana, PreferenciaHorario preferencia
             // Sin hora de disparo, aviso ni alarma propios una fila ENCENDIDA no dice nada que la preferencia
             // general no diga ya. Para volver al horario general se BORRA, no se vacia.
             throw new NullPointerException(
-                    "horaDisparo, recordatorio o alarma propios son obligatorios con el dia encendido");
+                    "horaDisparo, recordatorio o alarma propios son obligatorios con el día encendido");
         }
         // D-122: la regla vive en VentanaDelDia, no copiada aca. Lo que se escribe ya viene
         // normalizado por PreferenciaHorario; esto solo cubre una fila rehidratada de la base.

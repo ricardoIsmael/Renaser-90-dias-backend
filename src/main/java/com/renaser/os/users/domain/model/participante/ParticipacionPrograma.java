@@ -436,7 +436,7 @@ public final class ParticipacionPrograma {
     public void fijarDia(int nuevoDia, Clock clock) {
         int ultimoAjustable = duracionDias - 1;
         if (nuevoDia < PRIMER_DIA_AJUSTABLE || nuevoDia > ultimoAjustable) {
-            throw new IllegalArgumentException("El dia del programa se puede fijar entre " + PRIMER_DIA_AJUSTABLE
+            throw new IllegalArgumentException("El día del programa se puede fijar entre " + PRIMER_DIA_AJUSTABLE
                     + " y " + ultimoAjustable + " (el " + duracionDias + " gradua y no se fija a mano), recibido: " + nuevoDia);
         }
         LocalDate hoy = hoyEnMiZona(clock);

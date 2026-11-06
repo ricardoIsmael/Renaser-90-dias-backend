@@ -19,7 +19,7 @@ public record DiaDelSemaforo(LocalDate fecha, EstadoDiaSemaforo estado, Integer 
         Objects.requireNonNull(estado, "estado es obligatorio");
         Objects.requireNonNull(color, "color es obligatorio");
         if ((estado == EstadoDiaSemaforo.MEDIDO) != (porcentaje != null)) {
-            throw new IllegalArgumentException("Solo un dia MEDIDO tiene porcentaje: " + estado + "/" + porcentaje);
+            throw new IllegalArgumentException("Solo un día MEDIDO tiene porcentaje: " + estado + "/" + porcentaje);
         }
     }
 

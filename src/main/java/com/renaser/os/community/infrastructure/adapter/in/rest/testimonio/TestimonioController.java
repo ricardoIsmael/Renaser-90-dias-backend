@@ -83,7 +83,7 @@ public class TestimonioController {
 
     private static UserId requireActorId(UserId actorId) {
         if (actorId == null) {
-            throw new NotAuthorizedException("Se requiere sesion para promover");
+            throw new NotAuthorizedException("Se requiere sesión para promover");
         }
         return actorId;
     }

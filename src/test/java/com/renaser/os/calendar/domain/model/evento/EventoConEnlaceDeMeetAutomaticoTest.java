@@ -82,7 +82,7 @@ class EventoConEnlaceDeMeetAutomaticoTest {
     @DisplayName("FR-004: sin el enlace automático un evento de Meet sigue exigiendo su link, como siempre")
     void sinEnlaceAutomaticoElLinkSigueSiendoObligatorio() {
         assertThatThrownBy(() -> crear(TipoUbicacion.MEET, null, null)).isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("La URL es obligatoria para este tipo de ubicacion");
+                .hasMessage("La URL es obligatoria para este tipo de ubicación");
         assertThatThrownBy(() -> crear(TipoUbicacion.MEET, "javascript:alert(1)", null)).isInstanceOf(IllegalArgumentException.class);
     }
 

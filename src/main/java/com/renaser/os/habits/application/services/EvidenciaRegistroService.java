@@ -113,7 +113,7 @@ public class EvidenciaRegistroService implements SubirEvidenciaRegistroUseCase,
     /** Mismo criterio que {@code RegistroService.requireSelf}: pertenencia Y estado de cuenta. Devuelve su zona. */
     private ZoneId requireSelf(UserId actorId, UserId participanteId) {
         if (!actorId.equals(participanteId)) {
-            throw new NotAuthorizedException("Solo el propio participante puede subir evidencia de sus habitos");
+            throw new NotAuthorizedException("Solo el propio participante puede subir evidencia de sus hábitos");
         }
         var progreso = progresoPort.deParticipante(participanteId)
                 .orElseThrow(() -> new NoSuchElementException("Participante no encontrado: " + participanteId));

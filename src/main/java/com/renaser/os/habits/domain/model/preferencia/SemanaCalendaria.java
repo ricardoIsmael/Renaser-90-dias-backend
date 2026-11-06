@@ -40,7 +40,7 @@ public record SemanaCalendaria(LocalDate lunes) {
     /** La fecha del dia {@code indice} de la semana (0 = lunes ... 6 = domingo). */
     public LocalDate fecha(int indice) {
         if (indice < 0 || indice > 6) {
-            throw new IllegalArgumentException("Un dia de la semana va de 0 a 6: " + indice);
+            throw new IllegalArgumentException("Un día de la semana va de 0 a 6: " + indice);
         }
         return lunes.plusDays(indice);
     }

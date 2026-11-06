@@ -33,7 +33,7 @@ class AccesoAlRadar {
 
     private void requireSelf(UserId actorId, UserId participanteId) {
         if (!actorId.equals(participanteId)) {
-            throw new NotAuthorizedException("Solo el propio participante puede operar su Codigo Renaser");
+            throw new NotAuthorizedException("Solo el propio participante puede operar su Código Renaser");
         }
     }
 

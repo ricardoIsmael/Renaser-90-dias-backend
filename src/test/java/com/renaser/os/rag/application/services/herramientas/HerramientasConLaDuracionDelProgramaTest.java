@@ -83,6 +83,6 @@ class HerramientasConLaDuracionDelProgramaTest {
         when(puerto.deFecha(PERSONA, escuela)).thenReturn(new HorariosDelDia(escuela, 91, List.of(), CUOTA));
         when(puerto.deFecha(PERSONA, null)).thenReturn(new HorariosDelDia(LocalDate.of(2026, 12, 1), 70, List.of(), CUOTA));
         assertThatThrownBy(() -> HorariosParaProponer.de(puerto, PERSONA, escuela))
-                .isInstanceOf(PropuestaImposibleException.class).hasMessageContaining("fuera de sus 90 dias").hasMessageContaining("de 90");
+                .isInstanceOf(PropuestaImposibleException.class).hasMessageContaining("fuera de sus 90 días").hasMessageContaining("de 90");
     }
 }

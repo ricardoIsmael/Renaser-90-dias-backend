@@ -69,10 +69,10 @@ public record HabitoPersonalPedido(String nombre, CategoriaDelHabito categoria, 
                                           Set<DayOfWeek> dias, String meta) {
         String limpio = nombre == null ? "" : nombre.trim().replaceAll("\\s+", " ");
         if (limpio.isEmpty()) {
-            throw new IllegalArgumentException("Falta el nombre del habito.");
+            throw new IllegalArgumentException("Falta el nombre del hábito.");
         }
         if (limpio.length() > LARGO_MAXIMO_NOMBRE) {
-            throw new IllegalArgumentException("El nombre del habito puede tener hasta " + LARGO_MAXIMO_NOMBRE
+            throw new IllegalArgumentException("El nombre del hábito puede tener hasta " + LARGO_MAXIMO_NOMBRE
                     + " caracteres.");
         }
         String metaLimpia = meta == null || meta.isBlank() ? null : meta.trim();

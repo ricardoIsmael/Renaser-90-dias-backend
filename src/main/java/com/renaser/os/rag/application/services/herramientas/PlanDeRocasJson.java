@@ -163,7 +163,7 @@ final class PlanDeRocasJson {
                 && valor.intValue() >= PlanificarRocasPort.AUTOEVALUACION_MINIMA
                 && valor.intValue() <= PlanificarRocasPort.AUTOEVALUACION_MAXIMA;
         if (!enEscala) {
-            throw new PlanMalFormadoException(donde + ": '" + CAMPO_AUTOEVALUACION_INICIO + "' tiene que ser un numero "
+            throw new PlanMalFormadoException(donde + ": '" + CAMPO_AUTOEVALUACION_INICIO + "' tiene que ser un número "
                     + "entero del " + PlanificarRocasPort.AUTOEVALUACION_MINIMA + " al "
                     + PlanificarRocasPort.AUTOEVALUACION_MAXIMA + ".");
         }

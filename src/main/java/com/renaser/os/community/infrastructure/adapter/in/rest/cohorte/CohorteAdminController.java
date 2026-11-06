@@ -104,7 +104,7 @@ public class CohorteAdminController {
             case "PLANNED" -> EstadoCohorte.PLANIFICADA;
             case "ACTIVE" -> EstadoCohorte.ACTIVA;
             case "COMPLETED" -> EstadoCohorte.COMPLETADA;
-            default -> throw new IllegalArgumentException("status invalido: " + status);
+            default -> throw new IllegalArgumentException("status inválido: " + status);
         };
     }
 }

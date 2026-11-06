@@ -31,7 +31,7 @@ class CredencialPersistenceAdapter implements LoadCredencialPort, SaveCredencial
     public void guardar(UserId usuarioId, Credencial credencial) {
         int filas = repository.actualizarHash(usuarioId.value(), credencial.hash(), credencial.actualizadaEn());
         if (filas == 0) {
-            throw new IllegalStateException("No existe el usuario al que se le intenta fijar la contrasena");
+            throw new IllegalStateException("No existe el usuario al que se le intenta fijar la contraseña");
         }
     }
 

@@ -185,7 +185,7 @@ public final class DesbloqueoHabito {
      */
     public void pausar(boolean desactivable, LocalDate hasta, ZonedDateTime ahoraEnSuZona) {
         if (!desactivable) {
-            throw new IllegalStateException("Este habito es obligatorio y no se puede pausar");
+            throw new IllegalStateException("Este hábito es obligatorio y no se puede pausar");
         }
         Instant ahora = ahoraEnSuZona.toInstant();
         if (!estaPausadoEl(ahoraEnSuZona.toLocalDate(), ahoraEnSuZona.getZone())) {

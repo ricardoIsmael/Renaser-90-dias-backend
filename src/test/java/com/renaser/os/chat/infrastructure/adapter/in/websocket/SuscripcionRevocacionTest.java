@@ -172,7 +172,7 @@ class SuscripcionRevocacionTest {
 
         assertThatThrownBy(() -> interceptor.preSend(suscripcionA(CONVERSACION), canal))
                 .isInstanceOf(MessagingException.class)
-                .hasMessageContaining("Tu sesion ya no es valida");
+                .hasMessageContaining("Tu sesión ya no es válida");
     }
 
     // ------------------------------------------------------------------- canal de salida (MESSAGE)

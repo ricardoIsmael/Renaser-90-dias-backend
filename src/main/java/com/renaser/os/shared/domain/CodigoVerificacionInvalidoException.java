@@ -9,6 +9,6 @@ package com.renaser.os.shared.domain;
 public class CodigoVerificacionInvalidoException extends RuntimeException {
 
     public CodigoVerificacionInvalidoException() {
-        super("El codigo no es valido o ya vencio");
+        super("El código no es válido o ya venció");
     }
 }

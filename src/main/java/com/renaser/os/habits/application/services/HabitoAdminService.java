@@ -194,6 +194,6 @@ public class HabitoAdminService implements ConsultarCatalogoAdminUseCase, CrearH
     /** Un habito PERSONAL no es del catalogo: para este panel no existe (contrato admin-habits, 404). */
     private Habito requireHabito(HabitoId id) {
         return loadPort.byId(id).filter(Habito::esDeSistema)
-                .orElseThrow(() -> new NoSuchElementException("Habito no encontrado: " + id));
+                .orElseThrow(() -> new NoSuchElementException("Hábito no encontrado: " + id));
     }
 }

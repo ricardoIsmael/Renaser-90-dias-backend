@@ -228,7 +228,7 @@ class RocaDiariaServiceTest {
 
         assertThatThrownBy(() -> crearPara(LocalDate.of(2026, 8, 25)))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageStartingWith("INVALID_DATE")
-                .hasMessageContaining("todavia no eligio su Dia 1");
+                .hasMessageContaining("todavía no eligió su Día 1");
         verify(saveRocaDiariaPort, never()).saveAll(any());
     }
 

@@ -302,7 +302,7 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
         Instant ahora = clock.now();
         int actualizadas = saveNotificacionPort.marcarLeida(notificacionId, actorId, ahora);
         if (actualizadas == 0 && !loadNotificacionPort.existeDe(notificacionId, actorId)) {
-            throw new NoSuchElementException("Notificacion no encontrada");
+            throw new NoSuchElementException("Notificación no encontrada");
         }
         // O bien se actualizo ahora, o ya estaba leida (idempotente) — en ambos casos, exito.
         return new ResultadoLectura(notificacionId, ahora);

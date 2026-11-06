@@ -34,7 +34,7 @@ public final class SemanaPedida {
             throw new IllegalArgumentException("La semana se pide por su lunes: " + pedida + " no lo es.");
         }
         if (pedida.isAfter(enCurso)) {
-            throw new IllegalArgumentException("Esa semana todavia no llega: la en curso empieza el " + enCurso + ".");
+            throw new IllegalArgumentException("Esa semana todavía no llega: la en curso empieza el " + enCurso + ".");
         }
         LocalDate primera = primeraSemana != null ? primeraSemana : enCurso;
         if (pedida.isBefore(primera)) {

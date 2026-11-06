@@ -13,7 +13,7 @@ public record PlazoDeGracia(int dias) {
 
     public PlazoDeGracia {
         if (dias < 1) {
-            throw new IllegalArgumentException("El plazo de gracia tiene que ser de al menos un dia");
+            throw new IllegalArgumentException("El plazo de gracia tiene que ser de al menos un día");
         }
     }
 

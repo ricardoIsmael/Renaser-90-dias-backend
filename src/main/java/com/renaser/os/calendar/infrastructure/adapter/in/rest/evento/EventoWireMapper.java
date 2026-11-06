@@ -45,7 +45,7 @@ final class EventoWireMapper {
             case "ROLES" -> TipoAudiencia.ROLES;
             case "CELL" -> TipoAudiencia.CELULA;
             case "SELECTION" -> TipoAudiencia.SELECCION;
-            default -> throw new IllegalArgumentException("audienceType invalido: " + wire);
+            default -> throw new IllegalArgumentException("audienceType inválido: " + wire);
         };
     }
 
@@ -70,7 +70,7 @@ final class EventoWireMapper {
             case "MEET" -> TipoUbicacion.MEET;
             case "ADDRESS" -> TipoUbicacion.DIRECCION;
             case "LINK" -> TipoUbicacion.ENLACE;
-            default -> throw new IllegalArgumentException("locationType invalido: " + wire);
+            default -> throw new IllegalArgumentException("locationType inválido: " + wire);
         };
     }
 
@@ -89,7 +89,7 @@ final class EventoWireMapper {
             case "DAILY" -> FrecuenciaRecurrencia.DIARIA;
             case "WEEKLY" -> FrecuenciaRecurrencia.SEMANAL;
             case "MONTHLY" -> FrecuenciaRecurrencia.MENSUAL;
-            default -> throw new IllegalArgumentException("recurrenceFrequency invalido: " + wire);
+            default -> throw new IllegalArgumentException("recurrenceFrequency inválido: " + wire);
         };
     }
 
@@ -108,7 +108,7 @@ final class EventoWireMapper {
             case "GOING" -> EstadoConfirmacion.ASISTE;
             case "NOT_GOING" -> EstadoConfirmacion.NO_ASISTE;
             case "MAYBE" -> EstadoConfirmacion.QUIZAS;
-            default -> throw new IllegalArgumentException("status (rsvp) invalido: " + wire);
+            default -> throw new IllegalArgumentException("status (rsvp) inválido: " + wire);
         };
     }
 
@@ -148,7 +148,7 @@ final class EventoWireMapper {
             case "minutesBefore" -> ReglaRecordatorio.minutosAntes(orden, asInt(w.value()));
             case "daysBefore" -> ReglaRecordatorio.diasAntes(orden, asInt(w.value()));
             case "timeOfDay" -> ReglaRecordatorio.horaDelDia(orden, LocalTime.parse(String.valueOf(w.value())));
-            default -> throw new IllegalArgumentException("reminderRule.kind invalido: " + w.kind());
+            default -> throw new IllegalArgumentException("reminderRule.kind inválido: " + w.kind());
         };
     }
 

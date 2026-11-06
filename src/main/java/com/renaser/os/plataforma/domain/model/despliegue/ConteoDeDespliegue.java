@@ -19,7 +19,7 @@ public record ConteoDeDespliegue(String clave, Instant hora, boolean dentro, lon
             throw new IllegalArgumentException("La hora de una metrica va truncada a la hora: " + hora);
         }
         if (pedidos < 0 || errores < 0 || errores > pedidos) {
-            throw new IllegalArgumentException("Un error tambien es un pedido: errores entre 0 y pedidos");
+            throw new IllegalArgumentException("Un error también es un pedido: errores entre 0 y pedidos");
         }
     }
 

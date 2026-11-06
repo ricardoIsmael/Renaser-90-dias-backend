@@ -137,7 +137,7 @@ public final class RocaDiaria {
      */
     public void cerrarConRespuesta(RespuestaDeCierre respuesta, Instant ahora) {
         if (completada) {
-            throw new IllegalStateException("Esta accion ya esta cumplida: no lleva respuesta de cierre");
+            throw new IllegalStateException("Esta acción ya está cumplida: no lleva respuesta de cierre");
         }
         this.cierre = new CierreDeAccion(respuesta, ahora);
     }

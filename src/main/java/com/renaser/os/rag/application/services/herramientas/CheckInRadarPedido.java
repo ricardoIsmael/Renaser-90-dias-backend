@@ -78,7 +78,7 @@ record CheckInRadarPedido(RespuestasRadar respuestas) {
     }
 
     private static PropuestaImposibleException fueraDeRango() {
-        return new PropuestaImposibleException("El nivel de energia tiene que ser un numero entero del "
+        return new PropuestaImposibleException("El nivel de energía tiene que ser un número entero del "
                 + DiarioYRadarDelAprendizPort.RADAR_ENERGIA_MINIMA + " al "
                 + DiarioYRadarDelAprendizPort.RADAR_ENERGIA_MAXIMA + ", el que diga la persona.");
     }

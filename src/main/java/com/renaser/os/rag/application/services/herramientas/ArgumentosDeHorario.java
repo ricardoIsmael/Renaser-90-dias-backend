@@ -71,10 +71,10 @@ final class ArgumentosDeHorario {
     static void requireInicioDentroDelDia(LocalTime inicio, LocalTime ultimaHora) {
         if (inicio != null && inicio.isAfter(ultimaHora)) {
             String limite = texto(ultimaHora);
-            throw new PropuestaImposibleException("No se puede proponer " + texto(inicio) + ": lo mas tarde que se "
-                    + "puede programar un habito es " + limite + ". NO dejes otra propuesta por tu cuenta: dile a la "
-                    + "persona que el limite es " + limite + " y preguntale si lo quiere a las " + limite
-                    + " (la hora valida mas cercana) o a otra hora antes. Proponlo solo cuando acepte una hora.");
+            throw new PropuestaImposibleException("No se puede proponer " + texto(inicio) + ": lo más tarde que se "
+                    + "puede programar un hábito es " + limite + ". NO dejes otra propuesta por tu cuenta: dile a la "
+                    + "persona que el límite es " + limite + " y pregúntale si lo quiere a las " + limite
+                    + " (la hora válida más cercana) o a otra hora antes. Proponlo solo cuando acepte una hora.");
         }
     }
 
@@ -83,8 +83,8 @@ final class ArgumentosDeHorario {
      * (una tarjeta creada antes de E-475): el limite real, no una excepcion.
      */
     static String rechazoPorHoraTardia(LocalTime ultimaHora) {
-        return "No se pudo: lo mas tarde que se puede programar un habito es " + texto(ultimaHora)
-                + ". Pidele a tu acompanante el cambio con esa hora o una anterior.";
+        return "No se pudo: lo más tarde que se puede programar un hábito es " + texto(ultimaHora)
+                + ". Pídele a tu acompañante el cambio con esa hora o una anterior.";
     }
 
     /** {@code false} si no vino: es el caso "sin hora limite" o "sin fecha", no un error. */

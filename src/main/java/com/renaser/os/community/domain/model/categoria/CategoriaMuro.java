@@ -60,7 +60,7 @@ public final class CategoriaMuro {
         requireEmojiValido(emojiEfectivo);
         if (esSistema && Boolean.FALSE.equals(nuevaActiva)) {
             throw new IllegalArgumentException(
-                    "\"" + this.etiqueta + "\" es una categoria del sistema: la secuencia de bienvenida "
+                    "\"" + this.etiqueta + "\" es una categoría del sistema: la secuencia de bienvenida "
                             + "la necesita para la primera publicacion. Puedes cambiarle el nombre y el emoji, "
                             + "pero no retirarla.");
         }
@@ -81,7 +81,7 @@ public final class CategoriaMuro {
      * publicaciones usan la clave, dato que el dominio no tiene (wall-categories/service.ts:207-246). */
     public void requireEliminable() {
         if (esSistema) {
-            throw new IllegalArgumentException("\"" + etiqueta + "\" es una categoria del sistema y no se puede "
+            throw new IllegalArgumentException("\"" + etiqueta + "\" es una categoría del sistema y no se puede "
                     + "eliminar: la secuencia de bienvenida la necesita para la primera publicacion.");
         }
     }

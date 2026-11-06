@@ -72,7 +72,7 @@ public class PropuestaDeApagarDia implements HerramientaAgente {
             DiaPedido pedido = leido.dentroDelPrograma(hoy);
             requireNoEsObligatorio(pedido, hoy);
             if (pedido.fecha().isBefore(hoy.fecha())) {
-                throw new PropuestaImposibleException("Ese dia ya paso: solo se puede apagar hoy o un dia futuro. "
+                throw new PropuestaImposibleException("Ese día ya pasó: solo se puede apagar hoy o un día futuro. "
                         + "Hoy es " + ArgumentosDeHorario.texto(hoy.fecha()) + ".");
             }
             HorariosDelDia dia = pedido.fecha().equals(hoy.fecha()) ? hoy
@@ -111,10 +111,10 @@ public class PropuestaDeApagarDia implements HerramientaAgente {
             throw new PropuestaImposibleException(LoQueSiSePuede.pausado(habito.titulo()));
         }
         if (pedido.apagar() && habito.apagado()) {
-            throw new PropuestaImposibleException("'" + habito.titulo() + "' ya esta apagado ese dia.");
+            throw new PropuestaImposibleException("'" + habito.titulo() + "' ya está apagado ese día.");
         }
         if (!pedido.apagar() && !habito.apagado()) {
-            throw new PropuestaImposibleException("'" + habito.titulo() + "' no esta apagado ese dia: no hay nada "
+            throw new PropuestaImposibleException("'" + habito.titulo() + "' no está apagado ese día: no hay nada "
                     + "que encender.");
         }
     }
@@ -144,7 +144,7 @@ public class PropuestaDeApagarDia implements HerramientaAgente {
             if (ENCENDER.equalsIgnoreCase(accion.trim())) {
                 return false;
             }
-            throw new PropuestaImposibleException("La accion tiene que ser 'apagar' o 'encender'.");
+            throw new PropuestaImposibleException("La acción tiene que ser 'apagar' o 'encender'.");
         }
 
         /** E-276: con el año corregido si el modelo lo armo con uno viejo. */

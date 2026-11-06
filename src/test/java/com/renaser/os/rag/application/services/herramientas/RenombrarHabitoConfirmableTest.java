@@ -58,7 +58,7 @@ class RenombrarHabitoConfirmableTest {
     @Test
     @DisplayName("un rechazo de habits vuelve como fallo legible, nunca como excepcion")
     void rechazosLegibles() {
-        doThrow(new IllegalArgumentException("Este habito no se puede reemplazar"))
+        doThrow(new IllegalArgumentException("Este hábito no se puede reemplazar"))
                 .when(planPort).renombrar(any(), any(), any(), any());
         assertThat(((ResultadoHerramienta.Fallo) confirmable.aplicar(APRENDIZ, renombrar("B", "m"))).motivo())
                 .contains("no se le puede cambiar el nombre");

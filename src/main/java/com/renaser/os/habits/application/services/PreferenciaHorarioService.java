@@ -108,7 +108,7 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
             AntelacionesDelRecordatorio.normalizar(command.antelacionesRecordatorio());
         }
         requirePropio(command.actorId(), habito);
-        if (!habito.activo()) throw new IllegalArgumentException("El habito no esta activo");
+        if (!habito.activo()) throw new IllegalArgumentException("El hábito no está activo");
 
         ZoneId zona = ZoneId.of(progreso.timezone());
         Instant ahora = clock.now();
@@ -179,7 +179,7 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
     private static void requireCupoDisponible(HabitoId habitoId, boolean habitoLibre, List<HabitoId> tocados) {
         if (!habitoLibre && tocados.size() >= WEEKLY_SCHEDULE_EDIT_LIMIT && !tocados.contains(habitoId)) {
             throw new IllegalStateException("Esta semana ya reacomodaste " + WEEKLY_SCHEDULE_EDIT_LIMIT
-                    + " habitos. Puedes seguir ajustando esos, y el resto la semana que viene.");
+                    + " hábitos. Puedes seguir ajustando esos, y el resto la semana que viene.");
         }
     }
 
@@ -569,7 +569,7 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
     }
 
     private Habito requireHabito(HabitoId id) {
-        return loadHabitoPort.byId(id).orElseThrow(() -> new NoSuchElementException("Habito no encontrado: " + id));
+        return loadHabitoPort.byId(id).orElseThrow(() -> new NoSuchElementException("Hábito no encontrado: " + id));
     }
 
     /**
@@ -590,7 +590,7 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
      */
     private void requirePropio(UserId actorId, Habito habito) {
         if (habito.participanteId() != null && !habito.participanteId().equals(actorId)) {
-            throw new NotAuthorizedException("Solo puedes editar tus propios habitos");
+            throw new NotAuthorizedException("Solo puedes editar tus propios hábitos");
         }
         exigirDeSuFormacion(actorId, habito);
     }

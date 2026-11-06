@@ -113,9 +113,9 @@ class PropuestaDeCambioDeHorarioTest {
         ResultadoHerramienta tarde = herramienta.ejecutar(APRENDIZ, pedido("habito_id", MEDITAR.toString(),
                 "hora_inicio", "23:59"));
 
-        assertThat(tarde).isEqualTo(ResultadoHerramienta.fallo("No se puede proponer 23:59: lo mas tarde que se "
-                + "puede programar un habito es 23:40. NO dejes otra propuesta por tu cuenta: dile a la persona que "
-                + "el limite es 23:40 y preguntale si lo quiere a las 23:40 (la hora valida mas cercana) o a otra "
+        assertThat(tarde).isEqualTo(ResultadoHerramienta.fallo("No se puede proponer 23:59: lo más tarde que se "
+                + "puede programar un hábito es 23:40. NO dejes otra propuesta por tu cuenta: dile a la persona que "
+                + "el límite es 23:40 y pregúntale si lo quiere a las 23:40 (la hora válida más cercana) o a otra "
                 + "hora antes. Proponlo solo cuando acepte una hora."));
         verify(proponer, never()).proponer(any(), any(), any());
 
@@ -137,7 +137,7 @@ class PropuestaDeCambioDeHorarioTest {
                 "hora_inicio", "06:30"));
 
         assertThat(resultado).isInstanceOf(ResultadoHerramienta.Fallo.class);
-        assertThat(((ResultadoHerramienta.Fallo) resultado).motivo()).contains("ya uso sus 3 cambios");
+        assertThat(((ResultadoHerramienta.Fallo) resultado).motivo()).contains("ya usó sus 3 cambios");
         verify(proponer, never()).proponer(any(), any(), any());
     }
 
@@ -201,7 +201,7 @@ class PropuestaDeCambioDeHorarioTest {
         ResultadoHerramienta resultado = herramienta.ejecutar(APRENDIZ, pedido("habito_id", MEDITAR.toString(),
                 "hora_inicio", "06:00", "hora_limite", "07:00"));
 
-        assertThat(((ResultadoHerramienta.Fallo) resultado).motivo()).contains("ya esta a las 06:00-07:00")
+        assertThat(((ResultadoHerramienta.Fallo) resultado).motivo()).contains("ya está a las 06:00-07:00")
                 .contains("no se gasta un cambio");
         verify(proponer, never()).proponer(any(), any(), any());
     }

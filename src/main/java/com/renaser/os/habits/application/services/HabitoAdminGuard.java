@@ -35,7 +35,7 @@ class HabitoAdminGuard {
             throw new NotAuthorizedException("La cuenta esta suspendida");
         }
         if (actor.role() != UserRole.ADMIN && actor.role() != UserRole.ALCHEMIST) {
-            throw new NotAuthorizedException("Solo ADMIN/ALCHEMIST administran el catalogo de habitos");
+            throw new NotAuthorizedException("Solo ADMIN/ALCHEMIST administran el catálogo de hábitos");
         }
     }
 }

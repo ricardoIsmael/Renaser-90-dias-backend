@@ -52,7 +52,7 @@ public final class SemanaDelSemaforo {
 
     public static void exigirCierreValido(LocalDate semanaHasta) {
         if (!esCierreValido(semanaHasta)) {
-            throw new IllegalArgumentException("La semana del semaforo termina en viernes: " + semanaHasta);
+            throw new IllegalArgumentException("La semana del semáforo termina en viernes: " + semanaHasta);
         }
     }
 }

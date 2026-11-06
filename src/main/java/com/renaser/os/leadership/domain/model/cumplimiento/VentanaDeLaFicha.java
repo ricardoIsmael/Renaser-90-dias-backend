@@ -63,7 +63,7 @@ public record VentanaDeLaFicha(LocalDate desde, LocalDate hasta, boolean vigente
     private static void exigirQueSeaUnaSemanaQueLlego(LocalDate viernes, LocalDate hoyLocal) {
         SemanaDelSemaforo.exigirCierreValido(viernes);
         if (viernes.isAfter(hoyLocal)) {
-            throw new IllegalArgumentException("No hay semanas futuras: la que termina el " + viernes + " todavia no llego");
+            throw new IllegalArgumentException("No hay semanas futuras: la que termina el " + viernes + " todavía no llegó");
         }
     }
 }

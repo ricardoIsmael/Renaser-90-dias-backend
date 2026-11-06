@@ -4,6 +4,6 @@ package com.renaser.os.shared.domain;
 public class SesionNoIniciadaException extends RuntimeException {
 
     public SesionNoIniciadaException() {
-        super("No hay una sesion activa");
+        super("No hay una sesión activa");
     }
 }

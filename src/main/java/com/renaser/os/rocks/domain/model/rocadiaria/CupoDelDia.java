@@ -34,7 +34,7 @@ public final class CupoDelDia {
      */
     public static int siguientePosicion(List<RocaDiaria> delDia, EjeObjetivo eje) {
         if (delDia.size() >= MAXIMO_POR_DIA) {
-            throw new IllegalStateException("DAY_FULL: ese dia ya tiene " + MAXIMO_POR_DIA + " acciones");
+            throw new IllegalStateException("DAY_FULL: ese día ya tiene " + MAXIMO_POR_DIA + " acciones");
         }
         Set<Integer> ocupadas = delDia.stream().filter(roca -> roca.eje() == eje).map(RocaDiaria::posicion)
                 .collect(Collectors.toSet());
@@ -43,6 +43,6 @@ public final class CupoDelDia {
                 return posicion;
             }
         }
-        throw new IllegalStateException("AXIS_FULL: el eje " + eje + " ya tiene " + MAXIMO_POR_EJE + " acciones ese dia");
+        throw new IllegalStateException("AXIS_FULL: el eje " + eje + " ya tiene " + MAXIMO_POR_EJE + " acciones ese día");
     }
 }
