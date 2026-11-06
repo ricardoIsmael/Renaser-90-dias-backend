@@ -67,13 +67,13 @@ class PausarHabitoConfirmableTest {
     @Test
     @DisplayName("si habits lo rechaza al confirmar, vuelve un Fallo legible, no la excepcion")
     void rechazoDelNegocio() {
-        doThrow(new IllegalStateException("Este habito es obligatorio y no se puede pausar"))
+        doThrow(new IllegalStateException("Este hábito es obligatorio y no se puede pausar"))
                 .when(planPort).pausar(APRENDIZ, HABITO, null);
         ResultadoHerramienta obligatorio = confirmable.aplicar(APRENDIZ, invocacion("pausar", null));
         assertThat(((ResultadoHerramienta.Fallo) obligatorio).motivo()).isEqualTo(
                 "Ese habito es obligatorio: no se puede pausar.");
 
-        doThrow(new NoSuchElementException("Este habito no esta en tu plan: x"))
+        doThrow(new NoSuchElementException("Este hábito no está en tu plan: x"))
                 .when(planPort).reactivar(APRENDIZ, HABITO);
         ResultadoHerramienta fueraDelPlan = confirmable.aplicar(APRENDIZ, invocacion("reactivar", null));
         assertThat(((ResultadoHerramienta.Fallo) fueraDelPlan).motivo()).contains("ya no esta en su plan")

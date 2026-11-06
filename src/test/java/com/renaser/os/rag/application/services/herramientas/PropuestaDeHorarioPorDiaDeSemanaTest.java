@@ -57,8 +57,8 @@ class PropuestaDeHorarioPorDiaDeSemanaTest {
                 "hora_inicio", "23:59"));
 
         assertThat(tarde).isInstanceOf(ResultadoHerramienta.Fallo.class);
-        assertThat(((ResultadoHerramienta.Fallo) tarde).motivo()).contains("lo mas tarde que se puede programar un "
-                + "habito es 23:40").contains("NO dejes otra propuesta por tu cuenta");
+        assertThat(((ResultadoHerramienta.Fallo) tarde).motivo()).contains("lo más tarde que se puede programar un "
+                + "hábito es 23:40").contains("NO dejes otra propuesta por tu cuenta");
         verify(proponer, never()).proponer(any(), any(), any());
 
         herramienta.ejecutar(APRENDIZ, pedido("dia_semana", "lunes", "accion", "fijar", "hora_inicio", "23:40"));
@@ -79,9 +79,9 @@ class PropuestaDeHorarioPorDiaDeSemanaTest {
         var resultado = herramienta.ejecutar(APRENDIZ, pedido("dia_semana", "lunes", "accion", "apagar"));
 
         assertThat(resultado).isEqualTo(com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta.fallo(
-                "La persona pidio un solo lunes, no todos los lunes: no se propone un cambio de todas las semanas. "
-                        + "Usa proponer_apagar_dia con la fecha 2026-09-14 (el proximo lunes). Si no queda claro si "
-                        + "es solo ese dia o todas las semanas, preguntaselo."));
+                "La persona pidió un solo lunes, no todos los lunes: no se propone un cambio de todas las semanas. "
+                        + "Usa proponer_apagar_dia con la fecha 2026-09-14 (el próximo lunes). Si no queda claro si "
+                        + "es solo ese día o todas las semanas, pregúntaselo."));
         org.mockito.Mockito.verifyNoInteractions(proponer);
     }
 
@@ -182,7 +182,7 @@ class PropuestaDeHorarioPorDiaDeSemanaTest {
         ResultadoHerramienta resultado = herramienta.ejecutar(APRENDIZ, pedido("dia_semana", "lunes", "accion",
                 "fijar", "hora_inicio", "06:00", "hora_limite", "07:00"));
 
-        assertThat(((ResultadoHerramienta.Fallo) resultado).motivo()).contains("ya esta a las 06:00-07:00");
+        assertThat(((ResultadoHerramienta.Fallo) resultado).motivo()).contains("ya está a las 06:00-07:00");
         verify(proponer, never()).proponer(any(), any(), any());
     }
 }

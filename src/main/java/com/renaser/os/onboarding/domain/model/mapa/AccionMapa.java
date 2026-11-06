@@ -100,7 +100,7 @@ public final class AccionMapa {
         String limpio = texto == null ? "" : texto.trim();
         if (limpio.length() < MIN_CARACTERES || limpio.length() > MAX_CARACTERES) {
             throw new IllegalArgumentException(
-                    "El texto de la accion debe tener entre " + MIN_CARACTERES + " y " + MAX_CARACTERES
+                    "El texto de la acción debe tener entre " + MIN_CARACTERES + " y " + MAX_CARACTERES
                             + " caracteres, recibido: " + limpio.length());
         }
     }

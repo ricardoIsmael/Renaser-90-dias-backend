@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Lo que hace el proceso en segundo plano con Google (spec 040, FR-008, FR-009, FR-017). Sin {@code @Transactional}: cada paso con Google va fuera de
@@ -38,6 +39,8 @@ class TrabajoEnSegundoPlanDeMeetService implements SincronizarSalasDeMeetUseCase
     private final SincronizadorDeSalas sincronizador;
     private final RevocacionDeLaCuenta revocacion;
     private final AuditoriaDeGoogle auditoria;
+    /** Si ya se avisó que la cuenta no se puede leer (#98): el aviso sale una sola vez hasta que se vuelva a poder leer. */
+    private final AtomicBoolean avisoDeCuentaIlegible = new AtomicBoolean(false);
 
     TrabajoEnSegundoPlanDeMeetService(LoadCuentaGooglePort loadCuentaPort, LoadSalaMeetPort loadSalaPort,
                                       SaveSalaMeetPort saveSalaPort, AuditoriaGooglePort auditoriaPort,
@@ -92,8 +95,23 @@ class TrabajoEnSegundoPlanDeMeetService implements SincronizarSalasDeMeetUseCase
         }
     }
 
+    /**
+     * Si la cuenta no se puede leer —por ejemplo, falta {@code EVENTOS_GOOGLE_CLAVE_DE_CIFRADO} y el secreto guardado no se puede descifrar—
+     * se trata como no disponible: no se llama a Google y la excepción no llega al scheduler (#98). Se registra UNA vez; si después se
+     * vuelve a poder leer, el siguiente fallo se avisa otra vez.
+     */
     private boolean hayCuentaActiva() {
-        return loadCuentaPort.cargar().filter(CuentaDeGoogle::activa).isPresent();
+        try {
+            boolean activa = loadCuentaPort.cargar().filter(CuentaDeGoogle::activa).isPresent();
+            avisoDeCuentaIlegible.set(false);
+            return activa;
+        } catch (IllegalStateException ex) {
+            if (avisoDeCuentaIlegible.compareAndSet(false, true)) {
+                log.warn("[calendar.TrabajoEnSegundoPlanDeMeet] la cuenta de Google no se puede leer; se trata como no disponible hasta que se pueda: {}",
+                        ex.getMessage());
+            }
+            return false;
+        }
     }
 
     private void sincronizar(EventoId eventoId) {

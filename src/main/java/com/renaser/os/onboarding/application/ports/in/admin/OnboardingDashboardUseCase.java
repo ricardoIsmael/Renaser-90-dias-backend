@@ -29,7 +29,7 @@ public interface OnboardingDashboardUseCase {
             if (totalAprendicesActivos < 0 || totalOnboardingIniciado < 0 || totalOnboardingCompletado < 0
                     || totalPactoFase1Firmado < 0 || grabacionesPendientes < 0 || grabacionesProcesando < 0
                     || grabacionesRevisionManual < 0 || grabacionesAprobadas < 0 || grabacionesRechazadas < 0) {
-                throw new IllegalArgumentException("Ningun contador del dashboard puede ser negativo");
+                throw new IllegalArgumentException("Ningún contador del dashboard puede ser negativo");
             }
         }
     }

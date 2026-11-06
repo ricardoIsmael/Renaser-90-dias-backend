@@ -107,16 +107,16 @@ public final class GrabacionV90 {
      */
     public void procesarIntentoDeValidacion(Clock clock) {
         if (!grabada) {
-            throw new IllegalStateException("No se puede validar un slot sin audio grabado todavia");
+            throw new IllegalStateException("No se puede validar un slot sin audio grabado todavía");
         }
         if (estadoIa == EstadoIAv90.APROBADA || estadoIa == EstadoIAv90.RECHAZADA) {
             throw new IllegalStateException("Esta grabacion ya tiene un veredicto final: " + estadoIa);
         }
         if (estadoIa == EstadoIAv90.PROCESANDO) {
-            throw new IllegalStateException("Ya hay un intento de validacion en curso para esta grabacion");
+            throw new IllegalStateException("Ya hay un intento de validación en curso para esta grabación");
         }
         if (intentosIa >= MAX_INTENTOS) {
-            throw new IllegalStateException("Ya se agotaron los " + MAX_INTENTOS + " intentos de validacion");
+            throw new IllegalStateException("Ya se agotaron los " + MAX_INTENTOS + " intentos de validación");
         }
         this.intentosIa = (short) (intentosIa + 1);
         this.estadoIa = EstadoIAv90.PROCESANDO;
@@ -150,7 +150,7 @@ public final class GrabacionV90 {
     private void requireEnProcesando() {
         if (estadoIa != EstadoIAv90.PROCESANDO) {
             throw new IllegalStateException(
-                    "No hay un intento de validacion en curso para resolver (estado actual: " + estadoIa + ")");
+                    "No hay un intento de validación en curso para resolver (estado actual: " + estadoIa + ")");
         }
     }
 

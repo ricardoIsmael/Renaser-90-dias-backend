@@ -89,8 +89,8 @@ class ConfirmablesDeHorarioTest {
                 new IllegalArgumentException("horaDisparo no puede pasar de 23:40, recibida: 23:59"));
         doThrow(new IllegalArgumentException("horaDisparo no puede pasar de 23:40, recibida: 23:59"))
                 .when(ajustar).fijarDiaDeLaSemana(any(), any());
-        String esperado = "No se pudo: lo mas tarde que se puede programar un habito es 23:40. Pidele a tu "
-                + "acompanante el cambio con esa hora o una anterior.";
+        String esperado = "No se pudo: lo más tarde que se puede programar un hábito es 23:40. Pídele a tu "
+                + "acompañante el cambio con esa hora o una anterior.";
 
         ResultadoHerramienta cambio = new CambioDeHorarioConfirmable(ajustar).aplicar(APRENDIZ,
                 new InvocacionHerramienta(PropuestaDeCambioDeHorario.NOMBRE,

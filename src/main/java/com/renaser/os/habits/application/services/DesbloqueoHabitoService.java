@@ -93,7 +93,7 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
         // previo a empezar. Lo que se elige en dia 0 arranca el dia 1: `resolverDiaDesbloqueo`.
         // Spec 023: el rango de desbloqueo es el de SU programa (90 o 365 dias), no un 90 escrito de antemano.
         if (progreso.diaPrograma() > progreso.duracionDias()) {
-            throw new IllegalArgumentException("El dia de programa esta fuera del rango de desbloqueo (1-" + progreso.duracionDias() + ")");
+            throw new IllegalArgumentException("El día de programa está fuera del rango de desbloqueo (1-" + progreso.duracionDias() + ")");
         }
         Habito habito = requireHabito(command.habitoId());
         habito.exigirQueSeaVisibleEn(progreso.formacion());
@@ -120,7 +120,7 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
         habito.exigirQueSeaVisibleEn(progreso.formacion());
         DesbloqueoHabito desbloqueo = loadPort.deParticipanteYHabito(command.actorId(), command.habitoId())
                 .orElseThrow(() -> new NoSuchElementException(
-                        "Este habito no esta en tu plan: " + command.habitoId()));
+                        "Este hábito no está en tu plan: " + command.habitoId()));
 
         if (command.activo()) {
             desbloqueo.reactivar(clock.now());
@@ -173,7 +173,7 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
         Habito habito = requireHabito(command.habitoId());
         habito.exigirQueSeaVisibleEn(progreso.formacion());
         if (!habito.desactivable()) {
-            throw new IllegalStateException("Este habito es obligatorio y no se puede sacar de tu plan");
+            throw new IllegalStateException("Este hábito es obligatorio y no se puede sacar de tu plan");
         }
         savePort.borrar(command.actorId(), command.habitoId());
     }
@@ -190,15 +190,15 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
     private static int resolverDiaDesbloqueo(Integer pedido, int diaActual, int duracionDias) {
         // Dia 0 = todavia no empezo: lo mas temprano que existe es el dia 1.
         if (pedido != null && pedido > duracionDias) {
-            throw new IllegalArgumentException("El dia de desbloqueo no puede pasar del ultimo dia de tu programa (" + duracionDias + ")");
+            throw new IllegalArgumentException("El día de desbloqueo no puede pasar del último día de tu programa (" + duracionDias + ")");
         }
         int primerDiaPosible = Math.max(1, diaActual);
         if (pedido == null) {
             return primerDiaPosible;
         }
         if (pedido < primerDiaPosible) {
-            throw new IllegalArgumentException("No puedes desbloquear un habito para un dia que ya paso — "
-                    + "el mas temprano que puedes elegir es el dia " + primerDiaPosible);
+            throw new IllegalArgumentException("No puedes desbloquear un hábito para un día que ya pasó — "
+                    + "el más temprano que puedes elegir es el día " + primerDiaPosible);
         }
         return pedido;
     }
@@ -226,17 +226,17 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
      */
     private static void requirePuedeEntrarEnElPlan(Habito habito, UserId actorId) {
         if (!habito.esDeSistema() && !habito.esPersonalDe(actorId)) {
-            throw new NoSuchElementException("Habito no encontrado: " + habito.id());
+            throw new NoSuchElementException("Hábito no encontrado: " + habito.id());
         }
         if (!habito.activo()) {
             throw new IllegalArgumentException(habito.esDeSistema()
-                    ? "Este habito no esta activo en el catalogo"
-                    : "Este habito personal ya no esta activo");
+                    ? "Este hábito no está activo en el catálogo"
+                    : "Este hábito personal ya no está activo");
         }
     }
 
     private Habito requireHabito(HabitoId id) {
-        return loadHabitoPort.byId(id).orElseThrow(() -> new NoSuchElementException("Habito no encontrado: " + id));
+        return loadHabitoPort.byId(id).orElseThrow(() -> new NoSuchElementException("Hábito no encontrado: " + id));
     }
 
     private ProgresoParticipanteHabits requireProgreso(UserId participanteId) {

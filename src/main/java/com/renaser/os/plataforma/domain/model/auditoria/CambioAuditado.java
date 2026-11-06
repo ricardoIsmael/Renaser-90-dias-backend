@@ -28,7 +28,7 @@ public record CambioAuditado(UUID id, TipoDeCambio tipo, UserId actor, String cl
         Objects.requireNonNull(tipo, "tipo es obligatorio");
         Objects.requireNonNull(creadoEn, "creadoEn es obligatorio");
         if (actor == null && tipo != TipoDeCambio.AUTOMATICO) {
-            throw new IllegalArgumentException("Solo un cambio automatico va sin actor");
+            throw new IllegalArgumentException("Solo un cambio automático va sin actor");
         }
         antes = copia(antes);
         despues = copia(despues);

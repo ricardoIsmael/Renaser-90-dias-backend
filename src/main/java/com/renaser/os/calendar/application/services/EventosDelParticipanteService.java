@@ -44,7 +44,7 @@ class EventosDelParticipanteService implements EventosDelParticipanteFinder {
     @Override
     public AgendaDeEventos proximosDias(UserId participanteId, int dias) {
         if (dias < 1 || dias > MAXIMO_DIAS) {
-            throw new IllegalArgumentException("dias debe estar entre 1 y " + MAXIMO_DIAS + ": " + dias);
+            throw new IllegalArgumentException("Los días deben estar entre 1 y " + MAXIMO_DIAS + ": " + dias);
         }
         ZoneId zona = zonaDe(participanteId);
         LocalDate hoy = clock.now().atZone(zona).toLocalDate();

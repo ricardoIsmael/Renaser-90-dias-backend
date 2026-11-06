@@ -137,7 +137,7 @@ public class PlanDeLaSemanaService implements PlanDeLaSemanaUseCase {
                 throw new IllegalArgumentException("La fecha " + cambio.fecha() + " no es de la semana que empieza el " + semana.lunes());
             }
             if (!cambio.fecha().isAfter(hoy)) {
-                throw new IllegalArgumentException("Solo puedes cambiar dias que todavia no llegaron: " + cambio.fecha());
+                throw new IllegalArgumentException("Solo puedes cambiar días que todavía no llegaron: " + cambio.fecha());
             }
             if (!vistas.add(cambio.fecha())) {
                 throw new IllegalArgumentException("La fecha " + cambio.fecha() + " viene repetida");
@@ -169,7 +169,7 @@ public class PlanDeLaSemanaService implements PlanDeLaSemanaUseCase {
         return catalogoAplicable.aplicablesPara(actorId, progreso, semana.lunes()).stream()
                 .filter(h -> h.id().equals(habitoId))
                 .findFirst()
-                .orElseThrow(() -> new NoSuchElementException("Habito no encontrado: " + habitoId));
+                .orElseThrow(() -> new NoSuchElementException("Hábito no encontrado: " + habitoId));
     }
 
     private LocalDate hoyDe(ProgresoParticipanteHabits progreso) {

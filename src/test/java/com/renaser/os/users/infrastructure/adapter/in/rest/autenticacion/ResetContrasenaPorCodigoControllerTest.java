@@ -107,7 +107,7 @@ class ResetContrasenaPorCodigoControllerTest {
         mockMvc.perform(post("/api/v1/auth/password/verify-code").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"alguien@renaser.dev\",\"codigo\":\"000000\"}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("El codigo no es valido o ya vencio"));
+                .andExpect(jsonPath("$.message").value("El código no es válido o ya venció"));
     }
 
     @Test

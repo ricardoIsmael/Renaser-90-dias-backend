@@ -9,6 +9,6 @@ package com.renaser.os.shared.domain;
 public class CredencialesInvalidasException extends RuntimeException {
 
     public CredencialesInvalidasException() {
-        super("Email o contrasena incorrectos");
+        super("Email o contraseña incorrectos");
     }
 }

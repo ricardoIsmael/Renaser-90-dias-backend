@@ -98,7 +98,7 @@ class AutenticacionServiceTest {
         assertThatThrownBy(() -> service().iniciarSesion(
                 new IniciarSesionCommand("fantasma@renaser.dev", CONTRASENA_REAL, "203.0.113.10")))
                 .isInstanceOf(CredencialesInvalidasException.class)
-                .hasMessage("Email o contrasena incorrectos");
+                .hasMessage("Email o contraseña incorrectos");
     }
 
     @Test

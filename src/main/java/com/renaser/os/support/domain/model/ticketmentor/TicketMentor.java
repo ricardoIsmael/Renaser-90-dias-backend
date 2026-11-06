@@ -72,7 +72,7 @@ public final class TicketMentor {
     /** Exige RESPONDIDO — mismo invariante que el CHECK `respondido_coherente` del SQL. */
     public void guardarEnBiblioteca() {
         if (!estado.estaRespondido()) {
-            throw new IllegalStateException("El ticket todavia no tiene respuesta");
+            throw new IllegalStateException("El ticket todavía no tiene respuesta");
         }
         this.guardadoEnBiblioteca = true;
     }

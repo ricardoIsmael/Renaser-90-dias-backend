@@ -330,7 +330,7 @@ public class CatalogoAcademyService implements ConsultarMisCursosUseCase, Consul
                 .map(s -> s.visibleEnCatalogoPara(rol, programDay))
                 .orElse(true);
         if (!visible) {
-            throw new NotAuthorizedException("Esta sesion todavia no esta disponible");
+            throw new NotAuthorizedException("Esta sesión todavía no está disponible");
         }
     }
 
@@ -347,7 +347,7 @@ public class CatalogoAcademyService implements ConsultarMisCursosUseCase, Consul
 
     private Leccion requireLeccion(LeccionId leccionId) {
         return loadLeccionPort.byId(leccionId)
-                .orElseThrow(() -> new NoSuchElementException("Leccion no encontrada: " + leccionId));
+                .orElseThrow(() -> new NoSuchElementException("Lección no encontrada: " + leccionId));
     }
 
     /** `programDay` solo tiene sentido para TRAINEE — el resto de roles no tienen dia de programa (CLAUDE.MD sec. 5.3.2). */

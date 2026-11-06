@@ -170,7 +170,7 @@ class AgregarRocaDiariaServiceTest {
 
         assertThatThrownBy(() -> servicio.agregar(comando(JUEVES, EjeObjetivo.CUERPO)))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageStartingWith("INVALID_DATE")
-                .hasMessageContaining("todavia no eligio su Dia 1");
+                .hasMessageContaining("todavía no eligió su Día 1");
         verify(guardar, never()).save(any());
     }
 

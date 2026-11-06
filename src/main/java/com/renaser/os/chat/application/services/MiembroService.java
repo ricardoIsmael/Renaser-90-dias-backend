@@ -178,7 +178,7 @@ public class MiembroService implements ListarDirectorioMiembrosUseCase, ListarMi
     private List<Conversacion> requireGlobales(UserId actorId, Formacion pedida) {
         List<Conversacion> globales = loadConversacionPort.globales(formaciones.de(actorId).acotadoA(pedida).formaciones());
         if (globales.isEmpty()) {
-            throw new NoSuchElementException("La conversacion GLOBAL todavia no existe");
+            throw new NoSuchElementException("La conversación GLOBAL todavía no existe");
         }
         return globales;
     }

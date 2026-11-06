@@ -265,7 +265,7 @@ public class ConfiguracionMentoriaService implements ConfigurarMentoriaUseCase {
         try {
             return CadenciaRotacion.valueOf(valor);
         } catch (RuntimeException e) {
-            throw new IllegalArgumentException("Cadencia invalida: " + valor + ". Usa MENSUAL o SEMANAL");
+            throw new IllegalArgumentException("Cadencia inválida: " + valor + ". Usa MENSUAL o SEMANAL");
         }
     }
 

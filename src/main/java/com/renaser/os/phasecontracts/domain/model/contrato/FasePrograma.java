@@ -115,6 +115,6 @@ public enum FasePrograma {
                 return fase;
             }
         }
-        throw new IllegalArgumentException("Numero de fase invalido: " + numero);
+        throw new IllegalArgumentException("Número de fase inválido: " + numero);
     }
 }

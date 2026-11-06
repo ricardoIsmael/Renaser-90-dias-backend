@@ -39,7 +39,7 @@ public class TicketMentorAdminController {
         try {
             return Instant.parse(cursor);
         } catch (java.time.format.DateTimeParseException e) {
-            throw new IllegalArgumentException("cursor invalido, se espera ISO-8601: " + cursor);
+            throw new IllegalArgumentException("cursor inválido, se espera ISO-8601: " + cursor);
         }
     }
 }

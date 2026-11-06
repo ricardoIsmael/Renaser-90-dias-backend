@@ -102,7 +102,7 @@ public final class Notificacion {
 
     private static String requireNotBlank(String value) {
         if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException("titulo y cuerpo de la notificacion son obligatorios");
+            throw new IllegalArgumentException("Título y cuerpo de la notificación son obligatorios");
         }
         return value;
     }

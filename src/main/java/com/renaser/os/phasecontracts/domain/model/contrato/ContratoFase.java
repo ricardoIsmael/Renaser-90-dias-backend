@@ -67,11 +67,11 @@ public final class ContratoFase {
 
     private static void requireFirmable(FasePrograma fase, int diaProgramaActual) {
         if (fase == FasePrograma.FASE_1_RENACER) {
-            throw new IllegalArgumentException("La Fase 1 se firma en el Pacto del onboarding, no aqui");
+            throw new IllegalArgumentException("La Fase 1 se firma en el Pacto del onboarding, no aquí");
         }
         if (!fase.firmaDesbloqueadaEnDia(diaProgramaActual)) {
-            throw new IllegalArgumentException("Todavia no te toca firmar el pacto de " + fase.etiqueta()
-                    + " (se desbloquea el dia " + fase.diaDesbloqueoFirma() + " de programa)");
+            throw new IllegalArgumentException("Todavía no te toca firmar el pacto de " + fase.etiqueta()
+                    + " (se desbloquea el día " + fase.diaDesbloqueoFirma() + " de programa)");
         }
     }
 

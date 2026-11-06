@@ -34,7 +34,7 @@ class SemanaPedidaTest {
     @DisplayName("una semana futura es un error")
     void futura() {
         assertThatThrownBy(() -> SemanaPedida.resolver(EN_CURSO.plusWeeks(1), HOY, PRIMERA))
-                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("todavia no llega");
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("todavía no llega");
     }
 
     @Test

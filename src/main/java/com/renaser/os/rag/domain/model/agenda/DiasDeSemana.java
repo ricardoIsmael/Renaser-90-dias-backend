@@ -24,7 +24,7 @@ public final class DiasDeSemana {
     public static Set<DayOfWeek> leer(String texto) {
         String normal = normalizar(texto);
         if (normal.isEmpty()) {
-            throw new IllegalArgumentException("Faltan los dias: por ejemplo 'lunes-viernes' o 'sabado, domingo'.");
+            throw new IllegalArgumentException("Faltan los días: por ejemplo 'lunes-viernes' o 'sábado, domingo'.");
         }
         if (normal.equals("todos")) {
             return EnumSet.allOf(DayOfWeek.class);
@@ -59,7 +59,7 @@ public final class DiasDeSemana {
     private static DayOfWeek dia(String nombre) {
         DayOfWeek dia = NOMBRES.get(nombre.strip());
         if (dia == null) {
-            throw new IllegalArgumentException("No entendi el dia '" + nombre.strip() + "': usa lunes a domingo.");
+            throw new IllegalArgumentException("No entendí el día '" + nombre.strip() + "': usa lunes a domingo.");
         }
         return dia;
     }

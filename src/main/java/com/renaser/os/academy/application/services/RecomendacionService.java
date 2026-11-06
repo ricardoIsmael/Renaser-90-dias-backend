@@ -107,7 +107,7 @@ public class RecomendacionService implements ConsultarRecomendacionDiariaUseCase
 
     private Disponible aDisponible(RecomendacionAcademia recomendacion) {
         Leccion leccion = loadLeccionPort.byId(recomendacion.leccionId())
-                .orElseThrow(() -> new NoSuchElementException("Leccion no encontrada: " + recomendacion.leccionId()));
+                .orElseThrow(() -> new NoSuchElementException("Lección no encontrada: " + recomendacion.leccionId()));
         Curso curso = loadCursoPort.byId(leccion.cursoId())
                 .orElseThrow(() -> new NoSuchElementException("Curso no encontrado: " + leccion.cursoId()));
         return new Disponible(leccion.id(), leccion.titulo(), curso.id(), curso.titulo(), recomendacion.motivo());

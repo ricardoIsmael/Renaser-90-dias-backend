@@ -278,14 +278,14 @@ public final class Habito {
 
     private static String requireTitulo(String titulo) {
         if (titulo == null || titulo.isBlank()) {
-            throw new IllegalArgumentException("El titulo del habito es obligatorio");
+            throw new IllegalArgumentException("El título del hábito es obligatorio");
         }
         return titulo.trim();
     }
 
     private static String requireCategoria(String categoriaClave) {
         if (categoriaClave == null || categoriaClave.isBlank()) {
-            throw new IllegalArgumentException("La categoria del habito es obligatoria");
+            throw new IllegalArgumentException("La categoría del hábito es obligatoria");
         }
         return categoriaClave.trim().toUpperCase();
     }

@@ -205,7 +205,7 @@ public final class Evidencia {
     private void requireEnPendiente() {
         if (estadoValidacion != EstadoValidacion.PENDIENTE) {
             throw new IllegalStateException(
-                    "La evidencia ya no esta pendiente de validacion IA, esta en " + estadoValidacion);
+                    "La evidencia ya no está pendiente de validación IA, está en " + estadoValidacion);
         }
     }
 

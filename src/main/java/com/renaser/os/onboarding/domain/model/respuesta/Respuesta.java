@@ -122,7 +122,7 @@ public final class Respuesta {
         }
         if (cantidad > 1) {
             throw new IllegalArgumentException(
-                    "Una respuesta admite un solo valor no nulo (texto/numero/booleano/escala/json): " + this);
+                    "Una respuesta admite un solo valor no nulo (texto/número/booleano/escala/json): " + this);
         }
         if (valorEscala != null && (valorEscala < 1 || valorEscala > 10)) {
             throw new IllegalArgumentException("valorEscala debe estar entre 1 y 10: " + valorEscala);
@@ -168,7 +168,7 @@ public final class Respuesta {
         if (!(textoOk && numeroOk && booleanoOk && escalaOk && jsonOk)) {
             throw new IllegalArgumentException(
                     "Una respuesta de tipo " + tipo + " requiere exactamente el valor " + esperado
-                            + " y ningun otro slot");
+                            + " y ningún otro slot");
         }
     }
 

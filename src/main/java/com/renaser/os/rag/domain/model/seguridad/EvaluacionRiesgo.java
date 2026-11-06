@@ -56,7 +56,7 @@ public record EvaluacionRiesgo(NivelRiesgo riesgo, Severidad severidad) {
      */
     public EvaluacionRiesgo combinar(EvaluacionRiesgo nueva) {
         if (nueva == null) {
-            throw new IllegalArgumentException("La evaluacion nueva es obligatoria");
+            throw new IllegalArgumentException("La evaluación nueva es obligatoria");
         }
         return new EvaluacionRiesgo(
                 riesgo.compareTo(nueva.riesgo()) >= 0 ? riesgo : nueva.riesgo(),
@@ -73,7 +73,7 @@ public record EvaluacionRiesgo(NivelRiesgo riesgo, Severidad severidad) {
      */
     public EvaluacionRiesgo rebajarCon(EvaluacionRiesgo nueva, String motivo) {
         if (nueva == null) {
-            throw new IllegalArgumentException("La evaluacion nueva es obligatoria");
+            throw new IllegalArgumentException("La evaluación nueva es obligatoria");
         }
         if (motivo == null || motivo.isBlank()) {
             throw new IllegalArgumentException("Bajar un nivel de riesgo exige un motivo explicito");

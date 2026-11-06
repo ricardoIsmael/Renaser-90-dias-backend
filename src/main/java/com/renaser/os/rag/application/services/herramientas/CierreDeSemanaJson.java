@@ -101,7 +101,7 @@ final class CierreDeSemanaJson {
         boolean enEscala = valor != null && valor.isIntegralNumber() && valor.canConvertToInt()
                 && valor.intValue() >= reglas.autoevaluacionMinima() && valor.intValue() <= reglas.autoevaluacionMaxima();
         if (!enEscala) {
-            throw new PlanMalFormadoException(donde + ": 'autoevaluacion' tiene que ser un numero entero del "
+            throw new PlanMalFormadoException(donde + ": 'autoevaluacion' tiene que ser un número entero del "
                     + reglas.autoevaluacionMinima() + " al " + reglas.autoevaluacionMaxima() + ".");
         }
         return valor.intValue();

@@ -76,7 +76,7 @@ public class ClaseDiariaHabitoService implements CompletarClaseDiariaHabitoUseCa
         // Spec 023: la Clase diaria de la formacion de la persona; una formacion que no la ofrece no tiene este flujo (FR-005).
         Habito habitoDailyClass = loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_DAILY_CLASS, progreso.formacion())
                 .orElseThrow(() -> new NoSuchElementException(
-                        "No existe en el catalogo un habito con claveSistema=" + CLAVE_SISTEMA_DAILY_CLASS));
+                        "No existe en el catálogo un hábito con claveSistema=" + CLAVE_SISTEMA_DAILY_CLASS));
 
         LocalDate hoy = fechaHoyEnZonaDe(progreso.timezone());
         // CON cerrojo, y esta es la PRIMERA lectura de esta fila en la transaccion que abre

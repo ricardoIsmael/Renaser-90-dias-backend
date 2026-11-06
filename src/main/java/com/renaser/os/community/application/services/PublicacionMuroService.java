@@ -158,7 +158,7 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     public PublicacionVista publicar(PublicarCommand command) {
         requireActorPuedePublicar(command.autorId());
         if (command.categoriaClave() != null && !categoriasUseCase.clavesExistentes().contains(command.categoriaClave())) {
-            throw new IllegalArgumentException("Categoria desconocida: " + command.categoriaClave());
+            throw new IllegalArgumentException("Categoría desconocida: " + command.categoriaClave());
         }
         List<MediaPublicacion> media = aMedia(command.media(), command.autorId());
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
@@ -393,7 +393,7 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     public PaginaPublicaciones feed(UserId actorId, Instant cursor, String categoriaClave, Formacion formacion) {
         requireActorActivo(actorId);
         if (categoriaClave != null && !categoriasUseCase.clavesExistentes().contains(categoriaClave)) {
-            throw new IllegalArgumentException("Categoria desconocida: " + categoriaClave);
+            throw new IllegalArgumentException("Categoría desconocida: " + categoriaClave);
         }
         AlcanceDeFormacion alcance = FormacionDelContenido.paraLeer(formaciones.de(actorId), formacion);
         return paginaSinCuentasCerradas(actorId, cursor, categoriaClave, alcance, MAX_PAGINAS_SALTEADAS);

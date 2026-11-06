@@ -49,15 +49,15 @@ public class EleccionDiaSemanalService implements ElegirDiaSemanalUseCase {
         ProgresoParticipanteHabits progreso = requireProgreso(command.actorId());
         if (progreso.diaPrograma() == 0) {
             throw new NotAuthorizedException(
-                    "El Dia 0 es una vista previa — podras elegir tu dia a partir del Dia 1");
+                    "El Día 0 es una vista previa — podrás elegir tu día a partir del Día 1");
         }
         Habito habito = requireHabito(command.habitoId());
         habito.exigirQueSeaVisibleEn(progreso.formacion());
         if (!habito.eleccionDiaSemanal()) {
-            throw new IllegalArgumentException("Este habito no se elige por dia de la semana");
+            throw new IllegalArgumentException("Este hábito no se elige por día de la semana");
         }
         if (!habito.activo()) {
-            throw new IllegalArgumentException("Este habito no esta activo");
+            throw new IllegalArgumentException("Este hábito no está activo");
         }
 
         ZoneId zona = ZoneId.of(progreso.timezone());
@@ -66,7 +66,7 @@ public class EleccionDiaSemanalService implements ElegirDiaSemanalUseCase {
         LocalDate semanaInicio = SemanaDeEleccion.lunesDe(hoy);
 
         if (!SemanaDeEleccion.esElegible(command.fechaElegida(), hoy)) {
-            throw new IllegalArgumentException("Elige un dia de esta semana que no haya pasado todavia");
+            throw new IllegalArgumentException("Elige un día de esta semana que no haya pasado todavía");
         }
 
         savePort.borrarDeSemana(command.actorId(), command.habitoId(), semanaInicio);
@@ -76,7 +76,7 @@ public class EleccionDiaSemanalService implements ElegirDiaSemanalUseCase {
     }
 
     private Habito requireHabito(HabitoId id) {
-        return loadHabitoPort.byId(id).orElseThrow(() -> new NoSuchElementException("Habito no encontrado: " + id));
+        return loadHabitoPort.byId(id).orElseThrow(() -> new NoSuchElementException("Hábito no encontrado: " + id));
     }
 
     private ProgresoParticipanteHabits requireProgreso(UserId participanteId) {

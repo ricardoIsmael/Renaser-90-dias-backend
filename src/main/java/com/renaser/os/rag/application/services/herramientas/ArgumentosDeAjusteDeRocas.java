@@ -60,7 +60,7 @@ final class ArgumentosDeAjusteDeRocas {
         String eje = eje(invocacion, ejesValidos);
         String titulo = texto(invocacion, TITULO);
         if (titulo == null) {
-            throw new PlanMalFormadoException("Falta el titulo de la accion.");
+            throw new PlanMalFormadoException("Falta el título de la acción.");
         }
         return new AccionPedida(fecha(invocacion.argumento(FECHA)),
                 new AccionDelPlan(eje, titulo, hora(invocacion, INICIO), hora(invocacion, FIN)));
@@ -130,7 +130,7 @@ final class ArgumentosDeAjusteDeRocas {
         } catch (NumberFormatException | ArithmeticException noEsEntero) {
             // cae al rechazo de abajo, con el mismo mensaje
         }
-        throw new PlanMalFormadoException("autoevaluacionInicio tiene que ser un numero entero del "
+        throw new PlanMalFormadoException("autoevaluacionInicio tiene que ser un número entero del "
                 + PlanificarRocasPort.AUTOEVALUACION_MINIMA + " al " + PlanificarRocasPort.AUTOEVALUACION_MAXIMA + ".");
     }
 

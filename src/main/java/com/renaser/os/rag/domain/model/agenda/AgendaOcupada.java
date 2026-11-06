@@ -24,7 +24,7 @@ public record AgendaOcupada(List<Tramo> ocupados) {
     public AgendaOcupada {
         ocupados = unir(Objects.requireNonNull(ocupados, "ocupados es obligatorio"));
         if (ocupados.size() > MAXIMO_TRAMOS) {
-            throw new IllegalArgumentException("Son demasiados tramos: junta los contiguos (maximo " + MAXIMO_TRAMOS + ").");
+            throw new IllegalArgumentException("Son demasiados tramos: junta los contiguos (máximo " + MAXIMO_TRAMOS + ").");
         }
     }
 
@@ -40,7 +40,7 @@ public record AgendaOcupada(List<Tramo> ocupados) {
 
         public Tramo {
             if (desde < 0 || hasta > FIN_DEL_DIA || desde >= hasta) {
-                throw new IllegalArgumentException("Tramo invalido: " + desde + "-" + hasta);
+                throw new IllegalArgumentException("Tramo inválido: " + desde + "-" + hasta);
             }
         }
 
@@ -74,7 +74,7 @@ public record AgendaOcupada(List<Tramo> ocupados) {
         }
         String[] partes = texto.split("[,;]");
         if (partes.length > MAXIMO_TRAMOS) {
-            throw new IllegalArgumentException("Son demasiados tramos: junta los contiguos (maximo " + MAXIMO_TRAMOS + ").");
+            throw new IllegalArgumentException("Son demasiados tramos: junta los contiguos (máximo " + MAXIMO_TRAMOS + ").");
         }
         List<Tramo> delDia = new ArrayList<>();
         List<Tramo> siguiente = new ArrayList<>();

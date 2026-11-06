@@ -137,9 +137,9 @@ public class EspirituService implements ConsultarEstadoEspirituUseCase, Entregar
         asegurarAvance(command.actorId(), progreso.diaEnEscalaBase(), zona, ahora);
 
         RegistroEspiritu registro = loadPort.porParticipanteYDia(command.actorId(), command.dia())
-                .orElseThrow(() -> new NoSuchElementException("Ese dia no esta desbloqueado"));
+                .orElseThrow(() -> new NoSuchElementException("Ese día no está desbloqueado"));
         if (registro.estado() != EstadoRegistroEspiritu.PENDIENTE) {
-            throw new IllegalStateException("Ya se registro este dia (enviado o vencido): " + registro.estado());
+            throw new IllegalStateException("Ya se registró este día (enviado o vencido): " + registro.estado());
         }
         boolean aTiempo = registro.entregar(command.resumenTexto(), ahora);
         savePort.save(registro);

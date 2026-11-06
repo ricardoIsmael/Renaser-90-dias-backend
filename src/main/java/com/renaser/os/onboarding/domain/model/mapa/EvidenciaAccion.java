@@ -28,6 +28,6 @@ public enum EvidenciaAccion {
                 return evidencia;
             }
         }
-        throw new IllegalArgumentException("Evidencia de accion desconocida: " + clave);
+        throw new IllegalArgumentException("Evidencia de acción desconocida: " + clave);
     }
 }

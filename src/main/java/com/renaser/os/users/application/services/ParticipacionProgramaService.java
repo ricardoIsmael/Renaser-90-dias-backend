@@ -156,7 +156,7 @@ public class ParticipacionProgramaService implements ActivateSelfTrackingUseCase
         requireStaffRole(actor);
 
         if (loadParticipacionProgramaPort.byParticipanteId(actor.id()).isPresent()) {
-            throw new IllegalStateException("Ya activaste tu seguimiento personal de habitos y objetivos");
+            throw new IllegalStateException("Ya activaste tu seguimiento personal de hábitos y objetivos");
         }
 
         var programa = programaPropio.para(actor.id());

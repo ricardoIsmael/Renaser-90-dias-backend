@@ -91,7 +91,7 @@ class GeminiVozAdapter implements SintetizarVozPort {
         } catch (ProveedorIaNoDisponibleException e) {
             throw e;
         } catch (IOException e) {
-            log.warn("Gemini TTS no respondio ({}); la app usa el TTS del telefono", e.getClass().getSimpleName());
+            log.warn("Gemini TTS no respondió ({}); la app usa el TTS del teléfono", e.getClass().getSimpleName());
             throw new ProveedorIaNoDisponibleException(TraduccionErroresGoogleGenAi.MENSAJE_PROVEEDOR,
                     TraduccionErroresGoogleGenAi.ESPERA_TRAS_FALLO_DEL_PROVEEDOR);
         } catch (RuntimeException e) {

@@ -54,7 +54,7 @@ class EdicionDeObjetivoSemanalService implements EdicionDeObjetivoSemanalPort {
     @Override
     public ResultadoEdicion editar(UserId aprendizId, int numeroSemana, String eje, CambioDelObjetivo cambio) {
         if (cambio == null || cambio.vacio() || eje == null || !PlanificacionDeRocasPort.EJES.contains(eje)) {
-            return rechazo(MotivoRechazo.DATOS_INVALIDOS, new IllegalArgumentException("eje o cambio invalido"));
+            return rechazo(MotivoRechazo.DATOS_INVALIDOS, new IllegalArgumentException("eje o cambio inválido"));
         }
         try {
             Optional<RocaSemanal> roca = rocaDelEje(aprendizId, numeroSemana, EjeObjetivo.valueOf(eje));

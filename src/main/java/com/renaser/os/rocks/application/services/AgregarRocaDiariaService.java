@@ -90,7 +90,7 @@ class AgregarRocaDiariaService implements AgregarRocaDiariaUseCase {
      */
     private static void requireDiaQueTodaviaNoLlego(LocalDate fecha, LocalDate hoy, SemanaPrograma semanas) {
         if (fecha.equals(hoy)) {
-            throw new IllegalStateException("CURRENT_DAY: el dia en curso no se reacomoda");
+            throw new IllegalStateException("CURRENT_DAY: el día en curso no se reacomoda");
         }
         FechasPlanificables fechas = FechasPlanificables.para(hoy, EstadoPlazo.EN_PLAZO, semanas);
         if (!fechas.contiene(fecha)) {

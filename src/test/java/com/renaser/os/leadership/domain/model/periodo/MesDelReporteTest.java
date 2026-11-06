@@ -49,7 +49,7 @@ class MesDelReporteTest {
 
         assertThat(MesDelReporte.pedido(null, LIMA, ahora).mes()).isEqualTo(YearMonth.of(2026, 10));
         assertThatThrownBy(() -> MesDelReporte.pedido("2026-11", LIMA, ahora))
-                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("todavia no empezo");
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("todavía no empezó");
         assertThatThrownBy(() -> MesDelReporte.pedido("octubre", LIMA, ahora))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("AAAA-MM");
     }

@@ -203,7 +203,7 @@ class PlanDeHabitosServiceTest {
     void rechazoSube() {
         UUID habitoId = UUID.randomUUID();
         when(cambiarEstadoUseCase.cambiarEstado(any()))
-                .thenThrow(new IllegalStateException("Este habito es obligatorio y no se puede pausar"));
+                .thenThrow(new IllegalStateException("Este hábito es obligatorio y no se puede pausar"));
 
         assertThatThrownBy(() -> servicio.pausar(aprendiz, habitoId, null)).isInstanceOf(IllegalStateException.class);
     }

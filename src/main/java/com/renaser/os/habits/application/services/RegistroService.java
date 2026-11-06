@@ -651,7 +651,7 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
     /** Devuelve el progreso ya leido para que el llamador no tenga que volver a pedirlo (V-5). */
     private ProgresoParticipanteHabits requireSelf(UserId actorId, UserId participanteId) {
         if (!actorId.equals(participanteId)) {
-            throw new NotAuthorizedException("Solo el propio participante puede operar sobre sus habitos");
+            throw new NotAuthorizedException("Solo el propio participante puede operar sobre sus hábitos");
         }
         return requireProgreso(participanteId);
     }
@@ -686,7 +686,7 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
     }
 
     private Habito requireHabito(HabitoId id) {
-        return loadHabitoPort.byId(id).orElseThrow(() -> new NoSuchElementException("Habito no encontrado: " + id));
+        return loadHabitoPort.byId(id).orElseThrow(() -> new NoSuchElementException("Hábito no encontrado: " + id));
     }
 
     private ProgresoParticipanteHabits requireProgreso(UserId participanteId) {

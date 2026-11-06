@@ -53,7 +53,7 @@ public class ActorAutenticadoArgumentResolver implements HandlerMethodArgumentRe
                 return null;
             }
             throw new IllegalArgumentException(
-                    "No hay sesion activa ni header " + HEADER_ACTOR_ID + " — no se puede resolver el actor");
+                    "No hay sesión activa ni header " + HEADER_ACTOR_ID + " — no se puede resolver el actor");
         }
         return UserId.of(header);
     }

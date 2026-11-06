@@ -107,7 +107,7 @@ public final class User {
      */
     public void aprobar() {
         if (status != UserStatus.INACTIVE) {
-            throw new IllegalStateException("Solo se puede aprobar una cuenta pendiente de aprobacion");
+            throw new IllegalStateException("Solo se puede aprobar una cuenta pendiente de aprobación");
         }
         this.status = UserStatus.ACTIVE;
     }

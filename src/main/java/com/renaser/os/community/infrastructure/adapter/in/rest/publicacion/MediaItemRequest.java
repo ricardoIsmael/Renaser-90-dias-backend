@@ -94,7 +94,7 @@ public record MediaItemRequest(@NotBlank String url, @NotBlank String mimeType) 
         try {
             camino = new URI(sinFirma).getPath(); // getPath() ya viene decodificado (%2F -> /)
         } catch (URISyntaxException e) {
-            throw new IllegalArgumentException("url de media invalida: " + original, e);
+            throw new IllegalArgumentException("url de media inválida: " + original, e);
         }
         if (camino == null || camino.isBlank() || camino.equals("/")) {
             throw new IllegalArgumentException("url de media sin ruta de archivo: " + original);

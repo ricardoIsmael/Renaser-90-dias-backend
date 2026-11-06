@@ -86,7 +86,7 @@ final class RecepcionGeminiLive implements WebSocket.Listener {
 
     @Override
     public void onError(WebSocket webSocket, Throwable error) {
-        terminar("error de conexion (" + error.getClass().getSimpleName() + ")");
+        terminar("error de conexión (" + error.getClass().getSimpleName() + ")");
     }
 
     private void terminar(String motivo) {

@@ -154,7 +154,7 @@ class VerificacionEmailService implements EnviarCodigoVerificacionEmailUseCase, 
         if (!limitarSolicitudesResetPort.registrarIntento("email-verification:espera:" + email,
                 ESPERA_ENTRE_ENVIOS, 1)) {
             throw new RateLimitExceededException("Espera " + ESPERA_ENTRE_ENVIOS.toSeconds()
-                    + " segundos antes de pedir otro codigo");
+                    + " segundos antes de pedir otro código");
         }
     }
 

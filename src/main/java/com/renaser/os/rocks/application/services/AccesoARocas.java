@@ -58,6 +58,6 @@ final class AccesoARocas {
 
     static SemanaPrograma semanasParaPlanificarUnDia(ProgresoParticipanteRocks progreso, LocalDate hoy) {
         return progreso.semanas(hoy).orElseThrow(() -> new IllegalArgumentException(
-                "INVALID_DATE: todavia no eligio su Dia 1, asi que no hay dias del programa para planificar"));
+                "INVALID_DATE: todavía no eligió su Día 1, así que no hay días del programa para planificar"));
     }
 }

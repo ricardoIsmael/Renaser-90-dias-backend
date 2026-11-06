@@ -93,16 +93,16 @@ public class SantuarioService implements IniciarSesionBloqueoUseCase, CompletarS
         requireSelf(command.actorId(), registro.participanteId());
         Habito habito = requireHabito(registro);
         if (!habito.esBloqueo()) {
-            throw new IllegalArgumentException("Este habito no es de tipo Santuario (BLOQUEO)");
+            throw new IllegalArgumentException("Este hábito no es de tipo Santuario (BLOQUEO)");
         }
         if (loadSesionPort.porRegistro(registro.id()).isPresent()) {
-            throw new IllegalStateException("Ya existe una sesion de Santuario para este registro");
+            throw new IllegalStateException("Ya existe una sesión de Santuario para este registro");
         }
 
         Instant ahora = clock.now();
         VentanaBloqueo ventana = resolverVentana(registro, habito);
         if (ventana != null && ahora.isBefore(ventana.disparo())) {
-            throw new IllegalStateException("Todavia no es la hora de iniciar tu Santuario");
+            throw new IllegalStateException("Todavía no es la hora de iniciar tu Santuario");
         }
 
         registro.iniciar(ahora);
@@ -244,12 +244,12 @@ public class SantuarioService implements IniciarSesionBloqueoUseCase, CompletarS
 
     private Habito requireHabito(RegistroHabito registro) {
         return loadHabitoPort.byId(registro.habitoId())
-                .orElseThrow(() -> new NoSuchElementException("Habito no encontrado: " + registro.habitoId()));
+                .orElseThrow(() -> new NoSuchElementException("Hábito no encontrado: " + registro.habitoId()));
     }
 
     private SesionBloqueo requireSesion(RegistroHabitoId registroId) {
         return loadSesionPort.porRegistro(registroId)
-                .orElseThrow(() -> new NoSuchElementException("No hay sesion de Santuario para este registro"));
+                .orElseThrow(() -> new NoSuchElementException("No hay sesión de Santuario para este registro"));
     }
 
     private ProgresoParticipanteHabits requireProgreso(UserId participanteId) {

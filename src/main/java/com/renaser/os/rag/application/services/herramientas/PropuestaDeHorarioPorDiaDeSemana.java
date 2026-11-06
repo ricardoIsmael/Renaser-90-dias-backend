@@ -99,10 +99,10 @@ public class PropuestaDeHorarioPorDiaDeSemana implements HerramientaAgente {
         String dia = ArgumentosDeHorario.nombre(pedido.diaSemana());
         String herramienta = pedido.accion() == Accion.APAGAR ? PropuestaDeApagarDia.NOMBRE
                 : PropuestaDeCambioDeHorario.NOMBRE;
-        throw new PropuestaImposibleException("La persona pidio un solo " + dia + ", no todos los " + dia
+        throw new PropuestaImposibleException("La persona pidió un solo " + dia + ", no todos los " + dia
                 + ": no se propone un cambio de todas las semanas. Usa " + herramienta + " con la fecha "
-                + proxima + " (el proximo " + dia + "). Si no queda claro si es solo ese dia o todas las semanas, "
-                + "preguntaselo.");
+                + proxima + " (el próximo " + dia + "). Si no queda claro si es solo ese día o todas las semanas, "
+                + "pregúntaselo.");
     }
 
     /** Lo que ve la persona junto a los botones, despues de descartar lo que habits rechazaria. */

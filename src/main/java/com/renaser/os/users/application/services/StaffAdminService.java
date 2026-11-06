@@ -131,7 +131,7 @@ class StaffAdminService implements ListStaffUseCase, UpdateUserStatusUseCase, Up
             // staff a ese estado desde este panel — no seria "desactivar", seria dejarlo
             // esperando una aprobacion que ya ocurrio. Para quitarle el acceso esta SUSPENDED.
             case INACTIVE -> throw new IllegalArgumentException(
-                    "No se puede pasar una cuenta a pendiente de aprobacion; para quitar acceso, suspendela");
+                    "No se puede pasar una cuenta a pendiente de aprobación; para quitar acceso, suspéndela");
         }
     }
 

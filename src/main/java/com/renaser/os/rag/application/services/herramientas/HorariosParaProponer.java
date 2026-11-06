@@ -68,7 +68,7 @@ final class HorariosParaProponer {
         HorariosDelDia dia = leer(puerto, actorId, fecha);
         if (dia.diaPrograma() < PRIMER_DIA_DEL_PROGRAMA || dia.diaPrograma() > dia.duracionDias()) {
             throw new PropuestaImposibleException("El " + ArgumentosDeHorario.texto(dia.fecha())
-                    + " queda fuera de sus " + dia.duracionDias() + " dias de programa: no hay horario que cambiar ese dia."
+                    + " queda fuera de sus " + dia.duracionDias() + " días de programa: no hay horario que cambiar ese día."
                     + conLaFechaDeHoy(puerto, actorId, fecha));
         }
         return dia;
@@ -86,7 +86,7 @@ final class HorariosParaProponer {
         }
         try {
             HorariosDelDia hoy = leer(puerto, actorId, null);
-            return " Hoy es " + ArgumentosDeHorario.texto(hoy.fecha()) + ", su dia " + hoy.diaPrograma()
+            return " Hoy es " + ArgumentosDeHorario.texto(hoy.fecha()) + ", su día " + hoy.diaPrograma()
                     + " de " + hoy.duracionDias() + ": revisa el año y la fecha que pediste y vuelve a intentar.";
         } catch (RuntimeException sinHoy) {
             return "";
@@ -107,7 +107,7 @@ final class HorariosParaProponer {
         return dia.habitos().stream()
                 .filter(habito -> habitoId.equals(habito.habitoId()))
                 .findFirst()
-                .orElseThrow(() -> new PropuestaImposibleException("Ese habito no esta entre sus habitos activos del "
+                .orElseThrow(() -> new PropuestaImposibleException("Ese hábito no está entre sus hábitos activos del "
                         + ArgumentosDeHorario.texto(dia.fecha()) + ". Consulta consultar_horarios y usa el "
                         + "habito_id que devuelve."));
     }
@@ -115,9 +115,9 @@ final class HorariosParaProponer {
     /** La cuota de {@code CuotaEdicionHorario}, tal como la informa {@code habits}: nunca se la saltea. */
     static void requireCupo(CuotaCambios cuota) {
         if (!cuota.semanaDeAcomodoLibre() && cuota.restantes() <= 0) {
-            throw new PropuestaImposibleException("No se puede proponer: ya uso sus " + cuota.limite()
-                    + " cambios de horario de esa semana del programa. No propongas el cambio; explicale que los "
-                    + "habitos que ya reacomodo esa semana los puede seguir ajustando desde la app, y el resto la "
+            throw new PropuestaImposibleException("No se puede proponer: ya usó sus " + cuota.limite()
+                    + " cambios de horario de esa semana del programa. No propongas el cambio; explícale que los "
+                    + "hábitos que ya reacomodó esa semana los puede seguir ajustando desde la app, y el resto la "
                     + "semana siguiente.");
         }
     }
@@ -128,8 +128,8 @@ final class HorariosParaProponer {
      */
     static void requireQueCambie(HorarioDeHabito actual, LocalTime inicio, LocalTime limite) {
         if (inicio.equals(actual.horaDisparo()) && Objects.equals(limite, actual.horaLimite())) {
-            throw new PropuestaImposibleException("'" + actual.titulo() + "' ya esta a las " + franja(inicio, limite)
-                    + " ese dia: no hay nada que cambiar y no se gasta un cambio de horario.");
+            throw new PropuestaImposibleException("'" + actual.titulo() + "' ya está a las " + franja(inicio, limite)
+                    + " ese día: no hay nada que cambiar y no se gasta un cambio de horario.");
         }
     }
 

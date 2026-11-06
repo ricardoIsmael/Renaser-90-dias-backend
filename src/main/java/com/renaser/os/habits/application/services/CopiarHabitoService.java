@@ -73,7 +73,7 @@ public class CopiarHabitoService implements CopiarHabitoAOtraFormacionUseCase {
     public HabitoDelCatalogo copiar(CopiarHabitoCommand command) {
         guard.requireAdmin(command.actorId());
         Habito origen = loadPort.byId(command.habitoId()).filter(Habito::esDeSistema)
-                .orElseThrow(() -> new NoSuchElementException("Habito no encontrado: " + command.habitoId()));
+                .orElseThrow(() -> new NoSuchElementException("Hábito no encontrado: " + command.habitoId()));
         if (origen.esDeFormacion(command.destino())) {
             throw new IllegalArgumentException("Elige otra formación: el hábito ya es de esa.");
         }

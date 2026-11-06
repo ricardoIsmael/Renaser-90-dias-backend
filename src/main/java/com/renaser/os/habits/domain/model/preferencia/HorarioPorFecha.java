@@ -52,7 +52,7 @@ public record HorarioPorFecha(LocalDate fecha, PreferenciaHorario preferencia, b
      */
     public static void requireApagable(LocalDate fecha, LocalDate hoy) {
         if (fecha.isBefore(hoy)) {
-            throw new IllegalArgumentException("No puedes cambiar un dia que ya paso");
+            throw new IllegalArgumentException("No puedes cambiar un día que ya pasó");
         }
     }
 }

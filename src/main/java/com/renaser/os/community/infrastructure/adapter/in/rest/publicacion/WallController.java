@@ -212,7 +212,7 @@ public class WallController {
         return switch (type) {
             case "LIKE" -> TipoReaccion.ME_GUSTA;
             case "DISLIKE" -> TipoReaccion.NO_ME_GUSTA;
-            default -> throw new IllegalArgumentException("type invalido: " + type);
+            default -> throw new IllegalArgumentException("type inválido: " + type);
         };
     }
 }

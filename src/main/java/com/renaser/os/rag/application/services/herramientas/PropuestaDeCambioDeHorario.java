@@ -100,7 +100,7 @@ public class PropuestaDeCambioDeHorario implements HerramientaAgente {
             return hoy.plusDays(1);
         }
         if (!cambio.fecha().isAfter(hoy)) {
-            throw new PropuestaImposibleException("Solo se pueden reacomodar dias futuros: el dia de hoy y los "
+            throw new PropuestaImposibleException("Solo se pueden reacomodar días futuros: el día de hoy y los "
                     + "anteriores no se cambian. Hoy es " + ArgumentosDeHorario.texto(hoy) + ".");
         }
         return cambio.fecha();
@@ -142,7 +142,7 @@ public class PropuestaDeCambioDeHorario implements HerramientaAgente {
         private void requireLimitePosterior() {
             if (horaLimite != null && !horaLimite.isAfter(horaInicio)) {
                 throw new PropuestaImposibleException("La hora_limite tiene que ser posterior a la hora_inicio. "
-                        + "Preguntale a la persona hasta que hora quiere tener el habito.");
+                        + "Pregúntale a la persona hasta qué hora quiere tener el hábito.");
             }
         }
 

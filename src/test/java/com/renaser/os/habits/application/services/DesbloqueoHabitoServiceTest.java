@@ -420,7 +420,7 @@ class DesbloqueoHabitoServiceTest {
 
         assertThatThrownBy(() -> service.elegir(new ElegirHabitoCommand(actor, habito.id(), 3)))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("dia 10");
+                .hasMessageContaining("día 10");
     }
 
     @Test
