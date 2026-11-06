@@ -16,7 +16,7 @@ record EventoResponse(String id, String title, String description, String coverU
                        String eventType, List<EventoWireMapper.ReglaRecordatorioWire> reminderRules,
                        boolean notifyOnCreate, boolean remindByEmail, String recurrenceFrequency, String createdById,
                        String audienceType, List<String> targetRoles, String formation, MeetResponse meet,
-                       AudienciaResponse audience, PersonaResponse organizer) {
+                       AudienciaResponse audience, PersonaResponse organizer, boolean recordingNotice) {
 
     /**
      * «Para quién es» (spec 044, contrato §3): solo para quien creó el evento o lo gestiona (FR-018). Para cualquier otro, {@code null}: el invitado
@@ -50,7 +50,7 @@ record EventoResponse(String id, String title, String description, String coverU
     EventoResponse conAudiencia(ResumenDeAudiencia audiencia, PersonaConvocable organizador) {
         return new EventoResponse(id, title, description, coverUrl, startsAt, durationMinutes, timezone, locationType, locationValue,
                 eventType, reminderRules, notifyOnCreate, remindByEmail, recurrenceFrequency, createdById, audienceType,
-                targetRoles, formation, meet, AudienciaResponse.from(audiencia), PersonaResponse.from(organizador));
+                targetRoles, formation, meet, AudienciaResponse.from(audiencia), PersonaResponse.from(organizador), recordingNotice);
     }
 
     /**
@@ -70,11 +70,21 @@ record EventoResponse(String id, String title, String description, String coverU
         return from(e, coverUrl, null);
     }
 
+    /**
+     * Spec 047 (decisión P4-B del dueño): la app muestra «Esta sesión se graba y se transcribe.» en el detalle del evento. Solo es {@code true} si
+     * Google confirmó la grabación o la transcripción de alguna sala del evento; nunca trae la transcripción.
+     */
+    EventoResponse conAvisoDeGrabacion(boolean seGraba) {
+        return new EventoResponse(id, title, description, coverUrl, startsAt, durationMinutes, timezone, locationType, locationValue,
+                eventType, reminderRules, notifyOnCreate, remindByEmail, recurrenceFrequency, createdById, audienceType,
+                targetRoles, formation, meet, audience, organizer, seGraba);
+    }
+
     /** El mismo evento con el enlace de Meet de UNA fecha, que reemplaza al del evento (FR-017). */
     EventoResponse conUbicacion(String valor) {
         return new EventoResponse(id, title, description, coverUrl, startsAt, durationMinutes, timezone, locationType, valor,
                 eventType, reminderRules, notifyOnCreate, remindByEmail, recurrenceFrequency, createdById, audienceType,
-                targetRoles, formation, meet, audience, organizer);
+                targetRoles, formation, meet, audience, organizer, recordingNotice);
     }
 
     static EventoResponse from(Evento e, String coverUrl, ResumenDeMeet meet) {
@@ -102,6 +112,7 @@ record EventoResponse(String id, String title, String description, String coverU
                 e.formacion().codigo(),
                 MeetResponse.from(meet),
                 null,
-                null);
+                null,
+                false);
     }
 }

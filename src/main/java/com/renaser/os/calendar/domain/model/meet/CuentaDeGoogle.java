@@ -26,6 +26,8 @@ public final class CuentaDeGoogle {
     public static final String PERMISO_CALENDARIO_PROPIO = "https://www.googleapis.com/auth/calendar.app.created";
     public static final String PERMISO_EVENTOS = "https://www.googleapis.com/auth/calendar.events";
     public static final String PERMISO_AJUSTES_DE_LA_SALA = "https://www.googleapis.com/auth/meetings.space.settings";
+    /** Spec 047 (FR-019): leer lo que pasó en las salas (conferencias, participantes, transcripciones y grabaciones). */
+    public static final String PERMISO_LEER_REUNIONES = "https://www.googleapis.com/auth/meetings.space.readonly";
     public static final String CALENDARIO_PRINCIPAL = "primary";
 
     private final String correo;

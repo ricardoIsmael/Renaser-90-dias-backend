@@ -25,9 +25,12 @@ final class ResumenesDeMeet {
     static final String CREANDOSE = "El enlace de Meet todavía se está creando.";
     static final String SIN_SINCRONIZAR = "Los cambios todavía no llegaron a Google.";
 
-    /** FR-037: qué hace falta en la cuenta de Google conectada para cada cosa que Google no dejó encender: {qué, plan}. */
+    /**
+     * FR-037: qué hace falta en la cuenta de Google conectada para cada cosa que Google no dejó encender: {qué, plan}. Corregido por la spec 047:
+     * transcribir NO exige Workspace (RenaserOs transcribe con el mismo Gmail y Google One).
+     */
     static final String[] GRABAR = {"grabar", "Google One de 2 TB o más en la cuenta conectada"};
-    static final String[] TRANSCRIBIR = {"transcribir", "Google Workspace"};
+    static final String[] TRANSCRIBIR = {"transcribir", "un plan de Google One que incluya la transcripción de Meet"};
     static final String[] NOTAS = {"las notas automáticas", "Gemini en Google Workspace"};
 
     private ResumenesDeMeet() {
@@ -55,7 +58,7 @@ final class ResumenesDeMeet {
 
     /**
      * FR-037: si en alguna fecha Google no dejó grabar, transcribir o tomar notas, una sola frase que dice qué hace falta, en el orden de la
-     * decisión del dueño («Para grabar hace falta Google One 2 TB o más en la cuenta conectada; para transcribir, Google Workspace.»). Lo que está
+     * decisión del dueño («Para grabar hace falta Google One 2 TB o más en la cuenta conectada; para transcribir, Google Workspace.»; corregido por la spec 047). Lo que está
      * encendido o no se pidió no se menciona.
      */
     static String avisoDelPlan(List<SalaMeet> salas) {
@@ -77,6 +80,15 @@ final class ResumenesDeMeet {
             frase.append("; para ").append(otro[0]).append(", ").append(otro[1]);
         }
         return frase.append('.').toString();
+    }
+
+    /**
+     * Spec 047 (P4-B): alguna sala creada del evento quedó grabando o transcribiendo según lo que Google confirmó (spec 040, FR-036). Sin esa
+     * confirmación no se afirma nada: un aviso de grabación que no es cierto también engaña.
+     */
+    static boolean seGrabaOTranscribe(List<SalaMeet> salas) {
+        return salas.stream().anyMatch(s -> s.estado() == EstadoSalaMeet.CREADO
+                && (Boolean.TRUE.equals(s.artefactos().grabacion()) || Boolean.TRUE.equals(s.artefactos().transcripcion())));
     }
 
     /** Cuánto pesa una fila para decidir el estado del evento: 0 = sin problema. */

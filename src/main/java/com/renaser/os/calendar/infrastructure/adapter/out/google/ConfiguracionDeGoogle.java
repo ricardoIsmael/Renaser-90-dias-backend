@@ -16,14 +16,14 @@ import java.util.Set;
  * Renaser: distintos de los de RenaserOs, que comparte el Gmail pero guarda su propio permiso.
  *
  * <p>Los permisos por defecto son los mínimos: el calendario propio de la app ({@code calendar.app.created}, FR-034) y {@code meetings.space.settings}
- * (quién puede entrar a la sala, FR-023), más {@code openid email} para saber de qué cuenta es el permiso. Si SC-001 mostrara que el permiso reducido
+ * (quién puede entrar a la sala, FR-023), {@code meetings.space.readonly} (leer la transcripción de las sesiones, spec 047, FR-019), más {@code openid email} para saber de qué cuenta es el permiso. Si SC-001 mostrara que el permiso reducido
  * no alcanza, se cambia {@code EVENTOS_GOOGLE_PERMISOS} a {@code calendar.events} sin tocar el código.
  */
 @Component
 class ConfiguracionDeGoogle implements ConfiguracionDeGooglePort {
 
     static final String PERMISOS_POR_DEFECTO = "https://www.googleapis.com/auth/calendar.app.created "
-            + "https://www.googleapis.com/auth/meetings.space.settings openid email";
+            + "https://www.googleapis.com/auth/meetings.space.settings https://www.googleapis.com/auth/meetings.space.readonly openid email";
     private static final Set<String> PERMISOS_DE_IDENTIDAD = Set.of("openid", "email", "profile");
 
     private final String clientId;

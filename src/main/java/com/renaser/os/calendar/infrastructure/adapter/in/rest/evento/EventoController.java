@@ -183,7 +183,7 @@ class EventoController {
         EventoVista evento = vista.evento();
         return EventoResponse.from(evento.evento(), evento.coverUrl(), vista.meet()).conAudiencia(
                 convocatoriaUseCase.resumenPara(actor, evento.evento()).orElse(null),
-                convocatoriaUseCase.organizador(evento.evento()).orElse(null));
+                convocatoriaUseCase.organizador(evento.evento()).orElse(null)).conAvisoDeGrabacion(vista.seGrabaOTranscribe());
     }
 
     private CrearEventoCommand aComandoCrear(UserId actorId, EventoRequest r) {

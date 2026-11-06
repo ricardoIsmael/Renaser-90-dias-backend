@@ -112,10 +112,16 @@ class EventoConSalaDeMeetService implements EventosConMeetUseCase {
     @Override
     public EventoConMeetVista obtener(UserId actor, EventoId eventoId) {
         EventoVista vista = obtenerUseCase.obtener(actor, eventoId);
-        if (!vista.evento().usaSalaDeMeetAutomatica() || !accesoEventoService.gestiona(actor, vista.evento())) {
+        if (!vista.evento().usaSalaDeMeetAutomatica()) {
             return new EventoConMeetVista(vista, null);
         }
-        return new EventoConMeetVista(vista, ResumenesDeMeet.de(vista.evento(), loadSalaPort.porEvento(eventoId), clock.now()));
+        List<SalaMeet> salas = loadSalaPort.porEvento(eventoId);
+        // Spec 047 (P4-B): «Esta sesión se graba y se transcribe.» para todo el que ve el evento, solo si Google lo confirmó en alguna fecha.
+        boolean seGraba = ResumenesDeMeet.seGrabaOTranscribe(salas);
+        if (!accesoEventoService.gestiona(actor, vista.evento())) {
+            return new EventoConMeetVista(vista, null, seGraba);
+        }
+        return new EventoConMeetVista(vista, ResumenesDeMeet.de(vista.evento(), salas, clock.now()), seGraba);
     }
 
     @Override
@@ -203,6 +209,6 @@ class EventoConSalaDeMeetService implements EventosConMeetUseCase {
         Optional<Evento> reciente = loadEventoPort.byId(id);
         Evento evento = reciente.orElse(guardado.evento());
         ResumenDeMeet resumen = ResumenesDeMeet.de(evento, salas, clock.now());
-        return new EventoConMeetVista(new EventoVista(evento, guardado.coverUrl()), resumen);
+        return new EventoConMeetVista(new EventoVista(evento, guardado.coverUrl()), resumen, ResumenesDeMeet.seGrabaOTranscribe(salas));
     }
 }

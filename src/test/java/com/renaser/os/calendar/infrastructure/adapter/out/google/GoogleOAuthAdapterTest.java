@@ -75,12 +75,13 @@ class GoogleOAuthAdapterTest {
         assertThat(uno.codeVerifier()).isNotEqualTo(otro.codeVerifier());
     }
 
-    // spec 040 FR-010
+    // spec 040 FR-010; spec 047 FR-019 (suma leer las reuniones)
     @Test
     @DisplayName("FR-010: los permisos que tienen que estar todos son los pedidos sin los de identidad")
     void permisosObligatorios() {
         assertThat(adapter.permisosObligatorios()).containsExactlyInAnyOrder(
-                "https://www.googleapis.com/auth/calendar.app.created", "https://www.googleapis.com/auth/meetings.space.settings");
+                "https://www.googleapis.com/auth/calendar.app.created", "https://www.googleapis.com/auth/meetings.space.settings",
+                "https://www.googleapis.com/auth/meetings.space.readonly");
     }
 
     // spec 040 FR-010

@@ -12,5 +12,13 @@ public enum AccionDeAuditoriaGoogle {
     DESCONECTAR,
     CUENTA_REVOCADA,
     /** Pedir la grabación, la transcripción y las notas automáticas de la sala (spec 040, FR-036). */
-    AJUSTAR_GRABACION
+    AJUSTAR_GRABACION,
+    /** Spec 047: la transcripción de una sesión quedó guardada (cifrada). */
+    TRANSCRIPCION_GUARDADA,
+    /** Spec 047: la sesión terminó sin transcripción que guardar (sin reunión, sin transcripción o sin permiso). */
+    TRANSCRIPCION_SIN_DATOS,
+    /** Spec 047: ADMIN o ALCHEMIST sacó una transcripción, con motivo. */
+    TRANSCRIPCION_LEIDA,
+    /** Spec 047: se borró una transcripción (retención, sala borrada). */
+    TRANSCRIPCION_BORRADA
 }
