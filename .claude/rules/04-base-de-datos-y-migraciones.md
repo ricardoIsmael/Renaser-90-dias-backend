@@ -1,3 +1,9 @@
+---
+paths:
+  - "src/main/resources/db/**"
+  - "src/test/resources/**/*.sql"
+---
+
 # Base de datos y migraciones
 
 ## La base es propia

@@ -1,3 +1,10 @@
+---
+paths:
+  - "specs/**"
+  - "src/test/**"
+  - "scripts/trazabilidad-specs*"
+---
+
 # Trazabilidad de specs
 
 Cada requisito (`FR-NNN`) y cada criterio de éxito (`SC-NNN`) de una spec que se exige tiene que

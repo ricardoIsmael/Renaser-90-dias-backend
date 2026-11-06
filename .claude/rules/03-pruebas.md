@@ -40,6 +40,15 @@ nada como terminado sin haber corrido las pruebas.
   aparece, no se probó nada. Hay **dos** líneas de resumen: la de surefire (unitarias, 4889 al
   2026-09-27) y la de failsafe (integración, 130). El CI las suma y falla si no aparece ninguna.
   *Corregido 2026-09-27: decía «2421 al 2026-09-05» y «21».*
+- **Maven nunca corre en el checkout que usa el IDE**, ni para una sola clase: recompila `target/` y el backend
+  levantado deja de responder sin avisar (la app dice «No se pudo guardar» y el health da conexión rechazada). Se corre
+  en un worktree propio (E-313, E-104). El `clean verify` completo no lleva `-DargLine=-Xmx600m`, que solo alcanza para
+  pruebas sueltas (E-322, E-329). *Traído de `CLAUDE.MD` §0.2 el 2026-11-06, al mover ese archivo a
+  `docs/ARQUITECTURA.md`.*
+- **Un canal en vivo (chat, voz) se prueba con un mensaje de OTRA cuenta**: el mensaje propio la pantalla lo agrega sola
+  y esconde que el canal no funciona (E-331). *Ídem.*
+- **El camino estándar es `scripts/verificar.sh`** (arnés, trazabilidad y `clean verify` con la guarda de E-111); el CI
+  corre el mismo script.
 - **Dos builds no pueden compartir el mismo `target/`** (E-104), y una app levantada desde el IDE
   también lo bloquea (`Failed to delete ... target`). Si hay que compilar con el repo ocupado, se
   trabaja en un `git worktree` propio o sobre una copia aparte del checkout.
@@ -59,6 +68,11 @@ nada como terminado sin haber corrido las pruebas.
 - **El rol no se puede inyectar**: mandar `role` en el body de un alta pública no lo cambia.
 - `EndpointAuthorizationDeclarationTest` falla si un endpoint no declara `@RequiresPermission` ni
   `@PublicEndpoint`.
+- **Y que declare su funcionalidad** (D-267): `@Funcionalidad("clave")` del catálogo de `plataforma`, o
+  `@SinInterruptor(motivo = …)` si es anti-bloqueo (login, sesión, consola). `FuncionalidadDeclaradaTest` rompe el build
+  si falta o si la clave no existe. Un endpoint de la consola Soporte TI se prueba además con ADMIN y ALQUIMISTA → 403.
+  *Traído de `CLAUDE.MD` §0.3 el 2026-11-06.*
+- Antes de cada release: revisar dependencias con vulnerabilidades conocidas (lo vigila `seguridad.yml`).
 
 ## Escribir el test que hubiera atrapado el bug
 

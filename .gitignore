@@ -69,3 +69,13 @@ graphify-out/
 # Estaba a un `git add .` de quedar en la historia del repo, de donde no se borra facil.
 # Ver .env.example para la lista de variables que hace falta definir.
 .run/
+
+### Python compilado (lo genera el intérprete; no es del repo) ###
+__pycache__/
+*.pyc
+
+### Salida de scripts/verificar.sh (la evidencia va resumida en el PR, no en git) ###
+salida-maven.log
+
+### Estado de la tarea del arnés de agentes: es de cada worktree, no se versiona ###
+.arnes/

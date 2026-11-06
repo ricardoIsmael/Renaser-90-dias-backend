@@ -5,8 +5,9 @@
 - Todo avance se documenta **en el mismo cambio**. Si se cierra un bloqueante, se marca resuelto; si
   se toma una decisión, se agrega al registro de `docs/MODULOS_A_AVANZAR.md` §8.
 - **Los documentos son fuente de verdad y no pueden contradecirse.** Si un cambio deja una sección
-  vieja, se corrige en el momento — no "más adelante". `CLAUDE.MD` se lee en cada sesión, así que una
-  contradicción ahí se propaga hacia adelante hasta que alguien la nota.
+  vieja, se corrige en el momento — no "más adelante". `AGENTS.md` y estas reglas se leen en cada sesión, así que
+  una contradicción ahí se propaga hacia adelante hasta que alguien la nota. *Decía `CLAUDE.MD` hasta el 2026-11-06:
+  ese archivo pasó a `docs/ARQUITECTURA.md` y el mapa de cada sesión es `AGENTS.md`.*
 - Cuando se corrige una sección vieja, se deja **a la vista qué decía antes y por qué cambió**
   (`> **Corregido 2026-08-31.** Esta línea decía…`). Es lo que evita que la próxima persona
   "arregle" la corrección de vuelta al error.

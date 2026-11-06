@@ -1,6 +1,11 @@
 <!--
 Sync Impact Report
-- Version change: (plantilla sin completar) → 1.0.0
+- Version change: 1.0.0 → 1.0.1 (PATCH, 2026-11-06, arnés propio; propuesta en los PR `arnes-propio` de los dos
+  repos: la aprobación del dueño es fusionarlos). Solo redacción, ningún principio cambia:
+  - Las reglas detalladas del frontend están en `AGENTS.md` (vigentes) y las excepciones de los tabs en
+    `docs/decisiones/` (antes también en `AGENTS.md`). Las del backend, en `.claude/rules/` y su `AGENTS.md`.
+  - VI: «Jost» → «Inter, nombrada solo en `src/theme/fuentes.ts`» (decisión del dueño del 2026-10-31, ya en el código).
+- Antes: (plantilla sin completar) → 1.0.0
 - Principios: los siete son nuevos (primera adopción).
   I. Las dependencias apuntan al dominio
   II. No se inventan reglas de negocio
@@ -20,7 +25,7 @@ Sync Impact Report
 
 Rige el backend (`Renaser-90-dias-backend`, Java 25 / Spring Boot, hexagonal + Spring Modulith) y
 la app (`Renaser-90-dias-frontend-`, Expo / React Native / TypeScript). Las reglas detalladas viven
-en `.claude/rules/00..05` del backend y en `AGENTS.md` del frontend; esta constitución resume lo que
+en `.claude/rules/` y `AGENTS.md` del backend y en `AGENTS.md` del frontend; esta constitución resume lo que
 no se negocia y gana ante cualquier contradicción de una spec, un plan o una tarea.
 
 ## Core Principles
@@ -89,10 +94,10 @@ sin tocar reglas.
 ### VI. Los cinco tabs no se tocan sin autorización
 
 - Hoy, Plan, Training, Comunidad y Yo MUST NOT alterarse sin autorización explícita del dueño. Toda
-  excepción se anota en `AGENTS.md` con fecha, alcance y «lo que cambia y nada más»; una excepción
-  no abre el tab.
-- Pantallas: un solo scroll, márgenes de `useResponsive()`, áreas táctiles de 48–52 px, Jost
-  (nunca pesos ultrafinos), tipo oración, contraste del tema en claro y oscuro, validación antes de
+  excepción se anota en `docs/decisiones/` del frontend (con su fila en el índice) con fecha, alcance y
+  «lo que cambia y nada más»; una excepción no abre el tab.
+- Pantallas: un solo scroll, márgenes de `useResponsive()`, áreas táctiles de 48–52 px, Inter
+  nombrada solo en `src/theme/fuentes.ts` (nunca pesos ultrafinos), tipo oración, contraste del tema en claro y oscuro, validación antes de
   avanzar, `useSystemBackHandler` en toda vista hija u hoja.
 - Textos en español de Perú con tuteo. El voseo es una regresión.
 
@@ -133,4 +138,4 @@ sin tocar reglas.
 - Cumplimiento: cada plan lleva su Constitution Check; cada revisión verifica los siete principios.
   Toda complejidad que los tensione se justifica en la tabla *Complexity Tracking* del plan.
 
-**Version**: 1.0.0 | **Ratified**: 2026-10-12 | **Last Amended**: 2026-10-12
+**Version**: 1.0.1 | **Ratified**: 2026-10-12 | **Last Amended**: 2026-11-06

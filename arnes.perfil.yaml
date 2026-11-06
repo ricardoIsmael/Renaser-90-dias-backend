@@ -1,0 +1,36 @@
+# Perfil de este backend para el arnés de agentes (núcleo genérico, aparte de este repositorio: grafo, bucles, validador).
+# Dice cómo se hace aquí cada nodo del grafo. Lo valida scripts/verificar.sh con `arnes validar --perfil arnes.perfil.yaml`
+# (busca el núcleo en ARNES_DIR o en ~/Documentos/arnes). Mapa de las 14 fases a los dos repos: docs/arnes/fases.md.
+version: 1
+nombre: backend-spring
+stack: spring
+rutas:
+  incidentes: ~/.local/share/arnes/backend-spring/incidentes.jsonl   # fuera del worktree: así se ve si un error se repite entre tareas
+  instrucciones: AGENTS.md
+  progreso: PROGRESO.md
+  reglas: .claude/rules/
+  specs: specs/
+  bitacora_de_errores: docs/BITACORA_ERRORES.md
+  familias_de_errores: docs/arnes/familias-de-errores.md
+comandos:
+  especificar: "skill: speckit-specify (specs/NNN-…/spec.md, con FR-NNN y SC-NNN)"
+  aclarar: "skill: speckit-clarify (hasta 5 preguntas al dueño, con opciones y la recomendada primero; decisiones D-NN)"
+  planear: "skill: speckit-plan (contratos de la API y migraciones)"
+  dividir: "skill: speckit-tasks y speckit-analyze"
+  reproducir: "agente: gh issue create --label bug + prueba (JUnit) que falla por la causa; la causa va a la bitácora (E-NN)"
+  implementar: "agente: en su worktree (scripts/worktree-nuevo.sh <rama>), con la marca spec NNN FR-NNN en las pruebas"
+  verificar: "~/.config/renaser-e2e/herramientas/pesado.sh scripts/verificar.sh"
+  verificar_rapido: "scripts/verificar.sh --rapido"
+  e2e: "manual: Maestro y mobile-mcp en el emulador contra este backend local con la base clonada (nunca producción)"
+  logs: "manual: el registro del backend local durante el E2E, sin ERROR ni trazas nuevas"
+  mejorar: "agente: arnes incidente «qué pasó» --causa <qué le faltó al arnés>, la mejora (regla en AGENTS.md o el perfil, chequeo en verificar, prueba de familias de errores, hook o tope) y arnes incidente cerrar <id> --mejora <archivo> --tipo <tipo>"
+  pr: "gh pr create (con el resumen de verificar.sh, el E2E y lo que no se pudo verificar)"
+  cerrar: "manual: scripts/worktree-cerrar.sh <rama> (borra worktree, rama y grafo) y PROGRESO.md al día"
+reglas:
+  - "Arquitectura hexagonal: .claude/rules/01-arquitectura-hexagonal.md."
+  - "Una migración publicada no se edita: se escribe otra."
+  - "Nunca contra producción ni con sus secretos."
+  - "Solo el dueño fusiona."
+# La suite completa tarda ~45 min: el tope de minutos del bucle de verificación sube a 240 (los intentos quedan en 3).
+presupuestos:
+  verificacion: { intentos_max: 3, minutos_max: 240 }
