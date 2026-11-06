@@ -53,6 +53,6 @@ public class PoliticaClaseDiaria implements PoliticaHabito {
     public DecisionPolitica puedeCompletarseDirecto(Habito habito, ContextoCompletar contexto) {
         // El motivo lo lee una persona en el telefono: dice que falta Y por donde SI se hace.
         return DecisionPolitica.noProcede(
-                "La Clase Diaria se da por cumplida al enviar el resumen de la clase, desde Training");
+                "La Clase Diaria se da por cumplida al enviar el resumen de la clase, desde Entrenar");
     }
 }

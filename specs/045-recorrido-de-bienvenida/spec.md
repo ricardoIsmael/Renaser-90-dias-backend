@@ -2,12 +2,30 @@
 
 **Feature Branch**: `045-recorrido-y-046-sobrenombre` (spec; la implementación irá en `045-recorrido-de-bienvenida`, backend y app)
 **Created**: 2026-11-06
-**Status**: Borrador para aprobar. **No se implementa nada** hasta que el dueño responda las preguntas marcadas «[DECISIÓN DEL DUEÑO]» y apruebe la vista previa.
+**Status**: Aprobada por el dueño (2026-11-06), con las decisiones de abajo. En implementación (D-330).
 **Input**: Pedido del dueño (2026-11-06): que después de la Ficha Inicial o del diagnóstico la persona llene todo completo; que no sea una pantalla de «publicar» sino **un recorrido tipo tutorial, no tan específico**, que la guíe hasta publicar su **primer post en el Muro**; al publicar, **una animación de felicitación con confeti**; que explique **rápido y en poco** dónde está cada cosa: **Hoy, Plan y Training**; y «el inglés con español se ve feo en una app»: **ningún texto en inglés**.
 
 **Se apoya en**: la guía de arranque actual (`src/features/sparkie/`: `SparkieOverlay`, `useArranqueGuiado`, `data/asistente.ts`; D-95, D-102, D-255 e issue #50 de la app), la Ficha Inicial (`src/features/onboarding/`), el diagnóstico (spec 026), «Tu programa empieza mañana» (spec 036), los términos (specs 027 y 039), el compositor real del Muro (`NuevaPublicacion`) y la celebración de pantalla completa (`fenix/components/AnfitrionDeCelebraciones`, `PantallaDeCelebracion`).
 
 **Vista previa**: `specs/045-recorrido-de-bienvenida/vista-previa/index.html` (una sola para las specs 045 y 046; se abre en el navegador, sin red salvo la fuente).
+
+## Decisiones del dueño (2026-11-06)
+
+| Pregunta | Decisión |
+|---|---|
+| D1 · La guía de SER actual | **A, integrar**: el recorrido reemplaza el saludo y la guía al Muro; la burbuja de SER queda solo para el Pacto. |
+| D2 · A quién le sale | **A, solo cuentas nuevas**: la migración marca como terminadas (`CUENTA_ANTERIOR`) todas las cuentas que ya existen. |
+| D3 · Foto en el primer post | **A, sigue obligatoria.** |
+| D4 · El personal | **A, lo ve solo si hace su programa propio** (fila de programa activada). |
+| D5 · Nombre de la pestaña | **A, «Entrenar»** en la barra («ENTRENAR») y en todos los textos que la nombran. La ruta interna sigue siendo `'Training'`. **El dueño autorizó explícitamente** tocar el nombre en la barra de los cinco tabs. |
+| D6 · El saludo | **A, «Te damos la bienvenida»**, sin género. |
+| D7 · El confeti | **A, solo en el primer post.** |
+| D8 · Los textos en inglés | **A, corregirlos todos en un commit aparte**: Ranking → «Tabla», Stickers → «Figuritas», checklist → «lista», Tickets → «Consultas», «Mi onboarding» → «Mis documentos», «· auto» → «· del teléfono». «chat» se queda. |
+
+**Autorización de los cinco tabs**: concedida por el dueño el 06/11 para todo lo listado en la sección «Autorización de los cinco tabs» y para el nombre «Entrenar».
+
+**Cambio de diseño respecto del borrador**: el estado del recorrido no va en `GET /onboarding/state` sino en su propia ruta, `GET/PUT /api/v1/me/recorrido` y `POST /api/v1/me/recorrido/terminar`
+(`{ mostrar, paso, terminadoEn, como }`), con su tabla `recorrido_de_bienvenida` (V180). Así no se toca el estado del ingreso, que leen muchas pantallas.
 
 ---
 
@@ -127,13 +145,12 @@ Como persona que lo saltó, puedo verlo otra vez desde **Yo → Ajustes → «Ve
 
 | # | Foco | Título | Frase | Botones |
 |---|------|--------|-------|---------|
-| 1 | Ninguno: el fénix de SER al centro | «Bienvenida, Ana» (con su primer nombre; sin nombre, «Bienvenida») | «Te muestro en un minuto dónde está cada cosa.» | «Empezar» · «Saltar» |
+| 1 | Ninguno: el fénix de SER al centro | «Te damos la bienvenida, Ana» (con su primer nombre; sin nombre, «Te damos la bienvenida») | «Te muestro en un minuto dónde está cada cosa.» | «Empezar» · «Saltar» |
 | 2 | Pestaña **Hoy** | «Hoy» | «Lo de hoy, de un vistazo: tu hábito de esta hora y tu acompañante SER.» | «Siguiente» · «Saltar» |
 | 3 | Pestaña **Plan** | «Plan» | «Tus objetivos y la semana: aquí decides hacia dónde vas.» | «Siguiente» · «Saltar» |
-| 4 | Pestaña **Training** (botón dorado del centro) | «Training» *(nombre según D5)* | «Tus hábitos del día, hora por hora. Aquí registras lo que haces.» | «Siguiente» · «Saltar» |
+| 4 | Pestaña **Entrenar** (botón dorado del centro) | «Entrenar» | «Tus hábitos del día, hora por hora. Aquí registras lo que haces.» | «Siguiente» · «Saltar» |
 | 5 | Pestaña **Comunidad** | «Tu primera publicación» | «Preséntate al grupo: quién eres y qué vienes a cambiar. Con una foto.» | «Escribir mi publicación» · «Ahora no» |
 
-- «Bienvenida» va en femenino o masculino según `sexo` de la Ficha Inicial si existe; si no, «Te damos la bienvenida». **[DECISIÓN DEL DUEÑO] D6.**
 - Tipo oración, tuteo de Perú, título a 20 px seminegrita, frase a 16 px, botones de 48 de alto o más.
 - Los textos viven en un solo archivo (`recorrido/data/pasosDelRecorrido.ts`) para que el dueño los cambie sin tocar la lógica.
 
@@ -157,7 +174,7 @@ Como persona que lo saltó, puedo verlo otra vez desde **Yo → Ajustes → «Ve
 
 ## Cuándo sale (una vez por cuenta)
 
-- **Lo recuerda el servidor**, no el teléfono (como el arranque guiado: cambiar de celular no lo vuelve a mostrar). Campo nuevo en `estado_onboarding`: `recorrido_visto_en` (instante) y `recorrido_paso` (1–5), y en `GET /api/v1/onboarding/state` dos campos opcionales: `tourSeenAt`, `tourStep`. `PUT /api/v1/onboarding/state` los acepta (`tourStep`, `tourDone: true`). Migración aditiva; un APK anterior los ignora.
+- **Lo recuerda el servidor**, no el teléfono (como el arranque guiado: cambiar de celular no lo vuelve a mostrar). Tabla `recorrido_de_bienvenida` (V180) y rutas `GET/PUT /api/v1/me/recorrido` y `POST /api/v1/me/recorrido/terminar` (`como`: `PUBLICO`, `LISTO` o `SALTO`). Un APK anterior no las llama.
 - **Sale cuando** (todo lo decide el servidor + la app):
   - la cuenta terminó el ingreso (ficha o diagnóstico, términos y activación), y
   - `tourSeenAt` es nulo, y
@@ -184,17 +201,17 @@ Como persona que lo saltó, puedo verlo otra vez desde **Yo → Ajustes → «Ve
 - **FR-006**: El paso del Muro MUST abrir el compositor real; nada se publica sin que la persona toque «Publicar».
 - **FR-007**: Al confirmar el servidor el primer post, la app MUST mostrar la celebración con confeti de 1,4 s, una sola vibración, sin bloquear toques, y sin confeti con «reducir movimiento».
 - **FR-008**: El recorrido MUST NOT montarse encima de una capa obligatoria ni del panel de SER.
-- **FR-009**: El servidor MUST guardar `tourSeenAt` y `tourStep` y devolverlos en `GET /onboarding/state`; los campos son opcionales para APK anteriores.
+- **FR-009**: El servidor MUST guardar el paso y cómo terminó el recorrido (`recorrido_de_bienvenida`) y devolverlo en `GET /api/v1/me/recorrido` con `mostrar` decidido por él (D2, D4).
 - **FR-010**: Ningún texto del recorrido MUST contener palabras en inglés (salvo nombres de marca).
 - **FR-011**: La guía SER actual MUST quedar según D1, sin dos guías sobre el Muro a la vez.
 - **FR-012**: La barra de pestañas MUST quedar visible y fija mientras dura el recorrido.
 
 ### Success Criteria
 
-- **SC-001**: Una cuenta nueva publica su primer post en la primera sesión en mayor proporción que hoy (medir con `GET /wall/mine` a las 24 h de activar; línea base: las últimas 4 semanas).
-- **SC-002**: El recorrido completo (sin escribir el post) toma menos de 40 s.
+- **SC-001**: Una cuenta nueva publica su primer post en la primera sesión en mayor proporción que hoy (medir con `GET /wall/mine` a las 24 h de activar; línea base: las últimas 4 semanas). [sin prueba automática: es una medida de uso en producción]
+- **SC-002**: El recorrido completo (sin escribir el post) toma menos de 40 s. [sin prueba automática: se mide en el E2E con una persona]
 - **SC-003**: Ninguna cuenta ve el recorrido dos veces sin pedirlo (prueba: dos teléfonos, la misma cuenta).
-- **SC-004**: El confeti no baja de 55 cuadros por segundo en un teléfono de gama baja (medido con el monitor de rendimiento de Reanimated en el emulador).
+- **SC-004**: El confeti no baja de 55 cuadros por segundo en un teléfono de gama baja (medido con el monitor de rendimiento de Reanimated en el emulador). [sin prueba automática: se mide en un teléfono]
 
 ---
 
@@ -217,13 +234,13 @@ Como persona que lo saltó, puedo verlo otra vez desde **Yo → Ajustes → «Ve
 
 ## Compatibilidad
 
-- **APK nuevo + backend anterior**: sin `tourSeenAt` la app no sabe si se vio; **no lo muestra** (nunca mostrar sobre una duda) y la guía SER queda como hoy.
+- **APK nuevo + backend anterior**: `GET /me/recorrido` responde 404; la app **no lo muestra** (nunca mostrar sobre una duda) y la guía SER queda como hoy.
 - **APK anterior + backend nuevo**: ignora los campos; todo como hoy.
 - **Hace falta un APK nuevo** (solo JavaScript: el confeti es Reanimated + SVG, ya instalados) y el backend con la migración antes.
 
 ---
 
-## [DECISIÓN DEL DUEÑO]
+## [DECISIÓN DEL DUEÑO] (respondidas el 06/11: ver «Decisiones del dueño» arriba)
 
 **D1. ¿Qué pasa con la guía SER de hoy (la burbuja «✳ SER»)?**
 - **A (recomendada)**: el recorrido la **integra**. El saludo largo y «Tu primera publicación» se van; la burbuja queda solo para después del primer post: «Ya eres parte → Leer y firmar el Pacto». Una sola guía sobre el Muro.

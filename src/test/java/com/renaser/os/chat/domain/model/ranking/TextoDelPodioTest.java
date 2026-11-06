@@ -42,7 +42,7 @@ class TextoDelPodioTest {
     @DisplayName("plantilla B con tres distintos: el texto aprobado, tal cual")
     void plantillaB() {
         assertThat(TextoDelPodio.para(TRES, semanaCon(Plantilla.B))).isEqualTo("""
-                ✨ Ranking general de la semana ✨
+                ✨ Tabla general de la semana ✨
                 👑 Liz M. se queda con el 1.er puesto, ¡felicidades!
                 🌟 Jorge P. (2.º) y Carmen R. (3.º): su compromiso se nota día a día.
                 🚀 Aprendiz, la próxima foto puede llevar tu nombre. ¿Qué esperas para superar a tus compañeros? 🔥""");

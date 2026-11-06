@@ -64,7 +64,7 @@ final class EntradasDelCatalogo {
                 normal("habitos.foto", "Hábitos", "Evidencia con foto", "Subir la foto de un hábito.", TODOS, NO_APLICA),
                 normal("habitos.km", "Hábitos", "Kilómetros diarios", "Registrar los kilómetros del día.", TODOS, SALTA),
                 // Spec 042 (D-323): la carrera con GPS desde Training y la lectura de su ruta. Hija de habitos.km: apagar los km la apaga.
-                normal("habitos.km.carreras", "Hábitos", "Carreras con GPS", "Salir a correr o caminar con GPS desde Training, registrar la carrera y ver su ruta.", TODOS, NO_APLICA),
+                normal("habitos.km.carreras", "Hábitos", "Carreras con GPS", "Salir a correr o caminar con GPS desde Entrenar, registrar la carrera y ver su ruta.", TODOS, NO_APLICA),
                 normal("habitos.gimnasio", "Hábitos", "Gimnasio", "El hábito de gimnasio.", TODOS, SALTA),
                 normal("habitos.espiritu", "Hábitos", "Pastilla y audioterapia", "La Pastilla Renacer y la audioterapia semanal.", TODOS, NO_APLICA),
                 normal("habitos.ajustes", "Hábitos", "Ajustes de hábitos", "Horarios, pausa y renombre de hábitos.", TODOS, NO_APLICA),
@@ -88,8 +88,8 @@ final class EntradasDelCatalogo {
                 // Spec 041 (D-322): el WhatsApp de los recordatorios de eventos nace APAGADO (sin el numero, la clave y la plantilla aprobada no hay como enviar) y se prende a proposito.
                 naceApagada("eventos.whatsapp", "Eventos", "Recordatorios por WhatsApp", "Los recordatorios de los eventos por WhatsApp (1 día, 1 hora, 30 y 10 minutos antes) y su resumen.", ADMINISTRACION, SALTA),
                 normal("cursos", "Cursos", "Cursos", "Los cursos y sus lecciones.", TODOS, NO_APLICA),
-                normal("ranking", "Ranking", "Ranking", "Las tablas del ranking.", TODOS, NO_APLICA),
-                normal("ranking.podio_semanal", "Ranking", "Podio de los lunes", "El podio semanal en el chat global.", TODOS, POSPONE),
+                normal("ranking", "Tabla", "Tabla", "Las tablas de posiciones.", TODOS, NO_APLICA),
+                normal("ranking.podio_semanal", "Tabla", "Podio de los lunes", "El podio semanal en el chat global.", TODOS, POSPONE),
                 normal("semaforo", "Semáforo", "Semáforo", "El semáforo propio, del mentor, por grupos y de Administración.", EnumSet.of(TRAINEE, MENTOR, TRAINEE_GUIDE, MENTOR_LEAD, ADMIN, ALCHEMIST, IT_SUPPORT), POSPONE),
                 critica("ia", "SER (IA)", "SER", "SER entera, con su memoria y sus mensajes automáticos.", TODOS, SALTA),
                 normal("ia.chat", "SER (IA)", "Chat de SER", "El chat de SER y el del curso.", TODOS, NO_APLICA),
