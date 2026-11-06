@@ -52,3 +52,23 @@ test('no hay archivos compilados de Python en git', () => {
   const pyc = execFileSync('git', ['ls-files'], { cwd: RAIZ, encoding: 'utf8' }).split('\n').filter((f) => /__pycache__|\.pyc$/.test(f));
   assert.deepEqual(pyc, []);
 });
+
+test('los scripts de worktree y del grafo existen, son ejecutables y su bash es válido (arnés, 2026-11-06)', () => {
+  for (const s of ['worktree-nuevo.sh', 'worktree-cerrar.sh', 'worktree-viejos.sh', 'grafo-al-dia.sh']) {
+    const p = path.join(RAIZ, 'scripts', s);
+    assert.ok(fs.existsSync(p), `falta scripts/${s}`);
+    assert.ok(fs.statSync(p).mode & 0o111, `scripts/${s} no es ejecutable`);
+    execFileSync('bash', ['-n', p]);
+  }
+});
+
+test('AGENTS.md manda a usar el grafo primero y a cerrar el worktree al fusionar', () => {
+  assert.match(agents, /graphify query/);
+  assert.match(agents, /scripts\/grafo-al-dia\.sh/);
+  assert.match(agents, /scripts\/worktree-cerrar\.sh/);
+});
+
+test('un PR no está listo sin el E2E de su spec y los logs revisados (regla del dueño, 2026-11-06)', () => {
+  assert.match(agents, /no está listo sin el E2E de su spec/);
+  assert.match(agents, /logcat/);
+});

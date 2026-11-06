@@ -8,11 +8,13 @@ valen siempre. Mantenlo corto (≤ 150 líneas, `scripts/arnes.test.mjs`): un di
 ## Al empezar
 
 1. `pwd`, `git status --short`, `git log --oneline -5`. **Maven nunca corre en el checkout que usa el IDE**: trabaja en
-   un worktree propio (E-313, E-104).
+   un worktree propio (E-313, E-104), creado con `scripts/worktree-nuevo.sh <rama>` (arma el grafo antes que nada).
 2. Lee `PROGRESO.md` (qué está verificado, qué sigue, qué quedó a medias) y, si trabajas una spec, su carpeta en
    `specs/NNN-…/` (spec, plan, tareas, contratos y decisiones del dueño).
 3. Antes de elegir un número nuevo de error (`E-NN`) o de decisión (`D-NN`), mira el último usado.
-4. Para entender código, primero el grafo (`graphify query "…"`, ver `CLAUDE.md`); después los archivos.
+4. **Grafo primero**: `graphify query "…"` (o `path` / `explain`) antes de abrir archivos; después lee solo los 2–3 que
+   nombra. En un worktree el hook de graphify no corre: `scripts/grafo-al-dia.sh` lo pone al día (`--estado` solo mira).
+   Qué cargar según lo que tocas (capa, módulo, tab): `docs/arnes/README.md` §3.
 5. Si la verificación ya está en rojo antes de empezar, arréglala primero o dilo: no apiles trabajo encima.
 
 ## Dónde está cada cosa
@@ -30,6 +32,8 @@ valen siempre. Mantenlo corto (≤ 150 líneas, `scripts/arnes.test.mjs`): un di
 | Contratos de la API y mapa de endpoints | `docs/api/`, `docs/MAPA_ENDPOINTS.md` |
 | Mapa de los demás documentos (vigentes e históricos) | `docs/README.md` |
 | Lo que el dueño autorizó en los tabs de la app | `../Renaser-90-dias-frontend-/docs/decisiones/` |
+| El arnés: metodología (spec-kit), ciclo completo, módulos, grafo y fuentes | `docs/arnes/README.md` |
+| Familias de errores que se repiten y el chequeo que frena cada una | `docs/arnes/familias-de-errores.md` |
 
 ## Reglas que no se negocian
 
@@ -55,7 +59,18 @@ Cada una tiene su archivo con el detalle y el porqué:
    la vez, con tope de memoria). Antes de levantar un backend o el emulador, pregunta quién los tiene.
 10. **Un bug, primero un issue** (`gh issue create --label bug`); el PR lo cierra con `Closes #N`.
 
-## Cómo se verifica
+## Errores que se repiten y no tienen chequeo automático
+
+Los que sí lo tienen fallan solos (`scripts/arnes-familias.test.mjs`, ArchUnit). Estos dependen de ti:
+
+- **Dos pedidos a la vez** (doble toque, reintento, dos réplicas): toda creación «si no existe» y todo cierre es
+  idempotente o tiene su índice único, y se prueba con dos llamadas concurrentes (E-70, E-76, E-596, E-655, E-668).
+- **El motivo viaja**: un rechazo es un 4xx con `codigo` y un mensaje en tuteo y con tildes, nunca un 500 ni un genérico;
+  un 404 «no hay» no se confunde con «no existe la ruta» (E-45, E-84, E-373, E-473).
+- **Lo que se escribe se lee**: si guardas un dato nuevo, una prueba comprueba que la lectura lo devuelve (E-53, E-145).
+- **Avisos**: un push lleva caducidad y prioridad, no sale dos veces y se apaga cuando la persona ya cumplió (E-302, E-645).
+
+
 
 Un solo camino, el mismo que corre el CI:
 
@@ -70,13 +85,16 @@ verde: dilo en el PR). La app se busca en `../Renaser-90-dias-frontend-` o en `R
 
 ## Cuándo algo está terminado
 
-1. `scripts/verificar.sh` en 0, con su resumen en el PR (cuántas pruebas corrieron, 0 fallos).
-2. Si cambia lo que ve la persona, el E2E de la app en el emulador contra este backend local (ver el `AGENTS.md` de la
-   app). Lo que no se pudo verificar se dice con todas sus letras.
+1. `scripts/verificar.sh` en 0, con su resumen en el PR (cuántas pruebas corrieron, 0 fallos), y el CI del PR en verde.
+2. **Un PR no está listo sin el E2E de su spec** en el emulador contra este backend local (ver el `AGENTS.md` de la app)
+   **y los logs revisados**: el del backend y `adb logcat` de la app, sin errores nuevos (pégalo en el PR). Lo que no se
+   pudo verificar se dice con todas sus letras.
 3. Bitácora, registro de decisiones, spec y `PROGRESO.md` al día; `graphify update .`.
 
 ## Al cerrar la sesión
 
 1. `PROGRESO.md`: estado verificado, siguiente paso, lo que quedó a medias y tu sesión (solo las cinco últimas).
 2. El trabajo seguro, commiteado en su rama; nada a medio hacer sin anotar; sin archivos temporales en el repo.
-3. `graphify update .` (el hook no corre en los worktrees).
+3. `scripts/grafo-al-dia.sh` (el hook no corre en los worktrees). Si la rama ya se fusionó: `scripts/worktree-cerrar.sh
+   <rama>` (nunca borra cambios sin commitear ni ramas sin fusionar); `scripts/worktree-viejos.sh` lista lo que se puede
+   limpiar.
