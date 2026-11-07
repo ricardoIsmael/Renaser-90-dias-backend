@@ -89,6 +89,16 @@ aprendices de su formación** (FR-037 a FR-042). El mentor sigue sin estar (no s
 - **S3. «Personal»** = Administración y Alquimista, por nombre o «Todo el personal».
 - **S4. El semáforo solo lo tienen los aprendices.** Elegir «Rojo» es elegir a los aprendices en rojo.
 - **S5. Quien crea el evento siempre está dentro**: lo ve y recibe sus recordatorios como organizador.
+  > **Decisión del dueño, 2026-11-06.** Estar dentro no es contar en la asistencia: **quien creó el evento no entra en «van / no van / no
+  > respondieron»** de la tarjeta «Asistencia», no sale en «Quién respondió» y no se le pasa lista (el servidor responde 400 si se intenta). En
+  > «Rescate de rojos» la tarjeta decía «59 no respondieron» junto a «Llega a 58»: el organizador estaba en la lista y no en «Llega a». **Si el
+  > organizador también está en la audiencia elegida** (la administradora que invita a «Todo el personal», un mentor que se elige a sí mismo por
+  > nombre), **tampoco cuenta**: la asistencia mide a quién se convocó, y «Llega a N» ya lo dejaba afuera en ese caso (`AudienciaElegidaService.resumen`
+  > y `vistaPrevia` le restan el creador). Así van + no van + no respondieron = «Llega a N». Lo de S5 no cambia: lo ve y le llegan sus
+  > recordatorios. Una respuesta o una marca suya de antes se ignoran. Dos casos de siempre pueden seguir separando las cifras, y no son el
+  > organizador: quien respondió y después salió de la audiencia (la lista lo conserva, D-256) y un aprendiz sin verde en una Mentoría del
+  > Alquimista (S6: la lista aplica la elegibilidad y «Llega a» no). Código: `PersonasConvocadasService`, `ListaDeAsistenciaService.marcar`;
+  > prueba: `AsistenciaSinElOrganizadorTest`.
 - **S6. Los tipos de evento no cambian** sus reglas: el tipo sigue decidiendo los recordatorios por defecto, y la Mentoría del Alquimista sigue
   exigiendo verde además de la audiencia.
 
