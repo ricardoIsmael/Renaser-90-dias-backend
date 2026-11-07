@@ -133,8 +133,8 @@ class AsistenciaAEventosIT {
         JsonNode cuerpo = json.readTree(respuesta.body());
         assertThat(cuerpo.get("occurrenceStart").asText()).isEqualTo(INICIO.toString());
         Map<String, JsonNode> porId = porId(cuerpo.get("people"));
-        assertThat(porId.keySet()).as("la audiencia (aprendices + mentora del grupo), sin el staff que no respondió")
-                .containsExactlyInAnyOrder(ana.toString(), beto.toString(), ciro.toString(), mara.toString());
+        assertThat(porId.keySet()).as("la audiencia (los aprendices del grupo), sin la mentora que creó el evento (S5 de la spec 044) ni el staff que no respondió")
+                .containsExactlyInAnyOrder(ana.toString(), beto.toString(), ciro.toString());
         JsonNode filaAna = porId.get(ana.toString());
         assertThat(filaAna.get("fullName").asText()).isEqualTo("Ana Ríos");
         assertThat(filaAna.get("status").asText()).isEqualTo("GOING");
