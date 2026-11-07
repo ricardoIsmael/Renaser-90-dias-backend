@@ -63,6 +63,9 @@ public class ListaDeAsistenciaService implements PasarListaUseCase {
         OcurrenciaDeLaLista oc = acceso.autorizar(cmd.actor(), cmd.eventoId(), cmd.inicioOcurrencia());
         Instant ahora = clock.now();
         requireSePuedeMarcar(oc, ahora);
+        if (PersonasConvocadasService.esOrganizador(oc.evento(), cmd.persona())) {
+            throw new IllegalArgumentException("Esa persona no está en la lista de este evento");
+        }
         Optional<MarcaDeAsistencia> actual = loadLista.marcaDe(cmd.eventoId(), oc.slot(), cmd.persona());
         if (actual.isEmpty()) {
             requireConvocada(oc, cmd.persona());
@@ -121,7 +124,10 @@ public class ListaDeAsistenciaService implements PasarListaUseCase {
         }
     }
 
-    /** Solo se marca a quien está en la lista: la audiencia, o quien respondió aunque no esté en ella. */
+    /**
+     * Solo se marca a quien está en la lista: la audiencia, o quien respondió aunque no esté en ella. Quien creó el
+     * evento nunca (lo rechaza {@link #marcar} antes de mirar su marca).
+     */
     private void requireConvocada(OcurrenciaDeLaLista oc, UserId persona) {
         boolean respondio = personas.respondio(oc.evento(), oc.slot(), persona);
         if (!respondio && !audiencia.incluye(oc.evento(), persona)) {

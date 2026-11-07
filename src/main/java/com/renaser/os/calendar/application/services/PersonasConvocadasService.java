@@ -27,6 +27,12 @@ import java.util.stream.Collectors;
  * Arma la lista de personas de una ocurrencia (D-256): la audiencia del evento (la MISMA de los recordatorios,
  * {@link AudienciaDelEventoService}), más quien respondió o fue marcado aunque ya no esté en ella. Cada fila
  * trae su respuesta vigente, su historial y su marca. Todo en lote: una consulta por tabla, sin N+1.
+ *
+ * <p><b>Sin el organizador (decisión del dueño, 2026-11-06).</b> Quien creó el evento no está en la lista: no cuenta
+ * en «van / no van / no respondieron», no sale en «Quién respondió» y no se le pasa lista, aunque también esté en la
+ * audiencia elegida (por ejemplo, la administradora que invita a «Todo el personal»), haya respondido o tenga una marca
+ * vieja. Es la misma regla de «Llega a N personas» ({@link AudienciaElegidaService#resumen}), así las dos cifras
+ * cuadran. Sus recordatorios no cambian: {@link AudienciaDelEventoService#destinatarios} lo sigue incluyendo (S5).
  */
 @Component
 class PersonasConvocadasService {
@@ -58,6 +64,9 @@ class PersonasConvocadasService {
         Set<UserId> ids = new LinkedHashSet<>(audiencia.destinatarios(evento));
         ids.addAll(respuestas.keySet());
         ids.addAll(marcas.keySet());
+        if (evento.creadoPor() != null) {
+            ids.remove(evento.creadoPor());
+        }
         Map<UserId, Persona> fichas = personas.porIds(ids);
 
         return ids.stream()
@@ -74,6 +83,9 @@ class PersonasConvocadasService {
      * Vacío si la cuenta no existe.
      */
     Optional<PersonaConvocada> una(Evento evento, Instant slot, UserId persona) {
+        if (esOrganizador(evento, persona)) {
+            return Optional.empty();
+        }
         Persona ficha = personas.porIds(List.of(persona)).get(persona);
         if (ficha == null) {
             return Optional.empty();
@@ -87,6 +99,11 @@ class PersonasConvocadasService {
 
     boolean respondio(Evento evento, Instant slot, UserId persona) {
         return confirmaciones.estadoDe(evento.id(), slot, persona).isPresent();
+    }
+
+    /** Quien creó el evento: nunca está en la lista (ver la clase). */
+    static boolean esOrganizador(Evento evento, UserId persona) {
+        return persona != null && persona.equals(evento.creadoPor());
     }
 
     private static PersonaConvocada fila(Persona persona, Confirmacion respuesta, List<RespuestaAnterior> antes,
