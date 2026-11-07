@@ -49,6 +49,7 @@ class YCloudAdapterTest {
     private volatile String respuesta = "{\"id\":\"ycloud-1\",\"status\":\"accepted\",\"wamid\":\"wamid.ABC\"}";
     private volatile long demoraMs;
     private ListAppender<ILoggingEvent> registro;
+    private Level nivelAnterior;
     private Logger logDelAdaptador;
 
     @BeforeEach
@@ -81,6 +82,7 @@ class YCloudAdapterTest {
         registro = new ListAppender<>();
         registro.start();
         logDelAdaptador = (Logger) LoggerFactory.getLogger(YCloudAdapter.class);
+        nivelAnterior = logDelAdaptador.getLevel();
         logDelAdaptador.setLevel(Level.DEBUG);
         logDelAdaptador.addAppender(registro);
     }
@@ -89,6 +91,7 @@ class YCloudAdapterTest {
     void apagar() {
         servidor.stop(0);
         logDelAdaptador.detachAppender(registro);
+        logDelAdaptador.setLevel(nivelAnterior);
     }
 
     private YCloudAdapter adaptador(String clave, String emisor, int timeoutMs) {
