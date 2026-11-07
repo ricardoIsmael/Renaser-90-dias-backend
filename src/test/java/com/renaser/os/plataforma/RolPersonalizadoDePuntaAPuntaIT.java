@@ -75,9 +75,10 @@ class RolPersonalizadoDePuntaAPuntaIT {
     @BeforeEach
     void armar() throws Exception {
         pedidos = new PedidosDePrueba(puerto, jdbc, sesiones, passwordEncoder);
-        // V185 prende eventos.meet, .transcripcion y eventos.whatsapp: esta prueba mira el catálogo sin filas (nacen apagadas).
+        // V185 prende eventos.meet, .transcripcion y eventos.whatsapp, y V186 auth.codigo_whatsapp: esta prueba mira el catálogo sin filas
+        // (nacen apagadas).
         jdbc.update("DELETE FROM renaser.funcionalidades_estado WHERE clave IN "
-                + "('eventos.meet', 'eventos.meet.transcripcion', 'eventos.whatsapp')");
+                + "('eventos.meet', 'eventos.meet.transcripcion', 'eventos.whatsapp', 'auth.codigo_whatsapp')");
         copiaDeEstados.recargar();
         soporte = pedidos.sesionDe(pedidos.usuario("SOPORTE_TI"));
         consola = Map.of("X-Consola-Token", pedidos.desbloquear(soporte));
