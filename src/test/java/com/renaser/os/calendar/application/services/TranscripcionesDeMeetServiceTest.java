@@ -69,6 +69,7 @@ class TranscripcionesDeMeetServiceTest {
     private CuentaDeGoogle cuenta;
     private TranscripcionesDeMeetService servicio;
     private final ListAppender<ILoggingEvent> registro = new ListAppender<>();
+    private Level nivelAnterior;
     private Logger raiz;
 
     @BeforeEach
@@ -109,6 +110,7 @@ class TranscripcionesDeMeetServiceTest {
         when(eventos.byId(any())).thenReturn(Optional.of(mock(Evento.class)));
         doThrow(new NotAuthorizedException("No tienes permiso para administrar el calendario")).when(acceso).requireAdministraElCalendario(MENTOR);
         raiz = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
+        nivelAnterior = raiz.getLevel();
         raiz.setLevel(Level.ALL);
         registro.start();
         raiz.addAppender(registro);
@@ -117,6 +119,7 @@ class TranscripcionesDeMeetServiceTest {
     @AfterEach
     void soltar() {
         raiz.detachAppender(registro);
+        raiz.setLevel(nivelAnterior);
     }
 
     private PendienteDeTranscripcion pendiente(Boolean transcripcionConfirmada) {
