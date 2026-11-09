@@ -8,7 +8,7 @@
 - [ ] T04 Confirmar evidencia con `hechoEn` en regla sobre un registro `EXPIRADO`.
 
 ## App
-- [ ] T05 La sesión no se borra por falta de red; perfil guardado por cuenta (FR-001–FR-003).
+- [x] T05 La sesión no se borra por falta de red; perfil guardado por cuenta (FR-001–FR-003).
 - [ ] T06 Estado de conexión + ícono y globo (FR-006).
 - [ ] T07 Módulo nativo del reloj desde el encendido + hora real (FR-013).
 - [ ] T08 Cola por cuenta (FR-007, FR-009).
