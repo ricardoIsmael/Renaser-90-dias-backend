@@ -129,8 +129,11 @@ public class HabitTrackController {
                                                                @PathVariable String id,
                                                                @RequestBody @Valid
                                                                SolicitarUrlEvidenciaRegistroRequest request) {
-        var url = urlEvidenciaUseCase.solicitarUrl(new SolicitarUrlEvidenciaRegistroCommand(actor,
-                RegistroHabitoId.of(java.util.UUID.fromString(id)), request.tipoContenido()));
+        var command = new SolicitarUrlEvidenciaRegistroCommand(actor,
+                RegistroHabitoId.of(java.util.UUID.fromString(id)), request.tipoContenido());
+        // Spec 048 (FR-012): la foto de lo marcado sin red llega cuando su día ya pudo haber cerrado.
+        var url = Boolean.TRUE.equals(request.hechoSinRed()) ? urlEvidenciaUseCase.solicitarUrlHechoSinRed(command)
+                : urlEvidenciaUseCase.solicitarUrl(command);
         return UrlEvidenciaRegistroResponse.from(url);
     }
 
@@ -141,10 +144,12 @@ public class HabitTrackController {
     public EvidenciaRegistroResponse subirEvidencia(@ActorAutenticado UserId actor,
                                                       @PathVariable String id,
                                                       @RequestBody @Valid SubirEvidenciaRegistroRequest request) {
-        var evidencia = subirEvidenciaUseCase.subir(new SubirEvidenciaRegistroCommand(actor,
+        var command = new SubirEvidenciaRegistroCommand(actor,
                 RegistroHabitoId.of(java.util.UUID.fromString(id)), TipoEvidencia.valueOf(request.tipo()),
                 request.bucket(), request.rutaStorage(), request.contenidoTexto(), request.timestampExif(),
-                request.gpsLat(), request.gpsLng()));
+                request.gpsLat(), request.gpsLng());
+        var evidencia = Boolean.TRUE.equals(request.hechoSinRed()) ? subirEvidenciaUseCase.subirHechoSinRed(command)
+                : subirEvidenciaUseCase.subir(command);
         return EvidenciaRegistroResponse.from(evidencia);
     }
 

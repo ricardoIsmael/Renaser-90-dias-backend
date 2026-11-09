@@ -5,7 +5,7 @@
 - [x] T02 `CompletarRegistroCommand`/request con `hechoEn`, `idCliente`, `origenDeLaHora`; respuesta con `motivoSinPuntos`.
 - [x] T03 `RegistroHabito.completarHechoSinRed` (admite `EXPIRADO`) y `RegistroService.completar` con hora real, reglas
       de D14 e idempotencia. Pruebas por cada caso del plan.
-- [ ] T04 Confirmar evidencia con `hechoEn` en regla sobre un registro `EXPIRADO`.
+- [x] T04 Confirmar evidencia con `hechoEn` en regla sobre un registro `EXPIRADO`.
 
 ## App
 - [x] T05 La sesión no se borra por falta de red; perfil guardado por cuenta (FR-001–FR-003).

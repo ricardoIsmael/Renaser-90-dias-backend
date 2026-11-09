@@ -24,6 +24,12 @@ public interface SubirEvidenciaRegistroUseCase {
     EvidenciaRegistrada subir(SubirEvidenciaRegistroCommand command);
 
     /**
+     * Spec 048 (FR-012): la evidencia de lo marcado SIN RED, que llega cuando su día ya pudo haber cerrado. Sin la guarda del día
+     * (la evidencia no da puntos y lo hecho sin red no rebota, D14); el resto, igual que {@link #subir}.
+     */
+    EvidenciaRegistrada subirHechoSinRed(SubirEvidenciaRegistroCommand command);
+
+    /**
      * Para {@code tipo != TEXTO}: {@code bucket}+{@code rutaStorage} (ya subidos vía
      * {@code AlmacenamientoPort}). Para {@code TEXTO}: {@code contenidoTexto}. La
      * validación fina (media-o-texto, GPS coherente) la hace
