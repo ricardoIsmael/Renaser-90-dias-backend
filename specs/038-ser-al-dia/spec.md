@@ -82,6 +82,7 @@ El diagnóstico completo llega al modelo (Q8-B). SER lo usa con sus palabras, no
 - **FR-011** Los hábitos y la creación de hábitos propios MUST usar las categorías de la formación de la persona; nunca se ofrece o acepta una categoría de otra formación.
 - **FR-012** La memoria de SER MUST NOT guardar dinero personal (ingresos, deudas, cuotas, pagos); la política de privacidad MUST declarar que el diagnóstico llega al modelo de IA.
 - **FR-013** SER MUST NOT leer los pagos ni hablar de ellos más que para ubicar «Yo → Mi ingreso».
+- **FR-014** La compuerta de rocas que consulta SER antes de proponer un plan MUST leer los objetivos como los lee Plan: creando los que nacieron del diagnóstico y todavía no existen (por confirmar). Así SER propone planes aunque la persona todavía no haya abierto Plan (issue #60 del backend, 2026-11-09).
 
 ## Qué ve y qué dice SER en cada formación
 
