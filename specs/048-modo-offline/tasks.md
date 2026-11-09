@@ -1,9 +1,9 @@
 # Tareas — spec 048, fase 1 (una en curso a la vez)
 
 ## Servidor
-- [ ] T01 V188 `envios_sin_red` + IT de la migración.
-- [ ] T02 `CompletarRegistroCommand`/request con `hechoEn`, `idCliente`, `origenDeLaHora`; respuesta con `motivoSinPuntos`.
-- [ ] T03 `RegistroHabito.completarHechoSinRed` (admite `EXPIRADO`) y `RegistroService.completar` con hora real, reglas
+- [x] T01 V188 `envios_sin_red` + IT de la migración.
+- [x] T02 `CompletarRegistroCommand`/request con `hechoEn`, `idCliente`, `origenDeLaHora`; respuesta con `motivoSinPuntos`.
+- [x] T03 `RegistroHabito.completarHechoSinRed` (admite `EXPIRADO`) y `RegistroService.completar` con hora real, reglas
       de D14 e idempotencia. Pruebas por cada caso del plan.
 - [ ] T04 Confirmar evidencia con `hechoEn` en regla sobre un registro `EXPIRADO`.
 

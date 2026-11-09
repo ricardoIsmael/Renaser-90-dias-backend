@@ -1,6 +1,7 @@
 package com.renaser.os.habits.infrastructure.adapter.in.rest.registro;
 
 import com.renaser.os.evidence.api.TipoEvidencia;
+import com.renaser.os.habits.application.ports.in.registro.CompletarHechoSinRedUseCase;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase.CompletarRegistroCommand;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase;
@@ -41,13 +42,16 @@ public class HabitTrackController {
 
     private final ConsultarTracksDelDiaConCatalogoUseCase consultarTracksDelDiaUseCase;
     private final CompletarRegistroUseCase completarRegistroUseCase;
+    private final CompletarHechoSinRedUseCase completarHechoSinRedUseCase;
     private final SubirEvidenciaRegistroUseCase subirEvidenciaUseCase;
     private final SolicitarUrlEvidenciaRegistroUseCase urlEvidenciaUseCase;
 
     public HabitTrackController(ConsultarTracksDelDiaConCatalogoUseCase consultarTracksDelDiaUseCase,
                                  CompletarRegistroUseCase completarRegistroUseCase,
                                  SubirEvidenciaRegistroUseCase subirEvidenciaUseCase,
-                                 SolicitarUrlEvidenciaRegistroUseCase urlEvidenciaUseCase) {
+                                 SolicitarUrlEvidenciaRegistroUseCase urlEvidenciaUseCase,
+                                 CompletarHechoSinRedUseCase completarHechoSinRedUseCase) {
+        this.completarHechoSinRedUseCase = completarHechoSinRedUseCase;
         this.consultarTracksDelDiaUseCase = consultarTracksDelDiaUseCase;
         this.completarRegistroUseCase = completarRegistroUseCase;
         this.subirEvidenciaUseCase = subirEvidenciaUseCase;
@@ -101,10 +105,17 @@ public class HabitTrackController {
     @PostMapping("/{id}/complete")
     public RegistroHabitoResponse completar(@ActorAutenticado UserId actor, @PathVariable String id,
                                              @RequestBody @Valid CompletarRegistroRequest request) {
-        var registro = completarRegistroUseCase.completar(CompletarRegistroCommand.conValorManual(actor,
+        var command = CompletarRegistroCommand.conValorManual(actor,
                 RegistroHabitoId.of(java.util.UUID.fromString(id)), request.respuestaTexto(),
-                request.calificacionProductividad(), request.valorMedido()));
-        return RegistroHabitoResponse.from(registro);
+                request.calificacionProductividad(), request.valorMedido());
+        if (request.hechoSinRed()) {
+            // Spec 048: lo marcado sin red, con su hora real. Nunca rebota por llegar tarde (D14).
+            var hecho = completarHechoSinRedUseCase.completar(command, new CompletarHechoSinRedUseCase.HechoSinRed(
+                    request.hechoEn(), request.idCliente(), origenDe(request.origenDeLaHora())));
+            return RegistroHabitoResponse.from(hecho.registro(),
+                    hecho.motivoSinPuntos() == null ? null : hecho.motivoSinPuntos().name());
+        }
+        return RegistroHabitoResponse.from(completarRegistroUseCase.completar(command));
     }
 
     /**
@@ -135,5 +146,14 @@ public class HabitTrackController {
                 request.bucket(), request.rutaStorage(), request.contenidoTexto(), request.timestampExif(),
                 request.gpsLat(), request.gpsLng()));
         return EvidenciaRegistroResponse.from(evidencia);
+    }
+
+    /** Un valor desconocido no rebota (D14): se toma como el menos confiable. */
+    private static CompletarHechoSinRedUseCase.OrigenDeLaHora origenDe(String valor) {
+        try {
+            return valor == null ? null : CompletarHechoSinRedUseCase.OrigenDeLaHora.valueOf(valor);
+        } catch (IllegalArgumentException desconocido) {
+            return CompletarHechoSinRedUseCase.OrigenDeLaHora.TELEFONO_CORREGIDO;
+        }
     }
 }
