@@ -1,6 +1,6 @@
 # Documentos del backend
 
-Mapa de esta carpeta (arnés propio, 2026-11-06). **Vigente** = se mantiene al día y se puede seguir. **De referencia** =
+Mapa de esta carpeta (2026-11-06). **Vigente** = se mantiene al día y se puede seguir. **De referencia** =
 diseño o contrato de un momento: útil para entender el porqué, pero compáralo con el código antes de tomarlo como regla.
 **Histórico** = foto de un día; no se actualiza. Lo que manda siempre: el código, las pruebas, `.claude/rules/` y las
 specs de `../specs/`.
@@ -23,7 +23,7 @@ specs de `../specs/`.
 | [`ARQUITECTURA.md`](ARQUITECTURA.md) | El diseño de la arquitectura (antes `CLAUDE.MD`; los comentarios «`CLAUDE.MD` §N» del código apuntan aquí). Su §0 es historia: las reglas vigentes están en `.claude/rules/`. |
 | `MODULO_*.md` | El diseño inicial de cada módulo (agosto de 2026). |
 | [`CUMPLIMIENTO_REQUISITOS.md`](CUMPLIMIENTO_REQUISITOS.md), [`spec/`](spec/), [`specs/`](specs/) | Requisitos del cliente y especificaciones anteriores a spec-kit. |
-| [`ESTADO_DEL_PROYECTO.md`](ESTADO_DEL_PROYECTO.md), [`MAPA_ENDPOINTS.md`](MAPA_ENDPOINTS.md) | Estado y mapa con fecha; el estado al día está en `../PROGRESO.md`. |
+| [`ESTADO_DEL_PROYECTO.md`](ESTADO_DEL_PROYECTO.md), [`MAPA_ENDPOINTS.md`](MAPA_ENDPOINTS.md) | Estado y mapa con fecha. |
 | [`arquitectura/`](arquitectura/), [`db/`](db/), [`rag/`](rag/) | Propuestas, análisis de la base y estilo del acompañante. |
 
 ## Histórico

@@ -1,10 +1,10 @@
-// Familias de errores que se repiten, convertidas en chequeos (arnés propio, 2026-11-06).
+// Familias de errores que se repiten, convertidas en chequeos (2026-11-06).
 //
-// Cada prueba nace de una familia de `docs/BITACORA_ERRORES.md` (ver `docs/arnes/familias-de-errores.md`): lo que la
-// bitácora repetía como «cómo evitarlo» en prosa, acá se ejecuta. Sin dependencias y en segundos:
-// `node --test scripts/arnes-familias.test.mjs` (lo corre `scripts/verificar.sh` junto con `arnes.test.mjs`).
+// Cada prueba nace de una familia de `docs/BITACORA_ERRORES.md`: lo que la bitácora repetía como «cómo evitarlo» en
+// prosa, acá se ejecuta. Sin dependencias y en segundos: `node --test scripts/reglas-de-codigo.test.mjs` (lo corren
+// `scripts/verificar.sh` y trazabilidad.yml).
 //
-// Las violaciones que ya existían el día que nació el chequeo están en `scripts/arnes-excepciones.json`, con fecha y
+// Las violaciones que ya existían el día que nació el chequeo están en `scripts/reglas-de-codigo-excepciones.json`, con fecha y
 // su issue. Esa lista solo puede achicarse: si arreglas una, borra su línea (la prueba te avisa si sobra).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -14,7 +14,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const EXC = JSON.parse(fs.readFileSync(path.join(RAIZ, 'scripts', 'arnes-excepciones.json'), 'utf8'));
+const EXC = JSON.parse(fs.readFileSync(path.join(RAIZ, 'scripts', 'reglas-de-codigo-excepciones.json'), 'utf8'));
 const rel = (p) => path.relative(RAIZ, p).split(path.sep).join('/');
 
 function archivos(dir, filtro) {
@@ -169,7 +169,7 @@ test('textos: los mensajes de error nuevos van con tildes (la deuda vieja solo p
   const subieron = Object.entries(ahora).filter(([f, n]) => n > (deuda[f] ?? 0)).map(([f, n]) => `${f}: ${n} (deuda ${deuda[f] ?? 0})`);
   assert.deepEqual(subieron, [], 'Escribe el mensaje con sus tildes («sesión», «hábito», «día», «inválido»). Issue de la deuda: ' + EXC.mensajesSinTildes.issue);
   const bajaron = Object.entries(deuda).filter(([f, n]) => (ahora[f] ?? 0) < n).map(([f]) => f);
-  assert.deepEqual(bajaron, [], 'Arreglaste mensajes: baja su número en scripts/arnes-excepciones.json (mensajesSinTildes).');
+  assert.deepEqual(bajaron, [], 'Arreglaste mensajes: baja su número en scripts/reglas-de-codigo-excepciones.json (mensajesSinTildes).');
 });
 
 // ── Familia «entorno» (E-52, E-62: CRLF que reescribe archivos enteros) ───────────────────────────────────────────
@@ -180,10 +180,15 @@ test('entorno: ningún archivo de texto en git tiene finales de línea CRLF (sal
   assert.deepEqual(malos, [], 'Pásalo a LF (E-52): un CRLF hace que un cambio de una línea se vea como el archivo entero.');
 });
 
-test('las excepciones del arnés tienen fecha y motivo', () => {
+test('las excepciones tienen fecha y motivo', () => {
   for (const [k, v] of Object.entries(EXC)) {
     if (k.startsWith('$')) continue;
     assert.match(v.fecha ?? '', /^\d{4}-\d{2}-\d{2}$/, `${k} sin fecha`);
     assert.ok((v.motivo ?? '').length > 10, `${k} sin motivo`);
   }
+});
+
+test('no hay archivos compilados de Python en git', () => {
+  const pyc = execFileSync('git', ['ls-files'], { cwd: RAIZ, encoding: 'utf8' }).split('\n').filter((f) => /__pycache__|\.pyc$/.test(f));
+  assert.deepEqual(pyc, []);
 });

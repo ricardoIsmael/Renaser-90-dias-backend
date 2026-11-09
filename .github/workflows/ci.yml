@@ -67,11 +67,11 @@ jobs:
           ./mvnw -version
           docker --version
 
-      # El mismo camino que se corre en local antes de decir «terminado» (AGENTS.md, «Cómo se verifica»):
+      # El mismo camino que se corre en local antes de decir «terminado»:
       # `scripts/verificar.sh` corre `./mvnw -B -ntp clean verify` (`verify` y no `test`: es lo unico que corre TAMBIEN
       # las pruebas de integracion *IT.java y genera el XML de JaCoCo), deja la salida en salida-maven.log y aplica la
       # guarda de E-111 (docs/BITACORA_ERRORES.md): suma las lineas de RESUMEN `Tests run:` de surefire y failsafe y falla
-      # si no aparece ninguna o si el total queda por debajo de MINIMO_PRUEBAS. Con `--ci` no corre el arnés ni la
+      # si no aparece ninguna o si el total queda por debajo de MINIMO_PRUEBAS. Con `--ci` no corre las reglas de código ni la
       # trazabilidad: esos tienen su workflow (trazabilidad.yml), que termina en segundos. Si cambia lo que se verifica,
       # cambia en el script, no aca.
       - name: Compilar, correr la suite completa y verificar que las pruebas corrieron
