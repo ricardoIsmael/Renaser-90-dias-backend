@@ -77,7 +77,7 @@ El diagnóstico completo llega al modelo (Q8-B). SER lo usa con sus palabras, no
 - **FR-006** Los rechazos que la app muestra tal cual MUST estar en segunda persona y tuteo.
 - **FR-007** Los tres rituales MUST registrarse escribiendo: `proponer_registrar_con_foto` sobre un ritual deja la tarjeta con `conPregunta = true`, sin pedir foto ni «¿Qué sentiste?»; la app abre `RegistroDeRitualConTexto`.
 - **FR-008** La migración **V160** MUST dejar «Última comida del día» con `exigencia_evidencia = 'OPCIONAL'`, idempotente y sin tocar otro hábito.
-- **FR-009** `confirmar` MUST devolver `habitoCumplido` cuando la propuesta cumplió un hábito, y la app MUST emitir `habitoCumplido` con ese dato.
+- **FR-009** `confirmar` MUST devolver `habitoCumplido` cuando la propuesta cumplió un hábito, y la app MUST emitir `habitoCumplido` con ese dato. Vale también para las tres entregas que cierran un hábito por su propio camino: la Clase diaria (resumen), la Audioterapia (respuestas) y la Pastilla Renacer (resumen de Espíritu) (issue #99 de la app, 2026-11-09). Una entrega repetida que no cambia el estado del hábito no lo devuelve.
 - **FR-010** Un registro `EXPIRADO` MUST tratarse como **día cerrado**: no cuenta entre lo que falta, no se le deja botón y SER lo dice.
 - **FR-011** Los hábitos y la creación de hábitos propios MUST usar las categorías de la formación de la persona; nunca se ofrece o acepta una categoría de otra formación.
 - **FR-012** La memoria de SER MUST NOT guardar dinero personal (ingresos, deudas, cuotas, pagos); la política de privacidad MUST declarar que el diagnóstico llega al modelo de IA.

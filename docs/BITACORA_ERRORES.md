@@ -16072,3 +16072,13 @@ De las 78 tablas que compara la prueba, solo esa. A «la otra persona» no se le
 **Solución** (solo en la prueba; el rechazo del servidor funciona: el cierre con 1002 lo prueba). El cliente anota el cierre y `esperarOCierre` vuelve en cuanto el socket se cierra sin la trama (tope de 30 s si no pasa nada). Un cierre sin ERROR tiene que ser 1002; la prueba repite en otra conexión (hasta cinco) y exige ver el ERROR con `MODO_SOLO_LECTURA`.
 
 **Cómo evitar que vuelva a pasar.** Una prueba de WebSocket no espera un tiempo fijo: espera la trama O el cierre. Con STOMP de Spring, un ERROR seguido de cierre puede perderse si coincide con otro envío a la misma sesión; si algún día el cliente real depende de leer el código del ERROR, el cierre 1002 también hay que tratarlo como rechazo.
+
+## E-672 · Cumplir la Pastilla, la Audioterapia o la Clase desde SER no apagaba las alarmas ni celebraba (backend, issue #99 de la app, 09/11, RESUELTO)
+
+**Síntoma.** Si la persona entregaba la Clase diaria, las respuestas de la Audioterapia o el resumen de Espíritu (que marca la Pastilla Renacer) confirmando una propuesta de SER, el hábito quedaba cumplido en el servidor, pero en el teléfono seguían sonando sus alarmas de ese día, no salía la celebración y el semáforo no se refrescaba.
+
+**Causa real.** La spec 038 hizo que `POST /renasia/propuestas/{id}/confirmar` devolviera `habitoCumplido`, pero solo lo armaba `CompletacionDeHabito.completar` (el camino genérico de `marcar_habito_completado`). `EntregarClaseDeHoyConfirmable`, `EntregarResumenAudioterapiaConfirmable` y `EntregarResumenEspirituConfirmable` cierran el hábito por su propio caso de uso y devolvían `ResultadoHerramienta.exito(texto)` sin el hábito ni el día, así que la app no tenía con qué emitir `habitoCumplido`.
+
+**Solución.** Las tres leen el registro de hoy ANTES de entregar (`CompletacionDeHabito.porHacerDeHoy`, por clave de sistema o por id de registro) y devuelven `HabitoCumplido` con `exitoConElHabito`. Solo si estaba `PENDIENTE` o `EN_CURSO`: un segundo resumen de la Clase, que no suma, no vuelve a celebrar. La entrega de Espíritu no devuelve puntos: se usan los que estaban en juego justo antes. Si la agenda no se puede leer, la entrega sale igual, sin el dato. La app no cambió: ya emitía `habitoCumplido` cuando venía.
+
+**Cómo evitar que vuelva a pasar.** `EntregasDeSerAvisanElHabitoCumplidoTest` cubre las tres entregas. Toda `AccionConfirmable` nueva que cierre un hábito devuelve `HabitoCumplido` (spec 038 FR-009, ampliada el 09/11).
