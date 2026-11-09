@@ -33,10 +33,25 @@ Sin señal = túnel del backend cortado (en modo avión el build debug no alcanz
 - Hallazgos corregidos en el mismo E2E: el check se destildaba con la relectura; Entrenar no se releía al confirmarse; el
   ícono tapaba el botón de planificar; SER no recargaba solo al volver la señal.
 
+## E2E completo de la fase 1 (2026-11-09, tarde)
+
+Sin señal = túnel cortado **y la app reiniciada**: si solo se quita el túnel, las conexiones ya abiertas siguen vivas y la app
+cree que hay señal (artefacto de la prueba, no de la app).
+
+- Sin señal: Hoy, Plan, Yo y Ajustes completos; Escritura libre, Ritual noche y Ritual mañana con texto, Gimnasio con foto y
+  Última comida con check quedan hechos al instante; la Pastilla abre su hoja; Muro, composer, Eventos, SER, Planificar y la
+  Clase dicen «Necesitas conexión».
+- Cerrar sesión con 2 pendientes: «Tienes cosas sin enviar… Quedarme / Salir igual» (FR-009).
+- Cerrar la app con la cola llena y abrirla con señal: llega en 10 s, una sola vez (`envios_sin_red`), con la hora real.
+- Al volver la señal: los puntos llegan con la hora real (Última comida 10 pts a las 16:14:03); SER, el Muro y Entrenar se
+  recargan solos. Logs: backend sin errores; la app solo con avisos de lecturas que fallan sin señal.
+- Hallazgos corregidos: la sesión se borraba al abrir sin red; las lecturas se guardaban por huella del token (ahora por
+  cuenta); el texto de un ritual llegaba dos veces (carrera de la cola); Planificar, la Clase y el Muro mostraban el error
+  crudo; SER, el Muro, Planificar y la Clase no se recargaban al volver la señal (prueba `recargaAlVolverLaSenal`); Entrenar
+  sin señal mostraba pendiente lo ya confirmado (la lectura guardada se corrige al confirmar).
+
 ## Pendiente conocido (no bloquea la fase 1)
-- La tarjeta «No pudimos comprobar tu programa» de Hoy sin señal: esa lectura no está en la lista de guardadas (no es hueco
-  en blanco, ofrece «Reintentar»).
-- La Clase diaria y la Pastilla se entregan solo con señal (su propio camino); el audio de mañana normalmente no tiene URL
+- La Clase diaria (video) y la Pastilla se entregan solo con señal (su propio camino); el audio de mañana normalmente no tiene URL
   hasta desbloquearse, así que en la práctica se baja el de hoy.
 - iPhone: sin el módulo del reloj, usa el reloj del teléfono corregido (`TELEFONO_CORREGIDO`).
 - Flujo de Maestro de la fase 1: no escrito todavía (el E2E se hizo con mobile-mcp).
