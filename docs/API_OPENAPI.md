@@ -35,6 +35,37 @@ Con el backend local corriendo: `curl -s http://localhost:8080/v3/api-docs > ren
 Ese archivo se abre en Swagger Editor, Postman o Insomnia, o genera tipos
 (`npx openapi-typescript renaser-api.json -o api.d.ts`).
 
+## Pasar el contrato a una integración de renaseros
+
+Para un equipo que integra lo que usa **un participante** (rol TRAINEE), no se entrega el documento completo: se entrega
+uno filtrado (D-336, `ContratoParaRenaseros`). Entra una operación solo si su permiso (`x-permiso`) lo tiene un TRAINEE
+según la misma matriz del servidor (`UserRole.can`) **y** su ruta no es de personal (`/admin`, `/mentor`, `/leadership`,
+`/soporte-ti`, `/webhooks`, `/integraciones`…); de las públicas, solo las de cuenta (entrar, contraseña, solicitar acceso,
+borrar la cuenta). Lo que no declara permiso no entra. Los esquemas que solo usaban las rutas excluidas se quitan.
+
+Generarlo (no hace falta levantar el backend; usa la base de prueba de Testcontainers):
+
+```bash
+./mvnw -B -ntp verify -Dtest=ContratoParaRenaserosTest -Dit.test=ContratoParaRenaserosIT -Dsurefire.failIfNoSpecifiedTests=false
+# queda en target/openapi/renaser-api-renaseros.json
+```
+
+`ContratoParaRenaserosIT` falla si se cuela una ruta de personal o un permiso del equipo (`MANAGE_*`, `OPERATE_PLATFORM`…).
+
+### Cuidados al usarlo con una IA (Claude, ChatGPT, Cursor)
+
+El archivo **no trae secretos**: ni claves, ni tokens, ni datos de personas, ni la dirección interna de la base. Lo que sí
+hay que cuidar del lado de quien integra:
+
+- **Nunca pegar en el chat un `X-Auth-Token` real**, una contraseña ni respuestas con datos de personas reales. Para
+  ejemplos, valores inventados.
+- **La sesión es de la persona**: cada pedido va con el `X-Auth-Token` de quien usa la app, guardado en el teléfono
+  (almacenamiento seguro), nunca en el código ni en un repositorio. No hay una «clave maestra» para integraciones.
+- **El servidor manda**: el contrato dice qué existe, pero el permiso se vuelve a comprobar en cada pedido (401 sin sesión,
+  403 sin permiso). Que una IA «invente» una ruta que no está en el contrato no la vuelve accesible.
+- **Probar contra un entorno de prueba**, nunca contra producción con cuentas reales.
+- Si el contrato cambia (rutas nuevas), se vuelve a generar y se reemplaza el archivo; no se edita a mano.
+
 ## MCP: que la IA conozca la API
 
 Es para que un agente (Claude Code, Cursor) **consulte** qué endpoints hay y cómo se usan, en vez de
@@ -66,3 +97,5 @@ Parameter Store (pisa el valor del archivo). El MCP no debería encenderse fuera
   `X-Auth-Token`, ningún actor obligatorio) y sirve Swagger UI. Si un controller nuevo rompe la
   generación, esta prueba lo dice.
 - `DocumentacionApagadaEnProdTest`: prod apaga Swagger y MCP.
+- `ContratoParaRenaserosTest` y `ContratoParaRenaserosIT`: el contrato para renaseros (D-336) trae solo lo de un
+  participante y los esquemas que eso usa.
