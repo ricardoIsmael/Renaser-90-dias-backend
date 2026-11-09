@@ -119,7 +119,8 @@ class GoogleGenAiRenasiaChatAdapterTest {
         ObjectProvider<EjecutarHerramientaAgenteUseCase> proveedor = mock(ObjectProvider.class);
         when(proveedor.getIfAvailable()).thenReturn(herramientas);
         return ToolCallingManager.builder()
-                .toolCallbackResolver(new ResolverDeHerramientasDesconocidas(proveedor)).build();
+                .toolCallbackResolver(new ResolverDeHerramientasDesconocidas(proveedor))
+                .resolutionFallbackEnabled(true).build();
     }
 
     @Test
