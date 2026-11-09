@@ -9,6 +9,9 @@
 #   scripts/verificar.sh --ci --parte=unitarias|integracion
 #                                   solo una mitad de la suite (ci.yml corre las dos en trabajos paralelos, 2026-11-09):
 #                                   unitarias = surefire (sin los *IT); integracion = failsafe (los *IT). Cada mitad tiene su piso.
+#                                   integracion-a / integracion-b: la de integración partida en dos por módulo (~3,5 min de
+#                                   pruebas cada una). B lista sus módulos; A es TODO lo demás (la misma lista, negada), así
+#                                   un módulo nuevo nunca queda sin correr.
 #
 # Salida: 0 = todo corrió y pasó; 1 = algo falló; 2 = nada falló pero quedó algo sin correr (NO es «en verde»).
 # En esta laptop: córrelo con ~/.config/renaser-e2e/herramientas/pesado.sh y nunca en el checkout del IDE (E-313).
@@ -26,6 +29,8 @@ for a in "$@"; do
   case "$a" in
     --parte=unitarias) PARTE=unitarias ;;
     --parte=integracion) PARTE=integracion ;;
+    --parte=integracion-a) PARTE=integracion-a ;;
+    --parte=integracion-b) PARTE=integracion-b ;;
     --rapido) MODO=rapido ;;
     --nube) MODO=nube ;;
     --ci) MODO=ci ;;
@@ -33,14 +38,21 @@ for a in "$@"; do
   esac
 done
 # El piso es por lo que corre: la mitad de integración tiene ~900 pruebas, la de unitarias ~9500.
+# Módulos de la parte B (equilibrado con los tiempos del 2026-11-09). Para mover un módulo de parte, solo esta lista.
+MODULOS_B=(chat evidence notifications plataforma points rag shared)
+PATRONES_B=$(printf 'com/renaser/os/%s/**/*IT,' "${MODULOS_B[@]}")com/renaser/os/IndicesDeLaAuditoriaIT
+EXCLUIR_B=$(printf '!com/renaser/os/%s/**,' "${MODULOS_B[@]}")!com/renaser/os/IndicesDeLaAuditoriaIT
 case $PARTE in
   integracion) MINIMO_PRUEBAS=${MINIMO_PRUEBAS_INTEGRACION:-500} ;;
+  integracion-a|integracion-b) MINIMO_PRUEBAS=${MINIMO_PRUEBAS_INTEGRACION_PARTE:-200} ;;
   *) MINIMO_PRUEBAS=${MINIMO_PRUEBAS:-2000} ;;
 esac
 # Qué mitad corre Maven. Integración: surefire corre sin pruebas (un nombre que no existe y sin fallar por eso).
 case $PARTE in
   unitarias) MITAD=(-DskipITs) ;;
   integracion) MITAD=(-Dtest=NingunaPruebaUnitaria -Dsurefire.failIfNoSpecifiedTests=false) ;;
+  integracion-a) MITAD=(-Dtest=NingunaPruebaUnitaria -Dsurefire.failIfNoSpecifiedTests=false "-Dit.test=**/*IT,$EXCLUIR_B") ;;
+  integracion-b) MITAD=(-Dtest=NingunaPruebaUnitaria -Dsurefire.failIfNoSpecifiedTests=false "-Dit.test=$PATRONES_B") ;;
   *) MITAD=() ;;
 esac
 LOG=${LOG_MAVEN:-salida-maven.log}

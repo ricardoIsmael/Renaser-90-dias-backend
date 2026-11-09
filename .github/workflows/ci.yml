@@ -53,7 +53,8 @@ jobs:
       # Que una mitad falle no cancela la otra: se ven los dos resultados de una vez.
       fail-fast: false
       matrix:
-        parte: [unitarias, integracion]
+        # La de integración va partida en dos por módulo (scripts/verificar.sh, MODULOS_B): era la mitad más lenta.
+        parte: [unitarias, integracion-a, integracion-b]
 
     steps:
       - name: Descargar el codigo
