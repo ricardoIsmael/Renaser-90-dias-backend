@@ -25,6 +25,9 @@
 | D14 | Nada rebota | En el teléfono rigen las mismas reglas que con red. Se guarda la hora real en que lo hiciste. El servidor revisa con esa hora: lo que estaba en regla y llega dentro de 48 h suma sus puntos; lo demás queda registrado sin puntos y la app lo muestra así. Nada se pierde en silencio. |
 | D15 | Sesión vencida con pendientes | La app pide volver a entrar; si entra la misma cuenta, la cola se envía; con otra cuenta, nunca. |
 | D16 | Entrega | Tres fases, cada una con su PR, su E2E y su APK. Fase 1: sesión, ver sin red, hábitos, puntos por hora real, audios y el ícono. Fase 2: Muro. Fase 3: Plan, Cierra tu día, Radar y planificar hábitos. |
+| D17 | Post diario sin red (fase 2, 2026-11-09) | El hábito «Post diario en comunidad» hecho sin señal cuenta el día en que se escribió, por la hora real (mismas reglas que D14: 48 h, sin hora futura). |
+| D18 | Lugar en el Muro (fase 2) | Al llegar, la publicación aparece arriba, como nueva, para que la tribu la vea; solo el hábito usa la hora real. |
+| D19 | Mientras espera (fase 2) | Solo se puede borrar. Editar, ya publicada, como cualquier otra. |
 
 ## Lo que hay hoy (leído el 2026-11-09)
 
@@ -78,7 +81,16 @@ Luis hace su Escritura libre a las 21:10 en una casa de campo sin señal. La mar
 
 ### Historia 6 — Publicar en el Muro sin señal (P2, fase 2)
 
-La publicación aparece en el Muro marcada «Se publicará al volver la señal», se puede borrar antes y sube sola; los videos esperan wifi o buena señal.
+La publicación aparece en el Muro marcada «Se publicará al volver la señal», se puede borrar antes y sube sola. El Muro no
+tiene videos (solo fotos), así que la regla de los videos de D7 no aplica.
+
+**Acceptance Scenarios**:
+1. **Given** sin señal, **When** escribo una publicación con foto y toco Publicar, **Then** queda arriba en mi Muro marcada
+   «Se publicará al volver la señal» y el «Post diario» de Entrenar sale hecho al instante.
+2. **Given** esa publicación esperando, **When** la borro, **Then** desaparece y no sale nunca.
+3. **Given** la escribí a las 21:00 y la señal vuelve a la mañana siguiente, **When** llega, **Then** la tribu la ve arriba
+   como nueva y el «Post diario» de ayer queda cumplido con sus puntos (D17, D18).
+4. **Given** el envío se repite (corte a mitad), **Then** la publicación existe una sola vez.
 
 ### Historia 7 — Plan, Cierra tu día, Radar y planificar sin señal (P2, fase 3)
 
@@ -123,7 +135,9 @@ Las mismas reglas que con red, en la misma cola, con la regla de choques D13.
 
 ### Fases 2 y 3
 
-- **FR-018** (fase 2) La publicación del Muro hecha sin red MUST entrar a la cola, verse en el Muro marcada «Se publicará al volver la señal», poder borrarse antes de salir y subir sola; los videos MUST esperar wifi o buena señal.
+- **FR-018** (fase 2) La publicación del Muro hecha sin red MUST entrar a la cola, verse en el Muro marcada «Se publicará al volver la señal», poder borrarse antes de salir (D19) y subir sola con sus fotos.
+- **FR-020** (fase 2) Al llegar, la publicación MUST guardarse con la hora de llegada (aparece arriba, D18) y el hábito «Post diario en comunidad» MUST cerrarse por la hora real con las reglas de D14 (D17); un envío repetido MUST quedar una sola vez.
+- **FR-021** (fase 2) Sin red, el compositor del Muro MUST abrirse (con las categorías guardadas) y el Muro MUST mostrar las publicaciones propias en espera; el resto del Muro dice que se verá al volver la señal.
 - **FR-019** (fase 3) Plan (acciones y objetivos), Cierra tu día / bitácora, check-in del Radar y planificar hábitos y alarmas MUST funcionar sin red con la misma cola; en un choque MUST ganar lo más nuevo y avisarse qué no se aplicó (D13).
 
 ### Fuera de alcance
@@ -136,6 +150,7 @@ Las mismas reglas que con red, en la misma cola, con la regla de choques D13.
 - **SC-002** Un hábito marcado sin red dentro de su ventana suma los mismos puntos que con red si llega dentro de 48 h.
 - **SC-003** Un mismo envío repetido queda registrado una sola vez.
 - **SC-004** Ninguna pantalla de la fase 1 muestra un hueco en blanco sin red.
+- **SC-005** (fase 2) Una publicación hecha sin red llega una sola vez y su «Post diario» suma los mismos puntos que con red si llega dentro de 48 h.
 
 ## Supuestos
 

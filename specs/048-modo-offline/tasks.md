@@ -56,3 +56,17 @@ cree que hay señal (artefacto de la prueba, no de la app).
 - iPhone: sin el módulo del reloj, usa el reloj del teléfono corregido (`TELEFONO_CORREGIDO`).
 - Flujo de Maestro de la fase 1: no escrito todavía (el E2E se hizo con mobile-mcp).
 
+
+# Tareas — fase 2 (el Muro sin red)
+
+## Servidor
+- [ ] T15 V189 `publicaciones_sin_red` + IT de la migración.
+- [ ] T16 `POST /wall` con `hechoEn`/`idCliente`/`origenDeLaHora`, idempotente; `PublicacionCreadaEvent.hechoSinRedEn`.
+- [ ] T17 `PostDiarioComunidadHabitoService` cierra por la hora real; `existeDeAutorEntre` cuenta la hora real.
+- [ ] T18 `PublicarEnElMuroSinRedIT`.
+
+## App
+- [ ] T19 Envío `publicarMuro` en la cola (fotos copiadas, subida y publicación con la hora real).
+- [ ] T20 La publicación en espera en el Muro con «Borrar»; el compositor abre sin red (categorías guardadas).
+- [ ] T21 El «Post diario» de Entrenar hecho al instante.
+- [ ] T22 E2E en el emulador, logs y APK.
