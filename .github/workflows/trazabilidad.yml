@@ -42,7 +42,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          # Historia completa: el chequeo de migraciones del arnés compara contra origin/master (que no se edite una aplicada).
+          # Historia completa: el chequeo de migraciones compara contra origin/master (que no se edite una aplicada).
           fetch-depth: 0
 
       # El repositorio de la app es publico: sin `token`, sin PAT. Si la app no tiene una rama con el nombre de la del
@@ -68,8 +68,8 @@ jobs:
           persist-credentials: false
 
       # Node ya viene en el runner (el script pide Node 18 o mas y no tiene dependencias).
-      - name: Pruebas del propio script y reglas del arnés (AGENTS.md corto, PROGRESO.md, sin .pyc)
-        run: node --test scripts/trazabilidad-specs.test.mjs scripts/arnes.test.mjs scripts/arnes-familias.test.mjs
+      - name: Pruebas del propio script y reglas de código
+        run: node --test scripts/trazabilidad-specs.test.mjs scripts/reglas-de-codigo.test.mjs
 
       - name: Trazabilidad de las specs exigidas
         run: node scripts/trazabilidad-specs.mjs app --md "$GITHUB_STEP_SUMMARY"

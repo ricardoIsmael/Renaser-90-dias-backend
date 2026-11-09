@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Verificación estándar del backend: el mismo camino para cualquier persona, agente o el CI (arnés propio, 2026-11-06).
+# Verificación estándar del backend: el mismo camino para cualquier persona, o el CI (2026-11-06).
 #
-#   scripts/verificar.sh            reglas del arnés + trazabilidad de specs + grafo de agentes + ./mvnw -B -ntp clean verify (con la guarda de E-111)
-#   scripts/verificar.sh --rapido   reglas del arnés + trazabilidad + compilar: no cierra nada (sale con 2)
+#   scripts/verificar.sh            reglas de código + trazabilidad de specs + ./mvnw -B -ntp clean verify (con la guarda de E-111)
+#   scripts/verificar.sh --rapido   reglas de código + trazabilidad + compilar: no cierra nada (sale con 2)
 #   scripts/verificar.sh --nube     como el primero, con los contenedores en Testcontainers Cloud (scripts/test-cloud.sh)
-#   scripts/verificar.sh --ci       lo que corre ci.yml: solo Maven y su guarda (el arnés y la trazabilidad tienen su
+#   scripts/verificar.sh --ci       lo que corre ci.yml: solo Maven y su guarda (las reglas de código y la trazabilidad tienen su
 #                                   propio workflow, trazabilidad.yml, que no espera los ~45 minutos de la suite)
 #
 # Salida: 0 = todo corrió y pasó; 1 = algo falló; 2 = nada falló pero quedó algo sin correr (NO es «en verde»).
@@ -36,8 +36,8 @@ mal() { RESUMEN+=("✘ $1"); FALLO=1; }
 sin() { RESUMEN+=("– $1"); SIN_CORRER=1; }
 
 if [[ $MODO != ci ]]; then
-  echo "▶ Reglas del arnés (scripts/arnes*.test.mjs, con las familias de errores) y pruebas del script de trazabilidad"
-  if node --test scripts/arnes.test.mjs scripts/arnes-familias.test.mjs scripts/trazabilidad-specs.test.mjs; then ok "Reglas del arnés y del script de trazabilidad"; else mal "Reglas del arnés o del script de trazabilidad"; fi
+  echo "▶ Reglas de código (scripts/reglas-de-codigo.test.mjs) y pruebas del script de trazabilidad"
+  if node --test scripts/reglas-de-codigo.test.mjs scripts/trazabilidad-specs.test.mjs; then ok "Reglas de código y del script de trazabilidad"; else mal "Reglas de código o del script de trazabilidad"; fi
 
   APP=${RENASER_APP:-}
   if [[ -z $APP ]]; then
@@ -57,15 +57,9 @@ if [[ $MODO != ci ]]; then
     sin "Trazabilidad de specs: no encontré la app (pon RENASER_APP=<ruta>)"
   fi
 
-  # El grafo del flujo de agentes y el perfil de este repo (arnes.perfil.yaml). El núcleo del arnés es genérico y vive
-  # fuera de este repositorio (ARNES_DIR, o ~/Documentos/arnes): valida que no haya bucles sin tope ni camino a la fusión
-  # sin el dueño, y que el perfil traiga un comando para cada nodo que lo pide.
-  ARNES=${ARNES_DIR:-$HOME/Documentos/arnes}
-  if [[ -f $ARNES/bin/arnes.mjs ]]; then
-    echo "▶ Grafo de agentes y perfil del arnés ($ARNES)"
-    if node "$ARNES/bin/arnes.mjs" validar --perfil arnes.perfil.yaml; then ok "Grafo de agentes y perfil del arnés (arnes validar)"; else mal "Grafo de agentes o perfil del arnés: arnes validar falló"; fi
-  else
-    sin "Grafo de agentes y perfil del arnés: no encontré el núcleo (pon ARNES_DIR=<ruta>)"
+  # Chequeos locales de cada desarrollador, si los tiene (.arnes/verificar-local.sh, fuera de git). En el CI no existen.
+  if [[ -x .arnes/verificar-local.sh ]]; then
+    if bash .arnes/verificar-local.sh; then ok "Chequeos locales (.arnes)"; else mal "Chequeos locales (.arnes)"; fi
   fi
 fi
 

@@ -1,5 +1,5 @@
 {
-  "$comentario": "Violaciones que ya existían el día que nació cada chequeo de scripts/arnes-familias.test.mjs. Solo se achica: al arreglar una, se borra. Ver docs/arnes/familias-de-errores.md.",
+  "$comentario": "Violaciones que ya existían el día que nació cada chequeo de scripts/reglas-de-codigo.test.mjs. Solo se achica: al arreglar una, se borra.",
   "tiempoServidor": {
     "fecha": "2026-11-06",
     "motivo": "SystemClock es la única implementación del reloj del proceso: ahí vive la fecha del servidor a propósito.",
