@@ -42,3 +42,12 @@ spring:
 # `${RENASER_ENTORNO:local}`). Va como propiedad suelta y no pisando `management.metrics.tags`
 # para no depender del orden entre este archivo y el actuator.yaml importado por el base.
 RENASER_ENTORNO: prod
+
+# Documentacion de la API (springdoc): APAGADA en prod. /swagger-ui.html y /v3/api-docs viven fuera
+# de /api/v1/**, asi que SecurityConfig no las protege. Se enciende solo a proposito, con el
+# parametro OPENAPI_HABILITADO=true en Parameter Store (que pisa este valor). Ver docs/API_OPENAPI.md.
+OPENAPI_HABILITADO: false
+
+# MCP de la API (McpDeLaApiConfig): SOLO LOCAL. En prod no existe ni a proposito: /mcp no pasa por
+# SecurityConfig y dejaria a cualquier agente recorrer la API.
+MCP_HABILITADO: false
