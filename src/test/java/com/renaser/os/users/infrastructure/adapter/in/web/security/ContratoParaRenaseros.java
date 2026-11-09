@@ -77,6 +77,38 @@ final class ContratoParaRenaseros {
         return doc;
     }
 
+    /**
+     * Lo contrario: lo que hace el equipo (Administración, Alquimista, líder, mentor, Soporte TI), es decir, toda operación
+     * que NO entra en el contrato de renaseros. Documento INTERNO: es el mapa de lo administrativo, no se entrega afuera.
+     */
+    static ObjectNode delEquipo(ObjectNode completo) {
+        ObjectNode doc = completo.deepCopy();
+        ObjectNode rutas = (ObjectNode) doc.path("paths");
+        List<String> vacias = new ArrayList<>();
+        for (Iterator<Map.Entry<String, JsonNode>> it = rutas.fields(); it.hasNext(); ) {
+            Map.Entry<String, JsonNode> ruta = it.next();
+            ObjectNode item = (ObjectNode) ruta.getValue();
+            List<String> fuera = new ArrayList<>();
+            item.fieldNames().forEachRemaining(metodo -> {
+                if (METODOS.contains(metodo) && entra(ruta.getKey(), item.path(metodo))) fuera.add(metodo);
+            });
+            item.remove(fuera);
+            if (METODOS.stream().noneMatch(item::has)) vacias.add(ruta.getKey());
+        }
+        rutas.remove(vacias);
+        dejarSoloLosEsquemasUsados(doc);
+        ObjectNode info = (ObjectNode) doc.path("info");
+        info.put("title", "Renaser — API del equipo (INTERNO)");
+        info.put("description", info.path("description").asText("") + """
+
+
+                **Documento interno.** Lo que hacen Administración, Alquimista, líder, mentor, guía y Soporte TI (todo lo que \
+                no es de un participante). Es el mapa de lo administrativo: no se comparte fuera del equipo ni se pega en \
+                chats de IA externos. El permiso de cada operación está en `x-permiso` y el alcance en la descripción.""");
+        doc.remove("servers");
+        return doc;
+    }
+
     static boolean entra(String ruta, JsonNode operacion) {
         if (PREFIJOS_DE_PERSONAL.stream().anyMatch(ruta::startsWith)) return false;
         JsonNode seguridad = operacion.path("security");

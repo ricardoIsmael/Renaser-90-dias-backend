@@ -52,6 +52,12 @@ Generarlo (no hace falta levantar el backend; usa la base de prueba de Testconta
 
 `ContratoParaRenaserosIT` falla si se cuela una ruta de personal o un permiso del equipo (`MANAGE_*`, `OPERATE_PLATFORM`…).
 
+### El documento del equipo (interno)
+
+La misma prueba deja `target/openapi/renaser-api-equipo-INTERNO.json`: lo contrario del de renaseros, todo lo que hacen
+Administración, Alquimista, líder, mentor, guía y Soporte TI (`ContratoParaRenaseros.delEquipo`). Entre los dos cubren el
+documento entero. **Es el mapa de lo administrativo: no se entrega fuera del equipo ni se pega en chats de IA externos.**
+
 ### Cuidados al usarlo con una IA (Claude, ChatGPT, Cursor)
 
 El archivo **no trae secretos**: ni claves, ni tokens, ni datos de personas, ni la dirección interna de la base. Lo que sí

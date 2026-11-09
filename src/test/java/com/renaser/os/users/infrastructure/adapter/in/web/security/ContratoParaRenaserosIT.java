@@ -63,6 +63,12 @@ class ContratoParaRenaserosIT {
 
         Files.createDirectories(SALIDA.getParent());
         json.writerWithDefaultPrettyPrinter().writeValue(SALIDA.toFile(), contrato);
+        // El del equipo (interno): lo contrario del de renaseros. Entre los dos cubren todo el documento.
+        ObjectNode delEquipo = ContratoParaRenaseros.delEquipo((ObjectNode) json.readTree(respuesta.body()));
+        List<String> rutasDelEquipo = new ArrayList<>();
+        delEquipo.path("paths").fieldNames().forEachRemaining(rutasDelEquipo::add);
+        assertThat(rutasDelEquipo).anyMatch(r -> r.startsWith("/api/v1/admin/")).doesNotContain("/api/v1/home");
+        json.writerWithDefaultPrettyPrinter().writeValue(SALIDA.resolveSibling("renaser-api-equipo-INTERNO.json").toFile(), delEquipo);
         assertThat(Files.size(SALIDA)).isPositive();
     }
 }
