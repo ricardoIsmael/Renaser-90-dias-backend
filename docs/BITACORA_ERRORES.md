@@ -16072,3 +16072,11 @@ De las 78 tablas que compara la prueba, solo esa. A «la otra persona» no se le
 **Solución** (solo en la prueba; el rechazo del servidor funciona: el cierre con 1002 lo prueba). El cliente anota el cierre y `esperarOCierre` vuelve en cuanto el socket se cierra sin la trama (tope de 30 s si no pasa nada). Un cierre sin ERROR tiene que ser 1002; la prueba repite en otra conexión (hasta cinco) y exige ver el ERROR con `MODO_SOLO_LECTURA`.
 
 **Cómo evitar que vuelva a pasar.** Una prueba de WebSocket no espera un tiempo fijo: espera la trama O el cierre. Con STOMP de Spring, un ERROR seguido de cierre puede perderse si coincide con otro envío a la misma sesión; si algún día el cliente real depende de leer el código del ERROR, el cierre 1002 también hay que tratarlo como rechazo.
+
+## E-673 · SER no proponía planes a quien tenía objetivos del diagnóstico pero aún no abría Plan (backend, issue #60, 09/11, RESUELTO)
+
+**Causa real.** `CompuertaDeRocasService.maestrasDe` leía las Rocas Maestras con `LoadRocaMaestraPort` sin crearlas; `RocaMaestraService.misRocasMaestras` (lo que usa Plan) crea las que nacieron del diagnóstico al leerlas. Hasta abrir Plan, la compuerta decía «cerrada» y SER mandaba a Plan en vez de proponer.
+
+**Solución.** La compuerta lee con `misRocasMaestras` (sin `readOnly`, porque puede crear esas filas una vez). Sin programa andando (no participa, suspendida) cae a la lectura de antes. Spec 038 FR-014.
+
+**Cómo evitar que vuelva a pasar.** Una lectura que decide lo mismo que otra pantalla usa el MISMO caso de uso, no el puerto crudo. `CompuertaDeRocasMaterializaTest`.
