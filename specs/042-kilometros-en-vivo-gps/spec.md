@@ -150,6 +150,7 @@ primeros ni los últimos metros de la ruta (zona de privacidad, FR-043). Es un p
   a medida que llegan (como máximo cada 5 s o cada 10 puntos), de modo que si Android mata el proceso se pierden como mucho esos segundos.
 - **FR-006** Al reabrir la app con una carrera sin terminar, se ofrece retomarla («Seguir» / «Terminar» / «Descartar»); el tiempo sin
   puntos mientras el proceso estuvo muerto no cuenta como tiempo activo.
+  **Corregido 2026-11-10 (app #172):** si el proceso lo levanta la tarea del GPS (el sistema mató la app pero el GPS siguió), la carrera no queda en pausa: ese rato es un hueco de GPS. La pausa al reabrir vale solo cuando la persona abre la app.
 - **FR-007** Pantalla Corriendo: tiempo grande, distancia, ritmo (min/km) y calorías; pestañas Mapa / Estadísticas / Tramos / Voz; barra
   «Desliza para pausar». ~~Sin botón 2D/3D.~~ **Corregido 05/11/2026 (pedido del dueño):** el mapa lleva un botón redondo de 48 arriba a
   la derecha para pasar entre 3D (por defecto) y 2D; se recuerda en el teléfono y por cuenta. Ver FR-037.
@@ -229,6 +230,7 @@ primeros ni los últimos metros de la ruta (zona de privacidad, FR-043). Es un p
   real; si la diferencia es mayor a 30 m, se coloca en la real sin animar el recorrido.
 - **FR-033** **Sin pasos, quieto:** sin pasos detectados y con velocidad GPS menor a 1 km/h, el avatar no se mueve y no se suman metros aunque
   el GPS «tiemble». Parado 60 s con el teléfono en la mano, la distancia no sube más de 5 m.
+  **Corregido 2026-11-10 (app #172):** también cuenta como movimiento si la velocidad que mide el GPS (mediana de los últimos puntos) llega a 0,6 m/s y el avance pasa 4 m o media precisión: con 8 m o más de precisión, una caminata a 3–5 km/h no superaba el ruido de la posición y quedaba en 0 m.
 - **FR-034** **Los km oficiales son los del GPS filtrado** (FR-030). La zancada del podómetro solo mueve al avatar; no se suma a la distancia
   salvo FR-035.
 - **FR-035** **Huecos cortos sin señal:** si el GPS no da puntos buenos por menos de 60 s y hay pasos, se rellena la distancia con pasos ×
