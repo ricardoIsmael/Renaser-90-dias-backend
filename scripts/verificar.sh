@@ -6,6 +6,12 @@
 #   scripts/verificar.sh --nube     como el primero, con los contenedores en Testcontainers Cloud (scripts/test-cloud.sh)
 #   scripts/verificar.sh --ci       lo que corre ci.yml: solo Maven y su guarda (las reglas de código y la trazabilidad tienen su
 #                                   propio workflow, trazabilidad.yml, que no espera los ~45 minutos de la suite)
+#   scripts/verificar.sh --ci --parte=unitarias|integracion
+#                                   solo una mitad de la suite (ci.yml corre las dos en trabajos paralelos, 2026-11-09):
+#                                   unitarias = surefire (sin los *IT); integracion = failsafe (los *IT). Cada mitad tiene su piso.
+#                                   integracion-a / integracion-b: la de integración partida en dos por módulo (~3,5 min de
+#                                   pruebas cada una). B lista sus módulos; A es TODO lo demás (la misma lista, negada), así
+#                                   un módulo nuevo nunca queda sin correr.
 #
 # Salida: 0 = todo corrió y pasó; 1 = algo falló; 2 = nada falló pero quedó algo sin correr (NO es «en verde»).
 # En esta laptop: córrelo con ~/.config/renaser-e2e/herramientas/pesado.sh y nunca en el checkout del IDE (E-313).
@@ -18,15 +24,37 @@ set -uo pipefail
 RAIZ=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$RAIZ"
 MODO=completo
+PARTE=todo
 for a in "$@"; do
   case "$a" in
+    --parte=unitarias) PARTE=unitarias ;;
+    --parte=integracion) PARTE=integracion ;;
+    --parte=integracion-a) PARTE=integracion-a ;;
+    --parte=integracion-b) PARTE=integracion-b ;;
     --rapido) MODO=rapido ;;
     --nube) MODO=nube ;;
     --ci) MODO=ci ;;
     *) echo "Opción desconocida: $a" >&2; exit 2 ;;
   esac
 done
-MINIMO_PRUEBAS=${MINIMO_PRUEBAS:-2000}
+# El piso es por lo que corre: la mitad de integración tiene ~900 pruebas, la de unitarias ~9500.
+# Módulos de la parte B (equilibrado con los tiempos del 2026-11-09). Para mover un módulo de parte, solo esta lista.
+MODULOS_B=(chat evidence notifications plataforma points rag shared)
+PATRONES_B=$(printf 'com/renaser/os/%s/**/*IT,' "${MODULOS_B[@]}")com/renaser/os/IndicesDeLaAuditoriaIT
+EXCLUIR_B=$(printf '!com/renaser/os/%s/**,' "${MODULOS_B[@]}")!com/renaser/os/IndicesDeLaAuditoriaIT
+case $PARTE in
+  integracion) MINIMO_PRUEBAS=${MINIMO_PRUEBAS_INTEGRACION:-500} ;;
+  integracion-a|integracion-b) MINIMO_PRUEBAS=${MINIMO_PRUEBAS_INTEGRACION_PARTE:-200} ;;
+  *) MINIMO_PRUEBAS=${MINIMO_PRUEBAS:-2000} ;;
+esac
+# Qué mitad corre Maven. Integración: surefire corre sin pruebas (un nombre que no existe y sin fallar por eso).
+case $PARTE in
+  unitarias) MITAD=(-DskipITs) ;;
+  integracion) MITAD=(-Dtest=NingunaPruebaUnitaria -Dsurefire.failIfNoSpecifiedTests=false) ;;
+  integracion-a) MITAD=(-Dtest=NingunaPruebaUnitaria -Dsurefire.failIfNoSpecifiedTests=false "-Dit.test=**/*IT,$EXCLUIR_B") ;;
+  integracion-b) MITAD=(-Dtest=NingunaPruebaUnitaria -Dsurefire.failIfNoSpecifiedTests=false "-Dit.test=$PATRONES_B") ;;
+  *) MITAD=() ;;
+esac
 LOG=${LOG_MAVEN:-salida-maven.log}
 RESUMEN=()
 FALLO=0
@@ -68,7 +96,7 @@ if [[ $MODO == rapido ]]; then
   if ./mvnw -B -ntp -q compile; then ok "Compila"; else mal "No compila"; fi
   sin "Suite completa (clean verify): --rapido no cierra nada"
 else
-  if [[ $MODO == nube ]]; then CMD=(./scripts/test-cloud.sh clean verify); else CMD=(./mvnw -B -ntp clean verify); fi
+  if [[ $MODO == nube ]]; then CMD=(./scripts/test-cloud.sh clean verify "${MITAD[@]}"); else CMD=(./mvnw -B -ntp clean verify "${MITAD[@]}"); fi
   echo "▶ ${CMD[*]}  (la salida queda en $LOG)"
   "${CMD[@]}" 2>&1 | tee "$LOG"
   ESTADO=${PIPESTATUS[0]}
@@ -84,13 +112,13 @@ else
     elif [[ $TOTAL -lt $MINIMO_PRUEBAS ]]; then
       mal "Maven: solo $TOTAL pruebas, el piso es $MINIMO_PRUEBAS. Faltó correr un bloque de la suite, o el piso quedó viejo."
     else
-      ok "Maven clean verify: $TOTAL pruebas, 0 fallos, 0 errores"
+      ok "Maven clean verify ($PARTE): $TOTAL pruebas, 0 fallos, 0 errores"
     fi
   fi
 fi
 
 echo
-echo "── Verificación · $(date '+%Y-%m-%d %H:%M') · $(git rev-parse --abbrev-ref HEAD) @ $(git rev-parse --short HEAD) · modo $MODO"
+echo "── Verificación · $(date '+%Y-%m-%d %H:%M') · $(git rev-parse --abbrev-ref HEAD) @ $(git rev-parse --short HEAD) · modo $MODO · parte $PARTE"
 for r in "${RESUMEN[@]}"; do echo "$r"; done
 if [[ $FALLO -ne 0 ]]; then
   echo; echo "Algo falló: no está terminado."
