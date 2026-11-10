@@ -18,6 +18,9 @@ public interface EditarDentroDe48hUseCase {
 
     RocaSemanal editar(EditarRocaSemanalCommand command);
 
+    /** Lo mismo con el instante ya decidido (spec 048): lo hecho sin red corre sus reglas con la hora real, no con la de llegada. */
+    RocaSemanal editar(EditarRocaSemanalCommand command, java.time.Instant referencia);
+
     /** Campo {@code null} = no se toca (PATCH parcial). */
     record EditarRocaSemanalCommand(@NotNull UserId actorId, @NotNull RocaSemanalId rocaSemanalId, String titulo,
                                      String obstaculo, String contingencia, Integer autoevaluacionInicio) {

@@ -26,6 +26,7 @@ import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
@@ -62,11 +63,17 @@ public class RocaSemanalService implements CrearPlanSemanalUseCase, EditarDentro
     @Override
     @Transactional
     public List<RocaSemanal> crear(CrearPlanSemanalCommand command) {
+        return crear(command, clock.now());
+    }
+
+    @Override
+    @Transactional
+    public List<RocaSemanal> crear(CrearPlanSemanalCommand command, Instant ahora) {
         ProgresoParticipanteRocks progreso = requireProgreso(command.actorId());
         Map<EjeObjetivo, RocaMaestra> maestras = requireRocasMaestrasCompletas(command.actorId());
         requireUnEjePorItem(command.rocas());
 
-        LocalDate hoy = hoyEn(progreso.zona());
+        LocalDate hoy = ahora.atZone(progreso.zona()).toLocalDate();
         int numeroSemana = numeroSemanaAPlanificar(progreso, hoy);
 
         Set<EjeObjetivo> yaPlanificados = ejesYaPlanificados(maestras, numeroSemana);
@@ -82,7 +89,7 @@ public class RocaSemanalService implements CrearPlanSemanalUseCase, EditarDentro
                 // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD §5.4.7).
                 .map(item -> RocaSemanal.planificar(RocaSemanalId.of(idGenerator.newId()),
                         maestras.get(item.eje()).id(), numeroSemana, item.titulo(),
-                        item.obstaculo(), item.contingencia(), item.autoevaluacionInicio(), clock))
+                        item.obstaculo(), item.contingencia(), item.autoevaluacionInicio(), ahora))
                 .map(saveRocaSemanalPort::save)
                 .toList();
         return creadas;
@@ -91,28 +98,40 @@ public class RocaSemanalService implements CrearPlanSemanalUseCase, EditarDentro
     @Override
     @Transactional
     public RocaSemanal editar(EditarRocaSemanalCommand command) {
+        return editar(command, clock.now());
+    }
+
+    @Override
+    @Transactional
+    public RocaSemanal editar(EditarRocaSemanalCommand command, Instant ahora) {
         ProgresoParticipanteRocks progreso = requireProgreso(command.actorId());
         RocaSemanal rocaSemanal = requireRocaSemanalPropia(command.actorId(), command.rocaSemanalId());
 
         EstadoPlazo plazoAlCrear = VentanaPlanificacionSemanal.plazoAlCrear(rocaSemanal.creadoEn(), progreso.zona());
-        boolean editable = VentanaPlanificacionSemanal.puedeEditar(plazoAlCrear, rocaSemanal.creadoEn(), clock.now(),
+        boolean editable = VentanaPlanificacionSemanal.puedeEditar(plazoAlCrear, rocaSemanal.creadoEn(), ahora,
                 progreso.zona());
         if (!editable) {
             throw new NotAuthorizedException("La ventana para editar esta roca semanal ya cerro");
         }
 
         rocaSemanal.actualizarPlanificacion(command.titulo(), command.obstaculo(), command.contingencia(),
-                command.autoevaluacionInicio(), clock);
+                command.autoevaluacionInicio(), ahora);
         return saveRocaSemanalPort.save(rocaSemanal);
     }
 
     @Override
     @Transactional
     public RocaSemanal cerrar(CerrarSemanaCommand command) {
+        return cerrar(command, clock.now());
+    }
+
+    @Override
+    @Transactional
+    public RocaSemanal cerrar(CerrarSemanaCommand command, Instant ahora) {
         requireProgreso(command.actorId());
         RocaSemanal rocaSemanal = requireRocaSemanalPropia(command.actorId(), command.rocaSemanalId());
         rocaSemanal.registrarRevision(command.autoevaluacionFin(), command.bloqueoPrincipal(), command.correccion(),
-                clock);
+                ahora);
         return saveRocaSemanalPort.save(rocaSemanal);
     }
 
@@ -143,7 +162,7 @@ public class RocaSemanalService implements CrearPlanSemanalUseCase, EditarDentro
      * > lunes a domingo y el +1 vuelve al domingo. Se quedan dos cosas nuevas: la 13 nunca pide una
      * > 14, y el domingo previo al dia 1 prepara la semana 1 (la cuenta vieja pedia la 2).
      */
-    private static int numeroSemanaAPlanificar(ProgresoParticipanteRocks progreso, LocalDate hoy) {
+    static int numeroSemanaAPlanificar(ProgresoParticipanteRocks progreso, LocalDate hoy) {
         return progreso.semanas(hoy).map(semanas -> semanas.semanaAPlanificar(hoy)).orElse(1);
     }
 

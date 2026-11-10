@@ -41,6 +41,9 @@ public interface DefinirRocaMaestraUseCase {
 
     RocaMaestra definir(DefinirRocaMaestraCommand command);
 
+    /** Lo mismo con el instante ya decidido (spec 048): lo hecho sin red corre sus reglas con la hora real, no con la de llegada. */
+    RocaMaestra definir(DefinirRocaMaestraCommand command, java.time.Instant referencia);
+
     record DefinirRocaMaestraCommand(@NotNull UserId actorId,
                                       @NotNull EjeObjetivo eje,
                                       @NotBlank @Size(max = RocaMaestra.MAX_OBJETIVO) String objetivo,

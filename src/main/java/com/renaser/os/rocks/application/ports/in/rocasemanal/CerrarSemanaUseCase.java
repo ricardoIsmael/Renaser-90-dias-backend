@@ -14,6 +14,9 @@ public interface CerrarSemanaUseCase {
 
     RocaSemanal cerrar(CerrarSemanaCommand command);
 
+    /** Lo mismo con el instante ya decidido (spec 048): lo hecho sin red corre sus reglas con la hora real, no con la de llegada. */
+    RocaSemanal cerrar(CerrarSemanaCommand command, java.time.Instant referencia);
+
     record CerrarSemanaCommand(@NotNull UserId actorId, @NotNull RocaSemanalId rocaSemanalId,
                                 @Min(1) @Max(10) int autoevaluacionFin, @NotBlank String bloqueoPrincipal,
                                 @NotBlank String correccion) {

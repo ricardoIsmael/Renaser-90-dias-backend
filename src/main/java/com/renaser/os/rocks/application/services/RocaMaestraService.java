@@ -20,6 +20,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
@@ -75,14 +76,19 @@ public class RocaMaestraService implements ConsultarRocasMaestrasUseCase, Defini
      */
     @Override
     public RocaMaestra definir(DefinirRocaMaestraCommand command) {
+        return definir(command, clock.now());
+    }
+
+    @Override
+    public RocaMaestra definir(DefinirRocaMaestraCommand command, Instant ahora) {
         requireProgreso(command.actorId());
         conLasDelDiagnostico(command.actorId());
         MetaCuantitativa meta = command.tieneMeta()
                 ? new MetaCuantitativa(command.meta(), command.avance(), command.unidad(), command.lineaBase())
                 : null;
         Optional<RocaMaestra> existente = loadRocaMaestraPort.deParticipanteYEje(command.actorId(), command.eje());
-        RocaMaestra decidida = existente.map(roca -> roca.recibirDefinicion(command.objetivo(), meta, clock.now()))
-                .orElseGet(() -> nueva(command, meta));
+        RocaMaestra decidida = existente.map(roca -> roca.recibirDefinicion(command.objetivo(), meta, ahora))
+                .orElseGet(() -> nueva(command, meta, ahora));
         return guardarRocaMaestraPort.guardar(decidida);
     }
 
@@ -131,9 +137,9 @@ public class RocaMaestraService implements ConsultarRocasMaestrasUseCase, Defini
         }
     }
 
-    private RocaMaestra nueva(DefinirRocaMaestraCommand command, MetaCuantitativa meta) {
+    private RocaMaestra nueva(DefinirRocaMaestraCommand command, MetaCuantitativa meta, Instant ahora) {
         return RocaMaestra.definir(RocaMaestraId.of(idGenerator.newId()), command.actorId(), command.eje(),
-                command.objetivo(), meta, clock.now());
+                command.objetivo(), meta, ahora);
     }
 
     /**

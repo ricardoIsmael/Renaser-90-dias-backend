@@ -5,6 +5,8 @@ import com.renaser.os.rocks.application.ports.in.rocamensual.ConsultarRocasMensu
 import com.renaser.os.rocks.application.ports.in.rocamensual.DefinirRocaMensualUseCase;
 import com.renaser.os.rocks.application.ports.in.rocamensual.DefinirRocaMensualUseCase.DefinirRocaMensualCommand;
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
+import com.renaser.os.rocks.application.ports.in.rocasemanal.ObjetivosSinRedUseCase;
+import com.renaser.os.shared.domain.HechoSinRed;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.rocks.domain.model.rocamensual.RocaMensual;
 import com.renaser.os.shared.domain.UserId;
@@ -29,10 +31,12 @@ public class RocaMensualController {
     private final ConsultarRocasMensualesUseCase consultarUseCase;
     private final ConsultarObjetivoDelMesUseCase planUseCase;
     private final DefinirRocaMensualUseCase definirUseCase;
+    private final ObjetivosSinRedUseCase sinRedUseCase;
 
     public RocaMensualController(ConsultarRocasMensualesUseCase consultarUseCase,
                                   ConsultarObjetivoDelMesUseCase planUseCase,
-                                  DefinirRocaMensualUseCase definirUseCase) {
+                                  DefinirRocaMensualUseCase definirUseCase, ObjetivosSinRedUseCase sinRedUseCase) {
+        this.sinRedUseCase = sinRedUseCase;
         this.consultarUseCase = consultarUseCase;
         this.planUseCase = planUseCase;
         this.definirUseCase = definirUseCase;
@@ -75,10 +79,13 @@ public class RocaMensualController {
     @RequiresPermission(value = Permission.FOLLOW_OWN_PROGRAM, scope = "solo sobre las rocas del propio aprendiz")
     @PutMapping("/{eje}/{numeroMes}")
     public RocaMensualResponse definir(@ActorAutenticado UserId actor, @PathVariable EjeObjetivo eje,
-                                        @PathVariable int numeroMes,
+                                        @PathVariable int numeroMes, HechoSinRed sinRed,
                                         @Valid @RequestBody DefinirRocaMensualRequest request) {
-        RocaMensual definida = definirUseCase.definir(new DefinirRocaMensualCommand(
-                actor, eje, numeroMes, request.titulo(), request.meta(), request.avance(), request.unidad()));
+        var comando = new DefinirRocaMensualCommand(
+                actor, eje, numeroMes, request.titulo(), request.meta(), request.avance(), request.unidad());
+        // Spec 048 (FR-019): con X-Id-Cliente y X-Hecho-En es lo hecho sin red, con su hora real; sin ellas, lo de siempre.
+        RocaMensual definida = sinRed == null ? definirUseCase.definir(comando)
+                : sinRedUseCase.definirObjetivoDelMes(comando, sinRed);
         return RocaMensualResponse.from(definida, consultarUseCase.duracionDelPrograma(actor));
     }
 }

@@ -108,11 +108,16 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
     @Override
     @Transactional
     public List<RocaDiaria> crear(CrearPlanDiarioCommand command) {
+        return crear(command, clock.now());
+    }
+
+    @Override
+    @Transactional
+    public List<RocaDiaria> crear(CrearPlanDiarioCommand command, Instant ahora) {
         ProgresoParticipanteRocks progreso = requireProgreso(command.actorId());
         Map<EjeObjetivo, RocaMaestra> maestras = requireRocasMaestrasCompletas(command.actorId());
         requirePosicionesContiguasPorEje(command.rocas());
 
-        Instant ahora = clock.now();
         ZoneId zona = progreso.zona();
         EstadoPlazo plazoAlCrear = VentanaPlanificacionDiaria.abierta(ahora, zona) ? EstadoPlazo.EN_PLAZO
                 : EstadoPlazo.A_DESTIEMPO;
@@ -130,7 +135,7 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
         }
 
         List<RocaDiaria> creadas = command.rocas().stream()
-                .map(item -> planificarUna(command.actorId(), command.fecha(), item, maestras, semanas))
+                .map(item -> planificarUna(command.actorId(), command.fecha(), item, maestras, semanas, ahora))
                 .toList();
         return saveRocaDiariaPort.saveAll(creadas);
     }
@@ -138,13 +143,25 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
     @Override
     @Transactional
     public RocaDiaria completar(CompletarRocaDiariaCommand command) {
+        return completar(command, clock.now(), true, true);
+    }
+
+    @Override
+    @Transactional
+    public RocaDiaria completarConHoraReal(CompletarRocaDiariaCommand command, Instant referencia, boolean conPuntos) {
+        return completar(command, referencia, false, conPuntos);
+    }
+
+    /** @param exigirDeHoy con red es obligatorio; lo hecho sin red ya lo decidió quien llama (D14: nada rebota) */
+    private RocaDiaria completar(CompletarRocaDiariaCommand command, Instant ahora, boolean exigirDeHoy, boolean conPuntos) {
         ProgresoParticipanteRocks progreso = requireProgreso(command.actorId());
         RocaDiaria roca = requireRocaPropiaParaEscritura(command.actorId(), command.rocaDiariaId());
         if (roca.completada()) {
             throw new IllegalStateException("ALREADY_COMPLETED: esta roca ya tiene evidencia");
         }
-        Instant ahora = clock.now();
-        requireDeHoy(roca, ahora.atZone(progreso.zona()).toLocalDate());
+        if (exigirDeHoy) {
+            requireDeHoy(roca, ahora.atZone(progreso.zona()).toLocalDate());
+        }
         requireNoBloqueadaPorPareto(roca);
         if (command.tipo() == TipoEvidenciaRoca.FOTO) {
             requireExifDentroDeMargen(command.timestampExif(), ahora);
@@ -156,9 +173,11 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
                 command.contenidoTexto(), command.timestampExif(), command.gpsLat(),
                 command.gpsLng(), command.esPrincipal(), ahora));
 
-        roca.completar(ahora, clock);
+        roca.completar(ahora, ahora);
         RocaDiaria completada = saveRocaDiariaPort.save(roca);
-        completada = aplicarPremio(completada, progreso.zona(), ahora);
+        if (conPuntos) {
+            completada = aplicarPremio(completada, progreso.zona(), ahora);
+        }
 
         if (command.publishedToWall()) {
             publicarEnMuro(completada, command);
@@ -253,7 +272,7 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
     }
 
     private RocaDiaria planificarUna(UserId actorId, LocalDate fecha, ItemRocaDiaria item,
-                                      Map<EjeObjetivo, RocaMaestra> maestras, SemanaPrograma semanas) {
+                                      Map<EjeObjetivo, RocaMaestra> maestras, SemanaPrograma semanas, Instant ahora) {
         RocaMaestra maestra = maestras.get(item.eje());
         RocaSemanal rocaSemanal = AccesoARocas.objetivoSemanalDelDia(loadRocaSemanalPort, maestra, semanas, fecha)
                 .orElseThrow(() -> new IllegalArgumentException(
@@ -261,7 +280,7 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD §5.4.7).
         return RocaDiaria.planificar(RocaDiariaId.of(idGenerator.newId()), actorId, fecha, item.posicion(),
                 item.titulo(), item.descripcion(), item.puntajeImpacto(), item.esDelegable(), item.eje(),
-                rocaSemanal.id(), item.horaInicio(), item.horaFin(), accionesDe(item), clock);
+                rocaSemanal.id(), item.horaInicio(), item.horaFin(), accionesDe(item), ahora);
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.renaser.os.rocks.infrastructure.adapter.in.rest.rocadiaria;
 
+import com.renaser.os.rocks.application.ports.in.rocadiaria.AccionesSinRedUseCase;
 import com.renaser.os.rocks.application.ports.in.rocadiaria.CompletarRocaDiariaUseCase;
 import com.renaser.os.rocks.application.ports.in.rocadiaria.CompletarRocaDiariaUseCase.CompletarRocaDiariaCommand;
 import com.renaser.os.rocks.application.ports.in.rocadiaria.ConsultarRocasDeHoyUseCase;
@@ -12,6 +13,7 @@ import com.renaser.os.rocks.application.ports.in.rocadiaria.SolicitarUrlAdjuntoR
 import com.renaser.os.rocks.domain.model.rocadiaria.TipoEvidenciaRoca;
 import com.renaser.os.rocks.domain.model.rocadiaria.RocaDiariaId;
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
+import com.renaser.os.shared.domain.HechoSinRed;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
@@ -40,10 +42,13 @@ public class RocaDiariaController {
     private final SolicitarUrlAdjuntoRocaUseCase urlAdjuntoUseCase;
     private final ConsultarRocasDeHoyUseCase hoyUseCase;
     private final ConsultarRocasDeMananaUseCase mananaUseCase;
+    private final AccionesSinRedUseCase sinRedUseCase;
 
     public RocaDiariaController(CrearPlanDiarioUseCase crearUseCase, CompletarRocaDiariaUseCase completarUseCase,
                                  SolicitarUrlAdjuntoRocaUseCase urlAdjuntoUseCase,
-                                 ConsultarRocasDeHoyUseCase hoyUseCase, ConsultarRocasDeMananaUseCase mananaUseCase) {
+                                 ConsultarRocasDeHoyUseCase hoyUseCase, ConsultarRocasDeMananaUseCase mananaUseCase,
+                                 AccionesSinRedUseCase sinRedUseCase) {
+        this.sinRedUseCase = sinRedUseCase;
         this.crearUseCase = crearUseCase;
         this.completarUseCase = completarUseCase;
         this.urlAdjuntoUseCase = urlAdjuntoUseCase;
@@ -65,14 +70,16 @@ public class RocaDiariaController {
 
     @RequiresPermission(value = Permission.FOLLOW_OWN_PROGRAM, scope = "exige tener las rocas maestras completas (ROCKS_LOCKED)")
     @PostMapping("/plan")
-    public ResponseEntity<List<RocaDiariaResponse>> crear(@ActorAutenticado UserId actor,
+    public ResponseEntity<List<RocaDiariaResponse>> crear(@ActorAutenticado UserId actor, HechoSinRed sinRed,
                                                             @Valid @RequestBody CrearPlanDiarioRequest request) {
         List<ItemRocaDiaria> items = request.rocas().stream()
                 .map(item -> new ItemRocaDiaria(EjeObjetivo.valueOf(item.eje()), item.posicion(), item.titulo(),
                         item.descripcion(), item.puntajeImpacto(), item.esDelegable(), item.horaInicio(),
                         item.horaFin(), item.acciones()))
                 .toList();
-        var creadas = crearUseCase.crear(new CrearPlanDiarioCommand(actor, request.fecha(), items));
+        var comando = new CrearPlanDiarioCommand(actor, request.fecha(), items);
+        // Spec 048 (FR-019): con X-Id-Cliente y X-Hecho-En es lo hecho sin red, con su hora real; sin ellas, lo de siempre.
+        var creadas = sinRed == null ? crearUseCase.crear(comando) : sinRedUseCase.agendar(comando, sinRed);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(creadas.stream().map(RocaDiariaResponse::from).toList());
     }
@@ -88,14 +95,19 @@ public class RocaDiariaController {
 
     @RequiresPermission(value = Permission.FOLLOW_OWN_PROGRAM, scope = "dueno de la roca diaria, y la roca VERDE del eje primero (Pareto)")
     @PostMapping("/{id}/evidence")
-    public RocaDiariaResponse completar(@ActorAutenticado UserId actor, @PathVariable UUID id,
+    public RocaDiariaResponse completar(@ActorAutenticado UserId actor, @PathVariable UUID id, HechoSinRed sinRed,
                                          @Valid @RequestBody CompletarRocaDiariaRequest request) {
         boolean esPrincipal = request.esPrincipal() == null || request.esPrincipal();
         boolean publishedToWall = Boolean.TRUE.equals(request.publishedToWall());
-        var completada = completarUseCase.completar(new CompletarRocaDiariaCommand(actor,
+        var comando = new CompletarRocaDiariaCommand(actor,
                 RocaDiariaId.of(id), TipoEvidenciaRoca.valueOf(request.tipo()), request.bucket(),
                 request.rutaStorage(), request.contenidoTexto(), request.timestampExif(), request.gpsLat(),
-                request.gpsLng(), esPrincipal, publishedToWall));
-        return RocaDiariaResponse.from(completada);
+                request.gpsLng(), esPrincipal, publishedToWall);
+        if (sinRed != null) {
+            // Spec 048 (FR-019): marcada sin red; nada rebota (D14) y la respuesta dice por qué quedó sin puntos, si fue así.
+            var marcada = sinRedUseCase.marcar(comando, sinRed);
+            return RocaDiariaResponse.from(marcada.roca(), marcada.motivoSinPuntos() == null ? null : marcada.motivoSinPuntos().name());
+        }
+        return RocaDiariaResponse.from(completarUseCase.completar(comando));
     }
 }
