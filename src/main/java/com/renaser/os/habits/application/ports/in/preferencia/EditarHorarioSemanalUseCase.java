@@ -42,6 +42,10 @@ public interface EditarHorarioSemanalUseCase {
     /** Fija la hora de ese dia. Si ya habia una, la reemplaza. */
     void fijar(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana, LocalTime horaDisparo, LocalTime horaLimite);
 
+    /** Lo mismo con el instante ya decidido (spec 048): lo hecho sin red corre sus reglas (ventana, cuota, semana libre) con la hora real. */
+    void fijar(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana, LocalTime horaDisparo, LocalTime horaLimite,
+               java.time.Instant ahora);
+
     /**
      * Apaga el habito ESE dia de la semana, todas las semanas (V40).
      *
@@ -52,6 +56,9 @@ public interface EditarHorarioSemanalUseCase {
      * dias".
      */
     void apagar(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana);
+
+    /** Lo mismo con el instante ya decidido (spec 048): lo hecho sin red corre sus reglas (ventana, cuota, semana libre) con la hora real. */
+    void apagar(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana, java.time.Instant ahora);
 
     /**
      * El aviso propio de ese dia de la semana, todas las semanas (V111). Con {@code activo = false} ese
@@ -64,12 +71,20 @@ public interface EditarHorarioSemanalUseCase {
     void fijarRecordatorio(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana, boolean activo,
                            List<Integer> antelaciones);
 
+    /** Lo mismo con el instante ya decidido (spec 048): lo hecho sin red corre sus reglas (ventana, cuota, semana libre) con la hora real. */
+    void fijarRecordatorio(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana, boolean activo,
+                           List<Integer> antelaciones, java.time.Instant ahora);
+
     /**
      * Como suena la alarma de ese dia de la semana, todas las semanas (V112). Si la combinacion pedida es
      * IGUAL a la general (la del habito o, si nadie eligio nada, la de hoy), el dia vuelve a heredarla y no se
      * guarda como propia. Conserva la hora y el aviso del dia. No cobra cupo.
      */
     void fijarCombinacion(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana, CombinacionDeAlarma combinacion);
+
+    /** Lo mismo con el instante ya decidido (spec 048): lo hecho sin red corre sus reglas (ventana, cuota, semana libre) con la hora real. */
+    void fijarCombinacion(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana, CombinacionDeAlarma combinacion,
+                          java.time.Instant ahora);
 
     /**
      * Quita la hora propia, el aviso propio, la combinacion propia o el apagado de ese dia: vuelve al horario

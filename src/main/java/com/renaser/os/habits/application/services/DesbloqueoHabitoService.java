@@ -86,6 +86,12 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
     @Override
     @Transactional
     public DesbloqueoHabito elegir(ElegirHabitoCommand command) {
+        return elegir(command, clock.now());
+    }
+
+    @Override
+    @Transactional
+    public DesbloqueoHabito elegir(ElegirHabitoCommand command, Instant ahora) {
         ProgresoParticipanteHabits progreso = requireProgreso(command.actorId());
         // D-103: el dia 0 YA NO se rechaza. Con la regla "hoy se organiza manana" (D-91/D-98), quien
         // eligio empezar manana tiene que poder armar su plan hoy — y el interruptor ACTIVO/PAUSADO
@@ -99,7 +105,6 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
         habito.exigirQueSeaVisibleEn(progreso.formacion());
         requirePuedeEntrarEnElPlan(habito, command.actorId());
 
-        Instant ahora = clock.now();
         int diaDesbloqueo = resolverDiaDesbloqueo(command.diaDesbloqueo(), progreso.diaPrograma(), progreso.duracionDias());
         savePort.elegirSiFalta(command.actorId(), command.habitoId(), diaDesbloqueo, ahora, ahora);
         return loadPort.deParticipanteYHabito(command.actorId(), command.habitoId())
@@ -115,6 +120,12 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
     @Override
     @Transactional
     public DesbloqueoHabito cambiarEstado(CambiarEstadoHabitoCommand command) {
+        return cambiarEstado(command, clock.now());
+    }
+
+    @Override
+    @Transactional
+    public DesbloqueoHabito cambiarEstado(CambiarEstadoHabitoCommand command, Instant referencia) {
         ProgresoParticipanteHabits progreso = requireProgreso(command.actorId());
         Habito habito = requireHabito(command.habitoId());
         habito.exigirQueSeaVisibleEn(progreso.formacion());
@@ -123,9 +134,9 @@ public class DesbloqueoHabitoService implements ConsultarDesbloqueosHabitoUseCas
                         "Este hábito no está en tu plan: " + command.habitoId()));
 
         if (command.activo()) {
-            desbloqueo.reactivar(clock.now());
+            desbloqueo.reactivar(referencia);
         } else {
-            ZonedDateTime ahora = clock.now().atZone(ZoneId.of(progreso.timezone()));
+            ZonedDateTime ahora = referencia.atZone(ZoneId.of(progreso.timezone()));
             desbloqueo.pausar(habito.desactivable(), command.pausadoHasta(), ahora);
             /* Pausar apagaba la generacion FUTURA, pero el track de HOY ya estaba creado -- lo
                hace el barrido de las 05:02 o la primera apertura de la app -- y se quedaba en

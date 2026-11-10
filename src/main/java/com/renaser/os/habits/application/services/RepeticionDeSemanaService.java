@@ -20,6 +20,7 @@ import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
@@ -81,8 +82,15 @@ public class RepeticionDeSemanaService implements RepetirSemanaUseCase {
     @Override
     @Transactional
     public ResultadoDeRepeticion repetir(UserId actorId, SemanaCalendaria modelo, SemanaCalendaria destino, boolean reemplazar) {
+        return repetir(actorId, modelo, destino, reemplazar, clock.now());
+    }
+
+    @Override
+    @Transactional
+    public ResultadoDeRepeticion repetir(UserId actorId, SemanaCalendaria modelo, SemanaCalendaria destino, boolean reemplazar,
+                                         Instant ahora) {
         ProgresoParticipanteHabits progreso = requireProgreso(actorId);
-        LocalDate hoy = hoyDe(progreso);
+        LocalDate hoy = hoyDe(progreso, ahora);
         if (modelo.equals(destino)) {
             throw new IllegalArgumentException("La semana que se repite y la que queda igual no pueden ser la misma");
         }
@@ -93,7 +101,7 @@ public class RepeticionDeSemanaService implements RepetirSemanaUseCase {
         if (contexto.plan.reemplazaLoPropio() && !reemplazar) {
             throw new IllegalStateException("Esa semana ya tiene cambios tuyos que se reemplazarían. Confirma para reemplazarlos.");
         }
-        savePreferenciaPort.guardarFechasPropias(actorId, contexto.plan.escrituras());
+        savePreferenciaPort.guardarFechasPropias(actorId, contexto.plan.escrituras(), ahora);
         savePreferenciaPort.borrarParaFechas(actorId, contexto.plan.borrados().stream()
                 .map(b -> new SavePreferenciaHorarioPort.FechaABorrar(b.habitoId(), b.fecha())).toList());
         int habitos = (int) contexto.plan.cambios().stream().map(CambioPlaneado::habitoId).distinct().count();
@@ -104,8 +112,14 @@ public class RepeticionDeSemanaService implements RepetirSemanaUseCase {
     @Override
     @Transactional
     public int deshacerSemana(UserId actorId, SemanaCalendaria semana) {
+        return deshacerSemana(actorId, semana, clock.now());
+    }
+
+    @Override
+    @Transactional
+    public int deshacerSemana(UserId actorId, SemanaCalendaria semana, Instant ahora) {
         ProgresoParticipanteHabits progreso = requireProgreso(actorId);
-        LocalDate hoy = hoyDe(progreso);
+        LocalDate hoy = hoyDe(progreso, ahora);
         LocalDate desde = semana.lunes().isAfter(hoy) ? semana.lunes() : hoy.plusDays(1);
         return desde.isAfter(semana.domingo()) ? 0 : savePreferenciaPort.borrarFechasPropias(actorId, Set.of(), desde, semana.domingo());
     }
@@ -169,7 +183,11 @@ public class RepeticionDeSemanaService implements RepetirSemanaUseCase {
     }
 
     private LocalDate hoyDe(ProgresoParticipanteHabits progreso) {
-        return clock.now().atZone(ZoneId.of(progreso.timezone())).toLocalDate();
+        return hoyDe(progreso, clock.now());
+    }
+
+    private static LocalDate hoyDe(ProgresoParticipanteHabits progreso, Instant ahora) {
+        return ahora.atZone(ZoneId.of(progreso.timezone())).toLocalDate();
     }
 
     private ProgresoParticipanteHabits requireProgreso(UserId participanteId) {

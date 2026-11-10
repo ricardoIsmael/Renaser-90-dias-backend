@@ -31,6 +31,9 @@ public interface CambiarEstadoHabitoDelPlanUseCase {
 
     DesbloqueoHabito cambiarEstado(CambiarEstadoHabitoCommand command);
 
+    /** Lo mismo con el instante ya decidido (spec 048): lo hecho sin red corre sus reglas (ventana, cuota, semana libre) con la hora real. */
+    DesbloqueoHabito cambiarEstado(CambiarEstadoHabitoCommand command, java.time.Instant ahora);
+
     /**
      * @param activo {@code true} reactiva, {@code false} pausa.
      * @param pausadoHasta ultimo dia INCLUSIVE de la pausa, en la zona del aprendiz (V31).

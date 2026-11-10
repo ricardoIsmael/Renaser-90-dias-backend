@@ -1,10 +1,12 @@
 package com.renaser.os.habits.infrastructure.adapter.in.rest.preferencia;
 
+import com.renaser.os.habits.application.ports.in.preferencia.PlanDeLaSemanaSinRedUseCase;
 import com.renaser.os.habits.application.ports.in.preferencia.RepetirSemanaUseCase;
 import com.renaser.os.habits.domain.model.preferencia.SemanaCalendaria;
 import com.renaser.os.habits.infrastructure.adapter.in.rest.preferencia.WeekRepeatResponses.Offer;
 import com.renaser.os.habits.infrastructure.adapter.in.rest.preferencia.WeekRepeatResponses.Result;
 import com.renaser.os.habits.infrastructure.adapter.in.rest.preferencia.WeekRepeatResponses.Undone;
+import com.renaser.os.shared.domain.HechoSinRed;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
@@ -33,9 +35,11 @@ import java.time.LocalDate;
 public class RepetirSemanaController {
 
     private final RepetirSemanaUseCase useCase;
+    private final PlanDeLaSemanaSinRedUseCase sinRedUseCase;
 
-    public RepetirSemanaController(RepetirSemanaUseCase useCase) {
+    public RepetirSemanaController(RepetirSemanaUseCase useCase, PlanDeLaSemanaSinRedUseCase sinRedUseCase) {
         this.useCase = useCase;
+        this.sinRedUseCase = sinRedUseCase;
     }
 
     /** La oferta, o {@code 204} si no hay nada que ofrecer. */
@@ -49,16 +53,20 @@ public class RepetirSemanaController {
     /** Aplica la repeticion. {@code 409} si reemplazaria cambios propios y {@code replace} es {@code false}. Idempotente. */
     @RequiresPermission(Permission.USE_APP)
     @PostMapping("/week-repeat")
-    public Result repetir(@ActorAutenticado UserId actor, @RequestBody @Valid WeekRepeatRequest request) {
-        return Result.from(useCase.repetir(actor, SemanaCalendaria.desde(request.sourceWeekStart()),
-                SemanaCalendaria.desde(request.targetWeekStart()), request.replace()));
+    public Result repetir(@ActorAutenticado UserId actor, HechoSinRed sinRed, @RequestBody @Valid WeekRepeatRequest request) {
+        var modelo = SemanaCalendaria.desde(request.sourceWeekStart());
+        var destino = SemanaCalendaria.desde(request.targetWeekStart());
+        // Spec 048 (FR-019): con X-Id-Cliente y X-Hecho-En es lo hecho sin red, con su hora real; sin ellas, lo de siempre.
+        return Result.from(sinRed == null ? useCase.repetir(actor, modelo, destino, request.replace())
+                : sinRedUseCase.repetir(actor, modelo, destino, request.replace(), sinRed));
     }
 
     /** «Deshacer»: toda esa semana vuelve al plan de siempre (fechas posteriores a hoy). Idempotente. */
     @RequiresPermission(Permission.USE_APP)
     @DeleteMapping("/weeks/{weekStart}")
-    public Undone deshacer(@ActorAutenticado UserId actor,
+    public Undone deshacer(@ActorAutenticado UserId actor, HechoSinRed sinRed,
             @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate weekStart) {
-        return new Undone(useCase.deshacerSemana(actor, SemanaCalendaria.desde(weekStart)));
+        var semana = SemanaCalendaria.desde(weekStart);
+        return new Undone(sinRed == null ? useCase.deshacerSemana(actor, semana) : sinRedUseCase.deshacerSemana(actor, semana, sinRed));
     }
 }
