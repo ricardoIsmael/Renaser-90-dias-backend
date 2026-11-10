@@ -109,7 +109,7 @@ class HorarioSemanalRecordatorioServiceTest {
         service.fijarRecordatorio(ACTOR, habito.id(), DayOfWeek.SATURDAY, true, List.of(30));
 
         verify(savePreferenciaPort).fijarRecordatorioParaDiaSemana(ACTOR, habito.id(), DayOfWeek.SATURDAY,
-                RecordatorioDelDia.con(List.of(30)));
+                RecordatorioDelDia.con(List.of(30)), CLOCK.now());
         verifyNoInteractions(historialPort, saveCambioPendientePort);
         verify(savePreferenciaPort, never()).saveParaDiaSemana(any(), any(), any());
     }
@@ -121,7 +121,7 @@ class HorarioSemanalRecordatorioServiceTest {
         service.fijarRecordatorio(ACTOR, habito.id(), DayOfWeek.SATURDAY, true, List.of(0, 30));
 
         verify(savePreferenciaPort).fijarRecordatorioParaDiaSemana(ACTOR, habito.id(), DayOfWeek.SATURDAY,
-                RecordatorioDelDia.con(List.of(30, 0)));
+                RecordatorioDelDia.con(List.of(30, 0)), CLOCK.now());
     }
 
     @Test
@@ -130,7 +130,7 @@ class HorarioSemanalRecordatorioServiceTest {
 
         service.fijarRecordatorio(ACTOR, habito.id(), DayOfWeek.SATURDAY, true, List.of(10, 30));
 
-        verify(savePreferenciaPort).fijarRecordatorioParaDiaSemana(ACTOR, habito.id(), DayOfWeek.SATURDAY, null);
+        verify(savePreferenciaPort).fijarRecordatorioParaDiaSemana(ACTOR, habito.id(), DayOfWeek.SATURDAY, null, CLOCK.now());
     }
 
     @Test
@@ -139,7 +139,7 @@ class HorarioSemanalRecordatorioServiceTest {
 
         service.fijarRecordatorio(ACTOR, habito.id(), DayOfWeek.SATURDAY, false, List.of());
 
-        verify(savePreferenciaPort).fijarRecordatorioParaDiaSemana(ACTOR, habito.id(), DayOfWeek.SATURDAY, null);
+        verify(savePreferenciaPort).fijarRecordatorioParaDiaSemana(ACTOR, habito.id(), DayOfWeek.SATURDAY, null, CLOCK.now());
     }
 
     @Test
@@ -149,7 +149,7 @@ class HorarioSemanalRecordatorioServiceTest {
         service.fijarRecordatorio(ACTOR, habito.id(), DayOfWeek.SATURDAY, false, null);
 
         verify(savePreferenciaPort).fijarRecordatorioParaDiaSemana(ACTOR, habito.id(), DayOfWeek.SATURDAY,
-                RecordatorioDelDia.sinAviso());
+                RecordatorioDelDia.sinAviso(), CLOCK.now());
     }
 
     @Test
@@ -159,7 +159,7 @@ class HorarioSemanalRecordatorioServiceTest {
         service.fijarRecordatorio(ACTOR, habito.id(), DayOfWeek.SATURDAY, true, List.of(30));
 
         verify(savePreferenciaPort).fijarRecordatorioParaDiaSemana(ACTOR, habito.id(), DayOfWeek.SATURDAY,
-                RecordatorioDelDia.con(List.of(30)));
+                RecordatorioDelDia.con(List.of(30)), CLOCK.now());
     }
 
     @Test
