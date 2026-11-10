@@ -1,0 +1,9 @@
+{
+  "name": "renaser-miniaturas-muro",
+  "private": true,
+  "type": "module",
+  "description": "Lambda que arma la miniatura de cada foto del Muro (spec 049, D-339).",
+  "scripts": { "test": "node --test" },
+  "dependencies": { "sharp": "0.34.4" },
+  "devDependencies": {}
+}

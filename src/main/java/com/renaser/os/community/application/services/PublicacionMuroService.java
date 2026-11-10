@@ -1,5 +1,6 @@
 package com.renaser.os.community.application.services;
 
+import com.renaser.os.community.domain.model.publicacion.MiniaturaDeFoto;
 import com.renaser.os.community.api.PublicacionCreadaEvent;
 import com.renaser.os.community.api.PublicacionMuroFinder;
 import com.renaser.os.community.api.PublicacionParaCompartir;
@@ -651,8 +652,8 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     private PublicacionVista aVista(Publicacion publicacion, PerfilUsuario autor, boolean veNombreReal,
                                      Map<TipoReaccion, Integer> conteo, TipoReaccion miReaccion, int comentarios) {
         List<MediaFirmada> media = publicacion.media().stream()
-                .map(m -> new MediaFirmada(almacenamientoPort.firmarLectura(m.ruta(), VALIDEZ_URL_LECTURA), m.mime(),
-                        m.orden()))
+                .map(m -> new MediaFirmada(almacenamientoPort.firmarLectura(m.ruta(), VALIDEZ_URL_LECTURA), m.mime(), m.orden(),
+                        MiniaturaDeFoto.rutaDe(m.ruta()).map(r -> almacenamientoPort.firmarLectura(r, VALIDEZ_URL_LECTURA)).orElse(null)))
                 .toList();
         // Spec 046 (D3): en el Muro se le nombra por su sobrenombre; el nombre real va aparte y solo para el equipo.
         return new PublicacionVista(publicacion, autor != null ? autor.nombreEnElMuro() : null,

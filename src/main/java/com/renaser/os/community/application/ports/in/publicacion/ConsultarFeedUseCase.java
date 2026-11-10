@@ -48,6 +48,11 @@ public interface ConsultarFeedUseCase {
         }
     }
 
-    record MediaFirmada(URI url, String mime, int orden) {
+    /** {@code miniatura}: la URL firmada de su miniatura (spec 049), o {@code null} si la foto no tiene (video, evidencia de otro módulo). */
+    record MediaFirmada(URI url, String mime, int orden, URI miniatura) {
+
+        public MediaFirmada(URI url, String mime, int orden) {
+            this(url, mime, orden, null);
+        }
     }
 }
