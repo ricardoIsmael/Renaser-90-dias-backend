@@ -47,6 +47,20 @@ class ArmadorDeVistaDePagos {
         }
         CronogramaDePagos cronograma = cronogramaDe(persona, pago);
         Map<UserId, String> nombres = conNombres ? nombresDeQuienMarco(cronograma.cuotas()) : Map.of();
+        return conCronograma(pago, cronograma, nombres);
+    }
+
+    /**
+     * El pago «con cronograma» de una persona cuyas cuotas ya se leyeron (la lectura de todos, D-338: las cuotas y los nombres llegan en lote, sin una consulta por
+     * persona). Mismo armado que {@link #armar}: la huella y la confirmación salen del cronograma entero.
+     *
+     * @param nombres quién marcó cada cuota; el que falte queda sin nombre
+     */
+    PagoAnotado conCronograma(PagoDeLaPersona pago, List<Cuota> cuotasGuardadas, Map<UserId, String> nombres) {
+        return conCronograma(pago, CronogramaDePagos.guardado(pago.moneda(), cuotasGuardadas), nombres);
+    }
+
+    private static PagoAnotado conCronograma(PagoDeLaPersona pago, CronogramaDePagos cronograma, Map<UserId, String> nombres) {
         // Map.of() no admite pedir una llave nula (lanza NullPointerException): una cuota que nadie marcó no tiene a quién nombrar.
         List<CuotaVista> vistas = cronograma.cuotas().stream()
                 .map(cuota -> new CuotaVista(cuota, cuota.estadoCambiadoPor() == null ? null : nombres.get(cuota.estadoCambiadoPor()))).toList();
