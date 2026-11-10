@@ -171,6 +171,15 @@ spring:
       chat: none
       embedding: none
       vectorstore: none
+    # El servidor MCP de Spring AI que sirve /mcp (docs/API_OPENAPI.md, D-336). SOLO LOCAL: prod lo
+    # apaga con MCP_HABILITADO. STATELESS: sin la sesion SSE larga por agente, que para listar y leer
+    # herramientas no hace falta.
+    mcp:
+      server:
+        enabled: ${MCP_HABILITADO:true}
+        name: renaser-api
+        version: v1
+        protocol: STATELESS
   ai.google.genai.api-key: ${GOOGLE_GENAI_API_KEY:}
   # Modelo de embeddings (D-51 quedo obsoleta): text-embedding-004 fue retirado por Google
   # el 2026-01-14, asi que el default anterior apuntaba a un modelo inexistente y la primera
@@ -835,6 +844,31 @@ renaser:
 logging:
   level:
     org.springframework.ai.chat.model.MessageAggregator: "OFF"
+
+# Documentacion de la API (springdoc, OpenAPI 3.1): /swagger-ui.html y /v3/api-docs. Ver
+# shared.web.OpenApiConfig y docs/API_OPENAPI.md. Solo se documenta /api/v1/** (no actuator, ni
+# /salud, ni los forwards). Encendida por defecto aca (local); application-prod.yaml la deja en
+# false porque esas rutas no pasan por el filtro de SecurityConfig: publicarlas es publicar el mapa
+# entero de la API. Para verla en un entorno desplegado, OPENAPI_HABILITADO=true a proposito.
+springdoc:
+  api-docs:
+    enabled: ${OPENAPI_HABILITADO:true}
+  swagger-ui:
+    enabled: ${OPENAPI_HABILITADO:true}
+    operations-sorter: alpha
+    tags-sorter: alpha
+    persist-authorization: true
+    display-request-duration: true
+  paths-to-match: /api/v1/**
+  default-produces-media-type: application/json
+  # MCP de la API (McpDeLaApiConfig): /mcp para que un agente de IA conozca la API, y /mcp-ui para
+  # mirarla. SOLO LOCAL: application-prod.yaml lo apaga, porque estas rutas tampoco pasan por
+  # SecurityConfig. Solo lectura: las operaciones que no son GET ni se publican como herramienta.
+  ai:
+    mcp:
+      enabled: ${MCP_HABILITADO:true}
+      dashboard-enabled: ${MCP_HABILITADO:true}
+      base-url: http://localhost:${server.port:8080}
 
 server:
   forward-headers-strategy: ${FORWARD_HEADERS_STRATEGY:framework}

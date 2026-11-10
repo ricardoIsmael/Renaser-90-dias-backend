@@ -201,6 +201,33 @@
 			<artifactId>spring-boot-starter-webmvc</artifactId>
 		</dependency>
 		<!--
+			Documentacion de la API (OpenAPI 3.1 + Swagger UI), CLAUDE.MD §8. La 3.x es la linea
+			para Spring Boot 4; la 3.2.0 se construyo contra Boot 4.1.2, el mismo de este pom.
+			Se sirve en /v3/api-docs y /swagger-ui.html, FUERA de /api/v1/** (el filtro de
+			SecurityConfig no la cubre): por eso nace apagada en prod (application-prod.yaml,
+			OPENAPI_HABILITADO). Ver shared.web.OpenApiConfig y docs/API_OPENAPI.md.
+		-->
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+			<version>3.2.0</version>
+		</dependency>
+		<!--
+			MCP de la API (springdoc 3.2, seccion «MCP Support»): expone las operaciones documentadas
+			como herramientas para que un agente de IA (Claude Code, Cursor) CONOZCA la API. Solo local
+			y solo lectura: ver shared.web.McpDeLaApiConfig. El servidor MCP de Spring AI va con la
+			version del BOM de spring-ai (arriba). Los dos nacen apagados en prod (MCP_HABILITADO).
+		-->
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webmvc-mcp</artifactId>
+			<version>3.2.0</version>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.ai</groupId>
+			<artifactId>spring-ai-starter-mcp-server-webmvc</artifactId>
+		</dependency>
+		<!--
 			Spring Boot 4 saco RestClientAutoConfiguration (el bean RestClient.Builder) del
 			autoconfigure core a este starter dedicado. Sin el, cualquier @Component que pida
 			RestClient.Builder por constructor (los adaptadores OAuth de Google/Apple/Facebook,
