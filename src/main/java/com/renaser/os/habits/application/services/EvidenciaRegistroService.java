@@ -72,8 +72,20 @@ public class EvidenciaRegistroService implements SubirEvidenciaRegistroUseCase,
      */
     @Override
     public UrlEvidenciaRegistro solicitarUrl(SolicitarUrlEvidenciaRegistroCommand command) {
+        return firmar(command, true);
+    }
+
+    @Override
+    public UrlEvidenciaRegistro solicitarUrlHechoSinRed(SolicitarUrlEvidenciaRegistroCommand command) {
+        return firmar(command, false);
+    }
+
+    private UrlEvidenciaRegistro firmar(SolicitarUrlEvidenciaRegistroCommand command, boolean conGuardaDelDia) {
         RegistroHabito registro = requireRegistro(command.registroId());
-        requireDeUnDiaQueNoTermino(registro, requireSelf(command.actorId(), registro.participanteId()));
+        ZoneId zona = requireSelf(command.actorId(), registro.participanteId());
+        if (conGuardaDelDia) {
+            requireDeUnDiaQueNoTermino(registro, zona);
+        }
 
         String ruta = PREFIJO_RUTA + "/" + command.actorId() + "/" + registro.id() + "/" + idGenerator.newId();
         URI url = almacenamientoPort.firmarSubida(ruta, command.tipoContenido(), VALIDEZ_URL_SUBIDA);
@@ -83,8 +95,21 @@ public class EvidenciaRegistroService implements SubirEvidenciaRegistroUseCase,
     @Override
     @Transactional
     public EvidenciaRegistrada subir(SubirEvidenciaRegistroCommand command) {
+        return registrar(command, true);
+    }
+
+    @Override
+    @Transactional
+    public EvidenciaRegistrada subirHechoSinRed(SubirEvidenciaRegistroCommand command) {
+        return registrar(command, false);
+    }
+
+    private EvidenciaRegistrada registrar(SubirEvidenciaRegistroCommand command, boolean conGuardaDelDia) {
         RegistroHabito registro = requireRegistro(command.registroId());
-        requireDeUnDiaQueNoTermino(registro, requireSelf(command.actorId(), registro.participanteId()));
+        ZoneId zona = requireSelf(command.actorId(), registro.participanteId());
+        if (conGuardaDelDia) {
+            requireDeUnDiaQueNoTermino(registro, zona);
+        }
 
         var comando = new RegistrarEvidenciaComando(command.actorId(),
                 new DestinoEvidencia.RegistroHabito(registro.id().value()), command.tipo(), command.bucket(),
