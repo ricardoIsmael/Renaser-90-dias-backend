@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.HashSet;
@@ -58,15 +59,21 @@ public class MiRadarService implements ConsultarMiRadarUseCase, ConfigurarMiRada
     @Override
     @Transactional
     public PlanDeMiRadar configurar(ConfigurarMiRadarCommand command) {
+        return configurar(command, agenda.ahora());
+    }
+
+    @Override
+    @Transactional
+    public PlanDeMiRadar configurar(ConfigurarMiRadarCommand command, Instant referencia) {
         ProgresoParticipanteHabits progreso = acceso.propio(command.actorId(), command.participanteId());
         ZoneId zona = ZoneId.of(progreso.timezone());
         MiRadar guardado = loadPort.deParticipante(command.participanteId());
         List<DiaDeMiRadar> tocados = diasTocados(guardado, command.dias());
         MiRadar nuevo = guardado.conEncendido(command.encendido()).conDias(tocados);
-        requireEditables(guardado, tocados, agenda.hoy(zona));
+        requireEditables(guardado, tocados, agenda.hoy(zona, referencia));
         PlanDeMiRadar plan = agenda.semana(command.participanteId(), zona, nuevo);
         requireQueCaben(command.dias(), plan);
-        savePort.guardar(command.participanteId(), nuevo);
+        savePort.guardar(command.participanteId(), nuevo, referencia);
         return plan;
     }
 

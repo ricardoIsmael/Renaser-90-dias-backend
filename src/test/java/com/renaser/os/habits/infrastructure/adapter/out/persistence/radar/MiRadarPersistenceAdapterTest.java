@@ -29,6 +29,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @Transactional
 class MiRadarPersistenceAdapterTest {
 
+    private static final java.time.Instant HORA = java.time.Instant.parse("2026-10-30T15:00:00Z");
+
     @Autowired
     private MiRadarPersistenceAdapter adapter;
     @Autowired
@@ -64,7 +66,7 @@ class MiRadarPersistenceAdapterTest {
         MiRadar miRadar = new MiRadar(true, List.of(new DiaDeMiRadar(6, Modo.PERSONALIZADO, 3, false),
                 new DiaDeMiRadar(7, Modo.AUTOMATICO, null, true)));
 
-        adapter.guardar(participanteId, miRadar);
+        adapter.guardar(participanteId, miRadar, HORA);
 
         MiRadar leido = adapter.deParticipante(participanteId);
         assertThat(leido).isEqualTo(miRadar);
@@ -74,9 +76,9 @@ class MiRadarPersistenceAdapterTest {
 
     @Test
     void apagarConservaLosDiasYEncenderLosEncuentra() {
-        adapter.guardar(participanteId, new MiRadar(true, List.of(new DiaDeMiRadar(6, Modo.PERSONALIZADO, 4, false))));
+        adapter.guardar(participanteId, new MiRadar(true, List.of(new DiaDeMiRadar(6, Modo.PERSONALIZADO, 4, false))), HORA);
 
-        adapter.guardar(participanteId, adapter.deParticipante(participanteId).conEncendido(false));
+        adapter.guardar(participanteId, adapter.deParticipante(participanteId).conEncendido(false), HORA);
 
         MiRadar apagado = adapter.deParticipante(participanteId);
         assertThat(apagado.encendido()).isFalse();
@@ -88,7 +90,18 @@ class MiRadarPersistenceAdapterTest {
         UserId sinPrograma = UserId.of(UUID.randomUUID());
 
         assertThatThrownBy(() -> adapter.deParticipante(sinPrograma)).isInstanceOf(NoSuchElementException.class);
-        assertThatThrownBy(() -> adapter.guardar(sinPrograma, MiRadar.apagado()))
+        assertThatThrownBy(() -> adapter.guardar(sinPrograma, MiRadar.apagado(), HORA))
                 .isInstanceOf(NoSuchElementException.class);
+    }
+
+    @Test
+    void guardarDejaLaHoraLogicaYSinNadaGuardadoEsMuyViejo() { // spec 048 FR-019 (V191)
+        assertThat(adapter.actualizadoEn(participanteId)).isEmpty();
+
+        adapter.guardar(participanteId, MiRadar.apagado().conEncendido(true), HORA);
+
+        assertThat(adapter.actualizadoEn(participanteId)).contains(HORA);
+        adapter.guardar(participanteId, MiRadar.apagado(), HORA.plusSeconds(90));
+        assertThat(adapter.actualizadoEn(participanteId)).contains(HORA.plusSeconds(90));
     }
 }
