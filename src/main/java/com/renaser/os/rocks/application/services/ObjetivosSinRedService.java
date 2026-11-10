@@ -95,7 +95,7 @@ class ObjetivosSinRedService implements ObjetivosSinRedUseCase {
     public List<RocaSemanal> crearSemana(CrearPlanSemanalCommand command, HechoSinRed sinRed) {
         ProgresoParticipanteRocks progreso = AccesoARocas.exigir(progresoPort, command.actorId());
         RevisionDeLaHora hora = RevisionDeLaHora.de(sinRed, clock.now());
-        int semana = RocaSemanalService.numeroSemanaAPlanificar(progreso, hora.hoyEn(progreso.zona()));
+        int semana = RocaSemanalService.numeroSemanaAPlanificar(progreso, hora.hoyDeLaLlegadaEn(progreso.zona()), hora.hoyEn(progreso.zona()));
         Envio envio = new Envio(command.actorId(), sinRed, "PLAN_SEMANAL_CREAR", "semana:" + semana);
         return entrega.entregar(envio, () -> Aplicado.de(aplicarLaSemana(command, hora, semana)),
                 previo -> deLaSemana(command.actorId(), semana));

@@ -74,7 +74,8 @@ public class RocaSemanalService implements CrearPlanSemanalUseCase, EditarDentro
         requireUnEjePorItem(command.rocas());
 
         LocalDate hoy = ahora.atZone(progreso.zona()).toLocalDate();
-        int numeroSemana = numeroSemanaAPlanificar(progreso, hoy);
+        // El ancla de las semanas es el «hoy» de la llegada: el día del programa de `progreso` es el de hoy, no el de la hora real (spec 048).
+        int numeroSemana = numeroSemanaAPlanificar(progreso, hoyEn(progreso.zona()), hoy);
 
         Set<EjeObjetivo> yaPlanificados = ejesYaPlanificados(maestras, numeroSemana);
         List<ItemRocaSemanal> porCrear = command.rocas().stream()
@@ -163,7 +164,15 @@ public class RocaSemanalService implements CrearPlanSemanalUseCase, EditarDentro
      * > 14, y el domingo previo al dia 1 prepara la semana 1 (la cuenta vieja pedia la 2).
      */
     static int numeroSemanaAPlanificar(ProgresoParticipanteRocks progreso, LocalDate hoy) {
-        return progreso.semanas(hoy).map(semanas -> semanas.semanaAPlanificar(hoy)).orElse(1);
+        return numeroSemanaAPlanificar(progreso, hoy, hoy);
+    }
+
+    /**
+     * Lo mismo con las semanas ancladas en {@code anclaDeHoy} (el «hoy» del reloj del servidor, con el que `progreso` sabe el día del programa) y la semana
+     * medida en {@code hoy}: lo planificado sin red mide la semana del día de la hora real sin correr el ancla (spec 048).
+     */
+    static int numeroSemanaAPlanificar(ProgresoParticipanteRocks progreso, LocalDate anclaDeHoy, LocalDate hoy) {
+        return progreso.semanas(anclaDeHoy).map(semanas -> semanas.semanaAPlanificar(hoy)).orElse(1);
     }
 
     /**

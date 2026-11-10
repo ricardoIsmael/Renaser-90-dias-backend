@@ -122,7 +122,8 @@ public class RocaDiariaService implements CrearPlanDiarioUseCase, CompletarRocaD
         EstadoPlazo plazoAlCrear = VentanaPlanificacionDiaria.abierta(ahora, zona) ? EstadoPlazo.EN_PLAZO
                 : EstadoPlazo.A_DESTIEMPO;
         LocalDate hoy = ahora.atZone(zona).toLocalDate();
-        SemanaPrograma semanas = AccesoARocas.semanasParaPlanificarUnDia(progreso, hoy);
+        // El ancla de las semanas es el «hoy» de la llegada: el día del programa de `progreso` es el de hoy, no el de la hora real (spec 048).
+        SemanaPrograma semanas = AccesoARocas.semanasParaPlanificarUnDia(progreso, clock.now().atZone(zona).toLocalDate());
         requireFechaPlanificable(command.fecha(), hoy, plazoAlCrear, semanas);
 
         /* Un dia que TODAVIA NO LLEGO se puede volver a planificar: es el "hasta la noche tengo
