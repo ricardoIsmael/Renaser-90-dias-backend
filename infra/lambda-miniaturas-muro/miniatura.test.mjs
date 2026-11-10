@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import sharp from 'sharp';
 
 import { achicar, ANCHO_MINIATURA_PX, rutaDeLaMiniatura } from './miniatura.mjs';
-import { handler } from './index.mjs';
+import { handler, procesar } from './index.mjs';
 
 test('la ruta es la misma que firma el backend (MiniaturaDeFoto.rutaDe)', () => {
   assert.equal(rutaDeLaMiniatura('muro/fotos/u-1/f-2'), 'muro/miniaturas/u-1/f-2.webp');
@@ -42,7 +42,7 @@ function s3DeMentira(bytes) {
 
 test('foto nueva: baja la original y sube la miniatura con su nombre fijo', async () => {
   const s3 = s3DeMentira(await foto(1440, 1440));
-  await handler({ Records: [{ eventName: 'ObjectCreated:Put', s3: { bucket: { name: 'b' }, object: { key: 'muro/fotos/u-1/f-2' } } }] }, {}, s3);
+  await procesar({ Records: [{ eventName: 'ObjectCreated:Put', s3: { bucket: { name: 'b' }, object: { key: 'muro/fotos/u-1/f-2' } } }] }, s3);
   assert.deepEqual(s3.pedidos.map(p => p.tipo), ['GetObjectCommand', 'PutObjectCommand']);
   assert.equal(s3.pedidos[1].Key, 'muro/miniaturas/u-1/f-2.webp');
   assert.equal(s3.pedidos[1].ContentType, 'image/webp');
@@ -50,9 +50,13 @@ test('foto nueva: baja la original y sube la miniatura con su nombre fijo', asyn
 
 test('foto borrada: borra su miniatura; una clave ajena se ignora', async () => {
   const s3 = s3DeMentira(Buffer.alloc(0));
-  await handler({ Records: [
+  await procesar({ Records: [
     { eventName: 'ObjectRemoved:Delete', s3: { bucket: { name: 'b' }, object: { key: 'muro/fotos/u-1/f-2' } } },
     { eventName: 'ObjectCreated:Put', s3: { bucket: { name: 'b' }, object: { key: 'muro/videos/u-1/v' } } },
-  ] }, {}, s3);
+  ] }, s3);
   assert.deepEqual(s3.pedidos.map(p => `${p.tipo} ${p.Key}`), ['DeleteObjectCommand muro/miniaturas/u-1/f-2.webp']);
+});
+
+test('el handler de AWS no usa un tercer argumento (Lambda pasa ahí el callback, no un cliente de S3)', () => {
+  assert.ok(handler.length <= 1, `handler recibe ${handler.length} argumentos: el tercero sería el callback de Lambda`);
 });

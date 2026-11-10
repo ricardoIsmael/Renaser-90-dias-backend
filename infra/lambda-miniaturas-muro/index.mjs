@@ -12,7 +12,8 @@ import { achicar, rutaDeLaMiniatura } from './miniatura.mjs';
  */
 const s3 = new S3Client({});
 
-export async function handler(evento, contexto = {}, cliente = s3) {
+/** Lo que hace la Lambda, con el cliente de S3 inyectable (las pruebas pasan uno de mentira). */
+export async function procesar(evento, cliente) {
   const registros = evento?.Records ?? [];
   for (const r of registros) {
     const bucket = r.s3?.bucket?.name;
@@ -34,3 +35,9 @@ export async function handler(evento, contexto = {}, cliente = s3) {
   }
   return { procesadas: registros.length };
 }
+
+/**
+ * El punto de entrada de AWS. Lambda llama `handler(evento, contexto, callback)`: el tercer argumento es una función, así que el
+ * cliente de S3 NO puede ir ahí (en producción llegaba el callback y todo fallaba con «cliente.send is not a function»).
+ */
+export const handler = evento => procesar(evento, s3);
