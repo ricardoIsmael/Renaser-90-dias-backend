@@ -85,7 +85,8 @@ class RocaDiariaCierrePersistenciaTest {
         adaptador.guardarSoloElCierre(List.of(con, sin));
 
         verify(repositorio).guardarElCierre(con.id().value(), "SIN_TIEMPO", "OTRA_HORA", "Se alargó la reunión", AHORA);
-        verify(repositorio).quitarElCierre(sin.id().value());
+        // R1 (spec 048): ademas de las columnas de cierre, el UPDATE deja actualizado_en con la hora que fijo el dominio.
+        verify(repositorio).quitarElCierre(sin.id().value(), sin.actualizadoEn());
         verify(repositorio, never()).saveAndFlush(any());
         verify(repositorio, never()).saveAllAndFlush(any());
         verify(repositorio, never()).save(any());
