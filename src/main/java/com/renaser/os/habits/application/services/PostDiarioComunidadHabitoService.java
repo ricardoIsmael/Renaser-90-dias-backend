@@ -2,6 +2,7 @@ package com.renaser.os.habits.application.services;
 
 import com.renaser.os.habits.application.politica.PoliticaPostDiarioComunidad;
 import com.renaser.os.habits.application.ports.in.registro.CerrarPostDiarioComunidadUseCase;
+import com.renaser.os.habits.application.ports.in.registro.CompletarHechoSinRedUseCase;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase.CompletarRegistroCommand;
 import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUseCase;
@@ -17,10 +18,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Implementa {@link CerrarPostDiarioComunidadUseCase}. Misma forma que
@@ -93,12 +96,15 @@ public class PostDiarioComunidadHabitoService implements CerrarPostDiarioComunid
     private final ConsultarProgresoParticipanteHabitsPort progresoPort;
     private final CompletarRegistroUseCase completarRegistroUseCase;
     private final GenerarTracksDelDiaUseCase generarTracksUseCase;
+    private final CompletarHechoSinRedUseCase completarHechoSinRed;
     private final Clock clock;
 
     public PostDiarioComunidadHabitoService(LoadHabitoPort loadHabitoPort, LoadRegistroHabitoPort loadRegistroPort,
                                              ConsultarProgresoParticipanteHabitsPort progresoPort,
                                              CompletarRegistroUseCase completarRegistroUseCase,
-                                             GenerarTracksDelDiaUseCase generarTracksUseCase, Clock clock) {
+                                             GenerarTracksDelDiaUseCase generarTracksUseCase,
+                                             CompletarHechoSinRedUseCase completarHechoSinRed, Clock clock) {
+        this.completarHechoSinRed = completarHechoSinRed;
         this.loadHabitoPort = loadHabitoPort;
         this.loadRegistroPort = loadRegistroPort;
         this.progresoPort = progresoPort;
@@ -152,6 +158,35 @@ public class PostDiarioComunidadHabitoService implements CerrarPostDiarioComunid
      * javadoc de la clase). Las dos lecturas son con cerrojo y ninguna va sin el: la guarda de
      * estado terminal tiene que decidir sobre la fila que el cerrojo protege.
      */
+    /**
+     * Spec 048, fase 2 (D17). El registro se busca por el dia de la HORA REAL; la revision (48 h, hora futura, fuera de su
+     * dia), el cierre con puntos por esa hora y la idempotencia son los de {@link CompletarHechoSinRedUseCase}, el mismo
+     * camino que un habito marcado sin red. El id del envio sale de la publicacion: una reentrega del outbox da el mismo.
+     */
+    @Override
+    public void alPublicarSinRed(UserId autorId, UUID publicacionId, Instant hechoEn) {
+        Optional<ProgresoParticipanteHabits> progreso = progresoPort.deParticipante(autorId);
+        if (progreso.isEmpty() || progreso.get().suspendido()) {
+            return;
+        }
+        Optional<Habito> habito = loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA,
+                progreso.get().formacion());
+        if (habito.isEmpty()) {
+            return;
+        }
+        ZoneId zona = ZoneId.of(progreso.get().timezone());
+        LocalDate diaReal = hechoEn.atZone(zona).toLocalDate();
+        Optional<RegistroHabito> registro = registroDelDia(autorId, habito.get(), diaReal, zona);
+        if (registro.isEmpty()) {
+            return; // no le tocaba ese dia, o lo pauso
+        }
+        UUID idDelEnvio = UUID.nameUUIDFromBytes(("post-diario-sin-red:" + publicacionId).getBytes(StandardCharsets.UTF_8));
+        var resultado = completarHechoSinRed.completar(new CompletarRegistroCommand(autorId, registro.get().id(), null, null),
+                new CompletarHechoSinRedUseCase.HechoSinRed(hechoEn, idDelEnvio, null));
+        log.info("[offline] post diario del {} de {} (publicacion {} escrita sin red): {}", diaReal, autorId, publicacionId,
+                resultado.motivoSinPuntos() == null ? "en regla" : resultado.motivoSinPuntos());
+    }
+
     private Optional<RegistroHabito> registroDelDia(UserId autorId, Habito habito, LocalDate dia, ZoneId zona) {
         Optional<RegistroHabito> registro =
                 loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(autorId, habito.id(), dia);

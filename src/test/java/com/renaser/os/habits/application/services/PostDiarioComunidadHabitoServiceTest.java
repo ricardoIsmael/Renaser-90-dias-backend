@@ -1,6 +1,7 @@
 package com.renaser.os.habits.application.services;
 
 import com.renaser.os.habits.application.politica.PoliticaPostDiarioComunidad;
+import com.renaser.os.habits.application.ports.in.registro.CompletarHechoSinRedUseCase;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase.CompletarRegistroCommand;
 import com.renaser.os.habits.application.ports.in.registro.GenerarTracksDelDiaUseCase;
@@ -34,6 +35,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -60,13 +62,16 @@ class PostDiarioComunidadHabitoServiceTest {
     @Mock
     private GenerarTracksDelDiaUseCase generarTracksUseCase;
 
+    @Mock
+    private CompletarHechoSinRedUseCase completarHechoSinRed;
+
     private PostDiarioComunidadHabitoService service() {
         return service(CLOCK);
     }
 
     private PostDiarioComunidadHabitoService service(FixedClock reloj) {
         return new PostDiarioComunidadHabitoService(loadHabitoPort, loadRegistroPort, progresoPort,
-                completarRegistroUseCase, generarTracksUseCase, reloj);
+                completarRegistroUseCase, generarTracksUseCase, completarHechoSinRed, reloj);
     }
 
     private static UserId participante() {
@@ -318,5 +323,56 @@ class PostDiarioComunidadHabitoServiceTest {
                 .alPublicarEnElMuro(autor, Instant.parse("2026-08-25T04:50:00Z"));
 
         verify(completarRegistroUseCase, never()).completar(any());
+    }
+
+    /**
+     * Spec 048, fase 2 (D17). Escrita sin red a las 21:00 del 24 en Lima (02:00 UTC del 25) y llegada el 25: el registro que
+     * se cierra es el del 24 (dia de la HORA REAL, no de la llegada), por el camino de lo hecho sin red, que revisa las 48 h
+     * y paga con esa hora. El id del envio sale de la publicacion: una reentrega del outbox no vuelve a pagar.
+     */
+    @Test
+    @DisplayName("escrita sin red: cierra el registro del dia de la hora real, por el camino de lo hecho sin red")
+    void sinRedCierraElDiaDeLaHoraReal() { // spec 048 FR-020
+        UserId autor = participante();
+        Habito habito = habitoPostDiario();
+        LocalDate diaReal = LocalDate.of(2026, 8, 24);
+        RegistroHabito registro = registroDe(autor, habito.id(), diaReal);
+        UUID publicacion = UUID.randomUUID();
+        Instant hechoEn = Instant.parse("2026-08-25T02:00:00Z");
+
+        mockParticipanteEnLima(autor);
+        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA, Formacion.ESCUELA))
+                .thenReturn(Optional.of(habito));
+        when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(autor, habito.id(), diaReal))
+                .thenReturn(Optional.of(registro));
+        when(completarHechoSinRed.completar(any(), any()))
+                .thenReturn(new CompletarHechoSinRedUseCase.CompletadoSinRed(registro, null));
+
+        service(FixedClock.at(Instant.parse("2026-08-25T14:00:00Z"))).alPublicarSinRed(autor, publicacion, hechoEn);
+        service(FixedClock.at(Instant.parse("2026-08-25T14:00:00Z"))).alPublicarSinRed(autor, publicacion, hechoEn);
+
+        var envio = org.mockito.ArgumentCaptor.forClass(CompletarHechoSinRedUseCase.HechoSinRed.class);
+        verify(completarHechoSinRed, org.mockito.Mockito.times(2)).completar(
+                eq(new CompletarRegistroCommand(autor, registro.id(), null, null)), envio.capture());
+        assertThat(envio.getAllValues()).extracting(CompletarHechoSinRedUseCase.HechoSinRed::hechoEn).containsOnly(hechoEn);
+        assertThat(envio.getAllValues().get(0).idCliente()).as("mismo id en la reentrega")
+                .isEqualTo(envio.getAllValues().get(1).idCliente());
+        verify(completarRegistroUseCase, never()).completar(any());
+    }
+
+    @Test
+    @DisplayName("escrita sin red un dia que no le tocaba: no hay registro y no se cierra nada")
+    void sinRedSinRegistroNoHaceNada() {
+        UserId autor = participante();
+        Habito habito = habitoPostDiario();
+        mockParticipanteEnLima(autor);
+        when(loadHabitoPort.porClaveSistema(PoliticaPostDiarioComunidad.CLAVE_SISTEMA, Formacion.ESCUELA))
+                .thenReturn(Optional.of(habito));
+        when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(any(), any(), any())).thenReturn(Optional.empty());
+
+        service(FixedClock.at(Instant.parse("2026-08-25T14:00:00Z")))
+                .alPublicarSinRed(autor, UUID.randomUUID(), Instant.parse("2026-08-24T20:00:00Z"));
+
+        verify(completarHechoSinRed, never()).completar(any(), any());
     }
 }
