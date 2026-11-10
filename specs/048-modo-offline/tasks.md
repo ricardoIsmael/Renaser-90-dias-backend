@@ -82,38 +82,38 @@ responda, antes de cerrar la fase.
 ## Servidor (`Renaser-90-dias-backend`, rama `048-fase-3`)
 
 ### Tramo A — núcleo, Cierra tu día, Código Renaser y Mi Radar
-- [ ] T23 `V190__envios_sin_red_de_todo_lo_hecho_sin_red.sql` y `V191__mi_radar_actualizado_en.sql` (columnas, CHECK de `resultado`/`codigo`, índice
+- [x] T23 `V190__envios_sin_red_de_todo_lo_hecho_sin_red.sql` y `V191__mi_radar_actualizado_en.sql` (columnas, CHECK de `resultado`/`codigo`, índice
       parcial de no aplicados, cabecera con el porqué) + `EnviosSinRedGeneralIT` (migraciones y dos pedidos concurrentes con el mismo `X-Id-Cliente`).
-- [ ] T24 Núcleo común: `HechoSinRed`/`OrigenDeLaHora` a `shared.domain`; `HandlerMethodArgumentResolver` de las tres cabeceras (`shared/web`);
+- [x] T24 Núcleo común: `HechoSinRed`/`OrigenDeLaHora` a `shared.domain`; `HandlerMethodArgumentResolver` de las tres cabeceras (`shared/web`);
       `RevisionDeLaHora` (futuro 2 min, 48 h, `referencia`, día del programa a la hora real); `habits.api.EnviosSinRedPort` generalizado con
       `EnviosSinRedJdbcAdapter` (`tipo`, `recurso`, `resultado`, `codigo`, `mensaje`, candado `pg_advisory_xact_lock`); `NoAplicado` → 409
       `ApiErrorConCodigo` con los cinco `codigo`; línea `[offline]` sin textos. Pruebas unitarias y `ArchitectureTest`; la fase 1 sigue verde.
-- [ ] T25 Cierra tu día (`PUT /rocks/day-closure`): `CierreDelDiaService.cerrar` con `referencia` (`CierreDelDiaController`,
+- [x] T25 Cierra tu día (`PUT /rocks/day-closure`): `CierreDelDiaService.cerrar` con `referencia` (`CierreDelDiaController`,
       `CerrarElDiaUseCase`, `CierreDelDia`, `EvaluacionDelDiaService.dejarCerrado`); acciones creadas después de `hechoEn` no se exigen; confirmar que
       `guardarSoloElCierre` mueva `actualizado_en`. `CierreDelDiaSinRedServiceTest`, `CierreDelDiaControllerTest` (cabeceras, 409, 403) y `CierreDelDiaSinRedIT`.
-- [ ] T26 Código Renaser (`POST /radar`): `RadarService.registrar` con `referencia`; `AgendaDelRadar.delDia(…, fecha)`;
+- [x] T26 Código Renaser (`POST /radar`): `RadarService.registrar` con `referencia`; `AgendaDelRadar.delDia(…, fecha)`;
       `LoadRegistroRadarPort.deParticipanteEnLaHora`; `creado_en`/`horaPrevista` de la hora real; `MI_RADAR_NO_APLICA`, `YA_ESTABA_HECHO`.
       `CodigoRenaserSinRedServiceTest`, controller y `CodigoRenaserSinRedIT`.
-- [ ] T27 Mi Radar (`PUT /radar/mi-radar`): `MiRadarService.configurar` con `referencia` y `mi_radar_actualizado_en`; choque por la hora lógica.
+- [x] T27 Mi Radar (`PUT /radar/mi-radar`): `MiRadarService.configurar` con `referencia` y `mi_radar_actualizado_en`; choque por la hora lógica.
 
 ### Tramo B — Plan
-- [ ] T28 Agendar acciones (`POST /rocks/plan`): `RocaDiariaService.crear` con `referencia` (ventana, fechas, semanas), reemplazo de un día futuro con choque,
+- [x] T28 Agendar acciones (`POST /rocks/plan`): `RocaDiariaService.crear` con `referencia` (ventana, fechas, semanas), reemplazo de un día futuro con choque,
       `FUERA_DE_SU_DIA` y `YA_ESTABA_HECHO`. Prueba de servicio y de controller.
-- [ ] T29 Marcar una acción (`POST /rocks/{id}/evidence`): `RocaDiariaService.completar` con `referencia` (EXIF, `EscalaPuntosRoca`, evento), 48 h / hora futura /
+- [x] T29 Marcar una acción (`POST /rocks/{id}/evidence`): `RocaDiariaService.completar` con `referencia` (EXIF, `EscalaPuntosRoca`, evento), 48 h / hora futura /
       fuera de su día sin puntos, `RECURSO_YA_NO_EXISTE`, ya hecha → 200 `YA_ESTABA_HECHO`; `RocaDiariaResponse.motivoSinPuntos` (aditivo) y su lectura.
-- [ ] T30 Plan semanal (`POST /rocks/weekly`, `PATCH /rocks/weekly/{id}`, `PATCH …/review`): `RocaSemanalService` con `referencia` y choque por `actualizado_en`.
-- [ ] T31 Objetivo de 90 días y del mes (`PUT /rocks/master/{eje}`, `PUT /rocks/monthly/{eje}/{mes}`): `RocaMaestraService.definir` y
+- [x] T30 Plan semanal (`POST /rocks/weekly`, `PATCH /rocks/weekly/{id}`, `PATCH …/review`): `RocaSemanalService` con `referencia` y choque por `actualizado_en`.
+- [x] T31 Objetivo de 90 días y del mes (`PUT /rocks/master/{eje}`, `PUT /rocks/monthly/{eje}/{mes}`): `RocaMaestraService.definir` y
       `RocaMensualService.definir` con `referencia` y choque. `PlanDeRocasSinRedIT` (agendar, marcar, semanal, maestra y mensual, con el reloj en una hora UTC del día local anterior).
 
 ### Tramo C — planificar hábitos y alarmas
-- [ ] T32 Preferencias de horario y alarmas (`PATCH /habit-preferences/{id}`, `…/days/{date}`, `…/weekdays/{d}`, `…/reminder`, `…/alarm`, `DELETE …/active`):
+- [x] T32 Preferencias de horario y alarmas (`PATCH /habit-preferences/{id}`, `…/days/{date}`, `…/weekdays/{d}`, `…/reminder`, `…/alarm`, `DELETE …/active`):
       `PreferenciaHorarioService` con `referencia` (ventana «ya arrancó», cuota, semana libre); `PUT`/`DELETE` idempotentes; choque por `actualizado_en`.
-- [ ] T33 Plan de la semana, repetir semana, desbloqueos y hábito personal (`PUT/DELETE …/week`, `POST …/week-repeat`, `DELETE …/weeks/{w}`,
+- [x] T33 Plan de la semana, repetir semana, desbloqueos y hábito personal (`PUT/DELETE …/week`, `POST …/week-repeat`, `DELETE …/weeks/{w}`,
       `PUT/PATCH/DELETE /habit-unlocks/{id}`, `POST /habits`): `PlanDeLaSemanaService`, `RepeticionDeSemanaService`, `DesbloqueoHabitoService`,
       `HabitosPersonalesService`. `PlanificarHabitosSinRedIT`.
 
 ### Cierre del servidor
-- [ ] T34 Docs en el mismo cambio: contrato en `docs/api/` y `docs/MAPA_ENDPOINTS.md` (cabeceras y los cinco `codigo`), decisión D-NN en `docs/MODULOS_A_AVANZAR.md` §8,
+- [x] T34 Docs en el mismo cambio: contrato en `docs/api/` y `docs/MAPA_ENDPOINTS.md` (cabeceras y los cinco `codigo`), decisión D-NN en `docs/MODULOS_A_AVANZAR.md` §8,
       `.arnes/PROGRESO.md`, marcas `// spec 048 FR-019` en las pruebas; `scripts/verificar.sh` en 0; `graphify update .`.
 
 ## App (`Renaser-90-dias-frontend-`, rama `048-fase-3`)

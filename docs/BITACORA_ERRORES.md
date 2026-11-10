@@ -16072,3 +16072,20 @@ De las 78 tablas que compara la prueba, solo esa. A «la otra persona» no se le
 **Solución** (solo en la prueba; el rechazo del servidor funciona: el cierre con 1002 lo prueba). El cliente anota el cierre y `esperarOCierre` vuelve en cuanto el socket se cierra sin la trama (tope de 30 s si no pasa nada). Un cierre sin ERROR tiene que ser 1002; la prueba repite en otra conexión (hasta cinco) y exige ver el ERROR con `MODO_SOLO_LECTURA`.
 
 **Cómo evitar que vuelva a pasar.** Una prueba de WebSocket no espera un tiempo fijo: espera la trama O el cierre. Con STOMP de Spring, un ERROR seguido de cierre puede perderse si coincide con otro envío a la misma sesión; si algún día el cliente real depende de leer el código del ERROR, el cierre 1002 también hay que tratarlo como rechazo.
+
+## E-672 · Spring Modulith lanzaba «Cannot invoke "java.lang.Class.getTypeName()" because "type" is null» al llamar a un bean con un parámetro genérico (backend, spec 048 fase 3, 10/11, RESUELTO antes de publicar)
+
+**Síntoma.** Las pruebas de integración de lo hecho sin red fallaban todas con `java.lang.NullPointerException: Cannot invoke "java.lang.Class.getTypeName()" because "type" is null`, en
+`FormattableType.of` ← `DefaultObservedModule.render` ← `ModuleEntryInterceptor.invoke`, y la traza apuntaba a `EntregaSinRed$$SpringCGLIB$$0.entregar`. Las pruebas unitarias, que construyen la clase a mano,
+pasaban.
+
+**Causa real.** La observabilidad de Spring Modulith envuelve cada bean de un módulo (también el de `shared`) y, para dar nombre a la entrada, pinta los tipos de los parámetros con
+`ResolvableType.resolve()`. Un parámetro como `Supplier<Aplicado<T>>` o `Function<EnvioRegistrado, T>` tiene un `T` que no se resuelve: `resolve()` devuelve `null` y el pintado revienta, en
+cada llamada. No es un error del código ni de la configuración: es el pintado de cualquier método público de un bean con una variable de tipo en un parámetro genérico.
+
+**Solución.** `EntregaSinRed` pasó de bean a clase común (`new EntregaSinRed(envios, clock)` en cada caso de uso, con el puerto y el reloj que ya recibe): sin proxy no hay traza. `EnviosSinRedGeneralIT` la
+cubre contra Postgres, con dos pedidos concurrentes.
+
+**Cómo evitar que vuelva a pasar.** Un método público de un bean (servicio, adaptador, controller) no lleva una variable de tipo en un parámetro genérico (`Supplier<T>`, `Function<X, T>`, `List<T>`): usa tipos concretos
+o una clase común que no sea bean. Las pruebas de integración con el contexto real son las que lo atrapan; una unitaria con `new` no.
+

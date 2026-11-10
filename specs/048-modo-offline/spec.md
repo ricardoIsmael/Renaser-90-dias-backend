@@ -28,6 +28,15 @@
 | D17 | Post diario sin red (fase 2, 2026-11-09) | El hábito «Post diario en comunidad» hecho sin señal cuenta el día en que se escribió, por la hora real (mismas reglas que D14: 48 h, sin hora futura). |
 | D18 | Lugar en el Muro (fase 2) | Al llegar, la publicación aparece arriba, como nueva, para que la tribu la vea; solo el hábito usa la hora real. |
 | D19 | Mientras espera (fase 2) | Solo se puede borrar. Editar, ya publicada, como cualquier otra. |
+| D20 | «Bitácora» (fase 3, 2026-11-10) | Es Cierra tu día: la nota del día se guarda ahí y no existe otra bitácora. Una sola cosa. |
+| D21 | Agendar un día que ya pasó al llegar (fase 3) | No se aplica y se avisa (`FUERA_DE_SU_DIA`): crear acciones en un día vivido distorsiona el avance de la semana. |
+| D22 | Tope de 48 h (fase 3) | Las 48 h solo quitan puntos y solo al marcar una acción. Lo que no da puntos (Cierra tu día, Código Renaser, planificar) no tiene tope de llegada: lo decide el día y el choque (D13). |
+| D23 | Código Renaser de una hora que el servidor ya tiene (fase 3) | Se queda el del servidor y se avisa (`YA_ESTABA_HECHO`). Nunca dos por hora. |
+| D24 | Código Renaser que ya no corresponde al llegar (fase 3) | No se aplica y se avisa (`MI_RADAR_NO_APLICA`); el texto que la persona escribió va en el aviso para que lo copie. |
+| D25 | Acciones agendadas sin señal (fase 3) | No se pueden marcar hasta que lleguen al servidor («Se agendará al volver la señal»): el `id` lo pone el servidor. |
+| D26 | Cierra tu día con una acción que ya no existe (fase 3) | Todo o nada: no se aplica y se avisa (`RECURSO_YA_NO_EXISTE`); el aviso guarda lo escrito. |
+| D27 | Código Renaser innegociable (días 1 a 7) sin señal (fase 3) | Vuelve a abrirse solo sin señal y se responde y se encola (revierte el límite de la fase 1). |
+| D28 | Cómo se avisa lo que no se aplicó (fase 3) | Una hoja corta la próxima vez que se abre Hoy; el globo del ícono dice «1 cosa no se aplicó» hasta que se ve. No hay bandeja histórica. |
 
 ## Lo que hay hoy (leído el 2026-11-09)
 

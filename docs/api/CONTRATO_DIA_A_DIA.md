@@ -1181,3 +1181,70 @@ devuelve ese registro). Errores: `400` «Todavía no llegas a tu meta de 5 km.»
 lectura del futuro o de otro día; `403` no es el dueño; `404`; `409` el día ya terminó (D-259) o ya se registró con la captura. En
 `GET /habit-tracks/today` y `/day`, `medicion` suma `meta`, `origenDelDia` y `fuenteDelDia`. Detalle: `specs/037-pasos-y-km/contracts/api.md`.
 
+## Lo hecho sin internet: Plan, Cierra tu día, Código Renaser y planificar hábitos (spec 048, fase 3, D-340, 2026-11-10)
+
+**No hay endpoints nuevos.** Las escrituras de abajo aceptan tres cabeceras opcionales; un servidor o una app anteriores las ignoran y, **sin ellas, cada
+endpoint responde exactamente lo de siempre**.
+
+| Cabecera | Valor | Ejemplo |
+|---|---|---|
+| `X-Id-Cliente` | UUID del envío (el mismo en un reintento) | `5f0c1f4e-2d0a-4b7e-9d77-0c9f3f6b1a10` |
+| `X-Hecho-En` | instante ISO-8601 en UTC con `Z`: la hora real en que la persona lo hizo | `2026-11-10T02:40:13.250Z` |
+| `X-Origen-De-La-Hora` | `RELOJ_DEL_SISTEMA` o `TELEFONO_CORREGIDO` (otro valor se lee como `TELEFONO_CORREGIDO`) | `RELOJ_DEL_SISTEMA` |
+
+**Es «hecho sin red» cuando vienen `X-Id-Cliente` y `X-Hecho-En`.** Si falta uno, el pedido es uno normal. Si `X-Id-Cliente` no es un UUID o `X-Hecho-En` no es
+un instante: 400 de siempre.
+
+**Endpoints que las aceptan** (la respuesta de éxito es la de siempre, con el mismo código HTTP):
+
+| Área | Endpoints |
+|---|---|
+| Cierra tu día | `PUT /rocks/day-closure` |
+| Código Renaser y Mi Radar | `POST /radar`, `PUT /radar/mi-radar` |
+| Plan | `POST /rocks/plan`, `POST /rocks/{id}/evidence`, `POST /rocks/weekly`, `PATCH /rocks/weekly/{id}`, `PATCH /rocks/weekly/{id}/review`, `PUT /rocks/master/{eje}`, `PUT /rocks/monthly/{eje}/{mes}` |
+| Horario, aviso y alarma de un hábito | `PATCH /habit-preferences/{habitId}`, `PATCH …/days/{date}`, `PUT …/weekdays/{weekday}`, `PUT …/weekdays/{weekday}/reminder`, `PUT …/weekdays/{weekday}/alarm`, `PUT …/alarm`, `DELETE …/weekdays/{weekday}`, `DELETE …/weekdays/{weekday}/active` |
+| «Solo esta semana» y repetir | `PUT` y `DELETE /habit-preferences/{habitId}/week`, `POST /habit-preferences/week-repeat`, `DELETE /habit-preferences/weeks/{weekStart}` |
+| Plan de hábitos | `PUT`, `PATCH`, `DELETE /habit-unlocks/{habitId}`, `POST /habits` |
+
+**La hora real.** Las reglas de calendario corren con `referencia = min(hechoEn, ahora)`, nunca con la hora de llegada: el «hoy» de la persona, la ventana
+«ya arrancó» (el cambio rige mañana), la cuota semanal, las horas de Mi Radar de esa fecha. Una hora del futuro (más de 2 minutos) no adelanta nada. Cada fila
+que se escribe deja `actualizado_en = referencia`.
+
+**Los puntos.** Solo **marcar una acción** (`POST /rocks/{id}/evidence`) da puntos. Hora futura, más de 48 h de llegada o una acción que no era del día de la hora real
+la dejan cumplida **sin puntos**, y la respuesta suma el campo aditivo **`motivoSinPuntos`** (`LLEGO_DESPUES_DE_48_H`, `HORA_FUTURA`, `FUERA_DE_SU_DIA`,
+`YA_ESTABA_HECHO`; `null` si sumó los suyos; `null` también en todo lo demás). Una acción ya cumplida responde 200 con `YA_ESTABA_HECHO`. Nada rebota por llegar tarde.
+
+**Cuando no se aplicó.** La regla de choques es una sola, lo más nuevo por hora lógica: un envío se aplica si ninguna fila que toca tiene `actualizado_en > hechoEn`
+(comparación estricta, así dos envíos seguidos del mismo teléfono no chocan entre sí). Si no, **409** con el cuerpo `ApiErrorConCodigo`
+`{ "message", "timestamp", "codigo" }` y `message` en tuteo, listo para mostrar:
+
+| `codigo` | Cuándo | `message` |
+|---|---|---|
+| `CAMBIO_MAS_NUEVO_EN_EL_SERVIDOR` | alguna fila que tocabas cambió en el servidor después de `hechoEn` (otro dispositivo, tu mentora, el cierre del día…) | «Esto cambió en tu cuenta después de que lo hiciste sin conexión. Se quedó lo más nuevo.» |
+| `YA_ESTABA_HECHO` | el alta ya existía: semana ya planificada, hora del Código Renaser ya ocupada, día en curso ya armado | «Esto ya estaba hecho en tu cuenta. Se quedó lo que ya había.» |
+| `RECURSO_YA_NO_EXISTE` | lo que tocabas ya no está (acción reemplazada al replanificar, hábito quitado del plan, semana borrada). Con `X-Id-Cliente`, un «no existe lo que tocabas» se responde así y no como 404 | «Lo que tocaste ya no existe en tu cuenta. Se quedó lo del servidor.» |
+| `FUERA_DE_SU_DIA` | el día al que apunta ya terminó o no es el de `hechoEn` (agendar un día pasado, cerrar un día distinto del de la hora real) | «Esto era de un día que ya terminó y no se pudo aplicar.» |
+| `MI_RADAR_NO_APLICA` | Código Renaser desde el día 8 sin Mi Radar encendido, sin horas ese día o fuera de 03:00 a 23:59 a la hora real | «Mi Radar no tenía esa hora para ti, así que no se guardó ese Código Renaser.» |
+
+Lo demás sigue como hoy: 400 de datos mal hechos, 403 (con su `codigo` si lo tiene), los 409 de negocio de siempre (`ALREADY_PLANNED`, `ROCA_MAESTRA_FIJA`, «Esta semana ya reacomodaste
+N hábitos»), 503 `FUNCIONALIDAD_APAGADA`.
+
+**Un reintento** (mismo `X-Id-Cliente`) devuelve lo mismo sin tocar nada: si se aplicó, el éxito habitual releyendo lo que quedó; si no se aplicó, el mismo 409 con el mismo
+`codigo` y `message`. Dos pedidos iguales a la vez se turnan por un candado (`pg_advisory_xact_lock`) y tienen un solo efecto.
+
+**Rastro para Soporte TI (FR-016).** Cada resultado deja su fila en `envios_sin_red` (`tipo`, `recurso`, `resultado` `APLICADO`/`NO_APLICADO`, `codigo`, `mensaje`, `hecho_en`,
+`origen_de_la_hora`) y una línea `[offline] <tipo> <recurso> hecho <hechoEn> (hora <origen>), llegó <ahora>: <aplicado|no aplicado CODIGO>` en el log. **Nunca se registra un texto
+de la persona** (notas, respuestas del Código Renaser).
+
+**Cómo se decide cada área** (qué fila mira el choque):
+
+- **Cierra tu día:** el día es el de la hora real (cerrar el lunes a las 23:50 y llegar el martes se aplica al lunes); se exigen las pendientes cuya hora ya había llegado y que ya existían;
+  la nota del día o un cierre del servidor posteriores, o una pendiente que el teléfono no conocía, dan `CAMBIO_MAS_NUEVO_EN_EL_SERVIDOR`; una acción que ya no existe deja todo sin aplicar.
+- **Código Renaser:** día del programa a la hora real; desde el día 8, las horas del Despertar y el Dormir de ESA fecha; una por hora UTC (`YA_ESTABA_HECHO`, gana el del servidor). Se guarda con
+  `creado_en` = la hora real. **Mi Radar** es una sola cosa: si `participantes_programa.mi_radar_actualizado_en` (V191) es posterior a `hechoEn`, gana el servidor.
+- **Plan:** `rocas_diarias`, `rocas_semanales`, `rocas_maestras` y `rocas_mensuales` por su `actualizado_en` (un día futuro ya armado se reemplaza salvo que alguna acción cambió después; un objetivo de 90 días
+  por confirmar no cuenta como cambio).
+- **Planificar hábitos:** `preferencias_horario`, `horario_semanal_habito`, `horarios_habito_por_fecha` y `desbloqueos_habito`. Un `DELETE` sobre algo que ya no está se aplica sin más.
+
+Las pruebas llevan la marca `// spec 048 FR-019`. Contrato completo: `specs/048-modo-offline/plan.md` («Plan técnico — fase 3»).
+

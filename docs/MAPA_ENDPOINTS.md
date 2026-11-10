@@ -439,3 +439,13 @@ demás) y suma `categoryKey`. Detalle en `specs/023-habitos-por-formacion/contra
 | GET | `/api/v1/leadership/habits/{habitId}/people?date=&group=&formation=&q=&page=&size=` | Las personas de ese hábito con su estado, hora planificada y hora de cumplimiento |
 
 Solo lectura, sin constancia de consulta, `no-store`. Detalle en `specs/029-lider-ve-todos-los-habitos/contracts/habitos-de-todos-api.md`.
+
+## Lo hecho sin internet (spec 048, fase 3, D-340, 2026-11-10)
+
+No hay endpoints nuevos: las escrituras de Cierra tu día (`PUT /rocks/day-closure`), Código Renaser y Mi Radar (`POST /radar`, `PUT /radar/mi-radar`), Plan (`POST /rocks/plan`,
+`POST /rocks/{id}/evidence`, `POST|PATCH /rocks/weekly…`, `PUT /rocks/master/{eje}`, `PUT /rocks/monthly/{eje}/{mes}`) y planificar hábitos y alarmas
+(`/habit-preferences/**`, `/habit-unlocks/{habitId}`, `POST /habits`) aceptan tres cabeceras opcionales: `X-Id-Cliente` (UUID del envío), `X-Hecho-En` (la hora real, ISO-8601 en UTC) y
+`X-Origen-De-La-Hora` (`RELOJ_DEL_SISTEMA` | `TELEFONO_CORREGIDO`). Sin ellas responden exactamente lo de siempre. Si el cambio no se aplicó, **409** con `codigo` en
+`CAMBIO_MAS_NUEVO_EN_EL_SERVIDOR`, `YA_ESTABA_HECHO`, `RECURSO_YA_NO_EXISTE`, `FUERA_DE_SU_DIA` o `MI_RADAR_NO_APLICA` y el `message` listo para mostrar. `POST /rocks/{id}/evidence` suma `motivoSinPuntos`
+(aditivo). Contrato: `docs/api/CONTRATO_DIA_A_DIA.md` («Lo hecho sin internet…»).
+
