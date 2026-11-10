@@ -96,12 +96,12 @@ class CuotasDeTodosIT {
         assertThat(filas).containsKeys(escuela.id.toString(), diplomado.id.toString(), certificacion.id.toString());
         assertThat(filas).doesNotContainKey(pagoCompleto.id.toString());
         JsonNode deEscuela = filas.get(escuela.id.toString());
-        assertThat(deEscuela.get("personName").asText()).isEqualTo("Fixture APRENDIZ");
-        assertThat(deEscuela.get("email").asText()).isEqualTo(escuela.id + "@renaser.test");
-        assertThat(deEscuela.get("payments").get("mode").asText()).isEqualTo("SCHEDULE");
-        assertThat(deEscuela.get("payments").get("currency").asText()).isEqualTo("USD");
-        assertThat(deEscuela.get("payments").get("confirmation").get("state").asText()).isEqualTo("NOT_YET");
-        JsonNode cuotas = deEscuela.get("payments").get("installments");
+        assertThat(deEscuela.get("user").get("name").asText()).isEqualTo("Fixture APRENDIZ");
+        assertThat(deEscuela.get("user").get("email").asText()).isEqualTo(escuela.id + "@renaser.test");
+        assertThat(deEscuela.get("schedule").get("mode").asText()).isEqualTo("SCHEDULE");
+        assertThat(deEscuela.get("schedule").get("currency").asText()).isEqualTo("USD");
+        assertThat(deEscuela.get("schedule").get("confirmation").get("state").asText()).isEqualTo("NOT_YET");
+        JsonNode cuotas = deEscuela.get("schedule").get("installments");
         assertThat(cuotas).extracting(c -> c.get("dueDate").asText()).containsExactly("2031-10-15", "2031-11-15", "2031-12-15");
         assertThat(cuotas.get(0).get("id").asText()).isEqualTo(primera);
         assertThat(cuotas.get(0).get("amount").decimalValue()).isEqualByComparingTo("1000");
@@ -109,14 +109,14 @@ class CuotasDeTodosIT {
         assertThat(cuotas.get(0).get("statusChangedAt").isNull()).isFalse();
         assertThat(cuotas.get(0).get("statusChangedByName").asText()).isEqualTo("Fixture ADMIN");
         assertThat(cuotas.get(1).get("status").asText()).isEqualTo("PENDING");
-        assertThat(filas.get(diplomado.id.toString()).get("payments").get("currency").asText()).isEqualTo("PEN");
+        assertThat(filas.get(diplomado.id.toString()).get("schedule").get("currency").asText()).isEqualTo("PEN");
         assertThat(pagina.get("page").asInt()).isZero();
         assertThat(pagina.get("size").asInt()).isEqualTo(200);
         assertThat(pagina.get("total").asLong()).isGreaterThanOrEqualTo(3);
 
         // la lectura de todos dice lo mismo que la ficha de cada persona
         JsonNode ficha = ok(pedir("GET", UNA + escuela.id, ana.token, null));
-        assertThat(deEscuela.get("payments")).isEqualTo(ficha.get("payments"));
+        assertThat(deEscuela.get("schedule")).isEqualTo(ficha.get("payments"));
     }
 
     @Test
@@ -143,16 +143,16 @@ class CuotasDeTodosIT {
         Map<String, JsonNode> filas = porPersona(noviembre);
         assertThat(filas).containsOnlyKeys(escuela.id.toString(), diplomado.id.toString());
         assertThat(noviembre.get("total").asLong()).isEqualTo(2);
-        assertThat(filas.get(escuela.id.toString()).get("payments").get("installments")).extracting(c -> c.get("dueDate").asText()).containsExactly("2031-11-15");
-        assertThat(filas.get(diplomado.id.toString()).get("payments").get("installments")).extracting(c -> c.get("dueDate").asText()).containsExactly("2031-11-20");
+        assertThat(filas.get(escuela.id.toString()).get("schedule").get("installments")).extracting(c -> c.get("dueDate").asText()).containsExactly("2031-11-15");
+        assertThat(filas.get(diplomado.id.toString()).get("schedule").get("installments")).extracting(c -> c.get("dueDate").asText()).containsExactly("2031-11-20");
 
         Map<String, JsonNode> pagadas = porPersona(ok(pedir("GET", TODAS + "?size=200&desde=2031-01-01&status=PAID", ana.token, null)));
         assertThat(pagadas).containsOnlyKeys(escuela.id.toString());
-        assertThat(pagadas.get(escuela.id.toString()).get("payments").get("installments")).singleElement()
+        assertThat(pagadas.get(escuela.id.toString()).get("schedule").get("installments")).singleElement()
                 .satisfies(c -> assertThat(c.get("id").asText()).isEqualTo(deNoviembre));
 
         Map<String, JsonNode> pendientes = porPersona(ok(pedir("GET", TODAS + "?size=200&desde=2031-01-01&status=PENDING", ana.token, null)));
-        assertThat(pendientes.get(escuela.id.toString()).get("payments").get("installments")).extracting(c -> c.get("dueDate").asText())
+        assertThat(pendientes.get(escuela.id.toString()).get("schedule").get("installments")).extracting(c -> c.get("dueDate").asText())
                 .containsExactly("2031-10-15", "2031-12-15");
 
         assertThat(pedir("GET", TODAS + "?desde=15-11-2031", ana.token, null).statusCode()).isEqualTo(400);
@@ -243,10 +243,10 @@ class CuotasDeTodosIT {
         return ids;
     }
 
-    /** Las filas de la página por {@code personId}; falla si una persona sale dos veces. */
+    /** Las filas de la página por {@code user.id}; falla si una persona sale dos veces. */
     private static Map<String, JsonNode> porPersona(JsonNode pagina) {
         Map<String, JsonNode> filas = new HashMap<>();
-        pagina.get("content").forEach(fila -> assertThat(filas.put(fila.get("personId").asText(), fila)).as("una persona, una fila").isNull());
+        pagina.get("content").forEach(fila -> assertThat(filas.put(fila.get("user").get("id").asText(), fila)).as("una persona, una fila").isNull());
         return filas;
     }
 

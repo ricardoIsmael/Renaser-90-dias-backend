@@ -129,14 +129,20 @@ final class PagosDtos {
     }
 
     /**
-     * Una fila de la lectura de todos (D-338): el id de la persona (el {@code id} de {@code GET /admin/trainees}), su nombre, su correo y su pago con el mismo cuerpo que
-     * la ficha. {@code payments.installments} trae solo las cuotas que cumplen el pedido.
+     * Una fila de la lectura de todos (D-338): el usuario y su cronograma de pagos, en dos bloques (pedido del dueño, 10/11).
+     * {@code user.id} es el {@code id} de {@code GET /admin/trainees} y {@code user.email} su correo; {@code schedule} es el mismo
+     * cuerpo de pagos que la ficha, con solo las cuotas que cumplen el pedido.
      */
-    record PersonInstallmentsResponse(UUID personId, String personName, String email, PaymentsResponse payments) {
+    record PersonInstallmentsResponse(UserResponse user, PaymentsResponse schedule) {
 
         static PersonInstallmentsResponse from(PagosDeUnaPersona fila) {
-            return new PersonInstallmentsResponse(fila.persona().value(), fila.nombre(), fila.correo(), PaymentsResponse.from(fila.pago()));
+            return new PersonInstallmentsResponse(new UserResponse(fila.persona().value(), fila.nombre(), fila.correo()),
+                    PaymentsResponse.from(fila.pago()));
         }
+    }
+
+    /** El usuario de una fila: su id (el de {@code GET /admin/trainees}), su nombre y su correo. */
+    record UserResponse(UUID id, String name, String email) {
     }
 
     /** La página de la lectura de todos, con la forma de {@code GET /admin/trainees}: {@code total} es de personas, en todas las páginas. */

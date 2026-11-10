@@ -48,17 +48,18 @@ Trae, de a una página, a **cada persona «con cronograma»** con su pago, para 
 
 ```json
 { "content": [
-    { "personId": "uuid (el id de GET /admin/trainees)", "personName": "Beto Aprendiz", "email": "beto@correo.com",
-      "payments": { "mode": "SCHEDULE", "currency": "PEN",
+    { "user": { "id": "uuid (el id de GET /admin/trainees)", "name": "Beto Aprendiz", "email": "beto@correo.com" },
+      "schedule": { "mode": "SCHEDULE", "currency": "PEN",
                     "installments": [ { "id": "uuid", "dueDate": "2026-11-15", "amount": 1000.00, "status": "PAID",
                                         "statusChangedAt": "2026-11-16T14:03:00Z", "statusChangedByName": "Ana Admin" } ],
                     "confirmation": { "state": "CONFIRMED", "confirmedAt": "2026-11-02T20:10:00Z", "name": "Beto Aprendiz" } } } ],
   "total": 132, "page": 0, "size": 50 }
 ```
-- `payments` es **el mismo objeto** que devuelve `GET /admin/pagos/personas/{personaId}` (con `statusChangedByName`).
+- Cada fila es **el usuario y su cronograma de pagos** (pedido del dueño, 10/11): `user` (id, nombre, correo) y `schedule`.
+- `schedule` es **el mismo objeto** que `payments` en `GET /admin/pagos/personas/{personaId}` (con `statusChangedByName`).
 - Solo personas «con cronograma». Quien pagó completo (`NONE`) o no tiene nada anotado no sale. Sin `desde`/`hasta`/`status` también sale quien tiene cronograma y todavía no tiene cuotas (`installments: []`); con alguno de ellos, solo quien tiene al menos una cuota que lo cumple.
 - Con filtros, `installments` trae **solo las cuotas que los cumplen**. `confirmation` se calcula siempre sobre el cronograma entero.
-- `total` cuenta personas (no cuotas) en todas las páginas. El orden es estable (por `personId`), así que recorrer `page` 0, 1, 2… hasta una página vacía trae a todos una sola vez.
+- `total` cuenta personas (no cuotas) en todas las páginas. El orden es estable (por `user.id`), así que recorrer `page` 0, 1, 2… hasta una página vacía trae a todos una sola vez.
 - Costo fijo por página: los ids que cumplen el pedido, el recorte por formación (si se pide), las cuotas y el pago de las personas de la página, sus nombres y sus correos. Una consulta para cada cosa, nunca una por persona.
 
 ## Aceptar una solicitud (spec 025)
