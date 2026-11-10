@@ -351,10 +351,10 @@ class PostDiarioComunidadHabitoServiceTest {
         service(FixedClock.at(Instant.parse("2026-08-25T14:00:00Z"))).alPublicarSinRed(autor, publicacion, hechoEn);
         service(FixedClock.at(Instant.parse("2026-08-25T14:00:00Z"))).alPublicarSinRed(autor, publicacion, hechoEn);
 
-        var envio = org.mockito.ArgumentCaptor.forClass(CompletarHechoSinRedUseCase.HechoSinRed.class);
+        var envio = org.mockito.ArgumentCaptor.forClass(com.renaser.os.shared.domain.HechoSinRed.class);
         verify(completarHechoSinRed, org.mockito.Mockito.times(2)).completar(
                 eq(new CompletarRegistroCommand(autor, registro.id(), null, null)), envio.capture());
-        assertThat(envio.getAllValues()).extracting(CompletarHechoSinRedUseCase.HechoSinRed::hechoEn).containsOnly(hechoEn);
+        assertThat(envio.getAllValues()).extracting(com.renaser.os.shared.domain.HechoSinRed::hechoEn).containsOnly(hechoEn);
         assertThat(envio.getAllValues().get(0).idCliente()).as("mismo id en la reentrega")
                 .isEqualTo(envio.getAllValues().get(1).idCliente());
         verify(completarRegistroUseCase, never()).completar(any());

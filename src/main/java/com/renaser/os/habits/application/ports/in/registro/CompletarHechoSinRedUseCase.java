@@ -2,10 +2,7 @@ package com.renaser.os.habits.application.ports.in.registro;
 
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase.CompletarRegistroCommand;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
-
-import java.time.Instant;
-import java.util.Objects;
-import java.util.UUID;
+import com.renaser.os.shared.domain.HechoSinRed;
 
 /**
  * Spec 048 (FR-008, FR-013–FR-016): completar lo que la persona marcó SIN RED, con la hora real en que lo hizo.
@@ -16,22 +13,6 @@ import java.util.UUID;
 public interface CompletarHechoSinRedUseCase {
 
     CompletadoSinRed completar(CompletarRegistroCommand command, HechoSinRed sinRed);
-
-    /** @param origenDeLaHora cómo calculó la app {@code hechoEn} (FR-013); solo se anota en el log */
-    record HechoSinRed(Instant hechoEn, UUID idCliente, OrigenDeLaHora origenDeLaHora) {
-        public HechoSinRed {
-            Objects.requireNonNull(hechoEn, "hechoEn");
-            Objects.requireNonNull(idCliente, "idCliente");
-            origenDeLaHora = origenDeLaHora == null ? OrigenDeLaHora.TELEFONO_CORREGIDO : origenDeLaHora;
-        }
-    }
-
-    enum OrigenDeLaHora {
-        /** La última hora del servidor más el reloj del sistema desde el encendido: cambiar la hora del teléfono no la mueve. */
-        RELOJ_DEL_SISTEMA,
-        /** El teléfono se reinició sin señal: su reloj corregido con el último desfase conocido. */
-        TELEFONO_CORREGIDO
-    }
 
     /** {@code motivoSinPuntos} es nulo cuando sumó sus puntos. */
     record CompletadoSinRed(RegistroHabito registro, MotivoSinPuntos motivoSinPuntos) {
