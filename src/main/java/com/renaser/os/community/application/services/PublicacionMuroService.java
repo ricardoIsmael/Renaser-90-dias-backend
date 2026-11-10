@@ -22,6 +22,7 @@ import com.renaser.os.community.application.ports.out.publicacion.LoadComentario
 import com.renaser.os.community.application.ports.out.publicacion.LoadPublicacionPort;
 import com.renaser.os.community.application.ports.out.publicacion.ReaccionMuroPort;
 import com.renaser.os.community.application.ports.out.publicacion.ReferenciasDeMediaDelMuroPort;
+import com.renaser.os.community.application.ports.out.publicacion.PublicacionesSinRedPort;
 import com.renaser.os.community.application.ports.out.publicacion.SavePublicacionPort;
 import com.renaser.os.community.application.ports.out.usuario.ConsultarPerfilUsuarioPort;
 import com.renaser.os.community.application.ports.out.usuario.ConsultarPerfilUsuarioPort.PerfilUsuario;
@@ -122,6 +123,8 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     private final SinCuentasCerradas sinCerradas;
     /** Spec 024: el Muro de cada formación es solo de ella; la formación de quien actúa sale del punto único de la 022. */
     private final AlcanceDeFormacionFinder formaciones;
+    /** Spec 048, fase 2: las publicaciones hechas sin red (id del envio y hora real, V189). */
+    private final PublicacionesSinRedPort publicacionesSinRed;
 
     public PublicacionMuroService(LoadPublicacionPort loadPublicacionPort, SavePublicacionPort savePublicacionPort,
                                    EliminarPublicacionPort eliminarPublicacionPort,
@@ -133,8 +136,10 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
                                    ParticipacionProgramaFinder participacionFinder,
                                    ReferenciasDeMediaDelMuroPort referenciasDeMediaPort,
                                    List<ReferenciasExternasDeMediaDelMuro> referenciasExternas,
-                                   CuentasCerradasFinder cuentasCerradas, AlcanceDeFormacionFinder formaciones) {
+                                   CuentasCerradasFinder cuentasCerradas, AlcanceDeFormacionFinder formaciones,
+                                   PublicacionesSinRedPort publicacionesSinRed) {
         this.formaciones = formaciones;
+        this.publicacionesSinRed = publicacionesSinRed;
         this.sinCerradas = new SinCuentasCerradas(cuentasCerradas);
         this.referenciasDeMediaPort = referenciasDeMediaPort;
         this.referenciasExternas = List.copyOf(referenciasExternas);
@@ -157,6 +162,14 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
     @Transactional
     public PublicacionVista publicar(PublicarCommand command) {
         requireActorPuedePublicar(command.autorId());
+        // Spec 048, fase 2 (FR-020): un envio sin red que ya llego (corte a mitad, reintento) devuelve la misma publicacion.
+        if (command.sinRed() != null) {
+            Optional<Publicacion> yaLlego = publicacionesSinRed.publicacionDe(command.autorId(), command.sinRed().idCliente())
+                    .flatMap(id -> loadPublicacionPort.porId(PublicacionId.of(id)));
+            if (yaLlego.isPresent()) {
+                return aVista(yaLlego.get(), command.autorId());
+            }
+        }
         if (command.categoriaClave() != null && !categoriasUseCase.clavesExistentes().contains(command.categoriaClave())) {
             throw new IllegalArgumentException("Categoría desconocida: " + command.categoriaClave());
         }
@@ -166,8 +179,15 @@ public class PublicacionMuroService implements PublicarUseCase, EditarPublicacio
         Publicacion publicacion = Publicacion.publicar(PublicacionId.of(idGenerator.newId()), command.autorId(),
                 command.texto(), media, command.categoriaClave(), clock.now(), diaDePrograma(command.autorId()), donde);
         Publicacion guardada = savePublicacionPort.save(publicacion);
+        // Se guarda con la hora de LLEGADA (aparece arriba, D18); la hora real queda aparte para el «Post diario» (D17).
+        Instant hechoSinRedEn = null;
+        if (command.sinRed() != null) {
+            hechoSinRedEn = command.sinRed().hechoEn();
+            publicacionesSinRed.registrar(command.autorId(), command.sinRed().idCliente(), guardada.id().value(),
+                    hechoSinRedEn, command.sinRed().origenDeLaHora());
+        }
         events.publishEvent(new PublicacionCreadaEvent(guardada.id().value(), guardada.autorId(),
-                guardada.categoriaClave(), clock.now()));
+                guardada.categoriaClave(), clock.now(), hechoSinRedEn));
         return aVista(guardada, command.autorId());
     }
 

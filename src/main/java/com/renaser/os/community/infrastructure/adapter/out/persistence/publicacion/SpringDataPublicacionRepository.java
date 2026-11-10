@@ -100,6 +100,22 @@ interface SpringDataPublicacionRepository extends JpaRepository<PublicacionJpaEn
      */
     boolean existsByAutorIdAndCreadoEnGreaterThanEqualAndCreadoEnLessThan(UUID autorId, Instant desde, Instant hasta);
 
+    /**
+     * Spec 048, fase 2 (D17): como el de arriba, pero una publicacion hecha sin red cuenta en la ventana de su HORA REAL
+     * ({@code publicaciones_sin_red.hecho_en}, V189), no en la de su llegada. Una escrita ayer sin senal y llegada hoy
+     * cuenta para ayer (y tambien para hoy, por su llegada: el «Post diario» de hoy no se le niega por eso).
+     */
+    @Query(value = """
+            SELECT EXISTS (
+                SELECT 1 FROM renaser.publicaciones_muro p
+                 WHERE p.autor_id = :autorId AND p.creado_en >= :desde AND p.creado_en < :hasta)
+                OR EXISTS (
+                SELECT 1 FROM renaser.publicaciones_sin_red s
+                 WHERE s.autor_id = :autorId AND s.hecho_en >= :desde AND s.hecho_en < :hasta)
+            """, nativeQuery = true)
+    boolean existePublicadaEntre(@Param("autorId") UUID autorId, @Param("desde") Instant desde,
+                                 @Param("hasta") Instant hasta);
+
     /** El detalle del de arriba (E-628): id e instante, de la más vieja a la más nueva. Usa {@code muro_autor_idx}. */
     @Query("""
             SELECT p.id, p.creadoEn FROM PublicacionJpaEntity p

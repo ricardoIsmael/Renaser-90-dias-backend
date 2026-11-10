@@ -57,3 +57,37 @@ completa con `hechoEn`. Confirmar la evidencia de un registro `EXPIRADO` tambié
   contra Postgres de la tabla nueva.
 - App: Jest de la cola, de la hora real, de la sesión sin red y de marcar sin red; E2E en el emulador con el modo avión
   (Maestro + mobile-mcp) y el log del backend.
+
+---
+
+# Plan técnico — fase 2 (el Muro sin red, FR-018, FR-020, FR-021)
+
+## Servidor
+
+- **V189 `publicaciones_sin_red`** `(id_cliente uuid, autor_id uuid, publicacion_id uuid → publicaciones_muro ON DELETE
+  CASCADE, hecho_en timestamptz, origen_de_la_hora text, creado_en)`, PK `(autor_id, id_cliente)`. Aparte de
+  `publicaciones_muro` para no tocar el agregado `Publicacion` ni su mapeo.
+- `POST /api/v1/wall` suma `hechoEn`, `idCliente` y `origenDeLaHora` opcionales (los mismos de la fase 1). Con `idCliente`
+  ya registrado devuelve la publicación que quedó (201, la misma), sin crear otra.
+- La publicación se guarda con `clock.now()` (D18: arriba, como nueva). `PublicacionCreadaEvent` suma `hechoSinRedEn`
+  (nulo cuando hubo señal).
+- `PostDiarioComunidadHabitoService`: con `hechoSinRedEn`, busca el registro del DÍA DE LA HORA REAL y lo cierra con
+  `CompletarHechoSinRedUseCase` (misma revisión que la fase 1: 48 h, hora futura, fuera de su día; admite `EXPIRADO`;
+  idempotente por `envios_sin_red` con un id derivado de la publicación).
+- `existeDeAutorEntre` (lo que mira `PoliticaPostDiarioComunidad`) cuenta también la hora real de
+  `publicaciones_sin_red`: una publicación escrita ayer sin señal y llegada hoy cuenta para ayer.
+
+## App
+
+| Pieza | Dónde | FR |
+|---|---|---|
+| Envío `publicarMuro` en la cola: copia las fotos al almacenamiento de la app, las sube (URL firmada → S3) y publica con la hora real | `features/community/api/publicarSinRed.ts` | FR-018 |
+| La publicación en espera arriba en el Muro, «Se publicará al volver la señal», con «Borrar» (saca el envío de la cola) | `useWallFeed`, `ComunidadScreen` | FR-018, D19 |
+| El compositor abre sin red; las categorías del Muro entran en las lecturas guardadas | `NuevaPublicacion`, `lecturasGuardadas` | FR-021 |
+| El «Post diario» de Entrenar sale hecho al instante (ajuste de lectura con el registro guardado en el envío) | `evidenciaHabitoApi` / `publicarSinRed` | FR-011, D17 |
+
+## Cómo se prueba
+
+- Servidor: `PublicarEnElMuroSinRedIT` (llega al día siguiente → el «Post diario» de ayer cumplido con puntos y la
+  publicación arriba; reintento → una sola; borrada antes → no hay nada) y la prueba del servicio.
+- App: Jest del envío de la cola y del borrado; E2E en el emulador cortando el túnel (como la fase 1).
