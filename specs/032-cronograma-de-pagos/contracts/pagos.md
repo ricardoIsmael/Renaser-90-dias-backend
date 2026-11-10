@@ -34,6 +34,33 @@ Base: `/api/v1/admin/pagos/personas/{personaId}`. Todas devuelven `{ "personName
 | `DELETE /cuotas/{cuotaId}` | — | quita una cuota pendiente | 404; 409 pagada o última |
 | `PUT /cuotas/{cuotaId}/estado` | `{ "status": "PAID" \| "PENDING" }` | marca; idempotente; deja quién y cuándo | 404 |
 
+### `GET /api/v1/admin/pagos/cuotas` — las cuotas de todos (D-338, para RenaserOs)
+Mismo acceso que la ficha (`MANAGE_PAYMENTS`, funcionalidad `pagos`; 403 para cualquier otro rol, Soporte TI incluido, y para una cuenta suspendida; sin sesión, 403 como el resto de la API).
+Trae, de a una página, a **cada persona «con cronograma»** con su pago, para que el CRM no tenga que pedir la ficha persona por persona.
+
+| Parámetro | Por defecto | Qué hace |
+|---|---|---|
+| `page` | `0` | la página, desde 0 |
+| `size` | `50` | personas por página, de 1 a 200 (fuera de eso, 400) |
+| `formation` | vacío = todas | `ESCUELA`, `DIPLOMADO` o `CERTIFICACION` (sin distinguir mayúsculas), como en `GET /admin/trainees`: los aprendices que la cursan y el personal que la tiene asignada. Otra, 400 |
+| `desde`, `hasta` | sin límite | `yyyy-MM-dd`, inclusivos, sobre `dueDate` (la fecha fija de la cuota, sin zona). `desde` posterior a `hasta`, o mal formada, 400 |
+| `status` | las dos | `PAID` o `PENDING`. Otro, 400 |
+
+```json
+{ "content": [
+    { "personId": "uuid (el id de GET /admin/trainees)", "personName": "Beto Aprendiz", "email": "beto@correo.com",
+      "payments": { "mode": "SCHEDULE", "currency": "PEN",
+                    "installments": [ { "id": "uuid", "dueDate": "2026-11-15", "amount": 1000.00, "status": "PAID",
+                                        "statusChangedAt": "2026-11-16T14:03:00Z", "statusChangedByName": "Ana Admin" } ],
+                    "confirmation": { "state": "CONFIRMED", "confirmedAt": "2026-11-02T20:10:00Z", "name": "Beto Aprendiz" } } } ],
+  "total": 132, "page": 0, "size": 50 }
+```
+- `payments` es **el mismo objeto** que devuelve `GET /admin/pagos/personas/{personaId}` (con `statusChangedByName`).
+- Solo personas «con cronograma». Quien pagó completo (`NONE`) o no tiene nada anotado no sale. Sin `desde`/`hasta`/`status` también sale quien tiene cronograma y todavía no tiene cuotas (`installments: []`); con alguno de ellos, solo quien tiene al menos una cuota que lo cumple.
+- Con filtros, `installments` trae **solo las cuotas que los cumplen**. `confirmation` se calcula siempre sobre el cronograma entero.
+- `total` cuenta personas (no cuotas) en todas las páginas. El orden es estable (por `personId`), así que recorrer `page` 0, 1, 2… hasta una página vacía trae a todos una sola vez.
+- Costo fijo por página: los ids que cumplen el pedido, el recorte por formación (si se pide), las cuotas y el pago de las personas de la página, sus nombres y sus correos. Una consulta para cada cosa, nunca una por persona.
+
 ## Aceptar una solicitud (spec 025)
 `POST /api/v1/account-requests/{id}/approve` suma el campo opcional `payment` (mismo cuerpo del `PUT` de arriba). Sin él, nada se anota. Un `payment` inválido es 400 y deshace la aceptación.
 `GET /api/v1/account-requests/acceptance-options` suma `paymentScheduleAvailable: true`.
