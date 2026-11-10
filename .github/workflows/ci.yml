@@ -44,9 +44,17 @@ env:
 
 jobs:
   build:
-    name: Compilar y probar
+    # Dos mitades en paralelo (2026-11-09): unitarias (surefire) e integración (failsafe, los *IT). Antes una sola corría
+    # las dos en fila: ~17 min. Cada una compila por su cuenta y tiene su propio piso de pruebas (scripts/verificar.sh).
+    name: Compilar y probar (${{ matrix.parte }})
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      # Que una mitad falle no cancela la otra: se ven los dos resultados de una vez.
+      fail-fast: false
+      matrix:
+        # La de integración va partida en dos por módulo (scripts/verificar.sh, MODULOS_B): era la mitad más lenta.
+        parte: [unitarias, integracion-a, integracion-b]
 
     steps:
       - name: Descargar el codigo
@@ -76,13 +84,13 @@ jobs:
       # cambia en el script, no aca.
       - name: Compilar, correr la suite completa y verificar que las pruebas corrieron
         shell: bash
-        run: bash scripts/verificar.sh --ci
+        run: bash scripts/verificar.sh --ci --parte=${{ matrix.parte }}
 
       - name: Publicar el reporte de cobertura (JaCoCo)
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: jacoco-report
+          name: jacoco-report-${{ matrix.parte }}
           # El HTML es para mirarlo a mano; el XML es el que consume SonarCloud; el .exec es el
           # dato crudo, por si hay que regenerar el reporte sin volver a correr la suite.
           path: |
@@ -96,7 +104,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: informes-de-pruebas
+          name: informes-de-pruebas-${{ matrix.parte }}
           path: |
             target/surefire-reports/
             target/failsafe-reports/
