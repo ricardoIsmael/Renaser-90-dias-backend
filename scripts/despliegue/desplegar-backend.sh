@@ -143,9 +143,9 @@ esperar_sano() {
 }
 
 # La configuracion de nginx. Es transparente a proposito: NO toca X-Forwarded-For ni ninguna
-# otra cabecera de CloudFront (la app toma la IP del cliente del valor mas a la izquierda, E-149;
-# agregar la del borde a la derecha romperia el dia que se lea desde la derecha, OUT-1), y
-# conserva el Host original. Lo demas: WebSocket (/ws y la voz en vivo), sin buffer para el
+# otra cabecera de CloudFront (la app toma la IP del cliente del valor mas a la derecha, el que
+# agrega CloudFront, E-678; si nginx agregara el suyo, ese pasaria a ser el ultimo y todos los
+# clientes contarian como uno solo), y conserva el Host original. Lo demas: WebSocket (/ws y la voz en vivo), sin buffer para el
 # streaming del chat y para las subidas, y el tope de tamano lo sigue poniendo la aplicacion.
 escribir_config_proxy() {
   mkdir -p "$DIR_PROXY"
