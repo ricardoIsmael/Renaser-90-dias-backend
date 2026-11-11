@@ -570,8 +570,11 @@ Con el modo sin corte hay que tener presente:
   `DESPLIEGUE_MODO=reemplazo` (y después se vuelve a `auto`), o se parte en expandir y contraer.
 - **Lo conectado al viejo se corta al apagarlo** (voz en vivo en curso, streaming largo del chat). El chat
   por WebSocket reconecta contra el nuevo; el broker STOMP es en memoria, uno por instancia.
-- nginx es transparente: no toca `X-Forwarded-For` ni las cabeceras de CloudFront y conserva `Host`
-  (la IP del cliente sigue saliendo igual que antes, ver `DireccionIpDelCliente`). Soporta WebSocket y no
+- nginx es transparente: no toca `X-Forwarded-For` ni las cabeceras de CloudFront y conserva `Host`.
+  La app toma la IP del cliente del valor más a la derecha de `X-Forwarded-For` (el que agrega
+  CloudFront), así que nginx **no debe** agregar el suyo (ver `DireccionIpDelCliente`, E-678, D-342).
+  > **Corregido 2026-11-11 (E-678).** Decía «la IP del cliente sigue saliendo igual que antes», cuando
+  > salía del valor más a la izquierda. Soporta WebSocket y no
   hace buffer. Su configuración la reescribe el script en `/opt/renaser/proxy/renaser.conf`.
 - Los schedulers aguantan dos instancias unos segundos: 20 de 22 llevan ShedLock sobre JDBC y los otros
   dos pueden correr en todas (`SchedulerLockConfig`).

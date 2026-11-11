@@ -157,3 +157,8 @@ renaser:
       # se inventa. Los tests que necesitan un texto configurado construyen su propio MensajeDeApoyo,
       # no dependen de esta linea. Que este presente documenta que existe la propiedad.
       mensaje:
+
+# Espeja el bloque de main (E-678, D-342): este archivo REEMPLAZA al de main, asi que sin esto los IT correrian con el valor por
+# defecto de Spring y no con el de produccion. `CabecerasReenviadasTest` comprueba que los dos digan lo mismo.
+server:
+  forward-headers-strategy: none
