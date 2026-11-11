@@ -33,6 +33,9 @@ secreto, el id de la distribución, el de la instancia y la cuenta de AWS entran
   si esa IP es de operación (o de otro sistema que llama a la API sin CloudFront), ponla ahí. Si no, en `exigir` recibe
   403. El modo `registrar` lo muestra antes: cada pedido sin cabecera queda en `docker logs proxy` con su IP.
 - Si faltan los secretos o la subred, `exigir` **cae solo a `registrar`** y lo avisa: nunca deja a la API sin entrada.
+- Entre el despliegue de este cambio y `--paso agregar --aplicar` todavía no hay secreto, así que en `registrar` nginx anota **todo**
+  pedido que llega por CloudFront como «sin cabecera». Es ruido esperable (el log de Docker rota a 2 × 10 MB): corre `--paso agregar`
+  poco después de desplegar, y las 24 h de observación se cuentan desde que `estado` muestra que la distribución ya lleva la cabecera.
 
 ## Orden de salida (cada paso se verifica antes del siguiente)
 

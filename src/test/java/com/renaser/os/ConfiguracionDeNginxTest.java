@@ -169,6 +169,16 @@ class ConfiguracionDeNginxTest {
     }
 
     @Test
+    @DisplayName("el cuerpo que el CD manda por SSM (el script más la config de Alloy en base64) no se acerca al límite de SSM")
+    void elCuerpoPorSsmNoCreceSinAviso() throws IOException {
+        // El CD manda `desplegar-backend.sh` y `config.alloy` en base64 como UN solo parámetro de `ssm send-command`. El límite exacto de
+        // SSM no está confirmado por AWS (un blog habla de 100 KB; hoy se mandan ~34 KB): este techo de 60 KB avisa mucho antes.
+        int alloy = java.util.Base64.getEncoder().encode(Files.readAllBytes(Path.of("infra/observabilidad/alloy/config.alloy"))).length;
+        long total = Files.size(SCRIPT) + alloy + 1_000;
+        assertThat(total).as("el cuerpo del despliegue por SSM pasó de 60 KB: reduce el script o súbelo a S3 antes de seguir").isLessThan(60_000L);
+    }
+
+    @Test
     @DisplayName("el script de despliegue tiene sintaxis válida de bash")
     void sintaxisValida() throws Exception {
         Process proceso = new ProcessBuilder("bash", "-n", SCRIPT.toString()).redirectErrorStream(true).start();

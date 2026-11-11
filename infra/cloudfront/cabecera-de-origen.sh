@@ -217,7 +217,7 @@ quitar_cabecera() {
     | .Origins.Items |= map(
         if .Id == $o then
           ((.CustomHeaders.Items // []) | map(select((.HeaderName | ascii_downcase) != ($n | ascii_downcase)))) as $items
-          | .CustomHeaders = {Quantity: ($items | length), Items: $items}
+          | .CustomHeaders = (if ($items | length) == 0 then {Quantity: 0} else {Quantity: ($items | length), Items: $items} end)
         else . end)' "$TMP/config.json" > "$TMP/nueva.json"
   actualizar_distribucion "$TMP/nueva.json"
 }
