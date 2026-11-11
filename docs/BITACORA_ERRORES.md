@@ -16089,3 +16089,23 @@ cubre contra Postgres, con dos pedidos concurrentes.
 **Cómo evitar que vuelva a pasar.** Un método público de un bean (servicio, adaptador, controller) no lleva una variable de tipo en un parámetro genérico (`Supplier<T>`, `Function<X, T>`, `List<T>`): usa tipos concretos
 o una clase común que no sea bean. Las pruebas de integración con el contexto real son las que lo atrapan; una unitaria con `new` no.
 
+
+## E-673 · Sin señal, Plan mostraba en rojo «No se pudo conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.» en «Esta semana» y «Acciones que mueven la meta» (app, issue #182, spec 048 fase 3, 10/11, RESUELTO)
+
+**Síntoma literal** (E2E de la fase 3, cuenta `e2e-t-dia1` que nunca abrió Plan con señal, backend apagado): en Plan, «Esta semana» decía «Primero define tus tres objetivos de 90 días…» y debajo, en rojo, «No se pudo conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.»; «Acciones que mueven la meta» decía «Primero arma tu semana…» y el mismo error en rojo.
+
+**Causa real.** Cada hook de lectura (`useRocasSemanales`, `useRocasDiarias`, `useRocasMaestras`, `usePlanMensual`) guardaba en su estado `mensajeDeObjetivos(e, …)` → `mensajeDeError`, y para un `ApiError` de red (`status` 0) ese devuelve el texto del cliente HTTP tal cual. Sin señal y sin lectura guardada (`lecturasGuardadas` solo devuelve lo que la cuenta ya leyó con señal) eso es un estado normal del modo sin internet, no una falla; la tarjeta lo pintaba como error y, sin saber si había semana o acciones, además ofrecía «Arma tu semana» o decía «Primero arma tu semana». No se volvía a pedir al volver la señal. Mismo patrón en otras 23 lecturas del barrido (Hoy, Entrenar, Cierra tu día, la Pastilla, cursos, tribu, chat, evidencias de Yo…); `PlanificarDimensionModal` ya lo había resuelto a mano.
+
+**Solución.** Una sola pieza en `src/features/sinRed/`: `mensajeDeCarga` / `mensajeDeCargaEnLinea` (`utils/sinSenal.ts`: «Todavía no hay nada guardado de esto en este teléfono. Se cargará solo cuando vuelva la señal.» o «Necesitas conexión para usar esto…»), `<ErrorDeCarga>` (color suave, sin alerta; el error de verdad sigue en rojo) y `useRecargarAlVolverLaSenal`. Las tarjetas de Plan, con la lectura fallida, dicen eso y no ofrecen armar la semana. Las pantallas del personal y el inicio de sesión (sin modo sin internet) quedan en `excepciones.json` con su motivo.
+
+**Cómo evitar que vuelva a pasar.** Ya es ejecutable: `src/__tests__/reglas/sinSenalSeDiceSinSenal.test.ts` falla si una lectura guarda `mensajeDeError(e, 'No pudimos cargar…')` en su estado (y si usa `mensajeDeCarga` sin volver a pedir al volver la señal); su mensaje dice cómo arreglarlo. Toda lectura nueva usa `mensajeDeCarga` + `<ErrorDeCarga>` + `useRecargarAlVolverLaSenal`. Y un estado vacío («Primero arma tu semana») nunca se dibuja cuando la lectura falló: no se sabe si está vacío.
+
+## E-674 · Sin señal, la acción agendada en espera no contaba en «Agendar mis acciones» («Cuerpo · 0/3») (app, issue #183, spec 048 fase 3, 10/11, RESUELTO)
+
+**Síntoma literal** (E2E de la fase 3): con la semana armada y sin señal, agendar una acción de Cuerpo para mañana, tocarla en Plan («Se guardará al volver la señal») y abrir la hoja del día: «Cuerpo · 0/3», sin la acción.
+
+**Causa real.** `AgendarAccionesModal` contaba solo lo que se elegía en esa apertura (`elegidas`) y arrancaba siempre limpia; la acción en espera existía en las lecturas (`pendienteDeEnvio`, por el ajuste de lectura de `planSinRed`) pero la hoja nunca la recibía. Se podía pasar de tres por eje o agendarla dos veces. Y el plan nuevo del mismo día, al reemplazar al anterior (E-208), habría borrado la que esperaba; con el día en curso, el servidor lo rechaza (409), así que el segundo pedido de la cola chocaba con el primero.
+
+**Solución.** La hoja recibe las acciones en espera (`enEspera`), las del día elegido cuentan para el tope, se ven con «Se guardará al volver la señal» y no se vuelven a ofrecer; tocar una acción de otro día abre la hoja en ese día. Al guardar viaja el plan del día entero y, en la cola, `quitarPlanesEnEsperaDe(fecha)` retira el pedido anterior de esa fecha: sale uno por día.
+
+**Cómo evitar que vuelva a pasar.** Una pantalla que edita algo que se reemplaza entero (como el plan de un día) parte de lo que ya existe, incluido lo que espera en la cola, no de una hoja en blanco: probarla con una escritura pendiente (`agendarAccionesEnEspera.test.ts`, `planSinRed.test.ts`). Con la cola, un reemplazo se hace sustituyendo el pedido anterior, no sumando otro.
