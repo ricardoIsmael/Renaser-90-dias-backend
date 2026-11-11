@@ -360,5 +360,52 @@ escritura** (casi todo lo de esta fase es una llamada REST sin pasos intermedios
 - **R7 — `PlanificarDimensionModal` tiene unas 2 400 líneas**: se envuelven las llamadas, no se reescribe la hoja (regla 11).
 - **R8 — Tabla de otro módulo**: `rocks` usa `envios_sin_red` por `habits.api`. Si Spring Modulith no lo admite, el puerto pasa a `shared`.
 - **R9 — La Pastilla** sigue sin `hechoEn` en su endpoint (`/spirit-audio/submit`, límite de #179): fuera de esta fase, trabajo del backend aparte.
+
+  > **Corregido 2026-11-11 (issue #186).** Esto decía que la Pastilla seguía sin `hechoEn` y que era trabajo del backend aparte. Ya lo recibe: ver
+  > «Addendum — la Pastilla Renacer sin señal» al final.
 - **R10 — `id_cliente` es clave global** (V188): un UUID ya usado por otra cuenta no se ve (se filtra por participante) y su `INSERT` no hace nada; es
   un caso de probabilidad nula con UUID aleatorios, anotado para que nadie lo «arregle» con otra clave sin saber por qué.
+
+---
+
+# Addendum — la Pastilla Renacer entregada sin señal con su hora real (issue #186, D29)
+
+Redactado el 2026-11-11 sobre `master` (fase 3 ya fusionada: backend #127, app #181). **Sin mecanismo nuevo**: `POST /api/v1/spirit-audio/submit` acepta las
+mismas tres cabeceras de la fase 3 (`X-Id-Cliente`, `X-Hecho-En`, `X-Origen-De-La-Hora`, leídas por `HechoSinRedArgumentResolver` en un parámetro `HechoSinRed`) y
+pasa por `EntregaSinRed` / `RevisionDeLaHora`. **Sin ellas, el endpoint responde exactamente lo de siempre** (mismo caso de uso, misma respuesta `{ "onTime": … }`).
+
+## Lo que había (recon 2026-11-11)
+
+`EspirituService.entregar` corría con `clock.now()`: (1) `asegurarAvance(ahora)` pasaba a PERDIDO el audio del día anterior, (2) `entregar(texto, ahora)` medía el plazo
+(mediodía del día del audio, `fecha_limite`) contra la llegada y (3) completaba el hábito de «hoy». Entregada a las 11:00 sin señal y llegada a las 13:00: `onTime: false`
+(PENDIENTE). Llegada al otro día: el audio ya estaba PERDIDO y respondía 409 «Ya se registró este día (enviado o vencido): PERDIDO».
+
+## Reglas con hora real (D29)
+
+Caso de uso nuevo `EntregarResumenEspirituSinRedUseCase` (`PastillaSinRedService`), aparte del de siempre para no tocar a quien ya lo llama (la app con red, SER). `ahora = clock.now()`,
+`referencia = min(hechoEn, ahora)`; todo corre con `referencia`:
+
+| Situación | Resultado |
+|---|---|
+| El día de ese audio no está desbloqueado | 409 `RECURSO_YA_NO_EXISTE` (con cabeceras un 404 sería «reintentar» para siempre en la cola de la app) |
+| El «hoy» de `referencia` en la zona de la persona no es el día del audio (el de su `fecha_limite`) | 409 `FUERA_DE_SU_DIA`: el día ya cerró; no se escribe nada |
+| Ya se entregó desde otro lado **después** de `hechoEn` (`entregado_en > hechoEn`) | 409 `CAMBIO_MAS_NUEVO_EN_EL_SERVIDOR` (D13) |
+| Ya estaba ENTREGADO | 409 `YA_ESTABA_HECHO` |
+| `referencia <= fecha_limite` (a tiempo) | ENTREGADO, `entregado_en = referencia`, **también si la lectura perezosa ya lo había pasado a PERDIDO** porque la entrega no había llegado (no es un cambio de la persona: es lo que esta entrega corrige) |
+| `referencia > fecha_limite` el mismo día (tardía) | El texto queda guardado, el estado no cambia (PENDIENTE; PERDIDO si ya lo estaba) y `onTime: false`: lo mismo que con red |
+| Hora futura (>2 min) | Se aplica con `referencia = ahora`; el hábito queda sin puntos (`HORA_FUTURA`) |
+| Llegó pasadas 48 h | Solo quita los puntos del hábito (`LLEGO_DESPUES_DE_48_H`); la Pastilla queda registrada |
+
+- **El hábito «Pastilla Renacer»** del día de la hora real se cierra con esa hora (`CompletarPastillaRenacerUseCase.completarSinRed` → `RegistroService.completarConHoraReal`, el mismo
+  cálculo de puntos de la fase 1, con el gesto propio del hábito): acepta el registro aunque el barrido ya lo haya vencido (la hora real lo justifica, como en `CompletarHechoSinRedUseCase`).
+  En su propia transacción y best-effort, como `EspirituService.reflejarEnPastillaRenacer`: un fallo suyo no deshace la entrega.
+- **Idempotencia (FR-008):** `EntregaSinRed` (candado por `idCliente` + fila en `envios_sin_red`, `tipo = ENTREGAR_PASTILLA`, `recurso = pastilla:<día>`, sin el texto). Un reintento responde lo que quedó:
+  `onTime` = el audio está ENTREGADO y `motivoSinPuntos` el guardado. **Sin migración** (`tipo` no tiene CHECK; los cinco `codigo` ya existen).
+- **Respuesta 200:** `{ "onTime": boolean, "motivoSinPuntos"?: string }`. `motivoSinPuntos` (aditivo) solo sale si el hábito quedó sin puntos; si es nulo el campo no se manda.
+- **No cambia** la lectura `GET /spirit-audio/status`, que sigue avanzando el estado perezosamente: tras revivir un PERDIDO, la siguiente lectura desbloquea el audio siguiente como si hubiera estado entregado.
+
+## App
+
+`src/features/spirit/api/pastillaSinRed.ts`: el manejador de la cola manda las tres cabeceras (`cabecerasDe(envio)`), un 409 con `codigo` lo cierra `desenlaceDe` y lo avisa la hoja de avisos (con
+lo que se escribió), `YA_ESTABA_HECHO` además deja lo guardado diciendo «entregada», y un `motivoSinPuntos` se avisa como «sin puntos». Se quita el 409 «ENVIADO» que se daba por entregada
+(el servidor decía «ENTREGADO»: nunca se reconocía). Depende del backend: se fusiona primero.

@@ -1205,6 +1205,7 @@ un instante: 400 de siempre.
 | Horario, aviso y alarma de un hábito | `PATCH /habit-preferences/{habitId}`, `PATCH …/days/{date}`, `PUT …/weekdays/{weekday}`, `PUT …/weekdays/{weekday}/reminder`, `PUT …/weekdays/{weekday}/alarm`, `PUT …/alarm`, `DELETE …/weekdays/{weekday}`, `DELETE …/weekdays/{weekday}/active` |
 | «Solo esta semana» y repetir | `PUT` y `DELETE /habit-preferences/{habitId}/week`, `POST /habit-preferences/week-repeat`, `DELETE /habit-preferences/weeks/{weekStart}` |
 | Plan de hábitos | `PUT`, `PATCH`, `DELETE /habit-unlocks/{habitId}`, `POST /habits` |
+| Pastilla Renacer (#186, D-341) | `POST /spirit-audio/submit` (ver «La Pastilla Renacer sin señal» abajo) |
 
 **La hora real.** Las reglas de calendario corren con `referencia = min(hechoEn, ahora)`, nunca con la hora de llegada: el «hoy» de la persona, la ventana
 «ya arrancó» (el cambio rige mañana), la cuota semanal, las horas de Mi Radar de esa fecha. Una hora del futuro (más de 2 minutos) no adelanta nada. Cada fila
@@ -1248,3 +1249,22 @@ de la persona** (notas, respuestas del Código Renaser).
 
 Las pruebas llevan la marca `// spec 048 FR-019`. Contrato completo: `specs/048-modo-offline/plan.md` («Plan técnico — fase 3»).
 
+### La Pastilla Renacer sin señal (issue #186, D-341, spec 048 D29)
+
+`POST /api/v1/spirit-audio/submit` (cuerpo `{ "day", "summaryText" }`, sin cambios) acepta las mismas tres cabeceras y, **sin ellas, responde exactamente lo de siempre**
+(`200 { "onTime": boolean }`; fuera de plazo deja el texto guardado y `onTime: false`; un día ya entregado o vencido es el 409 «Ya se registró este día (enviado o vencido): ENTREGADO|PERDIDO»).
+Con `X-Id-Cliente` y `X-Hecho-En` las reglas corren con la hora real (`referencia = min(hechoEn, ahora)`), no con la de llegada:
+
+| Situación | Resultado |
+|---|---|
+| Antes del mediodía del día de ese audio (`fecha_limite`), llegue cuando llegue | `200 { "onTime": true }`: el audio queda ENTREGADO con `entregado_en` = la hora real, **aunque el servidor ya lo hubiera pasado a PERDIDO** porque la entrega no había llegado; el hábito «Pastilla Renacer» de ese día se cierra con esa hora y suma sus puntos |
+| Después del mediodía del mismo día | `200 { "onTime": false }`: el texto queda guardado y el estado no cambia (como con red) |
+| Hora del futuro (>2 min) | `200`: se cuenta con la hora de llegada y el hábito queda sin puntos: `"motivoSinPuntos": "HORA_FUTURA"` |
+| Llegó pasadas 48 h | `200`: la Pastilla queda registrada y el hábito sin puntos: `"motivoSinPuntos": "LLEGO_DESPUES_DE_48_H"` |
+| El día de ese audio ya cerró (el «hoy» de la hora real es otro) | `409 FUERA_DE_SU_DIA`; no se escribe nada (D29) |
+| Ese día ya estaba entregado | `409 YA_ESTABA_HECHO`; si se entregó desde otro lado después de `hechoEn`, `409 CAMBIO_MAS_NUEVO_EN_EL_SERVIDOR` |
+| Ese día no está desbloqueado | `409 RECURSO_YA_NO_EXISTE` (con cabeceras no es un 404) |
+
+La respuesta suma el campo aditivo **`motivoSinPuntos`** (string; **no sale** si es nulo, así que sin cabeceras la respuesta es la de antes). Un reintento (mismo `X-Id-Cliente`) responde lo mismo sin tocar nada;
+`envios_sin_red` deja su fila (`tipo = ENTREGAR_PASTILLA`, `recurso = pastilla:<día de audio>`) y la línea `[offline]` del log, **nunca el resumen**. 403 de cuenta suspendida o sin programa activo, y
+400 de cabeceras mal hechas, como en las demás áreas. Sin migración.

@@ -1,8 +1,10 @@
 package com.renaser.os.habits.infrastructure.adapter.in.rest.espiritu;
 
 import com.renaser.os.habits.application.ports.in.espiritu.ConsultarEstadoEspirituUseCase;
+import com.renaser.os.habits.application.ports.in.espiritu.EntregarResumenEspirituSinRedUseCase;
 import com.renaser.os.habits.application.ports.in.espiritu.EntregarResumenEspirituUseCase;
 import com.renaser.os.habits.application.ports.in.espiritu.EntregarResumenEspirituUseCase.EntregarResumenEspirituCommand;
+import com.renaser.os.shared.domain.HechoSinRed;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
@@ -28,11 +30,14 @@ public class EspirituController {
 
     private final ConsultarEstadoEspirituUseCase consultarUseCase;
     private final EntregarResumenEspirituUseCase entregarUseCase;
+    private final EntregarResumenEspirituSinRedUseCase entregarSinRedUseCase;
 
     public EspirituController(ConsultarEstadoEspirituUseCase consultarUseCase,
-                               EntregarResumenEspirituUseCase entregarUseCase) {
+                               EntregarResumenEspirituUseCase entregarUseCase,
+                               EntregarResumenEspirituSinRedUseCase entregarSinRedUseCase) {
         this.consultarUseCase = consultarUseCase;
         this.entregarUseCase = entregarUseCase;
+        this.entregarSinRedUseCase = entregarSinRedUseCase;
     }
 
     @RequiresPermission(Permission.FOLLOW_OWN_PROGRAM)
@@ -43,10 +48,13 @@ public class EspirituController {
 
     @RequiresPermission(Permission.FOLLOW_OWN_PROGRAM)
     @PostMapping("/submit")
-    public SubmitSpiritSummaryResponse submit(@ActorAutenticado UserId actor,
+    public SubmitSpiritSummaryResponse submit(@ActorAutenticado UserId actor, HechoSinRed sinRed,
                                                @RequestBody @Valid SubmitSpiritSummaryRequest request) {
-        var resultado = entregarUseCase.entregar(new EntregarResumenEspirituCommand(actor, request.day(),
-                request.summaryText()));
-        return SubmitSpiritSummaryResponse.from(resultado);
+        var comando = new EntregarResumenEspirituCommand(actor, request.day(), request.summaryText());
+        // Spec 048 (#186): con X-Id-Cliente y X-Hecho-En es la Pastilla entregada sin red, con su hora real; sin ellas, lo de siempre.
+        if (sinRed == null) {
+            return SubmitSpiritSummaryResponse.from(entregarUseCase.entregar(comando));
+        }
+        return SubmitSpiritSummaryResponse.from(entregarSinRedUseCase.entregar(comando, sinRed));
     }
 }

@@ -37,6 +37,7 @@
 | D26 | Cierra tu día con una acción que ya no existe (fase 3) | Todo o nada: no se aplica y se avisa (`RECURSO_YA_NO_EXISTE`); el aviso guarda lo escrito. |
 | D27 | Código Renaser innegociable (días 1 a 7) sin señal (fase 3) | Vuelve a abrirse solo sin señal y se responde y se encola (revierte el límite de la fase 1). |
 | D28 | Cómo se avisa lo que no se aplicó (fase 3) | Una hoja corta la próxima vez que se abre Hoy; el globo del ícono dice «1 cosa no se aplicó» hasta que se ve. No hay bandeja histórica. |
+| D29 | La Pastilla Renacer sin señal (#186, 2026-11-11) | Se registra con la hora real en que se entregó (mismas reglas de D14, FR-010 y FR-015), no con la de llegada: la entregada antes del mediodía cuenta **a tiempo** aunque llegue pasada esa hora o al día siguiente, y una sola vez (idempotente por `X-Id-Cliente`). Si la hora real cae en un día que ya cerró para ese audio, **no se aplica y se avisa** (`FUERA_DE_SU_DIA`, igual que D21): el audio siguiente es otro y nunca recibe el resumen de ayer; no hay un «PERDIDO» que rebote. Si ese día ya estaba entregado, `YA_ESTABA_HECHO` (o `CAMBIO_MAS_NUEVO_EN_EL_SERVIDOR` si se entregó desde otro lado después de lo que hiciste). El hábito «Pastilla Renacer» se cierra con esa hora; pasadas 48 h o con hora futura queda sin puntos y la respuesta lo dice (`motivoSinPuntos`). *Decisión técnica derivada de D14, D21 y FR-010: el dueño no la ha confirmado, se confirma al revisar el PR.* |
 
 ## Lo que hay hoy (leído el 2026-11-09)
 

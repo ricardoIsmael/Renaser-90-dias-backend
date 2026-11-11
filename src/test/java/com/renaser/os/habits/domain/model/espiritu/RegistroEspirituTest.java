@@ -102,4 +102,58 @@ class RegistroEspirituTest {
                 91, DESBLOQUEO, LIMITE, DESBLOQUEO))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    // ─── Spec 048 (#186): entregada SIN RED, con su hora real ───────────────────────────────────────────
+
+    @Test
+    void sinRedLaDeLasOnceQueLlegaDespuesDelMediodiaCuentaATiempo() { // spec 048 FR-010
+        RegistroEspiritu registro = nuevo();
+        Instant hechoEn = LIMITE.minus(Duration.ofHours(1));
+
+        boolean aTiempo = registro.entregarSinRed("de las once", hechoEn);
+
+        assertThat(aTiempo).isTrue();
+        assertThat(registro.estado()).isEqualTo(EstadoRegistroEspiritu.ENTREGADO);
+        assertThat(registro.entregadoEn()).isEqualTo(hechoEn);
+        assertThat(registro.actualizadoEn()).isEqualTo(hechoEn);
+        assertThat(registro.resumenTexto()).isEqualTo("de las once");
+    }
+
+    @Test
+    void sinRedLaQueLaLecturaPerezosaYaPasoAPerdidoPorqueNoHabiaLlegadoSeRevivePorSuHoraReal() { // spec 048 FR-010
+        RegistroEspiritu registro = nuevo();
+        registro.marcarPerdido(LIMITE.plus(Duration.ofHours(20)));
+        assertThat(registro.estado()).isEqualTo(EstadoRegistroEspiritu.PERDIDO);
+
+        boolean aTiempo = registro.entregarSinRed("a tiempo, pero llegó mañana", LIMITE.minus(Duration.ofMinutes(30)));
+
+        assertThat(aTiempo).isTrue();
+        assertThat(registro.estado()).isEqualTo(EstadoRegistroEspiritu.ENTREGADO);
+    }
+
+    @Test
+    void sinRedLaTardiaGuardaElTextoYNoCambiaElEstadoComoConRed() { // spec 048 FR-010
+        RegistroEspiritu pendiente = nuevo();
+        RegistroEspiritu perdido = nuevo();
+        perdido.marcarPerdido(LIMITE.plus(Duration.ofHours(20)));
+        Instant tarde = LIMITE.plus(Duration.ofMinutes(5));
+
+        assertThat(pendiente.entregarSinRed("tarde", tarde)).isFalse();
+        assertThat(perdido.entregarSinRed("tarde", tarde)).isFalse();
+
+        assertThat(pendiente.estado()).isEqualTo(EstadoRegistroEspiritu.PENDIENTE);
+        assertThat(perdido.estado()).isEqualTo(EstadoRegistroEspiritu.PERDIDO);
+        assertThat(pendiente.resumenTexto()).isEqualTo("tarde");
+        assertThat(perdido.entregadoEn()).isEqualTo(tarde);
+    }
+
+    @Test
+    void sinRedUnaYaEntregadaNoSeVuelveAEntregar() {
+        RegistroEspiritu registro = nuevo();
+        registro.entregar("primera", LIMITE.minus(Duration.ofHours(1)));
+
+        assertThatThrownBy(() -> registro.entregarSinRed("segunda", LIMITE.minus(Duration.ofMinutes(10))))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(registro.resumenTexto()).isEqualTo("primera");
+    }
 }
