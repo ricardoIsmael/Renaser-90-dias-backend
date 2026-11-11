@@ -29,13 +29,24 @@
 # condicion (tope + margen) no se baja. Ademas, en cada despliegue se borran las imagenes viejas del
 # backend: quedan la que esta en uso y las CONSERVAR_ANTERIORES (2) mas nuevas, mas IMAGEN.
 #
+# ORIGEN CERRADO (spec 050 tramo A2, FR-006 a FR-008). CloudFront agrega a cada pedido hacia este origen la
+# cabecera X-Origen-Renaser con un secreto, y nginx rechaza (403 ORIGEN_NO_PERMITIDO) lo que no la trae, salvo
+# lo que viene del propio host (el CD comprueba la salud por 127.0.0.1:8080) y las IP de operacion. Los
+# valores salen de Parameter Store (`origen-secreto`, `origen-secreto-anterior`, `origen-ips-directas` y
+# `origen-modo`), nunca del repositorio ni de la salida de este script. `origen-modo` es `registrar` (solo
+# anota en `docker logs proxy`; el modo de partida y el que se usa si falta el parametro) o `exigir`.
+# `ORIGEN_MODO` en el entorno lo pisa. Si faltan los secretos o la subred de Docker, `exigir` cae solo a
+# `registrar`: nunca deja a la API sin entrada. SOLO_PROXY=si reescribe y recarga nginx SIN tocar el backend
+# (lo usa infra/cloudfront/cabecera-de-origen.sh para rotar el secreto o pasar a `exigir` sin un corte).
+#
 # OBSERVABILIDAD (D-237), PREPARADO Y APAGADO: si el CD pasa CONFIG_ALLOY_B64 (el contenido de
 # infra/observabilidad/alloy/config.alloy) y en Parameter Store existen las tres credenciales de
 # Grafana Cloud, al final se (re)lanza el contenedor `alloy`. Si falta cualquiera, no hace nada. Un
 # fallo de Alloy NUNCA hace fallar el despliegue: las metricas no valen un corte.
 set -euo pipefail
 
-: "${IMAGEN:?falta IMAGEN}"
+SOLO_PROXY=${SOLO_PROXY:-no}
+if [ "$SOLO_PROXY" = si ]; then IMAGEN=${IMAGEN:-solo-proxy}; else : "${IMAGEN:?falta IMAGEN}"; fi
 REGISTRO=${REGISTRO:-}
 REGION=${REGION:-us-east-1}
 ESPERA=${ESPERA:-240}
@@ -142,18 +153,142 @@ esperar_sano() {
   done
 }
 
+# ---- Origen cerrado (spec 050 A2) -------------------------------------------------------------------
+# Los secretos aceptados (vigente y anterior). Solo letras y digitos, de 32 a 128: lo que entra al archivo
+# de nginx se interpreta como configuracion, asi que un valor raro no entra (ni se imprime nunca).
+bloque_de_secretos() {
+  local nombre valor
+  for nombre in origen-secreto origen-secreto-anterior; do
+    valor=$(parametro "$nombre")
+    [ -n "$valor" ] || continue
+    if [[ "$valor" =~ ^[A-Za-z0-9]{32,128}$ ]]; then
+      printf '    "%s" 1;\n' "$valor"
+    else
+      echo "AVISO: el parametro $nombre no tiene el formato esperado (32 a 128 letras y digitos): se ignora." >&2
+    fi
+  done
+}
+
+ipv4_valida() {  # a.b.c.d o a.b.c.d/m
+  local ip=${1%%/*} mascara=32 a b c d o
+  [[ "$1" == */* ]] && mascara=${1#*/}
+  [[ "$mascara" =~ ^[0-9]{1,2}$ ]] && [ "$mascara" -le 32 ] || return 1
+  IFS=. read -r a b c d <<< "$ip"
+  [ -n "${d:-}" ] || return 1
+  for o in "$a" "$b" "$c" "$d"; do [[ "$o" =~ ^[0-9]{1,3}$ ]] && [ "$o" -le 255 ] || return 1; done
+}
+
+# Docker entrega al contenedor lo que viene del propio host con la IP de la PASARELA de la red, no con
+# 127.0.0.1 (comprobado en el ensayo local): por eso se exime la subred de la red `renaser`. Pedidos de
+# internet llegan con su IP de verdad.
+bloque_de_subredes() {
+  local subred
+  for subred in $(docker network inspect "$RED" -f '{{range .IPAM.Config}}{{.Subnet}} {{end}}' 2>/dev/null || true); do
+    if ipv4_valida "$subred"; then printf '    %s 1;\n' "$subred"; fi
+  done
+}
+
+bloque_de_ips_de_operacion() {
+  local ip
+  for ip in $(parametro origen-ips-directas | tr ',' ' '); do
+    if ipv4_valida "$ip"; then
+      [[ "$ip" == */* ]] || ip="$ip/32"
+      printf '    %s 1;\n' "$ip"
+    else
+      echo "AVISO: una entrada de origen-ips-directas no es una IPv4 ni un rango valido: se ignora." >&2
+    fi
+  done
+}
+
+# nginx -t sobre la configuracion candidata, en un contenedor aparte y sin red: si no es valida, la que
+# esta andando no se toca (un `nginx -s reload` con una mala la deja andando, pero el archivo quedaria roto
+# para el proximo reinicio). Los mensajes se muestran sin nada que parezca un secreto.
+config_de_nginx_valida() {
+  local errores
+  if errores=$(docker run --rm --network none -v "$1:/etc/nginx/conf.d/default.conf:ro" "$IMAGEN_PROXY" nginx -t 2>&1); then
+    return 0
+  fi
+  echo "AVISO: la configuracion nueva de nginx NO es valida; sigue la que esta andando:" >&2
+  printf '%s\n' "$errores" | grep -E 'emerg|error' | sed -E 's/"[A-Za-z0-9]{32,}"/"***"/g' >&2 || true
+  return 1
+}
+
 # La configuracion de nginx. Es transparente a proposito: NO toca X-Forwarded-For ni ninguna
 # otra cabecera de CloudFront (la app toma la IP del cliente del valor mas a la izquierda, E-149;
 # agregar la del borde a la derecha romperia el dia que se lea desde la derecha, OUT-1), y
 # conserva el Host original. Lo demas: WebSocket (/ws y la voz en vivo), sin buffer para el
 # streaming del chat y para las subidas, y el tope de tamano lo sigue poniendo la aplicacion.
+# Devuelve 0 si escribio una configuracion nueva, 1 si no cambia nada y 2 si la nueva NO es valida (la que esta
+# andando no se toca). Quien llama con `if` trata cualquier distinto de 0 como "no cambio"; SOLO_PROXY, no.
 escribir_config_proxy() {
+  shopt -u patsub_replacement 2>/dev/null || true
   mkdir -p "$DIR_PROXY"
-  cat > "$DIR_PROXY/renaser.conf.nuevo" <<'FIN_CONF'
+  local secretos subredes operacion modo rechazar n_secretos n_subredes conf
+  secretos=$(bloque_de_secretos)
+  subredes=$(bloque_de_subredes)
+  operacion=$(bloque_de_ips_de_operacion)
+  n_secretos=$(printf '%s' "$secretos" | grep -c . || true)
+  n_subredes=$(printf '%s' "$subredes" | grep -c . || true)
+  modo=${ORIGEN_MODO:-$(parametro origen-modo)}
+  modo=${modo:-registrar}
+  case "$modo" in
+    registrar|exigir) ;;
+    *) echo "AVISO: el modo de origen debe ser registrar o exigir: se usa registrar." >&2; modo=registrar ;;
+  esac
+  if [ "$modo" = exigir ] && { [ "$n_secretos" -eq 0 ] || [ "$n_subredes" -eq 0 ]; }; then
+    echo "AVISO: no se puede exigir el origen (secretos aceptados: $n_secretos, subredes de $RED: $n_subredes); se queda en registrar." >&2
+    modo=registrar
+  fi
+  rechazar=0
+  if [ "$modo" = exigir ]; then rechazar=1; fi
+  echo "Origen: modo=$modo, secretos aceptados=$n_secretos, subredes eximidas=$n_subredes, IP de operacion=$(printf '%s' "$operacion" | grep -c . || true)."
+
+  conf=$(cat <<'FIN_CONF'
 # Generado por scripts/despliegue/desplegar-backend.sh en cada despliegue. No editar a mano.
+
+# Un secreto de 64 caracteres no entra en el cubo de 64 bytes que nginx usa por omision para un `map`
+# ("could not build map_hash, you should increase map_hash_bucket_size": lo cazo el ensayo local). Tiene que ir
+# ANTES del primer `map`: despues, nginx la rechaza como duplicada.
+map_hash_bucket_size 128;
+
 map $http_upgrade $conexion_hacia_atras {
     default upgrade;
     ''      close;
+}
+
+# ORIGEN CERRADO (spec 050 A2, FR-006 a FR-008). CloudFront agrega X-Origen-Renaser, con un secreto, a cada
+# pedido hacia este origen (y si el visitante ya mando esa cabecera, CloudFront la pisa con la suya). Se
+# aceptan el valor vigente y el anterior: asi se rota sin corte. Los valores salen de Parameter Store.
+map $http_x_origen_renaser $origen_con_secreto {
+    default 0;
+__ORIGEN_SECRETOS__
+}
+
+# Lo que viene del propio host (el CD comprueba la salud por 127.0.0.1:8080) y de la red de Docker, mas las IP
+# de operacion de Parameter Store. Un pedido asi no necesita la cabecera.
+geo $origen_de_operacion {
+    default 0;
+    127.0.0.1/32 1;
+__ORIGEN_IPS__
+}
+
+map "$origen_con_secreto$origen_de_operacion" $origen_permitido {
+    default 1;
+    "00"    0;
+}
+
+# 1 = rechazar. Solo vale 1 con ORIGEN_MODO=exigir; en `registrar` el pedido pasa y queda anotado.
+map $origen_permitido $origen_rechazar {
+    default 0;
+    0       __ORIGEN_RECHAZAR__;
+}
+
+# Lo que no trae el secreto ni viene de operacion queda en `docker logs proxy`, se rechace o no. Sin
+# cabeceras, sin los parametros de la URL (pueden llevar un token) y sin cuerpo.
+log_format origen 'origen-sin-cabecera ip=$remote_addr metodo=$request_method ruta=$uri estado=$status';
+map $origen_permitido $origen_a_anotar {
+    default 0;
+    0       1;
 }
 
 server {
@@ -165,7 +300,7 @@ server {
     resolver 127.0.0.11 valid=5s ipv6=off;
     resolver_timeout 3s;
 
-    access_log off;
+    access_log /dev/stdout origen if=$origen_a_anotar;
     client_max_body_size 50m;
     proxy_request_buffering off;
     proxy_buffering off;
@@ -179,13 +314,38 @@ server {
     proxy_read_timeout 3600s;
     proxy_send_timeout 3600s;
 
+    if ($origen_rechazar) {
+        rewrite ^ /__origen_no_permitido last;
+    }
+
+    location = /__origen_no_permitido {
+        internal;
+        default_type application/json;
+        return 403 '{"message":"No autorizado","codigo":"ORIGEN_NO_PERMITIDO"}';
+    }
+
     location / {
         set $destino http://__CONTENEDOR__:__PUERTO__;
         proxy_pass $destino;
     }
 }
 FIN_CONF
-  sed -i "s/__PUERTO__/$PUERTO/g; s/__CONTENEDOR__/$CONTENEDOR/g" "$DIR_PROXY/renaser.conf.nuevo"
+)
+  conf=${conf//__PUERTO__/$PUERTO}
+  conf=${conf//__CONTENEDOR__/$CONTENEDOR}
+  conf=${conf//__ORIGEN_RECHAZAR__/$rechazar}
+  conf=${conf//__ORIGEN_SECRETOS__/$secretos}
+  conf=${conf//__ORIGEN_IPS__/$(printf '%s\n%s' "$subredes" "$operacion" | grep . | sort -u | grep -v '^    127\.0\.0\.1/32 1;$' || true)}
+  # Los secretos van en este archivo: permiso 600 de root (nginx lo lee como root al arrancar y recargar).
+  ( umask 077; printf '%s\n' "$conf" > "$DIR_PROXY/renaser.conf.nuevo" )
+  if ! config_de_nginx_valida "$DIR_PROXY/renaser.conf.nuevo"; then
+    rm -f "$DIR_PROXY/renaser.conf.nuevo"
+    if [ ! -s "$DIR_PROXY/renaser.conf" ]; then
+      echo "ERROR: la configuracion de nginx no es valida y no hay una anterior a la que volver." >&2
+      exit 1
+    fi
+    return 2
+  fi
   if cmp -s "$DIR_PROXY/renaser.conf.nuevo" "$DIR_PROXY/renaser.conf" 2>/dev/null; then
     rm -f "$DIR_PROXY/renaser.conf.nuevo"
     return 1
@@ -193,6 +353,7 @@ FIN_CONF
   # Se sobreescribe el MISMO archivo y no se hace `mv`: el proxy lo monta como archivo suelto, y
   # un bind mount de archivo queda atado al inodo; con `mv` nginx seguiria leyendo el viejo.
   cat "$DIR_PROXY/renaser.conf.nuevo" > "$DIR_PROXY/renaser.conf"
+  chmod 600 "$DIR_PROXY/renaser.conf"
   rm -f "$DIR_PROXY/renaser.conf.nuevo"
   return 0
 }
@@ -455,6 +616,22 @@ lanzar_alloy() {
 }
 
 # ------------------------------------------------------------------------------------------------
+
+# SOLO_PROXY=si: reescribe la configuracion de nginx desde Parameter Store y la recarga, sin tocar el backend.
+# Es lo que usa infra/cloudfront/cabecera-de-origen.sh (rotar el secreto, pasar a `exigir`): no hay corte.
+if [ "$SOLO_PROXY" = si ]; then
+  log "Solo nginx: se reescribe la configuracion y se recarga (el backend no se toca)"
+  corriendo "$PROXY" || { echo "ERROR: el proxy $PROXY no esta corriendo; no hay nada que recargar." >&2; exit 1; }
+  rc=0
+  escribir_config_proxy || rc=$?
+  case "$rc" in
+    0) docker exec "$PROXY" nginx -s reload; echo "nginx recargado con la configuracion nueva." ;;
+    1) echo "La configuracion de nginx no cambia." ;;
+    *) echo "ERROR: la configuracion nueva de nginx no es valida (ver arriba); sigue la que estaba andando." >&2; exit 1 ;;
+  esac
+  sano_por "$PUERTO_PUBLICO" || { echo "ERROR: tras recargar nginx, el puerto $PUERTO_PUBLICO no responde UP." >&2; exit 1; }
+  exit 0
+fi
 
 # E-498. Antes del pull: libera disco para la imagen nueva. Las imagenes no ocupan memoria (medido:
 # borrar 85 etiquetas no movio MemAvailable), asi que esto no cambia la decision del modo.
