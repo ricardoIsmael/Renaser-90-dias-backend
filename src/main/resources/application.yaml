@@ -250,6 +250,14 @@ renaser:
       # escribe quien hace la peticion. Prenderla solo con la politica que la agrega y habiendo comprobado que CloudFront
       # pisa la que mande el visitante.
       confiar-en-cloudfront-viewer-address: false
+  sesion:
+    # Spec 050 tramo E (D6, D-347): tope ABSOLUTO de la sesion, contado desde que se inicio y sin renovarse con el uso: pasado
+    # este plazo el pedido responde 401 SESION_VENCIDA y la sesion se invalida (FiltroDeTopeDeSesion). Es aparte de los 30 dias
+    # SIN USO de spring.session.timeout, que no cambian. VOLVER ATRAS = ponerlo en 0 (o vacio) y reiniciar: sin tope, sin
+    # tocar codigo. En produccion es el parametro RENASER_SESION_TOPE_ABSOLUTO de Parameter Store, que no admite valores
+    # vacios: se usa `0`. Formatos: 90d, 2160h, P90D. Uno que no sea una duracion, o que no lleve unidad (`90` seria 90
+    # milisegundos), impide arrancar a proposito: peor es un tope apagado en silencio o una sesion que muere al primer pedido.
+    tope-absoluto: ${RENASER_SESION_TOPE_ABSOLUTO:90d}
   # Spec 002 (D-267): interruptores por funcionalidad y consola Soporte TI. El ESTADO de los interruptores no vive
   # aca (eso exigiria reiniciar): vive en Postgres y se cambia desde la consola. Esto son solo los tiempos.
   plataforma:
