@@ -574,8 +574,9 @@ Con el modo sin corte hay que tener presente:
   La app toma la IP del cliente del valor más a la derecha de `X-Forwarded-For` (el que agrega
   CloudFront), así que nginx **no debe** agregar el suyo (ver `DireccionIpDelCliente`, E-678, D-342).
   > **Corregido 2026-11-11 (E-678).** Decía «la IP del cliente sigue saliendo igual que antes», cuando
-  > salía del valor más a la izquierda. Soporta WebSocket y no
-  hace buffer. Su configuración la reescribe el script en `/opt/renaser/proxy/renaser.conf`.
+  > salía del valor más a la izquierda.
+  Soporta WebSocket y no hace buffer. Su configuración la reescribe el script en `/opt/renaser/proxy/renaser.conf` (desde
+  la spec 050 A2 también rechaza lo que no trae la cabecera de origen; ver «Origen cerrado» abajo).
 - Los schedulers aguantan dos instancias unos segundos: 20 de 22 llevan ShedLock sobre JDBC y los otros
   dos pueden correr en todas (`SchedulerLockConfig`).
 
@@ -660,6 +661,33 @@ aunque la aplicación esté perfecta**. Al agregar `anyRequest().authenticated()
 > puerto de la aplicación. Al agregar `anyRequest().authenticated()` hay que permitir **las dos**
 > rutas (`/actuator/health` y `/salud`), y también el despacho `FORWARD`. `PuertoDeAdministracionIT`
 > falla si `/actuator/health` deja de responder `{"status":"UP"}` en el 8080.
+
+#### Origen cerrado: la cabecera de CloudFront a nginx (spec 050, tramo A2, D-344)
+
+> **Corregido 2026-11-11 (D-344).** Arriba decía que nginx es «transparente» y solo reenvía. Sigue sin tocar
+> `X-Forwarded-For` ni el `Host`, pero ahora también **rechaza** (403 `ORIGEN_NO_PERMITIDO`) lo que no trae la cabecera
+> secreta de CloudFront, cuando se le pide. La seguridad del origen era solo el security group (la lista de IP de
+> CloudFront y una IP fija): cualquiera dentro de esa lista, o cualquier distribución de CloudFront, podía hablarle
+> directo y saltarse lo que se ponga delante.
+
+CloudFront agrega `X-Origen-Renaser` (un secreto de 32 bytes, en Parameter Store, `origen-secreto`) a cada pedido hacia el
+origen y nginx lo comprueba. **Se enciende en dos tiempos**: el modo de partida es `registrar` (no rechaza nada; cada
+pedido sin cabecera queda en `docker logs proxy`, sin secretos, sin cabeceras y sin los parámetros de la URL) y recién
+después de 24 h limpias el dueño pasa a `exigir` (`origen-modo` en Parameter Store). Lo que no necesita la cabecera: el
+propio host y la red `renaser` de Docker (el CD comprueba la salud por `127.0.0.1:8080` y Docker entrega eso con la IP de
+la pasarela de la red, no con `127.0.0.1`) y las IP de `origen-ips-directas` (la IP fija del security group, si hace
+falta). Si faltan los secretos o la subred, `exigir` cae solo a `registrar`.
+
+- **Todo por `infra/cloudfront/cabecera-de-origen.sh`** (simulacro por omisión, `--aplicar`, perfil `prod`, cuenta
+  verificada, respaldo de la distribución con su ETag), con la **rotación sin corte** (nginx acepta vigente y anterior →
+  CloudFront cambia → espera → nginx suelta el viejo) y la vuelta atrás. Los comandos, en orden, y lo que se probó y lo
+  que no: `infra/cloudfront/README.md`. El ensayo local con nginx de verdad: `infra/cloudfront/ensayo-local.sh`.
+- **`desplegar-backend.sh`** genera la configuración con los secretos en un archivo de permiso 600, la prueba con
+  `nginx -t` en un contenedor aparte **antes** de reemplazar la que anda, y con `SOLO_PROXY=si` reescribe y recarga nginx
+  sin tocar el backend (así se rota o se pasa a `exigir` sin los 1–2 minutos de 502 de un despliegue).
+- **Lo que cazó el ensayo local**: un secreto de 64 caracteres no entra en el cubo por omisión de un `map` de nginx
+  (`could not build map_hash, you should increase map_hash_bucket_size`; con `nginx -s reload` la recarga habría fallado en
+  silencio y, en un reinicio, nginx no habría arrancado), y la directiva tiene que ir **antes** del primer `map`.
 
 #### Por qué EC2 y no ECS Fargate o App Runner
 
