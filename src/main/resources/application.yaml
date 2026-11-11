@@ -243,6 +243,13 @@ renaser:
     # true recien cuando el log del modo sombra este limpio en uso real; volver atras es cambiar
     # esta linea, no desplegar codigo.
     mentor-lead-enforcement: ${MENTOR_LEAD_ENFORCEMENT:false}
+    ip-del-cliente:
+      # E-678, D-342. Apagada: la IP sale del valor que agrega CloudFront en X-Forwarded-For. La politica de origen
+      # `Managed-AllViewer` NO agrega CloudFront-Viewer-Address (solo `AllViewerAndCloudFrontHeaders-2022-06` lo hace) y
+      # reenvia las cabeceras del visitante tal cual: con esta propiedad en true sobre AllViewer, la cabecera la
+      # escribe quien hace la peticion. Prenderla solo con la politica que la agrega y habiendo comprobado que CloudFront
+      # pisa la que mande el visitante.
+      confiar-en-cloudfront-viewer-address: false
   # Spec 002 (D-267): interruptores por funcionalidad y consola Soporte TI. El ESTADO de los interruptores no vive
   # aca (eso exigiria reiniciar): vive en Postgres y se cambia desde la consola. Esto son solo los tiempos.
   plataforma:
@@ -808,31 +815,21 @@ renaser:
       grace-period-days: ${ACCOUNT_DELETION_GRACE_DAYS:30}
 
 # ---------------------------------------------------------------------------------------------
-# Auditoria NFR 2026-09-06 (2a pasada). El backend vive DETRAS de CloudFront, asi que
-# `request.getRemoteAddr()` -que usan los ocho puntos que limitan por IP: login, alta, reset-
-# devolvia la IP del borde de CloudFront, NO la del cliente. Consecuencia: el limite de 50
-# intentos de login por hora "por IP" era en realidad UN solo contador compartido por TODOS los
-# usuarios del producto; seis personas equivocandose ocho veces bloqueaban el login a todo el
-# mundo, y un atacante lo lograba solo. `framework` registra el ForwardedHeaderFilter de
-# Spring, que reescribe la direccion remota con el primer valor de X-Forwarded-For.
+# La IP del cliente (E-149, E-678). El backend vive detras de CloudFront y de un nginx transparente
+# (CloudFront -> EC2:8080 -> nginx -> Spring), asi que `request.getRemoteAddr()` es la conexion del
+# nginx y no dice nada del cliente. La IP que usan los limites por IP (login, alta, reset, verificacion
+# de correo, WhatsApp, cierre de cuenta) y `solicitudes_cuenta.ip_solicitud` se resuelve en UN solo
+# lugar, `shared.web.DireccionIpDelCliente`: el valor mas a la derecha de X-Forwarded-For, que es el que
+# agrega CloudFront; lo que va a su izquierda lo escribe quien hace la peticion y no se usa. Sin esa
+# cabecera, la direccion de la conexion. La cabecera CloudFront-Viewer-Address se lee solo si se prende
+# `renaser.security.ip-del-cliente.confiar-en-cloudfront-viewer-address` (ver mas arriba).
 #
-# >>> POR CONFIRMAR (auditoria 2026-09-18, OUT-1). Aca decia que ese primer valor es "el que
-# >>> CloudFront pone: el cliente real". Eso solo es cierto si CloudFront REEMPLAZA la cabecera.
-# >>> Si la AÑADE —que es su comportamiento documentado— y el cliente manda su propio
-# >>> X-Forwarded-For, lo que llega es "<lo que mando el cliente>, <IP real>" y
-# >>> ForwardedHeaderUtils toma el valor MAS A LA IZQUIERDA, o sea el del cliente. En ese caso
-# >>> cualquier anonimo elige su propia IP y los OCHO limites por IP (login, alta, reset) no
-# >>> cuentan nada: fuerza bruta ilimitada, ademas de envenenar solicitudes_cuenta.ip_solicitud.
-# >>>
-# >>> El security group NO cubre esto: protege contra saltarse CloudFront, no contra mandar la
-# >>> cabecera A TRAVES de CloudFront.
-# >>>
-# >>> Se resuelve con UNA peticion contra el despliegue, que tiene que correr el dueno:
-# >>>   curl -H 'X-Forwarded-For: 203.0.113.9' https://<dominio>/api/v1/auth/login ...
-# >>> y mirar que IP registro el backend. Si vio 203.0.113.9, hay que tomar la IP contando
-# >>> desde la DERECHA (con CloudFront delante, el ultimo valor es el que agrega el borde y el
-# >>> cliente no puede escribir despues de el). El cambio va en DireccionIpDelCliente, que
-# >>> existe justamente para tener un solo lugar donde tocarlo (E-151).
+# Por eso `server.forward-headers-strategy` es `none` y no se lee de una variable de entorno: ni el
+# ForwardedHeaderFilter de Spring ni la valvula de Tomcat reescriben la direccion remota, el esquema ni
+# el host desde cabeceras X-Forwarded-* o Forwarded. Ningun codigo del backend arma URLs desde el host o
+# el esquema de la peticion, y ni CloudFront ni el nginx las agregan. Lo comprueba
+# `CabecerasReenviadasTest`. Supuesto: el 8080 solo recibe trafico de CloudFront (security group) y de
+# una IP fija; ver docs/DESPLIEGUE_Y_CI.md.
 # ---------------------------------------------------------------------------------------------
 # Spring AI registra "Aggregation Error" con la pila entera CADA vez que un stream del
 # modelo termina en error — y lo hace CUATRO veces por peticion, una por cada operador
@@ -871,7 +868,7 @@ springdoc:
       base-url: http://localhost:${server.port:8080}
 
 server:
-  forward-headers-strategy: ${FORWARD_HEADERS_STRATEGY:framework}
+  forward-headers-strategy: none
 
 # Actuator y metricas: en actuator.yaml (D-237), importado arriba. Ahi esta tambien el razonamiento
 # de la auditoria OUT-2 que vivia aca, y por que todo actuator paso al puerto de administracion 8091.

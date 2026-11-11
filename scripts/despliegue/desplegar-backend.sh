@@ -214,9 +214,9 @@ config_de_nginx_valida() {
 }
 
 # La configuracion de nginx. Es transparente a proposito: NO toca X-Forwarded-For ni ninguna
-# otra cabecera de CloudFront (la app toma la IP del cliente del valor mas a la izquierda, E-149;
-# agregar la del borde a la derecha romperia el dia que se lea desde la derecha, OUT-1), y
-# conserva el Host original. Lo demas: WebSocket (/ws y la voz en vivo), sin buffer para el
+# otra cabecera de CloudFront (la app toma la IP del cliente del valor mas a la derecha, el que
+# agrega CloudFront, E-678; si nginx agregara el suyo, ese pasaria a ser el ultimo y todos los
+# clientes contarian como uno solo), y conserva el Host original. Lo demas: WebSocket (/ws y la voz en vivo), sin buffer para el
 # streaming del chat y para las subidas, y el tope de tamano lo sigue poniendo la aplicacion.
 # Devuelve 0 si escribio una configuracion nueva, 1 si no cambia nada y 2 si la nueva NO es valida (la que esta
 # andando no se toca). Quien llama con `if` trata cualquier distinto de 0 como "no cambio"; SOLO_PROXY, no.
