@@ -489,7 +489,7 @@ paso_parametros() {
   if existe_parametro REDIS_PASSWORD; then
     echo "REDIS_PASSWORD ya existe: no se toca (idempotente)."
   elif [ "$APLICAR" = si ]; then
-    tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+    tmp=$(mktemp -d); trap "rm -rf '$tmp'" EXIT
     ( umask 077
       openssl rand -hex 32 > "$tmp/clave"
       jq -n --arg n "${PREFIJO}REDIS_PASSWORD" --rawfile v "$tmp/clave" \
@@ -514,7 +514,7 @@ paso_parametros() {
 
 en_la_instancia() {  # <accion>: manda ESTE script por SSM, con las variables por delante (patron del CD)
   local accion=$1 parametros cid estado desde
-  parametros=$(mktemp); trap 'rm -f "$parametros"' EXIT
+  parametros=$(mktemp); trap "rm -f '$parametros'" EXIT
   jq -n --arg b64 "$(base64 -w0 "$0")" --arg plantilla "$(base64 -w0 "$(dirname "$0")/redis.conf.plantilla")" \
         --arg accion "$accion" --arg aplicar "$APLICAR" --arg prefijo "$PREFIJO" --arg region "$REGION" \
     '{commands: [

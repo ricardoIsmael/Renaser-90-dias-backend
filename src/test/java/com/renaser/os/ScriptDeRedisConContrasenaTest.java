@@ -129,4 +129,14 @@ class ScriptDeRedisConContrasenaTest {
         assertThat(script).contains("Vuelta atras ahora:");
         assertThat(leer(ENSAYO)).contains("== 4. Vuelta atras ==");
     }
+
+    @Test
+    @DisplayName("La limpieza al salir fija la ruta al crearla: una variable local ya no existe en el EXIT y con set -u el script termina en error")
+    void laLimpiezaAlSalirNoUsaVariablesQueYaNoExisten() throws IOException {
+        // Un trap con comillas simples y $variable se expande AL SALIR, cuando la variable local de la funcion ya no existe
+        // ("tmp: variable sin asignar" al terminar el paso parametros, 2026-11-11). Hay que expandirla al definir el trap.
+        assertThat(Pattern.compile("trap '[^']*\\$[^']*' EXIT").matcher(leer(SCRIPT)).find())
+                .as("usa trap \"rm -rf '$ruta'\" EXIT (comillas dobles afuera) para que la ruta quede fija al crearla")
+                .isFalse();
+    }
 }
