@@ -5,7 +5,9 @@ import com.renaser.os.habits.application.ports.in.preferencia.EditarHorarioSeman
 import com.renaser.os.habits.application.ports.in.preferencia.ConsultarPreferenciasHorarioUseCase;
 import com.renaser.os.habits.application.ports.in.preferencia.EditarPreferenciaHorarioUseCase.EditarPreferenciaHorarioCommand;
 import com.renaser.os.habits.application.ports.in.preferencia.EditarPreferenciaHorarioUseCase;
+import com.renaser.os.habits.application.ports.in.preferencia.PreferenciasSinRedUseCase;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
+import com.renaser.os.shared.domain.HechoSinRed;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
@@ -44,11 +46,14 @@ public class HabitPreferenceController {
     private final ConsultarPreferenciasHorarioUseCase consultarUseCase;
     private final CambiarEstadoHabitoEnFechaUseCase cambiarEstadoEnFechaUseCase;
     private final EditarHorarioSemanalUseCase horarioSemanalUseCase;
+    private final PreferenciasSinRedUseCase sinRedUseCase;
 
     public HabitPreferenceController(EditarPreferenciaHorarioUseCase editarUseCase,
                                       ConsultarPreferenciasHorarioUseCase consultarUseCase,
                                       CambiarEstadoHabitoEnFechaUseCase cambiarEstadoEnFechaUseCase,
-                                      EditarHorarioSemanalUseCase horarioSemanalUseCase) {
+                                      EditarHorarioSemanalUseCase horarioSemanalUseCase,
+                                      PreferenciasSinRedUseCase sinRedUseCase) {
+        this.sinRedUseCase = sinRedUseCase;
         this.editarUseCase = editarUseCase;
         this.consultarUseCase = consultarUseCase;
         this.cambiarEstadoEnFechaUseCase = cambiarEstadoEnFechaUseCase;
@@ -66,11 +71,13 @@ public class HabitPreferenceController {
 
     @RequiresPermission(Permission.USE_APP)
     @PatchMapping("/{habitId}")
-    public HabitPreferenceResponse editar(@ActorAutenticado UserId actor, @PathVariable UUID habitId,
+    public HabitPreferenceResponse editar(@ActorAutenticado UserId actor, @PathVariable UUID habitId, HechoSinRed sinRed,
                                            @RequestBody @Valid UpdateHabitPreferenceRequest request) {
-        var resultado = editarUseCase.editar(new EditarPreferenciaHorarioCommand(actor,
+        var comando = new EditarPreferenciaHorarioCommand(actor,
                 HabitoId.of(habitId), request.triggerTime(), request.limitTime(), request.reminderEnabled(),
-                request.reminderMinutesBefore(), request.date(), request.reminderMinutesList()));
+                request.reminderMinutesBefore(), request.date(), request.reminderMinutesList());
+        // Spec 048 (FR-019): con X-Id-Cliente y X-Hecho-En es lo hecho sin red, con su hora real; sin ellas, lo de siempre.
+        var resultado = sinRed == null ? editarUseCase.editar(comando) : sinRedUseCase.editar(comando, sinRed);
         return HabitPreferenceResponse.from(resultado);
     }
 
@@ -85,8 +92,12 @@ public class HabitPreferenceController {
     @PatchMapping("/{habitId}/days/{date}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void cambiarEstadoDelDia(@ActorAutenticado UserId actor, @PathVariable UUID habitId,
-            @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date, HechoSinRed sinRed,
             @RequestBody @Valid UpdateHabitDayRequest request) {
+        if (sinRed != null) {
+            sinRedUseCase.cambiarEstadoDelDia(actor, HabitoId.of(habitId), date, request.active(), sinRed);
+            return;
+        }
         cambiarEstadoEnFechaUseCase.cambiarEstadoEnFecha(actor, HabitoId.of(habitId), date, request.active());
     }
 
@@ -105,7 +116,11 @@ public class HabitPreferenceController {
     @PutMapping("/{habitId}/weekdays/{weekday}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void fijarDiaDeLaSemana(@ActorAutenticado UserId actor, @PathVariable UUID habitId,
-            @PathVariable DayOfWeek weekday, @RequestBody @Valid WeekdayScheduleRequest request) {
+            @PathVariable DayOfWeek weekday, HechoSinRed sinRed, @RequestBody @Valid WeekdayScheduleRequest request) {
+        if (sinRed != null) {
+            sinRedUseCase.fijarDiaDeLaSemana(actor, HabitoId.of(habitId), weekday, request.triggerTime(), request.limitTime(), sinRed);
+            return;
+        }
         horarioSemanalUseCase.fijar(actor, HabitoId.of(habitId), weekday, request.triggerTime(),
                 request.limitTime());
     }
@@ -119,7 +134,12 @@ public class HabitPreferenceController {
     @PutMapping("/{habitId}/weekdays/{weekday}/reminder")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void fijarAvisoDelDia(@ActorAutenticado UserId actor, @PathVariable UUID habitId,
-            @PathVariable DayOfWeek weekday, @RequestBody @Valid WeekdayReminderRequest request) {
+            @PathVariable DayOfWeek weekday, HechoSinRed sinRed, @RequestBody @Valid WeekdayReminderRequest request) {
+        if (sinRed != null) {
+            sinRedUseCase.fijarAvisoDelDia(actor, HabitoId.of(habitId), weekday, request.reminderEnabled(),
+                    request.reminderMinutesList(), sinRed);
+            return;
+        }
         horarioSemanalUseCase.fijarRecordatorio(actor, HabitoId.of(habitId), weekday, request.reminderEnabled(),
                 request.reminderMinutesList());
     }
@@ -131,8 +151,12 @@ public class HabitPreferenceController {
     @RequiresPermission(Permission.USE_APP)
     @PutMapping("/{habitId}/alarm")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void fijarAlarma(@ActorAutenticado UserId actor, @PathVariable UUID habitId,
+    public void fijarAlarma(@ActorAutenticado UserId actor, @PathVariable UUID habitId, HechoSinRed sinRed,
             @RequestBody @Valid AlarmCombinationRequest request) {
+        if (sinRed != null) {
+            sinRedUseCase.fijarAlarma(actor, HabitoId.of(habitId), request.toCombination(), sinRed);
+            return;
+        }
         editarUseCase.fijarCombinacion(actor, HabitoId.of(habitId), request.toCombination());
     }
 
@@ -144,7 +168,11 @@ public class HabitPreferenceController {
     @PutMapping("/{habitId}/weekdays/{weekday}/alarm")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void fijarAlarmaDelDia(@ActorAutenticado UserId actor, @PathVariable UUID habitId,
-            @PathVariable DayOfWeek weekday, @RequestBody @Valid AlarmCombinationRequest request) {
+            @PathVariable DayOfWeek weekday, HechoSinRed sinRed, @RequestBody @Valid AlarmCombinationRequest request) {
+        if (sinRed != null) {
+            sinRedUseCase.fijarAlarmaDelDia(actor, HabitoId.of(habitId), weekday, request.toCombination(), sinRed);
+            return;
+        }
         horarioSemanalUseCase.fijarCombinacion(actor, HabitoId.of(habitId), weekday, request.toCombination());
     }
 
@@ -156,7 +184,11 @@ public class HabitPreferenceController {
     @DeleteMapping("/{habitId}/weekdays/{weekday}/active")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void apagarDiaDeLaSemana(@ActorAutenticado UserId actor, @PathVariable UUID habitId,
-            @PathVariable DayOfWeek weekday) {
+            @PathVariable DayOfWeek weekday, HechoSinRed sinRed) {
+        if (sinRed != null) {
+            sinRedUseCase.apagarDiaDeLaSemana(actor, HabitoId.of(habitId), weekday, sinRed);
+            return;
+        }
         horarioSemanalUseCase.apagar(actor, HabitoId.of(habitId), weekday);
     }
 
@@ -165,7 +197,11 @@ public class HabitPreferenceController {
     @DeleteMapping("/{habitId}/weekdays/{weekday}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void quitarDiaDeLaSemana(@ActorAutenticado UserId actor, @PathVariable UUID habitId,
-            @PathVariable DayOfWeek weekday) {
+            @PathVariable DayOfWeek weekday, HechoSinRed sinRed) {
+        if (sinRed != null) {
+            sinRedUseCase.quitarDiaDeLaSemana(actor, HabitoId.of(habitId), weekday, sinRed);
+            return;
+        }
         horarioSemanalUseCase.quitar(actor, HabitoId.of(habitId), weekday);
     }
 }

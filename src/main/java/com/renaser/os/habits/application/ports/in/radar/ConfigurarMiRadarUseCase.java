@@ -21,6 +21,12 @@ public interface ConfigurarMiRadarUseCase {
     PlanDeMiRadar configurar(ConfigurarMiRadarCommand command);
 
     /**
+     * Lo mismo con el instante ya decidido (spec 048): lo guardado sin red corre sus reglas («hoy y lo pasado no se editan») y deja
+     * su hora lógica con la hora real en que la persona lo hizo ({@code RevisionDeLaHora#referencia}), no con la de llegada.
+     */
+    PlanDeMiRadar configurar(ConfigurarMiRadarCommand command, java.time.Instant referencia);
+
+    /**
      * Mismo patron que {@code RegistrarCheckInRadarCommand}: actor y participante separados para que el guard
      * {@code requireSelf} sea testeable. {@code dias} son SOLO los dias que se tocan (null equivale a []): lo que no llega se
      * queda como estaba.

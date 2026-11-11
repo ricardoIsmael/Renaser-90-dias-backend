@@ -98,7 +98,7 @@ public class WallController {
                                                        @RequestBody @Valid CreateWallPostRequest request) {
         var vista = publicarUseCase.publicar(new PublicarCommand(actorId, request.text(),
                 request.media().stream().map(MediaItemRequest::aArchivoEntrada).toList(), request.category(),
-                FormacionDelContenido.pedida(request.formation())));
+                FormacionDelContenido.pedida(request.formation()), request.sinRed()));
         return ResponseEntity.status(HttpStatus.CREATED).body(WallPostResponse.from(vista));
     }
 

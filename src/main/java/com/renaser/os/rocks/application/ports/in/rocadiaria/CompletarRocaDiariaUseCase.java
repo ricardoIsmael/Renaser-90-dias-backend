@@ -19,6 +19,13 @@ public interface CompletarRocaDiariaUseCase {
     RocaDiaria completar(CompletarRocaDiariaCommand command);
 
     /**
+     * Spec 048: completa lo marcado sin red, con la hora real. A diferencia de {@link #completar}, NO exige que la acción sea de hoy
+     * (quien llama ya decidió si lo hecho estaba en regla: nada rebota, D14) y {@code conPuntos = false} la deja registrada con 0
+     * puntos. La evidencia, el candado de la Ley IV y el evento van igual, con {@code referencia}.
+     */
+    RocaDiaria completarConHoraReal(CompletarRocaDiariaCommand command, java.time.Instant referencia, boolean conPuntos);
+
+    /**
      * Para {@code tipo != TEXTO}: {@code bucket}+{@code rutaStorage} (ya subidos vía
      * {@code SolicitarUrlAdjuntoRocaUseCase}). Para {@code TEXTO}: {@code contenidoTexto}.
      * {@code timestampExif} obligatorio solo para FOTO (Ley VI, ±15 min).

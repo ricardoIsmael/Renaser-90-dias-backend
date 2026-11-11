@@ -31,6 +31,9 @@ public interface ElegirHabitoUseCase {
 
     DesbloqueoHabito elegir(ElegirHabitoCommand command);
 
+    /** Lo mismo con el instante ya decidido (spec 048): lo hecho sin red corre sus reglas (ventana, cuota, semana libre) con la hora real. */
+    DesbloqueoHabito elegir(ElegirHabitoCommand command, java.time.Instant ahora);
+
     /**
      * {@code diaDesbloqueo} nulo = arranca HOY (el dia de programa actual del aprendiz), que es
      * el comportamiento historico y el unico que existia antes. Con valor, el aprendiz elige

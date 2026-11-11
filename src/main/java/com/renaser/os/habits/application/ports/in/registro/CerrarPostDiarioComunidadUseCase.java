@@ -48,4 +48,13 @@ public interface CerrarPostDiarioComunidadUseCase {
      * @param publicadoEn instante de la publicacion — {@code PublicacionCreadaEvent.occurredAt()}
      */
     void alPublicarEnElMuro(UserId autorId, Instant publicadoEn);
+
+    /**
+     * Spec 048, fase 2 (D17): la publicacion se escribio sin internet a la hora {@code hechoEn} y llego despues. Cierra el
+     * registro del DIA DE LA HORA REAL con las reglas de lo hecho sin red (48 h, sin hora futura, dentro de su dia; admite
+     * un registro ya vencido por el barrido). Idempotente: una reentrega no vuelve a pagar.
+     *
+     * @param publicacionId la publicacion; de ella sale el id del envio en {@code envios_sin_red}
+     */
+    void alPublicarSinRed(UserId autorId, java.util.UUID publicacionId, Instant hechoEn);
 }

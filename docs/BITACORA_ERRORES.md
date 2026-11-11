@@ -16073,7 +16073,54 @@ De las 78 tablas que compara la prueba, solo esa. A «la otra persona» no se le
 
 **Cómo evitar que vuelva a pasar.** Una prueba de WebSocket no espera un tiempo fijo: espera la trama O el cierre. Con STOMP de Spring, un ERROR seguido de cierre puede perderse si coincide con otro envío a la misma sesión; si algún día el cliente real depende de leer el código del ERROR, el cierre 1002 también hay que tratarlo como rechazo.
 
-## E-672 · Cumplir la Pastilla, la Audioterapia o la Clase desde SER no apagaba las alarmas ni celebraba (backend, issue #99 de la app, 09/11, RESUELTO)
+## E-672 · Spring Modulith lanzaba «Cannot invoke "java.lang.Class.getTypeName()" because "type" is null» al llamar a un bean con un parámetro genérico (backend, spec 048 fase 3, 10/11, RESUELTO antes de publicar)
+
+**Síntoma.** Las pruebas de integración de lo hecho sin red fallaban todas con `java.lang.NullPointerException: Cannot invoke "java.lang.Class.getTypeName()" because "type" is null`, en
+`FormattableType.of` ← `DefaultObservedModule.render` ← `ModuleEntryInterceptor.invoke`, y la traza apuntaba a `EntregaSinRed$$SpringCGLIB$$0.entregar`. Las pruebas unitarias, que construyen la clase a mano,
+pasaban.
+
+**Causa real.** La observabilidad de Spring Modulith envuelve cada bean de un módulo (también el de `shared`) y, para dar nombre a la entrada, pinta los tipos de los parámetros con
+`ResolvableType.resolve()`. Un parámetro como `Supplier<Aplicado<T>>` o `Function<EnvioRegistrado, T>` tiene un `T` que no se resuelve: `resolve()` devuelve `null` y el pintado revienta, en
+cada llamada. No es un error del código ni de la configuración: es el pintado de cualquier método público de un bean con una variable de tipo en un parámetro genérico.
+
+**Solución.** `EntregaSinRed` pasó de bean a clase común (`new EntregaSinRed(envios, clock)` en cada caso de uso, con el puerto y el reloj que ya recibe): sin proxy no hay traza. `EnviosSinRedGeneralIT` la
+cubre contra Postgres, con dos pedidos concurrentes.
+
+**Cómo evitar que vuelva a pasar.** Un método público de un bean (servicio, adaptador, controller) no lleva una variable de tipo en un parámetro genérico (`Supplier<T>`, `Function<X, T>`, `List<T>`): usa tipos concretos
+o una clase común que no sea bean. Las pruebas de integración con el contexto real son las que lo atrapan; una unitaria con `new` no.
+
+
+## E-673 · Sin señal, Plan mostraba en rojo «No se pudo conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.» en «Esta semana» y «Acciones que mueven la meta» (app, issue #182, spec 048 fase 3, 10/11, RESUELTO)
+
+**Síntoma literal** (E2E de la fase 3, cuenta `e2e-t-dia1` que nunca abrió Plan con señal, backend apagado): en Plan, «Esta semana» decía «Primero define tus tres objetivos de 90 días…» y debajo, en rojo, «No se pudo conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.»; «Acciones que mueven la meta» decía «Primero arma tu semana…» y el mismo error en rojo.
+
+**Causa real.** Cada hook de lectura (`useRocasSemanales`, `useRocasDiarias`, `useRocasMaestras`, `usePlanMensual`) guardaba en su estado `mensajeDeObjetivos(e, …)` → `mensajeDeError`, y para un `ApiError` de red (`status` 0) ese devuelve el texto del cliente HTTP tal cual. Sin señal y sin lectura guardada (`lecturasGuardadas` solo devuelve lo que la cuenta ya leyó con señal) eso es un estado normal del modo sin internet, no una falla; la tarjeta lo pintaba como error y, sin saber si había semana o acciones, además ofrecía «Arma tu semana» o decía «Primero arma tu semana». No se volvía a pedir al volver la señal. Mismo patrón en otras 23 lecturas del barrido (Hoy, Entrenar, Cierra tu día, la Pastilla, cursos, tribu, chat, evidencias de Yo…); `PlanificarDimensionModal` ya lo había resuelto a mano.
+
+**Solución.** Una sola pieza en `src/features/sinRed/`: `mensajeDeCarga` / `mensajeDeCargaEnLinea` (`utils/sinSenal.ts`: «Todavía no hay nada guardado de esto en este teléfono. Se cargará solo cuando vuelva la señal.» o «Necesitas conexión para usar esto…»), `<ErrorDeCarga>` (color suave, sin alerta; el error de verdad sigue en rojo) y `useRecargarAlVolverLaSenal`. Las tarjetas de Plan, con la lectura fallida, dicen eso y no ofrecen armar la semana. Las pantallas del personal y el inicio de sesión (sin modo sin internet) quedan en `excepciones.json` con su motivo.
+
+**Cómo evitar que vuelva a pasar.** Ya es ejecutable: `src/__tests__/reglas/sinSenalSeDiceSinSenal.test.ts` falla si una lectura guarda `mensajeDeError(e, 'No pudimos cargar…')` en su estado (y si usa `mensajeDeCarga` sin volver a pedir al volver la señal); su mensaje dice cómo arreglarlo. Toda lectura nueva usa `mensajeDeCarga` + `<ErrorDeCarga>` + `useRecargarAlVolverLaSenal`. Y un estado vacío («Primero arma tu semana») nunca se dibuja cuando la lectura falló: no se sabe si está vacío.
+
+## E-674 · Sin señal, la acción agendada en espera no contaba en «Agendar mis acciones» («Cuerpo · 0/3») (app, issue #183, spec 048 fase 3, 10/11, RESUELTO)
+
+**Síntoma literal** (E2E de la fase 3): con la semana armada y sin señal, agendar una acción de Cuerpo para mañana, tocarla en Plan («Se guardará al volver la señal») y abrir la hoja del día: «Cuerpo · 0/3», sin la acción.
+
+**Causa real.** `AgendarAccionesModal` contaba solo lo que se elegía en esa apertura (`elegidas`) y arrancaba siempre limpia; la acción en espera existía en las lecturas (`pendienteDeEnvio`, por el ajuste de lectura de `planSinRed`) pero la hoja nunca la recibía. Se podía pasar de tres por eje o agendarla dos veces. Y el plan nuevo del mismo día, al reemplazar al anterior (E-208), habría borrado la que esperaba; con el día en curso, el servidor lo rechaza (409), así que el segundo pedido de la cola chocaba con el primero.
+
+**Solución.** La hoja recibe las acciones en espera (`enEspera`), las del día elegido cuentan para el tope, se ven con «Se guardará al volver la señal» y no se vuelven a ofrecer; tocar una acción de otro día abre la hoja en ese día. Al guardar viaja el plan del día entero y, en la cola, `quitarPlanesEnEsperaDe(fecha)` retira el pedido anterior de esa fecha: sale uno por día.
+
+**Cómo evitar que vuelva a pasar.** Una pantalla que edita algo que se reemplaza entero (como el plan de un día) parte de lo que ya existe, incluido lo que espera en la cola, no de una hoja en blanco: probarla con una escritura pendiente (`agendarAccionesEnEspera.test.ts`, `planSinRed.test.ts`). Con la cola, un reemplazo se hace sustituyendo el pedido anterior, no sumando otro.
+
+## E-675 · «Agendar mis acciones» abría en «Cuerpo · 0/3» aunque el día ya tuviera acciones en el servidor, y agendar otra borraba las que había (app, issue #185, spec 048 fase 3, 10/11, RESUELTO)
+
+**Síntoma literal** (E2E de la fase 3, también en `master`): con la semana armada y acciones ya agendadas (con señal, ya confirmadas) para un día que todavía no llegó, abrir «Agendar mis acciones» en ese día decía «Cuerpo · 0/3» y no mostraba ninguna; elegir otra y agendar dejaba el día solo con la nueva: las que había desaparecieron de Plan y de Entrenar.
+
+**Causa real.** `AgendarAccionesModal` solo contaba lo que se elegía en esa apertura (`elegidas`) y lo que esperaba señal (`enEspera`, #183); lo que el servidor ya tenía de ese día —que la pantalla ya leía en `GET /rocks/upcoming`— nunca llegaba a la hoja. Y `POST /rocks/plan` sobre un día que todavía no llegó **reemplaza el plan entero** (E-208): lo que no viaja se borra. Se podía pasar de tres por eje, agendar lo mismo dos veces y perder acciones sin aviso. Si la lectura de la semana fallaba aparte de la de hoy y mañana (`useRocasDiarias` la tolera), la hoja tampoco tenía cómo saberlo.
+
+**Solución.** La hoja recibe lo que el servidor ya tiene en los días que vienen (`delServidor`, `agendadasDeDiasQueVienen`; el día en curso queda fuera: el servidor no deja rehacerlo, 409): se ve con su hora y «Ya agendada», cuenta para el tope de tres por eje y no se vuelve a ofrecer. La persona puede quitar una de forma explícita («Quitar» / «Deshacer», «Se quitará al guardar»). Al guardar viaja el plan del día entero —lo que ya tenía y siguió, con su hora y sus pasos, más lo que espera señal y lo nuevo—, así que solo desaparece lo que se quitó. Al cambiar de día lo elegido se recorta al tope del día nuevo (`recortadasAlTope`). Si la lectura de la semana no se pudo hacer (`agendadasLeidas` falso), la hoja avisa, ofrece «Volver a leer» y no deja agendar. Un día no puede quedar sin acciones (`rocas` es `@NotEmpty`).
+
+**Cómo evitar que vuelva a pasar.** Una pantalla que edita algo que el servidor reemplaza entero (el plan de un día) parte siempre de lo que ya existe —confirmado y en espera—, nunca de una hoja en blanco, y manda el conjunto completo; lo que borra la persona lo borra ella, a propósito. Probarla con el día ya poblado (`agendarAccionesYaAgendadas.test.ts`, `agendadasLeidas.test.ts`) además de vacío.
+
+## E-676 · Cumplir la Pastilla, la Audioterapia o la Clase desde SER no apagaba las alarmas ni celebraba (backend, issue #99 de la app, 09/11, RESUELTO)
 
 **Síntoma.** Si la persona entregaba la Clase diaria, las respuestas de la Audioterapia o el resumen de Espíritu (que marca la Pastilla Renacer) confirmando una propuesta de SER, el hábito quedaba cumplido en el servidor, pero en el teléfono seguían sonando sus alarmas de ese día, no salía la celebración y el semáforo no se refrescaba.
 

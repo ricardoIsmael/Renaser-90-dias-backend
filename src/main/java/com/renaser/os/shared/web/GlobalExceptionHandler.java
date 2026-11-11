@@ -9,6 +9,7 @@ import com.renaser.os.shared.domain.FuncionalidadApagadaException;
 import com.renaser.os.shared.domain.FuncionalidadNoDisponibleException;
 import com.renaser.os.shared.domain.IdentidadProveedorInvalidaException;
 import com.renaser.os.shared.domain.IdentidadYaVinculadaException;
+import com.renaser.os.shared.domain.NoAplicadoSinRedException;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.ProveedorIaNoDisponibleException;
 import com.renaser.os.shared.domain.ReautenticacionRequeridaException;
@@ -167,6 +168,18 @@ public class GlobalExceptionHandler {
                 .distinct()
                 .collect(java.util.stream.Collectors.joining(". "));
         return respond(HttpStatus.BAD_REQUEST, mensaje.isBlank() ? "Revisa los datos enviados." : mensaje);
+    }
+
+    /**
+     * Spec 048 (FR-019, D13): lo hecho sin red que al llegar NO se aplicó (algo cambió después, ya no existe, su día terminó):
+     * 409 con {@code codigo} (uno de {@code CodigoNoAplicado}) y el {@code message} listo para mostrar. La app lo recibe como
+     * resultado final del envío y le avisa a la persona qué no se aplicó.
+     */
+    @ExceptionHandler(NoAplicadoSinRedException.class)
+    public ResponseEntity<ApiErrorConCodigo> handleNoAplicadoSinRed(NoAplicadoSinRedException ex) {
+        log.info("409 -> lo hecho sin red no se aplicó: {}", ex.codigo());
+        return ResponseEntity.status(HttpStatus.CONFLICT).contentType(MediaType.APPLICATION_JSON)
+                .body(ApiErrorConCodigo.of(ex.getMessage(), ex.codigo().name(), null));
     }
 
     @ExceptionHandler(IllegalStateException.class)

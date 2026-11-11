@@ -53,6 +53,11 @@ spring:
       chat: none
       embedding: none
       vectorstore: none
+    # El servidor MCP de la API (McpDeLaApiConfig) es una herramienta local de desarrollo: la
+    # suite no lo levanta (springdoc.ai.mcp ya nace apagado sin la propiedad).
+    mcp:
+      server:
+        enabled: false
   # C-18 (docs/informes/auditoria-fixes/C-18.md): espeja el bloque de main -- sin esto, los
   # tests seguirian ejercitando open-in-view=true (el default de Boot) mientras produccion
   # corre con false, y un futuro @OneToMany/@ManyToOne perezoso que rompiera un DTO armado

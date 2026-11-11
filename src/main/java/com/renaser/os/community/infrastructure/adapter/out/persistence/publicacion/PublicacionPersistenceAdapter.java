@@ -96,7 +96,7 @@ class PublicacionPersistenceAdapter implements LoadPublicacionPort, SavePublicac
 
     @Override
     public boolean existeDeAutorEntre(UserId autorId, Instant desde, Instant hasta) {
-        return repository.existsByAutorIdAndCreadoEnGreaterThanEqualAndCreadoEnLessThan(autorId.value(), desde, hasta);
+        return repository.existePublicadaEntre(autorId.value(), desde, hasta);
     }
 
     @Override

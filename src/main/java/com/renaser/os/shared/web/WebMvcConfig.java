@@ -11,13 +11,17 @@ import java.util.List;
 public class WebMvcConfig implements WebMvcConfigurer {
 
     private final ActorAutenticadoArgumentResolver actorAutenticadoArgumentResolver;
+    private final HechoSinRedArgumentResolver hechoSinRedArgumentResolver;
 
-    public WebMvcConfig(ActorAutenticadoArgumentResolver actorAutenticadoArgumentResolver) {
+    public WebMvcConfig(ActorAutenticadoArgumentResolver actorAutenticadoArgumentResolver,
+                        HechoSinRedArgumentResolver hechoSinRedArgumentResolver) {
         this.actorAutenticadoArgumentResolver = actorAutenticadoArgumentResolver;
+        this.hechoSinRedArgumentResolver = hechoSinRedArgumentResolver;
     }
 
     @Override
     public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
         resolvers.add(actorAutenticadoArgumentResolver);
+        resolvers.add(hechoSinRedArgumentResolver);
     }
 }

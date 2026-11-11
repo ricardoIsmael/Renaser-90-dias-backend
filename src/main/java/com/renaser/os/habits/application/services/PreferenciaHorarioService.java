@@ -98,6 +98,12 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
     @Override
     @Transactional
     public ResultadoEdicionPreferencia editar(EditarPreferenciaHorarioCommand command) {
+        return editar(command, clock.now());
+    }
+
+    @Override
+    @Transactional
+    public ResultadoEdicionPreferencia editar(EditarPreferenciaHorarioCommand command, Instant ahora) {
         ProgresoParticipanteHabits progreso = requireProgreso(command.actorId());
         Habito habito = requireHabito(command.habitoId());
         VentanaDelDia.requireHoraDisparoDentroDelDia(command.horaDisparo());
@@ -111,9 +117,8 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
         if (!habito.activo()) throw new IllegalArgumentException("El hábito no está activo");
 
         ZoneId zona = ZoneId.of(progreso.timezone());
-        Instant ahora = clock.now();
 
-        ContextoCuota contexto = resolverContextoCuota(command, habito, progreso.diaPrograma(), zona, ahora);
+        ContextoCuota contexto = resolverContextoCuota(command, habito, diaDelProgramaEn(progreso, ahora), zona, ahora);
         HorarioGuardado guardado = aplicarEdicion(command, contexto, ahora);
 
         return construirResultado(command, contexto, guardado);
@@ -354,10 +359,16 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
     @Override
     @Transactional
     public void cambiarEstadoEnFecha(UserId actorId, HabitoId habitoId, LocalDate fecha, boolean activo) {
+        cambiarEstadoEnFecha(actorId, habitoId, fecha, activo, clock.now());
+    }
+
+    @Override
+    @Transactional
+    public void cambiarEstadoEnFecha(UserId actorId, HabitoId habitoId, LocalDate fecha, boolean activo, Instant ahora) {
         Habito habito = requireHabito(habitoId);
         ProgresoParticipanteHabits progreso = requireProgreso(actorId);
         requirePropio(actorId, habito);
-        LocalDate hoy = clock.now().atZone(ZoneId.of(progreso.timezone())).toLocalDate();
+        LocalDate hoy = ahora.atZone(ZoneId.of(progreso.timezone())).toLocalDate();
         HorarioPorFecha.requireApagable(fecha, hoy);
 
         if (activo) {
@@ -373,7 +384,6 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
             // dia, "obligatorio" no querria decir nada.
             throw new IllegalStateException("Este hábito es obligatorio y no se puede apagar");
         }
-        Instant ahora = clock.now();
         // Sin hora: apagar un dia NO toca el horario, que se sigue heredando de lo general. Es lo
         // que permite volver a encenderlo y que quede como estaba.
         var preferencia = PreferenciaHorario.crear(actorId, habitoId, null, null, ahora);
@@ -388,11 +398,17 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
     @Transactional
     public void fijar(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana, LocalTime horaDisparo,
                       LocalTime horaLimite) {
+        fijar(actorId, habitoId, diaSemana, horaDisparo, horaLimite, clock.now());
+    }
+
+    @Override
+    @Transactional
+    public void fijar(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana, LocalTime horaDisparo,
+                      LocalTime horaLimite, Instant ahora) {
         Habito habito = requireHabito(habitoId);
         // E-214: la cuenta suspendida la rechaza `cobrarCupo` (su primer paso es `requireProgreso`),
         // antes de escribir nada; lo que faltaba era la pertenencia del habito personal.
         requirePropio(actorId, habito);
-        Instant ahora = clock.now();
         cobrarCupo(actorId, habitoId, habito, diaSemana, ahora);
         var preferencia = PreferenciaHorario.crear(actorId, habitoId, horaDisparo, horaLimite, ahora);
         // El agregado valida que la hora limite sea posterior a la de disparo, igual que en el
@@ -408,12 +424,17 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
     @Override
     @Transactional
     public void apagar(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana) {
+        apagar(actorId, habitoId, diaSemana, clock.now());
+    }
+
+    @Override
+    @Transactional
+    public void apagar(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana, Instant ahora) {
         Habito habito = requireHabito(habitoId);
         requireEditable(actorId, habito);
         if (!habito.desactivable()) {
             throw new IllegalStateException("Este hábito es obligatorio y no se puede apagar");
         }
-        Instant ahora = clock.now();
         // Sin hora: apagar un día NO toca el horario, que se sigue heredando del general. Es lo
         // que permite volver a encenderlo y que quede como estaba.
         var preferencia = PreferenciaHorario.crear(actorId, habitoId, null, null, ahora);
@@ -438,12 +459,19 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
     @Transactional
     public void fijarRecordatorio(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana, boolean activo,
                                   List<Integer> antelaciones) {
+        fijarRecordatorio(actorId, habitoId, diaSemana, activo, antelaciones, clock.now());
+    }
+
+    @Override
+    @Transactional
+    public void fijarRecordatorio(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana, boolean activo,
+                                  List<Integer> antelaciones, Instant ahora) {
         requireEditable(actorId, requireHabito(habitoId));
         RecordatorioDelDia pedido = activo ? RecordatorioDelDia.con(antelaciones) : RecordatorioDelDia.sinAviso();
         RecordatorioDelDia general = RecordatorioDelDia
                 .delGeneral(loadPreferenciaPort.porParticipanteYHabito(actorId, habitoId).orElse(null));
         savePreferenciaPort.fijarRecordatorioParaDiaSemana(actorId, habitoId, diaSemana,
-                pedido.equals(general) ? null : pedido);
+                pedido.equals(general) ? null : pedido, ahora);
     }
 
     /**
@@ -454,9 +482,14 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
     @Override
     @Transactional
     public void fijarCombinacion(UserId actorId, HabitoId habitoId, CombinacionDeAlarma combinacion) {
+        fijarCombinacion(actorId, habitoId, combinacion, clock.now());
+    }
+
+    @Override
+    @Transactional
+    public void fijarCombinacion(UserId actorId, HabitoId habitoId, CombinacionDeAlarma combinacion, Instant ahora) {
         requireEditable(actorId, requireHabito(habitoId));
         AjusteDeAlarma ajuste = combinacion.equals(CombinacionDeAlarma.COMO_HOY) ? null : AjusteDeAlarma.de(combinacion);
-        Instant ahora = clock.now();
         Optional<PreferenciaHorario> existente = loadPreferenciaPort.porParticipanteYHabito(actorId, habitoId);
         if (existente.isEmpty() && ajuste == null) {
             return;
@@ -476,11 +509,18 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
     @Transactional
     public void fijarCombinacion(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana,
                                  CombinacionDeAlarma combinacion) {
+        fijarCombinacion(actorId, habitoId, diaSemana, combinacion, clock.now());
+    }
+
+    @Override
+    @Transactional
+    public void fijarCombinacion(UserId actorId, HabitoId habitoId, DayOfWeek diaSemana,
+                                 CombinacionDeAlarma combinacion, Instant ahora) {
         requireEditable(actorId, requireHabito(habitoId));
         CombinacionDeAlarma general = alarmaGeneralDe(loadPreferenciaPort.porParticipanteYHabito(actorId, habitoId)
                 .orElse(null));
         savePreferenciaPort.fijarAlarmaParaDiaSemana(actorId, habitoId, diaSemana,
-                combinacion.equals(general) ? null : AjusteDeAlarma.de(combinacion));
+                combinacion.equals(general) ? null : AjusteDeAlarma.de(combinacion), ahora);
     }
 
     /** La combinacion general ya resuelta: la elegida o, si nadie eligio nada, la de hoy. */
@@ -504,6 +544,16 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
      * La fecha efectiva es estrictamente FUTURA, igual que en el camino general: el dia en curso no
      * se reacomoda (D-91), asi que fijar "los lunes" un lunes rige desde el lunes siguiente.
      */
+    /**
+     * El día del programa en el instante {@code ahora}: el de hoy menos los días entre ese instante y hoy (spec 048: lo hecho ayer sin red mide
+     * su semana libre y su cuota con el día de ayer, no con el de la llegada). Con red {@code ahora} es hoy y no cambia nada; no baja de 0.
+     */
+    private int diaDelProgramaEn(ProgresoParticipanteHabits progreso, Instant ahora) {
+        ZoneId zona = ZoneId.of(progreso.timezone());
+        long dias = ChronoUnit.DAYS.between(ahora.atZone(zona).toLocalDate(), clock.now().atZone(zona).toLocalDate());
+        return (int) Math.max(0, progreso.diaPrograma() - Math.max(0, dias));
+    }
+
     private void cobrarCupo(UserId actorId, HabitoId habitoId, Habito habito, DayOfWeek diaSemana, Instant ahora) {
         ProgresoParticipanteHabits progreso = requireProgreso(actorId);
         LocalDate hoy = ahora.atZone(ZoneId.of(progreso.timezone())).toLocalDate();
@@ -511,7 +561,7 @@ public class PreferenciaHorarioService implements EditarPreferenciaHorarioUseCas
         while (fechaEfectiva.getDayOfWeek() != diaSemana) {
             fechaEfectiva = fechaEfectiva.plusDays(1);
         }
-        int diaEfectivo = Math.toIntExact(progreso.diaPrograma() + ChronoUnit.DAYS.between(hoy, fechaEfectiva));
+        int diaEfectivo = Math.toIntExact(diaDelProgramaEn(progreso, ahora) + ChronoUnit.DAYS.between(hoy, fechaEfectiva));
 
         if (!CuotaEdicionHorario.esSemanaDeAcomodoLibre(diaEfectivo)) {
             int libreHasta = Math.max(FREE_SCHEDULE_EDITS_UNTIL_DAY,

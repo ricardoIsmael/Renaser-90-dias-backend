@@ -77,5 +77,14 @@ __pycache__/
 ### Salida de scripts/verificar.sh (la evidencia va resumida en el PR, no en git) ###
 salida-maven.log
 
-### Estado de la tarea del arnés de agentes: es de cada worktree, no se versiona ###
-.arnes/
+### Herramientas locales de cada desarrollador: no son del producto ###
+# (sin barra final: en un worktree, .arnes es un enlace y no una carpeta)
+.arnes
+AGENTS.md
+CLAUDE.md
+CLAUDE.local.md
+PROGRESO.md
+arnes.perfil.yaml
+funcionalidades.json
+.claude/
+.specify

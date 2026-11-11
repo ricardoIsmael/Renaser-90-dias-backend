@@ -2,3 +2,6 @@ __pycache__/
 indexados.jsonl
 consulta/
 transcripciones/vtt/
+
+# Salida de extraer_todo.py (transcripciones de las lecciones): se regenera y no va al repo (2026-11-09).
+transcripciones/salida/

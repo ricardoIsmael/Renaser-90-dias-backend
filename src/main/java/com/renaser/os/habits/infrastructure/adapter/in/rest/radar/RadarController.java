@@ -1,12 +1,15 @@
 package com.renaser.os.habits.infrastructure.adapter.in.rest.radar;
 
+import com.renaser.os.habits.application.ports.in.radar.ConfigurarMiRadarSinRedUseCase;
 import com.renaser.os.habits.application.ports.in.radar.ConfigurarMiRadarUseCase;
 import com.renaser.os.habits.application.ports.in.radar.ConfigurarMiRadarUseCase.ConfigurarMiRadarCommand;
 import com.renaser.os.habits.application.ports.in.radar.ConsultarHistorialRadarUseCase;
 import com.renaser.os.habits.application.ports.in.radar.ConsultarMiRadarUseCase;
 import com.renaser.os.habits.application.ports.in.radar.ConsultarUltimoRadarUseCase;
+import com.renaser.os.habits.application.ports.in.radar.RegistrarCheckInRadarSinRedUseCase;
 import com.renaser.os.habits.application.ports.in.radar.RegistrarCheckInRadarUseCase;
 import com.renaser.os.habits.application.ports.in.radar.RegistrarCheckInRadarUseCase.RegistrarCheckInRadarCommand;
+import com.renaser.os.shared.domain.HechoSinRed;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
@@ -54,11 +57,17 @@ public class RadarController {
     private final ConsultarHistorialRadarUseCase historialUseCase;
     private final ConsultarMiRadarUseCase consultarMiRadarUseCase;
     private final ConfigurarMiRadarUseCase configurarMiRadarUseCase;
+    private final RegistrarCheckInRadarSinRedUseCase registrarSinRedUseCase;
+    private final ConfigurarMiRadarSinRedUseCase configurarMiRadarSinRedUseCase;
 
     public RadarController(RegistrarCheckInRadarUseCase registrarUseCase, ConsultarUltimoRadarUseCase ultimoUseCase,
                             ConsultarHistorialRadarUseCase historialUseCase,
                             ConsultarMiRadarUseCase consultarMiRadarUseCase,
-                            ConfigurarMiRadarUseCase configurarMiRadarUseCase) {
+                            ConfigurarMiRadarUseCase configurarMiRadarUseCase,
+                            RegistrarCheckInRadarSinRedUseCase registrarSinRedUseCase,
+                            ConfigurarMiRadarSinRedUseCase configurarMiRadarSinRedUseCase) {
+        this.registrarSinRedUseCase = registrarSinRedUseCase;
+        this.configurarMiRadarSinRedUseCase = configurarMiRadarSinRedUseCase;
         this.registrarUseCase = registrarUseCase;
         this.ultimoUseCase = ultimoUseCase;
         this.historialUseCase = historialUseCase;
@@ -68,11 +77,13 @@ public class RadarController {
 
     @RequiresPermission(Permission.FOLLOW_OWN_PROGRAM)
     @PostMapping
-    public RegistroRadarResponse registrar(@ActorAutenticado UserId actor,
+    public RegistroRadarResponse registrar(@ActorAutenticado UserId actor, HechoSinRed sinRed,
                                             @RequestBody @Valid RegistrarCheckInRadarRequest request) {
-        var registro = registrarUseCase.registrar(new RegistrarCheckInRadarCommand(actor, actor,
+        var comando = new RegistrarCheckInRadarCommand(actor, actor,
                 request.whatAmIDoing(), request.whatAmIThinking(), request.whatAmIFeeling(), request.energyLevel(),
-                request.whatAmIAvoiding(), request.fueDictado()));
+                request.whatAmIAvoiding(), request.fueDictado());
+        // Spec 048 (FR-019): con X-Id-Cliente y X-Hecho-En es lo hecho sin red, con su hora real; sin ellas, lo de siempre.
+        var registro = sinRed == null ? registrarUseCase.registrar(comando) : registrarSinRedUseCase.registrar(comando, sinRed);
         return RegistroRadarResponse.from(registro);
     }
 
@@ -100,9 +111,10 @@ public class RadarController {
 
     @RequiresPermission(Permission.FOLLOW_OWN_PROGRAM)
     @PutMapping("/mi-radar")
-    public MiRadarResponse configurarMiRadar(@ActorAutenticado UserId actor,
+    public MiRadarResponse configurarMiRadar(@ActorAutenticado UserId actor, HechoSinRed sinRed,
                                               @RequestBody @Valid GuardarMiRadarRequest request) {
-        return MiRadarResponse.from(configurarMiRadarUseCase.configurar(
-                new ConfigurarMiRadarCommand(actor, actor, request.encendido(), request.cambios())));
+        var comando = new ConfigurarMiRadarCommand(actor, actor, request.encendido(), request.cambios());
+        return MiRadarResponse.from(sinRed == null ? configurarMiRadarUseCase.configurar(comando)
+                : configurarMiRadarSinRedUseCase.configurar(comando, sinRed));
     }
 }

@@ -24,6 +24,9 @@ public interface CrearPlanSemanalUseCase {
 
     List<RocaSemanal> crear(CrearPlanSemanalCommand command);
 
+    /** Lo mismo con el instante ya decidido (spec 048): lo hecho sin red corre sus reglas con la hora real, no con la de llegada. */
+    List<RocaSemanal> crear(CrearPlanSemanalCommand command, java.time.Instant referencia);
+
     record CrearPlanSemanalCommand(@NotNull UserId actorId,
                                     @NotNull @Size(min = 1, max = 3) List<@Valid ItemRocaSemanal> rocas) {
 

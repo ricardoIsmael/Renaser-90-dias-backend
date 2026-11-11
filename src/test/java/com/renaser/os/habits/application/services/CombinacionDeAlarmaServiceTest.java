@@ -183,7 +183,7 @@ class CombinacionDeAlarmaServiceTest {
         service.fijarCombinacion(ACTOR, habito.id(), DayOfWeek.SATURDAY, SOLO_VIBRAR);
 
         verify(savePreferenciaPort).fijarAlarmaParaDiaSemana(ACTOR, habito.id(), DayOfWeek.SATURDAY,
-                AjusteDeAlarma.de(SOLO_VIBRAR));
+                AjusteDeAlarma.de(SOLO_VIBRAR), CLOCK.now());
         verifyNoInteractions(historialPort, saveCambioPendientePort);
         verify(savePreferenciaPort, never()).saveParaDiaSemana(any(), any(), any());
         verify(savePreferenciaPort, never()).save(any());
@@ -196,7 +196,7 @@ class CombinacionDeAlarmaServiceTest {
 
         service.fijarCombinacion(ACTOR, habito.id(), DayOfWeek.SATURDAY, SOLO_VIBRAR);
 
-        verify(savePreferenciaPort).fijarAlarmaParaDiaSemana(ACTOR, habito.id(), DayOfWeek.SATURDAY, null);
+        verify(savePreferenciaPort).fijarAlarmaParaDiaSemana(ACTOR, habito.id(), DayOfWeek.SATURDAY, null, CLOCK.now());
     }
 
     @Test
@@ -206,9 +206,9 @@ class CombinacionDeAlarmaServiceTest {
         service.fijarCombinacion(ACTOR, habito.id(), DayOfWeek.SATURDAY, CombinacionDeAlarma.COMO_HOY);
         service.fijarCombinacion(ACTOR, habito.id(), DayOfWeek.SUNDAY, CON_VOZ);
 
-        verify(savePreferenciaPort).fijarAlarmaParaDiaSemana(ACTOR, habito.id(), DayOfWeek.SATURDAY, null);
+        verify(savePreferenciaPort).fijarAlarmaParaDiaSemana(ACTOR, habito.id(), DayOfWeek.SATURDAY, null, CLOCK.now());
         verify(savePreferenciaPort).fijarAlarmaParaDiaSemana(ACTOR, habito.id(), DayOfWeek.SUNDAY,
-                AjusteDeAlarma.de(CON_VOZ));
+                AjusteDeAlarma.de(CON_VOZ), CLOCK.now());
     }
 
     @Test
@@ -218,7 +218,7 @@ class CombinacionDeAlarmaServiceTest {
         service.fijarCombinacion(ACTOR, habito.id(), DayOfWeek.SATURDAY, CombinacionDeAlarma.de(true, true, true, true));
 
         verify(savePreferenciaPort).fijarAlarmaParaDiaSemana(ACTOR, habito.id(), DayOfWeek.SATURDAY,
-                AjusteDeAlarma.de(CombinacionDeAlarma.de(true, true, true, true)));
+                AjusteDeAlarma.de(CombinacionDeAlarma.de(true, true, true, true)), CLOCK.now());
     }
 
     @Test
