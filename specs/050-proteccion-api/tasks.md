@@ -171,3 +171,6 @@ Orden recomendado: **G0** → A1 → A2 → B → C → D → E → F → G1–G
 | FR-035 a FR-039 | G | sonda y ensayos locales; `[sin prueba automática]` para el despliegue real (SC-009 lo mide el dueño) |
 | FR-040 a FR-044 | H | `UserRoleTest`; el recorrido por rol; E2E por rol |
 | FR-045 | Z | `[sin prueba automática]`: documentación; se revisa a mano en T074 |
+
+
+> Tramos G1–G4 (despliegue sin corte): fuera del alcance por decisión del dueño (D17, 2026-11-11). G0 hecho: medición en spec.md D17.

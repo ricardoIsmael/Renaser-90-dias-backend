@@ -241,3 +241,4 @@ Cada una con la opción que se recomienda primero. Ninguna bloquea el tramo A; Q
 
 - **D15 — Sin cuenta de servicio para el CRM.** La integración del CRM ya está hecha y queda como está: el tramo D (cuenta de solo lectura, V192, límite propio) sale del alcance. Su consumo cae en el grupo «administración» del filtro por cuenta (tramo C).
 - **D16 — Respuestas a las preguntas abiertas:** se toma la opción recomendada en Q1, Q3–Q8 (Q1 y Q2 dejan de aplicar por D15). La tabla de permisos de Mentor y Guía (tramo H) la arma la sesión principal a partir del código y del registro en sombra, y no se aplica hasta que el dueño la apruebe.
+- **D17 — Despliegue: se deja como está (2026-11-11).** G0 midió en el despliegue del 11/11: disponible 1890 MB, necesario 1912 MB (tope 1400 + margen 512) → reemplazo con 1–2 min de 502. El dueño eligió no cambiar el tipo de instancia ni bajar el margen. Los tramos G1–G4 salen del alcance; se recomienda desplegar en horario de poco uso.
