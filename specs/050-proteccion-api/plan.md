@@ -80,6 +80,8 @@ Tres ramas, tres PR (A1, A2, A3): son el mismo tipo de trabajo pero tres funcion
 
 - `map $http_x_origen_renaser $origen_valido { default 0; include origen-secretos.inc; }` con una línea por secreto aceptado (vigente y anterior).
 - `geo $ip_de_operacion { default 0; 127.0.0.1 1; <IP de operación desde Parameter Store> 1; }` (el CD comprueba la salud por `127.0.0.1:8080`: **tiene** que seguir pasando).
+
+> **Corregido 2026-11-11 (implementación del tramo A2, PR #131).** Esta línea decía que bastaba eximir `127.0.0.1`. No alcanza: Docker entrega lo que viene del propio host al contenedor con la IP de la **pasarela de la red** (`172.x.0.1`), no con `127.0.0.1` (comprobado con nginx 1.28). El `geo` exime `127.0.0.1/32`, la subred de la red `renaser` (sale de `docker network inspect`) y las IP de `origen-ips-directas`. Los secretos van en el mismo `renaser.conf` con permiso 600 (no en un `origen.conf` aparte: el proxy monta un solo archivo), y el modo (`ORIGEN_MODO`) sale de Parameter Store (`origen-modo`), no del CD.
 - Modo `registrar`: `access_log /dev/stdout` solo para lo que no valida (visible con `docker logs proxy`); modo `exigir`: `return 403` con el cuerpo del §2.
 
 **Los secretos** salen de Parameter Store (`origen-secreto`, `origen-secreto-anterior`, `origen-ips-directas`) con la función `parametro` que el script ya trae; **ninguno se escribe en el repositorio**.
