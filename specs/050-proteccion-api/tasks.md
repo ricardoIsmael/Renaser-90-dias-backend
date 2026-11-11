@@ -85,7 +85,7 @@ Orden recomendado: **G0** → A1 → A2 → B → C → D → E → F → G1–G
 - [ ] T036 Día 14: el informe (percentiles de uso por grupo, `habria_bloqueado`, la lista de cuentas revisadas una por una, los picos tras reconexión de la cola) y la **tabla de valores propuestos** (el mayor entre el valor de partida y 2 × p99) para que el dueño la apruebe (SC-002, SC-003).
 - [ ] T037 `[DUEÑO]` Pasar a `APLICAR` grupo por grupo con `limites-modo.sh` (primero `exportaciones`, `admin`, `ia-fuera-de-ser`, `subidas`; al final `muro`, `chat`, `escritura`, `lectura`), con la métrica de `bloqueado` abierta.
 
-## Tramo D — Cuenta de servicio del CRM
+## Tramo D — DESCARTADO por el dueño (D15, 2026-11-11): no se implementa — Cuenta de servicio del CRM
 
 - [ ] T038 `[DUEÑO]` Responder Q1 y Q2 (cómo entra RenaserOs y qué otros `GET` usa).
 - [ ] T039 `V192__rol_integracion_crm.sql` (**sola** en su archivo, con la cabecera de la regla 04; verificar con `git fetch` el último número) + IT de la migración.

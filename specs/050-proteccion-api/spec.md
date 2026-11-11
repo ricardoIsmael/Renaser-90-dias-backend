@@ -236,3 +236,8 @@ Cada una con la opción que se recomienda primero. Ninguna bloquea el tramo A; Q
 6. **Q6 — ¿Cambiar el modo de un grupo sin reiniciar?** **A (recomendada):** sí: un valor en Redis que el filtro lee cada 30 s y un script del dueño (`scripts/despliegue/limites-modo.sh <grupo> <modo>`); reiniciar hoy cuesta 1–2 minutos de 502. B: solo por configuración y reinicio.
 7. **Q7 — MENTOR_LEAD sigue en modo sombra:** ¿lo encendemos junto con el tramo H? **A (recomendada):** sí, si el registro de sombra está limpio; es una propiedad, no código. B: dejarlo como está.
 8. **Q8 — Registro del WAF:** ¿activar el registro completo en CloudWatch Logs durante la medición (costo pequeño, con `x-auth-token`, `authorization` y `cookie` censurados)? **A (recomendada):** sí, 14 días y luego se baja a solo muestreo. B: solo métricas y muestreo.
+
+## Cambios del dueño (2026-11-11)
+
+- **D15 — Sin cuenta de servicio para el CRM.** La integración del CRM ya está hecha y queda como está: el tramo D (cuenta de solo lectura, V192, límite propio) sale del alcance. Su consumo cae en el grupo «administración» del filtro por cuenta (tramo C).
+- **D16 — Respuestas a las preguntas abiertas:** se toma la opción recomendada en Q1, Q3–Q8 (Q1 y Q2 dejan de aplicar por D15). La tabla de permisos de Mentor y Guía (tramo H) la arma la sesión principal a partir del código y del registro en sombra, y no se aplica hasta que el dueño la apruebe.
