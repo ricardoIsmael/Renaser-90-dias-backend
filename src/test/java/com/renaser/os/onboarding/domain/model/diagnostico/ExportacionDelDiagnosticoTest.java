@@ -7,6 +7,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -26,5 +28,20 @@ class ExportacionDelDiagnosticoTest {
         String actual = PlantillaDeImportacion.exportar(FichasParaLaExportacion.deSiempre());
 
         assertThat(actual.getBytes(StandardCharsets.UTF_8)).isEqualTo(Files.readAllBytes(DORADO));
+    }
+
+    // spec 050 FR-032, SC-008
+    @Test
+    @DisplayName("por filas da lo mismo: la cabecera primero y después una fila por pregunta, y juntas son el CSV de antes")
+    void porFilasEsElMismoCsv() throws IOException {
+        FichaDelDiagnostico ficha = FichasParaLaExportacion.deSiempre();
+        List<String> filas = new ArrayList<>();
+
+        PlantillaDeImportacion.exportarPorFilas(ficha, filas::add);
+
+        assertThat(filas).hasSize(1 + 6);
+        assertThat(filas.get(0)).startsWith("Sección,Clave,Pregunta,").endsWith("\r\n");
+        assertThat(filas).allSatisfy(fila -> assertThat(fila).endsWith("\r\n"));
+        assertThat(String.join("", filas).getBytes(StandardCharsets.UTF_8)).isEqualTo(Files.readAllBytes(DORADO));
     }
 }
