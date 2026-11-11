@@ -781,6 +781,30 @@ renaser:
         version: ${EVENTOS_GOOGLE_VERSION_DE_CLAVE:1}
         clave-anterior: ${EVENTOS_GOOGLE_CLAVE_ANTERIOR:}
         version-anterior: ${EVENTOS_GOOGLE_VERSION_ANTERIOR:0}
+  # Spec 050, tramo C (D-346): el limite de pedidos POR CUENTA, un filtro en Spring que cuenta en Redis por grupo de endpoints.
+  # Todos los grupos nacen en REGISTRAR: cuenta y anota «habria bloqueado» en el registro y en las metricas, pero NUNCA responde 429.
+  # Se miden dos semanas y recien despues se pasa a APLICAR grupo por grupo. El modo de un grupo se cambia SIN reiniciar con un valor en
+  # Redis (`SET proteccion:modo:<grupo> APLICAR`, o `scripts/despliegue/limites-modo.sh <grupo> <modo>`): manda sobre el de aqui y el
+  # filtro lo relee cada `cache-del-modo`. Los topes son por cuenta (por origen si no hay sesion) y de PARTIDA: se ajustan con la medicion.
+  # `por-dia` es una ventana de 24 h contada desde el primer pedido, no el dia calendario de Lima: es proteccion contra abuso, no una
+  # regla del programa (spec 050, Supuestos). Fuera del filtro, a proposito: /ws, la salud y las rutas publicas de autenticacion y
+  # alta (tienen sus limites propios, D14). Los 25 por dia de SER (renaser.renasia.limite-diario) NO cambian.
+  proteccion:
+    limites:
+      # false apaga el filtro entero (vuelta atras de emergencia): ningun grupo cuenta ni anota nada.
+      habilitado: ${PROTECCION_LIMITES_HABILITADO:true}
+      cache-del-modo: ${PROTECCION_LIMITES_CACHE_DEL_MODO:30s}
+      grupos:
+        lectura: { modo: REGISTRAR, por-minuto: 300 }
+        escritura: { modo: REGISTRAR, por-minuto: 60 }
+        muro: { modo: REGISTRAR, por-minuto: 10, por-hora: 60 }
+        chat: { modo: REGISTRAR, por-minuto: 30 }
+        subidas: { modo: REGISTRAR, por-minuto: 20, por-dia: 300 }
+        ia-fuera-de-ser: { modo: REGISTRAR, por-minuto: 5 }
+        ser: { modo: REGISTRAR, por-minuto: 10 }
+        exportaciones: { modo: REGISTRAR, por-minuto: 5 }
+        admin: { modo: REGISTRAR, por-minuto: 120 }
+        webhook-whatsapp: { modo: REGISTRAR, por-minuto: 600 }
   web:
     cors:
       origenes: ${CORS_ORIGENES:http://localhost:8081,http://localhost:19006,http://localhost:3000}
