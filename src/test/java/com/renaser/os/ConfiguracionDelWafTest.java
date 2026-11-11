@@ -138,6 +138,14 @@ class ConfiguracionDelWafTest {
     }
 
     @Test
+    @DisplayName("la descripción cumple el patrón que AWS WAF exige (sin paréntesis ni otros signos): si no, create-web-acl la rechaza")
+    void descripcionValidaParaAws() throws IOException {
+        String descripcion = plantilla().get("Description").asText();
+        assertThat(descripcion.length()).isBetween(2, 256);
+        assertThat(descripcion).matches("^[\\w+=:#@/\\-,.][\\w+=:#@/\\-,.\\s]+[\\w+=:#@/\\-,.]$");
+    }
+
+    @Test
     @DisplayName("cada regla tiene prioridad única y una métrica con su mismo nombre (pasar-regla-a-bloqueo.sh lee esa métrica)")
     void prioridadesYMetricas() throws IOException {
         Set<Integer> prioridades = new HashSet<>();

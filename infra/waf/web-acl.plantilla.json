@@ -1,7 +1,7 @@
 {
   "Name": "renaser-api",
   "Scope": "CLOUDFRONT",
-  "Description": "Proteccion de la API de Renaser (spec 050 tramo B). Todo nace en Count: se pasa a Block regla por regla, por decision del dueno.",
+  "Description": "Proteccion de la API de Renaser, spec 050 tramo B. Todo nace en Count: se pasa a Block regla por regla, por decision del dueno.",
   "DefaultAction": { "Allow": {} },
   "VisibilityConfig": {
     "SampledRequestsEnabled": true,
