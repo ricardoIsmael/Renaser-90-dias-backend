@@ -67,7 +67,7 @@ El `redis` del compose admite autenticación sin otra configuración: si `REDIS_
 `.env`, el contenedor arranca con `requirepass` y Spring usa el mismo valor. Si queda vacío, se
 mantiene el modo local sin contraseña. En producción no se debe publicar el puerto de Redis; el
 servidor y la aplicación tienen que compartir la misma credencial y, cuando el proveedor lo
-requiera, TLS (`REDIS_SSL_ENABLED=true`).
+requiera, TLS (`REDIS_SSL_ENABLED=true`). La de producción se activa con `infra/redis/contrasena.sh` (§5.3).
 
 **`JAVA_HOME` tiene que apuntar al JDK 25:**
 
@@ -499,7 +499,7 @@ producción corría `:latest` y para saber qué había adentro había que compar
 | Pieza | Valor |
 |---|---|
 | Instancia | `i-0ea00f555c5fe8028` — t3.small, Amazon Linux 2023, IP fija `52.0.210.237` |
-| Contenedores | `redis` (`redis:7-alpine`, sin puertos publicados) y `backend` (la imagen de ECR, `-p 8080:8080`), los dos en la red de Docker `renaser`. Con el modo sin corte (E-465) se suma `proxy` (nginx) en el 8080 y `backend` deja de publicar puerto |
+| Contenedores | `redis` (`redis:7-alpine`, sin puertos publicados; **con contraseña desde la spec 050**, ver «Redis con contraseña» abajo) y `backend` (la imagen de ECR, `-p 8080:8080`), los dos en la red de Docker `renaser`. Con el modo sin corte (E-465) se suma `proxy` (nginx) en el 8080 y `backend` deja de publicar puerto |
 | Rol de la instancia | `renaser-backend-ec2` — lee `/renaser/prod/*`, firma URLs de su bucket, baja de ECR, y trae `AmazonSSMManagedInstanceCore` |
 | Delante | CloudFront `E3O4M4W7JW3TJQ` (`djbooeq09skac.cloudfront.net`), hablando **HTTP** al origen |
 | Lo que **no** hay | ECS, CodeDeploy, balanceador, autoscaling |
@@ -608,6 +608,41 @@ menos de 3 GB ahora quiere decir que el disco lo ocupa otra cosa (`docker system
 > hizo: el 02-10 había 85 etiquetas de `renaser-backend` acumuladas y solo 1,8 GB libres. Las borró a mano
 > el coordinador por SSM (quedaron `d55f84d8`, `cde92c44` y `153820e9`; 3,8 GB libres) y desde entonces
 > lo hace el script.
+
+#### Redis con contraseña (spec 050, tramo A1, D-343)
+
+> **Corregido 2026-11-11 (D-343).** Esta sección y la tabla de arriba decían que el contenedor `redis` no tenía
+> autenticación (`redis:7-alpine`, solo sin puertos publicados). Seguía siendo cierto el 11/11, pero ya no es el
+> destino: Redis guarda las sesiones, y cualquier contenedor de la red `renaser` podía leerlas. El contenedor
+> `redis` sigue sin publicar puertos y ahora pasa a tener su definición en el repositorio
+> (`infra/redis/`), con contraseña.
+
+**El backend no cambió.** `application.yaml` ya lee `spring.data.redis.username` y `password` de `REDIS_USERNAME` y
+`REDIS_PASSWORD` (Parameter Store, §6.4). `RedisConContrasenaIT` prueba, contra Redis reales, que conecta con y sin
+contraseña, que `AUTH default <clave>` contra un Redis que todavía no la exige funciona y que exigirla en caliente no
+corta la conexión abierta. De ahí el orden de salida, que no deja ningún hueco:
+
+1. `infra/redis/contrasena.sh --paso parametros --aplicar` guarda `REDIS_PASSWORD` (`SecureString`, 32 bytes
+   aleatorios generados en la máquina del dueño y nunca impresos) y `REDIS_USERNAME=default`.
+2. **Se despliega el backend** (el CD de siempre): arranca con las dos variables y Redis todavía no pide nada.
+3. `infra/redis/contrasena.sh --paso exigir --aplicar` (con `--paso estado` antes para mirar): comprueba que el
+   backend arrancó **después** de guardar la clave, exige la clave en caliente (`CONFIG SET requirepass`), y la deja
+   persistente recreando el contenedor con `/opt/renaser/redis/conf/redis.conf` (permiso 600, dueño `redis`):
+   `requirepass`, `appendonly yes` y `notify-keyspace-events Egx`. Es un corte de Redis de unos segundos.
+4. Verifica: `PING` sin clave desde **otro contenedor** de la red = `NOAUTH`, con clave = `PONG`, ningún puerto
+   publicado, el mismo número de sesiones y `/actuator/health` UP. Si algo no pasa, **vuelve atrás solo**.
+
+Detalles que costaron un ensayo local (`infra/redis/ensayo-local.sh`): (a) con `appendonly yes` y sin carpeta de AOF,
+Redis arranca **vacío** y no lee `dump.rdb`, así que el RDB se convierte a AOF en un contenedor temporal antes del
+definitivo; (b) el `redis` de la imagen corre como `999:1000` y no puede leer un `redis.conf` de root con permiso 600;
+(c) `notify-keyspace-events` lo pide Spring Session con `CONFIG SET` **una sola vez, al arrancar el backend**: un
+Redis nuevo arranca sin él, por eso va en el `redis.conf`.
+
+**Vuelta atrás.** El Redis anterior no se borra: queda parado como `redis-previo` (y `--revertir` lo vuelve a
+poner, pasándole antes las sesiones de ahora). `infra/redis/contrasena.sh --revertir --aplicar`. El backend no
+necesita redespliegue: `AUTH default <clave>` contra un Redis sin clave sigue siendo válido. Pasada una semana:
+`docker rm redis-previo`. Todo el script es simulacro salvo que se le pase `--aplicar`, exige
+`RENASER_CUENTA_AWS` y `RENASER_INSTANCIA` (no están en el repositorio) y usa el perfil `prod`.
 
 #### El health check depende de que `/actuator/health` siga siendo público
 
@@ -875,8 +910,8 @@ va cifrado.
 | `DB_PASSWORD` | **SecureString** | Contraseña de Postgres |
 | `REDIS_HOST` | String | Host de Redis (sesiones, cuotas, pub/sub de chat) |
 | `REDIS_PORT` | String | Puerto de Redis |
-| `REDIS_USERNAME` | String | Usuario ACL de Redis, si el servidor lo exige |
-| `REDIS_PASSWORD` | **SecureString** | Contraseña de Redis; no dejarla en texto plano |
+| `REDIS_USERNAME` | String | Usuario ACL de Redis. En producción vale `default` (lo crea `infra/redis/contrasena.sh`, spec 050 A1) |
+| `REDIS_PASSWORD` | **SecureString** | Contraseña de Redis; no dejarla en texto plano. En producción la genera `infra/redis/contrasena.sh` (spec 050 A1) |
 | `REDIS_SSL_ENABLED` | String | `true` cuando el proveedor de Redis exige TLS; `false` para el contenedor privado local |
 | `REDIS_SESSION_NAMESPACE` | String | Namespace de Spring Session; por defecto `renaser:session:v2` |
 | `CORS_ORIGENES` | String | Orígenes permitidos, separados por coma. El default son tres `localhost` |
