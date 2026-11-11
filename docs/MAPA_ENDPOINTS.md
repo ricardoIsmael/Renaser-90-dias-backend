@@ -444,7 +444,7 @@ Solo lectura, sin constancia de consulta, `no-store`. Detalle en `specs/029-lide
 
 No hay endpoints nuevos: las escrituras de Cierra tu día (`PUT /rocks/day-closure`), Código Renaser y Mi Radar (`POST /radar`, `PUT /radar/mi-radar`), Plan (`POST /rocks/plan`,
 `POST /rocks/{id}/evidence`, `POST|PATCH /rocks/weekly…`, `PUT /rocks/master/{eje}`, `PUT /rocks/monthly/{eje}/{mes}`) y planificar hábitos y alarmas
-(`/habit-preferences/**`, `/habit-unlocks/{habitId}`, `POST /habits`) aceptan tres cabeceras opcionales: `X-Id-Cliente` (UUID del envío), `X-Hecho-En` (la hora real, ISO-8601 en UTC) y
+(`/habit-preferences/**`, `/habit-unlocks/{habitId}`, `POST /habits`) y, desde el 2026-11-11 (D-341, issue #186), la Pastilla Renacer (`POST /spirit-audio/submit`, que además suma `motivoSinPuntos`, aditivo) aceptan tres cabeceras opcionales: `X-Id-Cliente` (UUID del envío), `X-Hecho-En` (la hora real, ISO-8601 en UTC) y
 `X-Origen-De-La-Hora` (`RELOJ_DEL_SISTEMA` | `TELEFONO_CORREGIDO`). Sin ellas responden exactamente lo de siempre. Si el cambio no se aplicó, **409** con `codigo` en
 `CAMBIO_MAS_NUEVO_EN_EL_SERVIDOR`, `YA_ESTABA_HECHO`, `RECURSO_YA_NO_EXISTE`, `FUERA_DE_SU_DIA` o `MI_RADAR_NO_APLICA` y el `message` listo para mostrar. `POST /rocks/{id}/evidence` suma `motivoSinPuntos`
 (aditivo). Contrato: `docs/api/CONTRATO_DIA_A_DIA.md` («Lo hecho sin internet…»).

@@ -85,6 +85,34 @@ public final class RegistroEspiritu {
         return aTiempo;
     }
 
+    /**
+     * Spec 048 (issue #186, FR-010): entrega el resumen hecha SIN RED, con la hora real en que la persona la hizo
+     * ({@code referencia}), no con la de llegada. Las mismas reglas de {@link #entregar} corridas con esa hora:
+     * <ul>
+     *   <li>a tiempo ({@code referencia <= fechaLimite}): ENTREGADO. También si la lectura perezosa del servidor ya la había
+     *       pasado a PERDIDO porque la entrega todavía no había llegado: lo que importa es la hora en que la hizo;</li>
+     *   <li>fuera de plazo: el contenido queda guardado y el estado no cambia (PENDIENTE, o PERDIDO si ya lo estaba), igual que
+     *       con red, donde una entrega tardía deja PENDIENTE y el siguiente chequeo la pasa a PERDIDO.</li>
+     * </ul>
+     * {@code entregadoEn} y {@code actualizadoEn} quedan en {@code referencia} (la hora lógica de lo que se hizo).
+     *
+     * @return si la entrega fue a tiempo
+     * @throws IllegalStateException si ya estaba ENTREGADO: quien llama decide antes si eso es «ya estaba hecho»
+     */
+    public boolean entregarSinRed(String resumenTexto, Instant referencia) {
+        if (estado == EstadoRegistroEspiritu.ENTREGADO) {
+            throw new IllegalStateException("Este registro de espiritu ya fue entregado");
+        }
+        boolean aTiempo = !referencia.isAfter(fechaLimite);
+        this.entregadoEn = referencia;
+        this.resumenTexto = resumenTexto;
+        if (aTiempo) {
+            this.estado = EstadoRegistroEspiritu.ENTREGADO;
+        }
+        this.actualizadoEn = referencia;
+        return aTiempo;
+    }
+
     public void marcarPerdido(Instant ahora) {
         if (estado != EstadoRegistroEspiritu.PENDIENTE) {
             return; // idempotente

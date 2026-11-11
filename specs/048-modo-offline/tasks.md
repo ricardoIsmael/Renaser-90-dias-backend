@@ -140,3 +140,8 @@ responda, antes de cerrar la fase.
 ## E2E de la fase 3
 - [ ] T44 E2E en el emulador con el túnel cortado y la app reiniciada (casos 1 a 7 del plan), con el backend de la rama sobre `renaser_e2e_048`, log del backend y
       `adb logcat` revisados; flujo de Maestro de lo que se pueda (`# spec 048 FR-019`); APK del día instalado. Todo hallazgo se corrige con su issue.
+
+## Addendum #186 — la Pastilla Renacer sin señal con su hora real
+- [x] T45 Servidor: `POST /spirit-audio/submit` acepta las tres cabeceras (`PastillaSinRedService`, `RegistroEspiritu.entregarSinRed`, `CompletarPastillaRenacerUseCase.completarSinRed`); sin ellas, igual que antes.
+      `PastillaSinRedServiceTest`, `EspirituControllerSinRedTest`, `RegistroEspirituTest`, `PastillaRenacerHabitoServiceTest`, `EntregarPastillaSinRedIT`. D29, D-341, E-677.
+- [ ] T46 App: `pastillaSinRed.ts` manda las cabeceras y avisa lo no aplicado y lo sin puntos (`pastillaSinRed.test.ts`); `docs/decisiones/transversal.md`.

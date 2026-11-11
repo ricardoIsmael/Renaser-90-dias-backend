@@ -341,6 +341,14 @@ public class EspirituService implements ConsultarEstadoEspirituUseCase, Entregar
     }
 
     private ProgresoParticipanteHabits requireParticipanteHabilitado(UserId actorId) {
+        return exigirHabilitado(progresoPort, actorId);
+    }
+
+    /**
+     * La puerta de Espiritu, compartida con la entrega sin red ({@code PastillaSinRedService}, spec 048 #186): la misma regla,
+     * sin copiarla.
+     */
+    static ProgresoParticipanteHabits exigirHabilitado(ConsultarProgresoParticipanteHabitsPort progresoPort, UserId actorId) {
         ProgresoParticipanteHabits progreso = progresoPort.deParticipante(actorId)
                 .orElseThrow(() -> new NoSuchElementException("Participante no encontrado: " + actorId));
         if (progreso.suspendido()) {
