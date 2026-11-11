@@ -1,14 +1,14 @@
 package com.renaser.os.habits.application.services;
 
 import com.renaser.os.habits.application.ports.in.registro.CompletarHechoSinRedUseCase.CompletadoSinRed;
-import com.renaser.os.habits.application.ports.in.registro.CompletarHechoSinRedUseCase.HechoSinRed;
 import com.renaser.os.habits.application.ports.in.registro.CompletarHechoSinRedUseCase.MotivoSinPuntos;
-import com.renaser.os.habits.application.ports.in.registro.CompletarHechoSinRedUseCase.OrigenDeLaHora;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase.CompletarRegistroCommand;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort.ProgresoParticipanteHabits;
 import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort;
-import com.renaser.os.habits.application.ports.out.sinred.EnviosSinRedPort;
+import com.renaser.os.shared.application.ports.out.EnviosSinRedPort;
+import com.renaser.os.shared.domain.HechoSinRed;
+import com.renaser.os.shared.domain.OrigenDeLaHora;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;

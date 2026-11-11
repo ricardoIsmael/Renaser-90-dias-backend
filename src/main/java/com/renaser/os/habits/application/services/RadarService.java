@@ -104,7 +104,7 @@ public class RadarService implements RegistrarCheckInRadarUseCase, ConsultarUlti
             return deEstaHora.get();
         }
         OptionalInt prevista = HorarioDelRadar.horaPrevista(progreso.diaPrograma(), horasDeHoy, local);
-        return savePort.save(nuevoRegistro(command, ahora, prevista));
+        return savePort.save(nuevoRegistro(idGenerator, command, ahora, prevista));
     }
 
     private static void requirePuedeRegistrar(int diaPrograma, MiRadar miRadar, DiaDelRadar hoy,
@@ -122,7 +122,9 @@ public class RadarService implements RegistrarCheckInRadarUseCase, ConsultarUlti
         return hoy == null || hoy.horas().isEmpty() ? "Hoy no tienes Mi Radar" : "Mi Radar funciona de 03:00 a 23:59";
     }
 
-    private RegistroRadar nuevoRegistro(RegistrarCheckInRadarCommand command, Instant ahora, OptionalInt prevista) {
+    /** Package-private y estático: lo comparte {@code CodigoRenaserSinRedService}, que lo guarda con la hora real (spec 048). */
+    static RegistroRadar nuevoRegistro(IdGenerator idGenerator, RegistrarCheckInRadarCommand command, Instant ahora,
+                                       OptionalInt prevista) {
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD 5.4.7).
         RegistroRadar registro = RegistroRadar.registrar(RegistroRadarId.of(idGenerator.newId()),
                 command.participanteId(), command.queHago(), command.quePienso(), command.queSiento(),

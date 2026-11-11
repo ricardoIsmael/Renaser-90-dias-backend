@@ -20,6 +20,7 @@ import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.NoSuchElementException;
 
@@ -64,6 +65,11 @@ public class RocaMensualService implements ConsultarRocasMensualesUseCase, Defin
      */
     @Override
     public RocaMensual definir(DefinirRocaMensualCommand command) {
+        return definir(command, clock.now());
+    }
+
+    @Override
+    public RocaMensual definir(DefinirRocaMensualCommand command, Instant ahora) {
         ProgresoParticipanteRocks progreso = requireProgreso(command.actorId());
         if (!MesPrograma.esValido(command.numeroMes(), progreso.duracionDias())) {
             throw new IllegalArgumentException("El mes tiene que estar entre 1 y " + progreso.meses() + " (los meses de tu programa)");
@@ -75,9 +81,9 @@ public class RocaMensualService implements ConsultarRocasMensualesUseCase, Defin
 
         return guardarRocaMensualPort.guardar(
                 loadRocaMensualPort.deMaestraYMes(maestra.id(), command.numeroMes())
-                        .map(existente -> existente.redefinir(command.titulo(), meta, clock.now()))
+                        .map(existente -> existente.redefinir(command.titulo(), meta, ahora))
                         .orElseGet(() -> RocaMensual.definir(RocaMensualId.of(idGenerator.newId()),
-                                maestra.id(), command.numeroMes(), command.titulo(), meta, clock.now())));
+                                maestra.id(), command.numeroMes(), command.titulo(), meta, ahora)));
     }
 
     /**

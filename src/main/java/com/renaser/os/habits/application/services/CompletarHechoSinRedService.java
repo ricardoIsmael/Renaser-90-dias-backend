@@ -4,10 +4,11 @@ import com.renaser.os.habits.application.ports.in.registro.CompletarHechoSinRedU
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase.CompletarRegistroCommand;
 import com.renaser.os.habits.application.ports.out.participante.ConsultarProgresoParticipanteHabitsPort;
 import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPort;
-import com.renaser.os.habits.application.ports.out.sinred.EnviosSinRedPort;
 import com.renaser.os.habits.domain.model.registro.EstadoRegistro;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
+import com.renaser.os.shared.application.ports.out.EnviosSinRedPort;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.HechoSinRed;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

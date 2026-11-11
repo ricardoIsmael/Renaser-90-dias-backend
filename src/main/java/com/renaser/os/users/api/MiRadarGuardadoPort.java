@@ -22,11 +22,16 @@ public interface MiRadarGuardadoPort {
     MiRadarGuardado de(UserId participanteId);
 
     /**
-     * Reemplaza lo guardado. Sin días guarda {@code NULL} en {@code dias_mi_radar}.
+     * Reemplaza lo guardado y deja {@code mi_radar_actualizado_en = actualizadoEn} (V191, spec 048): la hora lógica de Mi Radar, que
+     * decide un choque de lo hecho sin red (la hora real en que la persona lo hizo, o la de siempre). Sin días guarda {@code NULL}
+     * en {@code dias_mi_radar}.
      *
      * @throws java.util.NoSuchElementException si la persona no tiene fila de programa
      */
-    void guardar(UserId participanteId, MiRadarGuardado guardado);
+    void guardar(UserId participanteId, MiRadarGuardado guardado, java.time.Instant actualizadoEn);
+
+    /** La hora lógica del último guardado (V191); vacío si Mi Radar nunca se tocó (se lee como «muy viejo»). */
+    java.util.Optional<java.time.Instant> actualizadoEn(UserId participanteId);
 
     /** @param dias los días de la semana que no son de fábrica */
     record MiRadarGuardado(boolean encendido, List<DiaGuardado> dias) {

@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.HashSet;
@@ -73,8 +74,14 @@ public class PlanDeLaSemanaService implements PlanDeLaSemanaUseCase {
     @Override
     @Transactional
     public void guardar(UserId actorId, HabitoId habitoId, SemanaCalendaria semana, List<CambioDeFecha> cambios) {
+        guardar(actorId, habitoId, semana, cambios, clock.now());
+    }
+
+    @Override
+    @Transactional
+    public void guardar(UserId actorId, HabitoId habitoId, SemanaCalendaria semana, List<CambioDeFecha> cambios, Instant ahora) {
         ProgresoParticipanteHabits progreso = requireProgreso(actorId);
-        LocalDate hoy = hoyDe(progreso);
+        LocalDate hoy = hoyDe(progreso, ahora);
         requireDentroDelPrograma(progreso, hoy, semana);
         Habito habito = requireAplicable(actorId, progreso, habitoId, semana);
         requireCambiosValidos(semana, cambios, hoy);
@@ -94,15 +101,21 @@ public class PlanDeLaSemanaService implements PlanDeLaSemanaUseCase {
         }
         savePreferenciaPort.borrarParaFechas(actorId, aBorrar.stream().filter(existentes::containsKey)
                 .map(fecha -> new SavePreferenciaHorarioPort.FechaABorrar(habitoId, fecha)).toList());
-        savePreferenciaPort.guardarFechasPropias(actorId, aGuardar);
+        savePreferenciaPort.guardarFechasPropias(actorId, aGuardar, ahora);
     }
 
     @Override
     @Transactional
     public void volverAlPlanDeSiempre(UserId actorId, HabitoId habitoId, SemanaCalendaria semana) {
+        volverAlPlanDeSiempre(actorId, habitoId, semana, clock.now());
+    }
+
+    @Override
+    @Transactional
+    public void volverAlPlanDeSiempre(UserId actorId, HabitoId habitoId, SemanaCalendaria semana, Instant ahora) {
         ProgresoParticipanteHabits progreso = requireProgreso(actorId);
         requireAplicable(actorId, progreso, habitoId, semana);
-        LocalDate hoy = hoyDe(progreso);
+        LocalDate hoy = hoyDe(progreso, ahora);
         LocalDate desde = semana.lunes().isAfter(hoy) ? semana.lunes() : hoy.plusDays(1);
         if (!desde.isAfter(semana.domingo())) {
             savePreferenciaPort.borrarFechasPropias(actorId, List.of(habitoId), desde, semana.domingo());
@@ -173,7 +186,11 @@ public class PlanDeLaSemanaService implements PlanDeLaSemanaUseCase {
     }
 
     private LocalDate hoyDe(ProgresoParticipanteHabits progreso) {
-        return clock.now().atZone(ZoneId.of(progreso.timezone())).toLocalDate();
+        return hoyDe(progreso, clock.now());
+    }
+
+    private static LocalDate hoyDe(ProgresoParticipanteHabits progreso, Instant ahora) {
+        return ahora.atZone(ZoneId.of(progreso.timezone())).toLocalDate();
     }
 
     private ProgresoParticipanteHabits requireProgreso(UserId participanteId) {

@@ -4,7 +4,9 @@ import com.renaser.os.habits.application.ports.in.habito.ConsultarMisHabitosUseC
 import com.renaser.os.habits.domain.model.categoria.CodigoDeCategoria;
 import com.renaser.os.habits.domain.model.habito.TipoDia;
 import com.renaser.os.habits.application.ports.in.habito.CrearHabitoPersonalUseCase;
+import com.renaser.os.habits.application.ports.in.habito.HabitoPersonalSinRedUseCase;
 import com.renaser.os.habits.application.ports.in.habito.CrearHabitoPersonalUseCase.CrearHabitoPersonalCommand;
+import com.renaser.os.shared.domain.HechoSinRed;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
@@ -33,9 +35,11 @@ public class MisHabitosController {
 
     private final ConsultarMisHabitosUseCase consultarUseCase;
     private final CrearHabitoPersonalUseCase crearUseCase;
+    private final HabitoPersonalSinRedUseCase sinRedUseCase;
 
     public MisHabitosController(ConsultarMisHabitosUseCase consultarUseCase,
-                                 CrearHabitoPersonalUseCase crearUseCase) {
+                                 CrearHabitoPersonalUseCase crearUseCase, HabitoPersonalSinRedUseCase sinRedUseCase) {
+        this.sinRedUseCase = sinRedUseCase;
         this.consultarUseCase = consultarUseCase;
         this.crearUseCase = crearUseCase;
     }
@@ -50,12 +54,13 @@ public class MisHabitosController {
 
     @RequiresPermission(Permission.USE_APP)
     @PostMapping
-    public ResponseEntity<MiHabitoResponse> crear(@ActorAutenticado UserId actor,
+    public ResponseEntity<MiHabitoResponse> crear(@ActorAutenticado UserId actor, HechoSinRed sinRed,
                                                     @RequestBody @Valid CreatePersonalHabitRequest request) {
         var comando = new CrearHabitoPersonalCommand(actor, request.title(), request.habitType().toDomain(),
                 CodigoDeCategoria.aClave(request.category()), request.template(), request.goalLabel(), request.iconKey(),
                 request.triggerTime(), request.limitTime(), request.activeWeekdays());
-        var habito = crearUseCase.crear(comando);
+        // Spec 048 (FR-019): con X-Id-Cliente y X-Hecho-En es idempotente por envío; sin ellas, lo de siempre.
+        var habito = sinRed == null ? crearUseCase.crear(comando) : sinRedUseCase.crear(comando, sinRed);
         // El horario del catalogo sigue siendo TODOS; los dias que corre de verdad son los que
         // eligio el aprendiz, y el comando ya resolvio el default de "todos" cuando no manda nada.
         return ResponseEntity.status(HttpStatus.CREATED)

@@ -42,12 +42,23 @@ public class EvaluacionDelDiaService implements EvaluacionDelDiaPort {
     @Override
     @Transactional
     public MarcaDeCierre dejarCerrado(UserId participanteId, LocalDate fecha, String nota) {
-        Instant ahora = clock.now();
+        return dejarCerrado(participanteId, fecha, nota, clock.now());
+    }
+
+    @Override
+    @Transactional
+    public MarcaDeCierre dejarCerrado(UserId participanteId, LocalDate fecha, String nota, Instant ahora) {
         EntradaDiario entrada = cargar.porParticipanteFechaYTipo(participanteId, fecha, TIPO)
                 .map(existente -> conLaNota(existente, nota, ahora))
                 .orElseGet(() -> EntradaDiario.escribir(EntradaDiarioId.of(idGenerator.newId()), participanteId, fecha,
                         TIPO, nota, ahora));
         return aMarca(guardar.save(entrada));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.Optional<Instant> actualizadoEn(UserId participanteId, LocalDate fecha) {
+        return cargar.porParticipanteFechaYTipo(participanteId, fecha, TIPO).map(EntradaDiario::actualizadoEn);
     }
 
     @Override

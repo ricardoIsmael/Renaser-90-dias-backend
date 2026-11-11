@@ -10,6 +10,8 @@ import com.renaser.os.habits.application.ports.in.registro.SolicitarUrlEvidencia
 import com.renaser.os.habits.application.ports.in.registro.SubirEvidenciaRegistroUseCase;
 import com.renaser.os.habits.application.ports.in.registro.SubirEvidenciaRegistroUseCase.SubirEvidenciaRegistroCommand;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
+import com.renaser.os.shared.domain.HechoSinRed;
+import com.renaser.os.shared.domain.OrigenDeLaHora;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
@@ -110,7 +112,7 @@ public class HabitTrackController {
                 request.calificacionProductividad(), request.valorMedido());
         if (request.hechoSinRed()) {
             // Spec 048: lo marcado sin red, con su hora real. Nunca rebota por llegar tarde (D14).
-            var hecho = completarHechoSinRedUseCase.completar(command, new CompletarHechoSinRedUseCase.HechoSinRed(
+            var hecho = completarHechoSinRedUseCase.completar(command, new HechoSinRed(
                     request.hechoEn(), request.idCliente(), origenDe(request.origenDeLaHora())));
             return RegistroHabitoResponse.from(hecho.registro(),
                     hecho.motivoSinPuntos() == null ? null : hecho.motivoSinPuntos().name());
@@ -154,11 +156,11 @@ public class HabitTrackController {
     }
 
     /** Un valor desconocido no rebota (D14): se toma como el menos confiable. */
-    private static CompletarHechoSinRedUseCase.OrigenDeLaHora origenDe(String valor) {
+    private static OrigenDeLaHora origenDe(String valor) {
         try {
-            return valor == null ? null : CompletarHechoSinRedUseCase.OrigenDeLaHora.valueOf(valor);
+            return valor == null ? null : OrigenDeLaHora.valueOf(valor);
         } catch (IllegalArgumentException desconocido) {
-            return CompletarHechoSinRedUseCase.OrigenDeLaHora.TELEFONO_CORREGIDO;
+            return OrigenDeLaHora.TELEFONO_CORREGIDO;
         }
     }
 }

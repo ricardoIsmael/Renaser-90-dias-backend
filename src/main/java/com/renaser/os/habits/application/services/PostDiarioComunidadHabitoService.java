@@ -13,6 +13,7 @@ import com.renaser.os.habits.application.ports.out.registro.LoadRegistroHabitoPo
 import com.renaser.os.habits.domain.model.habito.Habito;
 import com.renaser.os.habits.domain.model.registro.RegistroHabito;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.HechoSinRed;
 import com.renaser.os.shared.domain.UserId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -182,7 +183,7 @@ public class PostDiarioComunidadHabitoService implements CerrarPostDiarioComunid
         }
         UUID idDelEnvio = UUID.nameUUIDFromBytes(("post-diario-sin-red:" + publicacionId).getBytes(StandardCharsets.UTF_8));
         var resultado = completarHechoSinRed.completar(new CompletarRegistroCommand(autorId, registro.get().id(), null, null),
-                new CompletarHechoSinRedUseCase.HechoSinRed(hechoEn, idDelEnvio, null));
+                new HechoSinRed(hechoEn, idDelEnvio, null));
         log.info("[offline] post diario del {} de {} (publicacion {} escrita sin red): {}", diaReal, autorId, publicacionId,
                 resultado.motivoSinPuntos() == null ? "en regla" : resultado.motivoSinPuntos());
     }

@@ -34,8 +34,13 @@ class MiRadarPersistenceAdapter implements LoadMiRadarPort, SaveMiRadarPort {
     }
 
     @Override
-    public void guardar(UserId participanteId, MiRadar miRadar) {
+    public java.util.Optional<java.time.Instant> actualizadoEn(UserId participanteId) {
+        return guardado.actualizadoEn(participanteId);
+    }
+
+    @Override
+    public void guardar(UserId participanteId, MiRadar miRadar, java.time.Instant actualizadoEn) {
         guardado.guardar(participanteId, new MiRadarGuardado(miRadar.encendido(), miRadar.dias().stream()
-                .map(dia -> new DiaGuardado(dia.dia(), dia.modo().name(), dia.veces(), dia.sinRadar())).toList()));
+                .map(dia -> new DiaGuardado(dia.dia(), dia.modo().name(), dia.veces(), dia.sinRadar())).toList()), actualizadoEn);
     }
 }

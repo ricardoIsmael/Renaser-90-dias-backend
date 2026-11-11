@@ -52,6 +52,10 @@ public interface SavePreferenciaHorarioPort {
     void fijarRecordatorioParaDiaSemana(UserId participanteId, HabitoId habitoId, DayOfWeek diaSemana,
                                         RecordatorioDelDia recordatorio);
 
+    /** Lo mismo dejando {@code actualizado_en} en {@code ahora} (spec 048: la hora real de lo hecho sin red decide los choques). */
+    void fijarRecordatorioParaDiaSemana(UserId participanteId, HabitoId habitoId, DayOfWeek diaSemana,
+                                        RecordatorioDelDia recordatorio, java.time.Instant ahora);
+
     /**
      * Pone como suena la alarma de ese dia de la semana CONSERVANDO su hora y su aviso (spec 009, D-283).
      * {@code null} o un ajuste vacio la devuelve a heredar la general; si la fila queda encendida sin hora,
@@ -61,6 +65,10 @@ public interface SavePreferenciaHorarioPort {
     void fijarAlarmaParaDiaSemana(UserId participanteId, HabitoId habitoId, DayOfWeek diaSemana,
                                   AjusteDeAlarma alarma);
 
+    /** Lo mismo dejando {@code actualizado_en} en {@code ahora} (spec 048). */
+    void fijarAlarmaParaDiaSemana(UserId participanteId, HabitoId habitoId, DayOfWeek diaSemana,
+                                  AjusteDeAlarma alarma, java.time.Instant ahora);
+
     /** Borra la hora de ese dia: vuelve a regirse por el horario general. Idempotente. */
     void borrarParaDiaSemana(UserId participanteId, HabitoId habitoId, DayOfWeek diaSemana);
 
@@ -69,6 +77,9 @@ public interface SavePreferenciaHorarioPort {
      * transaccion de quien lo llama: todo o nada.
      */
     void guardarFechasPropias(UserId participanteId, Collection<FechaPropia> filas);
+
+    /** Lo mismo dejando {@code actualizado_en} (y {@code creado_en} de las nuevas) en {@code ahora} (spec 048). */
+    void guardarFechasPropias(UserId participanteId, Collection<FechaPropia> filas, java.time.Instant ahora);
 
     /**
      * Spec 028: borra las fechas propias de la persona entre esas dos fechas (inclusive): las de los habitos dados o, con la coleccion
