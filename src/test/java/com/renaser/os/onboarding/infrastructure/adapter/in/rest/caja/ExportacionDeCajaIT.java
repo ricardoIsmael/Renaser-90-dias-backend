@@ -147,14 +147,17 @@ class ExportacionDeCajaIT {
     }
 
     private static long memoriaViva() {
-        for (int i = 0; i < 2; i++) {
-            System.gc();
-        }
+        System.gc();
         Runtime r = Runtime.getRuntime();
         return r.totalMemory() - r.freeMemory();
     }
 
-    /** Muestrea la memoria VIVA (después de un GC) cada 150 ms mientras corre {@code descarga}; devuelve el pico. */
+    /**
+     * Muestrea la memoria VIVA (después de un GC) cada 2 s mientras corre {@code descarga}; devuelve el pico. No más seguido:
+     * en la suite completa el montón ya trae casi 2 GB de contextos cacheados y un GC completo cada 150 ms frenaba la descarga
+     * hasta 100 s (cerca de los 120 s del tope asíncrono); lo que se busca, lo que se junta mientras dura la descarga,
+     * dura mucho más que 2 s.
+     */
     private long picoDeMemoriaViva(Runnable descarga) throws InterruptedException {
         AtomicLong pico = new AtomicLong(memoriaViva());
         AtomicBoolean terminada = new AtomicBoolean(false);
@@ -162,7 +165,7 @@ class ExportacionDeCajaIT {
             while (!terminada.get()) {
                 pico.accumulateAndGet(memoriaViva(), Math::max);
                 try {
-                    Thread.sleep(150);
+                    Thread.sleep(2_000);
                 } catch (InterruptedException e) {
                     return;
                 }
