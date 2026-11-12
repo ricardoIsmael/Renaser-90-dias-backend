@@ -10,6 +10,12 @@ spring:
   threads:
     virtual:
       enabled: true
+  # Spec 050 tramo F (D-348): espeja el bloque de main. Una descarga CSV en streaming (StreamingResponseBody) es una respuesta
+  # ASINCRONA de MVC y vive bajo este tope: sin esto la suite corria con el de Tomcat (30 s) y ExportacionDeCajaIT, que baja
+  # 20.000 aprendices, se cortaba (AsyncRequestTimeoutException) cuando la maquina estaba ocupada. Produccion usa 120 s.
+  mvc:
+    async:
+      request-timeout: 120s
   # Espeja el bloque de main. Sin esto la suite entera no arranca: este archivo REEMPLAZA a
   # src/main/resources/application.yaml (mismo nombre, gana el de test), asi que la clave de
   # main no llega aca, y `ParameterStoreAutoConfiguration` es @ConditionalOnProperty con

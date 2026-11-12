@@ -28,5 +28,24 @@
     "motivo": "Sin deuda: los mensajes de error sin tildes se arreglaron en #104 (issue #95). Queda la lista vacía para que el chequeo frene uno nuevo.",
     "issue": "https://github.com/ricardoIsmael/Renaser-90-dias-backend/issues/95",
     "porArchivo": {}
+  },
+  "tamanoSinPaginaAcotada": {
+    "fecha": "2026-11-11",
+    "motivo": "Controllers que ya existían cuando nació el chequeo (spec 050, tramo F; FR-034). Ninguno está sin tope: el inventario del 11/11 comprobó que su caso de uso o su servicio ya recorta o rechaza el tamaño (200 o menos). Pasarlos por PaginaAcotada es mecánico pero cambia, según la lista, un recorte en silencio por un 400 (o al revés) y la app puede depender de ello: se hace lista por lista, borrando su línea de aquí. Los tres que el tramo F tocó (Caja, Personas del programa y la consola de Soporte TI) ya pasan por PaginaAcotada.",
+    "archivos": [
+      "src/main/java/com/renaser/os/calendar/infrastructure/adapter/in/rest/evento/AudienciaController.java",
+      "src/main/java/com/renaser/os/chat/infrastructure/adapter/in/rest/conversacion/ConversacionController.java",
+      "src/main/java/com/renaser/os/chat/infrastructure/adapter/in/rest/conversacion/ConversacionSoporteController.java",
+      "src/main/java/com/renaser/os/chat/infrastructure/adapter/in/rest/conversacion/ParticipantesDelChatController.java",
+      "src/main/java/com/renaser/os/chat/infrastructure/adapter/in/rest/mensaje/MensajeController.java",
+      "src/main/java/com/renaser/os/chat/infrastructure/adapter/in/rest/miembro/MiembroController.java",
+      "src/main/java/com/renaser/os/community/infrastructure/adapter/in/rest/celula/AprendicesDelGrupoController.java",
+      "src/main/java/com/renaser/os/leadership/infrastructure/adapter/in/rest/HabitosDeTodosController.java",
+      "src/main/java/com/renaser/os/onboarding/infrastructure/adapter/in/rest/pagos/CuotasDeTodosAdminController.java",
+      "src/main/java/com/renaser/os/rag/infrastructure/adapter/in/rest/conversacion/RenasiaController.java",
+      "src/main/java/com/renaser/os/users/infrastructure/adapter/in/rest/accountrequest/AccountRequestController.java",
+      "src/main/java/com/renaser/os/users/infrastructure/adapter/in/rest/admin/StaffAdminController.java",
+      "src/main/java/com/renaser/os/users/infrastructure/adapter/in/rest/admin/TraineeAdminController.java"
+    ]
   }
 }

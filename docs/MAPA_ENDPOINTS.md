@@ -461,3 +461,25 @@ se ajustan con la medición. Quedan fuera `/ws`, la salud y las rutas públicas 
 `Retry-After` (segundos enteros, ≥ 1) y el sobre de siempre más el código: `{"message":"Espera un momento y vuelve a intentarlo.","timestamp":"…","codigo":"DEMASIADOS_PEDIDOS"}`. El cuerpo
 no dice el grupo ni el tope. Una app que no conoce el `codigo` muestra el `message` como cualquier error; la que sí lo conoce reintenta lo pendiente después de `Retry-After` sin perderlo
 (app: `apiClient.ts` y la cola sin red). Cómo se cambia el modo y se mide: `docs/DESPLIEGUE_Y_CI.md` §5.5.
+## Los topes de las listas y las descargas en streaming (spec 050, tramo F, D-348, 2026-11-11)
+
+Todo parámetro de tamaño de página de un controller se acota en **un solo lugar**, `shared.domain.PaginaAcotada` (`scripts/reglas-de-codigo.test.mjs` rompe el build si un controller nuevo recibe un `size`, `limit` o `tamano` sin pasar por ella). **Estricta** = fuera de rango es un **400** con el motivo (`size debe estar entre 1 y N`, `page no puede ser negativa`), como `GET /admin/pagos/cuotas`; **recorta** = se lleva al máximo en silencio (lo que esas listas ya hacían: no cambia nada para la app). Ninguna lista queda sin tope: el inventario del 11/11 comprobó el de cada una.
+
+| Lista | Máximo | Pasado el máximo | Dónde se acota |
+|---|---|---|---|
+| `GET /admin/caja` | 200 | recorta | controller (`PaginaAcotada.recortada`) |
+| `GET /leadership/people` (Personas del programa) | 100 | **400** | controller y caso de uso (`PaginaAcotada.estricta`) |
+| `GET /soporte-ti/auditoria` (consola de Soporte TI) | 100 | **400** *(antes recortaba)* | controller (`PaginaAcotada.estricta`) |
+| `GET /admin/pagos/cuotas` | 200 | **400** | caso de uso |
+| `GET /admin/trainees`, `/admin/staff`, `/account-requests` | 200 | **400** | caso de uso |
+| `GET /leadership/habits/{id}/people` | 100 | recorta | servicio |
+| `GET /chat/conversations/{id}/participants` | 200 | recorta | servicio |
+| `GET /chat/conversations/{id}/messages`, `/chat/members`, `/chat/global/members` | 100 | recorta (`≤ 0` = 30) | servicio |
+| `GET /chat/support-conversations` | 50 | recorta | servicio |
+| `GET /calendar/audience/people` | 50 | recorta (`≤ 0` = 30) | servicio |
+| `GET /mentor/groups/{id}/learners` | 100 | recorta | servicio |
+| `GET /renasia/mensajes` | 100 | recorta (`≤ 0` = 30) | servicio |
+
+Las doce últimas filas siguen acotadas donde ya lo estaban (`tamanoSinPaginaAcotada` en `scripts/reglas-de-codigo-excepciones.json`); pasarlas por `PaginaAcotada` se hace lista por lista, y la lista de excepciones solo se achica.
+
+**Descargas CSV en streaming.** `GET /admin/caja/export.csv` y `GET /admin/diagnostico/exportar.csv` responden `200` con el cuerpo en `Transfer-Encoding: chunked` (**sin `Content-Length`**): el BOM y la cabecera salen primero y las filas después, por lotes. El contenido, las columnas y el orden son los de siempre (se compara byte a byte con un archivo dorado). **El guard de ADMIN pasa antes del primer byte**: un rechazo sigue siendo un `403` en JSON con su motivo. Si algo falla a mitad, la conexión se corta y el archivo llega incompleto (no como uno bueno). La Caja deriva el estado de cada aprendiz (no hay columna: «derivar, no guardar», Q4 = A), así que cada descarga recorre el padrón por lotes de 200 y guarda solo un índice mínimo por aprendiz; las cajas completas se arman por lote. El costo medido está en D-348 (`docs/MODULOS_A_AVANZAR.md`).
