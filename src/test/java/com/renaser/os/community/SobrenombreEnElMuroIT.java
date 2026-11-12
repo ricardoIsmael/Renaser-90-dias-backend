@@ -21,6 +21,7 @@ import com.renaser.os.community.domain.model.publicacion.TipoReaccion;
 import com.renaser.os.community.domain.model.sobrenombre.SobrenombreRechazadoException;
 import com.renaser.os.community.domain.model.sobrenombre.SobrenombreRechazadoException.Motivo;
 import com.renaser.os.shared.domain.Formacion;
+import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -163,6 +164,35 @@ class SobrenombreEnElMuroIT {
         assertThatThrownBy(() -> mio.elegir(beto, "El Tigre")).isInstanceOf(SobrenombreRechazadoException.class);
         assertThat(admin.cambiar(administracion, ana, null, "Pedido de la persona")).isNull();
         assertThat(vista(beto, publicacion(ana)).autorNombre()).startsWith("Ana Pérez");
+    }
+
+    @Test
+    @DisplayName("spec 046 FR-005, FR-006 (D-349): solo ADMIN y ALCHEMIST administran; el mentor y la guía reciben 403 y no cambian nada")
+    void soloModeranAdministran() {
+        String apodo = "Cóndor " + ana.value().toString().substring(0, 6);
+        mio.elegir(ana, apodo);
+        UserId guia = usuario("GUIA_APRENDIZ", "Guía " + ana.value().toString().substring(0, 6));
+        UserId alquimista = usuario("ALQUIMISTA", "Alquimista " + ana.value().toString().substring(0, 6));
+
+        for (UserId quien : List.of(mentor, guia)) {
+            assertThatThrownBy(() -> admin.de(quien, ana)).isInstanceOf(NotAuthorizedException.class);
+            assertThatThrownBy(() -> admin.cambiar(quien, ana, "Otro " + ana.value().toString().substring(0, 6), "Sin ser moderador"))
+                    .isInstanceOf(NotAuthorizedException.class);
+            assertThatThrownBy(() -> admin.cambiar(quien, ana, null, "Sin ser moderador")).isInstanceOf(NotAuthorizedException.class);
+            assertThatThrownBy(() -> admin.listar(quien, "")).isInstanceOf(NotAuthorizedException.class);
+            assertThatThrownBy(() -> admin.palabras(quien)).isInstanceOf(NotAuthorizedException.class);
+            assertThatThrownBy(() -> admin.agregarPalabra(quien, "tigre")).isInstanceOf(NotAuthorizedException.class);
+            assertThatThrownBy(() -> admin.quitarPalabra(quien, "tigre")).isInstanceOf(NotAuthorizedException.class);
+        }
+        // nada cambió: el sobrenombre sigue, la lista de palabras sigue vacía y no quedó constancia de ningún cambio ajeno
+        assertThat(mio.mio(ana).sobrenombre()).isEqualTo(apodo);
+        assertThat(admin.palabras(administracion).deAdministracion()).doesNotContain("tigre");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM renaser.sobrenombres_cambios WHERE usuario_id = ? AND por <> usuario_id",
+                Integer.class, ana.value())).isZero();
+        // y quienes moderan siguen pudiendo
+        assertThat(admin.de(administracion, ana)).isEqualTo(apodo);
+        assertThat(admin.de(alquimista, ana)).isEqualTo(apodo);
+        assertThat(admin.listar(alquimista, "")).anyMatch(f -> f.persona().equals(ana));
     }
 
     private PublicacionVista vista(UserId visor, PublicacionId id) {

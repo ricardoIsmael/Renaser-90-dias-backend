@@ -26,12 +26,16 @@ import java.util.UUID;
 
 /**
  * Spec 046 (D-331): Administración y Alquimista ({@code MODERATE_WALL}) ven, cambian y quitan sobrenombres, y editan las palabras
- * prohibidas. Cambiar o quitar pide un motivo (queda en la constancia; a la persona se le avisa sin él, D7).
+ * prohibidas. Cambiar o quitar pide un motivo (queda en la constancia; a la persona se le avisa sin él, D7). Solo ellos: el servicio
+ * exige ser moderador del Muro (ADMIN o ALCHEMIST activos).
  */
 @RestController
 @RequestMapping("/api/v1/admin")
 @Funcionalidad("muro")
 public class SobrenombresAdminController {
+
+    /** Lo que el servicio sigue exigiendo además del permiso: quien modera el Muro (ADMIN o ALCHEMIST activos). */
+    private static final String ALCANCE = "SobrenombreService.exigirModerador: solo ADMIN o ALCHEMIST activos";
 
     private final AdministrarSobrenombresUseCase sobrenombres;
 
@@ -39,7 +43,7 @@ public class SobrenombresAdminController {
         this.sobrenombres = sobrenombres;
     }
 
-    @RequiresPermission(Permission.MODERATE_WALL)
+    @RequiresPermission(value = Permission.MODERATE_WALL, scope = ALCANCE)
     @GetMapping("/sobrenombres")
     public List<FilaResponse> listar(@ActorAutenticado UserId actor, @RequestParam(name = "q", required = false) String buscar) {
         return sobrenombres.listar(actor, buscar).stream()
@@ -47,38 +51,38 @@ public class SobrenombresAdminController {
                 .toList();
     }
 
-    @RequiresPermission(Permission.MODERATE_WALL)
+    @RequiresPermission(value = Permission.MODERATE_WALL, scope = ALCANCE)
     @GetMapping("/personas/{id}/sobrenombre")
     public SobrenombreDePersonaResponse de(@ActorAutenticado UserId actor, @PathVariable UUID id) {
         return new SobrenombreDePersonaResponse(sobrenombres.de(actor, UserId.of(id)));
     }
 
-    @RequiresPermission(Permission.MODERATE_WALL)
+    @RequiresPermission(value = Permission.MODERATE_WALL, scope = ALCANCE)
     @PutMapping("/personas/{id}/sobrenombre")
     public SobrenombreDePersonaResponse cambiar(@ActorAutenticado UserId actor, @PathVariable UUID id,
                                                @Valid @RequestBody CambiarRequest request) {
         return new SobrenombreDePersonaResponse(sobrenombres.cambiar(actor, UserId.of(id), request.sobrenombre(), request.motivo()));
     }
 
-    @RequiresPermission(Permission.MODERATE_WALL)
+    @RequiresPermission(value = Permission.MODERATE_WALL, scope = ALCANCE)
     @DeleteMapping("/personas/{id}/sobrenombre")
     public SobrenombreDePersonaResponse quitar(@ActorAutenticado UserId actor, @PathVariable UUID id, @RequestParam String motivo) {
         return new SobrenombreDePersonaResponse(sobrenombres.cambiar(actor, UserId.of(id), null, motivo));
     }
 
-    @RequiresPermission(Permission.MODERATE_WALL)
+    @RequiresPermission(value = Permission.MODERATE_WALL, scope = ALCANCE)
     @GetMapping("/sobrenombres/palabras-prohibidas")
     public PalabrasResponse palabras(@ActorAutenticado UserId actor) {
         return PalabrasResponse.from(sobrenombres.palabras(actor));
     }
 
-    @RequiresPermission(Permission.MODERATE_WALL)
+    @RequiresPermission(value = Permission.MODERATE_WALL, scope = ALCANCE)
     @PostMapping("/sobrenombres/palabras-prohibidas")
     public PalabrasResponse agregar(@ActorAutenticado UserId actor, @Valid @RequestBody PalabraRequest request) {
         return PalabrasResponse.from(sobrenombres.agregarPalabra(actor, request.palabra()));
     }
 
-    @RequiresPermission(Permission.MODERATE_WALL)
+    @RequiresPermission(value = Permission.MODERATE_WALL, scope = ALCANCE)
     @DeleteMapping("/sobrenombres/palabras-prohibidas/{palabra}")
     public PalabrasResponse quitarPalabra(@ActorAutenticado UserId actor, @PathVariable String palabra) {
         return PalabrasResponse.from(sobrenombres.quitarPalabra(actor, palabra));
