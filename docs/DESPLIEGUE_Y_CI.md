@@ -706,6 +706,29 @@ ECS es el camino natural, y la imagen ya está lista para eso: es multi-arquitec
 usuario sin privilegios, y toma su configuración de Parameter Store (§6) en vez de variables
 cableadas.
 
+#### AWS WAF en CloudFront (spec 050, tramo B, D-345)
+
+La API no tenía ningún límite por IP en el borde: CloudFront (con cabeceras de seguridad administradas) y nginx
+transparente reenviaban todo a Spring. Un Web ACL de AWS WAF delante de la distribución corta el exceso **antes** de que
+llegue a la instancia: dos reglas por tasa por IP (**2.000 pedidos en 5 minutos** en toda la API y **300 en 5 minutos** en
+`/api/v1/auth/`) y los grupos administrados de AWS «Common», «Known bad inputs» e «IP reputation».
+
+- **Todo nace en `Count`**: cuenta y deja pasar. El dueño asocia el Web ACL, mira siete días de métricas y muestras y pasa a
+  `Block` **regla por regla** (primero las dos por tasa y la reputación de IP; los otros dos grupos solo sin falsos positivos).
+  Las reglas por tasa, bloqueando, responden **429** con `Retry-After` y `{"message":"Espera un momento y vuelve a intentarlo.",
+  "codigo":"DEMASIADOS_PEDIDOS"}`, el mismo contrato que nginx y el filtro por cuenta de Spring.
+- **Un falso positivo de un grupo se resuelve excluyendo esa regla por nombre** (con su motivo y su fecha en la plantilla,
+  `Renaser.Excepciones`), nunca apagando el grupo. El cuerpo largo de un texto libre (Muro, diario, transcripciones) es el
+  candidato conocido: por eso se mira antes en `Count`.
+- **Registro**: CloudWatch Logs `aws-waf-logs-renaser`, 14 días, con `x-auth-token`, `authorization` y `cookie` censurados (el WAF
+  no guarda el cuerpo). Costo aproximado: del orden de US$ 10 al mes.
+- **Todo por scripts del dueño en `infra/waf/`** (simulacro por omisión, perfil `prod`, cuenta verificada, respaldo antes de
+  cambiar, vuelta atrás que quita solo lo suyo): `crear-web-acl.sh`, `asociar-web-acl.sh`, `pasar-regla-a-bloqueo.sh`
+  (`--aplicar-bloqueo` es su propia bandera) y `ensayo-local.sh`. Los comandos en orden, los permisos de AWS que hacen falta y lo
+  que se probó y lo que no: `infra/waf/README.md`. El esquema de la plantilla lo valida AWS en el simulacro (`check-capacity`).
+- **Cuidado con el orden de las IP**: el WAF cuenta por la IP de la conexión que ve CloudFront (la del visitante); nginx contará por
+  la IP del cliente que resuelva el cambio D1 (rama `ip-real-del-cliente`).
+
 ### 5.4 Observabilidad: Prometheus y Grafana (D-237, 2026-10-01)
 
 **Qué hay.** El backend publica sus métricas en formato Prometheus (`micrometer-registry-prometheus`)

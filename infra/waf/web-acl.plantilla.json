@@ -1,0 +1,96 @@
+{
+  "Name": "renaser-api",
+  "Scope": "CLOUDFRONT",
+  "Description": "Proteccion de la API de Renaser, spec 050 tramo B. Todo nace en Count: se pasa a Block regla por regla, por decision del dueno.",
+  "DefaultAction": { "Allow": {} },
+  "VisibilityConfig": {
+    "SampledRequestsEnabled": true,
+    "CloudWatchMetricsEnabled": true,
+    "MetricName": "renaser-api"
+  },
+  "CustomResponseBodies": {
+    "demasiados-pedidos": {
+      "ContentType": "APPLICATION_JSON",
+      "Content": "{\"message\":\"Espera un momento y vuelve a intentarlo.\",\"codigo\":\"DEMASIADOS_PEDIDOS\"}"
+    }
+  },
+  "Rules": [
+    {
+      "Name": "limite-auth",
+      "Priority": 0,
+      "Statement": {
+        "RateBasedStatement": {
+          "Limit": 300,
+          "EvaluationWindowSec": 300,
+          "AggregateKeyType": "IP",
+          "ScopeDownStatement": {
+            "RegexMatchStatement": {
+              "RegexString": "^/api/v1/auth/",
+              "FieldToMatch": { "UriPath": {} },
+              "TextTransformations": [ { "Priority": 0, "Type": "NONE" } ]
+            }
+          }
+        }
+      },
+      "Action": { "Count": {} },
+      "VisibilityConfig": { "SampledRequestsEnabled": true, "CloudWatchMetricsEnabled": true, "MetricName": "limite-auth" }
+    },
+    {
+      "Name": "limite-global",
+      "Priority": 1,
+      "Statement": {
+        "RateBasedStatement": {
+          "Limit": 2000,
+          "EvaluationWindowSec": 300,
+          "AggregateKeyType": "IP"
+        }
+      },
+      "Action": { "Count": {} },
+      "VisibilityConfig": { "SampledRequestsEnabled": true, "CloudWatchMetricsEnabled": true, "MetricName": "limite-global" }
+    },
+    {
+      "Name": "reputacion-de-ip",
+      "Priority": 2,
+      "Statement": {
+        "ManagedRuleGroupStatement": { "VendorName": "AWS", "Name": "AWSManagedRulesAmazonIpReputationList" }
+      },
+      "OverrideAction": { "Count": {} },
+      "VisibilityConfig": { "SampledRequestsEnabled": true, "CloudWatchMetricsEnabled": true, "MetricName": "reputacion-de-ip" }
+    },
+    {
+      "Name": "entradas-conocidas-como-malas",
+      "Priority": 3,
+      "Statement": {
+        "ManagedRuleGroupStatement": { "VendorName": "AWS", "Name": "AWSManagedRulesKnownBadInputsRuleSet" }
+      },
+      "OverrideAction": { "Count": {} },
+      "VisibilityConfig": { "SampledRequestsEnabled": true, "CloudWatchMetricsEnabled": true, "MetricName": "entradas-conocidas-como-malas" }
+    },
+    {
+      "Name": "reglas-comunes",
+      "Priority": 4,
+      "Statement": {
+        "ManagedRuleGroupStatement": { "VendorName": "AWS", "Name": "AWSManagedRulesCommonRuleSet" }
+      },
+      "OverrideAction": { "Count": {} },
+      "VisibilityConfig": { "SampledRequestsEnabled": true, "CloudWatchMetricsEnabled": true, "MetricName": "reglas-comunes" }
+    }
+  ],
+  "Renaser": {
+    "RegistroDeCloudWatch": {
+      "GrupoDeRegistros": "aws-waf-logs-renaser",
+      "RetencionEnDias": 14,
+      "CabecerasCensuradas": [ "x-auth-token", "authorization", "cookie" ]
+    },
+    "AccionDeBloqueoPorTasa": {
+      "Block": {
+        "CustomResponse": {
+          "ResponseCode": 429,
+          "CustomResponseBodyKey": "demasiados-pedidos",
+          "ResponseHeaders": [ { "Name": "Retry-After", "Value": "60" } ]
+        }
+      }
+    },
+    "Excepciones": []
+  }
+}
