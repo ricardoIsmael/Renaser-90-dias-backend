@@ -84,6 +84,9 @@ public interface ConsultarAgendaHabitosPort {
         /** La Clase diaria se cierra con su resumen, nunca por el camino generico ni con una foto. */
         public static final String CLAVE_CLASE_DIARIA = "DAILY_CLASS";
 
+        /** La Pastilla Renacer: la cierra la entrega del resumen de Espiritu, no el camino generico (issue #99 de la app). */
+        public static final String CLAVE_PASTILLA_RENACER = "PASTILLA_RENACER";
+
         /** Los tres RITUAL TIERRA - AGUA - FUEGO (V69): los unicos que preguntan "¿Que sentiste?" (D-172). */
         public static final java.util.Set<String> CLAVES_DE_RITUAL =
                 java.util.Set.of("RITUAL_MORNING", "RITUAL_MIDDAY", "RITUAL_NIGHT");

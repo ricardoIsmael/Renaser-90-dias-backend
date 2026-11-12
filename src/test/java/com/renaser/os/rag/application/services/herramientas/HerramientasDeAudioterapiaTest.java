@@ -127,7 +127,7 @@ class HerramientasDeAudioterapiaTest {
     // ─── la confirmable ────────────────────────────────────────────────────────────────────
 
     private final EntregarResumenAudioterapiaConfirmable confirmable =
-            new EntregarResumenAudioterapiaConfirmable(audioterapia);
+            new EntregarResumenAudioterapiaConfirmable(audioterapia, mock(com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort.class));
     private static final InvocacionHerramienta PROPUESTA = new InvocacionHerramienta(
             PropuestaDeResumenAudioterapia.NOMBRE, Map.of("texto", TEXTO, "registro_id", REGISTRO.toString()));
 

@@ -43,7 +43,7 @@ class ClaseDeHoyHerramientasTest {
     private final ProponerAccionUseCase proponerAccion = mock(ProponerAccionUseCase.class);
     private final ConsultarClaseDeHoyHerramienta consultar = new ConsultarClaseDeHoyHerramienta(puerto);
     private final PropuestaDeEntregarClaseDeHoy proponer = new PropuestaDeEntregarClaseDeHoy(puerto, proponerAccion);
-    private final EntregarClaseDeHoyConfirmable confirmable = new EntregarClaseDeHoyConfirmable(puerto);
+    private final EntregarClaseDeHoyConfirmable confirmable = new EntregarClaseDeHoyConfirmable(puerto, mock(com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort.class));
 
     private static ClaseDeHoy disponible(int dia, String leccionId, boolean vista) {
         return new ClaseDeHoy(EstadoClase.DISPONIBLE, dia, "Fundamentos", leccionId, "Clase 12: Constancia", vista,
