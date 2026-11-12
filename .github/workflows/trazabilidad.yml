@@ -68,8 +68,10 @@ jobs:
           persist-credentials: false
 
       # Node ya viene en el runner (el script pide Node 18 o mas y no tiene dependencias).
-      - name: Pruebas del propio script y reglas de código
-        run: node --test scripts/trazabilidad-specs.test.mjs scripts/reglas-de-codigo.test.mjs
+      # Incluye el despliegue automatico de la Lambda de miniaturas (workflow, politica del rol y script del duenio): un workflow
+      # de AWS no se puede correr sin empujar, y esta es la unica red que lo revisa antes de fusionar.
+      - name: Pruebas del propio script, reglas de código y despliegue de la Lambda
+        run: node --test scripts/trazabilidad-specs.test.mjs scripts/reglas-de-codigo.test.mjs scripts/lambda-miniaturas-ci.test.mjs
 
       - name: Trazabilidad de las specs exigidas
         run: node scripts/trazabilidad-specs.mjs app --md "$GITHUB_STEP_SUMMARY"
