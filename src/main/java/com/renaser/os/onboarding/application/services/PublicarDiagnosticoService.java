@@ -115,9 +115,11 @@ public class PublicarDiagnosticoService implements PublicarDiagnosticoUseCase {
 
     @Override
     @Transactional(readOnly = true)
-    public String exportar(UserId actor) {
+    public ExportacionDelDiagnostico exportar(UserId actor) {
         guardia.exigirQuePuedaAdministrar(actor);
-        return PlantillaDeImportacion.exportar(borrador.cargar());
+        // El borrador se lee AQUÍ, dentro de esta transacción de lectura; las filas se escriben después, ya sin base de datos.
+        FichaDelDiagnostico ficha = borrador.cargar();
+        return escritorDeFila -> PlantillaDeImportacion.exportarPorFilas(ficha, escritorDeFila);
     }
 
     /** Deja constancia de quién lo abrió (spec 026): por eso no es de solo lectura. Administración llega a la persona sin pasar por un grupo. */

@@ -243,6 +243,27 @@ renaser:
     # true recien cuando el log del modo sombra este limpio en uso real; volver atras es cambiar
     # esta linea, no desplegar codigo.
     mentor-lead-enforcement: ${MENTOR_LEAD_ENFORCEMENT:false}
+    # Spec 050, tramo H (FR-041, D-349): lo mismo para MENTOR y TRAINEE_GUIDE, cuya matriz es ahora una lista de permitidos
+    # (UserRole.PERMISOS_MENTOR_Y_GUIA, aprobada por el dueño). En false: modo SOMBRA, que evalua la matriz, anota lo que habria
+    # denegado (log y contador por dia en Redis) y deja pasar. En true: APLICAR, que responde 403 SIN_PERMISO. Esta propiedad es la
+    # de partida: lo que el dueño fije en la clave de Redis `proteccion:permisos:modo` con scripts/despliegue/permisos-modo.sh manda
+    # sobre ella y se aplica en 30 s SIN reiniciar (un reinicio son 1-2 minutos de 502). Vuelta atras: ese mismo script con CONFIGURACION.
+    mentor-enforcement: ${MENTOR_ENFORCEMENT:false}
+    ip-del-cliente:
+      # E-678, D-342. Apagada: la IP sale del valor que agrega CloudFront en X-Forwarded-For. La politica de origen
+      # `Managed-AllViewer` NO agrega CloudFront-Viewer-Address (solo `AllViewerAndCloudFrontHeaders-2022-06` lo hace) y
+      # reenvia las cabeceras del visitante tal cual: con esta propiedad en true sobre AllViewer, la cabecera la
+      # escribe quien hace la peticion. Prenderla solo con la politica que la agrega y habiendo comprobado que CloudFront
+      # pisa la que mande el visitante.
+      confiar-en-cloudfront-viewer-address: false
+  sesion:
+    # Spec 050 tramo E (D6, D-347): tope ABSOLUTO de la sesion, contado desde que se inicio y sin renovarse con el uso: pasado
+    # este plazo el pedido responde 401 SESION_VENCIDA y la sesion se invalida (FiltroDeTopeDeSesion). Es aparte de los 30 dias
+    # SIN USO de spring.session.timeout, que no cambian. VOLVER ATRAS = ponerlo en 0 (o vacio) y reiniciar: sin tope, sin
+    # tocar codigo. En produccion es el parametro RENASER_SESION_TOPE_ABSOLUTO de Parameter Store, que no admite valores
+    # vacios: se usa `0`. Formatos: 90d, 2160h, P90D. Uno que no sea una duracion, o que no lleve unidad (`90` seria 90
+    # milisegundos), impide arrancar a proposito: peor es un tope apagado en silencio o una sesion que muere al primer pedido.
+    tope-absoluto: ${RENASER_SESION_TOPE_ABSOLUTO:90d}
   # Spec 002 (D-267): interruptores por funcionalidad y consola Soporte TI. El ESTADO de los interruptores no vive
   # aca (eso exigiria reiniciar): vive en Postgres y se cambia desde la consola. Esto son solo los tiempos.
   plataforma:
@@ -774,6 +795,30 @@ renaser:
         version: ${EVENTOS_GOOGLE_VERSION_DE_CLAVE:1}
         clave-anterior: ${EVENTOS_GOOGLE_CLAVE_ANTERIOR:}
         version-anterior: ${EVENTOS_GOOGLE_VERSION_ANTERIOR:0}
+  # Spec 050, tramo C (D-346): el limite de pedidos POR CUENTA, un filtro en Spring que cuenta en Redis por grupo de endpoints.
+  # Todos los grupos nacen en REGISTRAR: cuenta y anota «habria bloqueado» en el registro y en las metricas, pero NUNCA responde 429.
+  # Se miden dos semanas y recien despues se pasa a APLICAR grupo por grupo. El modo de un grupo se cambia SIN reiniciar con un valor en
+  # Redis (`SET proteccion:modo:<grupo> APLICAR`, o `scripts/despliegue/limites-modo.sh <grupo> <modo>`): manda sobre el de aqui y el
+  # filtro lo relee cada `cache-del-modo`. Los topes son por cuenta (por origen si no hay sesion) y de PARTIDA: se ajustan con la medicion.
+  # `por-dia` es una ventana de 24 h contada desde el primer pedido, no el dia calendario de Lima: es proteccion contra abuso, no una
+  # regla del programa (spec 050, Supuestos). Fuera del filtro, a proposito: /ws, la salud y las rutas publicas de autenticacion y
+  # alta (tienen sus limites propios, D14). Los 25 por dia de SER (renaser.renasia.limite-diario) NO cambian.
+  proteccion:
+    limites:
+      # false apaga el filtro entero (vuelta atras de emergencia): ningun grupo cuenta ni anota nada.
+      habilitado: ${PROTECCION_LIMITES_HABILITADO:true}
+      cache-del-modo: ${PROTECCION_LIMITES_CACHE_DEL_MODO:30s}
+      grupos:
+        lectura: { modo: REGISTRAR, por-minuto: 300 }
+        escritura: { modo: REGISTRAR, por-minuto: 60 }
+        muro: { modo: REGISTRAR, por-minuto: 10, por-hora: 60 }
+        chat: { modo: REGISTRAR, por-minuto: 30 }
+        subidas: { modo: REGISTRAR, por-minuto: 20, por-dia: 300 }
+        ia-fuera-de-ser: { modo: REGISTRAR, por-minuto: 5 }
+        ser: { modo: REGISTRAR, por-minuto: 10 }
+        exportaciones: { modo: REGISTRAR, por-minuto: 5 }
+        admin: { modo: REGISTRAR, por-minuto: 120 }
+        webhook-whatsapp: { modo: REGISTRAR, por-minuto: 600 }
   web:
     cors:
       origenes: ${CORS_ORIGENES:http://localhost:8081,http://localhost:19006,http://localhost:3000}
@@ -808,31 +853,21 @@ renaser:
       grace-period-days: ${ACCOUNT_DELETION_GRACE_DAYS:30}
 
 # ---------------------------------------------------------------------------------------------
-# Auditoria NFR 2026-09-06 (2a pasada). El backend vive DETRAS de CloudFront, asi que
-# `request.getRemoteAddr()` -que usan los ocho puntos que limitan por IP: login, alta, reset-
-# devolvia la IP del borde de CloudFront, NO la del cliente. Consecuencia: el limite de 50
-# intentos de login por hora "por IP" era en realidad UN solo contador compartido por TODOS los
-# usuarios del producto; seis personas equivocandose ocho veces bloqueaban el login a todo el
-# mundo, y un atacante lo lograba solo. `framework` registra el ForwardedHeaderFilter de
-# Spring, que reescribe la direccion remota con el primer valor de X-Forwarded-For.
+# La IP del cliente (E-149, E-678). El backend vive detras de CloudFront y de un nginx transparente
+# (CloudFront -> EC2:8080 -> nginx -> Spring), asi que `request.getRemoteAddr()` es la conexion del
+# nginx y no dice nada del cliente. La IP que usan los limites por IP (login, alta, reset, verificacion
+# de correo, WhatsApp, cierre de cuenta) y `solicitudes_cuenta.ip_solicitud` se resuelve en UN solo
+# lugar, `shared.web.DireccionIpDelCliente`: el valor mas a la derecha de X-Forwarded-For, que es el que
+# agrega CloudFront; lo que va a su izquierda lo escribe quien hace la peticion y no se usa. Sin esa
+# cabecera, la direccion de la conexion. La cabecera CloudFront-Viewer-Address se lee solo si se prende
+# `renaser.security.ip-del-cliente.confiar-en-cloudfront-viewer-address` (ver mas arriba).
 #
-# >>> POR CONFIRMAR (auditoria 2026-09-18, OUT-1). Aca decia que ese primer valor es "el que
-# >>> CloudFront pone: el cliente real". Eso solo es cierto si CloudFront REEMPLAZA la cabecera.
-# >>> Si la AÑADE —que es su comportamiento documentado— y el cliente manda su propio
-# >>> X-Forwarded-For, lo que llega es "<lo que mando el cliente>, <IP real>" y
-# >>> ForwardedHeaderUtils toma el valor MAS A LA IZQUIERDA, o sea el del cliente. En ese caso
-# >>> cualquier anonimo elige su propia IP y los OCHO limites por IP (login, alta, reset) no
-# >>> cuentan nada: fuerza bruta ilimitada, ademas de envenenar solicitudes_cuenta.ip_solicitud.
-# >>>
-# >>> El security group NO cubre esto: protege contra saltarse CloudFront, no contra mandar la
-# >>> cabecera A TRAVES de CloudFront.
-# >>>
-# >>> Se resuelve con UNA peticion contra el despliegue, que tiene que correr el dueno:
-# >>>   curl -H 'X-Forwarded-For: 203.0.113.9' https://<dominio>/api/v1/auth/login ...
-# >>> y mirar que IP registro el backend. Si vio 203.0.113.9, hay que tomar la IP contando
-# >>> desde la DERECHA (con CloudFront delante, el ultimo valor es el que agrega el borde y el
-# >>> cliente no puede escribir despues de el). El cambio va en DireccionIpDelCliente, que
-# >>> existe justamente para tener un solo lugar donde tocarlo (E-151).
+# Por eso `server.forward-headers-strategy` es `none` y no se lee de una variable de entorno: ni el
+# ForwardedHeaderFilter de Spring ni la valvula de Tomcat reescriben la direccion remota, el esquema ni
+# el host desde cabeceras X-Forwarded-* o Forwarded. Ningun codigo del backend arma URLs desde el host o
+# el esquema de la peticion, y ni CloudFront ni el nginx las agregan. Lo comprueba
+# `CabecerasReenviadasTest`. Supuesto: el 8080 solo recibe trafico de CloudFront (security group) y de
+# una IP fija; ver docs/DESPLIEGUE_Y_CI.md.
 # ---------------------------------------------------------------------------------------------
 # Spring AI registra "Aggregation Error" con la pila entera CADA vez que un stream del
 # modelo termina en error — y lo hace CUATRO veces por peticion, una por cada operador
@@ -871,7 +906,7 @@ springdoc:
       base-url: http://localhost:${server.port:8080}
 
 server:
-  forward-headers-strategy: ${FORWARD_HEADERS_STRATEGY:framework}
+  forward-headers-strategy: none
 
 # Actuator y metricas: en actuator.yaml (D-237), importado arriba. Ahi esta tambien el razonamiento
 # de la auditoria OUT-2 que vivia aca, y por que todo actuator paso al puerto de administracion 8091.

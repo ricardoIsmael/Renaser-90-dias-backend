@@ -67,7 +67,7 @@ El `redis` del compose admite autenticación sin otra configuración: si `REDIS_
 `.env`, el contenedor arranca con `requirepass` y Spring usa el mismo valor. Si queda vacío, se
 mantiene el modo local sin contraseña. En producción no se debe publicar el puerto de Redis; el
 servidor y la aplicación tienen que compartir la misma credencial y, cuando el proveedor lo
-requiera, TLS (`REDIS_SSL_ENABLED=true`).
+requiera, TLS (`REDIS_SSL_ENABLED=true`). La de producción se activa con `infra/redis/contrasena.sh` (§5.3).
 
 **`JAVA_HOME` tiene que apuntar al JDK 25:**
 
@@ -499,7 +499,7 @@ producción corría `:latest` y para saber qué había adentro había que compar
 | Pieza | Valor |
 |---|---|
 | Instancia | `i-0ea00f555c5fe8028` — t3.small, Amazon Linux 2023, IP fija `52.0.210.237` |
-| Contenedores | `redis` (`redis:7-alpine`, sin puertos publicados) y `backend` (la imagen de ECR, `-p 8080:8080`), los dos en la red de Docker `renaser`. Con el modo sin corte (E-465) se suma `proxy` (nginx) en el 8080 y `backend` deja de publicar puerto |
+| Contenedores | `redis` (`redis:7-alpine`, sin puertos publicados; **con contraseña desde la spec 050**, ver «Redis con contraseña» abajo) y `backend` (la imagen de ECR, `-p 8080:8080`), los dos en la red de Docker `renaser`. Con el modo sin corte (E-465) se suma `proxy` (nginx) en el 8080 y `backend` deja de publicar puerto |
 | Rol de la instancia | `renaser-backend-ec2` — lee `/renaser/prod/*`, firma URLs de su bucket, baja de ECR, y trae `AmazonSSMManagedInstanceCore` |
 | Delante | CloudFront `E3O4M4W7JW3TJQ` (`djbooeq09skac.cloudfront.net`), hablando **HTTP** al origen |
 | Lo que **no** hay | ECS, CodeDeploy, balanceador, autoscaling |
@@ -570,9 +570,13 @@ Con el modo sin corte hay que tener presente:
   `DESPLIEGUE_MODO=reemplazo` (y después se vuelve a `auto`), o se parte en expandir y contraer.
 - **Lo conectado al viejo se corta al apagarlo** (voz en vivo en curso, streaming largo del chat). El chat
   por WebSocket reconecta contra el nuevo; el broker STOMP es en memoria, uno por instancia.
-- nginx es transparente: no toca `X-Forwarded-For` ni las cabeceras de CloudFront y conserva `Host`
-  (la IP del cliente sigue saliendo igual que antes, ver `DireccionIpDelCliente`). Soporta WebSocket y no
-  hace buffer. Su configuración la reescribe el script en `/opt/renaser/proxy/renaser.conf`.
+- nginx es transparente: no toca `X-Forwarded-For` ni las cabeceras de CloudFront y conserva `Host`.
+  La app toma la IP del cliente del valor más a la derecha de `X-Forwarded-For` (el que agrega
+  CloudFront), así que nginx **no debe** agregar el suyo (ver `DireccionIpDelCliente`, E-678, D-342).
+  > **Corregido 2026-11-11 (E-678).** Decía «la IP del cliente sigue saliendo igual que antes», cuando
+  > salía del valor más a la izquierda.
+  Soporta WebSocket y no hace buffer. Su configuración la reescribe el script en `/opt/renaser/proxy/renaser.conf` (desde
+  la spec 050 A2 también rechaza lo que no trae la cabecera de origen; ver «Origen cerrado» abajo).
 - Los schedulers aguantan dos instancias unos segundos: 20 de 22 llevan ShedLock sobre JDBC y los otros
   dos pueden correr en todas (`SchedulerLockConfig`).
 
@@ -606,6 +610,41 @@ menos de 3 GB ahora quiere decir que el disco lo ocupa otra cosa (`docker system
 > el coordinador por SSM (quedaron `d55f84d8`, `cde92c44` y `153820e9`; 3,8 GB libres) y desde entonces
 > lo hace el script.
 
+#### Redis con contraseña (spec 050, tramo A1, D-343)
+
+> **Corregido 2026-11-11 (D-343).** Esta sección y la tabla de arriba decían que el contenedor `redis` no tenía
+> autenticación (`redis:7-alpine`, solo sin puertos publicados). Seguía siendo cierto el 11/11, pero ya no es el
+> destino: Redis guarda las sesiones, y cualquier contenedor de la red `renaser` podía leerlas. El contenedor
+> `redis` sigue sin publicar puertos y ahora pasa a tener su definición en el repositorio
+> (`infra/redis/`), con contraseña.
+
+**El backend no cambió.** `application.yaml` ya lee `spring.data.redis.username` y `password` de `REDIS_USERNAME` y
+`REDIS_PASSWORD` (Parameter Store, §6.4). `RedisConContrasenaIT` prueba, contra Redis reales, que conecta con y sin
+contraseña, que `AUTH default <clave>` contra un Redis que todavía no la exige funciona y que exigirla en caliente no
+corta la conexión abierta. De ahí el orden de salida, que no deja ningún hueco:
+
+1. `infra/redis/contrasena.sh --paso parametros --aplicar` guarda `REDIS_PASSWORD` (`SecureString`, 32 bytes
+   aleatorios generados en la máquina del dueño y nunca impresos) y `REDIS_USERNAME=default`.
+2. **Se despliega el backend** (el CD de siempre): arranca con las dos variables y Redis todavía no pide nada.
+3. `infra/redis/contrasena.sh --paso exigir --aplicar` (con `--paso estado` antes para mirar): comprueba que el
+   backend arrancó **después** de guardar la clave, exige la clave en caliente (`CONFIG SET requirepass`), y la deja
+   persistente recreando el contenedor con `/opt/renaser/redis/conf/redis.conf` (permiso 600, dueño `redis`):
+   `requirepass`, `appendonly yes` y `notify-keyspace-events Egx`. Es un corte de Redis de unos segundos.
+4. Verifica: `PING` sin clave desde **otro contenedor** de la red = `NOAUTH`, con clave = `PONG`, ningún puerto
+   publicado, el mismo número de sesiones y `/actuator/health` UP. Si algo no pasa, **vuelve atrás solo**.
+
+Detalles que costaron un ensayo local (`infra/redis/ensayo-local.sh`): (a) con `appendonly yes` y sin carpeta de AOF,
+Redis arranca **vacío** y no lee `dump.rdb`, así que el RDB se convierte a AOF en un contenedor temporal antes del
+definitivo; (b) el `redis` de la imagen corre como `999:1000` y no puede leer un `redis.conf` de root con permiso 600;
+(c) `notify-keyspace-events` lo pide Spring Session con `CONFIG SET` **una sola vez, al arrancar el backend**: un
+Redis nuevo arranca sin él, por eso va en el `redis.conf`.
+
+**Vuelta atrás.** El Redis anterior no se borra: queda parado como `redis-previo` (y `--revertir` lo vuelve a
+poner, pasándole antes las sesiones de ahora). `infra/redis/contrasena.sh --revertir --aplicar`. El backend no
+necesita redespliegue: `AUTH default <clave>` contra un Redis sin clave sigue siendo válido. Pasada una semana:
+`docker rm redis-previo`. Todo el script es simulacro salvo que se le pase `--aplicar`, exige
+`RENASER_CUENTA_AWS` y `RENASER_INSTANCIA` (no están en el repositorio) y usa el perfil `prod`.
+
 #### El health check depende de que `/actuator/health` siga siendo público
 
 Sigue vigente lo que ya decía esta sección, y ahora con más peso, porque el despliegue **depende**
@@ -623,6 +662,33 @@ aunque la aplicación esté perfecta**. Al agregar `anyRequest().authenticated()
 > rutas (`/actuator/health` y `/salud`), y también el despacho `FORWARD`. `PuertoDeAdministracionIT`
 > falla si `/actuator/health` deja de responder `{"status":"UP"}` en el 8080.
 
+#### Origen cerrado: la cabecera de CloudFront a nginx (spec 050, tramo A2, D-344)
+
+> **Corregido 2026-11-11 (D-344).** Arriba decía que nginx es «transparente» y solo reenvía. Sigue sin tocar
+> `X-Forwarded-For` ni el `Host`, pero ahora también **rechaza** (403 `ORIGEN_NO_PERMITIDO`) lo que no trae la cabecera
+> secreta de CloudFront, cuando se le pide. La seguridad del origen era solo el security group (la lista de IP de
+> CloudFront y una IP fija): cualquiera dentro de esa lista, o cualquier distribución de CloudFront, podía hablarle
+> directo y saltarse lo que se ponga delante.
+
+CloudFront agrega `X-Origen-Renaser` (un secreto de 32 bytes, en Parameter Store, `origen-secreto`) a cada pedido hacia el
+origen y nginx lo comprueba. **Se enciende en dos tiempos**: el modo de partida es `registrar` (no rechaza nada; cada
+pedido sin cabecera queda en `docker logs proxy`, sin secretos, sin cabeceras y sin los parámetros de la URL) y recién
+después de 24 h limpias el dueño pasa a `exigir` (`origen-modo` en Parameter Store). Lo que no necesita la cabecera: el
+propio host y la red `renaser` de Docker (el CD comprueba la salud por `127.0.0.1:8080` y Docker entrega eso con la IP de
+la pasarela de la red, no con `127.0.0.1`) y las IP de `origen-ips-directas` (la IP fija del security group, si hace
+falta). Si faltan los secretos o la subred, `exigir` cae solo a `registrar`.
+
+- **Todo por `infra/cloudfront/cabecera-de-origen.sh`** (simulacro por omisión, `--aplicar`, perfil `prod`, cuenta
+  verificada, respaldo de la distribución con su ETag), con la **rotación sin corte** (nginx acepta vigente y anterior →
+  CloudFront cambia → espera → nginx suelta el viejo) y la vuelta atrás. Los comandos, en orden, y lo que se probó y lo
+  que no: `infra/cloudfront/README.md`. El ensayo local con nginx de verdad: `infra/cloudfront/ensayo-local.sh`.
+- **`desplegar-backend.sh`** genera la configuración con los secretos en un archivo de permiso 600, la prueba con
+  `nginx -t` en un contenedor aparte **antes** de reemplazar la que anda, y con `SOLO_PROXY=si` reescribe y recarga nginx
+  sin tocar el backend (así se rota o se pasa a `exigir` sin los 1–2 minutos de 502 de un despliegue).
+- **Lo que cazó el ensayo local**: un secreto de 64 caracteres no entra en el cubo por omisión de un `map` de nginx
+  (`could not build map_hash, you should increase map_hash_bucket_size`; con `nginx -s reload` la recarga habría fallado en
+  silencio y, en un reinicio, nginx no habría arrancado), y la directiva tiene que ir **antes** del primer `map`.
+
 #### Por qué EC2 y no ECS Fargate o App Runner
 
 La comparación que estaba acá sigue siendo válida como registro de la decisión:
@@ -639,6 +705,29 @@ anticipa (Redis Pub/Sub para el chat y para invalidar la caché de rol entre ins
 ECS es el camino natural, y la imagen ya está lista para eso: es multi-arquitectura, corre como
 usuario sin privilegios, y toma su configuración de Parameter Store (§6) en vez de variables
 cableadas.
+
+#### AWS WAF en CloudFront (spec 050, tramo B, D-345)
+
+La API no tenía ningún límite por IP en el borde: CloudFront (con cabeceras de seguridad administradas) y nginx
+transparente reenviaban todo a Spring. Un Web ACL de AWS WAF delante de la distribución corta el exceso **antes** de que
+llegue a la instancia: dos reglas por tasa por IP (**2.000 pedidos en 5 minutos** en toda la API y **300 en 5 minutos** en
+`/api/v1/auth/`) y los grupos administrados de AWS «Common», «Known bad inputs» e «IP reputation».
+
+- **Todo nace en `Count`**: cuenta y deja pasar. El dueño asocia el Web ACL, mira siete días de métricas y muestras y pasa a
+  `Block` **regla por regla** (primero las dos por tasa y la reputación de IP; los otros dos grupos solo sin falsos positivos).
+  Las reglas por tasa, bloqueando, responden **429** con `Retry-After` y `{"message":"Espera un momento y vuelve a intentarlo.",
+  "codigo":"DEMASIADOS_PEDIDOS"}`, el mismo contrato que nginx y el filtro por cuenta de Spring.
+- **Un falso positivo de un grupo se resuelve excluyendo esa regla por nombre** (con su motivo y su fecha en la plantilla,
+  `Renaser.Excepciones`), nunca apagando el grupo. El cuerpo largo de un texto libre (Muro, diario, transcripciones) es el
+  candidato conocido: por eso se mira antes en `Count`.
+- **Registro**: CloudWatch Logs `aws-waf-logs-renaser`, 14 días, con `x-auth-token`, `authorization` y `cookie` censurados (el WAF
+  no guarda el cuerpo). Costo aproximado: del orden de US$ 10 al mes.
+- **Todo por scripts del dueño en `infra/waf/`** (simulacro por omisión, perfil `prod`, cuenta verificada, respaldo antes de
+  cambiar, vuelta atrás que quita solo lo suyo): `crear-web-acl.sh`, `asociar-web-acl.sh`, `pasar-regla-a-bloqueo.sh`
+  (`--aplicar-bloqueo` es su propia bandera) y `ensayo-local.sh`. Los comandos en orden, los permisos de AWS que hacen falta y lo
+  que se probó y lo que no: `infra/waf/README.md`. El esquema de la plantilla lo valida AWS en el simulacro (`check-capacity`).
+- **Cuidado con el orden de las IP**: el WAF cuenta por la IP de la conexión que ve CloudFront (la del visitante); nginx contará por
+  la IP del cliente que resuelva el cambio D1 (rama `ip-real-del-cliente`).
 
 ### 5.4 Observabilidad: Prometheus y Grafana (D-237, 2026-10-01)
 
@@ -741,6 +830,78 @@ no, el próximo despliegue lo vuelve a levantar).
 (tope 192 MB). El modo sin corte necesita `MemAvailable` ≥ 1.400 + 512 MB; con ~2,4 GB disponibles
 en la t3.medium y Alloy andando quedan ~2,2 GB: sigue alcanzando, pero el margen baja. El segundo
 Tomcat del puerto de administración suma unos pocos MB por JVM.
+
+### 5.5 Límite de pedidos por cuenta: cómo se mide y cómo se pasa a «aplicar» (spec 050 tramo C, D-346)
+
+Un filtro de Spring (`FiltroDeLimitePorCuenta`) cuenta cada pedido de `/api/v1` por cuenta y por grupo en Redis. **Todos los grupos nacen en `REGISTRAR`**: cuentan y anotan «habría bloqueado», pero **nunca** responden 429. No hace falta redesplegar para cambiar nada de lo que sigue, salvo `habilitado`.
+
+| Grupo | Tope de partida (por cuenta) | Qué cubre |
+|---|---|---|
+| `lectura` | 300 / min | los `GET` y la lectura del perfil propio (`POST /users/me`) |
+| `escritura` | 60 / min | `POST`, `PUT`, `PATCH` y `DELETE` que no son de otro grupo |
+| `muro` | 10 / min y 60 / hora | publicar (`POST /wall`) y comentar (`POST /wall/{id}/comments`) |
+| `chat` | 30 / min | enviar mensajes del chat |
+| `subidas` | 20 / min y 300 por 24 h | toda URL firmada de subida (`…/upload-url`, `…/presign`) |
+| `ia-fuera-de-ser` | 5 / min | los `POST` de Análisis 80/20, Espejo y Mapa de Renacimiento |
+| `ser` | 10 / min | los `POST` de `/renasia/**` (los 25 por día de SER siguen aparte) |
+| `exportaciones` | 5 / min | `…/export.csv` y `…/exportar.csv` |
+| `admin` | 120 / min | el resto de `/api/v1/admin/**` (aquí cae el CRM: no tiene cuenta propia, D15) |
+| `webhook-whatsapp` | 600 / min **por origen** | `POST /webhooks/whatsapp` (sin sesión; la firma la comprueba el controller) |
+
+Fuera del filtro, por escrito: `/ws`, la salud, el `OPTIONS` del CORS y las rutas públicas de autenticación y alta (login, social, restablecer contraseña, verificación de correo, solicitudes de cuenta, eliminación de cuenta): tienen sus límites propios (D14) y no se cuentan dos veces. Una cuenta en «ver como» recibe su 403 de siempre antes de contarse. Si Redis falla, el pedido pasa y se anota (`error_de_redis`).
+
+**Cambiar el modo de un grupo, sin reiniciar** (lo corre el dueño; simulacro por omisión):
+
+```bash
+export RENASER_CUENTA_AWS=<12 dígitos>  RENASER_INSTANCIA=<i-…>
+scripts/despliegue/limites-modo.sh estado                      # el modo fijado en Redis de cada grupo
+scripts/despliegue/limites-modo.sh exportaciones APLICAR       # simulacro: muestra qué cambiaría
+scripts/despliegue/limites-modo.sh exportaciones APLICAR --aplicar
+scripts/despliegue/limites-modo.sh exportaciones CONFIGURACION --aplicar   # vuelta atrás: borra el valor, rige application.yaml
+scripts/despliegue/limites-modo.sh --revertir exportaciones --aplicar      # vuelve al valor que había antes del último cambio
+```
+
+Por dentro es una sola clave de Redis: `SET proteccion:modo:<grupo> APLICAR` (valores `DESACTIVADO`, `REGISTRAR`, `APLICAR`, sin distinguir mayúsculas; `DEL proteccion:modo:<grupo>` vuelve al modo de la configuración). El backend la relee cada 30 s (`renaser.proteccion.limites.cache-del-modo`). Un valor que no es un modo se ignora con un aviso en el registro y rige el de la configuración. Con Redis con contraseña (spec 050 A1), la instancia la lee de Parameter Store y entra por `REDISCLI_AUTH`: ningún secreto pasa por la pantalla.
+
+**Medir durante las dos semanas** (SC-002 y SC-003):
+
+- Panel de Grafana `infra/observabilidad/grafana/dashboards/renaser-proteccion.json`: pedidos por resultado y por grupo (`renaser_limite_pedidos_total`), «habría bloqueado» por grupo y la distribución de uso sobre el tope (`renaser_limite_uso_bucket`: 1,0 es justo el tope; más de 1, que se pasó) con p50, p95 y p99 por grupo y ventana. `config.alloy` descarta una lista cerrada de familias y `renaser_limite_*` no está entre ellas: pasan a Grafana Cloud (unas 200 series).
+- Quién habría sido bloqueado, de forma durable (30 días; el registro de Docker solo vive desde el último despliegue): `scripts/proteccion/cuentas-que-habrian-bloqueado.sh <grupo> [AAAA-MM-DD]` lista `veces  id-de-la-cuenta` de más a menos. Solo guarda el id de la cuenta, nunca una IP.
+- El registro del backend: una línea `limite_por_cuenta resultado=… grupo=… metodo=… ruta=…/{id}/… ventana=… cuenta=…` por pedido que habría sido bloqueado (INFO) y por bloqueo (WARN). Nunca lleva cabeceras, token ni cuerpo.
+
+**Antes de pasar `escritura` o `subidas` a `APLICAR`:** la cola sin red de la app (spec 048) envía en ráfaga cuando vuelve la señal (hábitos, radar, fotos): mirar el pico en el panel y llevar la versión de la app que trata el 429 como «reintentar después» (`Retry-After`). Orden recomendado: `exportaciones`, `admin`, `ia-fuera-de-ser`, `subidas`; al final `muro`, `chat`, `escritura` y `lectura`, de a uno, con la métrica `bloqueado` abierta.
+
+**Apagar todo el filtro** (emergencia, necesita despliegue): `PROTECCION_LIMITES_HABILITADO=false` en Parameter Store. Cambiar los topes: `renaser.proteccion.limites.grupos.<grupo>.por-minuto|por-hora|por-dia` en `application.yaml`.
+### 5.6 La matriz estricta de Mentor y Guía: sombra, aplicar y vuelta atrás (spec 050 tramo H, D-349)
+
+Mentor (`MENTOR`) y Guía (`TRAINEE_GUIDE`, D-265: lo mismo) tienen desde el 2026-11-12 **una lista de 12 permisos y todo lo demás se niega** (`UserRole.PERMISOS_MENTOR_Y_GUIA`, la tabla que aprobó el dueño: `USE_APP`, `FOLLOW_OWN_PROGRAM`, `PUBLISH_ON_WALL`, `TRACK_PROGRAM_AS_STAFF`, `OPEN_SUPPORT_TICKET`, `USE_MENTOR_TICKETS`, `ANSWER_MENTOR_TICKET`, `VIEW_OWN_PHASE_CONTRACTS`, `SIGN_PHASE_CONTRACT`, `MANAGE_CALENDAR`, `MANAGE_CELLS` y `MANAGE_COHORTS`; los tres últimos siguen acotados a lo propio por sus servicios, que no se tocaron). Antes `UserRole.can` les concedía todo salvo `EXPORT_RANKING` (falla-abierto, A-1).
+
+**Nace en `SOMBRA`** y no cambia nada para nadie: `PermissionEnforcementInterceptor` evalúa la lista, **anota** lo que habría negado y deja pasar. Pasar a `APLICAR` es una decisión del dueño, cuando el registro esté limpio en uso real (T070). Dos formas de cambiarlo:
+
+- **Sin reiniciar** (lo normal; un reinicio son 1–2 minutos de 502): la clave de Redis `proteccion:permisos:modo` (`SOMBRA` o `APLICAR`, sin distinguir mayúsculas), que el backend relee cada 30 s y **manda sobre** la configuración. Quitarla devuelve el modo de `application.yaml`.
+- Por configuración (necesita despliegue): `renaser.security.mentor-enforcement` (`MENTOR_ENFORCEMENT`, `false` = `SOMBRA`, valor de partida). MENTOR_LEAD tiene su propio interruptor (`mentor-lead-enforcement`, Q7) y no se toca aquí.
+
+```bash
+export RENASER_CUENTA_AWS=<12 dígitos>  RENASER_INSTANCIA=<i-…>
+scripts/despliegue/permisos-modo.sh estado                  # el modo fijado en Redis
+scripts/proteccion/denegaciones-de-la-matriz.sh 7           # qué habría negado (o negó) en los últimos 7 días, por endpoint
+scripts/despliegue/permisos-modo.sh APLICAR                 # simulacro: muestra qué cambiaría, no toca nada
+scripts/despliegue/permisos-modo.sh APLICAR --aplicar       # lo pone; el backend lo ve en menos de 30 s
+scripts/despliegue/permisos-modo.sh SOMBRA --aplicar        # VUELTA ATRÁS: deja de negar, solo anota
+scripts/despliegue/permisos-modo.sh CONFIGURACION --aplicar # borra la clave: rige application.yaml
+scripts/despliegue/permisos-modo.sh --revertir --aplicar    # vuelve al valor que había antes del último cambio
+```
+
+El script cumple D12 como los del tramo C: simulacro por omisión (solo `--aplicar` cambia algo), perfil `prod` y cuenta verificada, idempotente, guarda el valor anterior en `~/.renaser/permisos-modo/anterior` y nunca pone la contraseña de Redis en un argumento.
+
+**Qué se anota y dónde.** Por cada pedido de un Mentor o una Guía a un endpoint cuyo permiso no está en la lista (en `SOMBRA` el pedido pasa; en `APLICAR` da 403 `SIN_PERMISO`):
+
+- Una línea del registro, `matriz-estricta HABRIA_DENEGADO|DENEGADO rol=… permiso=… metodo=… ruta=… handler=…`, con la **plantilla** de la ruta (`/api/v1/mentor/groups/{id}`). **Nunca la cuenta, ni un token, ni la ruta concreta.** El registro de Docker solo vive desde el último despliegue.
+- Un contador durable en Redis, un hash por día de Lima (`proteccion:permisos:denegaciones:<AAAA-MM-DD>`, 30 días de vida) con el campo `<ESTADO> <ROL> <PERMISO> <MÉTODO> <RUTA>`. Es lo que lee `denegaciones-de-la-matriz.sh`, que sobrevive a los despliegues de las semanas que dura la sombra. Si anotar falla, el pedido sigue.
+
+**Cuándo está limpio.** Una línea `HABRIA_DENEGADO` es un endpoint que un Mentor o una Guía usó y cuyo permiso falta: o es un abuso, o falta un permiso en la tabla (que lo aprueba el dueño, regla 00; no se agrega por cuenta propia). Después de pasar a `APLICAR`, la misma lista (`DENEGADO`) es la de los 403 que da la matriz: cualquiera de un flujo legítimo es bloqueante y se vuelve a `SOMBRA`.
+
+> **Corregido 2026-11-12 (D-349).** `UserRole.can` y el javadoc de `Permission` decían que MENTOR y TRAINEE_GUIDE fallaban abiertos (los pasos «el 403 de un mentor lo da el servicio»). Ya no: el interceptor los evalúa en sombra. Siguen sin matriz solo ADMIN y ALCHEMIST (A-1).
 
 ---
 
@@ -872,10 +1033,11 @@ va cifrado.
 | `DB_PASSWORD` | **SecureString** | Contraseña de Postgres |
 | `REDIS_HOST` | String | Host de Redis (sesiones, cuotas, pub/sub de chat) |
 | `REDIS_PORT` | String | Puerto de Redis |
-| `REDIS_USERNAME` | String | Usuario ACL de Redis, si el servidor lo exige |
-| `REDIS_PASSWORD` | **SecureString** | Contraseña de Redis; no dejarla en texto plano |
+| `REDIS_USERNAME` | String | Usuario ACL de Redis. En producción vale `default` (lo crea `infra/redis/contrasena.sh`, spec 050 A1) |
+| `REDIS_PASSWORD` | **SecureString** | Contraseña de Redis; no dejarla en texto plano. En producción la genera `infra/redis/contrasena.sh` (spec 050 A1) |
 | `REDIS_SSL_ENABLED` | String | `true` cuando el proveedor de Redis exige TLS; `false` para el contenedor privado local |
 | `REDIS_SESSION_NAMESPACE` | String | Namespace de Spring Session; por defecto `renaser:session:v2` |
+| `RENASER_SESION_TOPE_ABSOLUTO` | String | Tope absoluto de la sesión desde que se inició (spec 050 tramo E, D-347): `90d` de partida; `0` = sin tope (la vuelta atrás: Parameter Store no admite valores vacíos), y se reinicia el backend. Siempre con unidad (`90d`, `2160h`, `P90D`): `90` sin unidad impide arrancar. Los 30 días sin uso (`spring.session.timeout`) no cambian |
 | `CORS_ORIGENES` | String | Orígenes permitidos, separados por coma. El default son tres `localhost` |
 | `RESET_PASSWORD_URL` | String | **Hoy el default es `https://TODO-frontend-no-definido.renaser.dev/...`** — el dominio del frontend no está decidido |
 | `ACTIVATE_ACCOUNT_URL` | String | Ídem: default con `TODO-` adentro |

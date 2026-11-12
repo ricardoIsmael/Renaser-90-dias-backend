@@ -159,6 +159,28 @@ class TicketMentorPersistenceAdapterTest {
     }
 
     @Test
+    @DisplayName("D19: deParticipantes devuelve solo los tickets de esos participantes, del más nuevo al más viejo, con cursor y límite; sin participantes, ninguno")
+    void deParticipantesSoloDevuelveLosDeEsosParticipantes() {
+        UserId a = sembrarParticipante();
+        UserId b = sembrarParticipante();
+        UserId c = sembrarParticipante();
+        Instant t1 = Instant.parse("2026-08-24T10:00:00Z");
+        TicketMentor deA1 = adapter.save(TicketMentor.abrir(nuevoId(), a, "a1", "a1", "a1", FixedClock.at(t1)));
+        TicketMentor deA2 = adapter.save(TicketMentor.abrir(nuevoId(), a, "a2", "a2", "a2", FixedClock.at(t1.plusSeconds(60))));
+        TicketMentor deB = adapter.save(TicketMentor.abrir(nuevoId(), b, "b1", "b1", "b1", FixedClock.at(t1.plusSeconds(120))));
+        adapter.save(TicketMentor.abrir(nuevoId(), c, "c1", "c1", "c1", FixedClock.at(t1.plusSeconds(180))));
+
+        assertThat(adapter.deParticipantes(List.of(a, b), null, 10)).extracting(TicketMentor::id)
+                .containsExactly(deB.id(), deA2.id(), deA1.id());
+        assertThat(adapter.deParticipantes(List.of(a, b), deB.creadoEn(), 10)).extracting(TicketMentor::id)
+                .containsExactly(deA2.id(), deA1.id());
+        assertThat(adapter.deParticipantes(List.of(a, b), null, 1)).extracting(TicketMentor::id).containsExactly(deB.id());
+        assertThat(adapter.deParticipantes(List.of(c), null, 10)).extracting(TicketMentor::participanteId).containsOnly(c);
+        // sin participantes no es «todos»: es nada
+        assertThat(adapter.deParticipantes(List.of(), null, 10)).isEmpty();
+    }
+
+    @Test
     void guardarConParticipanteSinInscripcionFallaConMensajeClaro() {
         TicketMentor ticket = TicketMentor.abrir(nuevoId(), UserId.of(UUID.randomUUID()), "bloqueo", "solucion",
                 "impacto", CLOCK);

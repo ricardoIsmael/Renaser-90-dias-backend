@@ -38,7 +38,7 @@ read -r -p "Enter para continuar, Ctrl+C para cortar... " _
 
 B64=$(base64 -w0 "$SQL")
 PARAMS=$(mktemp)
-trap 'rm -f "$PARAMS"' EXIT
+trap "rm -f '$PARAMS'" EXIT
 python3 - "$PARAMS" "$B64" "$CORREO" "$RDS" "$REGION" <<'PY'
 import json, sys
 destino, b64, correo, rds, region = sys.argv[1:]
