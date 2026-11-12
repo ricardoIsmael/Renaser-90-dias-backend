@@ -136,7 +136,7 @@ echo "Cuenta verificada ($CUENTA, perfil $PERFIL). Solo lectura."
 
 en_la_instancia() {  # manda ESTE script por SSM, con las variables por delante (patron de infra/redis/contrasena.sh)
   local parametros cid estado desde
-  parametros=$(mktemp); trap 'rm -f "$parametros"' EXIT
+  parametros=$(mktemp); trap "rm -f '$parametros'" EXIT
   jq -n --arg b64 "$(base64 -w0 "$0")" --arg ns "$NAMESPACE" --arg cont "$CONTENEDOR" --arg tope "$TOPE_DIAS" \
         --arg prefijo "$PREFIJO" --arg region "$REGION" \
     '{commands: [
