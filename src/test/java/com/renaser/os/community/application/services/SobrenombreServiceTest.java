@@ -40,7 +40,7 @@ import static org.mockito.Mockito.when;
 
 /**
  * La administración de sobrenombres y de palabras prohibidas (spec 046 FR-005 y FR-006) exige ser moderador del Muro: ADMIN o
- * ALCHEMIST activos. Lo comprueba el servicio, no solo el permiso del endpoint (spec 050, D19).
+ * ALCHEMIST activos. Lo comprueba el servicio (spec 050, D19).
  */
 @ExtendWith(MockitoExtension.class)
 class SobrenombreServiceTest {

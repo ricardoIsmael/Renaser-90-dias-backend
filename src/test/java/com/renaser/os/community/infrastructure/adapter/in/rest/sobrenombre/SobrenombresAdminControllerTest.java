@@ -40,8 +40,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Los siete endpoints de administración de sobrenombres y palabras prohibidas, de punta a punta con el servicio REAL detrás: solo ADMIN y
- * ALCHEMIST activos los usan. El permiso del endpoint ({@code MODERATE_WALL}) lo satisface más de un rol; quien decide es el servicio
- * (spec 046 FR-005 y FR-006). Con el servicio simulado esta prueba no probaría nada, por eso entra con {@code @Import}.
+ * ALCHEMIST activos los usan (spec 046 FR-005 y FR-006). Con el servicio simulado esta prueba no probaría nada, por eso entra con
+ * {@code @Import}.
  */
 @WebMvcTest(SobrenombresAdminController.class)
 @AutoConfigureMockMvc(addFilters = false)
@@ -89,7 +89,7 @@ class SobrenombresAdminControllerTest {
 
     @ParameterizedTest(name = "{0} recibe 403 en las siete rutas y no se toca nada")
     @EnumSource(value = UserRole.class, names = {"MENTOR", "TRAINEE_GUIDE", "MENTOR_LEAD", "TRAINEE", "IT_SUPPORT"})
-    @DisplayName("spec 046 FR-005, FR-006: quien no modera el Muro recibe 403 en cada ruta de administración, aunque el permiso se lo conceda")
+    @DisplayName("spec 046 FR-005, FR-006: quien no modera el Muro recibe 403 en cada ruta de administración")
     void quienNoModeraRecibe403(UserRole rol) throws Exception {
         UUID actorId = actor(rol, UserStatus.ACTIVE);
 

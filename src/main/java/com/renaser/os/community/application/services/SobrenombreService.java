@@ -41,8 +41,8 @@ import java.util.Set;
  * persona; si Administración lo cambia, se le avisa a la persona sin el motivo (D7).
  *
  * <p>La administración (ver, cambiar, quitar y editar las palabras) es de quien modera el Muro: ADMIN y ALCHEMIST activos, el mismo
- * criterio de {@code PublicacionMuroService.requireModerador}. Lo exige este servicio, no solo el permiso del endpoint: el servicio es la
- * segunda línea de defensa que tienen los demás servicios de administración (spec 050, FR-042).
+ * criterio de {@code PublicacionMuroService.requireModerador}. Lo exige este servicio además del permiso del endpoint, como los demás
+ * servicios de administración (segunda línea de defensa, spec 050, FR-042).
  */
 @Service
 public class SobrenombreService implements MiSobrenombreUseCase, AdministrarSobrenombresUseCase {

@@ -27,7 +27,7 @@ import java.util.UUID;
 /**
  * Spec 046 (D-331): Administración y Alquimista ({@code MODERATE_WALL}) ven, cambian y quitan sobrenombres, y editan las palabras
  * prohibidas. Cambiar o quitar pide un motivo (queda en la constancia; a la persona se le avisa sin él, D7). Solo ellos: el servicio
- * exige ser moderador del Muro, sin depender de a quién le conceda el permiso la matriz de roles.
+ * exige ser moderador del Muro (ADMIN o ALCHEMIST activos).
  */
 @RestController
 @RequestMapping("/api/v1/admin")
