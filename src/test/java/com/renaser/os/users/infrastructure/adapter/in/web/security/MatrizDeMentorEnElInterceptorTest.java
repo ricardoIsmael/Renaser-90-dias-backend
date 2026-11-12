@@ -61,9 +61,11 @@ class MatrizDeMentorEnElInterceptorTest {
     private final Logger logDelControl = (Logger) LoggerFactory.getLogger(ControlDeLaMatrizDeMentor.class);
 
     private MockHttpServletResponse respuesta;
+    private Level nivelDeAntes;
 
     @BeforeEach
     void escucharElLog() {
+        nivelDeAntes = logDelControl.getLevel();
         lineasDelLog.start();
         logDelControl.addAppender(lineasDelLog);
         logDelControl.setLevel(Level.WARN);
@@ -73,6 +75,7 @@ class MatrizDeMentorEnElInterceptorTest {
     @AfterEach
     void dejarElLog() {
         logDelControl.detachAppender(lineasDelLog);
+        logDelControl.setLevel(nivelDeAntes);
     }
 
     /** El interceptor con MENTOR y TRAINEE_GUIDE en el modo que se pida por configuración, y MENTOR_LEAD en sombra. */
