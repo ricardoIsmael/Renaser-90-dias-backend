@@ -192,6 +192,8 @@ Manager; el tráfico debe quedarse en la red privada o usar TLS según el servic
 
 Los 30 días de inactividad son deliberadamente largos: es una app de hábitos que se abre a diario, y forzar el login cada semana solo empuja a la gente a poner contraseñas peores.
 
+> **Corregido 2026-11-11 (spec 050 tramo E, D-347).** Este apartado daba a entender que la sesión duraba mientras se usara: los 30 días son de **inactividad** y cada pedido los renueva, así que un token usado a diario no vencía nunca. Ahora hay además un **tope absoluto de 90 días desde que se inició** (`renaser.sesion.tope-absoluto`, `FiltroDeTopeDeSesion`): al día 91 el pedido responde 401 `SESION_VENCIDA`, la sesión se invalida y la app lleva al login (conserva su cola de envíos). Los 30 días sin uso no cambian. Vuelta atrás: la propiedad en `0` o vacía (sin tope) y reiniciar. Conteo previo de cuántas sesiones se cortarían: `scripts/proteccion/sesiones-por-antiguedad.sh`.
+
 ### 4.2 Lo que se pierde respecto del diseño a mano, dicho explícitamente
 
 El borrador guardaba en Redis el **SHA-256** del token en vez del token, para que un volcado de Redis no entregara sesiones utilizables. **Spring Session guarda el identificador tal cual.** Es una capa de defensa en profundidad que se resigna a cambio de no mantener código de sesión propio.

@@ -1,0 +1,7 @@
+Sección,Clave,Pregunta,Ayuda,Tipo,Obligatoria,Opciones o filas (separadas por |),Máximo de opciones,Se muestra solo si,Alimenta,Se muestra en
+"Conociéndote, de verdad",p1,¿Cuál es tu nombre completo?,,Texto corto,Sí,,,,,
+"Conociéndote, de verdad",p2,"¿Tienes un negocio, o un proyecto?","Elige una · sola opción, ""la principal""",Opción única,Sí,Sí. | No.,,,,Diplomado | Escuela
+"Tu ""vida"" hoy",p2a,¿A qué se dedica?,,Texto corto,No,,,p2=Sí.,Objetivo de Negocio,
+"Tu ""vida"" hoy",p3,¿Qué tanto?,De 1 a 10,Escala,Sí,1-10,,,,Certificación
+"Tu ""vida"" hoy",p4,¿Prioridad principal?,,Opción única,Sí,Relaciones. = RELACIONES | Cuerpo. = CUERPO | Trabajo. = TRABAJO,,,Prioridad principal,
+"Tu ""vida"" hoy",p5,Máximo dos,,Casillas,No,Uno. | Dos. | Tres.,2,,,

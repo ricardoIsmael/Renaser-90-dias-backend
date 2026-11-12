@@ -43,7 +43,7 @@ declare -A APAGADO=([IA_VOZ_PROVEEDOR]=noop [IA_VOZ_EN_VIVO]=false
 CRONES_DEL_SEMAFORO=(renaser.scheduling.semaforo.cron renaser.scheduling.resumen-semaforo.cron)
 
 TEMPORAL="$(umask 077 && mktemp)"
-trap 'rm -f "$TEMPORAL"' EXIT
+trap "rm -f '$TEMPORAL'" EXIT
 
 nombre() { printf '%s/%s' "$PREFIJO" "$1"; }
 

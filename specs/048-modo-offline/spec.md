@@ -10,6 +10,8 @@
 | # | Pregunta | Decisión |
 |---|---|---|
 | D1 | Login | Solo el primer ingreso pide internet. La falta de señal nunca cierra la sesión: se cierra al salir a mano o cuando el servidor la da por vencida (hoy, 30 días sin uso). |
+
+> **Corregido 2026-11-11 (spec 050, tramo E, D-347).** Esta línea decía «(hoy, 30 días sin uso)». Ya no es toda la verdad: además de los 30 días sin uso, el servidor da por vencida la sesión a los **90 días desde que se inició**, aunque se use a diario (401 `SESION_VENCIDA`). Lo que decide esta decisión no cambia: solo un 401 del servidor cierra la sesión (nunca la falta de señal), y la app vuelve al login conservando la cola de envíos, que se manda al entrar de nuevo con la misma cuenta (FR-001, FR-003).
 | D2 | Alcance | Hacer «como si hubiera señal»: hábitos (con texto o foto), publicación del Muro, Plan (acciones y objetivos), Cierra tu día / bitácora, check-in del Radar y planificar hábitos y alarmas. Todo entra en una cola y se envía solo. |
 | D3 | Lo que necesita internet | SER, chat, Pagos, Eventos y Meet, Código Renaser y los videos: mensaje claro «Necesitas conexión para usar esto», nunca un hueco en blanco, y vuelven solas con la señal. |
 | D4 | Aviso | Un ícono discreto; al tocarlo, un globo: «Sin conexión desde las 10:42 · 3 cosas por enviar». Con señal y la cola vacía no aparece. |
@@ -42,7 +44,7 @@
 ## Lo que hay hoy (leído el 2026-11-09)
 
 - **La sesión se pierde al abrir sin red.** `AuthContext` (app) rehidrata la sesión pidiendo `/me`; cualquier fallo, también «sin red», cae en el mismo `catch` que «token vencido» y borra el token.
-- **La sesión del servidor** dura `spring.session.timeout: 30d` sin uso y cada pedido la renueva.
+- **La sesión del servidor** dura `spring.session.timeout: 30d` sin uso y cada pedido la renueva. *Corregido 2026-11-11 (spec 050, D-347): desde el tramo E tiene además un tope absoluto de 90 días desde que se inició; esa renovación no lo mueve.*
 - **Ya hay una cola que funciona sin red**: la de la carrera con GPS (spec 042, `colaDeCarreras.ts` + `colaDeEnvio.ts`): por cuenta, idempotente por `carreraId`, se procesa al terminar, al volver al frente y con un reloj.
 - **Los puntos dependen de la hora del servidor**: `RegistroService.completar` usa `clock.now()` contra la ventana del registro, y `ExpiracionDeRegistrosService` pasa a `EXPIRADO` lo vencido.
 - **La evidencia con foto** pide una URL firmada (`/evidence/upload-url`), sube a S3 y confirma (`/evidence`): los tres pasos necesitan red.
@@ -164,5 +166,5 @@ Las mismas reglas que con red, en la misma cola, con la regla de choques D13.
 
 ## Supuestos
 
-- La duración de la sesión del servidor (30 días sin uso) no cambia.
+- La duración de la sesión del servidor (30 días sin uso) no cambia. *Corregido 2026-11-11 (spec 050, D-347): los 30 días sin uso no cambian, pero la sesión ya no es indefinida: vence a los 90 días desde que se inició.*
 - El reloj del sistema desde el encendido sale de un módulo nativo chico (Android `SystemClock.elapsedRealtime`, iOS `ProcessInfo.systemUptime`); la fase 1 lleva APK nuevo.

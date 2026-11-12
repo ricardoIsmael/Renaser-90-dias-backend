@@ -808,6 +808,47 @@ no, el próximo despliegue lo vuelve a levantar).
 en la t3.medium y Alloy andando quedan ~2,2 GB: sigue alcanzando, pero el margen baja. El segundo
 Tomcat del puerto de administración suma unos pocos MB por JVM.
 
+### 5.5 Límite de pedidos por cuenta: cómo se mide y cómo se pasa a «aplicar» (spec 050 tramo C, D-346)
+
+Un filtro de Spring (`FiltroDeLimitePorCuenta`) cuenta cada pedido de `/api/v1` por cuenta y por grupo en Redis. **Todos los grupos nacen en `REGISTRAR`**: cuentan y anotan «habría bloqueado», pero **nunca** responden 429. No hace falta redesplegar para cambiar nada de lo que sigue, salvo `habilitado`.
+
+| Grupo | Tope de partida (por cuenta) | Qué cubre |
+|---|---|---|
+| `lectura` | 300 / min | los `GET` y la lectura del perfil propio (`POST /users/me`) |
+| `escritura` | 60 / min | `POST`, `PUT`, `PATCH` y `DELETE` que no son de otro grupo |
+| `muro` | 10 / min y 60 / hora | publicar (`POST /wall`) y comentar (`POST /wall/{id}/comments`) |
+| `chat` | 30 / min | enviar mensajes del chat |
+| `subidas` | 20 / min y 300 por 24 h | toda URL firmada de subida (`…/upload-url`, `…/presign`) |
+| `ia-fuera-de-ser` | 5 / min | los `POST` de Análisis 80/20, Espejo y Mapa de Renacimiento |
+| `ser` | 10 / min | los `POST` de `/renasia/**` (los 25 por día de SER siguen aparte) |
+| `exportaciones` | 5 / min | `…/export.csv` y `…/exportar.csv` |
+| `admin` | 120 / min | el resto de `/api/v1/admin/**` (aquí cae el CRM: no tiene cuenta propia, D15) |
+| `webhook-whatsapp` | 600 / min **por origen** | `POST /webhooks/whatsapp` (sin sesión; la firma la comprueba el controller) |
+
+Fuera del filtro, por escrito: `/ws`, la salud, el `OPTIONS` del CORS y las rutas públicas de autenticación y alta (login, social, restablecer contraseña, verificación de correo, solicitudes de cuenta, eliminación de cuenta): tienen sus límites propios (D14) y no se cuentan dos veces. Una cuenta en «ver como» recibe su 403 de siempre antes de contarse. Si Redis falla, el pedido pasa y se anota (`error_de_redis`).
+
+**Cambiar el modo de un grupo, sin reiniciar** (lo corre el dueño; simulacro por omisión):
+
+```bash
+export RENASER_CUENTA_AWS=<12 dígitos>  RENASER_INSTANCIA=<i-…>
+scripts/despliegue/limites-modo.sh estado                      # el modo fijado en Redis de cada grupo
+scripts/despliegue/limites-modo.sh exportaciones APLICAR       # simulacro: muestra qué cambiaría
+scripts/despliegue/limites-modo.sh exportaciones APLICAR --aplicar
+scripts/despliegue/limites-modo.sh exportaciones CONFIGURACION --aplicar   # vuelta atrás: borra el valor, rige application.yaml
+scripts/despliegue/limites-modo.sh --revertir exportaciones --aplicar      # vuelve al valor que había antes del último cambio
+```
+
+Por dentro es una sola clave de Redis: `SET proteccion:modo:<grupo> APLICAR` (valores `DESACTIVADO`, `REGISTRAR`, `APLICAR`, sin distinguir mayúsculas; `DEL proteccion:modo:<grupo>` vuelve al modo de la configuración). El backend la relee cada 30 s (`renaser.proteccion.limites.cache-del-modo`). Un valor que no es un modo se ignora con un aviso en el registro y rige el de la configuración. Con Redis con contraseña (spec 050 A1), la instancia la lee de Parameter Store y entra por `REDISCLI_AUTH`: ningún secreto pasa por la pantalla.
+
+**Medir durante las dos semanas** (SC-002 y SC-003):
+
+- Panel de Grafana `infra/observabilidad/grafana/dashboards/renaser-proteccion.json`: pedidos por resultado y por grupo (`renaser_limite_pedidos_total`), «habría bloqueado» por grupo y la distribución de uso sobre el tope (`renaser_limite_uso_bucket`: 1,0 es justo el tope; más de 1, que se pasó) con p50, p95 y p99 por grupo y ventana. `config.alloy` descarta una lista cerrada de familias y `renaser_limite_*` no está entre ellas: pasan a Grafana Cloud (unas 200 series).
+- Quién habría sido bloqueado, de forma durable (30 días; el registro de Docker solo vive desde el último despliegue): `scripts/proteccion/cuentas-que-habrian-bloqueado.sh <grupo> [AAAA-MM-DD]` lista `veces  id-de-la-cuenta` de más a menos. Solo guarda el id de la cuenta, nunca una IP.
+- El registro del backend: una línea `limite_por_cuenta resultado=… grupo=… metodo=… ruta=…/{id}/… ventana=… cuenta=…` por pedido que habría sido bloqueado (INFO) y por bloqueo (WARN). Nunca lleva cabeceras, token ni cuerpo.
+
+**Antes de pasar `escritura` o `subidas` a `APLICAR`:** la cola sin red de la app (spec 048) envía en ráfaga cuando vuelve la señal (hábitos, radar, fotos): mirar el pico en el panel y llevar la versión de la app que trata el 429 como «reintentar después» (`Retry-After`). Orden recomendado: `exportaciones`, `admin`, `ia-fuera-de-ser`, `subidas`; al final `muro`, `chat`, `escritura` y `lectura`, de a uno, con la métrica `bloqueado` abierta.
+
+**Apagar todo el filtro** (emergencia, necesita despliegue): `PROTECCION_LIMITES_HABILITADO=false` en Parameter Store. Cambiar los topes: `renaser.proteccion.limites.grupos.<grupo>.por-minuto|por-hora|por-dia` en `application.yaml`.
 ### 5.6 La matriz estricta de Mentor y Guía: sombra, aplicar y vuelta atrás (spec 050 tramo H, D-349)
 
 Mentor (`MENTOR`) y Guía (`TRAINEE_GUIDE`, D-265: lo mismo) tienen desde el 2026-11-12 **una lista de 12 permisos y todo lo demás se niega** (`UserRole.PERMISOS_MENTOR_Y_GUIA`, la tabla que aprobó el dueño: `USE_APP`, `FOLLOW_OWN_PROGRAM`, `PUBLISH_ON_WALL`, `TRACK_PROGRAM_AS_STAFF`, `OPEN_SUPPORT_TICKET`, `USE_MENTOR_TICKETS`, `ANSWER_MENTOR_TICKET`, `VIEW_OWN_PHASE_CONTRACTS`, `SIGN_PHASE_CONTRACT`, `MANAGE_CALENDAR`, `MANAGE_CELLS` y `MANAGE_COHORTS`; los tres últimos siguen acotados a lo propio por sus servicios, que no se tocaron). Antes `UserRole.can` les concedía todo salvo `EXPORT_RANKING` (falla-abierto, A-1).
@@ -973,6 +1014,7 @@ va cifrado.
 | `REDIS_PASSWORD` | **SecureString** | Contraseña de Redis; no dejarla en texto plano. En producción la genera `infra/redis/contrasena.sh` (spec 050 A1) |
 | `REDIS_SSL_ENABLED` | String | `true` cuando el proveedor de Redis exige TLS; `false` para el contenedor privado local |
 | `REDIS_SESSION_NAMESPACE` | String | Namespace de Spring Session; por defecto `renaser:session:v2` |
+| `RENASER_SESION_TOPE_ABSOLUTO` | String | Tope absoluto de la sesión desde que se inició (spec 050 tramo E, D-347): `90d` de partida; `0` = sin tope (la vuelta atrás: Parameter Store no admite valores vacíos), y se reinicia el backend. Siempre con unidad (`90d`, `2160h`, `P90D`): `90` sin unidad impide arrancar. Los 30 días sin uso (`spring.session.timeout`) no cambian |
 | `CORS_ORIGENES` | String | Orígenes permitidos, separados por coma. El default son tres `localhost` |
 | `RESET_PASSWORD_URL` | String | **Hoy el default es `https://TODO-frontend-no-definido.renaser.dev/...`** — el dominio del frontend no está decidido |
 | `ACTIVATE_ACCOUNT_URL` | String | Ídem: default con `TODO-` adentro |

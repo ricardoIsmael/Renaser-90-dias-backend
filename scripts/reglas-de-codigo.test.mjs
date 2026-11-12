@@ -65,6 +65,21 @@ test('tiempo: ningún LocalDate/LocalDateTime/LocalTime/ZonedDateTime/OffsetDate
 const MIGR = archivos('src/main/resources/db/migration', (n) => /^V\d+__.*\.sql$/.test(n));
 const version = (f) => Number(path.basename(f).match(/^V(\d+)__/)[1]);
 
+test('scripts: la limpieza al salir fija la ruta al crearla (trap con comillas dobles), nunca una variable que puede no existir en el EXIT', () => {
+  // Con comillas simples, `trap 'rm -f "$x"' EXIT` expande $x AL SALIR: si era local de una función ya no existe y, con set -u,
+  // el script termina en error después de hacer su trabajo (pasó dos veces el 11/11/2026, E-679). Se escribe trap "rm -f '$x'" EXIT.
+  const malos = [];
+  for (const raiz of ['scripts', 'infra']) {
+    if (!fs.existsSync(path.join(RAIZ, raiz))) continue;
+    for (const f of execFileSync('git', ['ls-files', raiz], { cwd: RAIZ, encoding: 'utf8' }).split('\n').filter(x => x.endsWith('.sh'))) {
+      fs.readFileSync(path.join(RAIZ, f), 'utf8').split('\n').forEach((linea, n) => {
+        if (/trap '[^']*\$[^']*' EXIT/.test(linea)) malos.push(`${f}:${n + 1}`);
+      });
+    }
+  }
+  assert.deepEqual(malos, [], `Usa trap "rm -f '$ruta'" EXIT (comillas dobles afuera) en: ${malos.join(', ')}`);
+});
+
 test('migraciones: cada versión de Flyway es única', () => {
   const vistas = new Map();
   const repetidas = [];
@@ -97,6 +112,52 @@ test('migraciones: no se edita ni se borra una que ya está en master, y una nue
   const bajas = cambios.filter(([e]) => e === 'A').map(([, p]) => path.basename(p))
     .filter((n) => /^V\d+__/.test(n) && Number(n.match(/^V(\d+)/)[1]) <= maxima);
   assert.deepEqual(bajas, [], `Una migración nueva por debajo de V${maxima} (la última de master) no corre en una base ya migrada.`);
+});
+
+// ── Familia «listas sin tope» (spec 050 tramo F, FR-034) ───────────────────────────────────────────────────────────
+// Un `size=100000` no puede llegar a una consulta. Todo parámetro de tamaño de página de un controller pasa por
+// `shared.domain.PaginaAcotada` (el único lugar donde se decide cuánto es demasiado).
+const NOMBRES_DE_TAMANO = 'size|limit|limite|tamano|tamanio|pageSize';
+const ARGS_DE_ANOTACION = String.raw`(?:[^()]|\([^()]*\))*`;
+const TAMANO_POR_NOMBRE_DE_PARAMETRO = new RegExp(String.raw`@RequestParam(?:\(${ARGS_DE_ANOTACION}\))?\s*(?:final\s+)?(?:int|Integer|long|Long)\s+(?:${NOMBRES_DE_TAMANO})\b`);
+const TAMANO_POR_NOMBRE_EN_LA_ANOTACION = new RegExp(String.raw`@RequestParam\(${ARGS_DE_ANOTACION}["'](?:${NOMBRES_DE_TAMANO})["']${ARGS_DE_ANOTACION}\)\s*(?:final\s+)?(?:int|Integer|long|Long)\s+\w+`);
+
+/** ¿Este controller (su fuente) recibe un tamaño de página y no lo pasa por PaginaAcotada? */
+function recibeUnTamanoSinAcotar(fuente) {
+  const java = sinComentarios(fuente);
+  return (TAMANO_POR_NOMBRE_DE_PARAMETRO.test(java) || TAMANO_POR_NOMBRE_EN_LA_ANOTACION.test(java)) && !/\bPaginaAcotada\b/.test(java);
+}
+
+test('listas: un controller que recibe size, limit o tamano lo pasa por PaginaAcotada (el tope no se escribe en cada lista)', () => {
+  const sueltos = JAVA_MAIN.filter((f) => f.endsWith('Controller.java'))
+    .filter((f) => !EXC.tamanoSinPaginaAcotada.archivos.includes(rel(f)))
+    .filter((f) => recibeUnTamanoSinAcotar(fs.readFileSync(f, 'utf8'))).map(rel);
+  assert.deepEqual(sueltos, [], 'Un parámetro de tamaño de página sin PaginaAcotada deja pasar un size=100000. Úsala en el controller: ' +
+    'PaginaAcotada.estricta(page, size, MAXIMO) responde 400 con el motivo (como GET /admin/pagos/cuotas) y PaginaAcotada.recortada(...) lo ' +
+    'lleva al máximo en silencio; declara el MAXIMO en el caso de uso (ver ConsultarAuditoriaUseCase.TAMANO_MAXIMO).');
+});
+
+test('listas: la lista de controllers sin PaginaAcotada solo se achica (si uno ya la usa o ya no recibe tamaño, bórralo de las excepciones)', () => {
+  const sobran = EXC.tamanoSinPaginaAcotada.archivos.filter((r) => !fs.existsSync(path.join(RAIZ, r))
+    || !recibeUnTamanoSinAcotar(fs.readFileSync(path.join(RAIZ, r), 'utf8')));
+  assert.deepEqual(sobran, [], 'Ya cumplen: quita estas líneas de scripts/reglas-de-codigo-excepciones.json (tamanoSinPaginaAcotada).');
+});
+
+test('listas: el chequeo reconoce el caso malo (un size suelto) y deja pasar el bueno (con PaginaAcotada)', () => {
+  const malo = '@RestController class ListaController { @GetMapping List<X> lista(@RequestParam(defaultValue = "50") int size) { return null; } }';
+  const maloPorLimit = '@RestController class L { @GetMapping List<X> l(@RequestParam(required = false, defaultValue = "30") int limit) { return null; } }';
+  const maloPorNombre = '@RestController class L { @GetMapping List<X> l(@RequestParam(value = "size", defaultValue = "30") int porPagina) { return null; } }';
+  const maloConInteger = '@RestController class L { @GetMapping List<X> l(@RequestParam(required = false) Integer limit) { return null; } }';
+  const bueno = '@RestController class L { @GetMapping List<X> l(@RequestParam(defaultValue = "50") int size) { var p = PaginaAcotada.estricta(0, size, 200); return null; } }';
+  const sinTamano = '@RestController class L { @GetMapping List<X> l(@RequestParam(required = false) String q, @RequestParam(defaultValue = "0") int page) { return null; } }';
+  const enUnComentario = '@RestController class L { // @RequestParam int size (viejo)\n @GetMapping List<X> l() { return null; } }';
+  assert.equal(recibeUnTamanoSinAcotar(malo), true, 'un size sin PaginaAcotada debe fallar');
+  assert.equal(recibeUnTamanoSinAcotar(maloPorLimit), true, 'un limit sin PaginaAcotada debe fallar');
+  assert.equal(recibeUnTamanoSinAcotar(maloPorNombre), true, 'un @RequestParam llamado "size" con otro nombre de variable debe fallar');
+  assert.equal(recibeUnTamanoSinAcotar(maloConInteger), true, 'un Integer limit debe fallar');
+  assert.equal(recibeUnTamanoSinAcotar(bueno), false);
+  assert.equal(recibeUnTamanoSinAcotar(sinTamano), false);
+  assert.equal(recibeUnTamanoSinAcotar(enUnComentario), false);
 });
 
 // ── Familia «pruebas que no corren» (E-27, E-111, E-349, E-654) ───────────────────────────────────────────────────
