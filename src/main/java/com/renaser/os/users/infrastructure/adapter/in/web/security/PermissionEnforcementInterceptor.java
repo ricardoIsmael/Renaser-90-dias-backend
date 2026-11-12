@@ -11,6 +11,8 @@ import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
+import com.renaser.os.users.application.ports.out.matriz.DenegacionDeLaMatriz;
+import com.renaser.os.users.application.ports.out.matriz.ModoDeLaMatriz;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
@@ -23,6 +25,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
+import org.springframework.web.servlet.HandlerMapping;
 
 import java.io.IOException;
 import java.util.Optional;
@@ -52,11 +55,17 @@ import java.util.Optional;
  *
  * <p><b>La matriz (que permiso tiene cada rol).</b> TRAINEE se verifica de verdad desde 2026-09-01.
  * MENTOR_LEAD se verifica desde 2026-09-09, pero <b>en modo sombra por defecto</b> (SDD 002, decision
- * DL-08). La matriz de MENTOR, ADMIN y ALCHEMIST sigue sin definirse: pasan cualquier permiso y lo
- * resuelven los guards de cada servicio. Ese falla-abierto esta documentado en
- * {@code UserRole.can(Permission)} y en {@code docs/ENDPOINTS_FALTANTES.md} fila A-1: definir que puede
- * hacer cada uno de esos 3 roles es una regla de negocio que el dueño del proyecto todavia no dicto
+ * DL-08). MENTOR y TRAINEE_GUIDE (D-265: lo mismo) se evaluan desde 2026-11-12 con una lista de permitidos que
+ * aprobo el dueño (spec 050, tramo H, D-349), tambien <b>en modo sombra por defecto</b>:
+ * {@code renaser.security.mentor-enforcement=false}, o el valor que el dueño fije en Redis sin reiniciar
+ * ({@link ControlDeLaMatrizDeMentor}, {@code scripts/despliegue/permisos-modo.sh}). La matriz de ADMIN y ALCHEMIST
+ * sigue sin definirse: pasan cualquier permiso y lo resuelven los guards de cada servicio. Ese falla-abierto
+ * esta documentado en {@code UserRole.can(Permission)} y en {@code docs/ENDPOINTS_FALTANTES.md} fila A-1: definir
+ * que puede hacer cada uno de esos 2 roles es una regla de negocio que el dueño del proyecto todavia no dicto
  * (CLAUDE.MD §0.6).
+ *
+ * <blockquote><b>Corregido 2026-11-12 (D-349).</b> Este parrafo decia que la matriz de MENTOR tambien
+ * seguia sin definirse y que pasaba cualquier permiso.</blockquote>
  *
  * <p><b>Que es el modo sombra y por que existe.</b> Hasta hoy MENTOR_LEAD pasaba por aca sin
  * que se le mirara un solo permiso. Encender el cumplimiento de golpe convierte en 403 todo
@@ -94,10 +103,24 @@ class PermissionEnforcementInterceptor implements HandlerInterceptor {
     /** false = modo sombra para MENTOR_LEAD (registra, no deniega). Ver el javadoc de la clase. */
     private final boolean cumplimientoMentorLead;
 
+    /** El modo (sombra o aplicar) y el registro de la matriz de MENTOR y TRAINEE_GUIDE. */
+    private final ControlDeLaMatrizDeMentor controlDeMentor;
+
+    /** Lo que se sabe de un pedido al decidir: para no pasar cinco argumentos de un metodo a otro. */
+    private record Pedido(HttpServletRequest request, HandlerMethod handler, Permission requerido) {
+    }
+
+    /** Con MENTOR y TRAINEE_GUIDE en sombra y sin Redis: el valor de produccion de partida y el de los contextos reducidos. */
     PermissionEnforcementInterceptor(ObjectProvider<UserSummaryFinder> userSummaryFinderProvider,
                                       boolean cumplimientoMentorLead) {
+        this(userSummaryFinderProvider, cumplimientoMentorLead, ControlDeLaMatrizDeMentor.soloConfiguracion(false));
+    }
+
+    PermissionEnforcementInterceptor(ObjectProvider<UserSummaryFinder> userSummaryFinderProvider,
+                                      boolean cumplimientoMentorLead, ControlDeLaMatrizDeMentor controlDeMentor) {
         this.userSummaryFinderProvider = userSummaryFinderProvider;
         this.cumplimientoMentorLead = cumplimientoMentorLead;
+        this.controlDeMentor = controlDeMentor;
     }
 
     @Override
@@ -127,7 +150,7 @@ class PermissionEnforcementInterceptor implements HandlerInterceptor {
             // suspension, arriba, si.
             return true;
         }
-        return verificarMatriz(request, response, actor.get(), requerido);
+        return verificarMatriz(response, actor.get(), new Pedido(request, handlerMethod, requerido));
     }
 
     /**
@@ -155,8 +178,8 @@ class PermissionEnforcementInterceptor implements HandlerInterceptor {
     }
 
     /** La matriz rol -> permiso, con la suspension ya descartada. Ver el javadoc de la clase. */
-    private boolean verificarMatriz(HttpServletRequest request, HttpServletResponse response,
-                                    UserSummary actor, Permission requerido) throws IOException {
+    private boolean verificarMatriz(HttpServletResponse response, UserSummary actor, Pedido pedido) throws IOException {
+        Permission requerido = pedido.requerido();
         if (requerido.exclusivoDeSoporteTi()) {
             // ESTRICTO, antes del falla-abierto de A-1 y sin modo sombra (D-267): la consola Soporte TI no la usa
             // ningun otro rol, ni ADMIN ni ALCHEMIST (FR-025).
@@ -167,13 +190,46 @@ class PermissionEnforcementInterceptor implements HandlerInterceptor {
             return false;
         }
         if (actor.role() == UserRole.MENTOR_LEAD) {
-            return verificarMentorLead(request, response, actor, requerido);
+            return verificarMentorLead(pedido.request(), response, actor, requerido);
+        }
+        if (actor.role().actuaComoMentor()) {
+            return verificarMentorOGuia(response, actor.role(), pedido);
         }
         if (actor.role() != UserRole.TRAINEE || actor.role().can(requerido)) {
-            return true; // MENTOR/ADMIN/ALCHEMIST/IT_SUPPORT: la matriz sigue falla-abierto (A-1, javadoc de la clase)
+            return true; // ADMIN/ALCHEMIST/IT_SUPPORT: la matriz sigue falla-abierto (A-1, javadoc de la clase)
         }
         denegar(response, "No autorizado", NotAuthorizedException.SIN_PERMISO);
         return false;
+    }
+
+    /**
+     * La matriz estricta de MENTOR y TRAINEE_GUIDE (spec 050, tramo H, FR-041; D-349): lista de permitidos, negada por
+     * defecto. Lo que la lista permite pasa sin anotar nada. Lo que no permite se <b>anota</b> —el rol, el permiso y el
+     * endpoint, nunca la cuenta— y, segun el modo, o bien pasa ({@code SOMBRA}) o bien responde 403 ({@code APLICAR}).
+     * Los guards de los servicios no cambian: son la segunda linea (FR-042).
+     */
+    private boolean verificarMentorOGuia(HttpServletResponse response, UserRole rol, Pedido pedido) throws IOException {
+        if (rol.can(pedido.requerido())) {
+            return true;
+        }
+        ModoDeLaMatriz modo = controlDeMentor.modo();
+        controlDeMentor.anotar(new DenegacionDeLaMatriz(modo, rol, pedido.requerido(),
+                pedido.request().getMethod(), plantillaDeLaRuta(pedido.request())), identidadDe(pedido.handler()));
+        if (modo == ModoDeLaMatriz.SOMBRA) {
+            return true;
+        }
+        denegar(response, "No autorizado", NotAuthorizedException.SIN_PERMISO);
+        return false;
+    }
+
+    /** La ruta con su plantilla ({@code /mentor/groups/{id}}), que agrupa los pedidos y no lleva el id de nadie. */
+    private static String plantillaDeLaRuta(HttpServletRequest request) {
+        Object plantilla = request.getAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE);
+        return plantilla == null ? "(sin plantilla)" : plantilla.toString();
+    }
+
+    private static String identidadDe(HandlerMethod handler) {
+        return handler.getBeanType().getSimpleName() + "#" + handler.getMethod().getName();
     }
 
     /**

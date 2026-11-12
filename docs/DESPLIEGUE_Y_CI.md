@@ -849,6 +849,36 @@ Por dentro es una sola clave de Redis: `SET proteccion:modo:<grupo> APLICAR` (va
 **Antes de pasar `escritura` o `subidas` a `APLICAR`:** la cola sin red de la app (spec 048) envía en ráfaga cuando vuelve la señal (hábitos, radar, fotos): mirar el pico en el panel y llevar la versión de la app que trata el 429 como «reintentar después» (`Retry-After`). Orden recomendado: `exportaciones`, `admin`, `ia-fuera-de-ser`, `subidas`; al final `muro`, `chat`, `escritura` y `lectura`, de a uno, con la métrica `bloqueado` abierta.
 
 **Apagar todo el filtro** (emergencia, necesita despliegue): `PROTECCION_LIMITES_HABILITADO=false` en Parameter Store. Cambiar los topes: `renaser.proteccion.limites.grupos.<grupo>.por-minuto|por-hora|por-dia` en `application.yaml`.
+### 5.6 La matriz estricta de Mentor y Guía: sombra, aplicar y vuelta atrás (spec 050 tramo H, D-349)
+
+Mentor (`MENTOR`) y Guía (`TRAINEE_GUIDE`, D-265: lo mismo) tienen desde el 2026-11-12 **una lista de 12 permisos y todo lo demás se niega** (`UserRole.PERMISOS_MENTOR_Y_GUIA`, la tabla que aprobó el dueño: `USE_APP`, `FOLLOW_OWN_PROGRAM`, `PUBLISH_ON_WALL`, `TRACK_PROGRAM_AS_STAFF`, `OPEN_SUPPORT_TICKET`, `USE_MENTOR_TICKETS`, `ANSWER_MENTOR_TICKET`, `VIEW_OWN_PHASE_CONTRACTS`, `SIGN_PHASE_CONTRACT`, `MANAGE_CALENDAR`, `MANAGE_CELLS` y `MANAGE_COHORTS`; los tres últimos siguen acotados a lo propio por sus servicios, que no se tocaron). Antes `UserRole.can` les concedía todo salvo `EXPORT_RANKING` (falla-abierto, A-1).
+
+**Nace en `SOMBRA`** y no cambia nada para nadie: `PermissionEnforcementInterceptor` evalúa la lista, **anota** lo que habría negado y deja pasar. Pasar a `APLICAR` es una decisión del dueño, cuando el registro esté limpio en uso real (T070). Dos formas de cambiarlo:
+
+- **Sin reiniciar** (lo normal; un reinicio son 1–2 minutos de 502): la clave de Redis `proteccion:permisos:modo` (`SOMBRA` o `APLICAR`, sin distinguir mayúsculas), que el backend relee cada 30 s y **manda sobre** la configuración. Quitarla devuelve el modo de `application.yaml`.
+- Por configuración (necesita despliegue): `renaser.security.mentor-enforcement` (`MENTOR_ENFORCEMENT`, `false` = `SOMBRA`, valor de partida). MENTOR_LEAD tiene su propio interruptor (`mentor-lead-enforcement`, Q7) y no se toca aquí.
+
+```bash
+export RENASER_CUENTA_AWS=<12 dígitos>  RENASER_INSTANCIA=<i-…>
+scripts/despliegue/permisos-modo.sh estado                  # el modo fijado en Redis
+scripts/proteccion/denegaciones-de-la-matriz.sh 7           # qué habría negado (o negó) en los últimos 7 días, por endpoint
+scripts/despliegue/permisos-modo.sh APLICAR                 # simulacro: muestra qué cambiaría, no toca nada
+scripts/despliegue/permisos-modo.sh APLICAR --aplicar       # lo pone; el backend lo ve en menos de 30 s
+scripts/despliegue/permisos-modo.sh SOMBRA --aplicar        # VUELTA ATRÁS: deja de negar, solo anota
+scripts/despliegue/permisos-modo.sh CONFIGURACION --aplicar # borra la clave: rige application.yaml
+scripts/despliegue/permisos-modo.sh --revertir --aplicar    # vuelve al valor que había antes del último cambio
+```
+
+El script cumple D12 como los del tramo C: simulacro por omisión (solo `--aplicar` cambia algo), perfil `prod` y cuenta verificada, idempotente, guarda el valor anterior en `~/.renaser/permisos-modo/anterior` y nunca pone la contraseña de Redis en un argumento.
+
+**Qué se anota y dónde.** Por cada pedido de un Mentor o una Guía a un endpoint cuyo permiso no está en la lista (en `SOMBRA` el pedido pasa; en `APLICAR` da 403 `SIN_PERMISO`):
+
+- Una línea del registro, `matriz-estricta HABRIA_DENEGADO|DENEGADO rol=… permiso=… metodo=… ruta=… handler=…`, con la **plantilla** de la ruta (`/api/v1/mentor/groups/{id}`). **Nunca la cuenta, ni un token, ni la ruta concreta.** El registro de Docker solo vive desde el último despliegue.
+- Un contador durable en Redis, un hash por día de Lima (`proteccion:permisos:denegaciones:<AAAA-MM-DD>`, 30 días de vida) con el campo `<ESTADO> <ROL> <PERMISO> <MÉTODO> <RUTA>`. Es lo que lee `denegaciones-de-la-matriz.sh`, que sobrevive a los despliegues de las semanas que dura la sombra. Si anotar falla, el pedido sigue.
+
+**Cuándo está limpio.** Una línea `HABRIA_DENEGADO` es un endpoint que un Mentor o una Guía usó y cuyo permiso falta: o es un abuso, o falta un permiso en la tabla (que lo aprueba el dueño, regla 00; no se agrega por cuenta propia). Después de pasar a `APLICAR`, la misma lista (`DENEGADO`) es la de los 403 que da la matriz: cualquiera de un flujo legítimo es bloqueante y se vuelve a `SOMBRA`.
+
+> **Corregido 2026-11-12 (D-349).** `UserRole.can` y el javadoc de `Permission` decían que MENTOR y TRAINEE_GUIDE fallaban abiertos (los pasos «el 403 de un mentor lo da el servicio»). Ya no: el interceptor los evalúa en sombra. Siguen sin matriz solo ADMIN y ALCHEMIST (A-1).
 
 ---
 

@@ -243,6 +243,12 @@ renaser:
     # true recien cuando el log del modo sombra este limpio en uso real; volver atras es cambiar
     # esta linea, no desplegar codigo.
     mentor-lead-enforcement: ${MENTOR_LEAD_ENFORCEMENT:false}
+    # Spec 050, tramo H (FR-041, D-349): lo mismo para MENTOR y TRAINEE_GUIDE, cuya matriz es ahora una lista de permitidos
+    # (UserRole.PERMISOS_MENTOR_Y_GUIA, aprobada por el dueño). En false: modo SOMBRA, que evalua la matriz, anota lo que habria
+    # denegado (log y contador por dia en Redis) y deja pasar. En true: APLICAR, que responde 403 SIN_PERMISO. Esta propiedad es la
+    # de partida: lo que el dueño fije en la clave de Redis `proteccion:permisos:modo` con scripts/despliegue/permisos-modo.sh manda
+    # sobre ella y se aplica en 30 s SIN reiniciar (un reinicio son 1-2 minutos de 502). Vuelta atras: ese mismo script con CONFIGURACION.
+    mentor-enforcement: ${MENTOR_ENFORCEMENT:false}
     ip-del-cliente:
       # E-678, D-342. Apagada: la IP sale del valor que agrega CloudFront en X-Forwarded-For. La politica de origen
       # `Managed-AllViewer` NO agrega CloudFront-Viewer-Address (solo `AllViewerAndCloudFrontHeaders-2022-06` lo hace) y
