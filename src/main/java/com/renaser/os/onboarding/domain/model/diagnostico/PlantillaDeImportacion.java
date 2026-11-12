@@ -19,6 +19,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /**
  * La hoja de cálculo de la que Administración carga preguntas (spec 026, Q4-A): lectura con errores por fila, plantilla y exportación. Sin Spring ni librerías.
@@ -124,12 +125,22 @@ public final class PlantillaDeImportacion {
 
     /** El diagnóstico tal como está (sin las retiradas) en el formato de la plantilla, para editarlo fuera y volver a importarlo. */
     public static String exportar(FichaDelDiagnostico ficha) {
-        StringBuilder sb = new StringBuilder(fila(COLUMNAS));
+        StringBuilder sb = new StringBuilder();
+        exportarPorFilas(ficha, sb::append);
+        return sb.toString();
+    }
+
+    /**
+     * Lo mismo que {@link #exportar}, fila por fila (spec 050, tramo F; FR-032): la cabecera primero y después cada pregunta,
+     * cada una ya con su salto de línea. Quien escribe las va soltando; no hace falta tener el archivo entero.
+     */
+    public static void exportarPorFilas(FichaDelDiagnostico ficha, Consumer<String> escritorDeFila) {
+        escritorDeFila.accept(fila(COLUMNAS));
         Map<Integer, String> clavePorId = new HashMap<>();
         ficha.preguntas().forEach(p -> clavePorId.put(p.id(), p.clave()));
         for (SeccionDelDiagnostico s : ficha.secciones()) {
             for (PreguntaDelDiagnostico p : s.preguntas()) {
-                sb.append(fila(List.of(s.titulo(), p.clave(), p.texto(), p.ayuda() == null ? "" : p.ayuda().replace("\n", " · "),
+                escritorDeFila.accept(fila(List.of(s.titulo(), p.clave(), p.texto(), p.ayuda() == null ? "" : p.ayuda().replace("\n", " · "),
                         NOMBRE_DEL_TIPO.get(p.tipo()), p.requerida() ? "Sí" : "No", opcionesComoTexto(p),
                         p.maximoOpciones() == null ? "" : String.valueOf(p.maximoOpciones()),
                         p.condicion() == null ? "" : clavePorId.getOrDefault(p.condicion().preguntaId(), "") + "=" + p.condicion().valor(),
@@ -137,7 +148,6 @@ public final class PlantillaDeImportacion {
                         String.join(" | ", p.formaciones().stream().map(f -> nombreDeLaFormacion(f)).sorted().toList()))));
             }
         }
-        return sb.toString();
     }
 
     private static String opcionesComoTexto(PreguntaDelDiagnostico p) {

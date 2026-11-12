@@ -5,14 +5,29 @@ import com.renaser.os.shared.domain.UserId;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /** La lista de cajas del Admin y su descarga (D-219). Solo ADMIN activo. */
 public interface ConsultarCajasUseCase {
 
+    /** El máximo de {@code size} de la lista (spec 050, tramo F): lo que pase de esto se recorta a esto. */
+    int TAMANO_MAXIMO = 200;
+
     PaginaDeCajas listar(UserId actorId, FiltroDeCajas filtro);
 
-    /** Todas las cajas que aplican (sin {@code NO_APLICA}), ordenadas por nombre: el CSV. */
-    List<ResumenDeCaja> exportar(UserId actorId);
+    /**
+     * La descarga: todas las cajas que aplican (sin {@code NO_APLICA}), ordenadas por nombre. <b>El guard de ADMIN pasa
+     * aquí, al pedirla</b>, antes de que se escriba un solo byte: lo que viene después (las filas, por lotes) ya no puede
+     * cambiar el estado HTTP. Las filas no se juntan: cada lote se entrega a quien escribe y se suelta.
+     */
+    ExportacionDeCajas exportar(UserId actorId);
+
+    /** Las filas de la descarga, por lotes y en el orden del CSV; no se arman hasta que se llama a {@link #porLotes}. */
+    @FunctionalInterface
+    interface ExportacionDeCajas {
+
+        void porLotes(Consumer<List<ResumenDeCaja>> escritor);
+    }
 
     /**
      * @param estado {@code null} = todas las que aplican (sin {@code NO_APLICA})

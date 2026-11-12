@@ -15,12 +15,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.web.filter.ForwardedHeaderFilter;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -35,38 +31,20 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Auditoria NFR 2026-09-06 (2a pasada). El backend vive detras de CloudFront, y sin
- * {@code server.forward-headers-strategy} el {@code getRemoteAddr()} que alimenta los limites por
- * IP (login, alta, reset) devolvia la IP del borde de CloudFront para TODOS los clientes: un solo
- * contador compartido por todo el mundo. Esta prueba fija que, con el filtro de cabeceras
- * reenviadas delante del controller, la IP que llega al caso de uso es la del cliente real
- * (primer valor de {@code X-Forwarded-For}).
+ * Auditoria NFR 2026-09-06 (2a pasada), corregida en E-678. El backend vive detras de CloudFront y de un nginx
+ * transparente: la conexion que ve Spring es la del nginx, asi que la IP que alimenta los limites por IP (login, alta,
+ * reset) sale de {@code X-Forwarded-For}. Esta prueba fija que al caso de uso le llega la que agrego CloudFront (el
+ * valor de mas a la derecha) y no lo que escriba el cliente a su izquierda.
  *
- * <p><b>Por que el filtro se registra aca a mano.</b> En produccion lo registra Spring Boot al
- * leer {@code server.forward-headers-strategy=framework}: el bean vive en
- * {@code org.springframework.boot.web.server.autoconfigure.servlet.ServletWebServerConfiguration}
- * (verificado con {@code javap}: {@code @ConditionalOnProperty(name="server.forward-headers-strategy",
- * havingValue="framework")}). Esa configuracion NO forma parte del slice {@code @WebMvcTest} — la
- * primera version de esta prueba fallo con {@code expected "203.0.113.9" but was "127.0.0.1"} por
- * eso, no por la configuracion (E-149). La configuracion de abajo replica exactamente lo que hace
- * Boot; lo que se prueba es el efecto del filtro sobre {@code getRemoteAddr()}, que es lo que
- * consumen los controllers.
+ * <p>No se registra ningun {@code ForwardedHeaderFilter}: en produccion
+ * {@code server.forward-headers-strategy} es {@code none} (lo fija {@code CabecerasReenviadasTest}) y la IP la resuelve
+ * {@code DireccionIpDelCliente} leyendo la cabecera tal como llega. El contexto completo, con el servidor real, lo
+ * ejercita {@code IpDelClienteIT}.
  */
 @WebMvcTest(AccountRequestController.class)
-@Import({SecurityConfig.class, AccountRequestControllerIpRealTest.FiltroComoEnProduccion.class})
-@TestPropertySource(properties = {
-        "renaser.web.cors.origenes=http://localhost:8081",
-        "server.forward-headers-strategy=framework"
-})
+@Import(SecurityConfig.class)
+@TestPropertySource(properties = "renaser.web.cors.origenes=http://localhost:8081")
 class AccountRequestControllerIpRealTest {
-
-    @TestConfiguration
-    static class FiltroComoEnProduccion {
-        @Bean
-        FilterRegistrationBean<ForwardedHeaderFilter> forwardedHeaderFilter() {
-            return new FilterRegistrationBean<>(new ForwardedHeaderFilter());
-        }
-    }
 
     @Autowired
     private MockMvc mockMvc;
@@ -94,12 +72,12 @@ class AccountRequestControllerIpRealTest {
     private com.renaser.os.users.application.ports.in.accountrequest.ConsultarOpcionesDeAceptacionUseCase opcionesDeAceptacion;
 
     @Test
-    @DisplayName("detras de CloudFront, la IP que ve el limite de tasa es la del cliente, no la del borde")
-    void laIpDelClienteSaleDeXForwardedFor() throws Exception {
+    @DisplayName("la IP que ve el limite de tasa es la que agrego CloudFront (la ultima), no la que escribio el cliente")
+    void laIpDelClienteEsLaUltimaDeXForwardedFor() throws Exception {
         when(consultarEmailRegistradoUseCase.estaRegistrado(eq("alguien@ejemplo.com"), anyString())).thenReturn(false);
 
         mockMvc.perform(post("/api/v1/account-requests/exists")
-                        .header("X-Forwarded-For", "203.0.113.9, 130.176.0.1")
+                        .header("X-Forwarded-For", "198.51.100.7, 203.0.113.9")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"alguien@ejemplo.com\"}"))
                 .andExpect(status().isOk());
@@ -110,9 +88,8 @@ class AccountRequestControllerIpRealTest {
     }
 
     /**
-     * Regresion de E-151. Con un cliente IPv6, el {@code ForwardedHeaderFilter} reconstruye la
-     * direccion como host de URI y {@code getRemoteAddr()} la devuelve <b>entre corchetes</b>.
-     * Postgres rechaza esa forma en una columna {@code inet}
+     * Regresion de E-151. Con un cliente IPv6, la direccion puede llegar <b>entre corchetes</b> (como host de URI) o con
+     * puerto. Postgres rechaza esa forma en una columna {@code inet}
      * ({@code invalid input syntax for type inet: "[2803:...]"}) y el alta explotaba: nadie con
      * conexion IPv6 podia registrarse, mientras que en IPv4 todo seguia funcionando.
      *
@@ -125,7 +102,7 @@ class AccountRequestControllerIpRealTest {
         when(consultarEmailRegistradoUseCase.estaRegistrado(eq("ipv6@ejemplo.com"), anyString())).thenReturn(false);
 
         mockMvc.perform(post("/api/v1/account-requests/exists")
-                        .header("X-Forwarded-For", "2803:9810:6075:9310:c63b:3904:e158:3228, 130.176.0.1")
+                        .header("X-Forwarded-For", "198.51.100.7, 2803:9810:6075:9310:c63b:3904:e158:3228")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"ipv6@ejemplo.com\"}"))
                 .andExpect(status().isOk());
@@ -156,7 +133,7 @@ class AccountRequestControllerIpRealTest {
                 .thenReturn(ResultadoVerificacionDominio.puedeRecibir());
 
         mockMvc.perform(post("/api/v1/account-requests/verify-email")
-                        .header("X-Forwarded-For", "203.0.113.9, 130.176.0.1")
+                        .header("X-Forwarded-For", "198.51.100.7, 203.0.113.9")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"alguien@ejemplo.com\"}"))
                 .andExpect(status().isOk());

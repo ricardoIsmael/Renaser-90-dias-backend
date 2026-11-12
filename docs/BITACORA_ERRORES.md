@@ -5136,7 +5136,10 @@ funcionó. Lo mismo para el límite de altas (60/h) y el de reset.
 
 **Solución.** `server.forward-headers-strategy: framework` (`FORWARD_HEADERS_STRATEGY`): Spring
 registra el `ForwardedHeaderFilter`, que reescribe la dirección remota con el primer valor de
-`X-Forwarded-For` — el que CloudFront pone: el cliente real. **Se confía en ese header porque el
+`X-Forwarded-For` — el que CloudFront pone: el cliente real.
+> **Corregido 2026-11-11 (E-678).** Esta línea decía que el primer valor es el que pone CloudFront. No lo es: CloudFront
+> agrega el suyo al final y lo que va antes lo escribe quien hace la petición. Hoy la IP sale del último valor y
+> `server.forward-headers-strategy` es `none`. **Se confía en ese header porque el
 security group solo deja llegar al 8080 desde los rangos de CloudFront (y la IP del dueño)**;
 falsearlo exige saltarse CloudFront, que es exactamente el pendiente de la cabecera secreta de
 origen (informe, §2.3). Cuando eso se cierre, la confianza en `X-Forwarded-For` queda completa.
@@ -12661,8 +12664,8 @@ segundo backend (tope de 1.400 MB) sigue siendo imposible en esta máquina.
   repositorio `DESPLIEGUE_MODO=reemplazo`. **En la t3.small de hoy el script elige este modo solo**: el
   cambio se puede subir sin riesgo, y el corte desaparece el día que la instancia pase a `t3.medium`.
 
-nginx es transparente a propósito: no toca `X-Forwarded-For` (la app toma el valor más a la izquierda,
-E-149/OUT-1) y conserva `Host`; soporta WebSocket (`/ws` y la voz en vivo), no guarda en buffer (streaming
+nginx es transparente a propósito: no toca `X-Forwarded-For` (la app toma el valor más a la derecha, el que
+agrega CloudFront; *corregido 2026-11-11, E-678: decía «a la izquierda»*) y conserva `Host`; soporta WebSocket (`/ws` y la voz en vivo), no guarda en buffer (streaming
 del chat, subidas), y el tope de tamaño lo sigue poniendo Spring. Los schedulers no se pisan durante los
 segundos con dos instancias: 20 de 22 llevan ShedLock sobre JDBC, y los otros dos pueden correr en todas
 las instancias (`SchedulerLockConfig`).
@@ -16137,3 +16140,32 @@ hora futura o >48 h dejan el hábito sin puntos y la respuesta suma `motivoSinPu
 **Cómo evitar que vuelva a pasar.** `EntregarPastillaSinRedIT` (Postgres real: 11:00 que llega a las 13:00, llegada al otro día con el audio ya PERDIDO, reintento y cuatro pedidos a la vez, madrugada UTC, día cerrado, 48 h, sin cabeceras igual que antes) y `PastillaSinRedServiceTest`. Todo endpoint que cierre un hábito o una entrega con la hora del servidor y que la
 app pueda hacer sin señal acepta las tres cabeceras desde el primer día: al sumar una escritura que la cola de la app pueda encolar, se revisa si usa `clock.now()` para una regla de calendario. Un mensaje de error que la app reconoce por su texto se prueba con el texto que el servidor de verdad escribe (aquí, `EstadoRegistroEspiritu.name()`), no con uno inventado;
 mejor aún, con un `codigo`.
+
+## E-678 · La IP del cliente se leía del primer valor de `X-Forwarded-For` y no del que agrega CloudFront (backend, 11/11, RESUELTO)
+
+**Síntoma exacto.** Los límites por IP (login, ingreso con Google o Apple, cambio de contraseña, verificación de correo, solicitudes de cuenta, código por WhatsApp, cierre de cuenta) y `solicitudes_cuenta.ip_solicitud` contaban contra la dirección que traía el **primer** valor de `X-Forwarded-For`. No hubo mensaje de error: la dirección que se guardaba y se contaba no era siempre la de la conexión del cliente.
+
+**Causa real.** `server.forward-headers-strategy=framework` registra el `ForwardedHeaderFilter` de Spring, que reescribe `getRemoteAddr()` con el valor más a la izquierda de `X-Forwarded-For` (o el `for=` de `Forwarded`). La cadena de producción (CloudFront → EC2:8080 → nginx → Spring) entrega esa cabecera como «lo que traía la petición, valor que agrega CloudFront»: el valor de CloudFront va al **final**, y lo que va antes lo escribe quien hace la petición. E-149 y su comentario «POR CONFIRMAR OUT-1» daban por hecho lo contrario. El filtro además esconde esas cabeceras de lo que viene después, así que ningún código posterior podía corregirlo.
+
+**Solución.** `server.forward-headers-strategy: none` (fijo, sin variable de entorno): nada reescribe la dirección remota, el esquema ni el host desde cabeceras reenviadas. `DireccionIpDelCliente.de(request)` es el único lugar que resuelve la IP: valor más a la derecha de `X-Forwarded-For` (la última línea de la cabecera y el último valor de la línea), o la dirección de la conexión si no hay uno o no es una dirección literal. `Forwarded` y `X-Real-IP` no se leen. La cabecera `CloudFront-Viewer-Address` se lee solo con `renaser.security.ip-del-cliente.confiar-en-cloudfront-viewer-address=true` (por defecto no): la política de origen `Managed-AllViewer` no la agrega (solo `AllViewerAndCloudFrontHeaders-2022-06`) y reenvía las cabeceras del visitante tal cual. Todos los puntos que limitan por IP ya pasaban por ese método; el conteo sigue siendo por /64 en IPv6 (`UnidadDeConteoPorIp`). Nada en el backend arma URLs desde el esquema o el host de la petición, y CloudFront y nginx no agregan esas cabeceras: `framework` no hacía nada útil ahí. El nginx sigue transparente: si agregara su propio valor a `X-Forwarded-For`, ese pasaría a ser el último.
+
+**Cómo evitar que vuelva a pasar.** `DireccionIpDelClienteTest` (valor falso a la izquierda, varias líneas de cabecera, IPv4 e IPv6 con y sin puerto, `Forwarded` ignorado, sin cabeceras, el /64 del IPv6 resuelto), `CabecerasReenviadasTest` (la estrategia sigue en `none`; falla si alguien vuelve a `framework` o la saca de `application.yaml`) y `IpDelClienteIT` (por HTTP real: dos intentos de login con distinto valor a la izquierda y el mismo cliente real gastan el mismo cupo, y otro cliente real no queda bloqueado). Detrás de un proxy, la IP se toma del lado que escribe **tu** proxy, no del que escribe el cliente; se comprueba contra la cadena real y no contra la documentación de la cabecera. D-342.
+
+## E-679 · La administración de sobrenombres y de palabras prohibidas exige ser moderador también en el servicio (backend, 12/11, RESUELTO)
+
+**Síntoma exacto.** Ninguno: no hubo mensaje de error. Es la comprobación del rol que los demás servicios de administración ya hacen dentro del servicio (FR-042 de la spec 050: los guards de los servicios se quedan).
+
+**Causa real.** La regla de quién usa las siete rutas de `SobrenombresAdminController` estaba solo en el permiso del endpoint (`MODERATE_WALL`); `SobrenombreService` no la repetía.
+
+**Solución.** Las seis operaciones de `SobrenombreService` que usa Administración (`de`, `cambiar`, `listar`, `palabras`, `agregarPalabra`, `quitarPalabra`) empiezan por `exigirModerador(actor)`: solo ADMIN y ALCHEMIST con la cuenta activa, el mismo criterio de `PublicacionMuroService.esModerador`; cualquier otro, una cuenta suspendida o una que no existe reciben `NotAuthorizedException` (403) y no se toca nada. Los endpoints declaran ese alcance en `@RequiresPermission(scope = …)`. `UserRole.can` y el permiso de los endpoints no cambian (su ajuste es el tramo H de la spec 050). Lo que cada persona hace con su propio sobrenombre (`/api/v1/me/sobrenombre`) no cambia.
+
+**Cómo evitar que vuelva a pasar.** `SobrenombreServiceTest` recorre las seis operaciones con cada rol y `SobrenombresAdminControllerTest` hace lo mismo por HTTP en las siete rutas, con el servicio real detrás (con el servicio simulado la prueba no probaría nada); `SobrenombreEnElMuroIT` lo comprueba contra Postgres. Un servicio de administración repite el rol que pide su regla; al sumar uno, su prueba lo recorre con todos los roles. D-349.
+## E-680 · Los tickets de mentoría de un mentor o una guía se acotan a los aprendices que acompaña (backend, 12/11, RESUELTO)
+
+**Síntoma exacto.** Ninguno visible: no hubo mensaje de error. `GET /api/v1/tickets` para un MENTOR o una guía (TRAINEE_GUIDE) llamaba a `LoadTicketMentorPort.todos` (la deuda D-S3 de `docs/MODULO_SUPPORT.md`, anotada desde agosto: «para rol `MENTOR` devuelven todos los tickets, no solo los de su célula»).
+
+**Causa real.** El puerto de lectura de `support` solo sabía listar por un participante o todos, y `support` no tenía cómo preguntar a quién acompaña una persona (la noción de «acompañante vigente» vive en `community`, y `AcompanamientoFinder` tiene dobles de prueba escritos a mano que no se querían tocar). El comentario de la deuda decía que faltaba «un puerto hacia `participantes_programa.celula_id`», pero ese puntero no es la fuente de verdad del acompañamiento desde la spec de mentoría (V45): lo son las asignaciones vigentes.
+
+**Solución.** `community.api.AprendicesDelAcompananteFinder` (implementado por `AcompanamientoFinderService`) devuelve los aprendices con pertenencia vigente a los grupos que la persona acompaña hoy, preguntando por cada grupo suyo lo mismo que `acompanaVigente` (en curso, formación activa, asignación vigente que no es de aprendiz). `support` lo consume por `AprendicesDelAcompanantePort` y `LoadTicketMentorPort.deParticipantes` trae solo los tickets de esos aprendices; sin aprendices la página es vacía, nunca «todos». El aprendiz, `todos()` (MENTOR_LEAD, ADMIN, ALCHEMIST) y el 403 de ADMIN/ALCHEMIST en `GET /tickets` no cambian; responder y archivar siguen exigiendo al mentor asignado (E-38). Sin migración.
+
+**Cómo evitar que vuelva a pasar.** `TicketMentorServiceTest` (mentor y guía ven solo los de sus aprendices, sin aprendices ven vacío, quien dejó de acompañar ya no ve, `todos()` por rol, la guía no asignada no responde), `AcompanamientoServiceTest` (el finder: mentor, guía, soporte, exmentor, grupo cerrado o programado, y que coincide con el padrón del grupo), `TicketMentorControllerTest` (por HTTP con el servicio real: no se llama a `todos` para un mentor), `TicketMentorPersistenceAdapterTest` (la consulta, el orden y el cursor) y `TicketsDeMentoriaAcotadosIT` (Postgres real: grupos, asignaciones y tickets, con paginación). Una lectura «de lo mío» para el personal sale de las asignaciones vigentes de `community`, no de un puntero ni de un `todos()` con el comentario «deuda»; una deuda de alcance se anota en `docs/MODULO_SUPPORT.md` y se salda con una prueba que falle contra el código viejo. D-350.

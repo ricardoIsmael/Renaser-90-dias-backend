@@ -10,6 +10,12 @@ spring:
   threads:
     virtual:
       enabled: true
+  # Spec 050 tramo F (D-348): espeja el bloque de main. Una descarga CSV en streaming (StreamingResponseBody) es una respuesta
+  # ASINCRONA de MVC y vive bajo este tope: sin esto la suite corria con el de Tomcat (30 s) y ExportacionDeCajaIT, que baja
+  # 20.000 aprendices, se cortaba (AsyncRequestTimeoutException) cuando la maquina estaba ocupada. Produccion usa 120 s.
+  mvc:
+    async:
+      request-timeout: 120s
   # Espeja el bloque de main. Sin esto la suite entera no arranca: este archivo REEMPLAZA a
   # src/main/resources/application.yaml (mismo nombre, gana el de test), asi que la clave de
   # main no llega aca, y `ParameterStoreAutoConfiguration` es @ConditionalOnProperty con
@@ -91,6 +97,12 @@ spring:
 # con @Value tiene que estar TAMBIEN aca o el contexto no levanta. Va al final, fuera del
 # bloque `spring:`, para no partirlo por accidente.
 renaser:
+  # Spec 050 tramo E (D-347): el tope absoluto de la sesion (90d) mide con el Clock de la aplicacion, y muchas ITs mueven ese
+  # reloj meses hacia adelante (IdentidadPorFormacionIT lo fija en 2027) con sesiones REALES de Spring Session, creadas con
+  # la hora del sistema: con el tope puesto, cada una de esas sesiones nace «de hace mas de 90 dias» y responde 401. En la
+  # suite el tope va apagado (0); TopeAbsolutoDeSesionIT lo prende en su propio contexto (`properties = ...=90d`).
+  sesion:
+    tope-absoluto: 0
   # D-224: el barrido que completa los chats de los aprendices NO corre solo en la suite: dispararia
   # en medio de otra prueba y le crearia chats a sus datos. Las pruebas lo llaman directo.
   scheduling:
@@ -129,6 +141,23 @@ renaser:
   # E-360: espeja el default de main (application.yaml): cuantos listeners de eventos corren a la vez.
   eventos:
     concurrencia: 4
+  # Espeja el bloque `renaser.proteccion.limites` de main (spec 050 tramo C, D-346): este archivo REEMPLAZA al de main, asi que sin esto los IT
+  # correrian sin ningun tope y el filtro no contaria nada. `LimitesDeProteccionTest` comprueba que los dos digan lo mismo.
+  proteccion:
+    limites:
+      habilitado: true
+      cache-del-modo: 30s
+      grupos:
+        lectura: { modo: REGISTRAR, por-minuto: 300 }
+        escritura: { modo: REGISTRAR, por-minuto: 60 }
+        muro: { modo: REGISTRAR, por-minuto: 10, por-hora: 60 }
+        chat: { modo: REGISTRAR, por-minuto: 30 }
+        subidas: { modo: REGISTRAR, por-minuto: 20, por-dia: 300 }
+        ia-fuera-de-ser: { modo: REGISTRAR, por-minuto: 5 }
+        ser: { modo: REGISTRAR, por-minuto: 10 }
+        exportaciones: { modo: REGISTRAR, por-minuto: 5 }
+        admin: { modo: REGISTRAR, por-minuto: 120 }
+        webhook-whatsapp: { modo: REGISTRAR, por-minuto: 600 }
   web:
     cors:
       origenes: http://localhost:8081
@@ -157,3 +186,8 @@ renaser:
       # se inventa. Los tests que necesitan un texto configurado construyen su propio MensajeDeApoyo,
       # no dependen de esta linea. Que este presente documenta que existe la propiedad.
       mensaje:
+
+# Espeja el bloque de main (E-678, D-342): este archivo REEMPLAZA al de main, asi que sin esto los IT correrian con el valor por
+# defecto de Spring y no con el de produccion. `CabecerasReenviadasTest` comprueba que los dos digan lo mismo.
+server:
+  forward-headers-strategy: none

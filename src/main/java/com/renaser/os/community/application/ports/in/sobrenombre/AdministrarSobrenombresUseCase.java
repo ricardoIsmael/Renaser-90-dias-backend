@@ -5,7 +5,10 @@ import com.renaser.os.shared.domain.UserId;
 import java.time.Instant;
 import java.util.List;
 
-/** Spec 046 (D-331): Administración y Alquimista ven, cambian y quitan sobrenombres, y editan las palabras prohibidas. */
+/**
+ * Spec 046 (D-331): Administración y Alquimista ven, cambian y quitan sobrenombres, y editan las palabras prohibidas. Solo ellos: cada
+ * operación responde 403 a quien no modera el Muro (ADMIN o ALCHEMIST activos).
+ */
 public interface AdministrarSobrenombresUseCase {
 
     /** El sobrenombre de una persona de su alcance, o {@code null} si no tiene. */
