@@ -34,6 +34,7 @@ class TicketMentorServiceTest {
     private InMemoryTicketMentorPort port;
     private FakeUserSummaryFinder actores;
     private FakeParticipacionProgramaFinder participaciones;
+    private FakeAprendicesDelAcompanante acompanamiento;
     private RecordingEventPublisher events;
     private TicketMentorService service;
 
@@ -46,8 +47,9 @@ class TicketMentorServiceTest {
         port = new InMemoryTicketMentorPort();
         actores = new FakeUserSummaryFinder();
         participaciones = new FakeParticipacionProgramaFinder();
+        acompanamiento = new FakeAprendicesDelAcompanante();
         events = new RecordingEventPublisher();
-        service = new TicketMentorService(port, port, port, actores, participaciones, events, CLOCK,
+        service = new TicketMentorService(port, port, port, actores, participaciones, acompanamiento, events, CLOCK,
                 idsSecuenciales());
 
         trainee = UserId.of(UUID.randomUUID());
@@ -56,6 +58,7 @@ class TicketMentorServiceTest {
         actores.conActor(trainee, UserRole.TRAINEE).conActor(mentor, UserRole.MENTOR)
                 .conActor(admin, UserRole.ADMIN);
         participaciones.conMentorAsignado(trainee, mentor);
+        acompanamiento.acompana(mentor, trainee);
     }
 
     /**
@@ -126,6 +129,7 @@ class TicketMentorServiceTest {
         UserId aprendizDelGuia = UserId.of(UUID.randomUUID());
         actores.conActor(guia, UserRole.TRAINEE_GUIDE).conActor(aprendizDelGuia, UserRole.TRAINEE);
         participaciones.conMentorAsignado(aprendizDelGuia, guia);
+        acompanamiento.acompana(guia, aprendizDelGuia);
         TicketMentor ticket = service.abrir(new AbrirTicketMentorCommand(aprendizDelGuia, "Bloqueo", "Intento",
                 "Impacto"));
 
@@ -274,5 +278,109 @@ class TicketMentorServiceTest {
         assertThatThrownBy(() -> service.guardar(new GuardarEnBibliotecaCommand(ticket.id(), otroMentor)))
                 .isInstanceOf(NotAuthorizedException.class);
         assertThat(port.byId(ticket.id()).orElseThrow().guardadoEnBiblioteca()).isFalse();
+    }
+
+    // ── D19: un mentor o una guía ve solo los tickets de los aprendices que acompaña ────────────────────────────────
+
+    private UserId aprendizAjeno() {
+        UserId ajeno = UserId.of(UUID.randomUUID());
+        actores.conActor(ajeno, UserRole.TRAINEE);
+        return ajeno;
+    }
+
+    @Test
+    @DisplayName("propios(): un MENTOR ve solo los tickets de los aprendices que acompaña, no los de los demás")
+    void mentorVeSoloLosTicketsDeSusAprendices() {
+        TicketMentor delMio = abrirTicketDeTrainee();
+        UserId ajeno = aprendizAjeno();
+        service.abrir(new AbrirTicketMentorCommand(ajeno, "Bloqueo ajeno", "Solucion ajena", "Impacto ajeno"));
+
+        var pagina = service.propios(mentor, null);
+
+        assertThat(pagina.tickets()).extracting(TicketMentor::id).containsExactly(delMio.id());
+    }
+
+    @Test
+    @DisplayName("propios(): una guía de aprendiz (TRAINEE_GUIDE) ve solo los tickets de los aprendices que acompaña")
+    void guiaVeSoloLosTicketsDeSusAprendices() {
+        UserId guia = UserId.of(UUID.randomUUID());
+        actores.conActor(guia, UserRole.TRAINEE_GUIDE);
+        UserId aprendizDeLaGuia = aprendizAjeno();
+        acompanamiento.acompana(guia, aprendizDeLaGuia);
+        abrirTicketDeTrainee();
+        TicketMentor delaGuia = service.abrir(new AbrirTicketMentorCommand(aprendizDeLaGuia, "Bloqueo", "Solucion", "Impacto"));
+
+        assertThat(service.propios(guia, null).tickets()).extracting(TicketMentor::id).containsExactly(delaGuia.id());
+        // y el mentor no ve los de la guía
+        assertThat(service.propios(mentor, null).tickets()).extracting(TicketMentor::participanteId).containsExactly(trainee);
+    }
+
+    @Test
+    @DisplayName("propios(): quien no acompaña a nadie recibe una página vacía, nunca todos los tickets")
+    void mentorSinAprendicesVeUnaPaginaVacia() {
+        abrirTicketDeTrainee();
+        UserId sinGrupo = UserId.of(UUID.randomUUID());
+        actores.conActor(sinGrupo, UserRole.MENTOR);
+
+        var pagina = service.propios(sinGrupo, null);
+
+        assertThat(pagina.tickets()).isEmpty();
+        assertThat(pagina.nextCursor()).isNull();
+    }
+
+    @Test
+    @DisplayName("propios(): un mentor que dejó de acompañar al aprendiz ya no ve sus tickets")
+    void mentorQueDejoDeAcompanarYaNoLosVe() {
+        abrirTicketDeTrainee();
+        assertThat(service.propios(mentor, null).tickets()).hasSize(1);
+
+        acompanamiento.dejaDeAcompanar(mentor, trainee);
+
+        assertThat(service.propios(mentor, null).tickets()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("seguridad: una cuenta suspendida de mentor recibe 403 en propios() aunque acompañe a alguien")
+    void mentorSuspendidoNoListaTickets() {
+        UserId suspendido = UserId.of(UUID.randomUUID());
+        actores.conActor(suspendido, UserRole.MENTOR, UserStatus.SUSPENDED);
+        acompanamiento.acompana(suspendido, trainee);
+        abrirTicketDeTrainee();
+
+        assertThatThrownBy(() -> service.propios(suspendido, null)).isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("todos(): ADMIN, ALCHEMIST y MENTOR_LEAD ven todos los tickets; un MENTOR o una guía reciben 403")
+    void todosEsDeLaPlataformaYNoDelMentor() {
+        abrirTicketDeTrainee();
+        service.abrir(new AbrirTicketMentorCommand(aprendizAjeno(), "Bloqueo ajeno", "Solucion ajena", "Impacto ajeno"));
+        UserId alquimista = UserId.of(UUID.randomUUID());
+        UserId lider = UserId.of(UUID.randomUUID());
+        UserId guia = UserId.of(UUID.randomUUID());
+        actores.conActor(alquimista, UserRole.ALCHEMIST).conActor(lider, UserRole.MENTOR_LEAD).conActor(guia, UserRole.TRAINEE_GUIDE);
+
+        assertThat(service.todos(admin, null).tickets()).hasSize(2);
+        assertThat(service.todos(alquimista, null).tickets()).hasSize(2);
+        assertThat(service.todos(lider, null).tickets()).hasSize(2);
+        assertThatThrownBy(() -> service.todos(mentor, null)).isInstanceOf(NotAuthorizedException.class);
+        assertThatThrownBy(() -> service.todos(guia, null)).isInstanceOf(NotAuthorizedException.class);
+        // ADMIN y ALCHEMIST siguen sin usar la vista de «los míos»: su puerta es todos()
+        assertThatThrownBy(() -> service.propios(alquimista, null)).isInstanceOf(NotAuthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("E-38 y D19: una guía que no es la asignada al aprendiz no puede responder ni archivar su ticket, aunque acompañe a otros")
+    void guiaNoAsignadaNoPuedeResponderNiArchivar() {
+        TicketMentor ticket = abrirTicketDeTrainee();
+        service.responder(new ResponderTicketMentorCommand(ticket.id(), mentor, "respuesta legitima"));
+        UserId guia = UserId.of(UUID.randomUUID());
+        actores.conActor(guia, UserRole.TRAINEE_GUIDE);
+        acompanamiento.acompana(guia, aprendizAjeno());
+
+        assertThatThrownBy(() -> service.responder(new ResponderTicketMentorCommand(ticket.id(), guia, "ajena")))
+                .isInstanceOf(NotAuthorizedException.class);
+        assertThatThrownBy(() -> service.guardar(new GuardarEnBibliotecaCommand(ticket.id(), guia)))
+                .isInstanceOf(NotAuthorizedException.class);
     }
 }

@@ -21,6 +21,11 @@ interface SpringDataTicketMentorRepository extends JpaRepository<TicketMentorJpa
 
     List<TicketMentorJpaEntity> findByOrderByCreadoEnDesc(Limit limit);
 
+    List<TicketMentorJpaEntity> findByParticipanteIdInAndCreadoEnBeforeOrderByCreadoEnDesc(Collection<UUID> participantes,
+            Instant cursor, Limit limit);
+
+    List<TicketMentorJpaEntity> findByParticipanteIdInOrderByCreadoEnDesc(Collection<UUID> participantes, Limit limit);
+
     @Query(nativeQuery = true, value = """
             select descripcion_bloqueo as descripcionBloqueo, respuesta_mentor as respuestaMentor
             from renaser.tickets_mentor

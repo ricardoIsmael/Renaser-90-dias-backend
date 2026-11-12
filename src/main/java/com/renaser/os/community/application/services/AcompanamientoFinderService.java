@@ -1,6 +1,7 @@
 package com.renaser.os.community.application.services;
 
 import com.renaser.os.community.api.AcompanamientoFinder;
+import com.renaser.os.community.api.AprendicesDelAcompananteFinder;
 import com.renaser.os.community.api.MentorVigenteFinder;
 import com.renaser.os.community.application.ports.out.acompanamiento.LoadAsignacionesPort;
 import com.renaser.os.community.application.ports.out.acompanamiento.LoadPoliticaMentoriaPort;
@@ -22,10 +23,12 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -36,7 +39,7 @@ import java.util.UUID;
  * no escribe nada, y tenerla aparte deja a la vista qué expone {@code community}.
  */
 @Service
-class AcompanamientoFinderService implements AcompanamientoFinder, MentorVigenteFinder {
+class AcompanamientoFinderService implements AcompanamientoFinder, MentorVigenteFinder, AprendicesDelAcompananteFinder {
 
     private final LoadAsignacionesPort loadAsignacionesPort;
     private final LoadCelulaPort loadCelulaPort;
@@ -135,6 +138,29 @@ class AcompanamientoFinderService implements AcompanamientoFinder, MentorVigente
                 .anyMatch(a -> a.vigenteEn(instante))
                 // Spec 022: un grupo de la formación que el actor no tiene activa se responde como un grupo ajeno.
                 && enLaFormacionDe(actorId, grupoId);
+    }
+
+    /**
+     * Los grupos donde la persona tiene hoy una asignación que no es de aprendiz salen de SU historial (una consulta); de cada uno se
+     * pregunta {@link #acompanaVigente} —la misma pregunta del padrón del grupo: en curso y en la formación activa de quien acompaña— y,
+     * si la respuesta es sí, se toman sus aprendices vigentes. Así «a quién acompaña» y «qué grupo puede abrir» nunca difieren.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public Set<UserId> aprendicesQueAcompana(UserId acompanante, Instant instante) {
+        Set<UserId> aprendices = new LinkedHashSet<>();
+        Set<CelulaId> consultados = new HashSet<>();
+        for (AsignacionCelula mia : loadAsignacionesPort.porUsuario(acompanante)) {
+            // Ser APRENDIZ de un grupo no es acompañarlo, y lo que ya terminó tampoco.
+            if (mia.funcion().consumeCupo() || !mia.vigenteEn(instante) || !consultados.add(mia.celulaId())) {
+                continue;
+            }
+            UUID grupoId = mia.celulaId().value();
+            if (acompanaVigente(acompanante, grupoId, instante)) {
+                aprendices.addAll(aprendicesVigentes(grupoId, instante));
+            }
+        }
+        return aprendices;
     }
 
     private boolean enLaFormacionDe(UserId actorId, UUID grupoId) {
