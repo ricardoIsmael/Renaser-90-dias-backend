@@ -45,7 +45,7 @@ if [ -n "${EN_LA_INSTANCIA:-}" ]; then
   else
     leer() { docker exec -i "$CONTENEDOR" redis-cli "$@"; }
   fi
-  TODO=$(mktemp); trap 'rm -f "$TODO"' EXIT
+  TODO=$(mktemp); trap "rm -f '$TODO'" EXIT
   for ((i = 0; i < DIAS; i++)); do
     dia=$(TZ=America/Lima date -d "-$i day" +%F)
     # El hash alterna campo y valor, una linea cada uno; el campo lleva espacios y el valor es el numero de veces.
@@ -75,7 +75,7 @@ CUENTA=$(aws sts get-caller-identity --profile "$PERFIL" --query Account --outpu
 [ "$CUENTA" = "$RENASER_CUENTA_AWS" ] || falla "el perfil $PERFIL apunta a la cuenta $CUENTA, no a la esperada ($RENASER_CUENTA_AWS)."
 echo "Cuenta verificada ($CUENTA, perfil $PERFIL). Solo lectura."
 
-parametros=$(mktemp); trap 'rm -f "$parametros"' EXIT
+parametros=$(mktemp); trap "rm -f '$parametros'" EXIT
 jq -n --arg b64 "$(base64 -w0 "$0")" --arg prefijo "$PREFIJO" --arg region "$REGION" --arg contenedor "$CONTENEDOR" --arg dias "$DIAS" \
   '{commands: [
      "set -eu",

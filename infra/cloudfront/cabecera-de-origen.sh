@@ -91,7 +91,7 @@ CUENTA=$(aws_prod sts get-caller-identity --query Account --output text)
 echo "Cuenta verificada ($CUENTA, perfil $PERFIL). Modo: $([ "$APLICAR" = si ] && echo APLICAR || echo SIMULACRO)."
 
 TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT
+trap "rm -rf '$TMP'" EXIT
 umask 077
 
 # ---- Parameter Store ---------------------------------------------------------------------------------------
