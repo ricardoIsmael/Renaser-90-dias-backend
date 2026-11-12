@@ -11,6 +11,7 @@ import com.renaser.os.support.application.ports.in.ticketmentor.BuscarBiblioteca
 import com.renaser.os.support.application.ports.in.ticketmentor.GuardarEnBibliotecaUseCase;
 import com.renaser.os.support.application.ports.in.ticketmentor.ListarTicketsMentorUseCase;
 import com.renaser.os.support.application.ports.in.ticketmentor.ResponderTicketMentorUseCase;
+import com.renaser.os.support.application.ports.out.ticketmentor.AprendicesDelAcompanantePort;
 import com.renaser.os.support.application.ports.out.ticketmentor.BuscarBibliotecaPort;
 import com.renaser.os.support.application.ports.out.ticketmentor.LoadTicketMentorPort;
 import com.renaser.os.support.application.ports.out.ticketmentor.SaveTicketMentorPort;
@@ -29,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
 @Service
 public class TicketMentorService implements AbrirTicketMentorUseCase, ResponderTicketMentorUseCase,
@@ -42,6 +44,7 @@ public class TicketMentorService implements AbrirTicketMentorUseCase, ResponderT
     private final BuscarBibliotecaPort buscarBibliotecaPort;
     private final UserSummaryFinder userSummaryFinder;
     private final ParticipacionProgramaFinder participacionFinder;
+    private final AprendicesDelAcompanantePort aprendicesDelAcompanante;
     private final ApplicationEventPublisher events;
     private final Clock clock;
     private final IdGenerator idGenerator;
@@ -49,12 +52,14 @@ public class TicketMentorService implements AbrirTicketMentorUseCase, ResponderT
     public TicketMentorService(LoadTicketMentorPort loadTicketMentorPort, SaveTicketMentorPort saveTicketMentorPort,
                                 BuscarBibliotecaPort buscarBibliotecaPort, UserSummaryFinder userSummaryFinder,
                                 ParticipacionProgramaFinder participacionFinder,
+                                AprendicesDelAcompanantePort aprendicesDelAcompanante,
                                 ApplicationEventPublisher events, Clock clock, IdGenerator idGenerator) {
         this.loadTicketMentorPort = loadTicketMentorPort;
         this.saveTicketMentorPort = saveTicketMentorPort;
         this.buscarBibliotecaPort = buscarBibliotecaPort;
         this.userSummaryFinder = userSummaryFinder;
         this.participacionFinder = participacionFinder;
+        this.aprendicesDelAcompanante = aprendicesDelAcompanante;
         this.events = events;
         this.clock = clock;
         this.idGenerator = idGenerator;
@@ -107,7 +112,14 @@ public class TicketMentorService implements AbrirTicketMentorUseCase, ResponderT
                 .toList();
     }
 
-    /** TRAINEE: los suyos. MENTOR: todos (deuda de celula, ver javadoc de la interfaz). Otro rol -> 403. */
+    /**
+     * TRAINEE: los suyos. MENTOR y TRAINEE_GUIDE (D-265): los de los aprendices que acompañan hoy, la misma pregunta que responde
+     * {@code /mentor/groups/{id}/learners}; quien no acompaña a nadie recibe una página vacía. Otro rol -> 403: ADMIN, ALCHEMIST y
+     * MENTOR_LEAD ven todos por {@link #todos}.
+     *
+     * <blockquote><b>Corregido 2026-11-12 (D-350).</b> Esta línea decía «MENTOR: todos (deuda de célula)»: la deuda ya está saldada, un
+     * mentor y una guía ven solo los tickets de sus aprendices.</blockquote>
+     */
     @Override
     public TicketsMentorPage propios(UserId actorId, Instant cursor) {
         UserSummary actor = requireActor(actorId);
@@ -115,7 +127,8 @@ public class TicketMentorService implements AbrirTicketMentorUseCase, ResponderT
             return paginar(loadTicketMentorPort.porParticipante(actorId, cursor, PAGE_SIZE + 1));
         }
         if (actor.role().actuaComoMentor()) {
-            return paginar(loadTicketMentorPort.todos(cursor, PAGE_SIZE + 1));
+            Set<UserId> aprendices = aprendicesDelAcompanante.aprendicesQueAcompana(actorId, clock.now());
+            return paginar(loadTicketMentorPort.deParticipantes(aprendices, cursor, PAGE_SIZE + 1));
         }
         throw new NotAuthorizedException("Solo un aprendiz o un mentor pueden listar estos tickets");
     }

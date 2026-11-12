@@ -496,7 +496,8 @@ curl -s -X POST http://localhost:8080/api/v1/tickets \
 
 - **Query:** `cursor` (opcional, ISO-8601; inválido → `IllegalArgumentException("cursor invalido, se espera ISO-8601: <valor>")` → 400).
 - **200 OK** → `{"tickets": [TicketMentorResponse...], "nextCursor": "..."|null}`. Página fija de **30**.
-- **Quién puede llamarlo:** **TRAINEE** ve solo los suyos; **MENTOR** ve **todos los tickets de la plataforma** (no solo los de su célula/asignados — deuda documentada, sin scope de célula todavía). Cualquier otro rol → 403 `"Solo un aprendiz o un mentor pueden listar estos tickets"`.
+- **Quién puede llamarlo:** **TRAINEE** ve solo los suyos; **MENTOR** y **TRAINEE_GUIDE** ven solo los tickets de los aprendices que **acompañan hoy** (la misma pregunta de `GET /api/v1/mentor/groups/{id}/learners`: asignación vigente que no sea de aprendiz, grupo en curso, formación activa); sin aprendices a cargo, `{"tickets": [], "nextCursor": null}`. Cualquier otro rol → 403 `"Solo un aprendiz o un mentor pueden listar estos tickets"` (ADMIN, ALCHEMIST y MENTOR_LEAD ven todos en `GET /api/v1/admin/tickets`, §4.1.6).
+  > **Corregido 2026-11-12 (D-350).** Esta línea decía: «**MENTOR** ve **todos los tickets de la plataforma** (no solo los de su célula/asignados — deuda documentada, sin scope de célula todavía)». La deuda (D-S3 de `docs/MODULO_SUPPORT.md`) ya está saldada.
 
 ```bash
 curl -s http://localhost:8080/api/v1/tickets \
