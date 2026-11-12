@@ -449,3 +449,15 @@ No hay endpoints nuevos: las escrituras de Cierra tu día (`PUT /rocks/day-closu
 `CAMBIO_MAS_NUEVO_EN_EL_SERVIDOR`, `YA_ESTABA_HECHO`, `RECURSO_YA_NO_EXISTE`, `FUERA_DE_SU_DIA` o `MI_RADAR_NO_APLICA` y el `message` listo para mostrar. `POST /rocks/{id}/evidence` suma `motivoSinPuntos`
 (aditivo). Contrato: `docs/api/CONTRATO_DIA_A_DIA.md` («Lo hecho sin internet…»).
 
+
+## El límite de pedidos por cuenta: el 429 de `/api/v1` (spec 050, tramo C, D-346, 2026-11-11)
+
+No hay endpoints nuevos. Todo pedido de `/api/v1` cuenta contra el tope de **un grupo** por cuenta (por origen si no hay sesión): lectura 300/min, escritura 60/min, Muro 10/min y 60/h
+(`POST /wall` y `POST /wall/{id}/comments`), chat 30/min (`POST …/messages`), subidas 20/min y 300 por 24 h (toda `…/upload-url` y `…/presign`), IA fuera de SER 5/min, SER 10/min
+(`POST /renasia/**`, aparte de los 25 por día), exportaciones 5/min (`…/export.csv`, `…/exportar.csv`), administración 120/min y el webhook de WhatsApp 600/min por origen. Son topes de partida:
+se ajustan con la medición. Quedan fuera `/ws`, la salud y las rutas públicas de autenticación y alta (sus límites propios no cambian).
+
+**Hoy todos los grupos están en `REGISTRAR`: ningún pedido recibe 429.** Cuando el dueño pasa un grupo a `APLICAR`, el pedido que pasa el tope responde **429** con la cabecera
+`Retry-After` (segundos enteros, ≥ 1) y el sobre de siempre más el código: `{"message":"Espera un momento y vuelve a intentarlo.","timestamp":"…","codigo":"DEMASIADOS_PEDIDOS"}`. El cuerpo
+no dice el grupo ni el tope. Una app que no conoce el `codigo` muestra el `message` como cualquier error; la que sí lo conoce reintenta lo pendiente después de `Retry-After` sin perderlo
+(app: `apiClient.ts` y la cola sin red). Cómo se cambia el modo y se mide: `docs/DESPLIEGUE_Y_CI.md` §5.5.

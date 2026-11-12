@@ -129,6 +129,23 @@ renaser:
   # E-360: espeja el default de main (application.yaml): cuantos listeners de eventos corren a la vez.
   eventos:
     concurrencia: 4
+  # Espeja el bloque `renaser.proteccion.limites` de main (spec 050 tramo C, D-346): este archivo REEMPLAZA al de main, asi que sin esto los IT
+  # correrian sin ningun tope y el filtro no contaria nada. `LimitesDeProteccionTest` comprueba que los dos digan lo mismo.
+  proteccion:
+    limites:
+      habilitado: true
+      cache-del-modo: 30s
+      grupos:
+        lectura: { modo: REGISTRAR, por-minuto: 300 }
+        escritura: { modo: REGISTRAR, por-minuto: 60 }
+        muro: { modo: REGISTRAR, por-minuto: 10, por-hora: 60 }
+        chat: { modo: REGISTRAR, por-minuto: 30 }
+        subidas: { modo: REGISTRAR, por-minuto: 20, por-dia: 300 }
+        ia-fuera-de-ser: { modo: REGISTRAR, por-minuto: 5 }
+        ser: { modo: REGISTRAR, por-minuto: 10 }
+        exportaciones: { modo: REGISTRAR, por-minuto: 5 }
+        admin: { modo: REGISTRAR, por-minuto: 120 }
+        webhook-whatsapp: { modo: REGISTRAR, por-minuto: 600 }
   web:
     cors:
       origenes: http://localhost:8081
