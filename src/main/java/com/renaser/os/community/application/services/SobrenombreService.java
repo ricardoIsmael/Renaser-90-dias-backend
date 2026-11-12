@@ -12,8 +12,12 @@ import com.renaser.os.community.domain.model.sobrenombre.SobrenombreRechazadoExc
 import com.renaser.os.community.domain.model.sobrenombre.SobrenombreRechazadoException.Motivo;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.Formacion;
+import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.AlcanceDeFormacionFinder;
+import com.renaser.os.users.api.UserRole;
+import com.renaser.os.users.api.UserStatus;
+import com.renaser.os.users.api.UserSummaryFinder;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +39,10 @@ import java.util.Set;
  * <p>Reglas (decisiones del dueño del 06/11): no es obligatorio (D8); el personal también puede tener uno (D9); se cambia una vez
  * cada 30 días (D5; Administración, cuando quiera); es único dentro de la formación (D6) y no puede ser el nombre real de otra
  * persona; si Administración lo cambia, se le avisa a la persona sin el motivo (D7).
+ *
+ * <p>La administración (ver, cambiar, quitar y editar las palabras) es de quien modera el Muro: ADMIN y ALCHEMIST activos, el mismo
+ * criterio de {@code PublicacionMuroService.requireModerador}. Lo exige este servicio además del permiso del endpoint, como los demás
+ * servicios de administración (segunda línea de defensa, spec 050, FR-042).
  */
 @Service
 public class SobrenombreService implements MiSobrenombreUseCase, AdministrarSobrenombresUseCase {
@@ -46,13 +54,15 @@ public class SobrenombreService implements MiSobrenombreUseCase, AdministrarSobr
 
     private final SobrenombresPort sobrenombres;
     private final AlcanceDeFormacionFinder formaciones;
+    private final UserSummaryFinder usuarios;
     private final ApplicationEventPublisher eventos;
     private final Clock clock;
 
-    public SobrenombreService(SobrenombresPort sobrenombres, AlcanceDeFormacionFinder formaciones, ApplicationEventPublisher eventos,
-                              Clock clock) {
+    public SobrenombreService(SobrenombresPort sobrenombres, AlcanceDeFormacionFinder formaciones, UserSummaryFinder usuarios,
+                              ApplicationEventPublisher eventos, Clock clock) {
         this.sobrenombres = sobrenombres;
         this.formaciones = formaciones;
+        this.usuarios = usuarios;
         this.eventos = eventos;
         this.clock = clock;
     }
@@ -115,6 +125,7 @@ public class SobrenombreService implements MiSobrenombreUseCase, AdministrarSobr
     @Override
     @Transactional(readOnly = true)
     public String de(UserId actor, UserId persona) {
+        exigirModerador(actor);
         formaciones.exigirQueLaVea(actor, persona);
         return sobrenombres.de(persona).map(FilaDeSobrenombre::sobrenombre).orElse(null);
     }
@@ -122,6 +133,7 @@ public class SobrenombreService implements MiSobrenombreUseCase, AdministrarSobr
     @Override
     @Transactional
     public String cambiar(UserId actor, UserId persona, String nuevo, String motivo) {
+        exigirModerador(actor);
         formaciones.exigirQueLaVea(actor, persona);
         String limpio = motivo == null ? "" : motivo.strip();
         if (limpio.length() < 3 || limpio.length() > 200) {
@@ -144,6 +156,7 @@ public class SobrenombreService implements MiSobrenombreUseCase, AdministrarSobr
     @Override
     @Transactional(readOnly = true)
     public List<PersonaConSobrenombre> listar(UserId actor, String buscar) {
+        exigirModerador(actor);
         List<FilaDeLaLista> filas = sobrenombres.listar(buscar == null ? "" : Sobrenombre.normalizar(buscar), LIMITE_DE_LA_LISTA);
         Set<UserId> visibles = formaciones.dentroDelAlcance(filas.stream().map(FilaDeLaLista::persona).toList(),
                 formaciones.de(actor));
@@ -155,25 +168,45 @@ public class SobrenombreService implements MiSobrenombreUseCase, AdministrarSobr
     @Override
     @Transactional(readOnly = true)
     public PalabrasProhibidas palabras(UserId actor) {
-        return new PalabrasProhibidas(PalabrasProhibidasBase.PALABRAS.size(), sobrenombres.palabrasDeAdministracion());
+        exigirModerador(actor);
+        return laLista();
     }
 
     @Override
     @Transactional
     public PalabrasProhibidas agregarPalabra(UserId actor, String palabra) {
+        exigirModerador(actor);
         String normalizada = Sobrenombre.normalizar(palabra);
         if (normalizada.length() < 2 || normalizada.length() > 40) {
             throw new IllegalArgumentException("Escribe una palabra de 2 a 40 letras.");
         }
         sobrenombres.agregarPalabra(normalizada, actor, clock.now());
-        return palabras(actor);
+        return laLista();
     }
 
     @Override
     @Transactional
     public PalabrasProhibidas quitarPalabra(UserId actor, String palabra) {
+        exigirModerador(actor);
         sobrenombres.quitarPalabra(Sobrenombre.normalizar(palabra));
-        return palabras(actor);
+        return laLista();
+    }
+
+    private PalabrasProhibidas laLista() {
+        return new PalabrasProhibidas(PalabrasProhibidasBase.PALABRAS.size(), sobrenombres.palabrasDeAdministracion());
+    }
+
+    /**
+     * Quien modera el Muro: ADMIN o ALCHEMIST con la cuenta activa, el mismo criterio de {@code PublicacionMuroService.esModerador}. Falla
+     * cerrado: una cuenta que no existe recibe el mismo 403 que una que no modera, no un 404 que diría si existe.
+     */
+    private void exigirModerador(UserId actor) {
+        boolean modera = usuarios.findById(actor)
+                .map(u -> u.status() == UserStatus.ACTIVE && (u.role() == UserRole.ADMIN || u.role() == UserRole.ALCHEMIST))
+                .orElse(false);
+        if (!modera) {
+            throw new NotAuthorizedException("Solo ADMIN/ALCHEMIST administran los sobrenombres del Muro");
+        }
     }
 
     // ---------------------------------------------------------------- reglas

@@ -13,6 +13,7 @@ import com.renaser.os.leadership.application.ports.in.ConsultarSemanaDePersonaUs
 import com.renaser.os.mentoring.api.HuecosDeLaSemana;
 import com.renaser.os.rocks.api.CierresDelDiaFinder.CierresDeLaSemana;
 import com.renaser.os.shared.domain.Permission;
+import com.renaser.os.shared.domain.PaginaAcotada;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
 import com.renaser.os.shared.web.security.Funcionalidad;
@@ -82,8 +83,10 @@ public class PersonasDelProgramaController {
                                                              @RequestParam(required = false) String q,
                                                              @RequestParam(defaultValue = "0") int page,
                                                              @RequestParam(defaultValue = "30") int size) {
+        // Spec 050 tramo F (FR-034): el tamaño se acota aquí, en un solo lugar; fuera de 1..100 es un 400 con el motivo.
+        PaginaAcotada pagina = PaginaAcotada.estricta(page, size, ConsultarPersonasDelProgramaUseCase.TAMANO_MAXIMO);
         return sinCache(PersonasDelProgramaResponse.from(
-                personas.listar(new ConsultaPersonasDelPrograma(actorId, q, page, size))));
+                personas.listar(new ConsultaPersonasDelPrograma(actorId, q, pagina.pagina(), pagina.tamano()))));
     }
 
     @RequiresPermission(value = Permission.VIEW_MENTOR_CORPS, scope = GUARD)
