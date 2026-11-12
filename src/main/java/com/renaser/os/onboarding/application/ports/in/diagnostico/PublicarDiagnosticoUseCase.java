@@ -9,6 +9,7 @@ import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.UserId;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 /** Ver el borrador, la vista previa, publicar, las versiones, la plantilla y la lectura del diagnóstico de una persona (solo Administración y Alquimista). */
 public interface PublicarDiagnosticoUseCase {
@@ -26,8 +27,20 @@ public interface PublicarDiagnosticoUseCase {
     /** La plantilla de importación vacía, en CSV. */
     String plantilla(UserId actor);
 
-    /** El borrador en el formato de la plantilla, para editarlo fuera y volver a importarlo. */
-    String exportar(UserId actor);
+    /**
+     * El borrador en el formato de la plantilla, para editarlo fuera y volver a importarlo (spec 050, tramo F; FR-032). El
+     * guard pasa <b>al pedirla</b>, antes de que se escriba un byte; las filas salen una por una, sin armar el archivo entero.
+     * El borrador es un cuestionario (no las respuestas de las personas): lo acota la cantidad de preguntas, que el editor
+     * ya carga entera.
+     */
+    ExportacionDelDiagnostico exportar(UserId actor);
+
+    /** Las filas del CSV, una por una y en orden (la primera es la cabecera); no se arman hasta que se llama a {@link #filas}. */
+    @FunctionalInterface
+    interface ExportacionDelDiagnostico {
+
+        void filas(Consumer<String> escritorDeFila);
+    }
 
     LecturaDelDiagnostico lecturaDe(UserId actor, UserId persona);
 
