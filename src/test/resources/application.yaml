@@ -91,6 +91,12 @@ spring:
 # con @Value tiene que estar TAMBIEN aca o el contexto no levanta. Va al final, fuera del
 # bloque `spring:`, para no partirlo por accidente.
 renaser:
+  # Spec 050 tramo E (D-347): el tope absoluto de la sesion (90d) mide con el Clock de la aplicacion, y muchas ITs mueven ese
+  # reloj meses hacia adelante (IdentidadPorFormacionIT lo fija en 2027) con sesiones REALES de Spring Session, creadas con
+  # la hora del sistema: con el tope puesto, cada una de esas sesiones nace «de hace mas de 90 dias» y responde 401. En la
+  # suite el tope va apagado (0); TopeAbsolutoDeSesionIT lo prende en su propio contexto (`properties = ...=90d`).
+  sesion:
+    tope-absoluto: 0
   # D-224: el barrido que completa los chats de los aprendices NO corre solo en la suite: dispararia
   # en medio de otra prueba y le crearia chats a sus datos. Las pruebas lo llaman directo.
   scheduling:

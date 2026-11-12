@@ -984,6 +984,7 @@ va cifrado.
 | `REDIS_PASSWORD` | **SecureString** | Contraseña de Redis; no dejarla en texto plano. En producción la genera `infra/redis/contrasena.sh` (spec 050 A1) |
 | `REDIS_SSL_ENABLED` | String | `true` cuando el proveedor de Redis exige TLS; `false` para el contenedor privado local |
 | `REDIS_SESSION_NAMESPACE` | String | Namespace de Spring Session; por defecto `renaser:session:v2` |
+| `RENASER_SESION_TOPE_ABSOLUTO` | String | Tope absoluto de la sesión desde que se inició (spec 050 tramo E, D-347): `90d` de partida; `0` = sin tope (la vuelta atrás: Parameter Store no admite valores vacíos), y se reinicia el backend. Siempre con unidad (`90d`, `2160h`, `P90D`): `90` sin unidad impide arrancar. Los 30 días sin uso (`spring.session.timeout`) no cambian |
 | `CORS_ORIGENES` | String | Orígenes permitidos, separados por coma. El default son tres `localhost` |
 | `RESET_PASSWORD_URL` | String | **Hoy el default es `https://TODO-frontend-no-definido.renaser.dev/...`** — el dominio del frontend no está decidido |
 | `ACTIVATE_ACCOUNT_URL` | String | Ídem: default con `TODO-` adentro |
