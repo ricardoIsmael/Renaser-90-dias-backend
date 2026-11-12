@@ -64,8 +64,8 @@ mal() { RESUMEN+=("✘ $1"); FALLO=1; }
 sin() { RESUMEN+=("– $1"); SIN_CORRER=1; }
 
 if [[ $MODO != ci ]]; then
-  echo "▶ Reglas de código (scripts/reglas-de-codigo.test.mjs) y pruebas del script de trazabilidad"
-  if node --test scripts/reglas-de-codigo.test.mjs scripts/trazabilidad-specs.test.mjs; then ok "Reglas de código y del script de trazabilidad"; else mal "Reglas de código o del script de trazabilidad"; fi
+  echo "▶ Reglas de código (scripts/reglas-de-codigo.test.mjs), pruebas del script de trazabilidad y del despliegue de la Lambda de miniaturas"
+  if node --test scripts/reglas-de-codigo.test.mjs scripts/trazabilidad-specs.test.mjs scripts/lambda-miniaturas-ci.test.mjs; then ok "Reglas de código, script de trazabilidad y despliegue de la Lambda"; else mal "Reglas de código, script de trazabilidad o despliegue de la Lambda"; fi
 
   APP=${RENASER_APP:-}
   if [[ -z $APP ]]; then

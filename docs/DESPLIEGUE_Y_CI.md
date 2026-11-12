@@ -281,6 +281,8 @@ es un workflow aparte de `ci.yml`. Corre en cada PR y en cada push a `master`.
   > no trae las marcas de las specs 040 y 041, y el job fallaba en sus PR aunque la app las tuviera en su rama.
 - Una spec entra a la lista **en el mismo cambio que le pone sus marcas**. Para exigir una spec nueva: agregar su número a `specs/trazabilidad.json` y marcar sus pruebas.
 - Falla (exit 1) con un requisito sin prueba o con una marca a un requisito que la spec no define; el resumen en tablas queda en la página del job.
+- Corre, además, `scripts/lambda-miniaturas-ci.test.mjs` (D-351, §5.7): un workflow de AWS no se puede ejecutar sin empujar, así que esta es la red que revisa el
+  del despliegue de la Lambda antes de fusionar.
 
 ## 4. SonarCloud (`.github/workflows/sonarcloud.yml`)
 
@@ -330,6 +332,9 @@ EC2**, esperando a que la aplicación responda `UP` antes de dar el despliegue p
 Como el resto, se saltea con un aviso mientras falten las variables de repositorio
 `AWS_ROLE_ARN`, `AWS_REGION` y `ECR_REPOSITORY`; el job de despliegue se saltea, además, si falta
 `EC2_INSTANCE_ID`.
+
+> **Agregado 2026-11-12 (D-351).** El `cd.yml` despliega el backend. La Lambda de miniaturas del Muro tiene su propio workflow,
+> `lambda-miniaturas.yml`, con el mismo rol de OIDC y una política propia (§5.7).
 
 ### 5.1 Autenticación: OIDC, no claves de acceso
 
@@ -452,6 +457,10 @@ Tres cosas que no son obvias y conviene no "arreglar" después:
   acciones que hacen falta dan `allowed`, y `SendCommand` contra otra instancia, contra
   `AWS-RunPowerShellScript`, `StartSession`, los parámetros, `ec2:TerminateInstances`,
   `iam:PutRolePolicy` y `s3:GetObject` dan todas `implicitDeny`.
+
+> **Agregado 2026-11-12 (D-351).** El rol tiene una tercera política en línea, `actualizar-lambda-miniaturas`, que le deja
+> actualizar el código de **una** función Lambda (§5.7). Lo de arriba sigue valiendo para las otras dos: sigue sin
+> `ssm:StartSession`, sin `iam:*` y sin S3.
 
 **d) El repositorio de ECR** (`aws ecr create-repository --repository-name renaser-backend`).
 
@@ -902,6 +911,56 @@ El script cumple D12 como los del tramo C: simulacro por omisión (solo `--aplic
 **Cuándo está limpio.** Una línea `HABRIA_DENEGADO` es un endpoint que un Mentor o una Guía usó y cuyo permiso falta: o es un abuso, o falta un permiso en la tabla (que lo aprueba el dueño, regla 00; no se agrega por cuenta propia). Después de pasar a `APLICAR`, la misma lista (`DENEGADO`) es la de los 403 que da la matriz: cualquiera de un flujo legítimo es bloqueante y se vuelve a `SOMBRA`.
 
 > **Corregido 2026-11-12 (D-349).** `UserRole.can` y el javadoc de `Permission` decían que MENTOR y TRAINEE_GUIDE fallaban abiertos (los pasos «el 403 de un mentor lo da el servicio»). Ya no: el interceptor los evalúa en sombra. Siguen sin matriz solo ADMIN y ALCHEMIST (A-1).
+
+### 5.7 La Lambda de miniaturas del Muro: despliegue automático (D-351, 2026-11-12)
+
+La función `renaser-miniaturas-muro` (spec 049, D-339; `us-east-1`, Node 22, arm64) arma la miniatura de cada foto del Muro. Hasta el 2026-11-12 un cambio de su
+código o de sus dependencias (una subida de `sharp`) pedía correr a mano `construir.sh` y `aws lambda update-function-code`. Ahora lo hace
+`.github/workflows/lambda-miniaturas.yml`, en cada push a `master` que toque `infra/lambda-miniaturas-muro/` (menos su README) y a mano desde **Actions → Run workflow** (solo en `master`).
+
+**Qué hace, en este orden** (el orden importa: lo comprueba `scripts/lambda-miniaturas-ci.test.mjs`):
+
+1. `npm ci` y `node --test` con Node 22 en x64, desde `package-lock.json`. **Antes** de construir: las pruebas necesitan los binarios de x64 de `sharp` que deja `npm ci`, y el zip de arm64 se arma aparte
+   (`construir.sh` instala en `build/`, no toca `node_modules`; se comprobó que las pruebas siguen pasando después de construir, pero el orden no depende de eso). Con pruebas rojas no hay zip ni despliegue.
+2. `construir.sh`: `lambda.zip` con `npm ci --omit=dev --os=linux --cpu=arm64` y una guarda que falla si el zip no trae `@img/sharp-linux-arm64` o trae el de x64.
+3. Si falta la variable `AWS_ROLE_ARN`, o la corrida no es de `master` (la confianza OIDC del rol solo acepta `ref:refs/heads/master`, §5.1), avisa con `::warning::` / `::notice::` y termina en verde sin desplegar, como el `cd.yml`.
+4. OIDC con el rol del CD (`aws-actions/configure-aws-credentials`, sin claves), `aws lambda update-function-code --zip-file fileb://lambda.zip` y `aws lambda wait function-updated-v2`.
+5. Humo que **no toca datos**: `get-function-configuration` (estado `Active`, `LastUpdateStatus: Successful`, `CodeSha256` igual al SHA-256 del zip subido, `nodejs22.x`, `arm64`) e `invoke` con un evento cuya clave
+   está fuera de `muro/fotos/` (la Lambda la ignora sin llamar a S3; una prueba lo comprueba con `rutaDeLaMiniatura`), que debe devolver `{"procesadas":1}` sin `FunctionError`. Esa invocación carga `sharp` en arm64 de verdad,
+   que es lo que rompe una subida de dependencias con el binario equivocado. No lee ni escribe el bucket de producción.
+
+Las acciones van fijadas por SHA (Dependabot las mantiene), con `permissions: id-token: write, contents: read` y un grupo de concurrencia único (`cancel-in-progress: false`: cortar un `update-function-code` a medias deja la función en `InProgress`).
+
+**El permiso que le faltaba al rol (una vez, lo corre el dueño).** El rol `renaser-github-actions` solo tenía `desplegar-por-ssm` y `publicar-en-ecr` (§5.1). Se le suma la política en línea `actualizar-lambda-miniaturas`
+(`infra/lambda-miniaturas-muro/permiso-del-ci.plantilla.json`):
+
+| Acción | Para qué |
+|---|---|
+| `lambda:UpdateFunctionCode` | subir el zip |
+| `lambda:GetFunction` | la consulta el `wait function-updated-v2` |
+| `lambda:GetFunctionConfiguration` | la comprobación del estado y del `CodeSha256` |
+| `lambda:InvokeFunction` | la invocación de humo (sin ella el humo no probaría que `sharp` carga en arm64) |
+
+`Resource`: solo `arn:aws:lambda:us-east-1:<cuenta>:function:renaser-miniaturas-muro`. Sin comodines, y **sin** `UpdateFunctionConfiguration`, `CreateFunction`, `DeleteFunction`, `iam:PassRole` ni S3: el rol del CI no puede cambiar el rol de la función, su disparador
+ni leer fotos (con `UpdateFunctionCode` ya puede cambiar lo que corre la función con el rol de la Lambda —leer `muro/fotos/`, escribir `muro/miniaturas/`—; por eso la política es solo sobre esa función y el workflow solo corre desde `master`).
+La cuenta no está escrita en el repositorio: el script la toma de AWS.
+
+```bash
+export RENASER_CUENTA_AWS=<id de 12 dígitos de la cuenta de producción>
+infra/lambda-miniaturas-muro/permiso-del-ci.sh                      # simulacro (por omisión): muestra la política, no cambia nada
+infra/lambda-miniaturas-muro/permiso-del-ci.sh --aplicar            # la pone en el rol (hazlo ANTES del primer despliegue automático)
+infra/lambda-miniaturas-muro/permiso-del-ci.sh --revertir --aplicar # VUELTA ATRÁS: borra solo esa política en línea
+```
+
+El script cumple lo de D12 como los del WAF: simulacro por omisión (solo `--aplicar` cambia algo), perfil `prod` en cada llamada, cuenta verificada contra `RENASER_CUENTA_AWS`, idempotente (la misma política no se vuelve a poner; una distinta se respalda
+en `~/.renaser/respaldos`, permiso 600, antes de reemplazarla), vuelve a leer lo que dejó en IAM y se niega si la plantilla trae una acción o un comodín fuera de la lista. `scripts/lambda-miniaturas-ci.test.mjs` lo corre contra un `aws` de mentira.
+
+**Si algo sale mal.** Pruebas o construcción rojas: la Lambda de producción sigue como estaba. `AccessDenied` al subir: falta aplicar la política (el paso lo dice). Humo rojo: la versión nueva **ya está** en AWS (la función no usa alias ni
+versiones publicadas; el aviso del bucket apunta a `$LATEST`): se revierte el commit en `master` y ese push despliega el anterior (el detalle y el camino a mano, en `infra/lambda-miniaturas-muro/README.md`).
+
+> **Lo que este workflow no hace.** Crear la función, su rol o el aviso del bucket (`desplegar.sh`, una vez) ni rellenar fotos viejas (`rellenar.sh`). No corre en un PR (no hay forma de que un PR llegue a las credenciales de AWS), así que la verificación
+> previa a fusionar es la de `scripts/lambda-miniaturas-ci.test.mjs` (en `trazabilidad.yml`). `dependabot.yml` **no** vigila el `npm` de esta carpeta: hoy nadie sube `sharp` solo; cuando se sume, sus PR se desplegarán por aquí al fusionarse.
+> **Qué se verificó (2026-11-12):** el workflow, la política y el script con `scripts/lambda-miniaturas-ci.test.mjs`; las pruebas de la Lambda con `npm ci` y `node --test`; `construir.sh` y su zip. **No se verificó:** ninguna ejecución del workflow (no se puede sin empujar), el intercambio OIDC con la política nueva ni la invocación en AWS real.
 
 ---
 
