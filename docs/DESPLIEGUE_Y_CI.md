@@ -67,7 +67,7 @@ El `redis` del compose admite autenticación sin otra configuración: si `REDIS_
 `.env`, el contenedor arranca con `requirepass` y Spring usa el mismo valor. Si queda vacío, se
 mantiene el modo local sin contraseña. En producción no se debe publicar el puerto de Redis; el
 servidor y la aplicación tienen que compartir la misma credencial y, cuando el proveedor lo
-requiera, TLS (`REDIS_SSL_ENABLED=true`).
+requiera, TLS (`REDIS_SSL_ENABLED=true`). La de producción se activa con `infra/redis/contrasena.sh` (§5.3).
 
 **`JAVA_HOME` tiene que apuntar al JDK 25:**
 
@@ -499,7 +499,7 @@ producción corría `:latest` y para saber qué había adentro había que compar
 | Pieza | Valor |
 |---|---|
 | Instancia | `i-0ea00f555c5fe8028` — t3.small, Amazon Linux 2023, IP fija `52.0.210.237` |
-| Contenedores | `redis` (`redis:7-alpine`, sin puertos publicados) y `backend` (la imagen de ECR, `-p 8080:8080`), los dos en la red de Docker `renaser`. Con el modo sin corte (E-465) se suma `proxy` (nginx) en el 8080 y `backend` deja de publicar puerto |
+| Contenedores | `redis` (`redis:7-alpine`, sin puertos publicados; **con contraseña desde la spec 050**, ver «Redis con contraseña» abajo) y `backend` (la imagen de ECR, `-p 8080:8080`), los dos en la red de Docker `renaser`. Con el modo sin corte (E-465) se suma `proxy` (nginx) en el 8080 y `backend` deja de publicar puerto |
 | Rol de la instancia | `renaser-backend-ec2` — lee `/renaser/prod/*`, firma URLs de su bucket, baja de ECR, y trae `AmazonSSMManagedInstanceCore` |
 | Delante | CloudFront `E3O4M4W7JW3TJQ` (`djbooeq09skac.cloudfront.net`), hablando **HTTP** al origen |
 | Lo que **no** hay | ECS, CodeDeploy, balanceador, autoscaling |
@@ -574,8 +574,9 @@ Con el modo sin corte hay que tener presente:
   La app toma la IP del cliente del valor más a la derecha de `X-Forwarded-For` (el que agrega
   CloudFront), así que nginx **no debe** agregar el suyo (ver `DireccionIpDelCliente`, E-678, D-342).
   > **Corregido 2026-11-11 (E-678).** Decía «la IP del cliente sigue saliendo igual que antes», cuando
-  > salía del valor más a la izquierda. Soporta WebSocket y no
-  hace buffer. Su configuración la reescribe el script en `/opt/renaser/proxy/renaser.conf`.
+  > salía del valor más a la izquierda.
+  Soporta WebSocket y no hace buffer. Su configuración la reescribe el script en `/opt/renaser/proxy/renaser.conf` (desde
+  la spec 050 A2 también rechaza lo que no trae la cabecera de origen; ver «Origen cerrado» abajo).
 - Los schedulers aguantan dos instancias unos segundos: 20 de 22 llevan ShedLock sobre JDBC y los otros
   dos pueden correr en todas (`SchedulerLockConfig`).
 
@@ -609,6 +610,41 @@ menos de 3 GB ahora quiere decir que el disco lo ocupa otra cosa (`docker system
 > el coordinador por SSM (quedaron `d55f84d8`, `cde92c44` y `153820e9`; 3,8 GB libres) y desde entonces
 > lo hace el script.
 
+#### Redis con contraseña (spec 050, tramo A1, D-343)
+
+> **Corregido 2026-11-11 (D-343).** Esta sección y la tabla de arriba decían que el contenedor `redis` no tenía
+> autenticación (`redis:7-alpine`, solo sin puertos publicados). Seguía siendo cierto el 11/11, pero ya no es el
+> destino: Redis guarda las sesiones, y cualquier contenedor de la red `renaser` podía leerlas. El contenedor
+> `redis` sigue sin publicar puertos y ahora pasa a tener su definición en el repositorio
+> (`infra/redis/`), con contraseña.
+
+**El backend no cambió.** `application.yaml` ya lee `spring.data.redis.username` y `password` de `REDIS_USERNAME` y
+`REDIS_PASSWORD` (Parameter Store, §6.4). `RedisConContrasenaIT` prueba, contra Redis reales, que conecta con y sin
+contraseña, que `AUTH default <clave>` contra un Redis que todavía no la exige funciona y que exigirla en caliente no
+corta la conexión abierta. De ahí el orden de salida, que no deja ningún hueco:
+
+1. `infra/redis/contrasena.sh --paso parametros --aplicar` guarda `REDIS_PASSWORD` (`SecureString`, 32 bytes
+   aleatorios generados en la máquina del dueño y nunca impresos) y `REDIS_USERNAME=default`.
+2. **Se despliega el backend** (el CD de siempre): arranca con las dos variables y Redis todavía no pide nada.
+3. `infra/redis/contrasena.sh --paso exigir --aplicar` (con `--paso estado` antes para mirar): comprueba que el
+   backend arrancó **después** de guardar la clave, exige la clave en caliente (`CONFIG SET requirepass`), y la deja
+   persistente recreando el contenedor con `/opt/renaser/redis/conf/redis.conf` (permiso 600, dueño `redis`):
+   `requirepass`, `appendonly yes` y `notify-keyspace-events Egx`. Es un corte de Redis de unos segundos.
+4. Verifica: `PING` sin clave desde **otro contenedor** de la red = `NOAUTH`, con clave = `PONG`, ningún puerto
+   publicado, el mismo número de sesiones y `/actuator/health` UP. Si algo no pasa, **vuelve atrás solo**.
+
+Detalles que costaron un ensayo local (`infra/redis/ensayo-local.sh`): (a) con `appendonly yes` y sin carpeta de AOF,
+Redis arranca **vacío** y no lee `dump.rdb`, así que el RDB se convierte a AOF en un contenedor temporal antes del
+definitivo; (b) el `redis` de la imagen corre como `999:1000` y no puede leer un `redis.conf` de root con permiso 600;
+(c) `notify-keyspace-events` lo pide Spring Session con `CONFIG SET` **una sola vez, al arrancar el backend**: un
+Redis nuevo arranca sin él, por eso va en el `redis.conf`.
+
+**Vuelta atrás.** El Redis anterior no se borra: queda parado como `redis-previo` (y `--revertir` lo vuelve a
+poner, pasándole antes las sesiones de ahora). `infra/redis/contrasena.sh --revertir --aplicar`. El backend no
+necesita redespliegue: `AUTH default <clave>` contra un Redis sin clave sigue siendo válido. Pasada una semana:
+`docker rm redis-previo`. Todo el script es simulacro salvo que se le pase `--aplicar`, exige
+`RENASER_CUENTA_AWS` y `RENASER_INSTANCIA` (no están en el repositorio) y usa el perfil `prod`.
+
 #### El health check depende de que `/actuator/health` siga siendo público
 
 Sigue vigente lo que ya decía esta sección, y ahora con más peso, porque el despliegue **depende**
@@ -625,6 +661,33 @@ aunque la aplicación esté perfecta**. Al agregar `anyRequest().authenticated()
 > puerto de la aplicación. Al agregar `anyRequest().authenticated()` hay que permitir **las dos**
 > rutas (`/actuator/health` y `/salud`), y también el despacho `FORWARD`. `PuertoDeAdministracionIT`
 > falla si `/actuator/health` deja de responder `{"status":"UP"}` en el 8080.
+
+#### Origen cerrado: la cabecera de CloudFront a nginx (spec 050, tramo A2, D-344)
+
+> **Corregido 2026-11-11 (D-344).** Arriba decía que nginx es «transparente» y solo reenvía. Sigue sin tocar
+> `X-Forwarded-For` ni el `Host`, pero ahora también **rechaza** (403 `ORIGEN_NO_PERMITIDO`) lo que no trae la cabecera
+> secreta de CloudFront, cuando se le pide. La seguridad del origen era solo el security group (la lista de IP de
+> CloudFront y una IP fija): cualquiera dentro de esa lista, o cualquier distribución de CloudFront, podía hablarle
+> directo y saltarse lo que se ponga delante.
+
+CloudFront agrega `X-Origen-Renaser` (un secreto de 32 bytes, en Parameter Store, `origen-secreto`) a cada pedido hacia el
+origen y nginx lo comprueba. **Se enciende en dos tiempos**: el modo de partida es `registrar` (no rechaza nada; cada
+pedido sin cabecera queda en `docker logs proxy`, sin secretos, sin cabeceras y sin los parámetros de la URL) y recién
+después de 24 h limpias el dueño pasa a `exigir` (`origen-modo` en Parameter Store). Lo que no necesita la cabecera: el
+propio host y la red `renaser` de Docker (el CD comprueba la salud por `127.0.0.1:8080` y Docker entrega eso con la IP de
+la pasarela de la red, no con `127.0.0.1`) y las IP de `origen-ips-directas` (la IP fija del security group, si hace
+falta). Si faltan los secretos o la subred, `exigir` cae solo a `registrar`.
+
+- **Todo por `infra/cloudfront/cabecera-de-origen.sh`** (simulacro por omisión, `--aplicar`, perfil `prod`, cuenta
+  verificada, respaldo de la distribución con su ETag), con la **rotación sin corte** (nginx acepta vigente y anterior →
+  CloudFront cambia → espera → nginx suelta el viejo) y la vuelta atrás. Los comandos, en orden, y lo que se probó y lo
+  que no: `infra/cloudfront/README.md`. El ensayo local con nginx de verdad: `infra/cloudfront/ensayo-local.sh`.
+- **`desplegar-backend.sh`** genera la configuración con los secretos en un archivo de permiso 600, la prueba con
+  `nginx -t` en un contenedor aparte **antes** de reemplazar la que anda, y con `SOLO_PROXY=si` reescribe y recarga nginx
+  sin tocar el backend (así se rota o se pasa a `exigir` sin los 1–2 minutos de 502 de un despliegue).
+- **Lo que cazó el ensayo local**: un secreto de 64 caracteres no entra en el cubo por omisión de un `map` de nginx
+  (`could not build map_hash, you should increase map_hash_bucket_size`; con `nginx -s reload` la recarga habría fallado en
+  silencio y, en un reinicio, nginx no habría arrancado), y la directiva tiene que ir **antes** del primer `map`.
 
 #### Por qué EC2 y no ECS Fargate o App Runner
 
@@ -917,8 +980,8 @@ va cifrado.
 | `DB_PASSWORD` | **SecureString** | Contraseña de Postgres |
 | `REDIS_HOST` | String | Host de Redis (sesiones, cuotas, pub/sub de chat) |
 | `REDIS_PORT` | String | Puerto de Redis |
-| `REDIS_USERNAME` | String | Usuario ACL de Redis, si el servidor lo exige |
-| `REDIS_PASSWORD` | **SecureString** | Contraseña de Redis; no dejarla en texto plano |
+| `REDIS_USERNAME` | String | Usuario ACL de Redis. En producción vale `default` (lo crea `infra/redis/contrasena.sh`, spec 050 A1) |
+| `REDIS_PASSWORD` | **SecureString** | Contraseña de Redis; no dejarla en texto plano. En producción la genera `infra/redis/contrasena.sh` (spec 050 A1) |
 | `REDIS_SSL_ENABLED` | String | `true` cuando el proveedor de Redis exige TLS; `false` para el contenedor privado local |
 | `REDIS_SESSION_NAMESPACE` | String | Namespace de Spring Session; por defecto `renaser:session:v2` |
 | `CORS_ORIGENES` | String | Orígenes permitidos, separados por coma. El default son tres `localhost` |
