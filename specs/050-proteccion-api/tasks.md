@@ -128,16 +128,16 @@ Orden recomendado: **G0** → A1 → A2 → B → C → D → E → F → G1–G
 ## Tramo H — Matriz estricta de MENTOR y TRAINEE_GUIDE
 
 **H1 — inventario y propuesta (solo documentos)**
-- [ ] T066 Inventario: los permisos que declara cada handler (`@RequiresPermission`, con y sin `value =`) y, por cada uno, el uso real de Mentor y Guía en la app (pantallas de Mentoría y flujos) y el registro de sombra de MENTOR_LEAD. Propuesta de la tabla de permisos de MENTOR/GUÍA **sin darla por buena**.
-- [ ] T067 `[DUEÑO]` Aprobar (o corregir) la tabla; la aprobación queda en `docs/MODULOS_A_AVANZAR.md` §8 (FR-040). Responder Q7.
+- [x] T066 Inventario: los permisos que declara cada handler (`@RequiresPermission`, con y sin `value =`) y, por cada uno, el uso real de Mentor y Guía en la app (pantallas de Mentoría y flujos) y el registro de sombra de MENTOR_LEAD. Propuesta de la tabla de permisos de MENTOR/GUÍA **sin darla por buena**.
+- [x] T067 `[DUEÑO]` Aprobar (o corregir) la tabla (aprobada el 2026-11-12: D18 de la spec; registrada como D-349); la aprobación queda en `docs/MODULOS_A_AVANZAR.md` §8 (FR-040). Responder Q7.
 
 **H2 — sombra**
-- [ ] T068 `UserRole.can` con el conjunto explícito y negación por defecto para MENTOR y TRAINEE_GUIDE; `PermissionEnforcementInterceptor` aplica la matriz con `renaser.security.mentor-enforcement=false` (registra permiso, método y ruta, **no** la cuenta); `EXPORT_RANKING` y la regla de cuenta suspendida (D-214) intactos (FR-041, FR-044).
-- [ ] T069 Pruebas unitarias de `UserRoleTest` (cada permiso, por rol) y del interceptor en sombra y en aplicación.
+- [x] T068 `UserRole.can` con el conjunto explícito y negación por defecto para MENTOR y TRAINEE_GUIDE; `PermissionEnforcementInterceptor` aplica la matriz con `renaser.security.mentor-enforcement=false` (registra permiso, método y ruta, **no** la cuenta); `EXPORT_RANKING` y la regla de cuenta suspendida (D-214) intactos (FR-041, FR-044).
+- [x] T069 Pruebas unitarias de `UserRoleTest` (cada permiso, por rol) y del interceptor en sombra y en aplicación.
 - [ ] T070 `[DUEÑO]` Dejarlo en producción hasta que el registro de sombra esté limpio en uso real.
 
 **H3/H4 — aplicar y probar**
-- [ ] T071 La prueba que recorre todos los handlers por cada rol: lo no aprobado responde 403 y lo aprobado no (FR-043, SC-010).
+- [x] T071 La prueba que recorre todos los handlers por cada rol: lo no aprobado responde 403 y lo aprobado no (FR-043, SC-010).
 - [ ] T072 **E2E por rol**: Mentor y Guía contra el backend local con mobile-mcp y Maestro (Mentoría, grupos, aprendices, tickets, evidencias, cursos, eventos, su propio programa). Un 403 nuevo en un flujo legítimo es bloqueante; revisar los logs del backend y `adb logcat`.
 - [ ] T073 `mentor-enforcement=true` (y `mentor-lead-enforcement=true` si el dueño lo quiere, Q7), con la vuelta atrás a un comando. Los guards de servicio **no se borran** (FR-042).
 
@@ -169,7 +169,7 @@ Orden recomendado: **G0** → A1 → A2 → B → C → D → E → F → G1–G
 | FR-032, FR-033 | F | caracterización del CSV; IT de 20.000 filas |
 | FR-034 | F | regla de código y `PaginaAcotadaTest` |
 | FR-035 a FR-039 | G | sonda y ensayos locales; `[sin prueba automática]` para el despliegue real (SC-009 lo mide el dueño) |
-| FR-040 a FR-044 | H | `UserRoleTest`; el recorrido por rol; E2E por rol |
+| FR-040 a FR-044 | H | `MatrizDeMentorYGuiaTest`, `UserRoleTest`; `MatrizDeMentorEnElInterceptorTest`, `ControlDeLaMatrizDeMentorTest`, `MatrizDeMentorConRedisIT`; `MatrizPorRolEnTodoEndpointTest` (el recorrido por rol); E2E por rol (pendiente) |
 | FR-045 | Z | `[sin prueba automática]`: documentación; se revisa a mano en T074 |
 
 
@@ -203,3 +203,14 @@ E en el PR #135 y F en el PR #136; **ninguno se ha corrido en producción ni en 
 
 - **E.** El tope **no es un bean**: el proxy de Modulith no puede con una clase `final` (E-307), así que el filtro y el handshake leen la propiedad (`FiltroDeTopeDeSesion.PROPIEDAD`) y arman su `TopeDeSesion`. Se agrega el handshake del WebSocket. `RutasSinSesion` copia los `permitAll()` de `SecurityConfig` y una prueba la compara con el archivo. El valor para volver atrás en producción es `0` (Parameter Store no admite vacío). **En la suite el tope va apagado** (`renaser.sesion.tope-absoluto: 0` en el `application.yaml` de test): muchas ITs mueven el reloj de prueba meses adelante con sesiones reales, que nacerían «de hace más de 90 días»; `TopeAbsolutoDeSesionIT` lo prende en su propio contexto. Las ramas que se rebasen sobre E heredan ese cambio. T053 (E2E con la app) queda sin hacer.
 - **F.** «Caja paginada en la base» no es posible sin una columna (Q4 = A: el estado se deriva en Java); lo que se hizo es recorrer el padrón por lotes con un índice mínimo y armar las cajas completas solo para la página o el lote. El diagnóstico exporta el cuestionario (no respuestas): lo acota la cantidad de preguntas. `PaginaAcotada` se usa en los tres controllers tocados y las otras 13 listas (ya acotadas en su servicio) quedan en una lista de excepciones que solo se achica. La auditoría de la consola pasa de recortar a **400** (lo pidió el dueño; la app pide 20). El 429 de la sexta exportación espera al tramo C. **Una descarga en streaming vive bajo `spring.mvc.async.request-timeout`** (120 s en producción): el `application.yaml` de test no lo espejaba (regía el de Tomcat, 30 s) y ahora sí; una descarga de más de 120 s (más de ~100.000 aprendices) se corta a mitad.
+
+## Registro de implementación de H (2026-11-12)
+
+El tramo H está en PR (backend #137, rama `050-h-permisos-estrictos`) y **nada se corrió en producción ni en el emulador**. Hechos T066 a T069 y T071; **quedan T070 `[DUEÑO]`** (dejarlo en sombra hasta que el registro esté limpio), **T072** (E2E por rol, sesión principal) **y T073 `[DUEÑO]`** (pasar a `APLICAR`). Cambios respecto al plan:
+
+- **Un solo PR para H2 y la prueba de H3/H4 (T071).** El plan los partía en cuatro ramas; la prueba que recorre todos los handlers por rol (`MatrizPorRolEnTodoEndpointTest`) y la de «ningún rol falla abierto» (`MatrizDeMentorYGuiaTest`) salen con la sombra, porque las dos se prueban en los dos modos sin tocar producción.
+- **El modo se cambia sin reiniciar, no solo con la propiedad.** FR-041 decía «volver atrás es cambiar la propiedad», que cuesta un despliegue (1–2 minutos de 502). Se mantiene `renaser.security.mentor-enforcement` (false = sombra) como valor de partida y se agrega la clave de Redis `proteccion:permisos:modo` (`SOMBRA`/`APLICAR`), que manda sobre ella y se relee cada 30 s (`renaser.security.mentor-enforcement-releer-cada`, para las pruebas), con el mismo patrón que el modo de los límites del tramo C. `scripts/despliegue/permisos-modo.sh` (simulacro por omisión, `--revertir`, `SOMBRA --aplicar` como vuelta atrás).
+- **El registro durable.** El plan hablaba de una línea del registro; el de Docker solo vive desde el último despliegue y la sombra dura semanas, así que además se cuenta cada denegación en un hash de Redis por día de Lima (`proteccion:permisos:denegaciones:<día>`, 30 días), que lee `scripts/proteccion/denegaciones-de-la-matriz.sh`. **No lleva la cuenta** (historia 8, criterio 3): rol, permiso, método y plantilla de la ruta. En `APLICAR` también se anota (`DENEGADO`), para ver los 403 que da la matriz.
+- **La excepción de D-278 ya no es una excepción.** `UserRole.can` quitó el caso especial de `EXPORT_RANKING` para MENTOR y TRAINEE_GUIDE: queda negado por no estar en la lista.
+- **MENTOR_LEAD no se tocó** (Q7): su interruptor, `mentor-lead-enforcement`, sigue aparte. Los guards de los servicios no se tocaron (FR-042).
+- **Falta antes de aplicar:** los dos arreglos de D19 (sobrenombres solo para moderadores; tickets de mentoría acotados) van en otras ramas. Mientras la matriz esté en sombra, `MODERATE_WALL` no frena a un mentor; y `USE_MENTOR_TICKETS` está permitido, así que la matriz no puede acotar *qué* tickets ve.
