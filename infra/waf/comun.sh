@@ -28,7 +28,7 @@ preparar() {
   echo "Cuenta verificada ($CUENTA, perfil $PERFIL, region $REGION). Modo: $([ "${APLICAR:-no}" = si ] && echo APLICAR || echo SIMULACRO)."
   NOMBRE=$(jq -r .Name "$PLANTILLA")
   TMP=$(mktemp -d)
-  trap 'rm -rf "$TMP"' EXIT
+  trap "rm -rf '$TMP'" EXIT
   umask 077
 }
 

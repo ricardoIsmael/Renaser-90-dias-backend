@@ -66,7 +66,7 @@ CUENTA=$(aws sts get-caller-identity --profile "$PERFIL" --query Account --outpu
 [ "$CUENTA" = "$RENASER_CUENTA_AWS" ] || falla "el perfil $PERFIL apunta a la cuenta $CUENTA, no a la esperada ($RENASER_CUENTA_AWS)."
 echo "Cuenta verificada ($CUENTA, perfil $PERFIL). Solo lectura."
 
-parametros=$(mktemp); trap 'rm -f "$parametros"' EXIT
+parametros=$(mktemp); trap "rm -f '$parametros'" EXIT
 jq -n --arg b64 "$(base64 -w0 "$0")" --arg prefijo "$PREFIJO" --arg region "$REGION" --arg contenedor "$CONTENEDOR" \
       --arg grupo "$GRUPO" --arg dia "$DIA" \
   '{commands: [

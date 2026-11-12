@@ -128,7 +128,7 @@ CUENTA=$(aws sts get-caller-identity --profile "$PERFIL" --query Account --outpu
 [ "$CUENTA" = "$RENASER_CUENTA_AWS" ] || falla "el perfil $PERFIL apunta a la cuenta $CUENTA, no a la esperada ($RENASER_CUENTA_AWS). No se cambio nada."
 echo "Cuenta verificada ($CUENTA, perfil $PERFIL). Modo: $([ "$APLICAR" = si ] && echo APLICAR || echo SIMULACRO)."
 
-PARAMETROS=$(mktemp); trap 'rm -f "$PARAMETROS"' EXIT
+PARAMETROS=$(mktemp); trap "rm -f '$PARAMETROS'" EXIT
 en_la_instancia() {  # <accion>: manda ESTE script por SSM, con las variables por delante (patron del CD)
   local accion=$1 cid estado desde
   jq -n --arg b64 "$(base64 -w0 "$0")" --arg accion "$accion" --arg aplicar "$APLICAR" --arg prefijo "$PREFIJO" \
