@@ -65,6 +65,21 @@ test('tiempo: ningún LocalDate/LocalDateTime/LocalTime/ZonedDateTime/OffsetDate
 const MIGR = archivos('src/main/resources/db/migration', (n) => /^V\d+__.*\.sql$/.test(n));
 const version = (f) => Number(path.basename(f).match(/^V(\d+)__/)[1]);
 
+test('scripts: la limpieza al salir fija la ruta al crearla (trap con comillas dobles), nunca una variable que puede no existir en el EXIT', () => {
+  // Con comillas simples, `trap 'rm -f "$x"' EXIT` expande $x AL SALIR: si era local de una función ya no existe y, con set -u,
+  // el script termina en error después de hacer su trabajo (pasó dos veces el 11/11/2026, E-679). Se escribe trap "rm -f '$x'" EXIT.
+  const malos = [];
+  for (const raiz of ['scripts', 'infra']) {
+    if (!fs.existsSync(path.join(RAIZ, raiz))) continue;
+    for (const f of execFileSync('git', ['ls-files', raiz], { cwd: RAIZ, encoding: 'utf8' }).split('\n').filter(x => x.endsWith('.sh'))) {
+      fs.readFileSync(path.join(RAIZ, f), 'utf8').split('\n').forEach((linea, n) => {
+        if (/trap '[^']*\$[^']*' EXIT/.test(linea)) malos.push(`${f}:${n + 1}`);
+      });
+    }
+  }
+  assert.deepEqual(malos, [], `Usa trap "rm -f '$ruta'" EXIT (comillas dobles afuera) en: ${malos.join(', ')}`);
+});
+
 test('migraciones: cada versión de Flyway es única', () => {
   const vistas = new Map();
   const repetidas = [];
