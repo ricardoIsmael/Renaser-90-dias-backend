@@ -19,4 +19,7 @@ public interface WhatsappConfirmadoPort {
      * @return {@code false} si ese numero ya esta confirmado en OTRA cuenta (no guarda nada)
      */
     boolean guardar(UserId cuenta, String numero);
+
+    /** ¿Ese numero esta confirmado en una cuenta distinta de {@code excepto} ({@code null}: en cualquiera)? Spec 053. */
+    boolean confirmadoPorOtra(String numero, UserId excepto);
 }

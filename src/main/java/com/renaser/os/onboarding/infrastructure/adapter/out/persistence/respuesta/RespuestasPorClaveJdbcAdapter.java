@@ -46,6 +46,17 @@ class RespuestasPorClaveJdbcAdapter implements LeerRespuestasPorClavePort {
                AND r.valor_texto IS NOT NULL
             """;
 
+    private static final String SQL_OTRA_PERSONA_TIENE_TEXTO = """
+            SELECT EXISTS (
+                SELECT 1
+                  FROM renaser.respuestas_onboarding r
+                  JOIN renaser.preguntas_onboarding  p ON p.id = r.pregunta_id
+                 WHERE p.clave_pregunta = :clave
+                   AND r.usuario_id <> :excepto
+                   AND r.valor_texto IS NOT NULL
+                   AND regexp_replace(r.valor_texto, '[\\s().-]', '', 'g') = :texto)
+            """;
+
     private static final String SQL_MEDIA = """
             SELECT r.media_id
               FROM renaser.respuestas_onboarding r
@@ -94,6 +105,16 @@ class RespuestasPorClaveJdbcAdapter implements LeerRespuestasPorClavePort {
                 })
                 .list();
         return textos;
+    }
+
+    @Override
+    public boolean otraPersonaTieneTexto(String clavePregunta, String textoSinSeparadores, UserId excepto) {
+        return Boolean.TRUE.equals(jdbcClient.sql(SQL_OTRA_PERSONA_TIENE_TEXTO)
+                .param("clave", clavePregunta)
+                .param("texto", textoSinSeparadores)
+                .param("excepto", excepto == null ? new UUID(0L, 0L) : excepto.value())
+                .query(Boolean.class)
+                .single());
     }
 
     /** A lo sumo una fila: {@code clave_pregunta} es UNIQUE global y la respuesta, UNIQUE por (usuario, pregunta). */

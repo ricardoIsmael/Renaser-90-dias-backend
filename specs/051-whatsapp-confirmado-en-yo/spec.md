@@ -21,6 +21,9 @@ recuperación.
 | D6 | ¿Límites? | Por cuenta: espera de 60 s y 5 códigos/hora; confirmar, 10 intentos/hora. Y **las mismas claves de la 043** por origen (10/h), por número (3/h) y global (300/h): un número recibe 3 códigos por hora sumando los dos usos. Son del grupo ESCRITURA de la spec 050 (`/users/me/**`, sin cambios en el clasificador). |
 | D8 | La spec 041 (FR-030) decía «ninguna tabla de números». | La 051 la **supera solo para esto** (decisión del dueño del 12/11): `whatsapp_confirmados`. Los recordatorios de eventos (041) siguen leyendo solo el número de la Ficha; la prueba de la 041 (`EntregasDeWhatsAppJdbcAdapterIT`) permite esta única tabla. |
 | D7 | ¿Se puede quitar el número? | **No en esta spec**: solo agregar o cambiar. |
+| D9 | **El número es único también al pedir acceso** (decisión del dueño, 13/11/2026: «el número es único»; D-353). ¿Qué es «de otra cuenta»? | **Un número es de otra cuenta si** (a) está confirmado en `whatsapp_confirmados` por otra cuenta, (b) otra persona lo declaró en su Ficha Inicial (respuesta `whatsapp`) o (c) hay una solicitud de acceso **pendiente** de otra persona con ese número. Se compara en formato internacional sin separadores (`NumeroDeWhatsApp`: «+51 987 654 321» = «+51987654321»). Las solicitudes rechazadas o aceptadas no cuentan (las aceptadas ya pasaron a la Ficha). Se dice con el mismo 409 `NUMERO_EN_USO` de D3. |
+| D10 | ¿Por qué en la 051 y no en la 052? | La 052 («Solicitar acceso» por pasos) es de la app, no cambia el servidor y todavía no está fusionada; esta regla es del servidor, reusa `whatsapp_confirmados` y el código `NUMERO_EN_USO` de esta spec y **cambia D3** (para el alta sí se dice al paso del WhatsApp, no solo al confirmar). La app solo dibuja el motivo en el paso del WhatsApp de la 052. |
+| D11 | D3 decía «solo al confirmar, para no ser un oráculo»; ahora el alta lo dice antes. ¿Cómo se contiene? | La pregunta es pública (la persona aún no tiene cuenta), así que lleva **tope por origen (20/h) y global (600/h)**, aparte de los de envío; no devuelve ni enmascara el número ajeno. Es la contrapartida aceptada por el dueño. **Yo → «WhatsApp» no cambia**: sigue rechazando solo al confirmar y solo contra `whatsapp_confirmados` (D3). |
 
 ## Requirements
 
@@ -43,7 +46,17 @@ recuperación.
 - **FR-012**: Un toque, un pedido: el botón se apaga mientras viaja; al confirmar, la fila relee el estado del servidor. Los errores del servidor se muestran con su texto (`codigo` y `message`): código incorrecto, número en uso, 429, canal caído.
 - **FR-013**: En la recuperación de la contraseña por WhatsApp, el texto dice que el código va al WhatsApp confirmado en `Yo` o, si no hay, al de la ficha.
 
+### Número único al pedir acceso (D9–D11, 13/11/2026)
+
+- **FR-014**: `POST /api/v1/auth/whatsapp-code/number` `{ whatsapp }` (público, mismo interruptor `auth.codigo_whatsapp`) es el paso del WhatsApp de «Solicitar acceso»: **204** si el número está libre; **409 `NUMERO_EN_USO`** («Ese número de WhatsApp ya está en uso en otra cuenta.») si es de otra cuenta según D9; **422 `NUMERO_INVALIDO`** si no tiene forma de número. No manda nada ni guarda nada.
+- **FR-015**: La consulta MUST tener tope por origen (20 por hora) y global (600 por hora): pasado cualquiera, **429** con texto en tuteo («Revisaste muchos números seguidos. Intenta de nuevo en una hora.»). No comparte claves con los envíos de códigos.
+- **FR-016**: `POST /api/v1/auth/whatsapp-code/registration` (el código del alta por WhatsApp) MUST rechazar con 409 `NUMERO_EN_USO` un número de otra cuenta, sin mandar el código.
+- **FR-017**: `POST /api/v1/account-requests` MUST rechazar con 409 `NUMERO_EN_USO` un `phone` que sea de otra cuenta, antes de crear la cuenta pendiente y sin gastar el token del correo. Un `phone` vacío o sin forma de número no se compara.
+- **FR-018**: Aceptar la solicitud MUST volver a comprobarlo (excluyendo la cuenta de la propia solicitud): si entre el alta y la aprobación otra cuenta se quedó con el número, la aprobación es 409 `NUMERO_EN_USO` y no cambia nada (ni la cuenta, ni la Ficha, ni la solicitud). Quien aprueba rechaza esa solicitud; la persona puede pedir acceso de nuevo con otro número.
+- **FR-019** (app): En el paso «Tu WhatsApp» de «Solicitar acceso», «Continuar» MUST consultar FR-014 y, ante un 409, un 422 o un 429, mostrar el texto del servidor bajo el campo (borde de error) y **no avanzar**; el botón se apaga mientras viaja el pedido. Un correo ya registrado conserva su mensaje de siempre.
+
 ### Criterios de éxito
 
 - **SC-001**: Una cuenta del personal agrega su número en `Yo`, lo confirma con el código y puede recuperar su contraseña por WhatsApp. [sin prueba automática: E2E en el emulador contra el backend local con un YCloud falso; capturas en el PR]
 - **SC-002**: Un número sin confirmar nunca queda guardado: pedir el código no escribe nada y un código equivocado tampoco.
+- **SC-003**: Una persona que pide acceso con el número de otra cuenta (confirmado, de una Ficha o de una solicitud pendiente) no pasa del paso del WhatsApp, ni crea la solicitud saltándoselo, ni la ve aprobada. [sin prueba automática: el recorrido completo es un E2E en el emulador contra el backend local; capturas en el PR]

@@ -109,6 +109,15 @@ class AccountRequestServiceTest {
     @Mock
     private com.renaser.os.users.api.WhatsappDelRegistro whatsappDelRegistro;
 
+    @Mock
+    private com.renaser.os.users.api.CodigoPorWhatsApp codigoPorWhatsApp;
+    @Mock
+    private com.renaser.os.users.application.ports.out.whatsapp.WhatsappConfirmadoPort whatsappConfirmado;
+    @Mock
+    private com.renaser.os.users.api.WhatsappEnOtraFicha whatsappEnOtraFicha;
+    @Mock
+    private com.renaser.os.users.application.ports.out.whatsapp.NumeroEnSolicitudPendientePort solicitudPendiente;
+
     private AccountRequestService service;
 
     @BeforeEach
@@ -120,7 +129,8 @@ class AccountRequestServiceTest {
                         rolesPersonalizados, fichaAlAceptar, pagosAlAceptar, terminosPublicados, whatsappDelRegistro, CLOCK),
                 tokenVerificacionEmailPort,
                 limitarSolicitudesResetPort, new RequireActiveUserGuard(loadUserPort),
-                new RequireAdminGuard(loadUserPort), updateUserRole, events, CLOCK, idGenerator);
+                new RequireAdminGuard(loadUserPort), updateUserRole, events, CLOCK, idGenerator,
+                new NumeroUnicoDeWhatsApp(codigoPorWhatsApp, whatsappConfirmado, whatsappEnOtraFicha, solicitudPendiente));
         // Spec 027: por defecto las tres formaciones tienen términos publicados; la prueba de «sin términos» lo cambia.
         lenient().when(terminosPublicados.estanPublicados(any())).thenReturn(true);
         lenient().when(catalogoDeFormaciones.todas()).thenReturn(java.util.List.of(
@@ -887,5 +897,73 @@ class AccountRequestServiceTest {
 
         assertThat(pagina.nombresDeQuienDecidio()).containsEntry(actorId, admin.fullName());
         verify(loadUserPort).byIds(any());
+    }
+
+    private static com.renaser.os.users.api.CodigoPorWhatsApp.NumeroParaCodigo numeroDeLaPrueba() {
+        return new com.renaser.os.users.api.CodigoPorWhatsApp.NumeroParaCodigo("+51987654321", "+51 9•• ••• •21");
+    }
+
+    private com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase.SubmitAccountRequestCommand
+    altaConWhatsapp() {
+        return com.renaser.os.users.application.ports.in.accountrequest.SubmitAccountRequestUseCase.SubmitAccountRequestCommand
+                .porFormulario("solicitante@renaser.dev", "Solicitante", "+51 987 654 321", "Lima", "token-valido",
+                        "una-contrasena-de-12-o-mas", "127.0.0.1");
+    }
+
+    // spec 051 FR-017
+    @Test
+    @DisplayName("spec 051: pedir acceso con un WhatsApp confirmado, de una ficha o de otra solicitud pendiente es 409 NUMERO_EN_USO y no crea nada")
+    void submitRechazaUnNumeroDeOtraCuenta() {
+        when(codigoPorWhatsApp.numero("+51 987 654 321")).thenReturn(Optional.of(numeroDeLaPrueba()));
+        when(whatsappConfirmado.confirmadoPorOtra("+51987654321", null)).thenReturn(true);
+        assertThatThrownBy(() -> service.submit(altaConWhatsapp()))
+                .isInstanceOfSatisfying(com.renaser.os.shared.domain.WhatsappDeLaCuentaException.class, e -> assertThat(e.motivo())
+                        .isEqualTo(com.renaser.os.shared.domain.WhatsappDeLaCuentaException.Motivo.NUMERO_EN_USO));
+
+        when(whatsappConfirmado.confirmadoPorOtra("+51987654321", null)).thenReturn(false);
+        when(whatsappEnOtraFicha.loTieneOtraPersona("+51987654321", null)).thenReturn(true);
+        assertThatThrownBy(() -> service.submit(altaConWhatsapp()))
+                .isInstanceOf(com.renaser.os.shared.domain.WhatsappDeLaCuentaException.class);
+
+        when(whatsappEnOtraFicha.loTieneOtraPersona("+51987654321", null)).thenReturn(false);
+        when(solicitudPendiente.hayPendienteDeOtra("+51987654321", null)).thenReturn(true);
+        assertThatThrownBy(() -> service.submit(altaConWhatsapp()))
+                .isInstanceOf(com.renaser.os.shared.domain.WhatsappDeLaCuentaException.class);
+
+        verify(saveUserPort, never()).save(any());
+        verify(saveAccountRequestPort, never()).save(any());
+        verify(tokenVerificacionEmailPort, never()).consumir(any());
+    }
+
+    // spec 051 FR-017
+    @Test
+    @DisplayName("spec 051: un WhatsApp libre deja crear la solicitud")
+    void submitConUnNumeroLibreCrea() {
+        when(codigoPorWhatsApp.numero("+51 987 654 321")).thenReturn(Optional.of(numeroDeLaPrueba()));
+        when(tokenVerificacionEmailPort.emailDe("token-valido")).thenReturn(Optional.of("solicitante@renaser.dev"));
+
+        service.submit(altaConWhatsapp());
+
+        verify(saveAccountRequestPort).save(any());
+    }
+
+    // spec 051 FR-018
+    @Test
+    @DisplayName("spec 051: aceptar con un WhatsApp que otra cuenta ya tiene es 409 NUMERO_EN_USO y no activa a nadie")
+    void approveRechazaUnNumeroQueOtraCuentaTomoEntreTanto() {
+        AccountRequest request = AccountRequest.submit(AccountRequestId.of(UUID.randomUUID()), UserId.of(UUID.randomUUID()),
+                new Email("solicitante@renaser.dev"), "Solicitante", "+51 987654321", null, null, null, CLOCK);
+        UserId actorId = id();
+        when(loadAccountRequestPort.byId(request.id())).thenReturn(Optional.of(request));
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId, UserRole.ADMIN)));
+        stubUsuarioPendiente(request);
+        when(codigoPorWhatsApp.numero("+51 987654321")).thenReturn(Optional.of(numeroDeLaPrueba()));
+        when(whatsappEnOtraFicha.loTieneOtraPersona("+51987654321", request.usuarioId())).thenReturn(true);
+
+        assertThatThrownBy(() -> service.approve(new ApproveAccountRequestCommand(request.id(), actorId)))
+                .isInstanceOf(com.renaser.os.shared.domain.WhatsappDeLaCuentaException.class);
+
+        verify(whatsappDelRegistro, never()).llevarALaFicha(any(), any());
+        verify(saveAccountRequestPort, never()).save(any());
     }
 }

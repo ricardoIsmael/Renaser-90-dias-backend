@@ -2,6 +2,8 @@ package com.renaser.os.users.application.services;
 
 import com.renaser.os.shared.domain.RateLimitExceededException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.domain.WhatsappDeLaCuentaException;
+import com.renaser.os.shared.domain.WhatsappDeLaCuentaException.Motivo;
 import com.renaser.os.users.api.CodigoPorWhatsApp;
 import com.renaser.os.users.api.CodigoPorWhatsApp.NumeroParaCodigo;
 import com.renaser.os.users.api.WhatsappDeLaFichaFinder;
@@ -49,11 +51,16 @@ class CodigoPorWhatsAppDeAccesoService implements PedirCodigoPorWhatsAppUseCase 
     static final Duration ESPERA_ENTRE_ENVIOS = Duration.ofSeconds(60);
     /** Tope de todos los codigos por WhatsApp de una hora: el freno del costo si alguien reparte el abuso entre muchos origenes. */
     static final int LIMITE_GLOBAL_POR_HORA = 300;
+    /** Spec 053: consultas de «¿ese numero ya es de otra cuenta?» por hora desde un mismo origen: alcanza para equivocarse al escribirlo, no para recorrer numeros. */
+    static final int LIMITE_DE_CONSULTAS_POR_ORIGEN = 20;
+    /** Spec 053: consultas por hora de todo el servidor: el freno de quien reparte el recorrido de numeros entre muchos origenes. */
+    static final int LIMITE_DE_CONSULTAS_GLOBAL = 600;
 
     static final String SIN_NUMERO = "Escribe un número de WhatsApp válido, con el código de país.";
     static final String NO_DISPONIBLE = "Por ahora no podemos enviar el código por WhatsApp. Revisa tu correo o intenta más tarde.";
     static final String NO_SALIO = "No pudimos enviar el código por WhatsApp. Intenta de nuevo en unos minutos.";
     static final String DEMASIADOS = "Ya pediste varios códigos por WhatsApp. Intenta de nuevo en una hora.";
+    static final String DEMASIADAS_CONSULTAS = "Revisaste muchos números seguidos. Intenta de nuevo en una hora.";
     private static final String PREFIJO = "codigo-whatsapp:";
 
     private final CodigoVerificacionEmailPort codigosDelRegistro;
@@ -63,11 +70,12 @@ class CodigoPorWhatsAppDeAccesoService implements PedirCodigoPorWhatsAppUseCase 
     private final WhatsappDeLaFichaFinder whatsappDeLaFicha;
     private final CodigoPorWhatsApp whatsapp;
     private final WhatsappConfirmadoPort whatsappConfirmado;
+    private final NumeroUnicoDeWhatsApp numeroUnico;
 
     CodigoPorWhatsAppDeAccesoService(CodigoVerificacionEmailPort codigosDelRegistro, CodigoResetContrasenaPort codigosDeRecuperacion,
                                      LimitarSolicitudesResetPort limites, LoadCredencialPort credenciales,
                                      WhatsappDeLaFichaFinder whatsappDeLaFicha, CodigoPorWhatsApp whatsapp,
-                                     WhatsappConfirmadoPort whatsappConfirmado) {
+                                     WhatsappConfirmadoPort whatsappConfirmado, NumeroUnicoDeWhatsApp numeroUnico) {
         this.codigosDelRegistro = codigosDelRegistro;
         this.codigosDeRecuperacion = codigosDeRecuperacion;
         this.limites = limites;
@@ -75,6 +83,7 @@ class CodigoPorWhatsAppDeAccesoService implements PedirCodigoPorWhatsAppUseCase 
         this.whatsappDeLaFicha = whatsappDeLaFicha;
         this.whatsapp = whatsapp;
         this.whatsappConfirmado = whatsappConfirmado;
+        this.numeroUnico = numeroUnico;
     }
 
     @Override
@@ -87,6 +96,7 @@ class CodigoPorWhatsAppDeAccesoService implements PedirCodigoPorWhatsAppUseCase 
         String email = new Email(command.email()).value();
         NumeroParaCodigo numero = whatsapp.numero(command.whatsapp()).orElseThrow(() -> new IllegalArgumentException(SIN_NUMERO));
         exigirDisponible();
+        numeroUnico.exigirLibre(numero, null);
         exigirCupoDelRegistro(email, numero, command.requestIp());
         String codigo = codigosDelRegistro.vigente(email)
                 .orElseGet(() -> codigosDelRegistro.generarCodigo(email, VerificacionEmailService.VIGENCIA_CODIGO));
@@ -94,6 +104,18 @@ class CodigoPorWhatsAppDeAccesoService implements PedirCodigoPorWhatsAppUseCase 
             throw new IllegalStateException(NO_SALIO);
         }
         return numero.enmascarado();
+    }
+
+    @Override
+    public void comprobarNumeroDelRegistro(NumeroDelRegistroCommand command) {
+        if (!limites.registrarIntento(PREFIJO + "consulta-numero:ip:" + OrigenDeLaPeticion.de(command.requestIp()), VENTANA,
+                LIMITE_DE_CONSULTAS_POR_ORIGEN)
+                || !limites.registrarIntento(PREFIJO + "consulta-numero:global", VENTANA, LIMITE_DE_CONSULTAS_GLOBAL)) {
+            throw new RateLimitExceededException(DEMASIADAS_CONSULTAS);
+        }
+        NumeroParaCodigo numero = whatsapp.numero(command.whatsapp())
+                .orElseThrow(() -> new WhatsappDeLaCuentaException(Motivo.NUMERO_INVALIDO));
+        numeroUnico.exigirLibre(numero, null);
     }
 
     /**
