@@ -14,6 +14,7 @@ import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.ProveedorIaNoDisponibleException;
 import com.renaser.os.shared.domain.ReautenticacionRequeridaException;
 import com.renaser.os.shared.domain.RateLimitExceededException;
+import com.renaser.os.shared.domain.WhatsappDeLaCuentaException;
 import com.renaser.os.shared.domain.RegistroPendienteSocialInvalidoException;
 import com.renaser.os.shared.domain.SesionNoIniciadaException;
 import com.renaser.os.shared.domain.TokenResetInvalidoException;
@@ -180,6 +181,14 @@ public class GlobalExceptionHandler {
         log.info("409 -> lo hecho sin red no se aplicó: {}", ex.codigo());
         return ResponseEntity.status(HttpStatus.CONFLICT).contentType(MediaType.APPLICATION_JSON)
                 .body(ApiErrorConCodigo.of(ex.getMessage(), ex.codigo().name(), null));
+    }
+
+    /** Spec 051 («Mi WhatsApp confirmado»): 409 o 422 con {@code codigo} y un mensaje listo para mostrar; nunca lleva el número ni el código. */
+    @ExceptionHandler(WhatsappDeLaCuentaException.class)
+    public ResponseEntity<ApiErrorConCodigo> handleWhatsappDeLaCuenta(WhatsappDeLaCuentaException ex) {
+        log.info("{} -> WhatsApp de la cuenta: {}", ex.motivo().estado(), ex.motivo());
+        return ResponseEntity.status(ex.motivo().estado()).contentType(MediaType.APPLICATION_JSON)
+                .body(ApiErrorConCodigo.of(ex.getMessage(), ex.motivo().name(), null));
     }
 
     @ExceptionHandler(IllegalStateException.class)

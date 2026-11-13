@@ -55,6 +55,8 @@ Mandá también `Authorization: Bearer <token>` en paralelo — hoy el backend l
 | PATCH | `/api/v1/users/me/avatar` |
 | GET · POST | `/api/v1/users/me/account-deletion` (D-243; antes también DELETE, que ya no existe) |
 | POST | `/api/v1/users/me/account-deletion/code` |
+| GET | `/api/v1/users/me/whatsapp` (spec 051: estado y número confirmado, enmascarado) |
+| POST | `/api/v1/users/me/whatsapp/code` · `/api/v1/users/me/whatsapp/confirm` (spec 051: mandar el código por WhatsApp y confirmarlo) |
 | POST | `/api/v1/account-deletion/request-code` · `/api/v1/account-deletion/confirm` (públicos, página web) |
 | POST | `/api/v1/admin/users/{id}/account-deletion` · `…/recover` (ADMIN/ALQUIMISTA) |
 
