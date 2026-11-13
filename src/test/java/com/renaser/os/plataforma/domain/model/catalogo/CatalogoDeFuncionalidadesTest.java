@@ -21,7 +21,7 @@ class CatalogoDeFuncionalidadesTest {
             "habitos.ajustes", "clase_diaria", "muro", "muro.publicar", "muro.comentarios", "muro.reacciones", "chat",
             "chat.grupos", "chat.global", "chat.soporte", "chat.directos", "chat.audio", "chat.fotos", "eventos",
             "eventos.gestion", "eventos.asistencia", "eventos.convocar", "eventos.meet", "eventos.meet.transcripcion", "eventos.whatsapp", "cursos", "ranking", "ranking.podio_semanal", "semaforo", "ia",
-            "ia.chat", "ia.voz", "ia.propuestas", "ia.analisis", "evidencias", "radar.fichas", "caja", "pagos", "emergencia", "cuenta.eliminar",
+            "ia.chat", "ia.voz", "ia.propuestas", "ia.analisis", "evidencias", "radar.fichas", "caja", "pagos", "emergencia", "cuenta.eliminar", "cuenta.whatsapp",
             "notificaciones", "mentor.mi_grupo", "lider", "lider.cumplimiento", "tickets", "admin", "admin.solicitudes", "admin.equipo",
             "admin.grupos", "admin.personas", "admin.habitos", "admin.bienvenida", "admin.fases", "perfil");
 
@@ -101,7 +101,7 @@ class CatalogoDeFuncionalidadesTest {
                 Map.entry("ranking.podio_semanal", PoliticaDeProcesos.POSPONE),
                 Map.entry("semaforo", PoliticaDeProcesos.POSPONE), Map.entry("ia", PoliticaDeProcesos.SALTA),
                 Map.entry("evidencias", PoliticaDeProcesos.POSPONE), Map.entry("caja", PoliticaDeProcesos.SALTA),
-                Map.entry("cuenta.eliminar", PoliticaDeProcesos.NO_APLICA),
+                Map.entry("cuenta.eliminar", PoliticaDeProcesos.NO_APLICA), Map.entry("cuenta.whatsapp", PoliticaDeProcesos.NO_APLICA),
                 Map.entry("notificaciones", PoliticaDeProcesos.POSPONE),
                 Map.entry("mentor.mi_grupo", PoliticaDeProcesos.SALTA),
                 Map.entry("lider.cumplimiento", PoliticaDeProcesos.SALTA),

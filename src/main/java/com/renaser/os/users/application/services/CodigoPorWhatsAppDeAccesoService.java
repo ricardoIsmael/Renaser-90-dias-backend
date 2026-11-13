@@ -11,7 +11,10 @@ import com.renaser.os.users.application.ports.out.autenticacion.CodigoVerificaci
 import com.renaser.os.users.application.ports.out.autenticacion.LimitarSolicitudesResetPort;
 import com.renaser.os.users.application.ports.out.autenticacion.LoadCredencialPort;
 import com.renaser.os.users.application.ports.out.autenticacion.LoadCredencialPort.CredencialParaLogin;
+import com.renaser.os.users.application.ports.out.whatsapp.WhatsappConfirmadoPort;
 import com.renaser.os.users.domain.model.user.Email;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -32,6 +35,8 @@ import java.util.Set;
  */
 @Service
 class CodigoPorWhatsAppDeAccesoService implements PedirCodigoPorWhatsAppUseCase {
+
+    private static final Logger log = LoggerFactory.getLogger(CodigoPorWhatsAppDeAccesoService.class);
 
     static final Duration VENTANA = Duration.ofHours(1);
     /** Envios por hora desde un mismo origen (IP), sumando el alta y la recuperacion. */
@@ -57,16 +62,19 @@ class CodigoPorWhatsAppDeAccesoService implements PedirCodigoPorWhatsAppUseCase 
     private final LoadCredencialPort credenciales;
     private final WhatsappDeLaFichaFinder whatsappDeLaFicha;
     private final CodigoPorWhatsApp whatsapp;
+    private final WhatsappConfirmadoPort whatsappConfirmado;
 
     CodigoPorWhatsAppDeAccesoService(CodigoVerificacionEmailPort codigosDelRegistro, CodigoResetContrasenaPort codigosDeRecuperacion,
                                      LimitarSolicitudesResetPort limites, LoadCredencialPort credenciales,
-                                     WhatsappDeLaFichaFinder whatsappDeLaFicha, CodigoPorWhatsApp whatsapp) {
+                                     WhatsappDeLaFichaFinder whatsappDeLaFicha, CodigoPorWhatsApp whatsapp,
+                                     WhatsappConfirmadoPort whatsappConfirmado) {
         this.codigosDelRegistro = codigosDelRegistro;
         this.codigosDeRecuperacion = codigosDeRecuperacion;
         this.limites = limites;
         this.credenciales = credenciales;
         this.whatsappDeLaFicha = whatsappDeLaFicha;
         this.whatsapp = whatsapp;
+        this.whatsappConfirmado = whatsappConfirmado;
     }
 
     @Override
@@ -90,32 +98,75 @@ class CodigoPorWhatsAppDeAccesoService implements PedirCodigoPorWhatsAppUseCase 
 
     /**
      * Siempre termina igual, tenga o no cuenta el correo, tenga o no WhatsApp guardado: sin respuesta y sin esperar al proveedor (el envio va en
-     * otro hilo, {@link CodigoPorWhatsApp#enviarSinEsperar}), asi tampoco lo delata lo que tarda.
+     * otro hilo, {@link CodigoPorWhatsApp#enviarSinEsperar}), asi tampoco lo delata lo que tarda. Como quien pide no ve nada, el servidor deja UNA linea
+     * de registro con el desenlace ({@link ResultadoDelCodigo}), sin correo ni numero: solo el id de la cuenta cuando la hay (issue #145).
      */
     @Override
     public void paraRecuperar(CodigoDeRecuperacionCommand command) {
         String email = command.email();
         exigirCupoDelOrigen(command.requestIp());
         exigirCupo(OrigenDeLaPeticion.claveConEmail(PREFIJO + "origen-email:", command.requestIp(), email), LIMITE_POR_CORREO);
+        Desenlace desenlace = recuperar(email);
+        log.info("[users.codigo-whatsapp] recuperacion: {} (cuenta {})", desenlace.resultado().etiqueta(),
+                desenlace.cuenta() == null ? "-" : desenlace.cuenta().value());
+    }
+
+    private Desenlace recuperar(String email) {
         if (!whatsapp.configurado()) {
-            return;
+            return new Desenlace(ResultadoDelCodigo.CANAL_NO_CONFIGURADO, null);
         }
-        numeroGuardado(email)
-                .filter(numero -> hayCupo(PREFIJO + "numero:" + numero.valor(), LIMITE_POR_NUMERO) && hayCupoGlobal())
-                .ifPresent(numero -> whatsapp.enviarSinEsperar(numero, codigoDeRecuperacion(email)));
+        Optional<CredencialParaLogin> credencial = credenciales.porEmail(email);
+        UserId cuenta = credencial.map(CredencialParaLogin::usuarioId).orElse(null);
+        if (credencial.filter(CredencialParaLogin::permiteLoginPorContrasena).isEmpty()) {
+            return new Desenlace(ResultadoDelCodigo.SIN_CUENTA_O_SIN_CONTRASENA, cuenta);
+        }
+        String guardado = whatsappDe(cuenta);
+        if (guardado == null || guardado.isBlank()) {
+            return new Desenlace(ResultadoDelCodigo.SIN_NUMERO, cuenta);
+        }
+        Optional<NumeroParaCodigo> numero = whatsapp.numero(guardado);
+        if (numero.isEmpty()) {
+            return new Desenlace(ResultadoDelCodigo.NUMERO_INVALIDO, cuenta);
+        }
+        if (!hayCupo(PREFIJO + "numero:" + numero.get().valor(), LIMITE_POR_NUMERO)) {
+            return new Desenlace(ResultadoDelCodigo.TOPE_NUMERO, cuenta);
+        }
+        if (!hayCupoGlobal()) {
+            return new Desenlace(ResultadoDelCodigo.TOPE_GLOBAL, cuenta);
+        }
+        whatsapp.enviarSinEsperar(numero.get(), codigoDeRecuperacion(email));
+        return new Desenlace(ResultadoDelCodigo.ENVIADO, cuenta);
     }
 
-    /** El WhatsApp que ya tiene la cuenta (el de su ficha, que es tambien el del alta). Sin cuenta con contraseña, o sin numero, nada. */
-    private Optional<NumeroParaCodigo> numeroGuardado(String email) {
-        return credenciales.porEmail(email)
-                .filter(CredencialParaLogin::permiteLoginPorContrasena)
-                .map(CredencialParaLogin::usuarioId)
-                .map(this::whatsappDe)
-                .flatMap(whatsapp::numero);
+    /** Por que la recuperacion mando o no el codigo. Se escribe en el registro tal cual: nada de personas, solo la etiqueta. */
+    enum ResultadoDelCodigo {
+        CANAL_NO_CONFIGURADO("canal-no-configurado"),
+        SIN_CUENTA_O_SIN_CONTRASENA("sin-cuenta-o-sin-contrasena"),
+        SIN_NUMERO("sin-numero"),
+        NUMERO_INVALIDO("numero-invalido"),
+        TOPE_NUMERO("tope-numero"),
+        TOPE_GLOBAL("tope-global"),
+        /** Se le paso al envio asincrono; si el proveedor lo rechaza, lo dice {@code notifications} en su propia linea. */
+        ENVIADO("enviado");
+
+        private final String etiqueta;
+
+        ResultadoDelCodigo(String etiqueta) {
+            this.etiqueta = etiqueta;
+        }
+
+        String etiqueta() {
+            return etiqueta;
+        }
     }
 
+    /** @param cuenta el id de la cuenta si el correo la tiene, o {@code null} */
+    private record Desenlace(ResultadoDelCodigo resultado, UserId cuenta) {
+    }
+
+    /** El WhatsApp confirmado en Yo (spec 051) si lo hay; si no, el de la ficha. */
     private String whatsappDe(UserId persona) {
-        return whatsappDeLaFicha.de(Set.of(persona)).get(persona);
+        return whatsappConfirmado.de(persona).orElseGet(() -> whatsappDeLaFicha.de(Set.of(persona)).get(persona));
     }
 
     private String codigoDeRecuperacion(String email) {

@@ -114,6 +114,8 @@ final class EntradasDelCatalogo {
                 // Spec 032 (D-307): «Mi ingreso» de la persona y los pagos de su ficha. Soporte TI figura como en todas (FR-023: puede apagarla y verla con «Ver como»), pero el servicio le niega operar pagos.
                 normal("pagos", "Pagos", "Cronograma de pagos", "«Mi ingreso» de la persona (su cronograma y sus recordatorios) y los pagos de su ficha en Administración.", EnumSet.of(TRAINEE, MENTOR, TRAINEE_GUIDE, MENTOR_LEAD, ADMIN, ALCHEMIST, IT_SUPPORT), NO_APLICA),
                 normal("emergencia", "Cuenta", "Botón de emergencia", "Pedir ayuda por una emergencia y atenderla.", EnumSet.of(TRAINEE, ADMIN, ALCHEMIST, IT_SUPPORT), NO_APLICA),
+                // Spec 051: agregar o cambiar el WhatsApp propio en Yo, confirmado con un código. Es de todos, incluido el personal.
+                raiz("cuenta.whatsapp", "Cuenta", "Mi WhatsApp confirmado", "Agregar o cambiar el WhatsApp propio en Yo, confirmado con un código; es el que usa la recuperación de la contraseña.", TODOS, NO_APLICA),
                 raiz("cuenta.eliminar", "Cuenta", "Eliminar mi cuenta", "Eliminar la cuenta propia.", TODOS, NO_APLICA),
                 normal("perfil", "Cuenta", "Perfil", "Editar el perfil y la foto.", TODOS, NO_APLICA),
                 critica("notificaciones", "Notificaciones", "Notificaciones", "Los avisos push y la bandeja.", TODOS, POSPONE),

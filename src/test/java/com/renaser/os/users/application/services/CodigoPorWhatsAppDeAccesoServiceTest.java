@@ -1,5 +1,9 @@
 package com.renaser.os.users.application.services;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.renaser.os.shared.domain.RateLimitExceededException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.CodigoPorWhatsApp;
@@ -11,9 +15,12 @@ import com.renaser.os.users.application.ports.out.autenticacion.CodigoVerificaci
 import com.renaser.os.users.application.ports.out.autenticacion.LimitarSolicitudesResetPort;
 import com.renaser.os.users.application.ports.out.autenticacion.LoadCredencialPort;
 import com.renaser.os.users.application.ports.out.autenticacion.LoadCredencialPort.CredencialParaLogin;
+import com.renaser.os.users.application.ports.out.whatsapp.WhatsappConfirmadoPort;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -36,11 +43,15 @@ class CodigoPorWhatsAppDeAccesoServiceTest {
 
     private final CodigosEnMemoria registro = new CodigosEnMemoria();
     private final CodigosEnMemoria recuperacion = new CodigosEnMemoria();
+    /** El WhatsApp confirmado en Yo (spec 051), por cuenta. */
+    private final Map<UserId, String> confirmados = new HashMap<>();
     private final LimitesEnMemoria limites = new LimitesEnMemoria();
     private final Map<String, CredencialParaLogin> cuentas = new HashMap<>();
     private final Map<UserId, String> fichas = new HashMap<>();
     private final WhatsAppFalso whatsapp = new WhatsAppFalso();
     private CodigoPorWhatsAppDeAccesoService service;
+    private ListAppender<ILoggingEvent> lineas;
+    private Logger log;
 
     @BeforeEach
     void armar() {
@@ -50,7 +61,31 @@ class CodigoPorWhatsAppDeAccesoServiceTest {
             personas.forEach(p -> { if (fichas.containsKey(p)) mapa.put(p, fichas.get(p)); });
             return mapa;
         };
-        service = new CodigoPorWhatsAppDeAccesoService(registro, recuperacion, limites, credenciales, deLaFicha, whatsapp);
+        service = new CodigoPorWhatsAppDeAccesoService(registro, recuperacion, limites, credenciales, deLaFicha, whatsapp,
+                new WhatsappConfirmadoPort() {
+                    @Override
+                    public Optional<String> de(UserId cuenta) {
+                        return Optional.ofNullable(confirmados.get(cuenta));
+                    }
+
+                    @Override
+                    public boolean guardar(UserId cuenta, String numero) {
+                        return false;
+                    }
+                });
+    }
+
+    @BeforeEach
+    void escucharElRegistro() {
+        lineas = new ListAppender<>();
+        lineas.start();
+        log = (Logger) LoggerFactory.getLogger(CodigoPorWhatsAppDeAccesoService.class);
+        log.addAppender(lineas);
+    }
+
+    @AfterEach
+    void soltarElRegistro() {
+        log.detachAppender(lineas);
     }
 
     private UserId cuentaConContrasena(String email, String whatsappDeLaFicha) {
@@ -151,6 +186,24 @@ class CodigoPorWhatsAppDeAccesoServiceTest {
     }
 
     // spec 043 FR-008
+    // spec 051 FR-005
+    @Test
+    @DisplayName("la recuperacion prefiere el WhatsApp CONFIRMADO en Yo al de la ficha, y una cuenta sin ficha (el personal) lo recibe ahi")
+    void recuperacionPrefiereElConfirmado() {
+        UserId conFicha = cuentaConContrasena(CORREO, "+51 912345678");
+        confirmados.put(conFicha, "+51955555555");
+
+        service.paraRecuperar(new CodigoDeRecuperacionCommand(CORREO, "9.9.9.9"));
+
+        assertThat(whatsapp.enviadosSinEsperar).singleElement().asString().startsWith("+51955555555=");
+        whatsapp.enviadosSinEsperar.clear();
+
+        UserId personal = cuentaConContrasena("personal@renaser.test", null);
+        confirmados.put(personal, "+51944444444");
+        service.paraRecuperar(new CodigoDeRecuperacionCommand("personal@renaser.test", "9.9.9.9"));
+        assertThat(whatsapp.enviadosSinEsperar).singleElement().asString().startsWith("+51944444444=");
+    }
+
     @Test
     @DisplayName("el comando de la recuperacion no tiene donde poner un numero: no se puede desviar el codigo a otro telefono")
     void laRecuperacionNoAceptaUnNumero() {
@@ -201,6 +254,78 @@ class CodigoPorWhatsAppDeAccesoServiceTest {
     void elComandoNoImprimeElNumero() {
         assertThat(new CodigoDelRegistroCommand(CORREO, NUMERO_ESCRITO, IP).toString()).doesNotContain("987654321");
         assertThat(new CodigoPorWhatsApp.NumeroParaCodigo("+51987654321", "+51 9•• ••• •21").toString()).doesNotContain("987654321");
+    }
+
+    // spec 043 FR-009, FR-011
+    @Test
+    @DisplayName("cada recuperacion deja UNA linea INFO con el desenlace, en los siete casos, y nunca el correo ni el numero (#145)")
+    void laRecuperacionDiceEnElRegistroPorQueNoMando() {
+        UserId conNumero = cuentaConContrasena("con-numero@renaser.dev", "+51 912345678");
+        UserId sinNumero = cuentaConContrasena("sin-numero@renaser.dev", null);
+        UserId numeroRoto = cuentaConContrasena("roto@renaser.dev", "987");
+        UserId soloGoogle = UserId.of(UUID.randomUUID());
+        cuentas.put("solo-google@renaser.dev", new CredencialParaLogin(soloGoogle, null, true));
+
+        whatsapp.configurado = false;
+        pedir("con-numero@renaser.dev", "190.0.0.1");
+        whatsapp.configurado = true;
+        pedir("nadie@renaser.dev", "190.0.0.2");
+        pedir("solo-google@renaser.dev", "190.0.0.3");
+        pedir("sin-numero@renaser.dev", "190.0.0.4");
+        pedir("roto@renaser.dev", "190.0.0.5");
+        pedir("con-numero@renaser.dev", "190.0.0.6");
+        for (int i = 0; i < 3; i++) {
+            pedir("con-numero@renaser.dev", "190.0.1." + i);
+        }
+
+        assertThat(lineasDelRegistro()).containsExactly(
+                "[users.codigo-whatsapp] recuperacion: canal-no-configurado (cuenta -)",
+                "[users.codigo-whatsapp] recuperacion: sin-cuenta-o-sin-contrasena (cuenta -)",
+                "[users.codigo-whatsapp] recuperacion: sin-cuenta-o-sin-contrasena (cuenta " + soloGoogle.value() + ")",
+                "[users.codigo-whatsapp] recuperacion: sin-numero (cuenta " + sinNumero.value() + ")",
+                "[users.codigo-whatsapp] recuperacion: numero-invalido (cuenta " + numeroRoto.value() + ")",
+                "[users.codigo-whatsapp] recuperacion: enviado (cuenta " + conNumero.value() + ")",
+                "[users.codigo-whatsapp] recuperacion: enviado (cuenta " + conNumero.value() + ")",
+                "[users.codigo-whatsapp] recuperacion: enviado (cuenta " + conNumero.value() + ")",
+                "[users.codigo-whatsapp] recuperacion: tope-numero (cuenta " + conNumero.value() + ")");
+        assertThat(lineas.list).allMatch(e -> e.getLevel() == Level.INFO);
+        String todo = String.join("\n", lineasDelRegistro());
+        assertThat(todo).doesNotContain("@").doesNotContain("renaser.dev").doesNotContain("912345678").doesNotContain("987")
+                .doesNotContain("+51").doesNotContain("•").doesNotContain(recuperacion.codigos.getOrDefault("con-numero@renaser.dev", "sin-codigo"));
+    }
+
+    @Test
+    @DisplayName("agotado el tope global de la hora, la recuperacion lo dice en el registro y no manda")
+    void elTopeGlobalSeEscribeEnElRegistro() {
+        UserId id = cuentaConContrasena(CORREO, "+51 912345678");
+        for (int i = 0; i < CodigoPorWhatsAppDeAccesoService.LIMITE_GLOBAL_POR_HORA; i++) {
+            limites.registrarIntento("codigo-whatsapp:global", Duration.ofHours(1), CodigoPorWhatsAppDeAccesoService.LIMITE_GLOBAL_POR_HORA);
+        }
+
+        pedir(CORREO, IP);
+
+        assertThat(lineasDelRegistro()).containsExactly("[users.codigo-whatsapp] recuperacion: tope-global (cuenta " + id.value() + ")");
+        assertThat(whatsapp.enviadosSinEsperar).isEmpty();
+    }
+
+    @Test
+    @DisplayName("un 429 de origen o de (origen, correo) sigue siendo 429 y no escribe la linea del desenlace: no hubo desenlace")
+    void elCupoDelOrigenNoEscribeDesenlace() {
+        for (int i = 0; i < CodigoPorWhatsAppDeAccesoService.LIMITE_POR_CORREO; i++) {
+            pedir("nadie@renaser.dev", IP);
+        }
+        lineas.list.clear();
+
+        assertThatThrownBy(() -> pedir("nadie@renaser.dev", IP)).isInstanceOf(RateLimitExceededException.class);
+        assertThat(lineas.list).isEmpty();
+    }
+
+    private void pedir(String email, String ip) {
+        service.paraRecuperar(new CodigoDeRecuperacionCommand(email, ip));
+    }
+
+    private List<String> lineasDelRegistro() {
+        return lineas.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
     }
 
     private static final class CodigosEnMemoria implements CodigoVerificacionEmailPort, CodigoResetContrasenaPort {
