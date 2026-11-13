@@ -6,6 +6,8 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.renaser.os.shared.domain.RateLimitExceededException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.shared.domain.WhatsappDeLaCuentaException;
+import com.renaser.os.users.application.ports.in.autenticacion.PedirCodigoPorWhatsAppUseCase.NumeroDelRegistroCommand;
 import com.renaser.os.users.api.CodigoPorWhatsApp;
 import com.renaser.os.users.api.WhatsappDeLaFichaFinder;
 import com.renaser.os.users.application.ports.in.autenticacion.PedirCodigoPorWhatsAppUseCase.CodigoDeRecuperacionCommand;
@@ -53,6 +55,8 @@ class CodigoPorWhatsAppDeAccesoServiceTest {
     private ListAppender<ILoggingEvent> lineas;
     private Logger log;
 
+    private final java.util.Set<String> numerosEnOtraCuenta = new java.util.HashSet<>();
+
     @BeforeEach
     void armar() {
         LoadCredencialPort credenciales = email -> Optional.ofNullable(cuentas.get(email));
@@ -61,8 +65,7 @@ class CodigoPorWhatsAppDeAccesoServiceTest {
             personas.forEach(p -> { if (fichas.containsKey(p)) mapa.put(p, fichas.get(p)); });
             return mapa;
         };
-        service = new CodigoPorWhatsAppDeAccesoService(registro, recuperacion, limites, credenciales, deLaFicha, whatsapp,
-                new WhatsappConfirmadoPort() {
+        WhatsappConfirmadoPort confirmadosFalsos = new WhatsappConfirmadoPort() {
                     @Override
                     public Optional<String> de(UserId cuenta) {
                         return Optional.ofNullable(confirmados.get(cuenta));
@@ -72,7 +75,15 @@ class CodigoPorWhatsAppDeAccesoServiceTest {
                     public boolean guardar(UserId cuenta, String numero) {
                         return false;
                     }
-                });
+
+                    @Override
+                    public boolean confirmadoPorOtra(String numero, UserId excepto) {
+                        return numerosEnOtraCuenta.contains(numero);
+                    }
+                };
+        service = new CodigoPorWhatsAppDeAccesoService(registro, recuperacion, limites, credenciales, deLaFicha, whatsapp,
+                confirmadosFalsos, new NumeroUnicoDeWhatsApp(whatsapp, confirmadosFalsos, (numero, excepto) -> false,
+                        (numero, excepto) -> false));
     }
 
     @BeforeEach
@@ -395,5 +406,50 @@ class CodigoPorWhatsAppDeAccesoServiceTest {
         public void enviarSinEsperar(NumeroParaCodigo numero, String codigo) {
             enviadosSinEsperar.add(numero.valor() + "=" + codigo);
         }
+    }
+
+    // spec 051 FR-014
+    @Test
+    @DisplayName("el paso del WhatsApp: un numero libre pasa y uno de otra cuenta es 409 NUMERO_EN_USO, escrito como se escriba")
+    void comprobarElNumeroDelRegistro() {
+        service.comprobarNumeroDelRegistro(new NumeroDelRegistroCommand(NUMERO_ESCRITO, IP));
+
+        numerosEnOtraCuenta.add("+51987654321");
+
+        assertThatThrownBy(() -> service.comprobarNumeroDelRegistro(new NumeroDelRegistroCommand("+51 987 654 321", IP)))
+                .isInstanceOfSatisfying(WhatsappDeLaCuentaException.class,
+                        e -> assertThat(e.motivo()).isEqualTo(WhatsappDeLaCuentaException.Motivo.NUMERO_EN_USO));
+    }
+
+    // spec 051 FR-014
+    @Test
+    @DisplayName("el paso del WhatsApp: lo que no tiene forma de numero es 422 NUMERO_INVALIDO")
+    void comprobarUnNumeroInvalido() {
+        assertThatThrownBy(() -> service.comprobarNumeroDelRegistro(new NumeroDelRegistroCommand("+51 98", IP)))
+                .isInstanceOfSatisfying(WhatsappDeLaCuentaException.class,
+                        e -> assertThat(e.motivo()).isEqualTo(WhatsappDeLaCuentaException.Motivo.NUMERO_INVALIDO));
+    }
+
+    // spec 051 FR-015
+    @Test
+    @DisplayName("la consulta tiene tope por origen: pasadas 20 por hora, 429 con texto en tuteo")
+    void laConsultaTieneTopePorOrigen() {
+        for (int i = 0; i < CodigoPorWhatsAppDeAccesoService.LIMITE_DE_CONSULTAS_POR_ORIGEN; i++) {
+            service.comprobarNumeroDelRegistro(new NumeroDelRegistroCommand(NUMERO_ESCRITO, IP));
+        }
+        assertThatThrownBy(() -> service.comprobarNumeroDelRegistro(new NumeroDelRegistroCommand(NUMERO_ESCRITO, IP)))
+                .isInstanceOf(RateLimitExceededException.class).hasMessage(CodigoPorWhatsAppDeAccesoService.DEMASIADAS_CONSULTAS);
+        assertThat(whatsapp.enviados).as("comprobar no manda ningun codigo").isEmpty();
+    }
+
+    // spec 051 FR-016
+    @Test
+    @DisplayName("pedir el codigo al WhatsApp de otra cuenta tambien es 409 NUMERO_EN_USO y no sale nada")
+    void elCodigoNoSaleAlNumeroDeOtraCuenta() {
+        numerosEnOtraCuenta.add("+51987654321");
+
+        assertThatThrownBy(() -> service.paraElRegistro(new CodigoDelRegistroCommand(CORREO, NUMERO_ESCRITO, IP)))
+                .isInstanceOf(WhatsappDeLaCuentaException.class);
+        assertThat(whatsapp.enviados).isEmpty();
     }
 }

@@ -96,6 +96,7 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
     private final ApplicationEventPublisher events;
     private final Clock clock;
     private final IdGenerator idGenerator;
+    private final NumeroUnicoDeWhatsApp numeroUnico;
 
     public AccountRequestService(LoadAccountRequestPort loadAccountRequestPort,
                                   SaveAccountRequestPort saveAccountRequestPort,
@@ -109,7 +110,8 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
                                   LimitarSolicitudesResetPort limitarSolicitudesResetPort,
                                   RequireActiveUserGuard requireActiveUserGuard, RequireAdminGuard requireAdminGuard,
                                   UpdateUserRoleUseCase updateUserRole,
-                                  ApplicationEventPublisher events, Clock clock, IdGenerator idGenerator) {
+                                  ApplicationEventPublisher events, Clock clock, IdGenerator idGenerator,
+                                  NumeroUnicoDeWhatsApp numeroUnico) {
         this.loadAccountRequestPort = loadAccountRequestPort;
         this.saveAccountRequestPort = saveAccountRequestPort;
         this.deleteAccountRequestPort = deleteAccountRequestPort;
@@ -128,6 +130,7 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
         this.events = events;
         this.clock = clock;
         this.idGenerator = idGenerator;
+        this.numeroUnico = numeroUnico;
     }
 
     /**
@@ -154,6 +157,8 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
         rejectIfRateLimitExceeded(command.requestIp());
         Email email = new Email(command.email());
         rejectIfEmailYaRegistrado(email);
+        // Spec 053: el WhatsApp es de una sola cuenta. Antes de gastar el token del correo, como el chequeo del correo.
+        numeroUnico.exigirLibreElTexto(command.phone(), null);
         requireEmailVerificado(command.email(), command.verificationToken());
 
         User usuario = User.registrarPendienteAprobacion(UserId.of(idGenerator.newId()), email,
@@ -282,6 +287,8 @@ public class AccountRequestService implements SubmitAccountRequestUseCase, Appro
         // transaccion. Desde la spec 025 nace en la formacion y con la duracion elegidas (el reloj del programa arranca pausado: lo activa el
         // primer login + Ficha + Terminos + Dia 1). Porte de onboarding/service.ts::createTraineePendingActivation (repo viejo).
         EleccionDeIngreso eleccion = ingreso.formalizar(usuario.id(), command.actorId(), rolFinal, command.pedido(), command.rolPersonalizadoId());
+        // Spec 053: entre el alta y la aprobacion otra cuenta pudo quedarse con el numero (lo confirmo en Yo o lo declaro en su ficha).
+        numeroUnico.exigirLibreElTexto(request.phone(), usuario.id());
         ingreso.llevarElWhatsappALaFicha(usuario.id(), request.phone());
         request.approve(actor, usuario.id(), eleccion, clock);
         saveAccountRequestPort.save(request);

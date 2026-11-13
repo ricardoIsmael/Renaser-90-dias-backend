@@ -32,6 +32,12 @@ public interface LeerRespuestasPorClavePort {
     Map<UserId, String> textosDeVarios(Collection<UserId> usuarios, String clavePregunta);
 
     /**
+     * ¿Alguna persona distinta de {@code excepto} respondió a {@code clavePregunta} con este texto, sin contar espacios, paréntesis ni guiones?
+     * Una sola consulta con {@code EXISTS}. {@code excepto == null}: nadie queda fuera. Lo usa el número único de WhatsApp (spec 051).
+     */
+    boolean otraPersonaTieneTexto(String clavePregunta, String textoSinSeparadores, UserId excepto);
+
+    /**
      * El {@code media_id} de la respuesta de ese usuario a esa clave: el archivo (firma, audio) que la
      * respalda. Vacío si no respondió, si la clave no existe o si la respuesta quedó sin archivo (el FK es
      * {@code ON DELETE SET NULL}).

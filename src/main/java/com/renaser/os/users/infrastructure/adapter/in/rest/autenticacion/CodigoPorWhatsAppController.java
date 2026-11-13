@@ -6,6 +6,7 @@ import com.renaser.os.shared.web.security.PublicEndpoint;
 import com.renaser.os.users.application.ports.in.autenticacion.PedirCodigoPorWhatsAppUseCase;
 import com.renaser.os.users.application.ports.in.autenticacion.PedirCodigoPorWhatsAppUseCase.CodigoDeRecuperacionCommand;
 import com.renaser.os.users.application.ports.in.autenticacion.PedirCodigoPorWhatsAppUseCase.CodigoDelRegistroCommand;
+import com.renaser.os.users.application.ports.in.autenticacion.PedirCodigoPorWhatsAppUseCase.NumeroDelRegistroCommand;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
@@ -51,6 +52,13 @@ public class CodigoPorWhatsAppController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(new EnviadoResponse(enmascarado));
     }
 
+    @PublicEndpoint("El paso del WhatsApp del alta: dice solo si el numero ya es de otra cuenta (409 NUMERO_EN_USO). Decision del dueño (spec 051); protegido por limites por origen y global.")
+    @PostMapping("/number")
+    public ResponseEntity<Void> comprobarNumero(@RequestBody @Valid NumeroRequest request, HttpServletRequest servletRequest) {
+        useCase.comprobarNumeroDelRegistro(new NumeroDelRegistroCommand(request.whatsapp(), DireccionIpDelCliente.de(servletRequest)));
+        return ResponseEntity.noContent().build();
+    }
+
     @PublicEndpoint("Se pide cuando no se puede iniciar sesion. Responde 202 siempre, sin cuerpo: no revela si el correo tiene cuenta ni WhatsApp.")
     @PostMapping("/password")
     public ResponseEntity<Void> paraRecuperar(@RequestBody @Valid RecuperacionRequest request, HttpServletRequest servletRequest) {
@@ -69,6 +77,13 @@ public class CodigoPorWhatsAppController {
         @Override
         public String toString() {
             return "RegistroRequest[email=" + email + ", whatsapp=oculto]";
+        }
+    }
+
+    public record NumeroRequest(@NotBlank @Size(max = 40) String whatsapp) {
+        @Override
+        public String toString() {
+            return "NumeroRequest[whatsapp=oculto]";
         }
     }
 

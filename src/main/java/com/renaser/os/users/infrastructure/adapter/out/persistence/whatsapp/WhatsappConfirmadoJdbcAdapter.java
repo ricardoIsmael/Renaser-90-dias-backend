@@ -35,4 +35,11 @@ class WhatsappConfirmadoJdbcAdapter implements WhatsappConfirmadoPort {
             return false;
         }
     }
+
+    @Override
+    public boolean confirmadoPorOtra(String numero, UserId excepto) {
+        return Boolean.TRUE.equals(jdbc.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM renaser.whatsapp_confirmados WHERE numero = ? AND usuario_id <> ?)", Boolean.class,
+                numero, excepto == null ? new java.util.UUID(0L, 0L) : excepto.value()));
+    }
 }
