@@ -16189,7 +16189,16 @@ mejor aún, con un `codigo`.
 
 **Cómo evitar que vuelva a pasar.** `lambda-miniaturas.yml` corre `npm ci` y `node --test` en una máquina limpia antes de cada despliegue, y `scripts/lambda-miniaturas-ci.test.mjs` comprueba que el lock coincide con `package.json` y que el SDK es `devDependency` y no `dependency`. Una carpeta con código que se ejecuta en producción necesita un workflow que corra sus pruebas en limpio, no solo un README que diga cómo. D-351.
 
-## E-682 · El chat abría lento en teléfonos de gama baja: cada burbuja se re-dibujaba por cualquier cambio y montaba un valor animado (app, issue #190 de la app, 12/11, RESUELTO)
+## E-682 · El código por WhatsApp de la recuperación no dejaba rastro de por qué no se enviaba (backend, issue #145, 12/11, RESUELTO)
+
+**Síntoma exacto.** `POST /api/v1/auth/whatsapp-code/password` respondía 202 en ~12 ms y no llegaba nada; en el log solo estaba la línea del pedido HTTP. No había cómo saber si fue por una cuenta sin contraseña, sin número de WhatsApp en la ficha, con un número inválido, por el tope del número o el global, o porque el canal no estaba configurado.
+
+**Causa real.** `CodigoPorWhatsAppDeAccesoService.paraRecuperar` devuelve 202 siempre a propósito (FR-009: no revelar si el correo tiene cuenta) y para eso abandonaba el camino en silencio: `return` si el canal no estaba configurado y un `Optional.filter` encadenado que se vaciaba sin decir en cuál de las condiciones. El silencio hacia quien pide es lo correcto; hacia el servidor no.
+
+**Solución.** Cada recuperación deja UNA línea INFO, `[users.codigo-whatsapp] recuperacion: <desenlace> (cuenta <id|->)`, con el desenlace en `ResultadoDelCodigo`: `canal-no-configurado`, `sin-cuenta-o-sin-contrasena`, `sin-numero`, `numero-invalido`, `tope-numero`, `tope-global` o `enviado`. Nunca lleva correo ni número (FR-011); el id de la cuenta solo aparece si el correo la tiene. La respuesta al cliente y los 429 de origen no cambian. Si el proveedor rechaza el envío, ya lo dice `CodigoPorWhatsAppService` con un WARN y el número enmascarado.
+
+**Cómo evitar que vuelva a pasar.** `CodigoPorWhatsAppDeAccesoServiceTest` recorre los siete desenlaces, comprueba que sale una sola línea INFO por pedido y que ni el correo, ni el número, ni el código aparecen en ella. Un camino que termina «sin hacer nada» a propósito tiene que dejar en el log por qué, sin datos personales: «responder siempre igual» es una regla hacia el cliente, no hacia quien opera el servidor.
+## E-683 · El chat abría lento en teléfonos de gama baja: cada burbuja se re-dibujaba por cualquier cambio y montaba un valor animado (app, issue #190 de la app, 12/11, RESUELTO)
 
 **Síntoma.** El dueño reportó que en algunos celulares el chat de Comunidad (grupo, comunidad, 1 a 1 y soporte) tardaba en mostrar los mensajes y se sentía pesado al tocar una nota de voz o abrir el menú de un mensaje.
 
