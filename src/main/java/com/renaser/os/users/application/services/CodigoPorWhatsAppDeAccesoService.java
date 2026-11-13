@@ -11,6 +11,7 @@ import com.renaser.os.users.application.ports.out.autenticacion.CodigoVerificaci
 import com.renaser.os.users.application.ports.out.autenticacion.LimitarSolicitudesResetPort;
 import com.renaser.os.users.application.ports.out.autenticacion.LoadCredencialPort;
 import com.renaser.os.users.application.ports.out.autenticacion.LoadCredencialPort.CredencialParaLogin;
+import com.renaser.os.users.application.ports.out.whatsapp.WhatsappConfirmadoPort;
 import com.renaser.os.users.domain.model.user.Email;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,16 +62,19 @@ class CodigoPorWhatsAppDeAccesoService implements PedirCodigoPorWhatsAppUseCase 
     private final LoadCredencialPort credenciales;
     private final WhatsappDeLaFichaFinder whatsappDeLaFicha;
     private final CodigoPorWhatsApp whatsapp;
+    private final WhatsappConfirmadoPort whatsappConfirmado;
 
     CodigoPorWhatsAppDeAccesoService(CodigoVerificacionEmailPort codigosDelRegistro, CodigoResetContrasenaPort codigosDeRecuperacion,
                                      LimitarSolicitudesResetPort limites, LoadCredencialPort credenciales,
-                                     WhatsappDeLaFichaFinder whatsappDeLaFicha, CodigoPorWhatsApp whatsapp) {
+                                     WhatsappDeLaFichaFinder whatsappDeLaFicha, CodigoPorWhatsApp whatsapp,
+                                     WhatsappConfirmadoPort whatsappConfirmado) {
         this.codigosDelRegistro = codigosDelRegistro;
         this.codigosDeRecuperacion = codigosDeRecuperacion;
         this.limites = limites;
         this.credenciales = credenciales;
         this.whatsappDeLaFicha = whatsappDeLaFicha;
         this.whatsapp = whatsapp;
+        this.whatsappConfirmado = whatsappConfirmado;
     }
 
     @Override
@@ -160,8 +164,9 @@ class CodigoPorWhatsAppDeAccesoService implements PedirCodigoPorWhatsAppUseCase 
     private record Desenlace(ResultadoDelCodigo resultado, UserId cuenta) {
     }
 
+    /** El WhatsApp confirmado en Yo (spec 051) si lo hay; si no, el de la ficha. */
     private String whatsappDe(UserId persona) {
-        return whatsappDeLaFicha.de(Set.of(persona)).get(persona);
+        return whatsappConfirmado.de(persona).orElseGet(() -> whatsappDeLaFicha.de(Set.of(persona)).get(persona));
     }
 
     private String codigoDeRecuperacion(String email) {

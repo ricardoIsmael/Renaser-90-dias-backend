@@ -32,6 +32,7 @@ class BorrarDatosPropiosDeCuentaJdbcAdapter implements BorrarDatosPropiosDeCuent
         jdbc.update("DELETE FROM renaser.ajustes_dia_programa WHERE participante_id = ?", id);
         jdbc.update("DELETE FROM renaser.participantes_programa WHERE usuario_id = ?", id);
         jdbc.update("DELETE FROM renaser.perfiles_mentor WHERE usuario_id = ?", id);
+        jdbc.update("DELETE FROM renaser.whatsapp_confirmados WHERE usuario_id = ?", id);
         jdbc.update("DELETE FROM renaser.identidades_externas WHERE usuario_id = ?", id);
         // Por dueño y por correo: la del alta de esta cuenta, y cualquier otra con su correo, que
         // dejaria el correo ocupado para una cuenta nueva (UNIQUE de solicitudes_cuenta.email).

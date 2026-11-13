@@ -15,6 +15,7 @@ import com.renaser.os.users.application.ports.out.autenticacion.CodigoVerificaci
 import com.renaser.os.users.application.ports.out.autenticacion.LimitarSolicitudesResetPort;
 import com.renaser.os.users.application.ports.out.autenticacion.LoadCredencialPort;
 import com.renaser.os.users.application.ports.out.autenticacion.LoadCredencialPort.CredencialParaLogin;
+import com.renaser.os.users.application.ports.out.whatsapp.WhatsappConfirmadoPort;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -42,6 +43,8 @@ class CodigoPorWhatsAppDeAccesoServiceTest {
 
     private final CodigosEnMemoria registro = new CodigosEnMemoria();
     private final CodigosEnMemoria recuperacion = new CodigosEnMemoria();
+    /** El WhatsApp confirmado en Yo (spec 051), por cuenta. */
+    private final Map<UserId, String> confirmados = new HashMap<>();
     private final LimitesEnMemoria limites = new LimitesEnMemoria();
     private final Map<String, CredencialParaLogin> cuentas = new HashMap<>();
     private final Map<UserId, String> fichas = new HashMap<>();
@@ -58,7 +61,18 @@ class CodigoPorWhatsAppDeAccesoServiceTest {
             personas.forEach(p -> { if (fichas.containsKey(p)) mapa.put(p, fichas.get(p)); });
             return mapa;
         };
-        service = new CodigoPorWhatsAppDeAccesoService(registro, recuperacion, limites, credenciales, deLaFicha, whatsapp);
+        service = new CodigoPorWhatsAppDeAccesoService(registro, recuperacion, limites, credenciales, deLaFicha, whatsapp,
+                new WhatsappConfirmadoPort() {
+                    @Override
+                    public Optional<String> de(UserId cuenta) {
+                        return Optional.ofNullable(confirmados.get(cuenta));
+                    }
+
+                    @Override
+                    public boolean guardar(UserId cuenta, String numero) {
+                        return false;
+                    }
+                });
     }
 
     @BeforeEach
@@ -172,6 +186,24 @@ class CodigoPorWhatsAppDeAccesoServiceTest {
     }
 
     // spec 043 FR-008
+    // spec 051 FR-005
+    @Test
+    @DisplayName("la recuperacion prefiere el WhatsApp CONFIRMADO en Yo al de la ficha, y una cuenta sin ficha (el personal) lo recibe ahi")
+    void recuperacionPrefiereElConfirmado() {
+        UserId conFicha = cuentaConContrasena(CORREO, "+51 912345678");
+        confirmados.put(conFicha, "+51955555555");
+
+        service.paraRecuperar(new CodigoDeRecuperacionCommand(CORREO, "9.9.9.9"));
+
+        assertThat(whatsapp.enviadosSinEsperar).singleElement().asString().startsWith("+51955555555=");
+        whatsapp.enviadosSinEsperar.clear();
+
+        UserId personal = cuentaConContrasena("personal@renaser.test", null);
+        confirmados.put(personal, "+51944444444");
+        service.paraRecuperar(new CodigoDeRecuperacionCommand("personal@renaser.test", "9.9.9.9"));
+        assertThat(whatsapp.enviadosSinEsperar).singleElement().asString().startsWith("+51944444444=");
+    }
+
     @Test
     @DisplayName("el comando de la recuperacion no tiene donde poner un numero: no se puede desviar el codigo a otro telefono")
     void laRecuperacionNoAceptaUnNumero() {

@@ -241,7 +241,9 @@ class EntregasDeWhatsAppJdbcAdapterIT {
     void sinTablasDeContactosNiDeNumeros() {
         List<String> tablas = jdbc.queryForList("SELECT table_name FROM information_schema.tables WHERE table_schema = 'renaser'", String.class);
 
+        // La spec 051 (D-352, decision del dueno del 12/11/2026) suma UNA tabla de numeros, la del WhatsApp que cada cuenta confirmo con un
+        // codigo (`whatsapp_confirmados`, de `users`): es lo unico que supera a la regla de la 041. Los recordatorios no la leen.
         assertThat(tablas).contains("entregas_whatsapp").noneMatch(t -> t.contains("contacto") || t.contains("numero")
-                || (t.contains("whatsapp") && !t.equals("entregas_whatsapp")));
+                || (t.contains("whatsapp") && !t.equals("entregas_whatsapp") && !t.equals("whatsapp_confirmados")));
     }
 }
