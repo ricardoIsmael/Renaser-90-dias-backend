@@ -221,7 +221,7 @@ class AprobarConRolIT {
     private Solicitud solicitud(String nombre) {
         String email = "rol-" + UUID.randomUUID() + "@renaser.dev";
         String ip = "203.0.113." + ThreadLocalRandom.current().nextInt(1, 255);
-        UUID id = submit.submit(SubmitAccountRequestCommand.porFormulario(email, nombre, "+51 999 888 777", "Lima",
+        UUID id = submit.submit(SubmitAccountRequestCommand.porFormulario(email, nombre, "+51 9" + String.format("%08d", ThreadLocalRandom.current().nextInt(100_000_000)), "Lima",
                 tokens.generar(email, Duration.ofMinutes(30)), CONTRASENA, ip)).value();
         UUID usuario = jdbc.queryForObject("SELECT usuario_id FROM renaser.solicitudes_cuenta WHERE id = ?", UUID.class, id);
         cuentas.add(usuario);
