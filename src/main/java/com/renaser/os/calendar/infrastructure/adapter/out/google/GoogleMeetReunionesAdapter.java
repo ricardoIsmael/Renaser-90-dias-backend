@@ -2,10 +2,13 @@ package com.renaser.os.calendar.infrastructure.adapter.out.google;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.renaser.os.calendar.application.ports.out.meet.CuentaGoogleRevocadaException;
+import com.renaser.os.calendar.application.ports.out.meet.GoogleNoRespondeException;
 import com.renaser.os.calendar.application.ports.out.meet.GoogleRechazoException;
 import com.renaser.os.calendar.application.ports.out.meet.ReunionesDeMeetPort;
 import com.renaser.os.calendar.domain.model.meet.CodigoDeSalaMeet;
+import com.renaser.os.calendar.domain.model.meet.transcripcion.DiagnosticoDeReunion;
 import com.renaser.os.calendar.domain.model.meet.transcripcion.LecturaDeReunion;
+import com.renaser.os.calendar.domain.model.meet.transcripcion.TranscripcionDeSesion;
 import com.renaser.os.calendar.infrastructure.adapter.out.google.LlamadasAGoogle.Respuesta;
 import com.renaser.os.calendar.infrastructure.adapter.out.google.TokenDeAccesoDeGoogle.Credencial;
 import org.springframework.http.HttpMethod;
@@ -14,6 +17,7 @@ import org.springframework.web.util.UriUtils;
 
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -60,18 +64,23 @@ class GoogleMeetReunionesAdapter implements ReunionesDeMeetPort {
             }
         }
         if (conferencias.isEmpty()) {
-            return LecturaDeReunion.SIN_REUNION;
+            return new LecturaDeReunion(0, 0, "", null, false, DiagnosticoDeReunion.de(List.of(), null, null));
         }
         conferencias.sort(Comparator.comparing(c -> c.path("startTime").asText("")));
         List<String> tramos = new ArrayList<>();
+        List<DiagnosticoDeReunion.Conferencia> vistas = new ArrayList<>();
         int entradas = 0;
         boolean enPreparacion = false;
         String grabacion = null;
         for (JsonNode conferencia : conferencias) {
             String nombre = conferencia.path("name").asText();
-            Map<String, String> nombres = nombresDe(nombre);
+            List<JsonNode> participantes = todas(nombre + "/participants", "participants");
+            Map<String, String> nombres = nombresDe(participantes);
+            List<String> estadosDeTranscripciones = new ArrayList<>();
+            List<String> estadosDeGrabaciones = new ArrayList<>();
             for (JsonNode transcripcion : todas(nombre + "/transcripts", "transcripts")) {
                 String estado = transcripcion.path("state").asText("");
+                estadosDeTranscripciones.add(estado.isEmpty() ? "SIN_ESTADO" : estado);
                 if (!"FILE_GENERATED".equals(estado)) {
                     enPreparacion = true;
                 }
@@ -90,20 +99,68 @@ class GoogleMeetReunionesAdapter implements ReunionesDeMeetPort {
             if (grabacion == null) {
                 for (JsonNode g : todas(nombre + "/recordings", "recordings")) {
                     String uri = g.path("driveDestination").path("exportUri").asText("");
-                    if ("FILE_GENERATED".equals(g.path("state").asText("")) && uri.startsWith("https://")) {
+                    String estado = g.path("state").asText("");
+                    estadosDeGrabaciones.add(estado.isEmpty() ? "SIN_ESTADO" : estado);
+                    if ("FILE_GENERATED".equals(estado) && uri.startsWith("https://") && grabacion == null) {
                         grabacion = uri;
-                        break;
                     }
                 }
             }
+            vistas.add(conferenciaVista(conferencia, participantes, estadosDeGrabaciones, estadosDeTranscripciones));
         }
-        return new LecturaDeReunion(conferencias.size(), entradas, String.join("\n\n---\n\n", tramos), grabacion, enPreparacion);
+        String texto = String.join("\n\n---\n\n", tramos);
+        DiagnosticoDeReunion diagnostico = texto.strip().length() >= TranscripcionDeSesion.LARGO_MINIMO ? null
+                : diagnosticar(vistas, conferencias.get(0).path("space").asText(""));
+        return new LecturaDeReunion(conferencias.size(), entradas, texto, grabacion, enPreparacion, diagnostico);
+    }
+
+    /** Issue #151: lo que no identifica a nadie de una conexión: cuándo, cuánto duró, cuántos entraron de cada tipo y qué estados dejó Google. */
+    private static DiagnosticoDeReunion.Conferencia conferenciaVista(JsonNode conferencia, List<JsonNode> participantes, List<String> grabaciones,
+                                                                      List<String> transcripciones) {
+        int conCuenta = 0;
+        int anonimos = 0;
+        int telefono = 0;
+        for (JsonNode p : participantes) {
+            if (p.has("signedinUser")) {
+                conCuenta++;
+            } else if (p.has("anonymousUser")) {
+                anonimos++;
+            } else if (p.has("phoneUser")) {
+                telefono++;
+            }
+        }
+        Instant inicio = instante(conferencia.path("startTime").asText(""));
+        Instant fin = instante(conferencia.path("endTime").asText(""));
+        int minutos = inicio == null || fin == null || fin.isBefore(inicio) ? 0 : (int) Duration.between(inicio, fin).toMinutes();
+        return new DiagnosticoDeReunion.Conferencia(inicio, fin, minutos, conCuenta, anonimos, telefono, grabaciones, transcripciones);
+    }
+
+    private DiagnosticoDeReunion diagnosticar(List<DiagnosticoDeReunion.Conferencia> vistas, String espacio) {
+        String grabacion = null;
+        String transcripcion = null;
+        if (espacio.startsWith("spaces/")) {
+            try {
+                Respuesta r = conToken(c -> llamadas.api(HttpMethod.GET, URI.create(MEET + "/" + espacio), c.tokenDeAcceso(), null));
+                if (r.ok()) {
+                    JsonNode artefactos = r.cuerpo().path("config").path("artifactConfig");
+                    grabacion = onOff(artefactos.path("recordingConfig").path("autoRecordingGeneration").asText(""));
+                    transcripcion = onOff(artefactos.path("transcriptionConfig").path("autoTranscriptionGeneration").asText(""));
+                }
+            } catch (CuentaGoogleRevocadaException | GoogleNoRespondeException | GoogleRechazoException e) {
+                // El diagnóstico es un extra: sin la configuración de la sala se arma igual, solo que sin ese dato.
+            }
+        }
+        return DiagnosticoDeReunion.de(vistas, grabacion, transcripcion);
+    }
+
+    private static String onOff(String valor) {
+        return valor.isEmpty() ? null : "ON".equals(valor) ? "ON" : "OFF";
     }
 
     /** El nombre de cada participante (solo el que muestra Meet). Por teléfono, nunca el número. */
-    private Map<String, String> nombresDe(String conferencia) {
+    private static Map<String, String> nombresDe(List<JsonNode> participantes) {
         Map<String, String> nombres = new HashMap<>();
-        for (JsonNode p : todas(conferencia + "/participants", "participants")) {
+        for (JsonNode p : participantes) {
             String nombre = p.path("signedinUser").path("displayName").asText("");
             if (nombre.isBlank()) {
                 nombre = p.path("anonymousUser").path("displayName").asText("");

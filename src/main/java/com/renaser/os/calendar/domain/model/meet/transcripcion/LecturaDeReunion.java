@@ -8,10 +8,16 @@ package com.renaser.os.calendar.domain.model.meet.transcripcion;
  * @param texto                        el texto armado (vacío si no hubo transcripción)
  * @param enlaceDeLaGrabacion          el enlace de Drive de la primera grabación lista, o {@code null}
  * @param transcripcionEnPreparacion   Google todavía está escribiendo alguna transcripción ({@code STARTED} o {@code ENDED})
+ * @param diagnostico                  quién entró y qué dejó Google, sin nombres (issue #151); {@code null} si no se pudo armar
  */
-public record LecturaDeReunion(int conferencias, int entradas, String texto, String enlaceDeLaGrabacion, boolean transcripcionEnPreparacion) {
+public record LecturaDeReunion(int conferencias, int entradas, String texto, String enlaceDeLaGrabacion, boolean transcripcionEnPreparacion,
+                              DiagnosticoDeReunion diagnostico) {
 
     public static final LecturaDeReunion SIN_REUNION = new LecturaDeReunion(0, 0, "", null, false);
+
+    public LecturaDeReunion(int conferencias, int entradas, String texto, String enlaceDeLaGrabacion, boolean transcripcionEnPreparacion) {
+        this(conferencias, entradas, texto, enlaceDeLaGrabacion, transcripcionEnPreparacion, null);
+    }
 
     public LecturaDeReunion {
         texto = texto == null ? "" : texto;
