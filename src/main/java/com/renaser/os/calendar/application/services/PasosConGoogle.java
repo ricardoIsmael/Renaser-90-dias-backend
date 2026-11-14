@@ -6,12 +6,14 @@ import com.renaser.os.calendar.application.ports.out.meet.CuentaGoogleRevocadaEx
 import com.renaser.os.calendar.application.ports.out.meet.GoogleNoRespondeException;
 import com.renaser.os.calendar.application.ports.out.meet.GoogleRechazoException;
 import com.renaser.os.calendar.application.ports.out.meet.PedidoDeSala;
+import com.renaser.os.calendar.application.ports.out.meet.ResultadoDeCoanfitriones;
 import com.renaser.os.calendar.application.ports.out.meet.ResultadoDeSala;
 import com.renaser.os.calendar.application.ports.out.meet.SalaDeReunionPort;
 import com.renaser.os.calendar.application.ports.out.meet.SaveSalaMeetPort;
 import com.renaser.os.calendar.domain.model.meet.AccesoSalaMeet;
 import com.renaser.os.calendar.domain.model.meet.AccionDeAuditoriaGoogle;
 import com.renaser.os.calendar.domain.model.meet.ArtefactosDeLaSala;
+import com.renaser.os.calendar.domain.model.meet.EstadoDeCoanfitriones;
 import com.renaser.os.calendar.domain.model.meet.EstadoSalaMeet;
 import com.renaser.os.calendar.domain.model.meet.PlanDeSalas.OcurrenciaDeseada;
 import com.renaser.os.calendar.domain.model.meet.PoliticaDeReintentos;
@@ -179,6 +181,54 @@ class PasosConGoogle {
         } catch (RuntimeException pasajero) {
             Integer codigo = pasajero instanceof GoogleNoRespondeException nr ? nr.codigoHttp() : null;
             auditar(AccionDeAuditoriaGoogle.AJUSTAR_GRABACION, sala, false, codigo, operacion);
+        }
+    }
+
+    static final String MOTIVO_SIN_CORREO = "No se encontró el correo de quien dirige la sesión.";
+    static final String MOTIVO_NO_QUEDO = "Google no dejó a quien dirige la sesión como coanfitrión (código %d): falta el permiso, la sala no es "
+            + "de la app o el correo no es de una cuenta de Google.";
+    static final String MOTIVO_PARCIAL = "Google dejó como coanfitrión solo a %d de %d personas que dirigen la sesión (código %d).";
+
+    /**
+     * Hace coanfitrión de la sala a quien dirige la sesión, para que Meet grabe y transcriba solo (spec 040, FR-038: Google solo empieza a grabar
+     * cuando entra el anfitrión o un coanfitrión). Con la opción apagada no llama a Google. Nunca falla ni deja trabajo pendiente: lo que Google
+     * rechaza queda anotado en la sala con una frase fija —nunca correos ni texto de Google— y el evento sigue como estaba. Un fallo pasajero (red,
+     * 5xx) deja la sala «sin pedir» para el próximo intento; una cuenta revocada la detecta el siguiente pedido.
+     *
+     * @param correos los correos de quien dirige: quien creó el evento y el mentor del grupo convocado
+     */
+    void pedirCoanfitriones(SalaMeet sala, List<String> correos, Operacion operacion) {
+        if (!configuracion.coanfitriones() || !sala.coanfitrionesPorPedir()) {
+            return;
+        }
+        if (correos.isEmpty()) {
+            sala.registrarCoanfitriones(EstadoDeCoanfitriones.SIN_CORREO, MOTIVO_SIN_CORREO, clock.now());
+            saveSalaPort.guardar(sala);
+            return;
+        }
+        try {
+            ResultadoDeCoanfitriones resultado = google.agregarCoanfitriones(sala.enlace(), correos);
+            int codigo = resultado.codigoHttp() == null ? 0 : resultado.codigoHttp();
+            if (resultado.quedaron() >= resultado.pedidos()) {
+                sala.registrarCoanfitriones(EstadoDeCoanfitriones.OK, null, clock.now());
+            } else if (resultado.quedaron() > 0) {
+                sala.registrarCoanfitriones(EstadoDeCoanfitriones.PARCIAL,
+                        MOTIVO_PARCIAL.formatted(resultado.quedaron(), resultado.pedidos(), codigo), clock.now());
+            } else {
+                sala.registrarCoanfitriones(EstadoDeCoanfitriones.FALLIDO, MOTIVO_NO_QUEDO.formatted(codigo), clock.now());
+            }
+            saveSalaPort.guardar(sala);
+            auditar(AccionDeAuditoriaGoogle.AJUSTAR_COANFITRIONES, sala, resultado.quedaron() >= resultado.pedidos(),
+                    resultado.codigoHttp(), operacion);
+        } catch (GoogleRechazoException rechazo) {
+            sala.registrarCoanfitriones(EstadoDeCoanfitriones.FALLIDO, MOTIVO_NO_QUEDO.formatted(rechazo.codigoHttp()), clock.now());
+            saveSalaPort.guardar(sala);
+            auditar(AccionDeAuditoriaGoogle.AJUSTAR_COANFITRIONES, sala, false, rechazo.codigoHttp(), operacion);
+        } catch (CuentaGoogleRevocadaException | CuentaGoogleNoConectadaException cuenta) {
+            clasificar(cuenta, operacion); // avisa la revocación; la sala queda sin pedir
+        } catch (RuntimeException pasajero) {
+            Integer codigo = pasajero instanceof GoogleNoRespondeException nr ? nr.codigoHttp() : null;
+            auditar(AccionDeAuditoriaGoogle.AJUSTAR_COANFITRIONES, sala, false, codigo, operacion);
         }
     }
 

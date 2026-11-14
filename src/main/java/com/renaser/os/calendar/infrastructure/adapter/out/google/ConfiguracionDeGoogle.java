@@ -24,6 +24,7 @@ class ConfiguracionDeGoogle implements ConfiguracionDeGooglePort {
 
     static final String PERMISOS_POR_DEFECTO = "https://www.googleapis.com/auth/calendar.app.created "
             + "https://www.googleapis.com/auth/meetings.space.settings https://www.googleapis.com/auth/meetings.space.readonly openid email";
+    static final String PERMISO_DE_COANFITRIONES = "https://www.googleapis.com/auth/meetings.space.created";
     private static final Set<String> PERMISOS_DE_IDENTIDAD = Set.of("openid", "email", "profile");
 
     private final String clientId;
@@ -37,6 +38,7 @@ class ConfiguracionDeGoogle implements ConfiguracionDeGooglePort {
     private boolean grabar = true;
     private boolean transcribir = true;
     private boolean tomarNotas = true;
+    private boolean coanfitriones = false;
 
     ConfiguracionDeGoogle(@Value("${renaser.calendar.meet.oauth.client-id:}") String clientId,
                           @Value("${renaser.calendar.meet.oauth.client-secret:}") String clientSecret,
@@ -59,7 +61,9 @@ class ConfiguracionDeGoogle implements ConfiguracionDeGooglePort {
     void opcionesDeLaSala(@Value("${renaser.calendar.meet.invitar-al-creador:true}") boolean invitarAlCreador,
                           @Value("${renaser.calendar.meet.grabar:true}") boolean grabar,
                           @Value("${renaser.calendar.meet.transcribir:true}") boolean transcribir,
-                          @Value("${renaser.calendar.meet.notas:true}") boolean tomarNotas) {
+                          @Value("${renaser.calendar.meet.notas:true}") boolean tomarNotas,
+                          @Value("${renaser.calendar.meet.coanfitriones:false}") boolean coanfitriones) {
+        this.coanfitriones = coanfitriones;
         this.invitarAlCreador = invitarAlCreador;
         this.grabar = grabar;
         this.transcribir = transcribir;
@@ -84,6 +88,11 @@ class ConfiguracionDeGoogle implements ConfiguracionDeGooglePort {
     @Override
     public boolean tomarNotas() {
         return tomarNotas;
+    }
+
+    @Override
+    public boolean coanfitriones() {
+        return coanfitriones;
     }
 
     @Override
@@ -113,9 +122,18 @@ class ConfiguracionDeGoogle implements ConfiguracionDeGooglePort {
         return redirectUri;
     }
 
-    /** Todos los permisos que se piden, con los de identidad. */
+    /**
+     * Todos los permisos que se piden, con los de identidad. Con los coanfitriones encendidos (FR-038) se suma {@code meetings.space.created}, que
+     * Google exige para {@code spaces.members.create}. NO es obligatorio: la conexión que ya existe sigue sirviendo sin él (el pedido de
+     * coanfitriones falla y queda anotado) hasta que el dueño la reconecte.
+     */
     Set<String> permisosPedidos() {
-        return permisos;
+        if (!coanfitriones) {
+            return permisos;
+        }
+        Set<String> con = new LinkedHashSet<>(permisos);
+        con.add(PERMISO_DE_COANFITRIONES);
+        return con;
     }
 
     /** Los que Google tiene que dar todos: los pedidos sin los de identidad. */

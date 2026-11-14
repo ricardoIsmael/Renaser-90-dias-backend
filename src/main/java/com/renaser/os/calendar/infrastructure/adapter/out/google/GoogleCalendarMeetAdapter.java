@@ -5,6 +5,7 @@ import com.renaser.os.calendar.application.ports.out.meet.CuentaGoogleRevocadaEx
 import com.renaser.os.calendar.application.ports.out.meet.GoogleNoRespondeException;
 import com.renaser.os.calendar.application.ports.out.meet.GoogleRechazoException;
 import com.renaser.os.calendar.application.ports.out.meet.PedidoDeSala;
+import com.renaser.os.calendar.application.ports.out.meet.ResultadoDeCoanfitriones;
 import com.renaser.os.calendar.application.ports.out.meet.ResultadoDeSala;
 import com.renaser.os.calendar.application.ports.out.meet.SalaDeReunionPort;
 import com.renaser.os.calendar.domain.model.meet.AccesoSalaMeet;
@@ -18,10 +19,14 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriUtils;
 
 import java.net.URI;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Set;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -221,6 +226,61 @@ class GoogleCalendarMeetAdapter implements SalaDeReunionPort {
         if (!cambio.ok()) {
             throw llamadas.falla(cambio);
         }
+    }
+
+    @Override
+    public ResultadoDeCoanfitriones agregarCoanfitriones(String enlace, List<String> correos) {
+        String codigo = CodigoDeSalaMeet.deEnlace(enlace)
+                .orElseThrow(() -> new GoogleRechazoException("El enlace no es de una sala de Meet.", 0));
+        String nombre = nombreDeLaSala(codigo);
+        Set<String> yaSon = coanfitrionesActuales(nombre);
+        int quedaron = 0;
+        Integer rechazo = null;
+        for (String correo : correos) {
+            if (yaSon.contains(correo.toLowerCase(Locale.ROOT))) {
+                quedaron++;
+                continue;
+            }
+            Respuesta alta = conToken(c -> llamadas.api(HttpMethod.POST, URI.create(MEET + "/" + nombre + "/members"), c.tokenDeAcceso(),
+                    Map.of("email", correo, "role", "COHOST")));
+            if (alta.ok() || alta.codigo() == 409) {
+                quedaron++; // 409: Google ya la tenía como miembro.
+            } else {
+                RuntimeException falla = llamadas.falla(alta);
+                if (!(falla instanceof GoogleRechazoException)) {
+                    throw falla;
+                }
+                rechazo = alta.codigo();
+            }
+        }
+        return new ResultadoDeCoanfitriones(correos.size(), quedaron, rechazo);
+    }
+
+    /** Los correos (en minúscula) de quienes ya son coanfitriones de la sala. Una lectura que Google rechaza se toma como «nadie»: el alta decide. */
+    private Set<String> coanfitrionesActuales(String nombre) {
+        Set<String> actuales = new HashSet<>();
+        String pagina = null;
+        for (int vuelta = 0; vuelta < 5; vuelta++) {
+            String consulta = "?pageSize=100" + (pagina == null ? "" : "&pageToken=" + URLEncoder.encode(pagina, StandardCharsets.UTF_8));
+            Respuesta lista = conToken(c -> llamadas.api(HttpMethod.GET, URI.create(MEET + "/" + nombre + "/members" + consulta), c.tokenDeAcceso(), null));
+            if (!lista.ok()) {
+                RuntimeException falla = llamadas.falla(lista);
+                if (falla instanceof GoogleRechazoException) {
+                    return actuales;
+                }
+                throw falla;
+            }
+            for (JsonNode miembro : lista.cuerpo().path("members")) {
+                if ("COHOST".equals(miembro.path("role").asText(""))) {
+                    actuales.add(miembro.path("email").asText("").toLowerCase(Locale.ROOT));
+                }
+            }
+            pagina = lista.cuerpo().path("nextPageToken").asText("");
+            if (pagina.isEmpty()) {
+                break;
+            }
+        }
+        return actuales;
     }
 
     // ─── Crear: 409, pendiente ──────────────────────────────────────────────────

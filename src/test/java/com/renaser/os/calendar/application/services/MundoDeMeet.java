@@ -147,7 +147,17 @@ final class MundoDeMeet {
         public boolean tomarNotas() {
             return tomarNotas;
         }
+
+        @Override
+        public boolean coanfitriones() {
+            return coanfitriones;
+        }
     };
+
+    /** FR-038: hacer coanfitrión a quien dirige. Apagado por defecto, como en producción. */
+    boolean coanfitriones = false;
+    /** El mentor de cada grupo (el puerto de comunidad). */
+    final Map<java.util.UUID, UserId> mentorDeGrupo = new HashMap<>();
 
     /** Las opciones de la sala (decisión 6 del dueño, FR-035 y FR-036): todo sí, como en producción. */
     boolean invitarAlCreador = true;
@@ -191,7 +201,8 @@ final class MundoDeMeet {
         ApplicationEventPublisher publicador = eventosPublicados::add;
         revocacion = new RevocacionDeLaCuenta(cuenta, cuenta, salas, auditor, publicador, mock(PlatformTransactionManager.class), reloj);
         pasos = new PasosConGoogle(google, salas, auditor, revocacion, reloj, () -> 0.0, configuracion);
-        sincronizador = new SincronizadorDeSalas(eventos, eventos, eventos, salas, salas, configuracion, pasos, reloj, ids, correos);
+        sincronizador = new SincronizadorDeSalas(eventos, eventos, eventos, salas, salas, configuracion, pasos, reloj, ids, correos,
+                celula -> java.util.Optional.ofNullable(mentorDeGrupo.get(celula)));
         acceso = new AccesoEventoService(this::progreso, null, null, (usuario, tipo) -> false, (celula, usuario) -> false,
                 new AlcanceDeFormacionSoloEscuela());
         disponibilidad = new DisponibilidadDeLasSalas(interruptores, configuracion, cuenta);
