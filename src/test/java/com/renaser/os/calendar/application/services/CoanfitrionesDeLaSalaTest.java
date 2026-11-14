@@ -190,6 +190,7 @@ class CoanfitrionesDeLaSalaTest {
     }
 
     // spec 047 FR-022
+    // spec 047 FR-023
     @Test
     @DisplayName("FR-022: con cuentas en la sala, sin archivos y quien dirige sin ser coanfitrión, el motivo probable lo dice")
     void diagnosticoDistingueQuienDirigeSinPermiso() {
