@@ -39,7 +39,13 @@ public interface ConvocatoriaUseCase {
      * @param colores     cuántos hay hoy de cada color en su alcance
      */
     record Opciones(boolean puedeCrear, Set<TipoDeParte> partes, Set<TipoEvento> tipos, TipoDeParte porDefecto, boolean todos,
-                    Map<String, Integer> colores, int misAlumnos, List<Grupo> grupos, List<PersonaConvocable> personal) {
+                    Map<String, Integer> colores, int misAlumnos, List<Grupo> grupos, List<PersonaConvocable> personal,
+                    java.time.LocalDate fechaDelSemaforo) {
+
+        public Opciones(boolean puedeCrear, Set<TipoDeParte> partes, Set<TipoEvento> tipos, TipoDeParte porDefecto, boolean todos,
+                        Map<String, Integer> colores, int misAlumnos, List<Grupo> grupos, List<PersonaConvocable> personal) {
+            this(puedeCrear, partes, tipos, porDefecto, todos, colores, misAlumnos, grupos, personal, null);
+        }
     }
 
     record Grupo(UUID id, String nombre, int integrantes) {

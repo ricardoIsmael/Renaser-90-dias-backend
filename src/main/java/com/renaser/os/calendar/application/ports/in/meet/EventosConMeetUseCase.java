@@ -31,4 +31,7 @@ public interface EventosConMeetUseCase {
     void eliminar(UserId actor, EventoId eventoId);
 
     void cancelarOcurrencia(UserId actor, EventoId eventoId, Instant inicioOcurrencia);
+
+    /** Spec 053 FR-014: esta fecha y las siguientes; si es la primera, se elimina el evento entero. */
+    void cancelarDesde(UserId actor, EventoId eventoId, Instant inicioOcurrencia);
 }
