@@ -75,12 +75,14 @@ class ConvocatoriaService implements ConvocatoriaUseCase {
         Set<TipoDeParte> partes = convoca ? QuienConvoca.partesDe(rol) : EnumSet.noneOf(TipoDeParte.class);
         Formacion formacion = formacionDe(actor, pedida);
         Map<String, Integer> porColor = new LinkedHashMap<>();
+        java.time.LocalDate fechaDelSemaforo = null;
         if (partes.contains(TipoDeParte.COLOR)) {
             for (ColorDeAudiencia color : ColorDeAudiencia.values()) {
                 porColor.put(color.name(), 0);
             }
-            colores.colores(rol == RolUsuario.MENTOR ? audienciaElegida.alumnosEnLaFormacion(actor, formacion) : padron.aprendicesDeLaFormacion(formacion))
-                    .values().forEach(c -> porColor.merge(c.name(), 1, Integer::sum));
+            var lectura = colores.leer(rol == RolUsuario.MENTOR ? audienciaElegida.alumnosEnLaFormacion(actor, formacion) : padron.aprendicesDeLaFormacion(formacion));
+            lectura.colores().values().forEach(c -> porColor.merge(c.name(), 1, Integer::sum));
+            fechaDelSemaforo = lectura.fecha();
         }
         int misAlumnos = partes.contains(TipoDeParte.MIS_ALUMNOS) ? audienciaElegida.alumnosEnLaFormacion(actor, formacion).size() : 0;
         List<Grupo> grupos = partes.contains(TipoDeParte.GRUPO)
@@ -91,7 +93,7 @@ class ConvocatoriaService implements ConvocatoriaUseCase {
                 ? ordenadas(padron.fichas(padron.personalActivo()).values().stream().filter(c -> !c.id().equals(actor)).toList())
                 : List.of();
         TipoDeParte porDefecto = rol == RolUsuario.MENTOR ? TipoDeParte.MIS_ALUMNOS : null;
-        return new Opciones(true, partes, QuienConvoca.tiposDe(rol), porDefecto, administra, porColor, misAlumnos, grupos, personal);
+        return new Opciones(true, partes, QuienConvoca.tiposDe(rol), porDefecto, administra, porColor, misAlumnos, grupos, personal, fechaDelSemaforo);
     }
 
     @Override

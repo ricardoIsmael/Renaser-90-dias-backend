@@ -173,6 +173,19 @@ class EventoConSalaDeMeetService implements EventosConMeetUseCase {
         sincronizador.reconciliar(eventoId, actor, auditoria.nuevaCorrelacion(), false, SincronizadorDeSalas.PRESUPUESTO_DE_UNA_PETICION);
     }
 
+    @Override
+    public void cancelarDesde(UserId actor, EventoId eventoId, Instant inicioOcurrencia) {
+        Evento evento = requireEvento(eventoId);
+        accesoEventoService.requireGestiona(actor, evento);
+        // La primera fecha y las siguientes son toda la serie: se elimina el evento (sus salas y avisos, como siempre).
+        if (Math.abs(evento.iniciaEn().toEpochMilli() - inicioOcurrencia.toEpochMilli()) <= 60_000L) {
+            eliminar(actor, eventoId);
+            return;
+        }
+        cancelarUseCase.cancelarDesde(actor, eventoId, inicioOcurrencia);
+        sincronizador.reconciliar(eventoId, actor, auditoria.nuevaCorrelacion(), false, SincronizadorDeSalas.PRESUPUESTO_DE_UNA_PETICION);
+    }
+
     // ─── Helpers ────────────────────────────────────────────────────────────────
 
     /**

@@ -377,6 +377,27 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
         return almacenamientoPort.firmarLectura(evento.portadaRuta(), VALIDEZ_URL_LECTURA_PORTADA).toString();
     }
 
+    @Override
+    @Transactional
+    public void cancelarDesde(UserId actorId, EventoId eventoId, Instant inicioOcurrencia) {
+        Evento evento = requireEvento(eventoId);
+        requireGestiona(actorId, evento);
+        if (!evento.esRecurrente()) {
+            throw new IllegalArgumentException("Este evento no es recurrente — eliminalo en vez de cancelar las siguientes");
+        }
+        if (!esOcurrenciaReal(evento, inicioOcurrencia)) {
+            throw new IllegalArgumentException("inicioOcurrencia no corresponde a una ocurrencia real de este evento");
+        }
+        evento.terminarLaSerieAntesDe(inicioOcurrencia, clock);
+        saveEventoPort.guardar(evento);
+        try {
+            // Los avisos pendientes nacieron de la serie larga: se borran y el cron regenera los de las fechas que quedan.
+            saveRecordatorioPort.borrarPendientesFuturos(eventoId, clock.now());
+        } catch (RuntimeException ex) {
+            log.warn("[EventoService.cancelarDesde] no se pudieron limpiar los avisos pendientes de {}: {}", eventoId, ex.getMessage());
+        }
+    }
+
     private Evento requireEvento(EventoId eventoId) {
         return loadEventoPort.byId(eventoId)
                 .orElseThrow(() -> new NoSuchElementException("Evento no encontrado: " + eventoId));
