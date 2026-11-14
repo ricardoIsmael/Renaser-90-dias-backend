@@ -45,6 +45,12 @@ public final class ReglasPorTipoEvento {
                 ReglaRecordatorio.horaDelDia(1, LocalTime.of(6, 0)),
                 ReglaRecordatorio.minutosAntes(2, 10)));
         REQUIERE_ELEGIBILIDAD.put(TipoEvento.SESION_ESPECIAL, false);
+
+        // Spec 053 (D-355): «Sesión personalizada» del líder de mentores; los mismos avisos que la sesión especial y sin elegibilidad extra.
+        RECORDATORIOS.put(TipoEvento.SESION_PERSONALIZADA, List.of(
+                ReglaRecordatorio.horaDelDia(1, LocalTime.of(6, 0)),
+                ReglaRecordatorio.minutosAntes(2, 10)));
+        REQUIERE_ELEGIBILIDAD.put(TipoEvento.SESION_PERSONALIZADA, false);
     }
 
     private ReglasPorTipoEvento() {

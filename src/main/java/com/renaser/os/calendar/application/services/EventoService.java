@@ -177,7 +177,7 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
         ProgresoParticipanteCalendar progreso = accesoEventoService.requireProgreso(cmd.actorId());
         RolUsuario rol = progreso.rol();
         boolean elegida = cmd.tipoAudiencia() == TipoAudiencia.SELECCION;
-        requirePuedeCrear(cmd.actorId(), rol, elegida, cmd.tipoEvento());
+        requirePuedeCrear(cmd.actorId(), rol, elegida, cmd.tipoEvento(), true);
         requireNivelExiste(cmd.tipoAudiencia(), cmd.nivelMinimoId());
         // Spec 024 (FR-017): Administración no pertenece a una formación; elige siempre en cuál nace el evento.
         Formacion donde = FormacionDelContenido.paraCrear(accesoEventoService.alcanceDe(cmd.actorId(), null), cmd.formacion());
@@ -211,7 +211,8 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
         RolUsuario rol = progreso.rol();
         requireGestiona(cmd.actorId(), evento);
         boolean elegida = cmd.tipoAudiencia() == TipoAudiencia.SELECCION;
-        requirePuedeCrear(cmd.actorId(), rol, elegida, evento.tipoEvento());
+        // Spec 053: el tipo es inmutable y ya se aprobó al crear; el líder sigue editando los de sesión especial de antes y los de sus mentores.
+        requirePuedeCrear(cmd.actorId(), rol, elegida, evento.tipoEvento(), false);
         requireNivelExiste(cmd.tipoAudiencia(), cmd.nivelMinimoId());
 
         AudienciaElegida nueva = audienciaAlEditar(cmd, evento, rol);
@@ -389,7 +390,7 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
      * <blockquote><b>Corregido 2026-11-06 (spec 044).</b> Desde D-186 (2026-09-26) crear era solo de ADMIN y ALCHEMIST y el mentor no podía. El dueño
      * pidió que el líder, el mentor y la guía vuelvan a crear eventos, cada uno para su gente.</blockquote>
      */
-    private void requirePuedeCrear(UserId actorId, RolUsuario rol, boolean conAudienciaElegida, TipoEvento tipo) {
+    private void requirePuedeCrear(UserId actorId, RolUsuario rol, boolean conAudienciaElegida, TipoEvento tipo, boolean verificarTipo) {
         if (!QuienConvoca.puedeCrear(rol)) {
             throw new NotAuthorizedException("No tienes permiso para crear eventos");
         }
@@ -408,7 +409,7 @@ public class EventoService implements ListarEventosParaVisorUseCase, ObtenerEven
         if (!conAudienciaElegida) {
             throw new NotAuthorizedException("Elige para quién es el evento");
         }
-        if (!QuienConvoca.tiposDe(rol).contains(tipo)) {
+        if (verificarTipo && !QuienConvoca.tiposDe(rol).contains(tipo)) {
             throw new NotAuthorizedException("No puedes crear un evento de ese tipo");
         }
     }
