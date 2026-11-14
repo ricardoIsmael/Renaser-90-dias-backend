@@ -16211,3 +16211,15 @@ mejor aún, con un `codigo`.
 **Qué NO se tocó y queda como mejora posible.** Las fotos del chat se bajan a 1.440 px (la subida ya las acota); el Muro tiene miniaturas (spec 049) y el chat no. Una miniatura del chat pide extender la Lambda de miniaturas al prefijo del chat y un campo nuevo en `MensajeResponse`: es otra funcionalidad, con su spec. Tampoco se tocó `GET /chat/members`, que resuelve a TODA la comunidad en memoria para devolver 30 y la app lo pide en cada refresco de la lista: con una comunidad grande vale una consulta propia.
 
 **Cómo evitar que vuelva a pasar.** `rendimientoDeLaLista.test.ts` (app): cero valores animados al abrir la página, a lo sumo 2 re-renders al resaltar o activar un audio, el tinte sigue apareciendo, la ventana de la lista acotada y la pantalla sin funciones nuevas por fila. Una fila de una lista larga es `memo` y recibe funciones estables; un valor animado por fila solo si la fila anima de verdad.
+
+## E-684 · Meet no grabó una sesión y no había forma de saber por qué: no se guardaba quién entró ni cuánto duró cada conexión (backend, issue #151, 14/11, RESUELTO)
+
+**Síntoma.** «Sesión II - Miguel» (13/11/2026, 11:00 Lima) tuvo cuatro conferencias en una sala con grabación y transcripción automáticas confirmadas por Google y quedó `SIN_TRANSCRIPCION`; «Sesión II - Carlos», con la misma configuración, quedó `LISTA` con grabación.
+
+**Causa.** Google decide en el momento de la reunión si graba (depende de quién la dirige y de quién entra), y la lectura de la 047 solo conservaba el texto y cantidades. De una sesión sin transcripción no quedaba nada que permitiera explicarla, y Google borra las conferencias a los 30 días. El error no estaba en el código de la lectura sino en que la evidencia se perdía.
+
+**Solución.** V194 agrega `eventos_meet_transcripciones.diagnostico` (jsonb). Al terminar `SIN_TRANSCRIPCION` o `SIN_REUNION` se guarda, sin nombres ni correos, por conferencia: inicio, fin, minutos, participantes por tipo (con cuenta, anónimos, teléfono) y estados de grabaciones y transcripciones; más la configuración automática de la sala y un `motivoProbable`. `GET …/meet/transcripciones` lo devuelve y `POST …/meet/transcripciones/{fecha}/diagnostico` lo vuelve a leer para sesiones ya terminadas (spec 047 FR-022).
+
+**Límite conocido.** La Meet REST API no dice si un participante con cuenta es de la organización, así que «cuenta de fuera» y «cuenta de Renaser» salen juntas como «con cuenta»; el motivo `CON_CUENTAS_Y_SIN_ARCHIVOS` lo reconoce y no adivina.
+
+**Cómo evitar que vuelva a pasar.** Un estado final «sin datos» guarda la evidencia mínima y anónima que permite explicarlo mientras la fuente todavía la tiene (`TranscripcionDeSesionTest`, `GoogleMeetReunionesAdapterTest`, `TranscripcionesDeMeetServiceTest`).

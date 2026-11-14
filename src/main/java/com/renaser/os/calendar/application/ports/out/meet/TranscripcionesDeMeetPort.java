@@ -1,6 +1,7 @@
 package com.renaser.os.calendar.application.ports.out.meet;
 
 import com.renaser.os.calendar.domain.model.evento.EventoId;
+import com.renaser.os.calendar.domain.model.meet.transcripcion.DiagnosticoDeReunion;
 import com.renaser.os.calendar.domain.model.meet.transcripcion.PendienteDeTranscripcion;
 import com.renaser.os.calendar.domain.model.meet.transcripcion.TranscripcionDeSesion;
 import com.renaser.os.shared.domain.UserId;
@@ -18,6 +19,9 @@ public interface TranscripcionesDeMeetPort {
 
     /** Las salas creadas cuya sesión terminó hace 5 minutos o más (y menos de 29 días) y todavía no tienen la transcripción resuelta. */
     List<PendienteDeTranscripcion> pendientes(Instant ahora, int limite);
+
+    /** La sala de una fecha de un evento, aunque su transcripción ya esté resuelta (issue #151: para volver a leer qué pasó). */
+    Optional<PendienteDeTranscripcion> salaDeLaFecha(EventoId eventoId, LocalDate fecha);
 
     void guardar(TranscripcionDeSesion transcripcion);
 
@@ -38,7 +42,8 @@ public interface TranscripcionesDeMeetPort {
 
     int purgarLecturasAnterioresA(Instant limite);
 
-    record EstadoPorFecha(LocalDate fecha, String estado, String motivo, Instant obtenidaEn, Instant borrarDespuesDe, boolean grabacion) {
+    record EstadoPorFecha(LocalDate fecha, String estado, String motivo, Instant obtenidaEn, Instant borrarDespuesDe, boolean grabacion,
+                          DiagnosticoDeReunion diagnostico) {
     }
 
     record ParaBorrar(java.util.UUID transcripcionId, EventoId eventoId, LocalDate fecha) {

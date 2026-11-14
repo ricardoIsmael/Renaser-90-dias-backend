@@ -43,6 +43,7 @@ public final class TranscripcionDeSesion {
     private int intentos;
     private Instant proximoIntento;
     private String motivo;
+    private DiagnosticoDeReunion diagnostico;
     private Instant obtenidaEn;
     private Instant borrarDespuesDe;
     private Instant borradaEn;
@@ -53,15 +54,15 @@ public final class TranscripcionDeSesion {
         Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(salaId, "salaId es obligatorio");
         return new TranscripcionDeSesion(id, salaId, EstadoDeTranscripcion.ESPERANDO, 0, 0, 0, false, null, null, 0, ahora, null, null, null,
-                null, ahora, ahora);
+                null, null, ahora, ahora);
     }
 
     public static TranscripcionDeSesion rehydrate(UUID id, UUID salaId, EstadoDeTranscripcion estado, int conferencias, int entradas, int largo,
                                                   boolean recortada, String texto, String enlaceDeLaGrabacion, int intentos,
-                                                  Instant proximoIntento, String motivo, Instant obtenidaEn, Instant borrarDespuesDe,
-                                                  Instant borradaEn, Instant creadaEn, Instant actualizadaEn) {
+                                                  Instant proximoIntento, String motivo, DiagnosticoDeReunion diagnostico,
+                                                  Instant obtenidaEn, Instant borrarDespuesDe, Instant borradaEn, Instant creadaEn, Instant actualizadaEn) {
         return new TranscripcionDeSesion(id, salaId, estado, conferencias, entradas, largo, recortada, texto, enlaceDeLaGrabacion, intentos,
-                proximoIntento, motivo, obtenidaEn, borrarDespuesDe, borradaEn, creadaEn, actualizadaEn);
+                proximoIntento, motivo, diagnostico, obtenidaEn, borrarDespuesDe, borradaEn, creadaEn, actualizadaEn);
     }
 
     /**
@@ -84,6 +85,7 @@ public final class TranscripcionDeSesion {
             this.borrarDespuesDe = ahora.plus(retencion);
             this.proximoIntento = null;
             this.motivo = null;
+            this.diagnostico = null;
             return;
         }
         if (!seAcaboElPlazo) {
@@ -96,6 +98,20 @@ public final class TranscripcionDeSesion {
         } else {
             terminarSin(EstadoDeTranscripcion.SIN_TRANSCRIPCION, "Hubo reunión, pero Google no dejó una transcripción.", ahora);
         }
+        this.diagnostico = lectura.diagnostico();
+    }
+
+    /**
+     * Issue #151, FR-022: suma el diagnóstico de una sesión que ya terminó sin transcripción (lo vuelve a leer Administración mientras Google aún
+     * guarda los datos). Solo vale en {@code SIN_TRANSCRIPCION} y {@code SIN_REUNION}; en cualquier otro estado devuelve {@code false}.
+     */
+    public boolean registrarDiagnostico(DiagnosticoDeReunion nuevo, Instant ahora) {
+        if (nuevo == null || (estado != EstadoDeTranscripcion.SIN_TRANSCRIPCION && estado != EstadoDeTranscripcion.SIN_REUNION)) {
+            return false;
+        }
+        this.diagnostico = nuevo;
+        this.actualizadaEn = ahora;
+        return true;
     }
 
     /** FR-009: la sala quedó sin transcripción automática (la cuenta no la dejó): no se le pregunta a Google. */

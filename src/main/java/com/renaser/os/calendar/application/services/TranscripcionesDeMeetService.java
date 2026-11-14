@@ -15,6 +15,7 @@ import com.renaser.os.calendar.application.ports.out.meet.TranscripcionesDeMeetP
 import com.renaser.os.calendar.domain.model.evento.EventoId;
 import com.renaser.os.calendar.domain.model.meet.AccionDeAuditoriaGoogle;
 import com.renaser.os.calendar.domain.model.meet.CuentaDeGoogle;
+import com.renaser.os.calendar.domain.model.meet.transcripcion.DiagnosticoDeReunion;
 import com.renaser.os.calendar.domain.model.meet.transcripcion.EstadoDeTranscripcion;
 import com.renaser.os.calendar.domain.model.meet.transcripcion.LecturaDeReunion;
 import com.renaser.os.calendar.domain.model.meet.transcripcion.PendienteDeTranscripcion;
@@ -159,8 +160,40 @@ class TranscripcionesDeMeetService implements TranscripcionesDeMeetUseCase {
         acceso.requireAdministraElCalendario(actor);
         exigirEvento(eventoId);
         return transcripciones.estadosDelEvento(eventoId).stream()
-                .map(e -> new EstadoDeLaFecha(e.fecha(), e.estado(), e.motivo(), e.obtenidaEn(), e.borrarDespuesDe(), e.grabacion()))
+                .map(e -> new EstadoDeLaFecha(e.fecha(), e.estado(), e.motivo(), e.obtenidaEn(), e.borrarDespuesDe(), e.grabacion(),
+                        e.diagnostico()))
                 .toList();
+    }
+
+    @Override
+    public DiagnosticoDeReunion diagnosticar(UserId actor, EventoId eventoId, LocalDate fecha) {
+        acceso.requireAdministraElCalendario(actor);
+        exigirEvento(eventoId);
+        PendienteDeTranscripcion sala = transcripciones.salaDeLaFecha(eventoId, fecha)
+                .orElseThrow(() -> new NoSuchElementException("Esa fecha no tiene una sala de Meet creada por Renaser."));
+        Optional<CuentaDeGoogle> cuenta = cuentaPort.cargar();
+        if (cuenta.isEmpty() || !cuenta.get().activa() || !cuenta.get().tienePermiso(CuentaDeGoogle.PERMISO_LEER_REUNIONES)) {
+            throw new IllegalStateException("La cuenta de Google no está conectada con el permiso de leer las reuniones.");
+        }
+        LecturaDeReunion lectura;
+        try {
+            lectura = reuniones.leer(sala.enlace(), sala.desde(), sala.hasta());
+        } catch (GoogleNoRespondeException | GoogleRechazoException | CuentaGoogleRevocadaException | CuentaGoogleNoConectadaException e) {
+            throw new IllegalStateException("Google no dejó leer esa reunión ahora. Intenta de nuevo en unos minutos.");
+        }
+        DiagnosticoDeReunion diagnostico = lectura.diagnostico();
+        if (diagnostico == null) {
+            // Esta vez Google sí dejó texto: no hay nada que explicar; se avisa sin tocar la fila.
+            throw new IllegalStateException("Esa sesión sí tiene transcripción en Google: no hay nada que diagnosticar.");
+        }
+        transcripciones.deLaFecha(eventoId, fecha).ifPresent(t -> {
+            if (t.registrarDiagnostico(diagnostico, clock.now())) {
+                transcripciones.guardar(t);
+            }
+        });
+        log.info("[calendar.TranscripcionesDeMeet] diagnóstico a pedido: {} conexión(es), motivo {}", diagnostico.conferencias().size(),
+                diagnostico.motivoProbable());
+        return diagnostico;
     }
 
     @Override
