@@ -303,10 +303,10 @@ class EventosPorAudienciaIT {
 
     // spec 044 FR-025
     @Test
-    @DisplayName("FR-025: cuándo se avisa no cambia: el invitado recibe los mismos avisos que en un evento para todos del mismo tipo")
+    @DisplayName("FR-025: cuándo se avisa no cambia: el invitado recibe los mismos avisos que en un evento para todos del mismo tipo (spec 053: el de la sesión personalizada)")
     void lasReglasNoCambian() {
         EventoId elegida = crear(lider, TipoEvento.SESION_PERSONALIZADA, List.of(ParteDeAudiencia.persona(rojo1.value())));
-        EventoId paraTodos = eventos.crear(comando(admin, TipoEvento.SESION_ESPECIAL, TipoAudiencia.TODOS, null)).evento().evento().id();
+        EventoId paraTodos = eventos.crear(comando(admin, TipoEvento.SESION_PERSONALIZADA, TipoAudiencia.TODOS, null)).evento().evento().id();
         creados.add(paraTodos.value());
 
         generar.generar(Instant.now());
