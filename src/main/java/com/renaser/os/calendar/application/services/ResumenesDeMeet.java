@@ -3,6 +3,7 @@ package com.renaser.os.calendar.application.services;
 import com.renaser.os.calendar.application.ports.in.meet.ResumenDeMeet;
 import com.renaser.os.calendar.domain.model.evento.Evento;
 import com.renaser.os.calendar.domain.model.meet.AccesoSalaMeet;
+import com.renaser.os.calendar.domain.model.meet.EstadoDeCoanfitriones;
 import com.renaser.os.calendar.domain.model.meet.EstadoSalaMeet;
 import com.renaser.os.calendar.domain.model.meet.SalaMeet;
 
@@ -52,8 +53,35 @@ final class ResumenesDeMeet {
         int conProblema = (int) cuentan.stream().filter(s -> gravedad(s) > 0).count();
         int conSala = (int) cuentan.stream().filter(s -> s.enlace() != null).count();
         boolean accesoAplicado = cuentan.stream().noneMatch(s -> s.estado() == EstadoSalaMeet.CREADO && s.accesoPendiente());
+        EstadoDeCoanfitriones coanfitriones = peorCoanfitriones(cuentan);
         return new ResumenDeMeet(peor.estado(), evento.accesoSalaMeet(), accesoAplicado, mensajeDe(peor), conSala, conProblema,
-                avisoDelPlan(cuentan));
+                avisoDelPlan(cuentan), coanfitriones == null ? null : coanfitriones.name(), avisoDeCoanfitriones(coanfitriones));
+    }
+
+    static final String COANFITRIONES_FALLIDO = "Quien dirige la sesión no quedó como coanfitrión de la sala: Meet puede no grabar ni transcribir "
+            + "si no entra la cuenta conectada.";
+    static final String COANFITRIONES_PARCIAL = "Solo algunas de las personas que dirigen la sesión quedaron como coanfitrionas: Meet puede no "
+            + "grabar ni transcribir si entra otra.";
+    static final String COANFITRIONES_SIN_CORREO = "No se encontró el correo de quien dirige la sesión para hacerlo coanfitrión: Meet puede no "
+            + "grabar ni transcribir si no entra la cuenta conectada.";
+
+    /** El peor estado de coanfitriones entre las fechas (FALLIDO > PARCIAL > SIN_CORREO > OK); {@code null} si ninguna lo pidió. */
+    static EstadoDeCoanfitriones peorCoanfitriones(List<SalaMeet> salas) {
+        List<EstadoDeCoanfitriones> orden = List.of(EstadoDeCoanfitriones.FALLIDO, EstadoDeCoanfitriones.PARCIAL,
+                EstadoDeCoanfitriones.SIN_CORREO, EstadoDeCoanfitriones.OK);
+        return orden.stream().filter(e -> salas.stream().anyMatch(s -> s.coanfitriones() == e)).findFirst().orElse(null);
+    }
+
+    private static String avisoDeCoanfitriones(EstadoDeCoanfitriones estado) {
+        if (estado == null) {
+            return null;
+        }
+        return switch (estado) {
+            case OK -> null;
+            case FALLIDO -> COANFITRIONES_FALLIDO;
+            case PARCIAL -> COANFITRIONES_PARCIAL;
+            case SIN_CORREO -> COANFITRIONES_SIN_CORREO;
+        };
     }
 
     /**

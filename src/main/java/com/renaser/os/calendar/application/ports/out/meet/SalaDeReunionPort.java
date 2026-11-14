@@ -41,4 +41,11 @@ public interface SalaDeReunionPort {
      * @return lo que Google confirmó de lo pedido ({@code true} o {@code false}); {@code null} en lo que no se pidió
      */
     ArtefactosDeLaSala fijarArtefactos(String enlace, ArtefactosDeLaSala pedidos);
+
+    /**
+     * Hace coanfitriones de la sala a esos correos (Meet REST API {@code spaces.members}, rol {@code COHOST}; FR-038). Primero lee quiénes ya lo son
+     * y a esos no les pide nada: repetirlo no duplica. Si Google rechaza a una persona (permiso, correo de fuera, sala ajena), se sigue con las demás
+     * y el rechazo se cuenta en el resultado; lo reintentable o una cuenta revocada sí salen como excepción, como en el resto del puerto.
+     */
+    ResultadoDeCoanfitriones agregarCoanfitriones(String enlace, java.util.List<String> correos);
 }

@@ -8,6 +8,7 @@ import com.renaser.os.calendar.domain.model.meet.ArtefactosDeLaSala;
 import com.renaser.os.calendar.domain.model.meet.AccionDeAuditoriaGoogle;
 import com.renaser.os.calendar.domain.model.meet.CuentaDeGoogle;
 import com.renaser.os.calendar.domain.model.meet.EstadoDeLaCuenta;
+import com.renaser.os.calendar.domain.model.meet.EstadoDeCoanfitriones;
 import com.renaser.os.calendar.domain.model.meet.EstadoSalaMeet;
 import com.renaser.os.calendar.domain.model.meet.RegistroDeAuditoriaGoogle;
 import com.renaser.os.calendar.domain.model.meet.SalaMeet;
@@ -97,6 +98,28 @@ class SalasYCuentaDeGooglePersistenceTest {
         auditoria.registrar(new RegistroDeAuditoriaGoogle(UUID.randomUUID(), AHORA, AccionDeAuditoriaGoogle.AJUSTAR_GRABACION, null,
                 evento.value(), false, 403, "corr-grabacion"));
         assertThat(auditoria.ultimos(50)).extracting(RegistroDeAuditoriaGoogle::correlacion).contains("corr-grabacion");
+    }
+
+    // spec 040 FR-038
+    @Test
+    @DisplayName("FR-038: cómo quedaron los coanfitriones se guarda por sala (V195), con la auditoría AJUSTAR_COANFITRIONES, y las filas viejas quedan en NULL")
+    void losCoanfitrionesSeGuardan() {
+        EventoId evento = EventoId.of(UUID.randomUUID());
+        SalaMeet creada = sala(evento, LocalDate.of(2026, 11, 12), "h".repeat(32));
+        creada.completarCon("https://meet.google.com/abc-defg-hij", AHORA);
+        salas.guardar(creada);
+        assertThat(salas.porEvento(evento)).singleElement().extracting(SalaMeet::coanfitriones).isNull();
+
+        creada.registrarCoanfitriones(EstadoDeCoanfitriones.FALLIDO, "Google no dejó (código 403).", AHORA);
+        salas.guardar(creada);
+
+        assertThat(salas.porEvento(evento)).singleElement().satisfies(s -> {
+            assertThat(s.coanfitriones()).isEqualTo(EstadoDeCoanfitriones.FALLIDO);
+            assertThat(s.coanfitrionesMotivo()).isEqualTo("Google no dejó (código 403).");
+        });
+        auditoria.registrar(new RegistroDeAuditoriaGoogle(UUID.randomUUID(), AHORA, AccionDeAuditoriaGoogle.AJUSTAR_COANFITRIONES, null,
+                evento.value(), false, 403, "corr-coanfitriones"));
+        assertThat(auditoria.ultimos(50)).extracting(RegistroDeAuditoriaGoogle::correlacion).contains("corr-coanfitriones");
     }
 
     // spec 040 FR-007
