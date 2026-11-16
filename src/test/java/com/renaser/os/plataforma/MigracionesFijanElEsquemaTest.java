@@ -16,13 +16,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Issue #61: la V160 no fijaba {@code SET search_path TO renaser, public;} y en una base cuyo {@code search_path} por defecto es
  * {@code public} fallo con {@code relation "habitos" does not exist}. Las migraciones ya aplicadas no se tocan (Flyway compara su
- * checksum); desde la V188 toda migracion lo fija en sus primeras lineas, asi no depende de como este configurada la base.
+ * checksum); desde la V194 toda migracion lo fija en sus primeras lineas, asi no depende de como este configurada la base.
  */
 class MigracionesFijanElEsquemaTest {
 
     private static final Path MIGRACIONES = Path.of("src/main/resources/db/migration");
-    /** La ultima que ya estaba aplicada en produccion cuando nacio esta regla (2026-11-09). */
-    private static final int ULTIMA_ANTERIOR_A_LA_REGLA = 187;
+    /**
+     * La ultima migracion aplicada en produccion sin fijar el esquema. La regla nacio el 2026-11-09 con 187, pero se fusiono el
+     * 2026-11-16, cuando la V193 ({@code tipo_de_evento_sesion_personalizada}) ya estaba aplicada en produccion sin el
+     * {@code SET search_path}: no se puede editar (Flyway compara su checksum), asi que la regla exige desde la V194. Las V188 a
+     * V192 y V194 a V196 ya lo fijaban.
+     */
+    private static final int ULTIMA_ANTERIOR_A_LA_REGLA = 193;
     private static final Pattern VERSION = Pattern.compile("^V(\\d+)__.*\\.sql$");
     private static final Pattern FIJA_EL_ESQUEMA = Pattern.compile("(?im)^\\s*SET\\s+search_path\\s+TO\\s+renaser\\b");
 
