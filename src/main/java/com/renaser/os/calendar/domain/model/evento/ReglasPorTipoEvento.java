@@ -45,6 +45,15 @@ public final class ReglasPorTipoEvento {
                 ReglaRecordatorio.horaDelDia(1, LocalTime.of(6, 0)),
                 ReglaRecordatorio.minutosAntes(2, 10)));
         REQUIERE_ELEGIBILIDAD.put(TipoEvento.SESION_ESPECIAL, false);
+
+        // Spec 053 (D-355, D3 del dueño 2026-11-14): «Sesión personalizada» avisa 1 día antes, 1 hora antes, 30 y 10 minutos antes (app y WhatsApp,
+        // como el resto de los avisos de eventos); sin elegibilidad extra.
+        RECORDATORIOS.put(TipoEvento.SESION_PERSONALIZADA, List.of(
+                ReglaRecordatorio.diasAntes(1, 1),
+                ReglaRecordatorio.minutosAntes(2, 60),
+                ReglaRecordatorio.minutosAntes(3, 30),
+                ReglaRecordatorio.minutosAntes(4, 10)));
+        REQUIERE_ELEGIBILIDAD.put(TipoEvento.SESION_PERSONALIZADA, false);
     }
 
     private ReglasPorTipoEvento() {
