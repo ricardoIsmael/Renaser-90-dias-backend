@@ -1,5 +1,6 @@
 package com.renaser.os.calendar.application.services;
 
+import com.renaser.os.calendar.application.ports.in.evento.CancelarOcurrenciaUseCase;
 import com.renaser.os.calendar.application.ports.in.evento.EventoVista;
 import com.renaser.os.calendar.application.ports.in.evento.ListarEventosParaVisorUseCase.OcurrenciaVista;
 import com.renaser.os.calendar.application.ports.out.meet.ConfiguracionDeGooglePort;
@@ -198,7 +199,17 @@ final class MundoDeMeet {
         trabajo = new TrabajoEnSegundoPlanDeMeetService(cuenta, salas, salas, auditoriaDeGoogle, sincronizador, revocacion, auditor);
         reintento = new ReintentoDeSalaDeMeetService(acceso, disponibilidad, sincronizador, eventos, this::obtener, auditor, reloj);
         servicio = new EventoConSalaDeMeetService(this::listar, this::obtener, this::crear, this::actualizar, this::eliminar,
-                this::cancelar, eventos, salas, salas, acceso, disponibilidad, sincronizador, auditor, reloj);
+                new CancelarOcurrenciaUseCase() {
+                    @Override
+                    public void cancelar(UserId actor, EventoId id, Instant inicio) {
+                        MundoDeMeet.this.cancelar(actor, id, inicio);
+                    }
+
+                    @Override
+                    public void cancelarDesde(UserId actor, EventoId id, Instant inicio) {
+                        throw new UnsupportedOperationException("no se usa en este mundo");
+                    }
+                }, eventos, salas, salas, acceso, disponibilidad, sincronizador, auditor, reloj);
     }
 
     // ─── Escenario ──────────────────────────────────────────────────────────────

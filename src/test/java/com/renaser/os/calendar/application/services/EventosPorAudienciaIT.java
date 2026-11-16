@@ -156,7 +156,7 @@ class EventosPorAudienciaIT {
     void laLiderConLosRojosYUnaPersona() {
         List<ParteDeAudiencia> partes = List.of(ParteDeAudiencia.color(ColorDeAudiencia.ROJO), ParteDeAudiencia.persona(otroMentor.value()));
         int llega = convocatoria.vistaPrevia(lider, null, partes).total();
-        EventoId id = crear(lider, TipoEvento.SESION_ESPECIAL, partes);
+        EventoId id = crear(lider, TipoEvento.SESION_PERSONALIZADA, partes);
 
         assertThat(llega).isEqualTo(4);
         assertThat(lista(rojo1)).contains(id.value());
@@ -174,7 +174,7 @@ class EventosPorAudienciaIT {
     @Test
     @DisplayName("la líder agenda con la Alquimista: la ven las dos; a Administración no le llega ningún aviso")
     void laLiderConLaAlquimista() {
-        EventoId id = crear(lider, TipoEvento.ESPONTANEO, List.of(new ParteDeAudiencia(TipoDeParte.PERSONAL, alquimista.value(), null)));
+        EventoId id = crear(lider, TipoEvento.SESION_PERSONALIZADA, List.of(new ParteDeAudiencia(TipoDeParte.PERSONAL, alquimista.value(), null)));
 
         assertThat(lista(alquimista)).contains(id.value());
         generar.generar(Instant.now());
@@ -202,7 +202,21 @@ class EventosPorAudienciaIT {
                 .isInstanceOf(NotAuthorizedException.class);
     }
 
-    // spec 044 FR-006
+    // spec 053 FR-001
+    @Test
+    @DisplayName("spec 053 FR-001: el líder crea su «Sesión personalizada» y ya no la especial ni la espontánea; el mentor, la personalizada no")
+    void elLiderSoloCreaLaSesionPersonalizada() {
+        List<ParteDeAudiencia> partes = List.of(ParteDeAudiencia.color(ColorDeAudiencia.ROJO));
+
+        assertThat(obtener.obtener(lider, crear(lider, TipoEvento.SESION_PERSONALIZADA, partes)).evento().tipoEvento())
+                .isEqualTo(TipoEvento.SESION_PERSONALIZADA);
+        assertThatThrownBy(() -> crear(lider, TipoEvento.SESION_ESPECIAL, partes)).isInstanceOf(NotAuthorizedException.class);
+        assertThatThrownBy(() -> crear(lider, TipoEvento.ESPONTANEO, partes)).isInstanceOf(NotAuthorizedException.class);
+        assertThatThrownBy(() -> crear(mentor, TipoEvento.SESION_PERSONALIZADA, List.of(ParteDeAudiencia.sola(TipoDeParte.MIS_ALUMNOS))))
+                .isInstanceOf(NotAuthorizedException.class);
+    }
+
+    // spec 044 FR-006; spec 053 FR-002 (los eventos de «Sesión especial» de antes siguen editables por el líder)
     @Test
     @DisplayName("FR-006 (P7): la líder edita y cancela el evento de un mentor; el mentor no toca el de Administración")
     void quienGestiona() {
@@ -221,7 +235,7 @@ class EventosPorAudienciaIT {
     @Test
     @DisplayName("SC-005: editar sin mandar la audiencia (una app anterior) la conserva")
     void editarSinAudienciaLaConserva() {
-        EventoId id = crear(lider, TipoEvento.SESION_ESPECIAL, List.of(ParteDeAudiencia.color(ColorDeAudiencia.ROJO)));
+        EventoId id = crear(lider, TipoEvento.SESION_PERSONALIZADA, List.of(ParteDeAudiencia.color(ColorDeAudiencia.ROJO)));
         int antes = invitados(id);
 
         eventos.actualizar(edicion(lider, id, "Otro nombre", null));
@@ -234,7 +248,7 @@ class EventosPorAudienciaIT {
     @Test
     @DisplayName("FR-022: quien dijo «No voy» no recibe los recordatorios; quien no respondió, sí")
     void noVoyNoRecibe() {
-        EventoId id = crear(lider, TipoEvento.SESION_ESPECIAL, List.of(ParteDeAudiencia.color(ColorDeAudiencia.ROJO)));
+        EventoId id = crear(lider, TipoEvento.SESION_PERSONALIZADA, List.of(ParteDeAudiencia.color(ColorDeAudiencia.ROJO)));
         Instant inicio = inicioDe(id);
         confirmar.confirmar(rojo1, id, inicio, EstadoConfirmacion.NO_ASISTE);
 
@@ -265,7 +279,7 @@ class EventosPorAudienciaIT {
     @Test
     @DisplayName("FR-016/018/019: «Para quién es» solo para quien lo creó y Administración; el invitado ve solo quién lo organizó")
     void quienVeLaAudiencia() {
-        EventoId id = crear(lider, TipoEvento.SESION_ESPECIAL, List.of(ParteDeAudiencia.color(ColorDeAudiencia.ROJO)));
+        EventoId id = crear(lider, TipoEvento.SESION_PERSONALIZADA, List.of(ParteDeAudiencia.color(ColorDeAudiencia.ROJO)));
         Evento evento = obtener.obtener(lider, id).evento();
 
         assertThat(convocatoria.resumenPara(lider, evento)).get().satisfies(r -> assertThat(r.total()).isEqualTo(3));
@@ -289,10 +303,10 @@ class EventosPorAudienciaIT {
 
     // spec 044 FR-025
     @Test
-    @DisplayName("FR-025: cuándo se avisa no cambia: el invitado recibe los mismos avisos que en un evento para todos del mismo tipo")
+    @DisplayName("FR-025: cuándo se avisa no cambia: el invitado recibe los mismos avisos que en un evento para todos del mismo tipo (spec 053: el de la sesión personalizada)")
     void lasReglasNoCambian() {
-        EventoId elegida = crear(lider, TipoEvento.SESION_ESPECIAL, List.of(ParteDeAudiencia.persona(rojo1.value())));
-        EventoId paraTodos = eventos.crear(comando(admin, TipoEvento.SESION_ESPECIAL, TipoAudiencia.TODOS, null)).evento().evento().id();
+        EventoId elegida = crear(lider, TipoEvento.SESION_PERSONALIZADA, List.of(ParteDeAudiencia.persona(rojo1.value())));
+        EventoId paraTodos = eventos.crear(comando(admin, TipoEvento.SESION_PERSONALIZADA, TipoAudiencia.TODOS, null)).evento().evento().id();
         creados.add(paraTodos.value());
 
         generar.generar(Instant.now());
