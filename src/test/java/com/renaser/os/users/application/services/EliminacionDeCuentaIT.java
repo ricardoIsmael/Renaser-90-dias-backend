@@ -206,7 +206,7 @@ class EliminacionDeCuentaIT {
         String token = tokenVerificacionEmailPort.generar(email, Duration.ofMinutes(30));
         String ip = "203.0.113." + ThreadLocalRandom.current().nextInt(1, 255);
         AccountRequestId solicitud = submitAccountRequest.submit(SubmitAccountRequestCommand.porFormulario(
-                email, nombre, "+51 999 888 777", "Lima", token, CONTRASENA, ip));
+                email, nombre, "+51 9" + String.format("%08d", ThreadLocalRandom.current().nextInt(100_000_000)), "Lima", token, CONTRASENA, ip));
         approveAccountRequest.approve(new ApproveAccountRequestCommand(solicitud, admin));
         return loadUserPort.byEmail(new Email(email)).orElseThrow().id();
     }

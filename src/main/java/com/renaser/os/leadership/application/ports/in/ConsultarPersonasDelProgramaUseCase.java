@@ -1,5 +1,6 @@
 package com.renaser.os.leadership.application.ports.in;
 
+import com.renaser.os.shared.domain.PaginaAcotada;
 import com.renaser.os.shared.domain.UserId;
 
 import java.util.List;
@@ -28,12 +29,7 @@ public interface ConsultarPersonasDelProgramaUseCase {
 
         public ConsultaPersonasDelPrograma {
             Objects.requireNonNull(actorId, "actorId es obligatorio");
-            if (pagina < 0) {
-                throw new IllegalArgumentException("page no puede ser negativa");
-            }
-            if (tamano < 1 || tamano > TAMANO_MAXIMO) {
-                throw new IllegalArgumentException("size debe estar entre 1 y " + TAMANO_MAXIMO);
-            }
+            PaginaAcotada.estricta(pagina, tamano, TAMANO_MAXIMO);
         }
     }
 

@@ -13,7 +13,15 @@ import java.util.UUID;
  *
  * <p>`categoriaClave` viaja null cuando la publicacion no llevo categoria (CLAUDE.MD:
  * un cliente viejo que no manda `category` sigue publicando igual, wall/schema.ts:51-53).
+ *
+ * <p>Spec 048, fase 2: `hechoSinRedEn` es la hora real en que se escribio una publicacion hecha sin internet (nulo cuando
+ * hubo senal). `occurredAt` sigue siendo la llegada: la publicacion aparece arriba (D18), y solo el habito «Post diario»
+ * cuenta el dia de la hora real (D17).
  */
 public record PublicacionCreadaEvent(UUID publicacionId, UserId autorId, String categoriaClave,
-                                      Instant occurredAt) implements DomainEvent {
+                                      Instant occurredAt, Instant hechoSinRedEn) implements DomainEvent {
+
+    public PublicacionCreadaEvent(UUID publicacionId, UserId autorId, String categoriaClave, Instant occurredAt) {
+        this(publicacionId, autorId, categoriaClave, occurredAt, null);
+    }
 }

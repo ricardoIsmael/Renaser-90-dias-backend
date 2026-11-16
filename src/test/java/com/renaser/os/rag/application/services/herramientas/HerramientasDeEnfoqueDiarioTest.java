@@ -176,7 +176,7 @@ class HerramientasDeEnfoqueDiarioTest {
     @Test
     @DisplayName("resumen confirmado: entrega por el puerto y traduce el rechazo del negocio")
     void confirmarResumen() {
-        EntregarResumenEspirituConfirmable confirmable = new EntregarResumenEspirituConfirmable(enfoque);
+        EntregarResumenEspirituConfirmable confirmable = new EntregarResumenEspirituConfirmable(enfoque, mock(com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort.class));
         InvocacionHerramienta propuesta = new InvocacionHerramienta(PropuestaDeResumenEspiritu.NOMBRE,
                 Map.of(PropuestaDeResumenEspiritu.ARGUMENTO_RESUMEN, "Aprendi",
                         PropuestaDeResumenEspiritu.ARGUMENTO_DIA, "5"));

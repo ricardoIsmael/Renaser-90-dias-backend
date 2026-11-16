@@ -1,6 +1,8 @@
 package com.renaser.os.rag.application.services.herramientas;
 
 import com.renaser.os.rag.application.ports.out.enfoque.EnfoqueDiarioDelAprendizPort;
+import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort;
+import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort.HabitoDelDia;
 import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -10,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.NoSuchElementException;
+import java.util.Optional;
 
 /**
  * La escritura de {@code proponer_resumen_espiritu}, que solo corre cuando la persona confirma la
@@ -29,9 +32,12 @@ public class EntregarResumenEspirituConfirmable implements AccionConfirmable {
     private static final Logger log = LoggerFactory.getLogger(EntregarResumenEspirituConfirmable.class);
 
     private final EnfoqueDiarioDelAprendizPort enfoquePort;
+    private final ConsultarAgendaHabitosPort agendaHabitos;
 
-    public EntregarResumenEspirituConfirmable(EnfoqueDiarioDelAprendizPort enfoquePort) {
+    public EntregarResumenEspirituConfirmable(EnfoqueDiarioDelAprendizPort enfoquePort,
+                                              ConsultarAgendaHabitosPort agendaHabitos) {
         this.enfoquePort = enfoquePort;
+        this.agendaHabitos = agendaHabitos;
     }
 
     @Override
@@ -46,15 +52,21 @@ public class EntregarResumenEspirituConfirmable implements AccionConfirmable {
         if (dia == null || resumen == null || resumen.isBlank()) {
             return ResultadoHerramienta.fallo("La propuesta no trae un resumen valido: no se envio nada.");
         }
+        // Issue #99: la entrega marca la Pastilla Renacer de hoy; que la app apague sus alarmas y celebre. Esta entrega no devuelve los
+        // puntos: se toman los que estaban en juego justo antes, los mismos que muestra la tarjeta de Training en ese momento.
+        Optional<HabitoDelDia> pastilla = CompletacionDeHabito.porHacerDeHoy(agendaHabitos, actorId,
+                CompletacionDeHabito.deClave(HabitoDelDia.CLAVE_PASTILLA_RENACER));
         boolean aTiempo;
         try {
             aTiempo = enfoquePort.entregarResumenEspiritu(actorId, dia, resumen);
         } catch (RuntimeException rechazo) {
             return traducir(rechazo);
         }
-        return ResultadoHerramienta.exito(aTiempo
+        int puntos = pastilla.map(HabitoDelDia::puntosEnJuego).orElse(0); // map con null deja el Optional vacio
+        return CompletacionDeHabito.exitoConElHabito(aTiempo
                 ? "Resumen de Espiritu enviado a tiempo; tambien se marca 'Pastilla Renacer' de hoy."
-                : "Resumen de Espiritu guardado, pero fuera de plazo; tambien se marca 'Pastilla Renacer' de hoy.");
+                : "Resumen de Espiritu guardado, pero fuera de plazo; tambien se marca 'Pastilla Renacer' de hoy.",
+                pastilla, puntos);
     }
 
     private static Integer diaDe(String texto) {

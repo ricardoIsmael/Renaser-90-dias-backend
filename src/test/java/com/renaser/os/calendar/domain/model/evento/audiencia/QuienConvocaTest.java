@@ -35,12 +35,24 @@ class QuienConvocaTest {
 
     // spec 044 FR-007
     @Test
-    @DisplayName("FR-007 (P9): el mentor y el líder solo crean «Sesión especial» y «Espontáneo», y solo con audiencia elegida")
+    @DisplayName("FR-007 (P9): el mentor solo crea «Sesión especial» y «Espontáneo»; el líder, solo su tipo (spec 053); todos con audiencia elegida")
     void tiposPorRol() {
         assertThat(QuienConvoca.tiposDe(RolUsuario.MENTOR)).containsExactlyInAnyOrder(TipoEvento.SESION_ESPECIAL, TipoEvento.ESPONTANEO);
         assertThat(QuienConvoca.tiposDe(RolUsuario.MENTOR_LEAD)).doesNotContain(TipoEvento.MENTORIA_ALQUIMISTA, TipoEvento.SEMANA_MANIFESTACION);
         assertThat(QuienConvoca.tiposDe(RolUsuario.ADMIN)).contains(TipoEvento.MENTORIA_ALQUIMISTA);
         assertThat(QuienConvoca.soloConAudienciaElegida(RolUsuario.MENTOR_LEAD)).isTrue();
         assertThat(QuienConvoca.soloConAudienciaElegida(RolUsuario.ADMIN)).isFalse();
+    }
+
+    // spec 053 FR-001, FR-003
+    @Test
+    @DisplayName("spec 053 FR-001: el líder ve UN solo tipo, «Sesión personalizada»; el mentor, la guía y Administración no la ven")
+    void ellliderVeUnSoloTipo() {
+        assertThat(QuienConvoca.tiposDe(RolUsuario.MENTOR_LEAD)).containsExactly(TipoEvento.SESION_PERSONALIZADA);
+        assertThat(QuienConvoca.tiposDe(RolUsuario.MENTOR)).doesNotContain(TipoEvento.SESION_PERSONALIZADA);
+        assertThat(QuienConvoca.tiposDe(RolUsuario.ADMIN)).doesNotContain(TipoEvento.SESION_PERSONALIZADA)
+                .containsExactlyInAnyOrder(TipoEvento.MENTORIA_ALQUIMISTA, TipoEvento.ESPONTANEO, TipoEvento.SEMANA_MANIFESTACION,
+                        TipoEvento.SESION_ESPECIAL);
+        assertThat(QuienConvoca.tiposDe(RolUsuario.ALCHEMIST)).doesNotContain(TipoEvento.SESION_PERSONALIZADA);
     }
 }

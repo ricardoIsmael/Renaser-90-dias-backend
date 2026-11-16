@@ -16,7 +16,7 @@
  *   --md <archivo>   agrega además las tablas en Markdown (el CI lo apunta a $GITHUB_STEP_SUMMARY).
  *   --detalle        en la tabla, la ruta completa de cada prueba en vez de `Archivo:línea`.
  *
- * LA CONVENCIÓN (la explican `.claude/rules/06-trazabilidad-de-specs.md` y el `AGENTS.md` de la app):
+ * LA CONVENCIÓN (cada requisito exigido lleva una prueba marcada):
  * la prueba que cubre un requisito lleva, en un comentario, una marca `spec NNN FR-NNN`.
  *
  *   Java / Jest   // spec 037 FR-005          (o dentro del @DisplayName / del nombre del `it`)

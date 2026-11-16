@@ -60,14 +60,14 @@ interface SpringDataRocaDiariaRepository extends JpaRepository<RocaDiariaJpaEnti
      */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update RocaDiariaJpaEntity r set r.cierreMotivo = :motivo, r.cierreManana = :manana, r.cierreNota = :nota, "
-            + "r.cierreEn = :en where r.id = :id and r.completada = false")
+            + "r.cierreEn = :en, r.actualizadoEn = :en where r.id = :id and r.completada = false")
     int guardarElCierre(@Param("id") UUID id, @Param("motivo") String motivo, @Param("manana") String manana,
                         @Param("nota") String nota, @Param("en") Instant en);
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update RocaDiariaJpaEntity r set r.cierreMotivo = null, r.cierreManana = null, r.cierreNota = null, "
-            + "r.cierreEn = null where r.id = :id")
-    int quitarElCierre(@Param("id") UUID id);
+            + "r.cierreEn = null, r.actualizadoEn = :en where r.id = :id")
+    int quitarElCierre(@Param("id") UUID id, @Param("en") Instant en);
 
     List<RocaDiariaJpaEntity> findByParticipanteIdAndFecha(UUID participanteId, LocalDate fecha);
 

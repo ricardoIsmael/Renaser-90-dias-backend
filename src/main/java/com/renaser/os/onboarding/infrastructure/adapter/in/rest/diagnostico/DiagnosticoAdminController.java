@@ -6,6 +6,7 @@ import com.renaser.os.onboarding.application.ports.in.diagnostico.DiagnosticoDeL
 import com.renaser.os.onboarding.application.ports.in.diagnostico.EditarDiagnosticoUseCase;
 import com.renaser.os.onboarding.application.ports.in.diagnostico.EditarDiagnosticoUseCase.ResultadoDeQuitar;
 import com.renaser.os.onboarding.application.ports.in.diagnostico.PublicarDiagnosticoUseCase;
+import com.renaser.os.onboarding.application.ports.in.diagnostico.PublicarDiagnosticoUseCase.ExportacionDelDiagnostico;
 import com.renaser.os.onboarding.domain.model.diagnostico.NoSePuedePublicarException;
 import com.renaser.os.onboarding.domain.model.diagnostico.OtraPersonaPublicoException;
 import com.renaser.os.onboarding.domain.model.diagnostico.TieneDependientesException;
@@ -47,7 +48,11 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
@@ -59,6 +64,7 @@ import java.util.UUID;
 @Funcionalidad("admin.personas")
 public class DiagnosticoAdminController {
 
+    private static final byte[] BOM_UTF8 = {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
     private static final String SOLO_ADMIN = "solo ADMIN/ALCHEMIST activos: el servicio rechaza a los demás roles";
 
     private final EditarDiagnosticoUseCase editar;
@@ -177,8 +183,12 @@ public class DiagnosticoAdminController {
 
     @RequiresPermission(value = Permission.MANAGE_TRAINEES, scope = SOLO_ADMIN)
     @GetMapping(value = "/exportar.csv", produces = "text/csv;charset=UTF-8")
-    public ResponseEntity<byte[]> exportar(@ActorAutenticado UserId actor) {
-        return comoCsv(publicar.exportar(actor), "diagnostico.csv");
+    public ResponseEntity<StreamingResponseBody> exportar(@ActorAutenticado UserId actor) {
+        // El guard de Administración pasa AQUÍ, antes del primer byte (spec 050, tramo F; FR-032): un rechazo sigue siendo un 403.
+        ExportacionDelDiagnostico exportacion = publicar.exportar(actor);
+        return ResponseEntity.ok().contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"diagnostico.csv\"")
+                .body(salida -> escribirCsv(exportacion, salida));
     }
 
     // ----------------------------------------------------------------------------------------- las personas
@@ -227,6 +237,23 @@ public class DiagnosticoAdminController {
         byte[] cuerpo = ("﻿" + contenido).getBytes(StandardCharsets.UTF_8);
         return ResponseEntity.ok().contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + nombre + "\"").body(cuerpo);
+    }
+
+    /** El BOM de UTF-8 (lo que Excel pide para abrir bien las tildes) y después cada fila, una por una. */
+    private static void escribirCsv(ExportacionDelDiagnostico exportacion, OutputStream salida) throws IOException {
+        salida.write(BOM_UTF8);
+        try {
+            exportacion.filas(fila -> {
+                try {
+                    salida.write(fila.getBytes(StandardCharsets.UTF_8));
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            });
+        } catch (UncheckedIOException e) {
+            throw e.getCause();
+        }
+        salida.flush();
     }
 
     record ConDependientes(String message, Instant timestamp, String codigo, List<Integer> dependientes) {

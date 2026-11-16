@@ -1,9 +1,11 @@
 package com.renaser.os.rocks.infrastructure.adapter.in.rest.cierre;
 
+import com.renaser.os.rocks.application.ports.in.cierre.CerrarElDiaSinRedUseCase;
 import com.renaser.os.rocks.application.ports.in.cierre.CerrarElDiaUseCase;
 import com.renaser.os.rocks.application.ports.in.cierre.CerrarElDiaUseCase.CerrarElDia;
 import com.renaser.os.rocks.application.ports.in.cierre.CerrarElDiaUseCase.RespuestaDeAccion;
 import com.renaser.os.rocks.application.ports.in.cierre.ConsultarCierreDelDiaUseCase;
+import com.renaser.os.shared.domain.HechoSinRed;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
@@ -36,10 +38,13 @@ public class CierreDelDiaController {
 
     private final ConsultarCierreDelDiaUseCase consultar;
     private final CerrarElDiaUseCase cerrar;
+    private final CerrarElDiaSinRedUseCase cerrarSinRed;
 
-    public CierreDelDiaController(ConsultarCierreDelDiaUseCase consultar, CerrarElDiaUseCase cerrar) {
+    public CierreDelDiaController(ConsultarCierreDelDiaUseCase consultar, CerrarElDiaUseCase cerrar,
+                                  CerrarElDiaSinRedUseCase cerrarSinRed) {
         this.consultar = consultar;
         this.cerrar = cerrar;
+        this.cerrarSinRed = cerrarSinRed;
     }
 
     @RequiresPermission(value = Permission.FOLLOW_OWN_PROGRAM, scope = "el propio cierre; cuenta activa y programa andando (AccesoARocas)")
@@ -52,11 +57,14 @@ public class CierreDelDiaController {
 
     @RequiresPermission(value = Permission.FOLLOW_OWN_PROGRAM, scope = "el propio cierre de HOY; cuenta activa y programa andando (AccesoARocas)")
     @PutMapping
-    public ResponseEntity<CierreDelDiaResponse> cerrar(@ActorAutenticado UserId actor, @Valid @RequestBody CerrarElDiaRequest request) {
+    public ResponseEntity<CierreDelDiaResponse> cerrar(@ActorAutenticado UserId actor, HechoSinRed sinRed,
+                                                       @Valid @RequestBody CerrarElDiaRequest request) {
         var acciones = request.acciones().stream()
                 .map(a -> new RespuestaDeAccion(a.id(), a.motivo(), a.manana(), a.nota()))
                 .toList();
-        return sinCache(CierreDelDiaResponse.from(cerrar.cerrar(new CerrarElDia(actor, request.fecha(), acciones, request.nota()))));
+        var pedido = new CerrarElDia(actor, request.fecha(), acciones, request.nota());
+        // Spec 048 (FR-019): con X-Id-Cliente y X-Hecho-En es lo hecho sin red, con su hora real; sin ellas, lo de siempre.
+        return sinCache(CierreDelDiaResponse.from(sinRed == null ? cerrar.cerrar(pedido) : cerrarSinRed.cerrar(pedido, sinRed)));
     }
 
     private static ResponseEntity<CierreDelDiaResponse> sinCache(CierreDelDiaResponse cuerpo) {

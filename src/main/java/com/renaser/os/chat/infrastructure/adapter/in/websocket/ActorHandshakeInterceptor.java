@@ -1,6 +1,11 @@
 package com.renaser.os.chat.infrastructure.adapter.in.websocket;
 
+import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.TopeDeSesion;
+import com.renaser.os.shared.web.security.FiltroDeTopeDeSesion;
 import com.renaser.os.shared.web.security.SesionDeSoloLectura;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
@@ -14,6 +19,7 @@ import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.server.HandshakeInterceptor;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -42,6 +48,11 @@ import java.util.UUID;
  *
  * <p>El atributo {@link #ATRIBUTO_ACTOR_ID} no cambia de nombre ni de tipo: es lo que
  * {@link SubscripcionAutorizadaInterceptor} lee para autorizar cada suscripcion.
+ *
+ * <p><b>El tope absoluto de la sesion (spec 050, tramo E; FR-028).</b> Una sesion que se creo hace mas que
+ * {@code renaser.sesion.tope-absoluto} no abre el socket: se borra y el handshake responde 401. Es la misma regla que
+ * {@code FiltroDeTopeDeSesion} aplica al HTTP; aca hace falta aparte porque el token tambien puede llegar por
+ * {@code ?token=} (el navegador), y ese camino no lo ve el filtro.
  */
 @Component
 class ActorHandshakeInterceptor implements HandshakeInterceptor {
@@ -60,9 +71,21 @@ class ActorHandshakeInterceptor implements HandshakeInterceptor {
     static final String PARAMETRO_SESION = "token";
 
     private final SessionRepository<? extends Session> sessionRepository;
+    private final TopeDeSesion topeDeSesion;
+    private final Clock clock;
 
-    ActorHandshakeInterceptor(SessionRepository<? extends Session> sessionRepository) {
+    /** El de producción: el tope sale de la propiedad (vacía o {@code 0} = sin tope), como en el filtro HTTP. */
+    @Autowired
+    ActorHandshakeInterceptor(SessionRepository<? extends Session> sessionRepository,
+                              @Value(FiltroDeTopeDeSesion.PROPIEDAD) Duration tope, Clock clock) {
+        this(sessionRepository, TopeDeSesion.de(tope), clock);
+    }
+
+    ActorHandshakeInterceptor(SessionRepository<? extends Session> sessionRepository, TopeDeSesion topeDeSesion,
+                              Clock clock) {
         this.sessionRepository = sessionRepository;
+        this.topeDeSesion = topeDeSesion;
+        this.clock = clock;
     }
 
     @Override
@@ -70,6 +93,11 @@ class ActorHandshakeInterceptor implements HandshakeInterceptor {
                                    WebSocketHandler wsHandler, Map<String, Object> attributes) {
         String idSesion = idDeSesion(request);
         Session sesion = idSesion == null ? null : sesionVigente(idSesion);
+        if (sesion != null && venceElTope(sesion)) {
+            sessionRepository.deleteById(idSesion);
+            response.setStatusCode(HttpStatus.UNAUTHORIZED);
+            return false;
+        }
         UUID actorId = sesion == null ? null : actorDeLaSesion(sesion);
         if (actorId == null) {
             response.setStatusCode(HttpStatus.FORBIDDEN);
@@ -111,6 +139,10 @@ class ActorHandshakeInterceptor implements HandshakeInterceptor {
             return null;
         }
         return valores.getFirst().trim();
+    }
+
+    private boolean venceElTope(Session sesion) {
+        return topeDeSesion.vencida(sesion.getCreationTime(), clock.now());
     }
 
     private Session sesionVigente(String idSesion) {

@@ -7,5 +7,10 @@ import java.time.Instant;
 /** {@code tipo}: FOTO/VIDEO/AUDIO/TEXTO/CAPTURA. Ver `RegistrarEvidenciaPort` para que campos exige cada uno. */
 public record SubirEvidenciaRegistroRequest(@NotBlank String tipo, String bucket, String rutaStorage,
                                              String contenidoTexto, Instant timestampExif, Double gpsLat,
-                                             Double gpsLng) {
+                                             Double gpsLng, Boolean hechoSinRed) {
+
+    public SubirEvidenciaRegistroRequest(String tipo, String bucket, String rutaStorage, String contenidoTexto,
+                                         Instant timestampExif, Double gpsLat, Double gpsLng) {
+        this(tipo, bucket, rutaStorage, contenidoTexto, timestampExif, gpsLat, gpsLng, null);
+    }
 }

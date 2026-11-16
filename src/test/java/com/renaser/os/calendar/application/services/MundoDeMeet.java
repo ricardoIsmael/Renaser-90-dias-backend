@@ -1,5 +1,6 @@
 package com.renaser.os.calendar.application.services;
 
+import com.renaser.os.calendar.application.ports.in.evento.CancelarOcurrenciaUseCase;
 import com.renaser.os.calendar.application.ports.in.evento.EventoVista;
 import com.renaser.os.calendar.application.ports.in.evento.ListarEventosParaVisorUseCase.OcurrenciaVista;
 import com.renaser.os.calendar.application.ports.out.meet.ConfiguracionDeGooglePort;
@@ -147,7 +148,25 @@ final class MundoDeMeet {
         public boolean tomarNotas() {
             return tomarNotas;
         }
+
+        @Override
+        public boolean coanfitriones() {
+            return coanfitriones;
+        }
+
+        @Override
+        public boolean salasConMeetApi() {
+            return salasConMeetApi;
+        }
     };
+
+    /** FR-040/FR-041: crear con la Meet API y migrar las de Calendar. Apagado por defecto, como en producción. */
+    boolean salasConMeetApi = false;
+
+    /** FR-038: hacer coanfitrión a quien dirige. Apagado por defecto, como en producción. */
+    boolean coanfitriones = false;
+    /** El mentor de cada grupo (el puerto de comunidad). */
+    final Map<java.util.UUID, UserId> mentorDeGrupo = new HashMap<>();
 
     /** Las opciones de la sala (decisión 6 del dueño, FR-035 y FR-036): todo sí, como en producción. */
     boolean invitarAlCreador = true;
@@ -191,14 +210,25 @@ final class MundoDeMeet {
         ApplicationEventPublisher publicador = eventosPublicados::add;
         revocacion = new RevocacionDeLaCuenta(cuenta, cuenta, salas, auditor, publicador, mock(PlatformTransactionManager.class), reloj);
         pasos = new PasosConGoogle(google, salas, auditor, revocacion, reloj, () -> 0.0, configuracion);
-        sincronizador = new SincronizadorDeSalas(eventos, eventos, eventos, salas, salas, configuracion, pasos, reloj, ids, correos);
+        sincronizador = new SincronizadorDeSalas(eventos, eventos, eventos, salas, salas, configuracion, pasos, reloj, ids, correos,
+                celula -> java.util.Optional.ofNullable(mentorDeGrupo.get(celula)));
         acceso = new AccesoEventoService(this::progreso, null, null, (usuario, tipo) -> false, (celula, usuario) -> false,
                 new AlcanceDeFormacionSoloEscuela());
         disponibilidad = new DisponibilidadDeLasSalas(interruptores, configuracion, cuenta);
-        trabajo = new TrabajoEnSegundoPlanDeMeetService(cuenta, salas, salas, auditoriaDeGoogle, sincronizador, revocacion, auditor);
+        trabajo = new TrabajoEnSegundoPlanDeMeetService(cuenta, salas, salas, auditoriaDeGoogle, sincronizador, revocacion, auditor, configuracion);
         reintento = new ReintentoDeSalaDeMeetService(acceso, disponibilidad, sincronizador, eventos, this::obtener, auditor, reloj);
         servicio = new EventoConSalaDeMeetService(this::listar, this::obtener, this::crear, this::actualizar, this::eliminar,
-                this::cancelar, eventos, salas, salas, acceso, disponibilidad, sincronizador, auditor, reloj);
+                new CancelarOcurrenciaUseCase() {
+                    @Override
+                    public void cancelar(UserId actor, EventoId id, Instant inicio) {
+                        MundoDeMeet.this.cancelar(actor, id, inicio);
+                    }
+
+                    @Override
+                    public void cancelarDesde(UserId actor, EventoId id, Instant inicio) {
+                        throw new UnsupportedOperationException("no se usa en este mundo");
+                    }
+                }, eventos, salas, salas, acceso, disponibilidad, sincronizador, auditor, reloj);
     }
 
     // ─── Escenario ──────────────────────────────────────────────────────────────

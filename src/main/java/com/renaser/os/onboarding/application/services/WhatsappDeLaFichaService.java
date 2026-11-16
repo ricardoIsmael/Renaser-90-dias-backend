@@ -4,6 +4,7 @@ import com.renaser.os.onboarding.application.ports.out.respuesta.LeerRespuestasP
 import com.renaser.os.onboarding.domain.model.caja.FichaDeEnvio;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.WhatsappDeLaFichaFinder;
+import com.renaser.os.users.api.WhatsappEnOtraFicha;
 import org.springframework.stereotype.Service;
 
 import java.util.Collection;
@@ -18,7 +19,7 @@ import java.util.Map;
  * clave: el dato vive en un solo lugar y no se copia. Un valor vacío cuenta como «no lo tiene».
  */
 @Service
-class WhatsappDeLaFichaService implements WhatsappDeLaFichaFinder {
+class WhatsappDeLaFichaService implements WhatsappDeLaFichaFinder, WhatsappEnOtraFicha {
 
     private final LeerRespuestasPorClavePort respuestas;
 
@@ -36,5 +37,11 @@ class WhatsappDeLaFichaService implements WhatsappDeLaFichaFinder {
             }
         });
         return whatsapps;
+    }
+
+    /** Spec 053: la misma respuesta que lee la recuperación, comparada sin separadores y sin contar la cuenta que pregunta. */
+    @Override
+    public boolean loTieneOtraPersona(String numeroInternacional, UserId excepto) {
+        return respuestas.otraPersonaTieneTexto(FichaDeEnvio.CLAVE_CELULAR, numeroInternacional, excepto);
     }
 }

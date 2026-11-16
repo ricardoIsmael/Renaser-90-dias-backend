@@ -122,7 +122,7 @@ class PlanDeLaSemanaServiceTest {
                 .isInstanceOf(NoSuchElementException.class);
         assertThatThrownBy(() -> service.consultar(ACTOR, habito.id(), SEMANA)).isInstanceOf(NoSuchElementException.class);
 
-        verify(savePreferenciaPort, never()).guardarFechasPropias(any(), anyCollection());
+        verify(savePreferenciaPort, never()).guardarFechasPropias(any(), anyCollection(), any());
     }
 
     @Test
@@ -144,7 +144,7 @@ class PlanDeLaSemanaServiceTest {
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Collection<FechaPropia>> filas = ArgumentCaptor.forClass(Collection.class);
-        verify(savePreferenciaPort).guardarFechasPropias(eq(ACTOR), filas.capture());
+        verify(savePreferenciaPort).guardarFechasPropias(eq(ACTOR), filas.capture(), any());
         assertThat(filas.getValue()).hasSize(2);
         var sabado = filas.getValue().stream().filter(f -> f.fecha().equals(LocalDate.of(2026, 11, 7))).findFirst().orElseThrow();
         assertThat(sabado.horaDisparo()).isEqualTo(LocalTime.of(9, 0));
@@ -162,7 +162,7 @@ class PlanDeLaSemanaServiceTest {
         assertThatThrownBy(() -> service.guardar(ACTOR, habito.id(), SEMANA, List.of(mover(LocalDate.of(2026, 11, 3), 9))))
                 .isInstanceOf(IllegalArgumentException.class);
 
-        verify(savePreferenciaPort, never()).guardarFechasPropias(any(), anyCollection());
+        verify(savePreferenciaPort, never()).guardarFechasPropias(any(), anyCollection(), any());
     }
 
     @Test
@@ -183,7 +183,7 @@ class PlanDeLaSemanaServiceTest {
                 new CambioDeFecha(LocalDate.of(2026, 11, 8), false, null, LocalTime.of(23, 59), null, null, null))))
                 .isInstanceOf(IllegalArgumentException.class);
 
-        verify(savePreferenciaPort, never()).guardarFechasPropias(any(), anyCollection());
+        verify(savePreferenciaPort, never()).guardarFechasPropias(any(), anyCollection(), any());
         verify(savePreferenciaPort, never()).borrarParaFechas(any(), anyCollection());
     }
 
@@ -199,7 +199,7 @@ class PlanDeLaSemanaServiceTest {
         assertThatThrownBy(() -> service.guardar(ACTOR, obligatorio.id(), SEMANA,
                 List.of(new CambioDeFecha(LocalDate.of(2026, 11, 7), false, false, null, null, null, null))))
                 .isInstanceOf(IllegalStateException.class);
-        verify(savePreferenciaPort, never()).guardarFechasPropias(any(), anyCollection());
+        verify(savePreferenciaPort, never()).guardarFechasPropias(any(), anyCollection(), any());
     }
 
     @Test
@@ -245,7 +245,7 @@ class PlanDeLaSemanaServiceTest {
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Collection<FechaPropia>> filas = ArgumentCaptor.forClass(Collection.class);
-        verify(savePreferenciaPort).guardarFechasPropias(eq(ACTOR), filas.capture());
+        verify(savePreferenciaPort).guardarFechasPropias(eq(ACTOR), filas.capture(), any());
         assertThat(filas.getValue()).extracting(FechaPropia::fecha).containsExactly(LocalDate.of(2027, 1, 9));
     }
 
@@ -265,7 +265,7 @@ class PlanDeLaSemanaServiceTest {
         assertThatThrownBy(() -> service.guardar(ACTOR, habito.id(), fuera, List.of(mover(LocalDate.of(2027, 1, 23), 9))))
                 .isInstanceOf(IllegalArgumentException.class);
 
-        verify(savePreferenciaPort, never()).guardarFechasPropias(any(), anyCollection());
+        verify(savePreferenciaPort, never()).guardarFechasPropias(any(), anyCollection(), any());
         verify(savePreferenciaPort, never()).borrarParaFechas(any(), anyCollection());
         // Ni siquiera se busca el habito: se rechaza antes.
         verifyNoInteractions(catalogoAplicable);

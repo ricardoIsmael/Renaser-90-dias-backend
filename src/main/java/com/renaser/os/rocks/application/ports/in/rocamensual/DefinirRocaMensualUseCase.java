@@ -35,6 +35,9 @@ public interface DefinirRocaMensualUseCase {
 
     RocaMensual definir(DefinirRocaMensualCommand command);
 
+    /** Lo mismo con el instante ya decidido (spec 048): lo hecho sin red corre sus reglas con la hora real, no con la de llegada. */
+    RocaMensual definir(DefinirRocaMensualCommand command, java.time.Instant referencia);
+
     record DefinirRocaMensualCommand(@NotNull UserId actorId,
                                       @NotNull EjeObjetivo eje,
                                       @Min(1) @Max(MesPrograma.MAXIMO_DE_MESES) int numeroMes,

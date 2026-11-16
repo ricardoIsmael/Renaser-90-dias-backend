@@ -215,4 +215,30 @@ class EvidenciaRegistroServiceTest {
 
         verify(registrarEvidenciaPort).registrar(any());
     }
+
+    @Test
+    @DisplayName("Spec 048: la foto de lo marcado sin red entra aunque su día ya haya terminado (no da puntos, no rebota)")
+    void laEvidenciaDeLoHechoSinRedEntraConElDiaCerrado() { // spec 048 FR-012
+        var alDiaSiguiente = new EvidenciaRegistroService(loadRegistroPort, progresoPort, registrarEvidenciaPort,
+                almacenamientoPort, UUID::randomUUID, FixedClock.at(Instant.parse("2026-08-26T15:00:00Z")));
+        RegistroHabito delVeinticinco = registroDe(actorId);
+        when(loadRegistroPort.byId(delVeinticinco.id())).thenReturn(Optional.of(delVeinticinco));
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(false)));
+
+        alDiaSiguiente.solicitarUrlHechoSinRed(new SolicitarUrlEvidenciaRegistroCommand(actorId, delVeinticinco.id(), "image/jpeg"));
+        alDiaSiguiente.subirHechoSinRed(comandoTexto(actorId, delVeinticinco));
+
+        verify(almacenamientoPort).firmarSubida(any(), any(), any());
+        verify(registrarEvidenciaPort).registrar(any());
+    }
+
+    @Test
+    @DisplayName("Spec 048: sin red tampoco se toca la evidencia de otra persona")
+    void laEvidenciaSinRedDeOtraPersonaSeRechaza() {
+        RegistroHabito ajeno = registroDe(UserId.of(UUID.randomUUID()));
+        when(loadRegistroPort.byId(ajeno.id())).thenReturn(Optional.of(ajeno));
+
+        assertThatThrownBy(() -> service.subirHechoSinRed(comandoTexto(actorId, ajeno))).isInstanceOf(RuntimeException.class);
+        verify(registrarEvidenciaPort, never()).registrar(any());
+    }
 }

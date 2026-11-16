@@ -16,6 +16,7 @@ import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.NoSuchElementException;
@@ -83,15 +84,19 @@ public class PastillaRenacerHabitoService implements CompletarPastillaRenacerUse
     private final LoadRegistroHabitoPort loadRegistroPort;
     private final ConsultarProgresoParticipanteHabitsPort progresoPort;
     private final CompletarRegistroUseCase completarRegistroUseCase;
+    /** Spec 048 (#186): el cierre con la hora real de lo entregado sin red; el mismo cálculo de puntos de siempre. */
+    private final RegistroService registros;
     private final Clock clock;
 
     public PastillaRenacerHabitoService(LoadHabitoPort loadHabitoPort, LoadRegistroHabitoPort loadRegistroPort,
                                          ConsultarProgresoParticipanteHabitsPort progresoPort,
-                                         CompletarRegistroUseCase completarRegistroUseCase, Clock clock) {
+                                         CompletarRegistroUseCase completarRegistroUseCase, RegistroService registros,
+                                         Clock clock) {
         this.loadHabitoPort = loadHabitoPort;
         this.loadRegistroPort = loadRegistroPort;
         this.progresoPort = progresoPort;
         this.completarRegistroUseCase = completarRegistroUseCase;
+        this.registros = registros;
         this.clock = clock;
     }
 
@@ -124,6 +129,34 @@ public class PastillaRenacerHabitoService implements CompletarPastillaRenacerUse
         // Gesto PROPIO: este es el camino legitimo de la Pastilla y PoliticaPastillaRenacer le cierra el generico (E-652).
         RegistroHabito completado = completarRegistroUseCase.completar(
                 new CompletarRegistroCommand(participanteId, track.id(), resumen, null, GestoCompletar.PROPIO_DEL_HABITO));
+        return Optional.of(new RegistroCompletado(completado.id().value(), completado.puntosOtorgados()));
+    }
+
+    /**
+     * Spec 048 (#186): lo mismo que {@link #completarDeHoy} para el día de la hora real, cerrando con esa hora
+     * ({@link RegistroService#completarConHoraReal}: acepta el registro aunque el barrido ya lo haya vencido). Con el mismo cerrojo y el
+     * mismo gesto propio; la diferencia es solo QUE día se busca y CON qué hora se calculan los puntos.
+     */
+    @Override
+    public Optional<RegistroCompletado> completarSinRed(UserId participanteId, String resumen, LocalDate dia, Instant hechoEn,
+                                                        boolean conPuntos) {
+        ProgresoParticipanteHabits progreso = requireProgresoNoSuspendido(participanteId);
+        Optional<Habito> habito = loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_PASTILLA_RENACER, progreso.formacion());
+        if (habito.isEmpty()) {
+            return Optional.empty();
+        }
+        Optional<RegistroHabito> registro = loadRegistroPort
+                .porParticipanteHabitoYFechaParaEscritura(participanteId, habito.get().id(), dia);
+        if (registro.isEmpty()) {
+            return Optional.empty();
+        }
+        RegistroHabito track = registro.get();
+        if (track.estado() == EstadoRegistro.COMPLETADO) {
+            return Optional.of(new RegistroCompletado(track.id().value(), track.puntosOtorgados()));
+        }
+        RegistroHabito completado = registros.completarConHoraReal(
+                new CompletarRegistroCommand(participanteId, track.id(), resumen, null, GestoCompletar.PROPIO_DEL_HABITO),
+                hechoEn, conPuntos);
         return Optional.of(new RegistroCompletado(completado.id().value(), completado.puntosOtorgados()));
     }
 

@@ -35,8 +35,15 @@ public interface RepetirSemanaUseCase {
      */
     ResultadoDeRepeticion repetir(UserId actorId, SemanaCalendaria modelo, SemanaCalendaria destino, boolean reemplazar);
 
+    /** Lo mismo con el instante ya decidido (spec 048): lo hecho sin red corre sus reglas (ventana, cuota, semana libre) con la hora real. */
+    ResultadoDeRepeticion repetir(UserId actorId, SemanaCalendaria modelo, SemanaCalendaria destino, boolean reemplazar,
+                                  java.time.Instant ahora);
+
     /** «Deshacer»: TODA la semana (todos los habitos) vuelve al plan de siempre, solo en fechas posteriores a hoy. Devuelve cuantas fechas. */
     int deshacerSemana(UserId actorId, SemanaCalendaria semana);
+
+    /** Lo mismo con el instante ya decidido (spec 048): lo hecho sin red corre sus reglas (ventana, cuota, semana libre) con la hora real. */
+    int deshacerSemana(UserId actorId, SemanaCalendaria semana, java.time.Instant ahora);
 
     /** Lo que quedaria en una fecha del destino; {@code propio == null}: la fecha vuelve al plan de siempre. */
     record DiaDeLaOferta(LocalDate fecha, DayOfWeek diaSemana, boolean activo, LocalTime horaDisparo, Boolean recordatorioActivo,

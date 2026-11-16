@@ -459,6 +459,9 @@ nombre; él ve el Muro, Tribu y Ranking del Diplomado; no ve nada de la Escuela.
 - **FR-048**: Administración y Alquimista MUST usar el mismo selector con las tres formaciones; las listas de administración
   (moderación, soportes, eventos, cursos, testimonios) MUST ofrecer «Todas» con cada fila rotulada; crear o editar MUST ocurrir
   siempre en una formación concreta.
+  **Corregido 2026-11-10 (app #169, decisión del dueño):** el selector de la **Comunidad** ya no ofrece «Todas»: Administración,
+  Alquimista y Soporte TI miran siempre una formación a la vez (sin nada recordado, la activa o la primera de la sesión), para que el
+  Muro y las demás secciones no pidan lo de todas juntas. Las listas de los paneles de administración fuera de la Comunidad no cambian.
 - **FR-049**: El líder de mentores MUST ver lo suyo (Mis mentores, tickets, semáforo por grupos, fichas) de la formación activa.
 
 **Pantallas**

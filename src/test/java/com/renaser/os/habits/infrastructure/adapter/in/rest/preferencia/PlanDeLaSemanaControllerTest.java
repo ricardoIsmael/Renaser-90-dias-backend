@@ -51,6 +51,7 @@ class PlanDeLaSemanaControllerTest {
 
     @Autowired MockMvc mvc;
     @MockitoBean PlanDeLaSemanaUseCase useCase;
+    @MockitoBean com.renaser.os.habits.application.ports.in.preferencia.PlanDeLaSemanaSinRedUseCase sinRed;
     @MockitoBean UserSummaryFinder users;
     private final UserId actor = UserId.of(UUID.randomUUID());
     private final HabitoId habito = HabitoId.of(UUID.randomUUID());

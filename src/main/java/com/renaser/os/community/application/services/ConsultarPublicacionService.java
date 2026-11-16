@@ -1,5 +1,6 @@
 package com.renaser.os.community.application.services;
 
+import com.renaser.os.community.domain.model.publicacion.MiniaturaDeFoto;
 import com.renaser.os.community.api.AcompanamientoFinder;
 import com.renaser.os.community.application.ports.in.publicacion.ConsultarFeedUseCase.MediaFirmada;
 import com.renaser.os.community.application.ports.in.publicacion.ConsultarPublicacionUseCase;
@@ -123,8 +124,8 @@ public class ConsultarPublicacionService implements ConsultarPublicacionUseCase 
         PerfilUsuario autor = perfiles.porId(publicacion.autorId()).orElse(null);
         List<MediaFirmada> media = publicacion.media().stream()
                 .sorted(Comparator.comparingInt(m -> m.orden()))
-                .map(m -> new MediaFirmada(almacenamiento.firmarLectura(m.ruta(), VALIDEZ_URL_LECTURA), m.mime(),
-                        m.orden()))
+                .map(m -> new MediaFirmada(almacenamiento.firmarLectura(m.ruta(), VALIDEZ_URL_LECTURA), m.mime(), m.orden(),
+                        MiniaturaDeFoto.rutaDe(m.ruta()).map(r -> almacenamiento.firmarLectura(r, VALIDEZ_URL_LECTURA)).orElse(null)))
                 .toList();
         return new PublicacionParaLeer(publicacion.id().value(), publicacion.autorId(),
                 autor == null ? null : autor.nombreCompleto(), autor == null ? null : autor.avatarUrl(),

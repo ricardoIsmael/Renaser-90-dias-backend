@@ -77,6 +77,8 @@ class RocaMensualControllerTest {
     @MockitoBean
     private DefinirRocaMensualUseCase definirUseCase;
     @MockitoBean
+    private com.renaser.os.rocks.application.ports.in.rocasemanal.ObjetivosSinRedUseCase sinRedUseCase;
+    @MockitoBean
     private UserSummaryFinder userSummaryFinder;
 
     private UUID actorId;

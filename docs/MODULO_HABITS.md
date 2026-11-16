@@ -1506,6 +1506,9 @@ sin política); solo la pantalla pedía las respuestas. Ahora lo exige el servid
   el audio y responde las dos preguntas.». La app ya muestra el mensaje del servidor.
 - **No cambia** ningún otro hábito, el cálculo de puntos, el cerrojo de la Pastilla ni `/spirit-audio/submit` (que sigue
   validando solo que el texto no esté vacío).
+
+  > **Agregado 2026-11-11 (D-341, issue #186).** `/spirit-audio/submit` también acepta las tres cabeceras de lo hecho sin red (`X-Id-Cliente`, `X-Hecho-En`, `X-Origen-De-La-Hora`): con ellas va por `PastillaSinRedService`
+  > y la entrega y el hábito se registran con la hora real (`PastillaRenacerHabitoService.completarSinRed`, con el mismo gesto propio); sin ellas, igual que arriba. Contrato en `docs/api/CONTRATO_DIA_A_DIA.md`.
 - **App.** El Training nuevo (spec 014) ya no ofrece el ✓ en estos dos hábitos; el APK publicado sí, y desde este cambio
   recibe el rechazo en vez de cerrar el hábito. No hace falta APK nuevo.
 - Pruebas: `RegistroServiceTest` (los cinco caminos), `PoliticaPastillaRenacerTest`, `PoliticaAudioterapiaTest`,

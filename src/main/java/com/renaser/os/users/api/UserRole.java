@@ -50,6 +50,9 @@ public enum UserRole {
      * propios. MENTOR, ADMIN y ALCHEMIST siguen sin matriz — sigue siendo la deuda A-1.
      * </blockquote>
      *
+     * <blockquote><b>Corregido 2026-11-12 (spec 050, tramo H, D-349).</b> MENTOR y TRAINEE_GUIDE ya la tienen
+     * ({@link #PERMISOS_MENTOR_Y_GUIA}); solo ADMIN y ALCHEMIST siguen sin matriz.</blockquote>
+     *
      * <p>Los permisos de TRAINEE salen de los guards ya existentes en cada servicio, no de una
      * lista deseada. Los de MENTOR_LEAD, de la matriz de roles de la especificacion del cliente
      * ({@code docs/spec/Especificacion_Requisitos_Renaser_OS.docx} §2.3 y HU-05) contrastada
@@ -127,6 +130,49 @@ public enum UserRole {
             Permission.MANAGE_CALENDAR);
 
     /**
+     * Matriz de MENTOR y TRAINEE_GUIDE (spec 050, tramo H, FR-040; D-349): <b>una lista de permitidos, negada por
+     * defecto</b>. Es una sola porque D-265 los define como lo mismo ({@link #actuaComoMentor()}). La tabla la aprobó el
+     * dueño el 2026-11-12 (D18 de la spec) a partir del inventario de los handlers y de lo que la app de Mentoría usa;
+     * <b>un permiso que no está aquí se niega</b>, también el que se agregue mañana al vocabulario:
+     * {@code UserRoleTest} falla si la lista crece o si un permiso queda sin clasificar.
+     *
+     * <p><b>Lo que se permite y por qué:</b>
+     * <ul>
+     *   <li>{@link Permission#USE_APP}, {@link Permission#TRACK_PROGRAM_AS_STAFF}, {@link Permission#FOLLOW_OWN_PROGRAM}
+     *       y {@link Permission#PUBLISH_ON_WALL}: la cuenta activa, su seguimiento personal opcional, su propio programa
+     *       (los servicios dejan pasar a un no-aprendiz solo si lo activó) y el Muro.</li>
+     *   <li>{@link Permission#OPEN_SUPPORT_TICKET}, {@link Permission#USE_MENTOR_TICKETS} y
+     *       {@link Permission#ANSWER_MENTOR_TICKET}: soporte, y la bandeja de tickets de mentoría de sus aprendices
+     *       (el alcance por aprendiz lo da el servicio).</li>
+     *   <li>{@link Permission#VIEW_OWN_PHASE_CONTRACTS} y {@link Permission#SIGN_PHASE_CONTRACT}: recorre el programa
+     *       como un aprendiz.</li>
+     *   <li>{@link Permission#MANAGE_CALENDAR}, {@link Permission#MANAGE_CELLS} y {@link Permission#MANAGE_COHORTS}:
+     *       <b>solo porque la app del mentor los usa</b> (crear sus eventos, leer su grupo y cambiar su foto, leer su
+     *       cohorte). Son permisos de administración que mezclan eso con escrituras que no son suyas: el filtro por lo
+     *       propio lo dan los guards de los servicios, que se quedan (FR-042), y partirlos en permisos propios queda
+     *       fuera de esta spec.</li>
+     * </ul>
+     *
+     * <p><b>Lo que se niega, a propósito:</b> todo lo demás, entre otros {@link Permission#MODERATE_WALL},
+     * {@link Permission#MANAGE_EVIDENCE}, {@link Permission#OPEN_MENTOR_TICKET} (lo abre el aprendiz),
+     * {@link Permission#VIEW_ALL_MENTOR_TICKETS} y los de la jefatura de mentores, {@link Permission#EXPORT_RANKING}
+     * (D-278) y {@link Permission#OPERATE_PLATFORM}.
+     */
+    private static final Set<Permission> PERMISOS_MENTOR_Y_GUIA = EnumSet.of(
+            Permission.USE_APP,
+            Permission.FOLLOW_OWN_PROGRAM,
+            Permission.PUBLISH_ON_WALL,
+            Permission.TRACK_PROGRAM_AS_STAFF,
+            Permission.OPEN_SUPPORT_TICKET,
+            Permission.USE_MENTOR_TICKETS,
+            Permission.ANSWER_MENTOR_TICKET,
+            Permission.VIEW_OWN_PHASE_CONTRACTS,
+            Permission.SIGN_PHASE_CONTRACT,
+            Permission.MANAGE_CALENDAR,
+            Permission.MANAGE_CELLS,
+            Permission.MANAGE_COHORTS);
+
+    /**
      * Nombre para mostrar en español (spec 001 de hábitos por rol, D-264). Vive junto al enum para que un rol nuevo
      * traiga su nombre en el mismo cambio, y una app ya publicada lo muestre sin otra versión.
      */
@@ -152,26 +198,24 @@ public enum UserRole {
     }
 
     /**
-     * <b>HUECO DE SEGURIDAD DELIBERADO Y TEMPORAL (A-1), ya no completo.</b> TRAINEE y
-     * MENTOR_LEAD consultan su matriz real. Para MENTOR, TRAINEE_GUIDE (D-265: lo mismo que MENTOR), ADMIN y
-     * ALCHEMIST <b>sigue devolviendo
-     * {@code true}</b> — falla-abierto, no falla-cerrado — porque CLAUDE.MD §0.6 prohibe
-     * inventar que puede hacer cada uno de esos roles sin que el dueño del proyecto lo
-     * confirme. No se esconde detras de un {@code default} silencioso: el {@code switch} nombra
-     * uno por uno los que siguen sin matriz, para que el hueco quede a la vista.
+     * <b>HUECO DE SEGURIDAD DELIBERADO Y TEMPORAL (A-1), cada vez más chico.</b> TRAINEE, MENTOR_LEAD, MENTOR y
+     * TRAINEE_GUIDE (D-265: lo mismo que MENTOR) consultan una matriz explícita, negada por defecto. Para ADMIN y
+     * ALCHEMIST <b>sigue devolviendo {@code true}</b> —falla-abierto, no falla-cerrado— porque CLAUDE.MD §0.6 prohibe
+     * inventar qué puede hacer cada uno sin que el dueño del proyecto lo confirme. No se esconde detrás de un
+     * {@code default} silencioso: el {@code switch} nombra uno por uno los que siguen sin matriz, para que el hueco
+     * quede a la vista, y {@code UserRoleTest} falla si otro rol cae en él.
      *
-     * <blockquote><b>Corregido 2026-09-09.</b> Esta rama decia
-     * {@code case MENTOR, MENTOR_LEAD, ADMIN, ALCHEMIST -> true}. MENTOR_LEAD salio de ahi por
-     * la decision DL-08 del SDD 002.</blockquote>
+     * <blockquote><b>Corregido 2026-11-12 (spec 050, tramo H, D-349).</b> Este javadoc decía que MENTOR y
+     * TRAINEE_GUIDE también fallaban abiertos, con una sola excepción a la vista ({@link Permission#EXPORT_RANKING},
+     * D-278): «un permiso nuevo pasaría solo para ellos». Ahora la matriz de los dos es una lista de permitidos
+     * aprobada por el dueño y esa excepción es una más de las que se niegan. Antes, el 2026-09-09 (DL-08), MENTOR_LEAD
+     * había salido del falla-abierto por el mismo camino.</blockquote>
      *
-     * <p><b>Una excepcion, a la vista (D-278):</b> {@link Permission#EXPORT_RANKING} es estricto tambien para
-     * MENTOR y TRAINEE_GUIDE. El dueño nombro cuatro roles para descargar el podio (MENTOR_LEAD, ADMIN, ALCHEMIST e
-     * IT_SUPPORT) y el falla-abierto se lo daria al mentor sin que nadie lo decidiera.
-     *
-     * <p><b>Devolver {@code false} aca no significa 403 todavia para MENTOR_LEAD:</b> quien
-     * decide si se deniega es {@code PermissionEnforcementInterceptor}, que para este rol
-     * arranca en <i>modo sombra</i> (registra lo que denegaria, sin denegar) hasta que el
-     * dueño active el cumplimiento. Esa es la secuencia de tres pasos de DL-08.
+     * <p><b>Devolver {@code false} aquí no significa 403 todavía para MENTOR_LEAD, MENTOR ni TRAINEE_GUIDE:</b> quien
+     * decide si se deniega es {@code PermissionEnforcementInterceptor}, que para esos tres roles arranca en <i>modo
+     * sombra</i> (registra lo que denegaría, sin denegar) hasta que el dueño active el cumplimiento. La matriz de
+     * MENTOR y TRAINEE_GUIDE se enciende con {@code renaser.security.mentor-enforcement} o, sin reiniciar, con
+     * {@code scripts/despliegue/permisos-modo.sh}.
      */
     public boolean can(Permission permission) {
         // Un permiso exclusivo de Soporte TI (OPERATE_PLATFORM) no pasa por el falla-abierto de abajo (D-267).
@@ -181,9 +225,8 @@ public enum UserRole {
         return switch (this) {
             case TRAINEE -> PERMISOS_TRAINEE.contains(permission);
             case MENTOR_LEAD -> PERMISOS_MENTOR_LEAD.contains(permission);
-            // D-278: EXPORT_RANKING es la excepcion al falla-abierto. Ni el mentor ni el guia pueden descargar el
-            // podio (el dueño nombro cuatro roles), asi que para ellos la matriz es estricta en ese permiso.
-            case MENTOR, TRAINEE_GUIDE -> permission != Permission.EXPORT_RANKING;
+            // Spec 050, tramo H: lista de permitidos, negada por defecto. Incluye la excepcion de D-278 (EXPORT_RANKING).
+            case MENTOR, TRAINEE_GUIDE -> PERMISOS_MENTOR_Y_GUIA.contains(permission);
             case ADMIN, ALCHEMIST -> true;
             // Soporte TI tiene todos los permisos de todos los roles más la consola (FR-023). Ojo: los guards de
             // Administración de los servicios todavía preguntan ADMIN/ALCHEMIST literal (D-267, pendiente).

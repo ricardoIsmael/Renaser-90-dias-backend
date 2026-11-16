@@ -437,6 +437,30 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         RegistroHabito registro = requireRegistro(command.registroId());
         ProgresoParticipanteHabits progreso = requireSelf(command.actorId(), registro.participanteId());
         requireDeUnDiaQueNoTermino(registro, ZoneId.of(progreso.timezone()));
+        return completarConHora(command, registro, clock.now(), true, false);
+    }
+
+    /**
+     * Spec 048 (FR-014, FR-015): completa con la hora REAL en que la persona lo marcó sin red, no con la de llegada. Lo usa
+     * {@link CompletarHechoSinRedService}, que ya decidió si esa hora está en regla.
+     *
+     * <ul>
+     *   <li>{@code enRegla}: los puntos se calculan con {@code hechoEn} y {@code completadoEn = hechoEn}. Se acepta aunque el
+     *       día ya haya cerrado y el barrido lo haya pasado a {@code EXPIRADO} (la excepción a D-259 la justifica la hora real).</li>
+     *   <li>Fuera de regla: se registra igual, con 0 puntos y la hora de llegada (nada rebota, decisión D14 del dueño).</li>
+     * </ul>
+     *
+     * Sin el chequeo del día ({@code requireDeUnDiaQueNoTermino}): ese es justamente el caso de lo que llega tarde.
+     */
+    @Transactional
+    RegistroHabito completarConHoraReal(CompletarRegistroCommand command, Instant hechoEn, boolean enRegla) {
+        RegistroHabito registro = requireRegistro(command.registroId());
+        requireSelf(command.actorId(), registro.participanteId());
+        return completarConHora(command, registro, enRegla ? hechoEn : clock.now(), enRegla, true);
+    }
+
+    private RegistroHabito completarConHora(CompletarRegistroCommand command, RegistroHabito registro, Instant ahora,
+                                            boolean conPuntos, boolean hechoSinRed) {
         Habito habito = requireHabito(registro.habitoId());
         // Spec 002: kilómetros y gimnasio tienen su propio interruptor, además del de los hábitos (la ruta).
         FuncionalidadesDeHabitos.exigirParaCompletar(interruptores, habito, command.actorId());
@@ -451,7 +475,6 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
             requireEvidenciaSiLaExige(habito, registro);
         }
 
-        Instant ahora = clock.now();
         VentanaEntrega ventana = resolverVentana(registro, habito);
         /* Aca vivia un `expirar()` + 409 "El habito expiro — no se puede completar". Se quita por
            pedido del dueno del proyecto, y la razon aguanta sola: registrar tarde es informacion,
@@ -473,7 +496,10 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
         // DESPERTAR se completaba y no pagaba nunca — el dueno lo definio al reves.
         int puntos = ResultadoOtorgamiento.PUNTOS_COMPLETOS;
         MotivoPuntos motivo = MotivoPuntos.HABIT_COMPLETED;
-        if (ventana != null) {
+        if (!conPuntos) {
+            puntos = 0;
+            motivo = MotivoPuntos.LATE_HABIT;
+        } else if (ventana != null) {
             ResultadoOtorgamiento resultado = ResultadoOtorgamiento.calcular(ventana.instanteAncla(), ahora,
                     ventana.extension());
             puntos = resultado.puntos();
@@ -487,8 +513,13 @@ public class RegistroService implements ConsultarTracksDelDiaUseCase, GenerarTra
             };
         }
 
-        registro.completar(puntos, command.respuestaTexto(), command.calificacionProductividad(), null,
-                command.medicion(), ahora);
+        if (hechoSinRed) {
+            registro.completarHechoSinRed(puntos, command.respuestaTexto(), command.calificacionProductividad(),
+                    command.medicion(), ahora);
+        } else {
+            registro.completar(puntos, command.respuestaTexto(), command.calificacionProductividad(), null,
+                    command.medicion(), ahora);
+        }
         RegistroHabito guardado = saveRegistroPort.save(registro);
 
         if (puntos > 0) {

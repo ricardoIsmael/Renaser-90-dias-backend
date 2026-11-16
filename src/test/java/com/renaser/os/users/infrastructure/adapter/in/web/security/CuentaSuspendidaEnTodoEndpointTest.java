@@ -14,6 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.annotation.AnnotatedElementUtils;
+import org.springframework.mock.env.MockEnvironment;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.objenesis.SpringObjenesis;
@@ -148,7 +149,8 @@ class CuentaSuspendidaEnTodoEndpointTest {
     @SuppressWarnings("unchecked")
     void todaRutaAutenticadaPasaPorElInterceptor() {
         RegistroLegible registro = new RegistroLegible();
-        new PermissionEnforcementWebConfig(mock(ObjectProvider.class), false).addInterceptors(registro);
+        new PermissionEnforcementWebConfig(mock(ObjectProvider.class), mock(ObjectProvider.class), mock(ObjectProvider.class),
+                new MockEnvironment()).addInterceptors(registro);
         List<MappedInterceptor> delInterceptor = registro.registrados().stream()
                 .filter(MappedInterceptor.class::isInstance)
                 .map(MappedInterceptor.class::cast)

@@ -21,7 +21,8 @@ Estado: **[x]** hecho y probado · **[ ]** pendiente. Decisión **D-311**, migra
 ## 4. Cumplir con SER apaga las alarmas
 - [x] T011 Backend: `habitoId` y `fecha` en `HabitoEnJuegoResumen` / `HabitoDelDia`; `HabitoCumplido` en `ResultadoHerramienta.Exito`; `ResultadoPropuestaResponse.habitoCumplido`.
 - [x] T012 App: `confirmarPropuestaRenasia` emite `habitoCumplido` (alarmas del día, celebración, semáforo, fénix) con el dato de la respuesta.
-- [ ] T013 (límite aceptado) Pastilla, Audioterapia y Clase por SER siguen sin avisar; sumar `HabitoCumplido` a sus tres confirmables.
+- [x] T013 Pastilla, Audioterapia y Clase por SER avisan el hábito cumplido: `CompletacionDeHabito.porHacerDeHoy` + `exitoConElHabito` en sus tres confirmables; `EntregasDeSerAvisanElHabitoCumplidoTest` (issue #99 de la app, E-676, 2026-11-09).
+  > **Corregido 2026-11-09.** Decía `[ ]` «(límite aceptado) … siguen sin avisar».
 
 ## 5. Día cerrado (D-259)
 - [x] T014 `EstadoDeHoy.DIA_CERRADO`; `LoQueLeFaltaHoy`, `SituacionDelTurnoService`, `PropuestaDeRegistrarConFoto`, `PropuestaDeMarcarHabito` y `CompletacionDeHabito` hablan de «día cerrado»; un `PENDIENTE` con la hora pasada sí se registra.

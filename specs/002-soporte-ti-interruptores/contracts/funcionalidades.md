@@ -135,8 +135,10 @@ app no tenga que conocer el árbol.
 | `POST /api/v1/soporte-ti/desbloqueo` | `{ "contrasena": "…", "para": "CONSOLA" \| "CAMBIO_CRITICO" }` | `200 { "token": "…", "venceEn": "…" }` · `401` contraseña mal · `429` cinco intentos en 15 min |
 | `GET /api/v1/soporte-ti/funcionalidades` | — | `200 [ { clave, madre, area, nombre, descripcion, rolesQueLaUsan, critica, porDefecto, prendidaGlobal, porRol: {ROL: bool}, aviso, version, actualizadoPor: {id, nombre}, actualizadoEn, circuito?: {estado, proximaPrueba} } ]` |
 | `PUT /api/v1/soporte-ti/funcionalidades/{clave}` | `{ "prendidaGlobal": true, "porRol": {"TRAINEE": false}, "aviso": "…", "motivo": "…", "version": 41 }` | `200` el estado nuevo · `409` versión vieja · `428` crítico sin reautenticación · `400` sin motivo o clave anti-bloqueo |
-| `GET /api/v1/soporte-ti/auditoria?clave=&actor=&desde=&hasta=&page=&size=` | — | `200 { contenido: [...], pagina, total }` |
+| `GET /api/v1/soporte-ti/auditoria?clave=&actor=&desde=&hasta=&page=&size=` | — | `200 { contenido: [...], pagina, total }` · `400` si `size` no está entre 1 y 100 o `page` es negativa (spec 050, tramo F) |
 | `GET /api/v1/soporte-ti/ia/circuito` | — | `200 [ { parte: "ia.chat" \| "ia.voz", estado: "CERRADO" \| "ABIERTO" \| "PROBANDO", fallasEnVentana, abiertoDesde?, proximaPrueba? } ]` |
+
+> **Corregido 2026-11-11 (spec 050, tramo F, D-348).** La fila de la auditoría no decía nada del tamaño y el servidor recortaba `size` a 1..100 en silencio. Ahora un `size` fuera de 1..100 (o una `page` negativa) es un **400** con el motivo, como `GET /admin/pagos/cuotas`; la app pide 20.
 
 Cabeceras: `X-Consola-Token` (desbloqueo `CONSOLA`) en todas; `X-Reautenticacion` (desbloqueo `CAMBIO_CRITICO`, un solo
 uso) en el `PUT` crítico. Ambos tokens viven en Redis con TTL (15 min y 5 min, a confirmar), atados a la sesión.

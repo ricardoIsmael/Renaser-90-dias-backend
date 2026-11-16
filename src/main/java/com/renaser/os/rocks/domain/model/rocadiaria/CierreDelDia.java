@@ -89,7 +89,7 @@ public final class CierreDelDia {
         if (roca.completada() || respuesta == null) {
             // Cumplida (ya no hay nada que explicar) o pendiente de hora futura sin respuesta: queda sin respuesta de cierre.
             boolean teniaRespuesta = roca.cierre() != null;
-            roca.quitarCierre();
+            roca.quitarCierre(momento.instante());
             return teniaRespuesta;
         }
         roca.cerrarConRespuesta(respuesta, momento.instante());

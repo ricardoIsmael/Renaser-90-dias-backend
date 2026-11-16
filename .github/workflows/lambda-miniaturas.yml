@@ -1,0 +1,205 @@
+# Despliegue automatico de la Lambda de miniaturas del Muro (`renaser-miniaturas-muro`; spec 049, D-339, D-351).
+#
+# QUE HACE: en cada push a `master` que toca `infra/lambda-miniaturas-muro/` (un cambio de codigo, o Dependabot subiendo
+# `sharp`), corre las pruebas de la Lambda, arma `lambda.zip` para Node 22 arm64 y reemplaza el codigo de la funcion en AWS.
+# Antes se hacia a mano: `construir.sh` y `aws lambda update-function-code`. El alta de la funcion, de su rol y del aviso del
+# bucket sigue siendo `desplegar.sh` (una sola vez, lo corre el duenio); este workflow solo actualiza el CODIGO.
+#
+# EL ORDEN IMPORTA. Las pruebas corren ANTES de construir: `npm ci` deja los binarios de sharp de ESTA maquina (x64) y las
+# pruebas los necesitan; el zip se arma aparte, en `build/`, con los de linux-arm64 (`construir.sh`). Pruebas rojas = no hay zip
+# ni despliegue, y la Lambda de produccion sigue con el codigo de antes.
+#
+# QUE PRUEBA DESPUES DE DESPLEGAR (sin tocar datos): espera a que AWS termine de actualizar y comprueba que la funcion esta
+# `Active`, que su `CodeSha256` es el del zip que subimos y que corre en nodejs22.x / arm64; despues la INVOCA con un evento
+# cuya clave cae fuera de `muro/fotos/` (la Lambda la ignora sin llamar a S3) y exige `{"procesadas":1}` sin `FunctionError`.
+# Esa invocacion carga `sharp` en arm64 de verdad: es lo que se rompe cuando una subida de dependencias trae el binario equivocado.
+# No lee ni escribe el bucket de produccion.
+#
+# AUTENTICACION: OIDC con el mismo rol del CD (`vars.AWS_ROLE_ARN`, `renaser-github-actions`), sin claves guardadas. El rol no
+# tenia permisos de Lambda: se los da UNA VEZ, a mano, `infra/lambda-miniaturas-muro/permiso-del-ci.sh --aplicar` (politica en
+# linea `actualizar-lambda-miniaturas`, solo sobre esta funcion). Sin ella la actualizacion falla con AccessDenied y el paso lo dice.
+# La confianza del rol solo acepta `ref:refs/heads/master`: desde otra rama el workflow prueba y construye, pero no despliega.
+#
+# SI ALGO SALE MAL DESPUES DE SUBIR: la version nueva ya esta en AWS (no hay alias ni version publicada). Revierte el commit en
+# `master`: ese push vuelve a desplegar el codigo anterior. Detalle en `infra/lambda-miniaturas-muro/README.md`.
+#
+# Las acciones van fijadas por SHA de commit, con la version en un comentario (Dependabot las actualiza y respeta ese formato).
+name: Lambda de miniaturas
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'infra/lambda-miniaturas-muro/**'
+      # El README no cambia lo que corre en AWS.
+      - '!infra/lambda-miniaturas-muro/README.md'
+  workflow_dispatch:
+
+# Una sola corrida a la vez, y la que esta en curso no se cancela: cortar un `update-function-code` a la mitad deja la funcion
+# en `InProgress` y la corrida siguiente choca con `ResourceConflictException`.
+concurrency:
+  group: lambda-miniaturas-muro
+  cancel-in-progress: false
+
+permissions:
+  # `id-token: write` es lo que habilita OIDC (ver cd.yml). Nada mas: el workflow no escribe en el repositorio.
+  id-token: write
+  contents: read
+
+env:
+  FUNCION: renaser-miniaturas-muro
+  # La funcion vive donde esta el bucket de produccion (desplegar.sh), no en la region del backend.
+  REGION: us-east-1
+
+jobs:
+  desplegar:
+    name: Probar, construir y desplegar la Lambda
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+        working-directory: infra/lambda-miniaturas-muro
+
+    steps:
+      - name: Descargar el codigo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Preparar Node 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      # Dependencias de ESTA maquina (x64), tal como las fija package-lock.json. Incluye @aws-sdk/client-s3 (devDependency: en
+      # produccion ya viene en el runtime de Lambda) que las pruebas importan.
+      - name: Instalar las dependencias para las pruebas
+        run: npm ci --no-audit --no-fund
+
+      # Antes de construir: ver el comentario de arriba. Si algo falla aca, no se construye ni se despliega.
+      - name: Pruebas de la Lambda
+        run: node --test
+
+      # Arma lambda.zip con sharp para linux-arm64 (instala en build/, no toca node_modules) y comprueba que el binario es el de arm64.
+      - name: Construir lambda.zip (Node 22, arm64)
+        run: bash construir.sh
+
+      # Mismo criterio que cd.yml: sin la variable del rol no hay a donde desplegar, se avisa y el workflow termina en verde
+      # (las pruebas y el zip ya corrieron). Con `if` explicitos y no con `[ ... ] && ...`: bajo `set -e` esa forma corta el paso.
+      - name: Ver si hay donde desplegar
+        id: aws
+        env:
+          ROL: ${{ vars.AWS_ROLE_ARN }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [ -z "$ROL" ]; then
+            echo "configurado=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Falta la variable de repositorio AWS_ROLE_ARN. La Lambda se probo y se construyo, pero NO se desplego."
+            {
+              echo "### Lambda de miniaturas: no se desplego"
+              echo ""
+              echo "Falta la variable de repositorio \`AWS_ROLE_ARN\`. Como crearla: \`docs/DESPLIEGUE_Y_CI.md\` §5.1."
+            } >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$REF" != "refs/heads/master" ]; then
+            echo "configurado=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Solo se despliega desde master (la confianza OIDC del rol no acepta $REF). Se probo y se construyo."
+            {
+              echo "### Lambda de miniaturas: no se desplego"
+              echo ""
+              echo "Corrida desde \`$REF\`: el rol de AWS solo acepta \`refs/heads/master\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "configurado=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # El intercambio OIDC: sin AWS_ACCESS_KEY_ID ni AWS_SECRET_ACCESS_KEY. Las credenciales duran lo que dura el job.
+      - name: Autenticarse en AWS por OIDC
+        if: steps.aws.outputs.configurado == 'true'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.REGION }}
+          role-session-name: gha-lambda-miniaturas-${{ github.run_id }}
+
+      - name: Subir el codigo a la Lambda
+        if: steps.aws.outputs.configurado == 'true'
+        run: |
+          set -euo pipefail
+          # `aws` devuelve 0 o 254, pero el motivo esta en el texto: se captura para poder decir QUE falta.
+          if ! SALIDA=$(aws lambda update-function-code --function-name "$FUNCION" --zip-file fileb://lambda.zip \
+                          --query '{CodeSha256: CodeSha256, LastModified: LastModified, CodeSize: CodeSize}' --output json 2>&1); then
+            echo "$SALIDA"
+            if grep -q 'AccessDenied' <<< "$SALIDA"; then
+              echo "::error::El rol del CD no puede actualizar la Lambda. Falta darle el permiso, una sola vez: el duenio corre infra/lambda-miniaturas-muro/permiso-del-ci.sh --aplicar (ver su README)."
+            fi
+            exit 1
+          fi
+          echo "$SALIDA"
+
+      # La actualizacion es asincrona: `update-function-code` vuelve con `LastUpdateStatus: InProgress`.
+      - name: Esperar a que AWS termine de actualizarla
+        if: steps.aws.outputs.configurado == 'true'
+        run: aws lambda wait function-updated-v2 --function-name "$FUNCION"
+
+      # Prueba 1 (solo lectura): estado, el zip que quedo en AWS es el nuestro, y runtime y arquitectura no cambiaron.
+      - name: Comprobar el estado y el zip desplegado
+        if: steps.aws.outputs.configurado == 'true'
+        run: |
+          set -euo pipefail
+          CONF=$(aws lambda get-function-configuration --function-name "$FUNCION" --output json)
+          SUBIDO=$(openssl dgst -sha256 -binary lambda.zip | base64 -w0)
+          ESTADO=$(jq -r '.State' <<< "$CONF")
+          ULTIMA=$(jq -r '.LastUpdateStatus' <<< "$CONF")
+          EN_AWS=$(jq -r '.CodeSha256' <<< "$CONF")
+          RUNTIME=$(jq -r '.Runtime' <<< "$CONF")
+          ARQ=$(jq -r '.Architectures | join(",")' <<< "$CONF")
+          echo "Estado: $ESTADO · ultima actualizacion: $ULTIMA · runtime: $RUNTIME · arquitectura: $ARQ"
+          echo "CodeSha256 en AWS: $EN_AWS (zip subido: $SUBIDO)"
+          FALLOS=""
+          if [ "$ESTADO" != "Active" ];       then FALLOS="$FALLOS estado=$ESTADO"; fi
+          if [ "$ULTIMA" != "Successful" ];   then FALLOS="$FALLOS ultima-actualizacion=$ULTIMA"; fi
+          if [ "$EN_AWS" != "$SUBIDO" ];      then FALLOS="$FALLOS codigo-distinto"; fi
+          if [ "$RUNTIME" != "nodejs22.x" ];  then FALLOS="$FALLOS runtime=$RUNTIME"; fi
+          if [ "$ARQ" != "arm64" ];           then FALLOS="$FALLOS arquitectura=$ARQ"; fi
+          if [ -n "$FALLOS" ]; then
+            echo "::error::La Lambda quedo mal despues de desplegar:$FALLOS. La version nueva YA esta en AWS: revierte el commit en master para volver a la anterior."
+            exit 1
+          fi
+          echo "SHA_EN_AWS=$EN_AWS" >> "$GITHUB_ENV"
+
+      # Prueba 2: invocar con un evento que la Lambda ignora (clave fuera de `muro/fotos/`, ver `rutaDeLaMiniatura`). Carga `sharp`
+      # en arm64 y recorre el handler sin llamar a S3: no lee ni escribe nada del bucket. Sale `{"procesadas":1}` si todo esta bien.
+      - name: Invocar la Lambda con un evento que no toca el bucket
+        if: steps.aws.outputs.configurado == 'true'
+        run: |
+          set -euo pipefail
+          EVENTO='{"Records":[{"eventName":"ObjectCreated:Put","s3":{"bucket":{"name":"humo"},"object":{"key":"humo/fuera-de-muro-fotos"}}}]}'
+          aws lambda invoke --function-name "$FUNCION" --invocation-type RequestResponse \
+            --cli-binary-format raw-in-base64-out --payload "$EVENTO" respuesta.json > invocacion.json
+          CODIGO=$(jq -r '.StatusCode' invocacion.json)
+          FUNCION_ERROR=$(jq -r '.FunctionError // ""' invocacion.json)
+          RESPUESTA=$(jq -c '.' respuesta.json)
+          echo "StatusCode: $CODIGO · FunctionError: ${FUNCION_ERROR:-ninguno} · respuesta: $RESPUESTA"
+          if [ "$CODIGO" != "200" ] || [ -n "$FUNCION_ERROR" ] || [ "$RESPUESTA" != '{"procesadas":1}' ]; then
+            echo "::error::La invocacion de prueba fallo (revisa el binario de sharp para arm64 y los logs en CloudWatch /aws/lambda/$FUNCION). La version nueva YA esta en AWS: revierte el commit en master para volver a la anterior."
+            exit 1
+          fi
+
+      - name: Resumen
+        if: always() && steps.aws.outputs.configurado == 'true'
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          {
+            echo "### Lambda de miniaturas: ${{ job.status }}"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Funcion | \`$FUNCION\` ($REGION) |"
+            echo "| Commit | \`${SHA:0:7}\` |"
+            echo "| CodeSha256 en AWS | \`${SHA_EN_AWS:-sin dato}\` |"
+            echo ""
+            echo "Logs: CloudWatch \`/aws/lambda/$FUNCION\`. Volver atras: revertir el commit en master (ver \`infra/lambda-miniaturas-muro/README.md\`)."
+          } >> "$GITHUB_STEP_SUMMARY"

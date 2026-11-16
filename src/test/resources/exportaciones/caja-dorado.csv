@@ -1,0 +1,11 @@
+﻿aprendizId;nombre;grupo;diaPrograma;estado;envio;cumplimientoFase1;nombreEnvio;celular;dni;pais;provincia;ciudad;distrito;direccion;referencias;quienRecibe;otraDireccion;otroCelular;medio;courier;codigo;costo;actualizadoEn
+00000000-0000-0000-0000-000000000001;Ana Pérez;Grupo de Ana;10;POR_REVISAR;0;1.00;Ana Pérez;999111222;45678912;Perú;Lima;Lima;Miraflores;Av. Larco 123;Frente al parque;;;;;;;;
+00000000-0000-0000-0000-000000000002;Beto Díaz;;10;EN_EVALUACION;0;;;;;;;;;;;;;;;;;;
+00000000-0000-0000-0000-000000000003;"Carla; Soto ""la Chilena""";Grupo B;25;ENVIADA;1;0.85;Carla Soto;'+56 9 1111 2222;X123;Chile;Santiago;Santiago;Providencia;"Calle 1; piso 2
+referencia";Casa verde;Su mamá;Otra calle 5;988777666;Olva;Olva Courier;OL-0001;12.50;2026-11-03T14:30:00Z
+00000000-0000-0000-0000-000000000004;"'=HYPERLINK(""http://x"")";'+grupo;30;ENTREGADA;2;1.00;'-cmd;'@celular;'=1+1;Perú;'=prov;'=Lima;'+Barranco;"'@Dirección
+con salto";'@ref;'+quien;'=otra;'-1;inDrive;;'=PLACA;;2026-11-04T01:00:00Z
+00000000-0000-0000-0000-000000000005;Ñandú Ávila;Grupo ñ;12;CON_PROBLEMA;1;;Ñandú;;;PERU;;Cusco;;Jr. Sol 4;;;;;Shalom;Shalom;SH-9;0;2026-11-05T05:00:00Z
+00000000-0000-0000-0000-000000000006;Diana Rojas;Grupo A;40;ARMANDO;0;0.50;Diana;900000000;11112222;Perú;;Arequipa;Cayma;"Calle ""Sol"" 7";;;;;;;;;
+00000000-0000-0000-0000-000000000007;Elena Vega;;9;EN_PAUSA;0;;Elena;;;Perú;;;;;;;;;;;;;
+00000000-0000-0000-0000-000000000008;Fabiola Ríos;Grupo C;8;FUERA_DE_LA_APP;0;;Fabiola;5551234;ABC;México;;CDMX;Coyoacán;Av. 5;;;;;;;;;

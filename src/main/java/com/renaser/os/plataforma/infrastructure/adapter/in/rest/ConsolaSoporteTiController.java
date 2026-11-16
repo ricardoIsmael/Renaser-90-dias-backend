@@ -6,6 +6,7 @@ import com.renaser.os.plataforma.application.ports.in.DesbloquearConsolaUseCase;
 import com.renaser.os.plataforma.application.ports.in.DesbloquearConsolaUseCase.DesbloquearConsolaCommand;
 import com.renaser.os.plataforma.application.ports.in.DesbloquearConsolaUseCase.Desbloqueo;
 import com.renaser.os.shared.domain.Permission;
+import com.renaser.os.shared.domain.PaginaAcotada;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
 import com.renaser.os.shared.web.security.RequiresPermission;
@@ -69,9 +70,11 @@ class ConsolaSoporteTiController {
                                        @RequestParam(defaultValue = "0") int page,
                                        @RequestParam(defaultValue = "50") int size,
                                        HttpServletRequest request) {
+        // Spec 050 tramo F (FR-034): el tamaño se acota aquí, en un solo lugar; fuera de 1..100 es un 400 con el motivo.
+        PaginaAcotada pagina = PaginaAcotada.estricta(page, size, ConsultarAuditoriaUseCase.TAMANO_MAXIMO);
         return AuditoriaResponse.from(auditoria.consultar(PedidoDeConsola.acceso(actor, request),
                 new ConsultarAuditoriaUseCase.Filtro(clave == null || clave.isBlank() ? null : clave,
-                        quien == null ? null : UserId.of(quien), desde, hasta, page, size)));
+                        quien == null ? null : UserId.of(quien), desde, hasta, pagina.pagina(), pagina.tamano())));
     }
 
     @GetMapping("/ia/circuito")

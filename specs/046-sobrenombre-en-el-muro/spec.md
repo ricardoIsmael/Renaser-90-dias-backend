@@ -116,8 +116,8 @@ El día 7, en Hoy, una tarjeta invita a elegir **cómo te verán en el Muro**. L
 - **FR-002**: El servidor MUST devolver el sobrenombre en lugar del nombre en `authorName` del Muro (publicaciones y comentarios) y en la lista de reacciones, según D3.
 - **FR-003**: El mentor/guía del grupo, el líder, ADMIN, ALCHEMIST y Soporte TI MUST ver también el nombre real (campo nuevo `authorRealName`, solo para ellos).
 - **FR-004**: Las validaciones de la tabla MUST cumplirse en el servidor.
-- **FR-005**: ADMIN y ALCHEMIST MUST poder ver, cambiar y quitar el sobrenombre de cualquier persona, con motivo y constancia.
-- **FR-006**: ADMIN y ALCHEMIST MUST poder editar la lista de palabras prohibidas.
+- **FR-005**: ADMIN y ALCHEMIST MUST poder ver, cambiar y quitar el sobrenombre de cualquier persona, con motivo y constancia. Ningún otro rol MUST poder: el servicio responde 403 (D-349).
+- **FR-006**: ADMIN y ALCHEMIST MUST poder editar la lista de palabras prohibidas. Ningún otro rol MUST poder: el servicio responde 403 (D-349).
 - **FR-007**: Ningún texto de esta función MUST estar en inglés.
 
 ## Datos (borrador, sin plan detallado)

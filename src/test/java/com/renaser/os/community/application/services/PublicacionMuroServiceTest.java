@@ -85,6 +85,8 @@ class PublicacionMuroServiceTest {
     @Mock
     private ReaccionMuroPort reaccionMuroPort;
     @Mock
+    private com.renaser.os.community.application.ports.out.publicacion.PublicacionesSinRedPort publicacionesSinRed;
+    @Mock
     private ConsultarCategoriasMuroUseCase categoriasUseCase;
     @Mock
     private ConsultarPerfilUsuarioPort consultarPerfilUsuarioPort;
@@ -121,7 +123,8 @@ class PublicacionMuroServiceTest {
         service = new PublicacionMuroService(loadPublicacionPort, savePublicacionPort, eliminarPublicacionPort,
                 loadComentarioPort, reaccionMuroPort, categoriasUseCase, consultarPerfilUsuarioPort,
                 almacenamiento, userSummaryFinder, events, CLOCK, idGenerator,
-                participacionFinder, referenciasDeMediaPort, List.of(referenciasEnElChat), cuentasCerradas, new com.renaser.os.users.api.AlcanceDeFormacionSoloEscuela());
+                participacionFinder, referenciasDeMediaPort, List.of(referenciasEnElChat), cuentasCerradas, new com.renaser.os.users.api.AlcanceDeFormacionSoloEscuela(),
+                publicacionesSinRed);
         // Por defecto nadie mas mira los objetos: cada prueba que necesite lo contrario lo dice.
         lenient().when(referenciasDeMediaPort.referenciadasFueraDe(any(), any())).thenReturn(Set.of());
         lenient().when(referenciasEnElChat.referenciadas(any())).thenReturn(Set.of());
@@ -224,6 +227,40 @@ class PublicacionMuroServiceTest {
         var command = new PublicarCommand(autor, "hola comunidad", unaFotoDe(autor), "INEXISTENTE");
         assertThatThrownBy(() -> service.publicar(command)).isInstanceOf(IllegalArgumentException.class);
         verify(savePublicacionPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("spec 048 fase 2: publicada sin red, se guarda con la llegada y el evento lleva la hora real")
+    void publicarSinRedGuardaLaHoraReal() { // spec 048 FR-020
+        var idCliente = java.util.UUID.randomUUID();
+        var escrita = CLOCK.now().minusSeconds(12 * 3600);
+        var command = new PublicarCommand(autor, "escrita sin señal", unaFotoDe(autor), null, null,
+                new com.renaser.os.community.application.ports.in.publicacion.PublicarUseCase.HechoSinRed(escrita, idCliente,
+                        "RELOJ_DEL_SISTEMA"));
+
+        service.publicar(command);
+
+        verify(publicacionesSinRed).registrar(any(), any(), any(), any(), any());
+        var evento = org.mockito.ArgumentCaptor.forClass(PublicacionCreadaEvent.class);
+        verify(events).publishEvent(evento.capture());
+        assertThat(evento.getValue().occurredAt()).as("aparece arriba, D18").isEqualTo(CLOCK.now());
+        assertThat(evento.getValue().hechoSinRedEn()).as("el Post diario cuenta la hora real, D17").isEqualTo(escrita);
+    }
+
+    @Test
+    @DisplayName("spec 048 fase 2: el mismo envío sin red que llega dos veces no publica otra vez")
+    void publicarSinRedRepetidoNoDuplica() { // spec 048 FR-020
+        var idCliente = java.util.UUID.randomUUID();
+        var yaPublicada = publicacionDe(autor, 5);
+        when(publicacionesSinRed.publicacionDe(autor, idCliente)).thenReturn(java.util.Optional.of(yaPublicada.id().value()));
+        when(loadPublicacionPort.porId(yaPublicada.id())).thenReturn(java.util.Optional.of(yaPublicada));
+        var command = new PublicarCommand(autor, "escrita sin señal", unaFotoDe(autor), null, null,
+                new com.renaser.os.community.application.ports.in.publicacion.PublicarUseCase.HechoSinRed(CLOCK.now(), idCliente, null));
+
+        service.publicar(command);
+
+        verify(savePublicacionPort, never()).save(any());
+        verify(events, never()).publishEvent(any(PublicacionCreadaEvent.class));
     }
 
     @Test

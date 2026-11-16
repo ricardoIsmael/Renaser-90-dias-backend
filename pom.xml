@@ -28,8 +28,8 @@
 	</scm>
 	<properties>
 		<java.version>25</java.version>
-		<spring-ai.version>2.0.0</spring-ai.version>
-		<spring-modulith.version>2.1.0</spring-modulith.version>
+		<spring-ai.version>2.0.2</spring-ai.version>
+		<spring-modulith.version>2.1.2</spring-modulith.version>
 		<!-- SDK de AWS v2 para el adaptador real de S3 (AlmacenamientoPort). El artefacto
 		     `s3` ya trae el S3Presigner: en la v2 no es un modulo aparte como en la v1.
 
@@ -42,19 +42,19 @@
 		     versiones menores mas viejo, y un `NoSuchMethodError` de ese tipo solo aparece en
 		     produccion, que es justo lo que no se puede probar desde aca. Con 2.54.3 el riesgo se
 		     traslada a nuestro adaptador de S3, que SI lo cubre la suite completa. -->
-		<aws-sdk.version>2.54.3</aws-sdk.version>
+		<aws-sdk.version>2.57.10</aws-sdk.version>
 		<!-- Spring Cloud AWS 4.1.1 (GA, 2026-08-28) es la linea que corresponde a Spring Boot 4.1:
 		     su POM hereda de `spring-cloud-dependencies-parent:5.0.3` (tren 2025.1.x) y alinea
 		     Spring Modulith 2.1.1, la misma linea que usa este repo. Verificado contra
 		     repo1.maven.org, no contra la tabla del README de awspring, que todavia resume la
 		     linea 4.x como "Spring Boot 4.0.x" sin desglosar los parches. -->
-		<spring-cloud-aws.version>4.1.1</spring-cloud-aws.version>
+		<spring-cloud-aws.version>4.2.1</spring-cloud-aws.version>
 		<mapstruct.version>1.6.3</mapstruct.version>
 		<!-- Cobertura. 0.8.14 fue la primera con soporte OFICIAL de Java 25 (la 0.8.13 lo tenia
 		     como experimental); 0.8.15 es la ultima y lo mantiene. Con una version anterior el
 		     agente no entiende los class files de version 69 y rompe la instrumentacion. -->
-		<jacoco.version>0.8.15</jacoco.version>
-		<sonar-maven-plugin.version>5.7.0.6970</sonar-maven-plugin.version>
+		<jacoco.version>0.8.16</jacoco.version>
+		<sonar-maven-plugin.version>5.8.0.7211</sonar-maven-plugin.version>
 		<!-- Obligatorio desde Lombok 1.18.16: hace que MapStruct espere a que Lombok
 		     genere getters/setters. Sin esto los mappers se generan vacios SIN fallar el build. -->
 		<lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
@@ -172,7 +172,7 @@
 		<dependency>
 			<groupId>org.bitbucket.b_c</groupId>
 			<artifactId>jose4j</artifactId>
-			<version>0.9.6</version>
+			<version>0.9.7</version>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.httpcomponents</groupId>
@@ -194,11 +194,38 @@
 		<dependency>
 			<groupId>org.bouncycastle</groupId>
 			<artifactId>bcprov-jdk18on</artifactId>
-			<version>1.85.2</version>
+			<version>1.86</version>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc</artifactId>
+		</dependency>
+		<!--
+			Documentacion de la API (OpenAPI 3.1 + Swagger UI), CLAUDE.MD §8. La 3.x es la linea
+			para Spring Boot 4; la 3.2.0 se construyo contra Boot 4.1.2, el mismo de este pom.
+			Se sirve en /v3/api-docs y /swagger-ui.html, FUERA de /api/v1/** (el filtro de
+			SecurityConfig no la cubre): por eso nace apagada en prod (application-prod.yaml,
+			OPENAPI_HABILITADO). Ver shared.web.OpenApiConfig y docs/API_OPENAPI.md.
+		-->
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+			<version>3.2.0</version>
+		</dependency>
+		<!--
+			MCP de la API (springdoc 3.2, seccion «MCP Support»): expone las operaciones documentadas
+			como herramientas para que un agente de IA (Claude Code, Cursor) CONOZCA la API. Solo local
+			y solo lectura: ver shared.web.McpDeLaApiConfig. El servidor MCP de Spring AI va con la
+			version del BOM de spring-ai (arriba). Los dos nacen apagados en prod (MCP_HABILITADO).
+		-->
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webmvc-mcp</artifactId>
+			<version>3.2.0</version>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.ai</groupId>
+			<artifactId>spring-ai-starter-mcp-server-webmvc</artifactId>
 		</dependency>
 		<!--
 			Spring Boot 4 saco RestClientAutoConfiguration (el bean RestClient.Builder) del
@@ -406,7 +433,7 @@
 		<dependency>
 			<groupId>com.redis</groupId>
 			<artifactId>testcontainers-redis</artifactId>
-			<version>2.2.4</version>
+			<version>3.0.1</version>
 			<scope>test</scope>
 		</dependency>
 		<!-- ShedLock: lock distribuido para los @Scheduled que NO son seguros con N instancias.
@@ -415,12 +442,12 @@
 		<dependency>
 			<groupId>net.javacrumbs.shedlock</groupId>
 			<artifactId>shedlock-spring</artifactId>
-			<version>7.9.0</version>
+			<version>7.10.1</version>
 		</dependency>
 		<dependency>
 			<groupId>net.javacrumbs.shedlock</groupId>
 			<artifactId>shedlock-provider-jdbc-template</artifactId>
-			<version>7.9.0</version>
+			<version>7.10.1</version>
 		</dependency>
 	</dependencies>
 	<dependencyManagement>
@@ -435,7 +462,7 @@
 			<dependency>
 				<groupId>com.google.guava</groupId>
 				<artifactId>guava</artifactId>
-				<version>33.7.2-android</version>
+				<version>33.8.0-android</version>
 			</dependency>
 			<dependency>
 				<groupId>org.springframework.ai</groupId>

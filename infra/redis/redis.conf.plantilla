@@ -1,0 +1,22 @@
+# Plantilla del redis.conf de produccion (spec 050 tramo A1, FR-010; decision D7).
+#
+# La usa infra/redis/contrasena.sh: en la instancia sustituye __CLAVE__ por el valor de
+# /renaser/prod/REDIS_PASSWORD (Parameter Store, SecureString) y deja el resultado en
+# /opt/renaser/redis/conf/redis.conf con permiso 600 y dueno `redis`. ESTE archivo NO lleva ninguna
+# contrasena real y no debe llevarla nunca.
+#
+# El puerto de Redis sigue SIN publicarse: solo lo alcanzan los contenedores de la red `renaser`.
+
+requirepass __CLAVE__
+
+# Persistencia: el AOF cada segundo, ademas de los snapshots RDB que Redis ya hace por omision.
+# Sin esto, reiniciar el contenedor o la instancia perderia las sesiones de las ultimas horas.
+appendonly yes
+appendfsync everysec
+dir /data
+
+# Spring Session (RedisIndexedSessionRepository) necesita los eventos de expiracion de claves para
+# limpiar su indice. Lo pide solo, con `CONFIG SET`, pero UNA VEZ al arrancar el backend: un Redis
+# recien creado arranca sin ellos y, sin esta linea, las sesiones vencidas dejarian de limpiarse
+# hasta el proximo despliegue del backend.
+notify-keyspace-events Egx

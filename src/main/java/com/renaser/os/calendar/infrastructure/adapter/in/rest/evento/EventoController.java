@@ -140,6 +140,16 @@ class EventoController {
         return ResponseEntity.ok().build();
     }
 
+    /** Spec 053 FR-014: «esta y las siguientes». Las fechas que ya pasaron quedan igual; si es la primera, se cancela todo el evento. */
+    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "spec 044: ADMIN/ALCHEMIST, y el líder, el mentor y la guía en sus propios eventos (y el líder en los de sus mentores); el servicio rechaza al aprendiz")
+    @Funcionalidad(value = "eventos.gestion", laResuelveElCasoDeUso = true)
+    @PostMapping("/{id}/cancel-from")
+    public ResponseEntity<Void> cancelarDesde(@ActorAutenticado UserId actor, @PathVariable UUID id,
+                                               @Valid @RequestBody CancelarOcurrenciaRequest request) {
+        eventosUseCase.cancelarDesde(actor, EventoId.of(id), Instant.parse(request.occurrenceStart()));
+        return ResponseEntity.ok().build();
+    }
+
     @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "spec 044: ADMIN/ALCHEMIST, y el líder, el mentor y la guía en sus propios eventos (y el líder en los de sus mentores); el servicio rechaza al aprendiz")
     @Funcionalidad(value = "eventos.gestion", laResuelveElCasoDeUso = true)
     @PostMapping("/{id}/portada/upload-url")

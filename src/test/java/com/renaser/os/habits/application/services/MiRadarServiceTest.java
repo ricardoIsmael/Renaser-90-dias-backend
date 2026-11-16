@@ -91,7 +91,7 @@ class MiRadarServiceTest {
 
     private MiRadar guardado() {
         ArgumentCaptor<MiRadar> captor = ArgumentCaptor.forClass(MiRadar.class);
-        verify(savePort).guardar(any(), captor.capture());
+        verify(savePort).guardar(any(), captor.capture(), any());
         return captor.getValue();
     }
 
@@ -240,7 +240,7 @@ class MiRadarServiceTest {
         }
         assertThatThrownBy(() -> service.configurar(pedido(true, cambio(5, null, null, true))))
                 .isInstanceOf(IllegalStateException.class);
-        verify(savePort, never()).guardar(any(), any());
+        verify(savePort, never()).guardar(any(), any(), any());
     }
 
     @Test
@@ -251,7 +251,7 @@ class MiRadarServiceTest {
 
         assertThatThrownBy(() -> service.configurar(pedido(true, cambio(6, Modo.PERSONALIZADO, 3, null),
                 cambio(5, Modo.PERSONALIZADO, 3, null)))).isInstanceOf(IllegalStateException.class);
-        verify(savePort, never()).guardar(any(), any());
+        verify(savePort, never()).guardar(any(), any(), any());
     }
 
     @Test
@@ -286,7 +286,7 @@ class MiRadarServiceTest {
         assertThatThrownBy(() -> service.configurar(pedido(true, cambio(6, Modo.PERSONALIZADO, 5, null))))
                 .isInstanceOf(IllegalArgumentException.class).hasMessage("Ese día caben 4 veces");
 
-        verify(savePort, never()).guardar(any(), any());
+        verify(savePort, never()).guardar(any(), any(), any());
     }
 
     @Test
@@ -317,6 +317,6 @@ class MiRadarServiceTest {
                 .isInstanceOf(ConstraintViolationException.class);
 
         verifyNoInteractions(horarios);
-        verify(savePort, never()).guardar(any(), any());
+        verify(savePort, never()).guardar(any(), any(), any());
     }
 }

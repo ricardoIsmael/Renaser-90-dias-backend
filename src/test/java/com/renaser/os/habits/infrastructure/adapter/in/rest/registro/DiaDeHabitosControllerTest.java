@@ -28,6 +28,7 @@ class DiaDeHabitosControllerTest {
     @Autowired MockMvc mvc;
     @MockitoBean ConsultarTracksDelDiaConCatalogoUseCase consultar;
     @MockitoBean CompletarRegistroUseCase completar;
+    @MockitoBean com.renaser.os.habits.application.ports.in.registro.CompletarHechoSinRedUseCase completarSinRed;
     @MockitoBean SubirEvidenciaRegistroUseCase evidencia;
     @MockitoBean SolicitarUrlEvidenciaRegistroUseCase url;
     @MockitoBean UserSummaryFinder users;

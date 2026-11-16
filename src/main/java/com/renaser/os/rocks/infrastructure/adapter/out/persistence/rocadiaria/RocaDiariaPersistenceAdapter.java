@@ -85,7 +85,7 @@ class RocaDiariaPersistenceAdapter implements LoadRocaDiariaPort, SaveRocaDiaria
     public void guardarSoloElCierre(List<RocaDiaria> rocas) {
         for (RocaDiaria roca : rocas) {
             if (roca.cierre() == null) {
-                repository.quitarElCierre(roca.id().value());
+                repository.quitarElCierre(roca.id().value(), roca.actualizadoEn());
                 continue;
             }
             var respuesta = roca.cierre().respuesta();

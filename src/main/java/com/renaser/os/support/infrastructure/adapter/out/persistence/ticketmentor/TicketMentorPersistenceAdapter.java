@@ -55,6 +55,18 @@ class TicketMentorPersistenceAdapter implements LoadTicketMentorPort, SaveTicket
     }
 
     @Override
+    public List<TicketMentor> deParticipantes(Collection<UserId> participantes, Instant cursor, int limite) {
+        List<UUID> ids = valores(participantes);
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        List<TicketMentorJpaEntity> rows = cursor == null
+                ? repository.findByParticipanteIdInOrderByCreadoEnDesc(ids, Limit.of(limite))
+                : repository.findByParticipanteIdInAndCreadoEnBeforeOrderByCreadoEnDesc(ids, cursor, Limit.of(limite));
+        return rows.stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
     public TicketMentor save(TicketMentor ticket) {
         try {
             var saved = repository.saveAndFlush(mapper.toEntity(ticket));

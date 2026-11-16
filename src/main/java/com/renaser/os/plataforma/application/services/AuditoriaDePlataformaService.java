@@ -29,7 +29,7 @@ import java.util.Objects;
 @Primary
 class AuditoriaDePlataformaService implements ConsultarAuditoriaUseCase, AuditoriaDePlataforma {
 
-    static final int TAMANO_MAXIMO = 100;
+    static final int TAMANO_MAXIMO = ConsultarAuditoriaUseCase.TAMANO_MAXIMO;
 
     private final GuardiaDeSoporteTi guardia;
     private final ConsultarAuditoriaPort consultarPort;

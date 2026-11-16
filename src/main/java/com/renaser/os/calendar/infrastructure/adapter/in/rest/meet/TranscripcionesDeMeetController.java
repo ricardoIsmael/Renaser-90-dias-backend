@@ -3,6 +3,7 @@ package com.renaser.os.calendar.infrastructure.adapter.in.rest.meet;
 import com.renaser.os.calendar.application.ports.in.meet.TranscripcionesDeMeetUseCase;
 import com.renaser.os.calendar.application.ports.in.meet.TranscripcionesDeMeetUseCase.TranscripcionDescargada;
 import com.renaser.os.calendar.domain.model.evento.EventoId;
+import com.renaser.os.calendar.domain.model.meet.transcripcion.DiagnosticoDeReunion;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
@@ -46,7 +47,8 @@ public class TranscripcionesDeMeetController {
         return useCase.estados(actor, EventoId.of(id)).stream()
                 .map(e -> new EstadoResponse(e.fecha().toString(), e.estado(), e.motivo(),
                         e.obtenidaEn() == null ? null : e.obtenidaEn().toString(),
-                        e.borrarDespuesDe() == null ? null : e.borrarDespuesDe().toString(), e.grabacion()))
+                        e.borrarDespuesDe() == null ? null : e.borrarDespuesDe().toString(), e.grabacion(),
+                        e.diagnostico() == null ? null : DiagnosticoResponse.de(e.diagnostico())))
                 .toList();
     }
 
@@ -75,9 +77,29 @@ public class TranscripcionesDeMeetController {
         return ResponseEntity.noContent().build();
     }
 
+    /**
+     * Issue #151, FR-022: vuelve a leer en Google qué pasó en esa fecha y guarda el diagnóstico si terminó sin transcripción. Es el camino para
+     * las sesiones que ya terminaron (Google guarda los datos unos 30 días). Solo ADMIN y ALCHEMIST. Sin nombres ni correos.
+     */
+    @RequiresPermission(value = Permission.MANAGE_CALENDAR, scope = "spec 047 FR-022: solo ADMIN y ALCHEMIST; el servicio rechaza a los demás")
+    @PostMapping("/{fecha}/diagnostico")
+    public DiagnosticoResponse diagnosticar(@ActorAutenticado UserId actor, @PathVariable UUID id, @PathVariable LocalDate fecha) {
+        return DiagnosticoResponse.de(useCase.diagnosticar(actor, EventoId.of(id), fecha));
+    }
+
     public record DescargaRequest(@NotBlank @Size(min = 10, max = 500) String motivo) {
     }
 
-    public record EstadoResponse(String fecha, String estado, String motivo, String obtenidaEn, String borrarDespuesDe, boolean grabacion) {
+    public record EstadoResponse(String fecha, String estado, String motivo, String obtenidaEn, String borrarDespuesDe, boolean grabacion,
+                           DiagnosticoResponse diagnostico) {
+    }
+
+    /** Lo que se ve del diagnóstico: los datos, el código corto del motivo probable y la explicación en español. */
+    public record DiagnosticoResponse(String motivoProbable, String explicacion, String autoGrabacion, String autoTranscripcion,
+                                      List<DiagnosticoDeReunion.Conferencia> conferencias) {
+
+        static DiagnosticoResponse de(DiagnosticoDeReunion d) {
+            return new DiagnosticoResponse(d.motivoProbable(), d.explicacion(), d.autoGrabacion(), d.autoTranscripcion(), d.conferencias());
+        }
     }
 }

@@ -26,6 +26,18 @@ public interface EvaluacionDelDiaPort {
      */
     MarcaDeCierre dejarCerrado(UserId participanteId, LocalDate fecha, String nota);
 
+    /**
+     * Lo mismo con el instante ya decidido (spec 048): una marca hecha sin red queda con la hora real en que se hizo, tanto su
+     * {@code creado_en} (si es nueva) como su {@code actualizado_en}.
+     */
+    MarcaDeCierre dejarCerrado(UserId participanteId, LocalDate fecha, String nota, Instant referencia);
+
+    /**
+     * La última vez que se cerró ese día ({@code entradas_diario.actualizado_en}), o vacío si no hay marca. Es la hora lógica con la
+     * que se decide un choque (spec 048, D13): si cambió después de lo que se hizo sin red, gana el servidor.
+     */
+    java.util.Optional<Instant> actualizadoEn(UserId participanteId, LocalDate fecha);
+
     /** Las marcas de la persona entre dos fechas (ambas inclusive), por fecha. Vacía si no hay; nunca null. */
     List<MarcaDeCierre> marcasEntre(UserId participanteId, LocalDate desde, LocalDate hasta);
 

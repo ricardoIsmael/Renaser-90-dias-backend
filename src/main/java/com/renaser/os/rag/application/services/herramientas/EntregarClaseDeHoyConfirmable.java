@@ -3,6 +3,8 @@ package com.renaser.os.rag.application.services.herramientas;
 import com.renaser.os.rag.application.ports.out.academia.ClaseDiariaDelAprendizPort;
 import com.renaser.os.rag.application.ports.out.academia.ClaseDiariaDelAprendizPort.ClaseDeHoy;
 import com.renaser.os.rag.application.services.herramientas.PropuestaDeEntregarClaseDeHoy.EntregaPedida;
+import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort;
+import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort.HabitoDelDia;
 import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -12,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.NoSuchElementException;
+import java.util.Optional;
 
 /**
  * La escritura de {@code proponer_entregar_clase_de_hoy}, que solo corre cuando la persona
@@ -33,9 +36,11 @@ public class EntregarClaseDeHoyConfirmable implements AccionConfirmable {
     private static final Logger log = LoggerFactory.getLogger(EntregarClaseDeHoyConfirmable.class);
 
     private final ClaseDiariaDelAprendizPort claseDiaria;
+    private final ConsultarAgendaHabitosPort agendaHabitos;
 
-    public EntregarClaseDeHoyConfirmable(ClaseDiariaDelAprendizPort claseDiaria) {
+    public EntregarClaseDeHoyConfirmable(ClaseDiariaDelAprendizPort claseDiaria, ConsultarAgendaHabitosPort agendaHabitos) {
         this.claseDiaria = claseDiaria;
+        this.agendaHabitos = agendaHabitos;
     }
 
     @Override
@@ -56,10 +61,13 @@ public class EntregarClaseDeHoyConfirmable implements AccionConfirmable {
                 return ResultadoHerramienta.fallo("No se entrego: la Clase Diaria de hoy ya no es la que se propuso "
                         + "(cambio el dia). Revisa la clase de hoy y, si corresponde, vuelve a proponer la entrega.");
             }
+            // Issue #99: que la app apague las alarmas de la Clase y celebre, como al entregarla desde Training.
+            Optional<HabitoDelDia> antes = CompletacionDeHabito.porHacerDeHoy(agendaHabitos, actorId,
+                    CompletacionDeHabito.deClave(HabitoDelDia.CLAVE_CLASE_DIARIA));
             int puntos = claseDiaria.entregar(actorId, entrega.leccionId(), entrega.resumen());
-            return ResultadoHerramienta.exito("Clase Diaria entregada: habito cerrado y leccion marcada como vista. "
+            return CompletacionDeHabito.exitoConElHabito("Clase Diaria entregada: habito cerrado y leccion marcada como vista. "
                     + "Puntos otorgados: " + puntos + ". Si ya la habia entregado antes hoy, queda la primera "
-                    + "entrega y no suma de nuevo.");
+                    + "entrega y no suma de nuevo.", antes, puntos);
         } catch (RuntimeException rechazo) {
             return traducir(rechazo);
         }

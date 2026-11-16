@@ -3,13 +3,18 @@ package com.renaser.os.rocks.infrastructure.adapter.in.rest.cierre;
 import com.renaser.os.rocks.api.CierresDelDiaFinder.AccionDelCierre;
 import com.renaser.os.rocks.api.CierresDelDiaFinder.DiaDelCierre;
 import com.renaser.os.rocks.api.CierresDelDiaFinder.RespuestaDelCierre;
+import com.renaser.os.rocks.application.ports.in.cierre.CerrarElDiaSinRedUseCase;
 import com.renaser.os.rocks.application.ports.in.cierre.CerrarElDiaUseCase;
 import com.renaser.os.rocks.application.ports.in.cierre.CerrarElDiaUseCase.CerrarElDia;
 import com.renaser.os.rocks.application.ports.in.cierre.ConsultarCierreDelDiaUseCase;
 import com.renaser.os.rocks.application.ports.in.cierre.ConsultarCierreDelDiaUseCase.AvanceDeLaSemana;
 import com.renaser.os.rocks.application.ports.in.cierre.ConsultarCierreDelDiaUseCase.VistaDelCierre;
 import com.renaser.os.rocks.domain.model.cierre.CierreDeOtroDiaException;
+import com.renaser.os.shared.domain.CodigoNoAplicado;
+import com.renaser.os.shared.domain.HechoSinRed;
+import com.renaser.os.shared.domain.NoAplicadoSinRedException;
 import com.renaser.os.shared.domain.NotAuthorizedException;
+import com.renaser.os.shared.domain.OrigenDeLaHora;
 import com.renaser.os.shared.domain.UserId;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -66,10 +71,12 @@ class CierreDelDiaControllerTest {
     private ConsultarCierreDelDiaUseCase consultar;
     @MockitoBean
     private CerrarElDiaUseCase cerrar;
+    @MockitoBean
+    private CerrarElDiaSinRedUseCase cerrarSinRed;
 
     @BeforeEach
     void preparar() {
-        reset(consultar, cerrar);
+        reset(consultar, cerrar, cerrarSinRed);
         VistaDelCierre vista = new VistaDelCierre(new DiaDelCierre(HOY, "CERRADO", Instant.parse("2026-10-29T03:02:00Z"), "Descansé",
                 List.of(new AccionDelCierre(UUID.randomUUID(), "Enviar la propuesta", LocalTime.of(10, 0), true,
                                 Instant.parse("2026-10-28T15:20:00Z"), null),
@@ -78,6 +85,7 @@ class CierreDelDiaControllerTest {
                 true, new AvanceDeLaSemana(7, 12), Set.of(FACTURAS));
         when(consultar.consultar(any(), any())).thenReturn(vista);
         when(cerrar.cerrar(any())).thenReturn(vista);
+        when(cerrarSinRed.cerrar(any(), any())).thenReturn(vista);
     }
 
     private ResultActions cerrarCon(String cuerpo) throws Exception {
@@ -210,5 +218,69 @@ class CierreDelDiaControllerTest {
 
         doThrow(new NoSuchElementException("Participante no encontrado")).when(consultar).consultar(any(), any());
         mockMvc.perform(get("/api/v1/rocks/day-closure").header("X-Actor-Id", ANA.toString())).andExpect(status().isNotFound());
+    }
+
+    // ─── lo hecho sin red (spec 048, fase 3) ───────────────────────────────
+
+    private ResultActions cerrarSinRedCon(String cuerpo) throws Exception {
+        return mockMvc.perform(put("/api/v1/rocks/day-closure").header("X-Actor-Id", ANA.toString())
+                .header("X-Id-Cliente", "5f0c1f4e-2d0a-4b7e-9d77-0c9f3f6b1a10").header("X-Hecho-En", "2026-10-29T02:40:13.250Z")
+                .header("X-Origen-De-La-Hora", "RELOJ_DEL_SISTEMA").contentType(MediaType.APPLICATION_JSON).content(cuerpo));
+    }
+
+    @Test
+    @DisplayName("con X-Id-Cliente y X-Hecho-En va por el caso de uso de lo hecho sin red, con su hora real, y responde la misma forma")
+    void conCabecerasVaPorLoHechoSinRed() throws Exception { // spec 048 FR-019
+        cerrarSinRedCon(cuerpoValido()).andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("CERRADO"));
+
+        ArgumentCaptor<HechoSinRed> hecho = ArgumentCaptor.forClass(HechoSinRed.class);
+        verify(cerrarSinRed).cerrar(any(CerrarElDia.class), hecho.capture());
+        assertThat(hecho.getValue().idCliente()).isEqualTo(UUID.fromString("5f0c1f4e-2d0a-4b7e-9d77-0c9f3f6b1a10"));
+        assertThat(hecho.getValue().hechoEn()).isEqualTo(Instant.parse("2026-10-29T02:40:13.250Z"));
+        assertThat(hecho.getValue().origenDeLaHora()).isEqualTo(OrigenDeLaHora.RELOJ_DEL_SISTEMA);
+        verifyNoInteractions(cerrar);
+    }
+
+    @Test
+    @DisplayName("sin las cabeceras responde exactamente lo de hoy: el caso de uso de siempre y nunca el de lo hecho sin red")
+    void sinCabecerasEsComoAntes() throws Exception { // spec 048 FR-019
+        cerrarCon(cuerpoValido()).andExpect(status().isOk());
+
+        verify(cerrar).cerrar(any());
+        verifyNoInteractions(cerrarSinRed);
+    }
+
+    @Test
+    @DisplayName("lo que no se aplicó es un 409 con codigo y message listos para mostrar (el formato ApiErrorConCodigo)")
+    void noAplicadoEsUn409ConCodigo() throws Exception { // spec 048 FR-019
+        doThrow(new NoAplicadoSinRedException(CodigoNoAplicado.CAMBIO_MAS_NUEVO_EN_EL_SERVIDOR)).when(cerrarSinRed)
+                .cerrar(any(), any());
+
+        cerrarSinRedCon(cuerpoValido()).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.codigo").value("CAMBIO_MAS_NUEVO_EN_EL_SERVIDOR"))
+                .andExpect(jsonPath("$.message").value("Esto cambió en tu cuenta después de que lo hiciste sin conexión. Se quedó lo más nuevo."))
+                .andExpect(jsonPath("$.timestamp").exists());
+    }
+
+    @Test
+    @DisplayName("autorizacion negativa con cabeceras: una cuenta suspendida es 403 también cuando es lo hecho sin red")
+    void autorizacionNegativaConCabeceras() throws Exception { // spec 048 FR-019
+        doThrow(new NotAuthorizedException("Cuenta suspendida", NotAuthorizedException.CUENTA_SUSPENDIDA)).when(cerrarSinRed)
+                .cerrar(any(), any());
+
+        cerrarSinRedCon(cuerpoValido()).andExpect(status().isForbidden()).andExpect(jsonPath("$.codigo").value("CUENTA_SUSPENDIDA"));
+    }
+
+    @Test
+    @DisplayName("un X-Id-Cliente que no es UUID o un X-Hecho-En que no es un instante es un 400 de siempre y no llega al caso de uso")
+    void cabecerasMalHechas() throws Exception { // spec 048 FR-019
+        mockMvc.perform(put("/api/v1/rocks/day-closure").header("X-Actor-Id", ANA.toString()).header("X-Id-Cliente", "no-es-uuid")
+                .header("X-Hecho-En", "2026-10-29T02:40:13Z").contentType(MediaType.APPLICATION_JSON).content(cuerpoValido()))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(put("/api/v1/rocks/day-closure").header("X-Actor-Id", ANA.toString())
+                .header("X-Id-Cliente", "5f0c1f4e-2d0a-4b7e-9d77-0c9f3f6b1a10").header("X-Hecho-En", "ayer")
+                .contentType(MediaType.APPLICATION_JSON).content(cuerpoValido())).andExpect(status().isBadRequest());
+
+        verifyNoInteractions(cerrar, cerrarSinRed);
     }
 }
