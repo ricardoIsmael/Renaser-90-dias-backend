@@ -1,5 +1,7 @@
 package com.renaser.os.calendar.domain.model.meet.transcripcion;
 
+import com.renaser.os.calendar.domain.model.meet.EstadoDeCoanfitriones;
+
 /**
  * Lo que Google tiene de una sesión (spec 047, FR-003, FR-004), ya armado: el texto «Nombre: frase» de todos los tramos de esa fecha, en orden.
  *
@@ -21,5 +23,14 @@ public record LecturaDeReunion(int conferencias, int entradas, String texto, Str
 
     public LecturaDeReunion {
         texto = texto == null ? "" : texto;
+    }
+
+    /** La misma lectura con el motivo del diagnóstico afinado por cómo quedaron los coanfitriones (FR-038). Sin diagnóstico, no cambia. */
+    public LecturaDeReunion conCoanfitriones(EstadoDeCoanfitriones coanfitriones) {
+        if (diagnostico == null || coanfitriones == null) {
+            return this;
+        }
+        return new LecturaDeReunion(conferencias, entradas, texto, enlaceDeLaGrabacion, transcripcionEnPreparacion,
+                diagnostico.conCoanfitriones(coanfitriones));
     }
 }

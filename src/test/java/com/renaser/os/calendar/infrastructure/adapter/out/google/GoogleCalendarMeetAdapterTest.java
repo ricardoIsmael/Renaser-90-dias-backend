@@ -2,6 +2,7 @@ package com.renaser.os.calendar.infrastructure.adapter.out.google;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.renaser.os.calendar.application.ports.out.meet.ResultadoDeCoanfitriones;
 import com.renaser.os.calendar.application.ports.out.meet.CuentaGoogleNoConectadaException;
 import com.renaser.os.calendar.application.ports.out.meet.CuentaGoogleRevocadaException;
 import com.renaser.os.calendar.application.ports.out.meet.GoogleNoRespondeException;
@@ -510,6 +511,59 @@ class GoogleCalendarMeetAdapterTest {
         assertThat(adapter.fijarArtefactos(ENLACE, ArtefactosDeLaSala.pedir(true, false, false)))
                 .isEqualTo(new ArtefactosDeLaSala(false, null, null));
         servidor.verify();
+    }
+
+    // spec 040 FR-038
+    @Test
+    @DisplayName("FR-038: lee quiénes ya son coanfitriones y da de alta solo a los que faltan (POST members con role COHOST), sin duplicar")
+    void coanfitrionesSoloLosQueFaltan() {
+        tokenDeAcceso();
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces/abc-defg-hij"))
+                .andRespond(withSuccess("{\"name\":\"spaces/Zk3jd8\"}", MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces/Zk3jd8/members?pageSize=100")).andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("{\"members\":[{\"name\":\"spaces/Zk3jd8/members/1\",\"email\":\"Admin@Renaser.pe\",\"role\":\"COHOST\"}]}",
+                        MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces/Zk3jd8/members")).andExpect(method(HttpMethod.POST))
+                .andExpect(jsonPath("$.email").value("mentor@gmail.com")).andExpect(jsonPath("$.role").value("COHOST"))
+                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+
+        ResultadoDeCoanfitriones resultado = adapter.agregarCoanfitriones(ENLACE, List.of("admin@renaser.pe", "mentor@gmail.com"));
+
+        assertThat(resultado).isEqualTo(new ResultadoDeCoanfitriones(2, 2, null));
+        servidor.verify();
+    }
+
+    // spec 040 FR-038
+    @Test
+    @DisplayName("FR-038: 403 o 404 de Google en un correo no rompe: se cuenta el rechazo con su código y se sigue con los demás")
+    void coanfitrionRechazadoSeCuenta() {
+        tokenDeAcceso();
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces/abc-defg-hij"))
+                .andRespond(withSuccess("{\"name\":\"spaces/Zk3jd8\"}", MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces/Zk3jd8/members?pageSize=100"))
+                .andRespond(withStatus(HttpStatus.FORBIDDEN).contentType(MediaType.APPLICATION_JSON).body("{\"error\":{\"code\":403}}"));
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces/Zk3jd8/members")).andExpect(method(HttpMethod.POST))
+                .andRespond(withStatus(HttpStatus.FORBIDDEN).contentType(MediaType.APPLICATION_JSON).body("{\"error\":{\"code\":403}}"));
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces/Zk3jd8/members")).andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+
+        ResultadoDeCoanfitriones resultado = adapter.agregarCoanfitriones(ENLACE, List.of("a@x.pe", "b@x.pe"));
+
+        assertThat(resultado).isEqualTo(new ResultadoDeCoanfitriones(2, 1, 403));
+        servidor.verify();
+    }
+
+    // spec 040 FR-038
+    @Test
+    @DisplayName("FR-038: el permiso meetings.space.created se pide solo con los coanfitriones encendidos y nunca es obligatorio")
+    void elPermisoNuevoEsOpcional() {
+        ConfiguracionDeGoogle config = g.configuracion;
+        assertThat(config.permisosPedidos()).doesNotContain(ConfiguracionDeGoogle.PERMISO_DE_COANFITRIONES);
+
+        config.opcionesDeLaSala(true, true, true, true, true);
+
+        assertThat(config.permisosPedidos()).contains(ConfiguracionDeGoogle.PERMISO_DE_COANFITRIONES);
+        assertThat(config.permisosObligatorios()).doesNotContain(ConfiguracionDeGoogle.PERMISO_DE_COANFITRIONES);
     }
 
     // spec 040 FR-036

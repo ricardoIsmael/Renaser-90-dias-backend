@@ -2,6 +2,8 @@ package com.renaser.os.calendar.domain.model.meet.transcripcion;
 
 import com.renaser.os.calendar.domain.model.evento.EventoId;
 
+import com.renaser.os.calendar.domain.model.meet.EstadoDeCoanfitriones;
+
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -15,9 +17,17 @@ import java.util.UUID;
  * @param fin                     cuándo termina (inicio + duración; sin duración, 60 minutos)
  * @param transcripcionConfirmada lo que Google confirmó al crear la sala (spec 040, FR-036): {@code false} = la cuenta no dejó transcribir
  * @param actual                  lo que ya se sabía de su transcripción, o {@code null} si es la primera vez
+ * @param coanfitriones           cómo quedó hacer coanfitrión a quien dirige la sala (spec 040, FR-038), o {@code null} si no se pidió
  */
 public record PendienteDeTranscripcion(UUID salaId, EventoId eventoId, LocalDate fecha, String enlace, Instant inicio, Instant fin,
-                                       Boolean transcripcionConfirmada, TranscripcionDeSesion actual) {
+                                       Boolean transcripcionConfirmada, TranscripcionDeSesion actual,
+                                       EstadoDeCoanfitriones coanfitriones) {
+
+    /** Sin datos de coanfitriones. */
+    public PendienteDeTranscripcion(UUID salaId, EventoId eventoId, LocalDate fecha, String enlace, Instant inicio, Instant fin,
+                                    Boolean transcripcionConfirmada, TranscripcionDeSesion actual) {
+        this(salaId, eventoId, fecha, enlace, inicio, fin, transcripcionConfirmada, actual, null);
+    }
 
     /** Se buscan las conferencias que empiezan desde media hora antes hasta tres horas después del fin agendado. */
     public static final Duration ANTES_DEL_INICIO = Duration.ofMinutes(30);

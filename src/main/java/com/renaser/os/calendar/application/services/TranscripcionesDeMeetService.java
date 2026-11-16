@@ -102,7 +102,7 @@ class TranscripcionesDeMeetService implements TranscripcionesDeMeetUseCase {
                 } else if (!puedeLeer) {
                     t.sinPermiso(ahora);
                 } else {
-                    LecturaDeReunion lectura = reuniones.leer(p.enlace(), p.desde(), p.hasta());
+                    LecturaDeReunion lectura = reuniones.leer(p.enlace(), p.desde(), p.hasta()).conCoanfitriones(p.coanfitriones());
                     t.registrarLectura(lectura, p.fin(), ahora, retencion);
                 }
             } catch (GoogleNoRespondeException e) {
@@ -177,7 +177,7 @@ class TranscripcionesDeMeetService implements TranscripcionesDeMeetUseCase {
         }
         LecturaDeReunion lectura;
         try {
-            lectura = reuniones.leer(sala.enlace(), sala.desde(), sala.hasta());
+            lectura = reuniones.leer(sala.enlace(), sala.desde(), sala.hasta()).conCoanfitriones(sala.coanfitriones());
         } catch (GoogleNoRespondeException | GoogleRechazoException | CuentaGoogleRevocadaException | CuentaGoogleNoConectadaException e) {
             throw new IllegalStateException("Google no dejó leer esa reunión ahora. Intenta de nuevo en unos minutos.");
         }

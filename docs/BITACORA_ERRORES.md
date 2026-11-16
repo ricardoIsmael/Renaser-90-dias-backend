@@ -16223,3 +16223,12 @@ mejor aún, con un `codigo`.
 **Límite conocido.** La Meet REST API no dice si un participante con cuenta es de la organización, así que «cuenta de fuera» y «cuenta de Renaser» salen juntas como «con cuenta»; el motivo `CON_CUENTAS_Y_SIN_ARCHIVOS` lo reconoce y no adivina.
 
 **Cómo evitar que vuelva a pasar.** Un estado final «sin datos» guarda la evidencia mínima y anónima que permite explicarlo mientras la fuente todavía la tiene (`TranscripcionDeSesionTest`, `GoogleMeetReunionesAdapterTest`, `TranscripcionesDeMeetServiceTest`).
+
+## E-685 · Meet no grababa si no entraba la cuenta conectada: la anfitriona era una cuenta que nadie usa y quien dirige no era coanfitrión (backend, issue #151, 14/11, RESUELTO detrás de un interruptor)
+
+- **Fecha:** 2026-11-14
+- **Dónde:** `PasosConGoogle`, `GoogleCalendarMeetAdapter`, `SincronizadorDeSalas` (spec 040 FR-038, spec 047 FR-023)
+- **Síntoma:** «Sesión II - Miguel» (13/11/2026): cuatro conferencias en una sala con grabación y transcripción automáticas confirmadas por Google (`ON` al leerlas de vuelta) y ni un archivo (`SIN_TRANSCRIPCION`); «Sesión II - Carlos», con la misma configuración, sí.
+- **Causa real:** Google solo empieza a grabar y transcribir solo cuando entra alguien «con permiso para grabar»: el anfitrión o un coanfitrión, desde la web. La anfitriona de todas las salas es la cuenta conectada (`renasercorporation@gmail.com`), a la que no entra nadie, y a quien dirige solo se lo invitaba al evento de Calendar (FR-035), lo que no da ese permiso. Con ella o con otro coanfitrión adentro graba; si no, no.
+- **Solución:** FR-038: `POST spaces/{sala}/members` con rol `COHOST` para quien creó el evento y el mentor del grupo, por sala y sin romper el evento; el diagnóstico de #151 dice `QUIEN_DIRIGE_NO_ERA_COANFITRION`. Apagado por defecto (`EVENTOS_MEET_COANFITRIONES`): `spaces.members.create` pide `meetings.space.created`, que Google limita a espacios creados por la app, y estas salas las crea la Calendar API; el resultado real (`OK` o 403) lo dice `meet.coanfitriones` en el detalle del evento. Pasos del dueño en la spec 040 FR-038.
+- **Cómo evitarlo:** `CoanfitrionesDeLaSalaTest` (alta al crear, sin duplicar, 403 sin romper, interruptor apagado, relleno) y `GoogleCalendarMeetAdapterTest`. Pendiente verificar con la cuenta real si Google acepta coanfitriones en salas de Calendar; si no, crear las salas con `spaces.create` (otra decisión).

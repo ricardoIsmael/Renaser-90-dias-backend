@@ -1,6 +1,7 @@
 package com.renaser.os.calendar.application.services;
 
 import com.renaser.os.calendar.application.ports.out.meet.PedidoDeSala;
+import com.renaser.os.calendar.application.ports.out.meet.ResultadoDeCoanfitriones;
 import com.renaser.os.calendar.application.ports.out.meet.ResultadoDeSala;
 import com.renaser.os.calendar.application.ports.out.meet.SalaDeReunionPort;
 import com.renaser.os.calendar.domain.model.meet.AccesoSalaMeet;
@@ -96,6 +97,34 @@ final class GoogleSimulado implements SalaDeReunionPort {
                 pedidos.notas() == null ? null : !sinPlanParaTranscribir);
         artefactosPorEnlace.put(enlace, quedo);
         return quedo;
+    }
+
+    /** enlace -> correos que ya son coanfitriones de la sala (en minúscula). */
+    final Map<String, java.util.Set<String>> coanfitrionesPorEnlace = new LinkedHashMap<>();
+    /** Si no es nulo, Google rechaza hacer coanfitrión a CUALQUIERA con este código (403: falta el permiso). */
+    Integer rechazaCoanfitrionesCon;
+    /** Correos (en minúscula) a los que Google rechaza aunque a los demás no (p. ej. de fuera de la organización). */
+    final java.util.Set<String> correosRechazados = new java.util.LinkedHashSet<>();
+
+    @Override
+    public ResultadoDeCoanfitriones agregarCoanfitriones(String enlace, List<String> correos) {
+        entrar("coanfitriones:" + CodigoDeSalaMeet.deEnlace(enlace).orElse("?"));
+        java.util.Set<String> actuales = coanfitrionesPorEnlace.computeIfAbsent(enlace, e -> new java.util.LinkedHashSet<>());
+        int quedaron = 0;
+        Integer rechazo = null;
+        for (String correo : correos) {
+            String c = correo.toLowerCase(java.util.Locale.ROOT);
+            if (actuales.contains(c)) {
+                quedaron++;
+            } else if (rechazaCoanfitrionesCon != null || correosRechazados.contains(c)) {
+                rechazo = rechazaCoanfitrionesCon != null ? rechazaCoanfitrionesCon : 403;
+            } else {
+                llamadas.add("alta-coanfitrion"); // un POST de verdad a Google
+                actuales.add(c);
+                quedaron++;
+            }
+        }
+        return new ResultadoDeCoanfitriones(correos.size(), quedaron, rechazo);
     }
 
     long llamadasDe(String prefijo) {

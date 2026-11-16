@@ -6,6 +6,7 @@ import com.renaser.os.calendar.application.ports.out.evento.SaveEventoPort;
 import com.renaser.os.calendar.application.ports.out.meet.ConfiguracionDeGooglePort;
 import com.renaser.os.calendar.application.ports.out.meet.LoadSalaMeetPort;
 import com.renaser.os.calendar.application.ports.out.meet.SaveSalaMeetPort;
+import com.renaser.os.calendar.application.ports.out.celula.MentorDelGrupoPort;
 import com.renaser.os.calendar.application.ports.out.persona.CorreosDePersonasPort;
 import com.renaser.os.calendar.application.services.PasosConGoogle.CuentaInutilizable;
 import com.renaser.os.calendar.application.services.PasosConGoogle.Operacion;
@@ -66,13 +67,16 @@ class SincronizadorDeSalas {
     private final Clock clock;
     private final IdGenerator idGenerator;
     private final CorreosDePersonasPort correos;
+    private final MentorDelGrupoPort mentores;
     /** Candados rayados por evento: dos hilos sobre el mismo evento esperan; los de eventos distintos casi nunca chocan. Sin mapa que crezca. */
     private final ReentrantLock[] candados = IntStream.range(0, 64).mapToObj(i -> new ReentrantLock()).toArray(ReentrantLock[]::new);
 
     SincronizadorDeSalas(LoadEventoPort loadEventoPort, LoadExcepcionPort loadExcepcionPort, SaveEventoPort saveEventoPort,
                          LoadSalaMeetPort loadSalaPort, SaveSalaMeetPort saveSalaPort, ConfiguracionDeGooglePort configuracion,
-                         PasosConGoogle pasos, Clock clock, IdGenerator idGenerator, CorreosDePersonasPort correos) {
+                         PasosConGoogle pasos, Clock clock, IdGenerator idGenerator, CorreosDePersonasPort correos,
+                         MentorDelGrupoPort mentores) {
         this.correos = correos;
+        this.mentores = mentores;
         this.loadEventoPort = loadEventoPort;
         this.loadExcepcionPort = loadExcepcionPort;
         this.saveEventoPort = saveEventoPort;
@@ -128,10 +132,50 @@ class SincronizadorDeSalas {
             ejecutar(paso, evento.orElse(null), deseadas, zona, invitados, operacion, limite);
         }
         List<SalaMeet> resultado = loadSalaPort.porEvento(eventoId);
+        if (vivo && configuracion.coanfitriones()) {
+            pedirCoanfitriones(evento.get(), resultado, hoy, operacion, limite);
+            resultado = loadSalaPort.porEvento(eventoId);
+        }
         if (vivo) {
             publicarElEnlaceEnElEvento(evento.get(), resultado, hoy);
         }
         return resultado;
+    }
+
+    /**
+     * Spec 040 FR-038: quien dirige la sesión —quien creó el evento y el mentor del grupo convocado— es coanfitrión de la sala, para que Meet grabe y
+     * transcriba solo. Cubre las salas recién creadas y, de paso, el relleno de las que ya existían: toda fecha de hoy en adelante que todavía no
+     * lo pidió. Sin tiempo (el presupuesto de la petición se acabó) se deja para la próxima pasada del proceso de fondo.
+     */
+    private void pedirCoanfitriones(Evento evento, List<SalaMeet> salas, LocalDate hoy, Operacion operacion, Instant limite) {
+        List<String> quienDirige = null;
+        for (SalaMeet sala : salas) {
+            if (!sala.coanfitrionesPorPedir() || sala.fechaOcurrencia().isBefore(hoy) || clock.now().isAfter(limite)) {
+                continue;
+            }
+            if (quienDirige == null) {
+                quienDirige = correosDeQuienDirige(evento);
+            }
+            pasos.pedirCoanfitriones(sala, quienDirige, operacion);
+        }
+    }
+
+    /** Los correos de quien dirige: quien creó el evento (líder, mentor, guía o administración) y el mentor del grupo convocado, si lo hay. */
+    private List<String> correosDeQuienDirige(Evento evento) {
+        LinkedHashSet<UserId> personas = new LinkedHashSet<>();
+        if (evento.creadoPor() != null) {
+            personas.add(evento.creadoPor());
+        }
+        try {
+            if (evento.celulaDestinoId() != null) {
+                mentores.mentorDe(evento.celulaDestinoId()).ifPresent(personas::add);
+            }
+            Map<UserId, String> encontrados = correos.correosDe(personas);
+            return personas.stream().map(encontrados::get).filter(c -> c != null && !c.isBlank()).map(String::trim).distinct().toList();
+        } catch (RuntimeException ex) {
+            log.warn("[calendar.SincronizadorDeSalas] no se pudo leer quién dirige el evento {}: {}", evento.id(), ex.getClass().getSimpleName());
+            return List.of();
+        }
     }
 
     private void ejecutar(Paso paso, Evento evento, Map<LocalDate, OcurrenciaDeseada> deseadas, ZoneId zona, Invitados invitados,
@@ -148,6 +192,9 @@ class SincronizadorDeSalas {
             }
             case ACTUALIZAR -> {
                 if (!sinTiempo) {
+                    if (operacion.actor() != null && configuracion.coanfitriones()) {
+                        paso.sala().olvidarCoanfitriones(clock.now()); // una persona editó: puede haber cambiado quién dirige
+                    }
                     pasos.actualizar(paso.sala(), deseadas.get(paso.fecha()), zona, invitados.alEditar(), operacion);
                 }
             }

@@ -43,6 +43,10 @@ public final class SalaMeet {
     private long version;
     /** La grabación, la transcripción y las notas que Google dejó encendidas (FR-036); {@link ArtefactosDeLaSala#NADA} si todavía no se pidieron. */
     private ArtefactosDeLaSala artefactos;
+    /** Cómo quedó el pedido de coanfitriones (spec 040 FR-038); {@code null} = todavía no se pidió. Nunca guarda correos. */
+    private EstadoDeCoanfitriones coanfitriones;
+    /** Frase fija con el porqué cuando {@link #coanfitriones} no es {@code OK}; nunca texto de Google ni correos. */
+    private String coanfitrionesMotivo;
 
     /** Una sala que todavía no se le pidió a Google: nace {@code PENDIENTE} y lista para el primer intento. */
     public static SalaMeet nueva(UUID id, EventoId eventoId, LocalDate fecha, String idGoogle, AccesoSalaMeet acceso,
@@ -53,7 +57,7 @@ public final class SalaMeet {
         Objects.requireNonNull(idGoogle, "idGoogle es obligatorio");
         Objects.requireNonNull(acceso, "acceso es obligatorio");
         return new SalaMeet(id, eventoId, fecha, idGoogle, null, EstadoSalaMeet.PENDIENTE, acceso, null, 0, ahora, null,
-                ahora, ahora, 0L, ArtefactosDeLaSala.NADA);
+                ahora, ahora, 0L, ArtefactosDeLaSala.NADA, null, null);
     }
 
     /** Solo para el adaptador de persistencia: reconstruye una fila existente sin revalidar. */
@@ -72,7 +76,7 @@ public final class SalaMeet {
                                      String ultimoError, Instant creadaEn, Instant actualizadaEn, long version,
                                      ArtefactosDeLaSala artefactos) {
         return new SalaMeet(id, eventoId, fecha, idGoogle, enlace, estado, accesoElegido, accesoConfirmado, intentos,
-                proximoIntento, ultimoError, creadaEn, actualizadaEn, version, artefactos == null ? ArtefactosDeLaSala.NADA : artefactos);
+                proximoIntento, ultimoError, creadaEn, actualizadaEn, version, artefactos == null ? ArtefactosDeLaSala.NADA : artefactos, null, null);
     }
 
     /**
@@ -82,6 +86,46 @@ public final class SalaMeet {
     public void registrarArtefactos(ArtefactosDeLaSala confirmados, Instant ahora) {
         this.artefactos = confirmados == null ? ArtefactosDeLaSala.NADA : confirmados;
         this.actualizadaEn = ahora;
+    }
+
+    /** Igual, con el estado de los coanfitriones (V195). */
+    public static SalaMeet rehydrate(UUID id, EventoId eventoId, LocalDate fecha, String idGoogle, String enlace,
+                                     EstadoSalaMeet estado, AccesoSalaMeet accesoElegido,
+                                     AccesoSalaMeet accesoConfirmado, int intentos, Instant proximoIntento,
+                                     String ultimoError, Instant creadaEn, Instant actualizadaEn, long version,
+                                     ArtefactosDeLaSala artefactos, EstadoDeCoanfitriones coanfitriones, String coanfitrionesMotivo) {
+        SalaMeet sala = rehydrate(id, eventoId, fecha, idGoogle, enlace, estado, accesoElegido, accesoConfirmado, intentos, proximoIntento,
+                ultimoError, creadaEn, actualizadaEn, version, artefactos);
+        sala.coanfitriones = coanfitriones;
+        sala.coanfitrionesMotivo = coanfitrionesMotivo;
+        return sala;
+    }
+
+    /** Lo que Google dejó de los coanfitriones (FR-038). No genera reintentos: un rechazo de Google no cambia solo. */
+    public void registrarCoanfitriones(EstadoDeCoanfitriones estadoNuevo, String motivo, Instant ahora) {
+        this.coanfitriones = Objects.requireNonNull(estadoNuevo, "el estado es obligatorio");
+        this.coanfitrionesMotivo = estadoNuevo == EstadoDeCoanfitriones.OK ? null : limpiar(motivo);
+        this.actualizadaEn = ahora;
+    }
+
+    /** Todavía no se pidió hacer coanfitrión a quien dirige esta sala, o se pidió y no había a quién (se vuelve a mirar: puede haberse asignado). */
+    public boolean coanfitrionesPorPedir() {
+        return estado == EstadoSalaMeet.CREADO && (coanfitriones == null || coanfitriones == EstadoDeCoanfitriones.SIN_CORREO);
+    }
+
+    /** Vuelve a pedirlos en la próxima sincronización (p. ej. cuando cambia quien dirige o el dueño dio el permiso). */
+    public void olvidarCoanfitriones(Instant ahora) {
+        this.coanfitriones = null;
+        this.coanfitrionesMotivo = null;
+        this.actualizadaEn = ahora;
+    }
+
+    public EstadoDeCoanfitriones coanfitriones() {
+        return coanfitriones;
+    }
+
+    public String coanfitrionesMotivo() {
+        return coanfitrionesMotivo;
     }
 
     /** Todavía no se le pidió a Google la grabación ni lo demás de esta sala. */
@@ -148,6 +192,8 @@ public final class SalaMeet {
         this.enlace = null;
         this.accesoConfirmado = null;
         this.artefactos = ArtefactosDeLaSala.NADA;
+        this.coanfitriones = null;
+        this.coanfitrionesMotivo = null;
         this.intentos = 0;
         this.proximoIntento = null;
         this.ultimoError = null;
@@ -161,6 +207,8 @@ public final class SalaMeet {
         this.accesoElegido = acceso;
         this.accesoConfirmado = null;
         this.artefactos = ArtefactosDeLaSala.NADA;
+        this.coanfitriones = null;
+        this.coanfitrionesMotivo = null;
         this.intentos = 0;
         this.proximoIntento = ahora;
         this.ultimoError = null;

@@ -8,6 +8,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.renaser.os.calendar.application.ports.out.meet.CifradoDeSecretosPort;
 import com.renaser.os.calendar.application.ports.out.meet.TranscripcionesDeMeetPort;
 import com.renaser.os.calendar.domain.model.evento.EventoId;
+import com.renaser.os.calendar.domain.model.meet.EstadoDeCoanfitriones;
 import com.renaser.os.calendar.domain.model.meet.transcripcion.DiagnosticoDeReunion;
 import com.renaser.os.calendar.domain.model.meet.transcripcion.EstadoDeTranscripcion;
 import com.renaser.os.calendar.domain.model.meet.transcripcion.PendienteDeTranscripcion;
@@ -56,7 +57,7 @@ class TranscripcionesDeMeetJdbcAdapter implements TranscripcionesDeMeetPort {
 
     @Override
     public List<PendienteDeTranscripcion> pendientes(Instant ahora, int limite) {
-        return jdbcClient.sql("SELECT m.id AS sala_id, m.evento_id, m.fecha_ocurrencia, m.enlace, m.transcripcion_confirmada, "
+        return jdbcClient.sql("SELECT m.id AS sala_id, m.evento_id, m.fecha_ocurrencia, m.enlace, m.transcripcion_confirmada, m.coanfitriones_estado, "
                         + INICIO + " AS inicio, " + FIN + " AS fin, " + COLUMNAS
                         + " FROM renaser.eventos_meet m JOIN renaser.eventos e ON e.id = m.evento_id"
                         + " LEFT JOIN renaser.eventos_meet_transcripciones t ON t.evento_meet_id = m.id"
@@ -77,14 +78,14 @@ class TranscripcionesDeMeetJdbcAdapter implements TranscripcionesDeMeetPort {
                     return new PendienteDeTranscripcion(salaId, EventoId.of(rs.getObject("evento_id", UUID.class)),
                             rs.getObject("fecha_ocurrencia", LocalDate.class), rs.getString("enlace"),
                             rs.getObject("inicio", OffsetDateTime.class).toInstant(), rs.getObject("fin", OffsetDateTime.class).toInstant(),
-                            transcripcion, actual);
+                            transcripcion, actual, coanfitriones(rs.getString("coanfitriones_estado")));
                 })
                 .list();
     }
 
     @Override
     public Optional<PendienteDeTranscripcion> salaDeLaFecha(EventoId eventoId, LocalDate fecha) {
-        return jdbcClient.sql("SELECT m.id AS sala_id, m.evento_id, m.fecha_ocurrencia, m.enlace, " + INICIO + " AS inicio, " + FIN + " AS fin"
+        return jdbcClient.sql("SELECT m.id AS sala_id, m.evento_id, m.fecha_ocurrencia, m.enlace, m.coanfitriones_estado, " + INICIO + " AS inicio, " + FIN + " AS fin"
                         + " FROM renaser.eventos_meet m JOIN renaser.eventos e ON e.id = m.evento_id"
                         + " WHERE m.evento_id = :evento AND m.fecha_ocurrencia = :fecha AND m.estado = 'CREADO' AND m.enlace IS NOT NULL")
                 .param("evento", eventoId.value())
@@ -92,8 +93,13 @@ class TranscripcionesDeMeetJdbcAdapter implements TranscripcionesDeMeetPort {
                 .query((rs, n) -> new PendienteDeTranscripcion(rs.getObject("sala_id", UUID.class),
                         EventoId.of(rs.getObject("evento_id", UUID.class)), rs.getObject("fecha_ocurrencia", LocalDate.class),
                         rs.getString("enlace"), rs.getObject("inicio", OffsetDateTime.class).toInstant(),
-                        rs.getObject("fin", OffsetDateTime.class).toInstant(), null, null))
+                        rs.getObject("fin", OffsetDateTime.class).toInstant(), null, null,
+                        coanfitriones(rs.getString("coanfitriones_estado"))))
                 .optional();
+    }
+
+    private static EstadoDeCoanfitriones coanfitriones(String estado) {
+        return estado == null ? null : EstadoDeCoanfitriones.valueOf(estado);
     }
 
     @Override

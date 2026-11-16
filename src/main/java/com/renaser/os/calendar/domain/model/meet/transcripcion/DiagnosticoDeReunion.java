@@ -1,5 +1,7 @@
 package com.renaser.os.calendar.domain.model.meet.transcripcion;
 
+import com.renaser.os.calendar.domain.model.meet.EstadoDeCoanfitriones;
+
 import java.time.Instant;
 import java.util.List;
 
@@ -29,7 +31,25 @@ public record DiagnosticoDeReunion(List<Conferencia> conferencias, String autoGr
         /** La sala no tenía la grabación y la transcripción automáticas encendidas cuando la leímos. */
         AUTOMATICO_APAGADO,
         /** Hubo cuentas de Google en la sala y aun así Google no generó nada: suele ser que quien dirige no es de la organización o no había licencia. */
-        CON_CUENTAS_Y_SIN_ARCHIVOS
+        CON_CUENTAS_Y_SIN_ARCHIVOS,
+        /**
+         * Hubo cuentas de Google en la sala pero quien dirige NO quedó como coanfitrión (FR-038: el pedido a Google falló o no había correo):
+         * Meet solo graba solo cuando entra el anfitrión o un coanfitrión.
+         */
+        QUIEN_DIRIGE_NO_ERA_COANFITRION
+    }
+
+    /**
+     * Afina el motivo con cómo quedaron los coanfitriones (FR-038): si hubo cuentas en la sala y no se generó nada, y a quien dirige no se le pudo
+     * dar el permiso de grabar, ese es el motivo probable. Con coanfitriones en {@code OK} o sin pedir, el motivo no cambia.
+     */
+    public DiagnosticoDeReunion conCoanfitriones(EstadoDeCoanfitriones coanfitriones) {
+        boolean dirigeSinPermiso = coanfitriones == EstadoDeCoanfitriones.FALLIDO || coanfitriones == EstadoDeCoanfitriones.PARCIAL
+                || coanfitriones == EstadoDeCoanfitriones.SIN_CORREO;
+        if (!dirigeSinPermiso || !Motivo.CON_CUENTAS_Y_SIN_ARCHIVOS.name().equals(motivoProbable)) {
+            return this;
+        }
+        return new DiagnosticoDeReunion(conferencias, autoGrabacion, autoTranscripcion, Motivo.QUIEN_DIRIGE_NO_ERA_COANFITRION.name());
     }
 
     /**
@@ -99,6 +119,8 @@ public record DiagnosticoDeReunion(List<Conferencia> conferencias, String autoGr
             case ARCHIVO_NO_GENERADO -> "Google empezó a grabar o transcribir pero no dejó el archivo (estado sin terminar). Puede ser que la "
                     + "reunión se cortara antes de tiempo.";
             case AUTOMATICO_APAGADO -> "La sala no tiene la grabación ni la transcripción automáticas encendidas.";
+            case QUIEN_DIRIGE_NO_ERA_COANFITRION -> "Google no grabó aunque en " + conexiones + " entraron " + conCuenta + " cuentas de Google: quien "
+                    + "dirige la sesión no quedó como coanfitrión de la sala y Meet solo graba solo cuando entra el anfitrión o un coanfitrión.";
             case CON_CUENTAS_Y_SIN_ARCHIVOS -> "Google no grabó aunque en " + conexiones + " entraron " + conCuenta + " cuentas de Google, "
                     + anonimos + " anónimos y " + telefono + " por teléfono. Suele pasar cuando quien dirige no entra con la cuenta de la "
                     + "organización o su cuenta no tiene grabación; Meet no permite saber cuál de los dos fue.";

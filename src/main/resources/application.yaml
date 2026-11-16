@@ -781,6 +781,9 @@ renaser:
       grabar: ${EVENTOS_MEET_GRABAR:true}
       transcribir: ${EVENTOS_MEET_TRANSCRIBIR:true}
       notas: ${EVENTOS_MEET_NOTAS:true}
+      # Spec 040 FR-038: hacer coanfitrión de la sala a quien dirige la sesión para que Meet grabe solo. NO por defecto: exige el permiso
+      # meetings.space.created (reconectar la cuenta) y Google solo lo da para salas creadas por la app (ver la spec).
+      coanfitriones: ${EVENTOS_MEET_COANFITRIONES:false}
       # Spec 047: la transcripcion de cada sesion se lee de Google (Meet REST API, meetings.space.readonly) y se guarda CIFRADA, sin mostrarse
       # en la app. Se prende con el interruptor de Soporte TI `eventos.meet.transcripcion` (nace apagado). Se guarda `retencion-dias` (decision
       # P3 del duenio: 6 meses) y despues se borra sola.
