@@ -40,6 +40,8 @@ Se apoya en la spec 044 (eventos por audiencia, FR-007 y FR-009 a FR-012) y en l
   crear** (la foto de spec 044, FR-010): los invitados quedan fijos para toda la serie y no se recalculan por ocurrencia; los avisos usan esa lista.
 - **FR-006**: `GET /calendar/audience/options` trae `trafficLightDate` (el día más reciente del que salen los colores). La app dice «Según el semáforo de ayer.» si es
   ayer y, si no, «Según el semáforo del viernes 13.» (el día de la semana y la fecha).
+  El **detalle** del evento no repite ninguna fecha: la fila de un color de «Para quién es» muestra solo el color y su cifra (#207, 2026-11-16, decisión del
+  dueño: la fecha que salía era la de guardado, `resolvedAt`, no la del semáforo usado).
 
 ### Repetir por días (app; el servidor ya acepta la repetición)
 
