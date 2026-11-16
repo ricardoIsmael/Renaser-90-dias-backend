@@ -143,6 +143,7 @@ primeros ni los últimos metros de la ruta (zona de privacidad, FR-043). Es un p
 
 - **FR-001** La carrera se inicia solo desde la fila «Kilómetros diarios» de Training, de hoy, y solo en Android. En la web (iPhone) no
   se ofrece; queda la captura.
+  **Corregido 2026-11-16 (decisión del dueño, FR-047 a FR-052):** también se ofrece en la app de iPhone. En la web sigue sin ofrecerse.
 - **FR-002** Al empezar, el teléfono genera una `carreraId` (UUID v4) y la guarda con el inicio y la cuenta, antes de la cuenta regresiva.
 - **FR-003** Cuenta regresiva de 3 segundos con pitido, voz y vibración en cada número; con «reducir movimiento», sin animación de escala.
 - **FR-004** Durante la carrera la app **no hace ningún pedido al servidor** (ni lecturas ni escrituras) relacionado con la carrera.
@@ -171,6 +172,36 @@ primeros ni los últimos metros de la ruta (zona de privacidad, FR-043). Es un p
   del dueño): el objetivo de 90 días del eje `CUERPO` de `GET /api/v1/rocks/master`, si su `unidad` es de peso en kilos («kg», «kilo»,
   «kilos», «kilogramo(s)», sin importar mayúsculas ni tildes), usa su `avance` y, si no hay, su `lineaBase`; un valor fuera de 30–300 kg se
   ignora. Sin nada de eso, 70 kg. Lo calcula la app; se muestran como «aprox.». El servidor las guarda tal como llegan, topadas (FR-026).
+
+### La carrera en iPhone (corregido 2026-11-16, decisión del dueño)
+
+La app ya sale para iOS y el dueño decidió que la carrera con GPS funciona en iPhone igual que en Android. Todo lo de arriba (motor,
+cuenta regresiva, pausa, cola sin red por `carreraId`, envío único) vale igual; lo siguiente es lo que cambia por el sistema.
+
+- **FR-047** «Correr con GPS» se ofrece también en la app de iOS, con las mismas condiciones de FR-001 (fila «Kilómetros diarios» de hoy,
+  servidor con carreras, interruptor `habitos.km.carreras`). La carrera, la cuenta regresiva, la voz, la cola sin red por `carreraId` y el
+  envío único no cambian. En la web sigue sin ofrecerse; en Android no cambia nada.
+- **FR-048** Segundo plano en iPhone (FR-011): no hay servicio en primer plano ni notificación fija propia; la carrera sigue contando con la
+  pantalla apagada o con la app en segundo plano porque la app declara el modo de fondo `location` (`UIBackgroundModes`, con
+  `isIosBackgroundLocationEnabled` en el plugin de `expo-location`) y el GPS se arranca, con la app visible, con la tarea de
+  `expo-task-manager`, `showsBackgroundLocationIndicator: true` (la barra azul del sistema avisa que se usa la ubicación),
+  `pausesUpdatesAutomatically: false` y `activityType: Fitness`. Android no cambia.
+- **FR-049** Permiso de ubicación en iPhone: solo «mientras se usa la app» (como en Android, FR-011): `expo-location` no pide «siempre» para
+  una tarea que se arranca con la app visible. Por eso la app **no declara** `NSLocationAlwaysAndWhenInUseUsageDescription` ni
+  `NSLocationAlwaysUsageDescription`, y `NSLocationWhenInUseUsageDescription` dice en español de Perú, con tuteo, que es para contar los
+  kilómetros y dibujar la ruta de «Correr con GPS». Sin permiso, o con la ubicación del teléfono apagada, la carrera no empieza y se avisa
+  con un texto claro (en iPhone dice dónde activarlo: Ajustes, Renaser, Ubicación); la captura sigue como siempre.
+- **FR-050** Los pasos de la carrera en iPhone salen del podómetro de `expo-sensors` (el mismo `Pedometer` de Android). El texto de
+  `NSMotionUsageDescription` (`motionPermission` de `expo-sensors` y `motionUsagePermission` de `expo-location`, el mismo texto) está en
+  español y dice que es para contar tus pasos mientras corres. Sin permiso o sin sensor, la carrera cuenta solo con el GPS (FR-036).
+- **FR-051** En iPhone no hay guía de batería de marca (FR-010) ni notificación local de la carrera: lo que avisa es el indicador del
+  sistema. La notificación única (FR-011) sigue siendo solo de Android.
+- **FR-052** La app de iPhone no declara `NSFaceIDUsageDescription`: no usa Face ID (SecureStore sin `requireAuthentication`); se quita con
+  `faceIDPermission: false` en el plugin de `expo-secure-store`. Todo texto `NS*UsageDescription` que declare la app está en español.
+
+**Solo se comprueba en un iPhone** (no en las pruebas ni en el emulador de Android): que el recorrido siga sumando con la pantalla apagada
+y con la app en segundo plano, que la barra azul aparezca, que `Pedometer.watchStepCount` entregue pasos mientras corres, y los dos
+permisos (ubicación y movimiento).
 
 ### Envío único e idempotencia
 
@@ -328,6 +359,7 @@ Reemplazan a los «Supuestos para el dueño» que tenía este borrador. Cada una
 ## Qué necesita
 
 - **APK nuevo** (código nativo: `react-native-maps`, servicio en primer plano, sensores). No llega por aire.
+- **iPhone (FR-047 a FR-052):** build nuevo de iOS (cambia `Info.plist`: modo de fondo `location`, textos de ubicación y de movimiento, sin Face ID).
 - **Clave de Maps SDK for Android** restringida al paquete de la app y a las huellas SHA-1 de la llave de subida y la de firma de Play.
 - **Migración** (V170): tabla `carreras` con índice único `(participante_id, carrera_id)` y el CHECK de
   `registros_habito.origen_medicion` ampliado a `GPS` (ver `plan.md`).
@@ -338,5 +370,5 @@ Reemplazan a los «Supuestos para el dueño» que tenía este borrador. Cada una
 
 ## Fuera de alcance (para después)
 
-iPhone (la app web no tiene GPS en segundo plano), metas o planes de entrenamiento, historial «Mis carreras», competir con otros en vivo,
+iPhone en la web (no tiene GPS en segundo plano; la app de iPhone sí, FR-047), metas o planes de entrenamiento, historial «Mis carreras», competir con otros en vivo,
 frecuencia cardiaca, exportar a Strava o GPX, escribir la carrera en Health Connect.
