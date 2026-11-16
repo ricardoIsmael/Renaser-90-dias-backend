@@ -153,7 +153,15 @@ final class MundoDeMeet {
         public boolean coanfitriones() {
             return coanfitriones;
         }
+
+        @Override
+        public boolean salasConMeetApi() {
+            return salasConMeetApi;
+        }
     };
+
+    /** FR-040/FR-041: crear con la Meet API y migrar las de Calendar. Apagado por defecto, como en producción. */
+    boolean salasConMeetApi = false;
 
     /** FR-038: hacer coanfitrión a quien dirige. Apagado por defecto, como en producción. */
     boolean coanfitriones = false;
@@ -207,7 +215,7 @@ final class MundoDeMeet {
         acceso = new AccesoEventoService(this::progreso, null, null, (usuario, tipo) -> false, (celula, usuario) -> false,
                 new AlcanceDeFormacionSoloEscuela());
         disponibilidad = new DisponibilidadDeLasSalas(interruptores, configuracion, cuenta);
-        trabajo = new TrabajoEnSegundoPlanDeMeetService(cuenta, salas, salas, auditoriaDeGoogle, sincronizador, revocacion, auditor);
+        trabajo = new TrabajoEnSegundoPlanDeMeetService(cuenta, salas, salas, auditoriaDeGoogle, sincronizador, revocacion, auditor, configuracion);
         reintento = new ReintentoDeSalaDeMeetService(acceso, disponibilidad, sincronizador, eventos, this::obtener, auditor, reloj);
         servicio = new EventoConSalaDeMeetService(this::listar, this::obtener, this::crear, this::actualizar, this::eliminar,
                 new CancelarOcurrenciaUseCase() {

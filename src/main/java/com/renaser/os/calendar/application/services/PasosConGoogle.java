@@ -5,6 +5,7 @@ import com.renaser.os.calendar.application.ports.out.meet.CuentaGoogleNoConectad
 import com.renaser.os.calendar.application.ports.out.meet.CuentaGoogleRevocadaException;
 import com.renaser.os.calendar.application.ports.out.meet.GoogleNoRespondeException;
 import com.renaser.os.calendar.application.ports.out.meet.GoogleRechazoException;
+import com.renaser.os.calendar.application.ports.out.meet.EspacioDeMeet;
 import com.renaser.os.calendar.application.ports.out.meet.PedidoDeSala;
 import com.renaser.os.calendar.application.ports.out.meet.ResultadoDeCoanfitriones;
 import com.renaser.os.calendar.application.ports.out.meet.ResultadoDeSala;
@@ -85,6 +86,10 @@ class PasosConGoogle {
      * @param invitados quién va como invitado del evento de Calendar (FR-035); {@code null} = no tocar los que haya
      */
     void crear(SalaMeet sala, OcurrenciaDeseada fecha, ZoneId zona, List<String> invitados, Operacion operacion) {
+        if (configuracion.salasConMeetApi()) {
+            crearConLaMeetApi(sala, fecha, zona, invitados, operacion);
+            return;
+        }
         PedidoDeSala pedido = new PedidoDeSala(sala.idGoogle(), fecha.titulo(), fecha.inicio(), fecha.fin(), zona, invitados);
         try {
             ResultadoDeSala resultado = google.crear(pedido);
@@ -105,11 +110,112 @@ class PasosConGoogle {
         }
     }
 
+    /**
+     * FR-040: la sala nace con la Meet API ({@code spaces.create}) ya con su acceso y con la grabación, la transcripción y las notas automáticas, y
+     * el enlace se guarda en cuanto Google lo devuelve (así un fallo después no deja una sala huérfana ni crea otra al reintentar). Después se
+     * publica en el evento de Calendar; si eso falla, la sala queda por sincronizar y se reintenta sin tocar la sala.
+     */
+    private void crearConLaMeetApi(SalaMeet sala, OcurrenciaDeseada fecha, ZoneId zona, List<String> invitados, Operacion operacion) {
+        PedidoDeSala pedido = new PedidoDeSala(sala.idGoogle(), fecha.titulo(), fecha.inicio(), fecha.fin(), zona, invitados);
+        try {
+            if (sala.enlace() == null) {
+                EspacioDeMeet espacio = google.crearEspacio(sala.accesoElegido(), pedidosDeArtefactos());
+                Instant ahora = clock.now();
+                sala.completarConMeetApi(espacio.enlace(), ahora);
+                sala.registrarAccesoConfirmado(espacio.acceso(), ahora);
+                sala.registrarArtefactos(espacio.artefactos(), ahora);
+                saveSalaPort.guardar(sala);
+                auditar(AccionDeAuditoriaGoogle.CREAR_SALA, sala, true, null, operacion);
+            }
+        } catch (RuntimeException ex) {
+            fallarAlCrear(sala, ex, operacion);
+            return;
+        }
+        if (!publicarEnCalendario(sala, pedido, operacion)) {
+            return;
+        }
+        if (sala.accesoPendiente() || sala.artefactosSinPedir()) {
+            ajustarAcceso(sala, operacion);
+        }
+    }
+
+    /**
+     * FR-041: reemplaza la sala de Calendar de esa fecha por una de la Meet API. Primero se crea y se anota la sala nueva (con la vieja en
+     * {@code enlaceAnterior}), después se publica en Calendar y por último se cierra la vieja. Un fallo en cualquier punto deja el evento como
+     * estaba, con un enlace que funciona, y se reintenta con espera; nunca deja dos salas «vivas» sin anotar.
+     */
+    void migrar(SalaMeet sala, OcurrenciaDeseada fecha, ZoneId zona, List<String> invitados, Operacion operacion) {
+        PedidoDeSala pedido = new PedidoDeSala(sala.idGoogle(), fecha.titulo(), fecha.inicio(), fecha.fin(), zona, invitados);
+        try {
+            EspacioDeMeet espacio = google.crearEspacio(sala.accesoElegido(), pedidosDeArtefactos());
+            Instant ahora = clock.now();
+            sala.migrarA(espacio.enlace(), ahora);
+            sala.registrarAccesoConfirmado(espacio.acceso(), ahora);
+            sala.registrarArtefactos(espacio.artefactos(), ahora);
+            saveSalaPort.guardar(sala);
+            auditar(AccionDeAuditoriaGoogle.CREAR_SALA, sala, true, null, operacion);
+        } catch (RuntimeException ex) {
+            fallarLaMigracion(sala, ex, AccionDeAuditoriaGoogle.CREAR_SALA, operacion);
+            return;
+        }
+        if (!publicarEnCalendario(sala, pedido, operacion)) {
+            return;
+        }
+        cerrarLaAnterior(sala, operacion);
+        if (sala.accesoPendiente() || sala.artefactosSinPedir()) {
+            ajustarAcceso(sala, operacion);
+        }
+    }
+
+    /** Pone el enlace de la sala en el evento de Calendar. Si falla, la sala queda por sincronizar (el enlace nuevo ya está guardado). */
+    private boolean publicarEnCalendario(SalaMeet sala, PedidoDeSala pedido, Operacion operacion) {
+        try {
+            google.publicarEnCalendario(pedido, sala.enlace());
+            sala.sincronizada(clock.now());
+            saveSalaPort.guardar(sala);
+            auditar(AccionDeAuditoriaGoogle.ACTUALIZAR_SALA, sala, true, null, operacion);
+            return true;
+        } catch (RuntimeException ex) {
+            fallarAlSincronizar(sala, ex, AccionDeAuditoriaGoogle.ACTUALIZAR_SALA, operacion);
+            return false;
+        }
+    }
+
+    /**
+     * Cierra la sala vieja (restringida y sin conferencia activa) para que nadie entre a una sala que no graba. Un fallo pasajero se reintenta con
+     * espera; si Google dice que no se puede, se anota y no se insiste. Nunca rompe el evento.
+     */
+    void cerrarLaAnterior(SalaMeet sala, Operacion operacion) {
+        if (sala.enlaceAnterior() == null) {
+            return;
+        }
+        try {
+            google.cerrar(sala.enlaceAnterior());
+            sala.anteriorCerrada(clock.now());
+            saveSalaPort.guardar(sala);
+            auditar(AccionDeAuditoriaGoogle.CERRAR_SALA_ANTERIOR, sala, true, null, operacion);
+        } catch (GoogleRechazoException rechazo) {
+            sala.anteriorCerrada(clock.now());
+            saveSalaPort.guardar(sala);
+            auditar(AccionDeAuditoriaGoogle.CERRAR_SALA_ANTERIOR, sala, false, rechazo.codigoHttp(), operacion);
+        } catch (RuntimeException ex) {
+            fallarLaMigracion(sala, ex, AccionDeAuditoriaGoogle.CERRAR_SALA_ANTERIOR, operacion);
+        }
+    }
+
+    private ArtefactosDeLaSala pedidosDeArtefactos() {
+        return ArtefactosDeLaSala.pedir(configuracion.grabar(), configuracion.transcribir(), configuracion.tomarNotas());
+    }
+
     /** Google se entera del cambio de título, hora o duración. El enlace no cambia. */
     void actualizar(SalaMeet sala, OcurrenciaDeseada fecha, ZoneId zona, List<String> invitados, Operacion operacion) {
         PedidoDeSala pedido = new PedidoDeSala(sala.idGoogle(), fecha.titulo(), fecha.inicio(), fecha.fin(), zona, invitados);
         try {
-            google.actualizar(pedido);
+            if (sala.conMeetApi()) {
+                google.publicarEnCalendario(pedido, sala.enlace());
+            } else {
+                google.actualizar(pedido);
+            }
             sala.sincronizada(clock.now());
             saveSalaPort.guardar(sala);
             auditar(AccionDeAuditoriaGoogle.ACTUALIZAR_SALA, sala, true, null, operacion);
@@ -117,20 +223,33 @@ class PasosConGoogle {
             fallarAlSincronizar(sala, ex, AccionDeAuditoriaGoogle.ACTUALIZAR_SALA, operacion);
             return;
         }
+        cerrarLaAnterior(sala, operacion);
         if (sala.accesoPendiente()) {
             ajustarAcceso(sala, operacion);
         }
     }
 
-    /** Borra el evento de Google. Que ya no exista cuenta como hecho. */
+    /** Borra el evento de Google (y, si la sala es de la Meet API, la deja cerrada: borrar el evento no la cierra). Que ya no exista cuenta como hecho. */
     void borrar(SalaMeet sala, Operacion operacion) {
         try {
+            if (sala.conMeetApi() && sala.enlace() != null) {
+                cerrarSalaAlBorrar(sala.enlace());
+            }
             google.borrar(sala.idGoogle());
             sala.marcarBorrada(clock.now());
             saveSalaPort.guardar(sala);
             auditar(AccionDeAuditoriaGoogle.BORRAR_SALA, sala, true, null, operacion);
         } catch (RuntimeException ex) {
             fallarAlSincronizar(sala, ex, AccionDeAuditoriaGoogle.BORRAR_SALA, operacion);
+        }
+    }
+
+    /** Mejor esfuerzo: si Google no deja cerrarla no se frena el borrado del evento; los fallos de red sí se reintentan con el borrado. */
+    private void cerrarSalaAlBorrar(String enlace) {
+        try {
+            google.cerrar(enlace);
+        } catch (GoogleRechazoException noSePudo) {
+            log.warn("[calendar.PasosConGoogle] no se pudo cerrar la sala al borrar el evento (codigo {})", noSePudo.codigoHttp());
         }
     }
 
@@ -249,6 +368,18 @@ class PasosConGoogle {
         Falla falla = clasificar(ex, operacion);
         Instant ahora = clock.now();
         sala.fallarAlSincronizar(falla.motivo(), ahora, falla.proximoIntento(sala.intentos() + 1, ahora, azar));
+        saveSalaPort.guardar(sala);
+        auditar(accion, sala, false, falla.codigoHttp(), operacion);
+        if (falla.cortaElRecorrido()) {
+            throw new CuentaInutilizable();
+        }
+    }
+
+    /** No se pudo migrar o cerrar la vieja: la sala sigue como estaba, con su enlace que funciona, y se reintenta con espera (FR-041). */
+    private void fallarLaMigracion(SalaMeet sala, RuntimeException ex, AccionDeAuditoriaGoogle accion, Operacion operacion) {
+        Falla falla = clasificar(ex, operacion);
+        Instant ahora = clock.now();
+        sala.fallarLaMigracion(falla.motivo(), ahora, PoliticaDeReintentos.proximoIntento(sala.intentos() + 1, ahora, azar.getAsDouble()));
         saveSalaPort.guardar(sala);
         auditar(accion, sala, false, falla.codigoHttp(), operacion);
         if (falla.cortaElRecorrido()) {
