@@ -13,6 +13,7 @@ import com.renaser.os.calendar.domain.model.evento.Evento;
 import com.renaser.os.calendar.domain.model.evento.EventoId;
 import com.renaser.os.calendar.domain.model.evento.Excepcion;
 import com.renaser.os.calendar.domain.model.meet.CuentaDeGoogle;
+import com.renaser.os.calendar.domain.model.meet.EstadoDeCoanfitriones;
 import com.renaser.os.calendar.domain.model.meet.EstadoSalaMeet;
 import com.renaser.os.calendar.domain.model.meet.RegistroDeAuditoriaGoogle;
 import com.renaser.os.calendar.domain.model.meet.SalaMeet;
@@ -137,6 +138,18 @@ final class EnMemoria {
         @Override
         public void reencolarLoPendiente(Instant ahora) {
             porId.values().forEach(s -> s.reencolar(ahora));
+        }
+
+        @Override
+        public void pedirDeNuevoLosCoanfitrionesFallidos(Instant ahora) {
+            for (SalaMeet sala : porId.values()) {
+                java.time.ZoneId zona = eventos.byId(sala.eventoId()).map(com.renaser.os.calendar.domain.model.evento.Evento::timezone)
+                        .orElse(java.time.ZoneId.of("UTC"));
+                if (sala.estado() == EstadoSalaMeet.CREADO && sala.coanfitriones() == EstadoDeCoanfitriones.FALLIDO
+                        && !sala.fechaOcurrencia().isBefore(ahora.atZone(zona).toLocalDate())) {
+                    sala.olvidarCoanfitriones(ahora);
+                }
+            }
         }
 
         @Override

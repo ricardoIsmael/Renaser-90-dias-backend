@@ -8,7 +8,9 @@ import com.renaser.os.calendar.application.ports.out.meet.GoogleRechazoException
 import com.renaser.os.calendar.domain.model.evento.RolUsuario;
 import com.renaser.os.calendar.domain.model.meet.AccionDeAuditoriaGoogle;
 import com.renaser.os.calendar.domain.model.meet.CuentaDeGoogle;
+import com.renaser.os.calendar.domain.model.meet.EstadoDeCoanfitriones;
 import com.renaser.os.calendar.domain.model.meet.EstadoDeLaCuenta;
+import com.renaser.os.calendar.domain.model.meet.SalaMeet;
 import com.renaser.os.calendar.domain.model.meet.HuellaDeSecreto;
 import com.renaser.os.calendar.domain.model.meet.RegistroDeAuditoriaGoogle;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -115,6 +117,83 @@ class ConectarLaCuentaDeGoogleTest {
         conexiones = new ConexionesEnMemoria();
         servicio = new CuentaDeGoogleService(m.acceso, oauth, conexiones, m.cuenta, m.cuenta, m.salas, m.auditoriaDeGoogle, m.auditor,
                 ids -> java.util.Map.of(), m.configuracion, m.reloj);
+    }
+
+    private void reconectar() {
+        servicio.iniciarConexion(ADMIN);
+        assertThat(servicio.completarConexion("codigo", "STATE-SECRETO", null).conectada()).isTrue();
+    }
+
+    private void crearClaseConGoogleRechazando403() {
+        m.conectarLaCuenta();
+        m.coanfitriones = true;
+        m.google.rechazaCoanfitrionesCon = 403;
+        m.servicio.crear(new com.renaser.os.calendar.application.ports.in.evento.CrearEventoUseCase.CrearEventoCommand(ADMIN, "Clase en vivo",
+                null, m.reloj.now().plus(Duration.ofHours(4)), 90, MundoDeMeet.LIMA, com.renaser.os.calendar.domain.model.evento.TipoUbicacion.MEET,
+                null, com.renaser.os.calendar.domain.model.evento.TipoAudiencia.TODOS, null, null, null,
+                com.renaser.os.calendar.domain.model.evento.TipoEvento.SESION_ESPECIAL, false, false, false, null, Set.of(), List.of(), null,
+                com.renaser.os.calendar.domain.model.meet.AccesoSalaMeet.ABIERTA));
+    }
+
+    // spec 040 FR-038
+    @Test
+    @DisplayName("FR-038: al reconectar la cuenta, un pedido de coanfitriones que Google rechazó se repite en la siguiente pasada del proceso de fondo")
+    void reconectarReintentaLosCoanfitrionesFallidos() {
+        crearClaseConGoogleRechazando403();
+        assertThat(m.salas.todas()).singleElement().extracting(SalaMeet::coanfitriones).isEqualTo(EstadoDeCoanfitriones.FALLIDO);
+        m.trabajo.mantenimiento(m.reloj.now());
+        assertThat(m.salas.todas()).singleElement().extracting(SalaMeet::coanfitriones).as("sin reconectar, sigue sin pedirse")
+                .isEqualTo(EstadoDeCoanfitriones.FALLIDO);
+
+        m.google.rechazaCoanfitrionesCon = null; // la cuenta ya tiene el permiso
+        reconectar();
+        assertThat(m.salas.todas()).singleElement().satisfies(s -> {
+            assertThat(s.coanfitriones()).isNull();
+            assertThat(s.coanfitrionesPorPedir()).isTrue();
+        });
+        m.trabajo.mantenimiento(m.reloj.now());
+
+        assertThat(m.salas.todas()).singleElement().extracting(SalaMeet::coanfitriones).isEqualTo(EstadoDeCoanfitriones.OK);
+    }
+
+    // spec 040 FR-038
+    @Test
+    @DisplayName("FR-038: al reconectar solo se repiten las salas FALLIDO de hoy en adelante: las de ayer y las que quedaron OK no se tocan")
+    void reconectarNoTocaLasPasadasNiLasQueNoFallaron() {
+        crearClaseConGoogleRechazando403();
+        SalaMeet deHoy = m.salas.todas().get(0);
+        com.renaser.os.calendar.domain.model.evento.EventoId evento = deHoy.eventoId();
+        java.time.LocalDate hoy = m.reloj.now().atZone(MundoDeMeet.LIMA).toLocalDate();
+        SalaMeet deAyer = sala(evento, hoy.minusDays(1), EstadoDeCoanfitriones.FALLIDO);
+        SalaMeet deManianaOk = sala(evento, hoy.plusDays(1), EstadoDeCoanfitriones.OK);
+        m.salas.guardar(deAyer);
+        m.salas.guardar(deManianaOk);
+
+        reconectar();
+
+        assertThat(m.salas.todas()).extracting(SalaMeet::fechaOcurrencia, SalaMeet::coanfitriones).containsExactlyInAnyOrder(
+                org.assertj.core.groups.Tuple.tuple(hoy, null),
+                org.assertj.core.groups.Tuple.tuple(hoy.minusDays(1), EstadoDeCoanfitriones.FALLIDO),
+                org.assertj.core.groups.Tuple.tuple(hoy.plusDays(1), EstadoDeCoanfitriones.OK));
+    }
+
+    @Test
+    @DisplayName("Con el interruptor de coanfitriones apagado, reconectar no toca el estado de las salas")
+    void sinInterruptorNoSeTocaNada() {
+        crearClaseConGoogleRechazando403();
+        m.coanfitriones = false;
+
+        reconectar();
+
+        assertThat(m.salas.todas()).singleElement().extracting(SalaMeet::coanfitriones).isEqualTo(EstadoDeCoanfitriones.FALLIDO);
+    }
+
+    private SalaMeet sala(com.renaser.os.calendar.domain.model.evento.EventoId evento, java.time.LocalDate fecha, EstadoDeCoanfitriones estado) {
+        SalaMeet sala = SalaMeet.nueva(UUID.randomUUID(), evento, fecha, UUID.randomUUID().toString().replace("-", ""),
+                com.renaser.os.calendar.domain.model.meet.AccesoSalaMeet.ABIERTA, m.reloj.now());
+        sala.completarCon("https://meet.google.com/aaa-bbbb-" + fecha.getDayOfMonth() + fecha.getMonthValue(), m.reloj.now());
+        sala.registrarCoanfitriones(estado, estado == EstadoDeCoanfitriones.OK ? null : "Google no dejó (código 403).", m.reloj.now());
+        return sala;
     }
 
     // spec 040 FR-010
