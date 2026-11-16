@@ -158,6 +158,17 @@ class SalaMeetJdbcAdapter implements LoadSalaMeetPort, SaveSalaMeetPort {
 
     @Override
     @Transactional
+    public void pedirDeNuevoLosCoanfitrionesFallidos(Instant ahora) {
+        // «Hoy» es el de la zona del evento (como en SincronizadorDeSalas); sin evento a la vista, el de UTC.
+        jdbcClient.sql("UPDATE renaser.eventos_meet m SET coanfitriones_estado = NULL, coanfitriones_motivo = NULL, actualizada_en = :ahora, "
+                        + "version = version + 1 WHERE m.estado = 'CREADO' AND m.coanfitriones_estado = 'FALLIDO' "
+                        + "AND m.fecha_ocurrencia >= (:ahora AT TIME ZONE COALESCE((SELECT e.timezone FROM renaser.eventos e WHERE e.id = m.evento_id), 'UTC'))::date")
+                .param("ahora", utc(ahora))
+                .update();
+    }
+
+    @Override
+    @Transactional
     public void detenerLoPendiente(String motivo, Instant ahora) {
         jdbcClient.sql("UPDATE renaser.eventos_meet SET estado = CASE WHEN estado = 'PENDIENTE' THEN 'FALLIDO' ELSE estado END, "
                         + "proximo_intento = NULL, ultimo_error = :motivo, actualizada_en = :ahora, version = version + 1 WHERE " + CON_TRABAJO)
