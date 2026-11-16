@@ -42,13 +42,13 @@
 		     versiones menores mas viejo, y un `NoSuchMethodError` de ese tipo solo aparece en
 		     produccion, que es justo lo que no se puede probar desde aca. Con 2.54.3 el riesgo se
 		     traslada a nuestro adaptador de S3, que SI lo cubre la suite completa. -->
-		<aws-sdk.version>2.57.10</aws-sdk.version>
+		<aws-sdk.version>2.59.1</aws-sdk.version>
 		<!-- Spring Cloud AWS 4.1.1 (GA, 2026-08-28) es la linea que corresponde a Spring Boot 4.1:
 		     su POM hereda de `spring-cloud-dependencies-parent:5.0.3` (tren 2025.1.x) y alinea
 		     Spring Modulith 2.1.1, la misma linea que usa este repo. Verificado contra
 		     repo1.maven.org, no contra la tabla del README de awspring, que todavia resume la
 		     linea 4.x como "Spring Boot 4.0.x" sin desglosar los parches. -->
-		<spring-cloud-aws.version>4.2.1</spring-cloud-aws.version>
+		<spring-cloud-aws.version>4.2.2</spring-cloud-aws.version>
 		<mapstruct.version>1.6.3</mapstruct.version>
 		<!-- Cobertura. 0.8.14 fue la primera con soporte OFICIAL de Java 25 (la 0.8.13 lo tenia
 		     como experimental); 0.8.15 es la ultima y lo mantiene. Con una version anterior el
@@ -194,7 +194,7 @@
 		<dependency>
 			<groupId>org.bouncycastle</groupId>
 			<artifactId>bcprov-jdk18on</artifactId>
-			<version>1.86</version>
+			<version>1.87</version>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -442,12 +442,12 @@
 		<dependency>
 			<groupId>net.javacrumbs.shedlock</groupId>
 			<artifactId>shedlock-spring</artifactId>
-			<version>7.10.1</version>
+			<version>7.11.0</version>
 		</dependency>
 		<dependency>
 			<groupId>net.javacrumbs.shedlock</groupId>
 			<artifactId>shedlock-provider-jdbc-template</artifactId>
-			<version>7.10.1</version>
+			<version>7.11.0</version>
 		</dependency>
 	</dependencies>
 	<dependencyManagement>
