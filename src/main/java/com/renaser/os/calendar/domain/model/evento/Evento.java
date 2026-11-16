@@ -35,6 +35,8 @@ public final class Evento {
 
     /** z.string().max(30) en schema.ts — bastante mas corto que otros modulos, es intencional (tarjeta del calendario). */
     private static final int MAX_TITULO = 30;
+    /** Spec 053 (D-358): el título de «Sesión personalizada» lo arma la app («Sesión personalizada · <nombre>») y no cabe en 30. */
+    private static final int MAX_TITULO_PERSONALIZADA = 60;
     private static final int MAX_DESCRIPCION = 300;
     private static final int MAX_UBICACION = 600;
     /** SEG-13 (E-364): el unico mensaje del rechazo, para que el cliente sepa exactamente que corregir. */
@@ -139,6 +141,19 @@ public final class Evento {
                 recordatoriosPersonalizados, recurrencia, rolesDestino, reglasRecordatorio, accesoSalaMeet);
         evento.actualizadoEn = ahora;
         return evento;
+    }
+
+    /**
+     * «Esta y las siguientes» (spec 053, FR-014): la serie termina un instante antes de la ocurrencia dada; lo que ya pasó no se toca. La repetición
+     * por cantidad pasa a «hasta» (ya no se puede contar igual).
+     */
+    public void terminarLaSerieAntesDe(Instant inicioOcurrencia, Clock clock) {
+        if (recurrencia == null) {
+            throw new IllegalStateException("Este evento no se repite");
+        }
+        this.recurrencia = new Recurrencia(recurrencia.frecuencia(), recurrencia.intervalo(), inicioOcurrencia.minusMillis(1), null,
+                recurrencia.diasSemana());
+        this.actualizadoEn = clock.now();
     }
 
     /** Reenvio completo del formulario de edicion — reemplaza todo salvo id/tipoEvento/creadoPor/creadoEn/estado. */
@@ -267,7 +282,7 @@ public final class Evento {
             throw new IllegalArgumentException("recurrencia.hasta debe ser posterior a iniciaEn");
         }
 
-        this.titulo = requireTitulo(titulo);
+        this.titulo = requireTitulo(titulo, tipoEvento);
         this.descripcion = requireMax(descripcion, MAX_DESCRIPCION, "descripcion");
         this.iniciaEn = Objects.requireNonNull(iniciaEn, "iniciaEn es obligatorio");
         this.duracionMinutos = requirePositivoONulo(duracionMinutos, "duracionMinutos");
@@ -386,13 +401,14 @@ public final class Evento {
         }
     }
 
-    private static String requireTitulo(String titulo) {
+    private static String requireTitulo(String titulo, TipoEvento tipo) {
         if (titulo == null || titulo.isBlank()) {
             throw new IllegalArgumentException("El titulo es obligatorio");
         }
         String limpio = titulo.trim();
-        if (limpio.length() > MAX_TITULO) {
-            throw new IllegalArgumentException("titulo supera " + MAX_TITULO + " caracteres");
+        int tope = tipo == TipoEvento.SESION_PERSONALIZADA ? MAX_TITULO_PERSONALIZADA : MAX_TITULO;
+        if (limpio.length() > tope) {
+            throw new IllegalArgumentException("titulo supera " + tope + " caracteres");
         }
         return limpio;
     }

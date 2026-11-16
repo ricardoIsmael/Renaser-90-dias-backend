@@ -36,7 +36,7 @@ else echo "No llego a docker ni desde aca ni por el host."; exit 1; fi
 TABLAS=(horario_semanal_habito horarios_habito_por_fecha preferencias_horario cambios_horario_pendientes)
 
 ok=0; fallos=0
-TMP=$(mktemp -d); trap 'restaurar; rm -rf "$TMP"' EXIT
+TMP=$(mktemp -d); trap "restaurar; rm -rf '$TMP'" EXIT
 
 q()   { "${DOCKER[@]}" exec "$DB" psql -U postgres -d renaser -Atc "$1" 2>&1; }
 qi()  { "${DOCKER[@]}" exec -i "$DB" psql -U postgres -d renaser -q 2>&1; }

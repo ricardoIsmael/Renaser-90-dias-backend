@@ -154,4 +154,48 @@ class PlanDeSalasTest {
         });
         assertThat(PlanDeSalas.calcular(false, HOY, Map.of(), List.of(lapida), AHORA, true)).as("una lápida no se vuelve a borrar").isEmpty();
     }
+
+    // spec 040 FR-041
+    @Test
+    @DisplayName("FR-041: con la migración prendida, una sala de Calendar de hoy en adelante que no empezó se migra; apagada, no")
+    void migraLaDeCalendar() {
+        LocalDate manana = LocalDate.of(2026, 11, 6);
+        List<SalaMeet> existentes = List.of(creada(manana));
+
+        assertThat(acciones(PlanDeSalas.calcular(true, HOY, fechas(manana), existentes, AHORA, false, true))).containsExactly(Accion.MIGRAR);
+        assertThat(PlanDeSalas.calcular(true, HOY, fechas(manana), existentes, AHORA, false, false)).isEmpty();
+    }
+
+    // spec 040 FR-041
+    @Test
+    @DisplayName("FR-041: las pasadas y las que ya empezaron no se migran; una que ya es de la Meet API tampoco")
+    void noMigraLoQueNoDebe() {
+        LocalDate ayer = LocalDate.of(2026, 11, 4);
+        SalaMeet pasada = creada(ayer);
+        SalaMeet deLaMeetApi = creada(LocalDate.of(2026, 11, 7));
+        deLaMeetApi.migrarA("https://meet.google.com/zzz-zzzz-zzz", AHORA);
+        deLaMeetApi.anteriorCerrada(AHORA);
+        SalaMeet empezada = creada(HOY);
+        Instant despuesDeEmpezar = HOY.atTime(19, 30).toInstant(java.time.ZoneOffset.ofHours(-5));
+
+        assertThat(PlanDeSalas.calcular(true, HOY, fechas(ayer, LocalDate.of(2026, 11, 7)), List.of(pasada, deLaMeetApi), AHORA, false, true)).isEmpty();
+        assertThat(PlanDeSalas.calcular(true, HOY, fechas(HOY), List.of(empezada), despuesDeEmpezar, false, true)).isEmpty();
+    }
+
+    // spec 040 FR-041
+    @Test
+    @DisplayName("FR-041: una sala nueva con la vieja por cerrar pide cerrarla; si falló, espera su turno")
+    void cierraLaAnterior() {
+        LocalDate manana = LocalDate.of(2026, 11, 6);
+        SalaMeet sala = creada(manana);
+        sala.migrarA("https://meet.google.com/zzz-zzzz-zzz", AHORA);
+        sala.registrarAccesoConfirmado(AccesoSalaMeet.ABIERTA, AHORA);
+
+        assertThat(acciones(PlanDeSalas.calcular(true, HOY, fechas(manana), List.of(sala), AHORA, false, true))).containsExactly(Accion.CERRAR_ANTERIOR);
+
+        sala.fallarLaMigracion("falló", AHORA, AHORA.plusSeconds(600));
+        assertThat(PlanDeSalas.calcular(true, HOY, fechas(manana), List.of(sala), AHORA, false, true)).isEmpty();
+        assertThat(acciones(PlanDeSalas.calcular(true, HOY, fechas(manana), List.of(sala), AHORA.plusSeconds(601), false, true)))
+                .containsExactly(Accion.CERRAR_ANTERIOR);
+    }
 }

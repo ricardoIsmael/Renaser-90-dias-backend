@@ -21,13 +21,19 @@ import java.util.UUID;
 public record RegistroHabitoResponse(String id, UUID habitoId, LocalDate fechaEjecucion, int diaPrograma,
                                       String tipoDia, boolean esOpcional, String estado, int puntosOtorgados,
                                       String respuestaTexto, Integer calificacionProductividad,
-                                      Instant completadoEn, BigDecimal valorMedido, MedicionResponse medicion) {
+                                      Instant completadoEn, BigDecimal valorMedido, MedicionResponse medicion,
+                                      String motivoSinPuntos) {
 
     public static RegistroHabitoResponse from(RegistroHabito r) {
+        return from(r, null);
+    }
+
+    /** Spec 048: {@code motivoSinPuntos} dice por qué lo marcado sin red quedó sin puntos (nulo si sumó). */
+    public static RegistroHabitoResponse from(RegistroHabito r, String motivoSinPuntos) {
         return new RegistroHabitoResponse(r.id().toString(), r.habitoId().value(), r.fechaEjecucion(),
                 r.diaPrograma(), r.tipoDia().name(), r.esOpcional(), r.estado().name(), r.puntosOtorgados(),
                 r.respuestaTexto(), r.calificacionProductividad(), r.completadoEn(),
-                r.medicion() != null ? r.medicion().valor() : null, MedicionResponse.from(r.medicion()));
+                r.medicion() != null ? r.medicion().valor() : null, MedicionResponse.from(r.medicion()), motivoSinPuntos);
     }
 
     /** {@code pasos}, {@code fuente}, {@code dispositivo}, {@code leidoEn} y {@code porRevisar} solo existen en la lectura automática. */

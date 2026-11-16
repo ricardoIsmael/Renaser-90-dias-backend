@@ -1,6 +1,8 @@
 package com.renaser.os.calendar.application.services;
 
+import com.renaser.os.calendar.application.ports.out.meet.EspacioDeMeet;
 import com.renaser.os.calendar.application.ports.out.meet.PedidoDeSala;
+import com.renaser.os.calendar.application.ports.out.meet.ResultadoDeCoanfitriones;
 import com.renaser.os.calendar.application.ports.out.meet.ResultadoDeSala;
 import com.renaser.os.calendar.application.ports.out.meet.SalaDeReunionPort;
 import com.renaser.os.calendar.domain.model.meet.AccesoSalaMeet;
@@ -96,6 +98,94 @@ final class GoogleSimulado implements SalaDeReunionPort {
                 pedidos.notas() == null ? null : !sinPlanParaTranscribir);
         artefactosPorEnlace.put(enlace, quedo);
         return quedo;
+    }
+
+    /** enlace -> correos que ya son coanfitriones de la sala (en minúscula). */
+    final Map<String, java.util.Set<String>> coanfitrionesPorEnlace = new LinkedHashMap<>();
+    /** Si no es nulo, Google rechaza hacer coanfitrión a CUALQUIERA con este código (403: falta el permiso). */
+    Integer rechazaCoanfitrionesCon;
+    /** Correos (en minúscula) a los que Google rechaza aunque a los demás no (p. ej. de fuera de la organización). */
+    final java.util.Set<String> correosRechazados = new java.util.LinkedHashSet<>();
+
+    @Override
+    public ResultadoDeCoanfitriones agregarCoanfitriones(String enlace, List<String> correos) {
+        entrar("coanfitriones:" + CodigoDeSalaMeet.deEnlace(enlace).orElse("?"));
+        java.util.Set<String> actuales = coanfitrionesPorEnlace.computeIfAbsent(enlace, e -> new java.util.LinkedHashSet<>());
+        int quedaron = 0;
+        Integer rechazo = null;
+        for (String correo : correos) {
+            String c = correo.toLowerCase(java.util.Locale.ROOT);
+            if (actuales.contains(c)) {
+                quedaron++;
+            } else if (rechazaCoanfitrionesCon != null || correosRechazados.contains(c)) {
+                rechazo = rechazaCoanfitrionesCon != null ? rechazaCoanfitrionesCon : 403;
+            } else {
+                llamadas.add("alta-coanfitrion"); // un POST de verdad a Google
+                actuales.add(c);
+                quedaron++;
+            }
+        }
+        return new ResultadoDeCoanfitriones(correos.size(), quedaron, rechazo);
+    }
+
+    // ─── Meet API (FR-040, FR-041) ──────────────────────────────────────────────
+
+    /** enlace de la sala de la Meet API -> true si sigue abierta. */
+    final Map<String, Boolean> espaciosAbiertos = new LinkedHashMap<>();
+    /** idGoogle -> enlace que el evento de Calendar tiene en su ubicación. */
+    final Map<String, String> ubicacionPorEvento = new LinkedHashMap<>();
+    /** Salas viejas cerradas (restringidas y sin conferencia). */
+    final java.util.Set<String> cerradas = new java.util.LinkedHashSet<>();
+    /** Si no es nulo, crear el espacio rechaza con esto (el resto de lo que se llame sigue bien). */
+    RuntimeException fallaAlCrearEspacio;
+    /** Si no es nulo, publicar en Calendar lanza esto una vez. */
+    RuntimeException fallaAlPublicar;
+    /** Si no es nulo, cerrar lanza esto una vez. */
+    RuntimeException fallaAlCerrar;
+    int espaciosCreados;
+
+    @Override
+    public EspacioDeMeet crearEspacio(AccesoSalaMeet acceso, ArtefactosDeLaSala pedidos) {
+        entrar("crearEspacio:" + acceso);
+        if (fallaAlCrearEspacio != null) {
+            throw fallaAlCrearEspacio;
+        }
+        String enlace = "https://meet.google.com/bbb-bbbb-b" + (char) ('a' + espaciosCreados / 26 % 26) + (char) ('a' + espaciosCreados++ % 26);
+        espaciosAbiertos.put(enlace, true);
+        accesoPorEnlace.put(enlace, acceso);
+        ArtefactosDeLaSala quedo = new ArtefactosDeLaSala(
+                pedidos.grabacion() == null ? null : !sinPlanParaGrabar,
+                pedidos.transcripcion() == null ? null : !sinPlanParaTranscribir,
+                pedidos.notas() == null ? null : !sinPlanParaTranscribir);
+        artefactosPorEnlace.put(enlace, quedo);
+        return new EspacioDeMeet(enlace, acceso, quedo);
+    }
+
+    @Override
+    public void publicarEnCalendario(PedidoDeSala pedido, String enlace) {
+        entrar("publicar:" + pedido.idGoogle());
+        if (fallaAlPublicar != null) {
+            RuntimeException falla = fallaAlPublicar;
+            fallaAlPublicar = null;
+            throw falla;
+        }
+        ultimoPedido.put(pedido.idGoogle(), pedido);
+        ubicacionPorEvento.put(pedido.idGoogle(), enlace);
+        eventos.remove(pedido.idGoogle()); // sin conferencia de Calendar: el enlace de la sala vieja ya no es el del evento
+        eventos.put(pedido.idGoogle(), enlace);
+    }
+
+    @Override
+    public void cerrar(String enlace) {
+        entrar("cerrar:" + CodigoDeSalaMeet.deEnlace(enlace).orElse("?"));
+        if (fallaAlCerrar != null) {
+            RuntimeException falla = fallaAlCerrar;
+            fallaAlCerrar = null;
+            throw falla;
+        }
+        cerradas.add(enlace);
+        accesoPorEnlace.remove(enlace);
+        espaciosAbiertos.computeIfPresent(enlace, (e, abierta) -> false);
     }
 
     long llamadasDe(String prefijo) {

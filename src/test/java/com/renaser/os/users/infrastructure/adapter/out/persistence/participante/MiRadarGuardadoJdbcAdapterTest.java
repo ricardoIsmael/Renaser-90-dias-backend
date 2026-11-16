@@ -39,6 +39,11 @@ class MiRadarGuardadoJdbcAdapterTest {
 
     private UserId participanteId;
 
+    /** Spec 048 (V191): todo guardado deja su hora lógica; estas pruebas no la miran. */
+    private void guardar(UserId participante, MiRadarGuardado guardado) {
+        adapter.guardar(participante, guardado, java.time.Instant.parse("2026-10-30T15:00:00Z"));
+    }
+
     @BeforeEach
     void seedFixtures() {
         participanteId = UserId.of(UUID.randomUUID());
@@ -71,7 +76,7 @@ class MiRadarGuardadoJdbcAdapterTest {
 
     @Test
     void guardaYDevuelveElEncendidoYLosDias() {
-        adapter.guardar(participanteId, new MiRadarGuardado(true, List.of(
+        guardar(participanteId, new MiRadarGuardado(true, List.of(
                 new DiaGuardado(6, "PERSONALIZADO", 3, false), new DiaGuardado(7, "AUTOMATICO", null, true))));
 
         MiRadarGuardado leido = adapter.de(participanteId);
@@ -84,7 +89,7 @@ class MiRadarGuardadoJdbcAdapterTest {
 
     @Test
     void losDiasQuedanComoUnArregloJson() {
-        adapter.guardar(participanteId, new MiRadarGuardado(true, List.of(new DiaGuardado(1, "PERSONALIZADO", 4, false))));
+        guardar(participanteId, new MiRadarGuardado(true, List.of(new DiaGuardado(1, "PERSONALIZADO", 4, false))));
 
         String json = entityManager.createNativeQuery(
                         "SELECT CAST(dias_mi_radar AS text) FROM renaser.participantes_programa WHERE usuario_id = :id")
@@ -95,13 +100,13 @@ class MiRadarGuardadoJdbcAdapterTest {
 
     @Test
     void sinDiasGuardaNullYApagarConservaLosDiasQueLlegan() {
-        adapter.guardar(participanteId, new MiRadarGuardado(true, List.of(new DiaGuardado(6, "PERSONALIZADO", 3, false))));
+        guardar(participanteId, new MiRadarGuardado(true, List.of(new DiaGuardado(6, "PERSONALIZADO", 3, false))));
 
-        adapter.guardar(participanteId, new MiRadarGuardado(false, List.of(new DiaGuardado(6, "PERSONALIZADO", 3, false))));
+        guardar(participanteId, new MiRadarGuardado(false, List.of(new DiaGuardado(6, "PERSONALIZADO", 3, false))));
         assertThat(adapter.de(participanteId).encendido()).isFalse();
         assertThat(adapter.de(participanteId).dias()).hasSize(1);
 
-        adapter.guardar(participanteId, new MiRadarGuardado(false, List.of()));
+        guardar(participanteId, new MiRadarGuardado(false, List.of()));
         assertThat(diasSonNull()).isTrue();
     }
 
@@ -128,7 +133,7 @@ class MiRadarGuardadoJdbcAdapterTest {
         UserId sinPrograma = UserId.of(UUID.randomUUID());
 
         assertThatThrownBy(() -> adapter.de(sinPrograma)).isInstanceOf(NoSuchElementException.class);
-        assertThatThrownBy(() -> adapter.guardar(sinPrograma, new MiRadarGuardado(true, List.of())))
+        assertThatThrownBy(() -> guardar(sinPrograma, new MiRadarGuardado(true, List.of())))
                 .isInstanceOf(NoSuchElementException.class);
     }
 }

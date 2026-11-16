@@ -27,6 +27,9 @@ public interface EditarPreferenciaHorarioUseCase {
      */
     ResultadoEdicionPreferencia editar(EditarPreferenciaHorarioCommand command);
 
+    /** Lo mismo con el instante ya decidido (spec 048): lo hecho sin red corre sus reglas (ventana, cuota, semana libre) con la hora real. */
+    ResultadoEdicionPreferencia editar(EditarPreferenciaHorarioCommand command, java.time.Instant ahora);
+
     /**
      * Como suena la alarma de ese habito (sonido, vibracion, voz y repetir), para toda la semana (spec 009,
      * D-283). Cada dia puede tener la suya ({@code EditarHorarioSemanalUseCase#fijarCombinacion}). NO consume
@@ -34,6 +37,9 @@ public interface EditarPreferenciaHorarioUseCase {
      * Lo de hoy ({@link CombinacionDeAlarma#COMO_HOY}) se guarda como «nada elegido».
      */
     void fijarCombinacion(UserId actorId, HabitoId habitoId, CombinacionDeAlarma combinacion);
+
+    /** Lo mismo con el instante ya decidido (spec 048): lo hecho sin red corre sus reglas (ventana, cuota, semana libre) con la hora real. */
+    void fijarCombinacion(UserId actorId, HabitoId habitoId, CombinacionDeAlarma combinacion, java.time.Instant ahora);
 
     /**
      * {@code antelacionesRecordatorio} (D-217, 2026-09-28): TODAS las antelaciones elegidas, o

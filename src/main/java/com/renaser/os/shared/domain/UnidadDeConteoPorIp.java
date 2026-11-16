@@ -58,8 +58,9 @@ import java.net.InetAddress;
  * contando no se reinician con el despliegue.
  *
  * <p><b>Lo que esto NO arregla</b>, y hay que hacer aparte: que los servicios no cuenten nada
- * cuando la IP llega nula, y la pregunta de si se puede confiar en {@code X-Forwarded-For}
- * (agregar por prefijo no impide que un cliente escriba su propia cabecera).
+ * cuando la IP llega nula. De donde sale la direccion que se cuenta (el valor que agrega
+ * CloudFront, no el primero de {@code X-Forwarded-For}) lo decide {@code DireccionIpDelCliente}
+ * (E-678).
  */
 public final class UnidadDeConteoPorIp {
 

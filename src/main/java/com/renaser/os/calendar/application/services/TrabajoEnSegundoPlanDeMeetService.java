@@ -2,6 +2,7 @@ package com.renaser.os.calendar.application.services;
 
 import com.renaser.os.calendar.application.ports.in.meet.SincronizarSalasDeMeetUseCase;
 import com.renaser.os.calendar.application.ports.out.meet.AuditoriaGooglePort;
+import com.renaser.os.calendar.application.ports.out.meet.ConfiguracionDeGooglePort;
 import com.renaser.os.calendar.application.ports.out.meet.LoadCuentaGooglePort;
 import com.renaser.os.calendar.application.ports.out.meet.LoadSalaMeetPort;
 import com.renaser.os.calendar.application.ports.out.meet.SaveSalaMeetPort;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -29,6 +31,8 @@ class TrabajoEnSegundoPlanDeMeetService implements SincronizarSalasDeMeetUseCase
     static final int EVENTOS_POR_PASADA = 50;
     /** Cuánto espera cada evento a Google en el proceso de fondo: más que una petición, porque nadie está esperando. */
     static final Duration PRESUPUESTO_POR_EVENTO = Duration.ofSeconds(20);
+    /** Eventos por pasada del mantenimiento a los que se les migran las salas a la Meet API (FR-041): por tandas, lo que quede sale en la hora siguiente. */
+    static final int MIGRACIONES_POR_PASADA = 25;
     /** Retención de la auditoría y de las lápidas (FR-016). */
     static final Duration RETENCION = Duration.ofDays(365);
 
@@ -39,13 +43,15 @@ class TrabajoEnSegundoPlanDeMeetService implements SincronizarSalasDeMeetUseCase
     private final SincronizadorDeSalas sincronizador;
     private final RevocacionDeLaCuenta revocacion;
     private final AuditoriaDeGoogle auditoria;
+    private final ConfiguracionDeGooglePort configuracion;
     /** Si ya se avisó que la cuenta no se puede leer (#98): el aviso sale una sola vez hasta que se vuelva a poder leer. */
     private final AtomicBoolean avisoDeCuentaIlegible = new AtomicBoolean(false);
 
     TrabajoEnSegundoPlanDeMeetService(LoadCuentaGooglePort loadCuentaPort, LoadSalaMeetPort loadSalaPort,
                                       SaveSalaMeetPort saveSalaPort, AuditoriaGooglePort auditoriaPort,
                                       SincronizadorDeSalas sincronizador, RevocacionDeLaCuenta revocacion,
-                                      AuditoriaDeGoogle auditoria) {
+                                      AuditoriaDeGoogle auditoria, ConfiguracionDeGooglePort configuracion) {
+        this.configuracion = configuracion;
         this.loadCuentaPort = loadCuentaPort;
         this.loadSalaPort = loadSalaPort;
         this.saveSalaPort = saveSalaPort;
@@ -75,6 +81,9 @@ class TrabajoEnSegundoPlanDeMeetService implements SincronizarSalasDeMeetUseCase
     @Override
     public void mantenimiento(Instant ahora) {
         revocacion.avisarSiSigueRevocada();
+        if (hayCuentaActiva() && configuracion.salasConMeetApi()) {
+            migrarSalasViejas(ahora);
+        }
         if (hayCuentaActiva()) {
             // Derivar, no incrementar (regla 02): se recalcula cada evento con Meet y las fechas que entraron a la ventana reciben su sala.
             for (EventoId evento : loadSalaPort.eventosConSalaAutomatica(ahora).stream().limit(EVENTOS_POR_PASADA * 4L).toList()) {
@@ -92,6 +101,21 @@ class TrabajoEnSegundoPlanDeMeetService implements SincronizarSalasDeMeetUseCase
             }
         } catch (RuntimeException ex) {
             log.warn("[calendar.TrabajoEnSegundoPlanDeMeet] no se pudo purgar: {}", ex.getClass().getSimpleName());
+        }
+    }
+
+    /**
+     * Spec 040 FR-041: las salas de Calendar de hoy en adelante pasan a una sala de la Meet API y las viejas se cierran, por tandas. Idempotente: lo
+     * que ya se migró no vuelve a aparecer; lo que falló espera su turno (espera exponencial, máximo 8 intentos) y nunca rompe el evento.
+     */
+    private void migrarSalasViejas(Instant ahora) {
+        // Un día de margen por la zona de cada evento; el plan descarta por zona las fechas pasadas y las sesiones que ya empezaron.
+        List<EventoId> eventos = loadSalaPort.eventosConSalasPorMigrar(ahora.atZone(ZoneOffset.UTC).toLocalDate().minusDays(1), MIGRACIONES_POR_PASADA);
+        for (EventoId evento : eventos) {
+            if (!hayCuentaActiva()) {
+                break;
+            }
+            sincronizar(evento);
         }
     }
 

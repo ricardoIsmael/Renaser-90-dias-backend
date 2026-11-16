@@ -2,6 +2,8 @@ package com.renaser.os.habits.application.ports.in.espiritu;
 
 import com.renaser.os.shared.domain.UserId;
 
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -40,6 +42,18 @@ public interface CompletarPastillaRenacerUseCase {
      *         participante no tiene track de ese habito para hoy)
      */
     Optional<RegistroCompletado> completarDeHoy(UserId participanteId, String resumen);
+
+    /**
+     * Spec 048 (issue #186): el mismo espejo para la entrega hecha SIN RED, en el día de la hora real y con esa hora. Cierra el hábito
+     * de {@code dia} con {@code hechoEn} como hora de cumplimiento (aunque el barrido ya lo haya pasado a EXPIRADO: la hora real lo
+     * justifica, como en {@code CompletarHechoSinRedUseCase}). {@code conPuntos = false} (hora futura o llegada pasadas 48 h) lo
+     * registra igual, con 0 puntos: nada rebota (D14). Idempotente como {@link #completarDeHoy}.
+     *
+     * @param dia la fecha local del registro del hábito: el día de la hora real
+     * @return vacío cuando no hay nada que reflejar (sin hábito en el catálogo o sin registro de ese día)
+     */
+    Optional<RegistroCompletado> completarSinRed(UserId participanteId, String resumen, LocalDate dia, Instant hechoEn,
+                                                 boolean conPuntos);
 
     record RegistroCompletado(UUID registroId, int puntosOtorgados) {
     }

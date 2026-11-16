@@ -97,7 +97,10 @@ class GoogleMeetReunionesAdapterTest {
     @DisplayName("FR-008: sin conferencias en la ventana no se pide nada más; una transcripción a medio escribir se marca en preparación")
     void sinReunionYEnPreparacion() {
         responde(CONFERENCIAS, "{\"conferenceRecords\":[]}");
-        assertThat(adapter.leer(ENLACE, DESDE, HASTA)).isEqualTo(LecturaDeReunion.SIN_REUNION);
+        LecturaDeReunion vacia = adapter.leer(ENLACE, DESDE, HASTA);
+        assertThat(vacia.conferencias()).isZero();
+        assertThat(vacia.texto()).isEmpty();
+        assertThat(vacia.diagnostico().motivoProbable()).isEqualTo("SIN_CONFERENCIAS");
         servidor.verify();
 
         servidor.reset();
@@ -136,5 +139,91 @@ class GoogleMeetReunionesAdapterTest {
     @DisplayName("FR-005: un enlace que no es de Meet no llama a Google")
     void enlaceQueNoEsDeMeet() {
         assertThatThrownBy(() -> adapter.leer("https://zoom.us/j/123", DESDE, HASTA)).isInstanceOf(GoogleRechazoException.class);
+    }
+
+    private void unaConferencia(String id, String inicio, String fin, String participantes, String grabaciones, String transcripciones) {
+        responde(CONFERENCIAS, "{\"conferenceRecords\":[{\"name\":\"conferenceRecords/" + id + "\",\"startTime\":\"" + inicio + "\","
+                + (fin == null ? "" : "\"endTime\":\"" + fin + "\",") + "\"space\":\"spaces/esp1\"}]}");
+        responde(MEET + "/conferenceRecords/" + id + "/participants?pageSize=100", participantes);
+        responde(MEET + "/conferenceRecords/" + id + "/transcripts?pageSize=100", transcripciones);
+        if (transcripciones.contains("/transcripts/t1")) {
+            responde(MEET + "/conferenceRecords/" + id + "/transcripts/t1/entries?pageSize=100", "{}");
+        }
+        responde(MEET + "/conferenceRecords/" + id + "/recordings?pageSize=100", grabaciones);
+    }
+
+    // spec 047 FR-022
+    @Test
+    @DisplayName("FR-022: solo anónimos y teléfonos, sin archivos: el diagnóstico cuenta por tipo, lee la configuración de la sala y no guarda nombres")
+    void diagnosticoDeSoloAnonimos() {
+        unaConferencia("c1", "2026-11-06T01:00:00Z", "2026-11-06T01:20:00Z", """
+                {"participants":[{"name":"conferenceRecords/c1/participants/p1","anonymousUser":{"displayName":"Secreto Anónimo"}},
+                                 {"name":"conferenceRecords/c1/participants/p2","phoneUser":{"displayName":"+51 999 111 222"}}]}""",
+                "{}", "{}");
+        responde(MEET + "/spaces/esp1", """
+                {"config":{"artifactConfig":{"recordingConfig":{"autoRecordingGeneration":"ON"},
+                 "transcriptionConfig":{"autoTranscriptionGeneration":"ON"}}}}""");
+
+        LecturaDeReunion l = adapter.leer(ENLACE, DESDE, HASTA);
+
+        assertThat(l.texto()).isEmpty();
+        assertThat(l.diagnostico().motivoProbable()).isEqualTo("SOLO_ANONIMOS_O_TELEFONO");
+        assertThat(l.diagnostico().autoGrabacion()).isEqualTo("ON");
+        assertThat(l.diagnostico().autoTranscripcion()).isEqualTo("ON");
+        var c = l.diagnostico().conferencias().get(0);
+        assertThat(c.minutos()).isEqualTo(20);
+        assertThat(c.conCuenta()).isZero();
+        assertThat(c.anonimos()).isEqualTo(1);
+        assertThat(c.porTelefono()).isEqualTo(1);
+        assertThat(l.diagnostico().explicacion()).contains("anónimos (1)").doesNotContain("Secreto").doesNotContain("999");
+        assertThat(l.diagnostico().toString()).doesNotContain("Secreto").doesNotContain("999");
+        servidor.verify();
+    }
+
+    // spec 047 FR-022
+    @Test
+    @DisplayName("FR-022: conexiones de menos de un minuto; y una conferencia sin fin cuenta como 0 minutos")
+    void diagnosticoDeConexionesCortas() {
+        unaConferencia("c1", "2026-11-06T01:00:00Z", "2026-11-06T01:00:40Z",
+                "{\"participants\":[{\"name\":\"conferenceRecords/c1/participants/p1\",\"signedinUser\":{\"displayName\":\"Ana\"}}]}", "{}", "{}");
+        responde(MEET + "/spaces/esp1", "{}");
+
+        LecturaDeReunion l = adapter.leer(ENLACE, DESDE, HASTA);
+
+        assertThat(l.diagnostico().motivoProbable()).isEqualTo("CONEXIONES_MUY_CORTAS");
+        assertThat(l.diagnostico().conferencias().get(0).minutos()).isZero();
+        assertThat(l.diagnostico().autoGrabacion()).isNull();
+    }
+
+    // spec 047 FR-022
+    @Test
+    @DisplayName("FR-022: con cuentas de Google en la sala y nada generado, el diagnóstico lo dice; la configuración que falla no lo rompe")
+    void diagnosticoConCuentasYSinArchivos() {
+        unaConferencia("c1", "2026-11-06T01:00:00Z", "2026-11-06T01:30:00Z", """
+                {"participants":[{"name":"conferenceRecords/c1/participants/p1","signedinUser":{"displayName":"Ana"}},
+                                 {"name":"conferenceRecords/c1/participants/p2","anonymousUser":{}}]}""", "{}", "{}");
+        servidor.expect(requestTo(MEET + "/spaces/esp1")).andRespond(withStatus(HttpStatus.FORBIDDEN));
+
+        LecturaDeReunion l = adapter.leer(ENLACE, DESDE, HASTA);
+
+        assertThat(l.diagnostico().motivoProbable()).isEqualTo("CON_CUENTAS_Y_SIN_ARCHIVOS");
+        assertThat(l.diagnostico().autoGrabacion()).isNull();
+        assertThat(l.diagnostico().conferencias().get(0).conCuenta()).isEqualTo(1);
+    }
+
+    // spec 047 FR-022
+    @Test
+    @DisplayName("FR-022: una grabación a medias (STARTED) se dice así; con transcripción lista no hay diagnóstico y no se pide la sala")
+    void diagnosticoConArchivoNoGenerado() {
+        unaConferencia("c1", "2026-11-06T01:00:00Z", "2026-11-06T01:30:00Z",
+                "{\"participants\":[{\"name\":\"conferenceRecords/c1/participants/p1\",\"signedinUser\":{}}]}",
+                "{\"recordings\":[{\"state\":\"STARTED\"}]}", "{\"transcripts\":[{\"name\":\"conferenceRecords/c1/transcripts/t1\",\"state\":\"ENDED\"}]}");
+        responde(MEET + "/spaces/esp1", "{}");
+
+        var d = adapter.leer(ENLACE, DESDE, HASTA).diagnostico();
+
+        assertThat(d.motivoProbable()).isEqualTo("ARCHIVO_NO_GENERADO");
+        assertThat(d.conferencias().get(0).grabaciones()).containsExactly("STARTED");
+        assertThat(d.conferencias().get(0).transcripciones()).containsExactly("ENDED");
     }
 }

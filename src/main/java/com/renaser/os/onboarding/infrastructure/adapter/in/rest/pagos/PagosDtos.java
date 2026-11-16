@@ -1,5 +1,7 @@
 package com.renaser.os.onboarding.infrastructure.adapter.in.rest.pagos;
 
+import com.renaser.os.onboarding.application.ports.in.pagos.CuotasDeTodosUseCase.PagosDeUnaPersona;
+import com.renaser.os.onboarding.application.ports.in.pagos.CuotasDeTodosUseCase.PaginaDeCuotas;
 import com.renaser.os.onboarding.application.ports.in.pagos.MiIngreso;
 import com.renaser.os.onboarding.application.ports.in.pagos.PagosDeLaPersonaUseCase.CuotaPedida;
 import com.renaser.os.onboarding.application.ports.in.pagos.PagosDeLaPersonaUseCase.PedidoDeCronograma;
@@ -52,14 +54,19 @@ final class PagosDtos {
     record MarkRequest(String status) {
 
         EstadoDeCuota aEstado() {
-            if ("PAID".equals(status)) {
-                return EstadoDeCuota.PAGADA;
-            }
-            if ("PENDING".equals(status)) {
-                return EstadoDeCuota.PENDIENTE;
-            }
-            throw new IllegalArgumentException("status es PAID o PENDING");
+            return estadoDesde(status);
         }
+    }
+
+    /** {@code PAID} o {@code PENDING}: el mismo nombre del estado que devuelve {@link InstallmentResponse}. */
+    static EstadoDeCuota estadoDesde(String status) {
+        if ("PAID".equals(status)) {
+            return EstadoDeCuota.PAGADA;
+        }
+        if ("PENDING".equals(status)) {
+            return EstadoDeCuota.PENDIENTE;
+        }
+        throw new IllegalArgumentException("status es PAID o PENDING");
     }
 
     /** {@code reviewed}: la casilla «Revisé mis fechas y montos.»; {@code name}: «Tu nombre». */
@@ -118,6 +125,32 @@ final class PagosDtos {
                 case ACUERDO -> "AGREEMENT";
                 case PAGOS -> "PAYMENTS";
             };
+        }
+    }
+
+    /**
+     * Una fila de la lectura de todos (D-338): el usuario y su cronograma de pagos, en dos bloques (pedido del dueño, 10/11).
+     * {@code user.id} es el {@code id} de {@code GET /admin/trainees} y {@code user.email} su correo; {@code schedule} es el mismo
+     * cuerpo de pagos que la ficha, con solo las cuotas que cumplen el pedido.
+     */
+    record PersonInstallmentsResponse(UserResponse user, PaymentsResponse schedule) {
+
+        static PersonInstallmentsResponse from(PagosDeUnaPersona fila) {
+            return new PersonInstallmentsResponse(new UserResponse(fila.persona().value(), fila.nombre(), fila.correo()),
+                    PaymentsResponse.from(fila.pago()));
+        }
+    }
+
+    /** El usuario de una fila: su id (el de {@code GET /admin/trainees}), su nombre y su correo. */
+    record UserResponse(UUID id, String name, String email) {
+    }
+
+    /** La página de la lectura de todos, con la forma de {@code GET /admin/trainees}: {@code total} es de personas, en todas las páginas. */
+    record InstallmentsPageResponse(List<PersonInstallmentsResponse> content, long total, int page, int size) {
+
+        static InstallmentsPageResponse from(PaginaDeCuotas pagina) {
+            return new InstallmentsPageResponse(pagina.contenido().stream().map(PersonInstallmentsResponse::from).toList(), pagina.total(), pagina.pagina(),
+                    pagina.tamano());
         }
     }
 

@@ -71,6 +71,8 @@ class RadarControllerMiRadarTest {
     @MockitoBean ConsultarHistorialRadarUseCase historial;
     @MockitoBean ConsultarMiRadarUseCase consultarMiRadar;
     @MockitoBean ConfigurarMiRadarUseCase configurarMiRadar;
+    @MockitoBean com.renaser.os.habits.application.ports.in.radar.RegistrarCheckInRadarSinRedUseCase registrarSinRed;
+    @MockitoBean com.renaser.os.habits.application.ports.in.radar.ConfigurarMiRadarSinRedUseCase configurarMiRadarSinRed;
     @MockitoBean UserSummaryFinder users;
     private final UserId actor = UserId.of(UUID.randomUUID());
 

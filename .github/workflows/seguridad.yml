@@ -180,7 +180,7 @@ jobs:
       # mappers que esos procesadores generan y el analisis queda incompleto. Con `manual` se compila el codigo
       # de produccion con el wrapper, que es lo que CodeQL observa.
       - name: Preparar CodeQL
-        uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           languages: java-kotlin
           build-mode: manual
@@ -190,6 +190,6 @@ jobs:
         run: ./mvnw -B -ntp -Dmaven.test.skip=true clean compile
 
       - name: Analizar
-        uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           category: /language:java-kotlin

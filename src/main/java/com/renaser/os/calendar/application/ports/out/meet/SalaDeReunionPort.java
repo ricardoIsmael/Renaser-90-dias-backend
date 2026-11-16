@@ -41,4 +41,32 @@ public interface SalaDeReunionPort {
      * @return lo que Google confirmó de lo pedido ({@code true} o {@code false}); {@code null} en lo que no se pidió
      */
     ArtefactosDeLaSala fijarArtefactos(String enlace, ArtefactosDeLaSala pedidos);
+
+    /**
+     * Hace coanfitriones de la sala a esos correos (Meet REST API {@code spaces.members}, rol {@code COHOST}; FR-038). Primero lee quiénes ya lo son
+     * y a esos no les pide nada: repetirlo no duplica. Si Google rechaza a una persona (permiso, correo de fuera, sala ajena), se sigue con las demás
+     * y el rechazo se cuenta en el resultado; lo reintentable o una cuenta revocada sí salen como excepción, como en el resto del puerto.
+     */
+    ResultadoDeCoanfitriones agregarCoanfitriones(String enlace, java.util.List<String> correos);
+
+    /**
+     * Crea la sala con la Meet REST API ({@code spaces.create}, FR-040) ya con su acceso y con la grabación, la transcripción y las notas
+     * automáticas pedidas (lo que está en {@code true} en {@code pedidos}). Como el espacio es de la app, después se pueden pedir coanfitriones.
+     * Si Google rechaza la configuración de grabación (400), crea la sala solo con el acceso y deja lo demás para {@link #fijarArtefactos}. No es
+     * idempotente (Google no lo permite): quien llama guarda el enlace en cuanto vuelve.
+     */
+    EspacioDeMeet crearEspacio(AccesoSalaMeet acceso, ArtefactosDeLaSala pedidos);
+
+    /**
+     * Deja el evento de Calendar con el enlace de {@code enlace} (FR-040): lo crea si no existe y, si existe, lo actualiza y le quita la conferencia
+     * de Calendar que tuviera. Como la Calendar API no permite ligar un espacio existente a {@code conferenceData}, el enlace va en la ubicación.
+     * Idempotente por {@link PedidoDeSala#idGoogle()}.
+     */
+    void publicarEnCalendario(PedidoDeSala pedido, String enlace);
+
+    /**
+     * Cierra una sala (FR-041): acceso restringido —se lee de vuelta— y termina la conferencia activa, si la hay. Que ya no exista o que no haya
+     * conferencia activa no es un error; que Google no deje restringirla sí (rechazo).
+     */
+    void cerrar(String enlace);
 }

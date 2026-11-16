@@ -173,6 +173,26 @@ public final class RegistroHabito {
      * servidor ni UTC; regla 02 §1). Es la misma frontera que el barrido de expiracion ({@link CorteDeExpiracion}):
      * un habito se registra durante su dia, aunque se le haya pasado la hora, y no despues.
      */
+    /**
+     * Spec 048 (FR-014): completa lo marcado sin red. Igual que {@link #completar}, pero admite un registro que el barrido ya
+     * pasó a {@code EXPIRADO}: la persona lo hizo a tiempo y solo le faltó la señal. {@code instante} es la hora real
+     * (en regla) o la de llegada (fuera de regla, con 0 puntos); la decide el caso de uso.
+     */
+    public void completarHechoSinRed(int puntos, String respuestaTexto, Integer calificacionProductividad,
+                                     MedicionDiaria medicion, Instant instante) {
+        if (!estado.puedeCompletarseHechoSinRed()) {
+            throw new IllegalStateException("Este registro no puede completarse: " + estado);
+        }
+        this.estado = EstadoRegistro.COMPLETADO;
+        this.puntosOtorgados = Math.max(puntos, 0);
+        this.respuestaTexto = respuestaTexto;
+        this.calificacionProductividad = calificacionProductividad;
+        this.entradaDiarioId = null;
+        this.medicion = medicion;
+        this.completadoEn = instante;
+        this.actualizadoEn = instante;
+    }
+
     public boolean suDiaYaTermino(java.time.ZoneId zona, Instant ahora) {
         return CorteDeExpiracion.para(zona, ahora).yaTermino(fechaEjecucion);
     }

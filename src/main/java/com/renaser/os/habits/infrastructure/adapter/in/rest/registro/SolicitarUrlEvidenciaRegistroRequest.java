@@ -7,5 +7,9 @@ import jakarta.validation.constraints.NotBlank;
  * {@code video/mp4}, {@code audio/m4a}). Tiene que ser el MISMO que el cliente manda como
  * {@code Content-Type} en el PUT a la URL prefirmada — si no coincide, S3 rechaza la firma.
  */
-public record SolicitarUrlEvidenciaRegistroRequest(@NotBlank String tipoContenido) {
+public record SolicitarUrlEvidenciaRegistroRequest(@NotBlank String tipoContenido, Boolean hechoSinRed) {
+
+    public SolicitarUrlEvidenciaRegistroRequest(String tipoContenido) {
+        this(tipoContenido, null);
+    }
 }

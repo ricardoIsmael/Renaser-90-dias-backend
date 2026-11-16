@@ -58,11 +58,12 @@ record EventoResponse(String id, String title, String description, String coverU
      * otro caso la respuesta no lo lleva ({@code null}, y el aprendiz, el mentor y el líder no ven nada nuevo, SC-007).
      */
     record MeetResponse(String estado, String acceso, boolean accesoAplicado, String mensaje, int fechasConSala,
-                        int fechasConProblema, String avisoDelPlan) {
+                        int fechasConProblema, String avisoDelPlan, String coanfitriones,
+                        String avisoDeCoanfitriones) {
 
         static MeetResponse from(ResumenDeMeet r) {
             return r == null ? null : new MeetResponse(r.estado().name(), r.acceso().name(), r.accesoAplicado(), r.mensaje(),
-                    r.fechasConSala(), r.fechasConProblema(), r.avisoDelPlan());
+                    r.fechasConSala(), r.fechasConProblema(), r.avisoDelPlan(), r.coanfitriones(), r.avisoDeCoanfitriones());
         }
     }
 

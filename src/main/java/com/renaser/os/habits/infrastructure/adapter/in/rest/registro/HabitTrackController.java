@@ -1,6 +1,7 @@
 package com.renaser.os.habits.infrastructure.adapter.in.rest.registro;
 
 import com.renaser.os.evidence.api.TipoEvidencia;
+import com.renaser.os.habits.application.ports.in.registro.CompletarHechoSinRedUseCase;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase;
 import com.renaser.os.habits.application.ports.in.registro.CompletarRegistroUseCase.CompletarRegistroCommand;
 import com.renaser.os.habits.application.ports.in.registro.ConsultarTracksDelDiaConCatalogoUseCase;
@@ -9,6 +10,8 @@ import com.renaser.os.habits.application.ports.in.registro.SolicitarUrlEvidencia
 import com.renaser.os.habits.application.ports.in.registro.SubirEvidenciaRegistroUseCase;
 import com.renaser.os.habits.application.ports.in.registro.SubirEvidenciaRegistroUseCase.SubirEvidenciaRegistroCommand;
 import com.renaser.os.habits.domain.model.registro.RegistroHabitoId;
+import com.renaser.os.shared.domain.HechoSinRed;
+import com.renaser.os.shared.domain.OrigenDeLaHora;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
@@ -41,13 +44,16 @@ public class HabitTrackController {
 
     private final ConsultarTracksDelDiaConCatalogoUseCase consultarTracksDelDiaUseCase;
     private final CompletarRegistroUseCase completarRegistroUseCase;
+    private final CompletarHechoSinRedUseCase completarHechoSinRedUseCase;
     private final SubirEvidenciaRegistroUseCase subirEvidenciaUseCase;
     private final SolicitarUrlEvidenciaRegistroUseCase urlEvidenciaUseCase;
 
     public HabitTrackController(ConsultarTracksDelDiaConCatalogoUseCase consultarTracksDelDiaUseCase,
                                  CompletarRegistroUseCase completarRegistroUseCase,
                                  SubirEvidenciaRegistroUseCase subirEvidenciaUseCase,
-                                 SolicitarUrlEvidenciaRegistroUseCase urlEvidenciaUseCase) {
+                                 SolicitarUrlEvidenciaRegistroUseCase urlEvidenciaUseCase,
+                                 CompletarHechoSinRedUseCase completarHechoSinRedUseCase) {
+        this.completarHechoSinRedUseCase = completarHechoSinRedUseCase;
         this.consultarTracksDelDiaUseCase = consultarTracksDelDiaUseCase;
         this.completarRegistroUseCase = completarRegistroUseCase;
         this.subirEvidenciaUseCase = subirEvidenciaUseCase;
@@ -101,10 +107,17 @@ public class HabitTrackController {
     @PostMapping("/{id}/complete")
     public RegistroHabitoResponse completar(@ActorAutenticado UserId actor, @PathVariable String id,
                                              @RequestBody @Valid CompletarRegistroRequest request) {
-        var registro = completarRegistroUseCase.completar(CompletarRegistroCommand.conValorManual(actor,
+        var command = CompletarRegistroCommand.conValorManual(actor,
                 RegistroHabitoId.of(java.util.UUID.fromString(id)), request.respuestaTexto(),
-                request.calificacionProductividad(), request.valorMedido()));
-        return RegistroHabitoResponse.from(registro);
+                request.calificacionProductividad(), request.valorMedido());
+        if (request.hechoSinRed()) {
+            // Spec 048: lo marcado sin red, con su hora real. Nunca rebota por llegar tarde (D14).
+            var hecho = completarHechoSinRedUseCase.completar(command, new HechoSinRed(
+                    request.hechoEn(), request.idCliente(), origenDe(request.origenDeLaHora())));
+            return RegistroHabitoResponse.from(hecho.registro(),
+                    hecho.motivoSinPuntos() == null ? null : hecho.motivoSinPuntos().name());
+        }
+        return RegistroHabitoResponse.from(completarRegistroUseCase.completar(command));
     }
 
     /**
@@ -118,8 +131,11 @@ public class HabitTrackController {
                                                                @PathVariable String id,
                                                                @RequestBody @Valid
                                                                SolicitarUrlEvidenciaRegistroRequest request) {
-        var url = urlEvidenciaUseCase.solicitarUrl(new SolicitarUrlEvidenciaRegistroCommand(actor,
-                RegistroHabitoId.of(java.util.UUID.fromString(id)), request.tipoContenido()));
+        var command = new SolicitarUrlEvidenciaRegistroCommand(actor,
+                RegistroHabitoId.of(java.util.UUID.fromString(id)), request.tipoContenido());
+        // Spec 048 (FR-012): la foto de lo marcado sin red llega cuando su día ya pudo haber cerrado.
+        var url = Boolean.TRUE.equals(request.hechoSinRed()) ? urlEvidenciaUseCase.solicitarUrlHechoSinRed(command)
+                : urlEvidenciaUseCase.solicitarUrl(command);
         return UrlEvidenciaRegistroResponse.from(url);
     }
 
@@ -130,10 +146,21 @@ public class HabitTrackController {
     public EvidenciaRegistroResponse subirEvidencia(@ActorAutenticado UserId actor,
                                                       @PathVariable String id,
                                                       @RequestBody @Valid SubirEvidenciaRegistroRequest request) {
-        var evidencia = subirEvidenciaUseCase.subir(new SubirEvidenciaRegistroCommand(actor,
+        var command = new SubirEvidenciaRegistroCommand(actor,
                 RegistroHabitoId.of(java.util.UUID.fromString(id)), TipoEvidencia.valueOf(request.tipo()),
                 request.bucket(), request.rutaStorage(), request.contenidoTexto(), request.timestampExif(),
-                request.gpsLat(), request.gpsLng()));
+                request.gpsLat(), request.gpsLng());
+        var evidencia = Boolean.TRUE.equals(request.hechoSinRed()) ? subirEvidenciaUseCase.subirHechoSinRed(command)
+                : subirEvidenciaUseCase.subir(command);
         return EvidenciaRegistroResponse.from(evidencia);
+    }
+
+    /** Un valor desconocido no rebota (D14): se toma como el menos confiable. */
+    private static OrigenDeLaHora origenDe(String valor) {
+        try {
+            return valor == null ? null : OrigenDeLaHora.valueOf(valor);
+        } catch (IllegalArgumentException desconocido) {
+            return OrigenDeLaHora.TELEFONO_CORREGIDO;
+        }
     }
 }

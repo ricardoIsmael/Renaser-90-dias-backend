@@ -1,6 +1,8 @@
 package com.renaser.os.rag.application.services.herramientas;
 
 import com.renaser.os.rag.application.ports.out.audioterapia.AudioterapiaSemanalPort;
+import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort;
+import com.renaser.os.rag.application.ports.out.habitos.ConsultarAgendaHabitosPort.HabitoDelDia;
 import com.renaser.os.rag.domain.model.herramienta.InvocacionHerramienta;
 import com.renaser.os.rag.domain.model.herramienta.ResultadoHerramienta;
 import com.renaser.os.shared.domain.NotAuthorizedException;
@@ -30,9 +32,12 @@ public class EntregarResumenAudioterapiaConfirmable implements AccionConfirmable
     private static final Logger log = LoggerFactory.getLogger(EntregarResumenAudioterapiaConfirmable.class);
 
     private final AudioterapiaSemanalPort audioterapiaPort;
+    private final ConsultarAgendaHabitosPort agendaHabitos;
 
-    public EntregarResumenAudioterapiaConfirmable(AudioterapiaSemanalPort audioterapiaPort) {
+    public EntregarResumenAudioterapiaConfirmable(AudioterapiaSemanalPort audioterapiaPort,
+                                                  ConsultarAgendaHabitosPort agendaHabitos) {
         this.audioterapiaPort = audioterapiaPort;
+        this.agendaHabitos = agendaHabitos;
     }
 
     @Override
@@ -48,13 +53,17 @@ public class EntregarResumenAudioterapiaConfirmable implements AccionConfirmable
         if (registroId.isEmpty() || texto == null || texto.isBlank()) {
             return ResultadoHerramienta.fallo("La propuesta no trae respuestas validas: no se entrego nada.");
         }
+        // Issue #99: que la app apague las alarmas de la Audioterapia y celebre, como al entregarla desde Training.
+        Optional<HabitoDelDia> antes = CompletacionDeHabito.porHacerDeHoy(agendaHabitos, actorId,
+                CompletacionDeHabito.deRegistro(registroId.get()));
         int puntos;
         try {
             puntos = audioterapiaPort.entregarRespuestas(actorId, registroId.get(), texto);
         } catch (RuntimeException rechazo) {
             return traducir(rechazo);
         }
-        return ResultadoHerramienta.exito("Audioterapia de hoy entregada. Puntos otorgados: " + puntos + ".");
+        return CompletacionDeHabito.exitoConElHabito("Audioterapia de hoy entregada. Puntos otorgados: " + puntos + ".",
+                antes, puntos);
     }
 
     /** El detalle va al log; a la persona, un motivo que se pueda leer. */

@@ -341,6 +341,12 @@ class PreferenciaHorarioPersistenceAdapter implements LoadPreferenciaHorarioPort
     @Override
     @Transactional
     public void guardarFechasPropias(UserId participanteId, Collection<FechaPropia> filas) {
+        guardarFechasPropias(participanteId, filas, clock.now());
+    }
+
+    @Override
+    @Transactional
+    public void guardarFechasPropias(UserId participanteId, Collection<FechaPropia> filas, java.time.Instant ahora) {
         if (filas.isEmpty()) {
             return;
         }
@@ -349,7 +355,6 @@ class PreferenciaHorarioPersistenceAdapter implements LoadPreferenciaHorarioPort
         Map<HabitoYFecha, HorarioPorFechaJpaEntity> existentes = new HashMap<>();
         fechasRepository.findByParticipanteIdAndFechaBetween(participanteId.value(), desde, hasta)
                 .forEach(e -> existentes.put(new HabitoYFecha(e.getHabitoId(), e.getFecha()), e));
-        var ahora = clock.now();
         for (FechaPropia f : filas) {
             var previa = existentes.get(new HabitoYFecha(f.habitoId().value(), f.fecha()));
             var creadoEn = previa == null ? ahora : previa.getCreadoEn();
@@ -482,8 +487,13 @@ class PreferenciaHorarioPersistenceAdapter implements LoadPreferenciaHorarioPort
     @Override
     public void fijarRecordatorioParaDiaSemana(UserId participanteId, HabitoId habitoId, DayOfWeek diaSemana,
                                                RecordatorioDelDia recordatorio) {
+        fijarRecordatorioParaDiaSemana(participanteId, habitoId, diaSemana, recordatorio, clock.now());
+    }
+
+    @Override
+    public void fijarRecordatorioParaDiaSemana(UserId participanteId, HabitoId habitoId, DayOfWeek diaSemana,
+                                               RecordatorioDelDia recordatorio, java.time.Instant ahora) {
         var key = new HorarioSemanalPk(participanteId.value(), habitoId.value(), (short) diaSemana.getValue());
-        var ahora = clock.now();
         var existente = semanalRepository.findById(key);
         if (existente.isEmpty()) {
             if (recordatorio != null) {
@@ -509,8 +519,13 @@ class PreferenciaHorarioPersistenceAdapter implements LoadPreferenciaHorarioPort
     @Override
     public void fijarAlarmaParaDiaSemana(UserId participanteId, HabitoId habitoId, DayOfWeek diaSemana,
                                          AjusteDeAlarma alarma) {
+        fijarAlarmaParaDiaSemana(participanteId, habitoId, diaSemana, alarma, clock.now());
+    }
+
+    @Override
+    public void fijarAlarmaParaDiaSemana(UserId participanteId, HabitoId habitoId, DayOfWeek diaSemana,
+                                         AjusteDeAlarma alarma, java.time.Instant ahora) {
         var key = new HorarioSemanalPk(participanteId.value(), habitoId.value(), (short) diaSemana.getValue());
-        var ahora = clock.now();
         var existente = semanalRepository.findById(key);
         AjusteDeAlarma propia = alarma == null || alarma.esVacio() ? null : alarma;
         if (existente.isEmpty()) {

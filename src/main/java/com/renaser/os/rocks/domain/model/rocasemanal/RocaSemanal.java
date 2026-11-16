@@ -52,10 +52,16 @@ public final class RocaSemanal {
     public static RocaSemanal planificar(RocaSemanalId id, RocaMaestraId rocaMaestraId, int numeroSemana,
                                           String titulo, String obstaculo,
                                           String contingencia, Integer autoevaluacionInicio, Clock clock) {
+        return planificar(id, rocaMaestraId, numeroSemana, titulo, obstaculo, contingencia, autoevaluacionInicio, clock.now());
+    }
+
+    /** Lo mismo con el instante ya decidido (spec 048: lo planificado sin red nace con la hora real en que se hizo). */
+    public static RocaSemanal planificar(RocaSemanalId id, RocaMaestraId rocaMaestraId, int numeroSemana,
+                                          String titulo, String obstaculo,
+                                          String contingencia, Integer autoevaluacionInicio, Instant ahora) {
         Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(rocaMaestraId, "rocaMaestraId es obligatorio");
         requireNumeroSemanaValido(numeroSemana);
-        Instant ahora = clock.now();
         return new RocaSemanal(id, rocaMaestraId, numeroSemana, requireTitulo(titulo),
                 requireTexto(obstaculo, "obstaculo"), requireTexto(contingencia, "contingencia"),
                 requireEscala(autoevaluacionInicio, "autoevaluacionInicio"), null, null, null, ahora, ahora);
@@ -80,6 +86,12 @@ public final class RocaSemanal {
      */
     public void actualizarPlanificacion(String titulo, String obstaculo,
                                          String contingencia, Integer autoevaluacionInicio, Clock clock) {
+        actualizarPlanificacion(titulo, obstaculo, contingencia, autoevaluacionInicio, clock.now());
+    }
+
+    /** Lo mismo con el instante ya decidido (spec 048). */
+    public void actualizarPlanificacion(String titulo, String obstaculo,
+                                         String contingencia, Integer autoevaluacionInicio, Instant ahora) {
         if (titulo != null) {
             this.titulo = requireTitulo(titulo);
         }
@@ -92,7 +104,7 @@ public final class RocaSemanal {
         if (autoevaluacionInicio != null) {
             this.autoevaluacionInicio = requireEscala(autoevaluacionInicio, "autoevaluacionInicio");
         }
-        this.actualizadoEn = clock.now();
+        this.actualizadoEn = ahora;
     }
 
     /**
@@ -101,10 +113,15 @@ public final class RocaSemanal {
      * ventana (mismo comportamiento que `reviewWeeklyRock` del repo viejo).
      */
     public void registrarRevision(int autoevaluacionFin, String bloqueoPrincipal, String correccion, Clock clock) {
+        registrarRevision(autoevaluacionFin, bloqueoPrincipal, correccion, clock.now());
+    }
+
+    /** Lo mismo con el instante ya decidido (spec 048). */
+    public void registrarRevision(int autoevaluacionFin, String bloqueoPrincipal, String correccion, Instant ahora) {
         this.autoevaluacionFin = requireEscala(autoevaluacionFin, "autoevaluacionFin");
         this.bloqueoPrincipal = requireNotBlank(bloqueoPrincipal, "bloqueoPrincipal");
         this.correccion = requireNotBlank(correccion, "correccion");
-        this.actualizadoEn = clock.now();
+        this.actualizadoEn = ahora;
     }
 
     private static void requireNumeroSemanaValido(int numeroSemana) {

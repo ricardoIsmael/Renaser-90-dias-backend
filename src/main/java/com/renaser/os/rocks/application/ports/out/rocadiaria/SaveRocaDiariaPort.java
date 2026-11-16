@@ -27,6 +27,9 @@ public interface SaveRocaDiariaPort {
      * {@link #save}, que reescribe la fila entera, esto no puede tocar {@code completada}, {@code completada_en} ni
      * {@code puntos_otorgados}: si la persona cumple una accion mientras cierra su dia, ese cumplimiento sobrevive. Una roca con
      * respuesta solo se actualiza si sigue pendiente; una sin respuesta ({@code cierre() == null}) se limpia.
+     *
+     * <p>Spec 048 (R1): tambien deja {@code actualizado_en} en {@link RocaDiaria#actualizadoEn()}, que el dominio fija al cerrar:
+     * el choque de lo hecho sin red se decide por esa hora y un cierre que no la mueve pasaria inadvertido.
      */
     void guardarSoloElCierre(List<RocaDiaria> rocas);
 }

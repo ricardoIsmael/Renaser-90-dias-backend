@@ -107,6 +107,23 @@ class ConsultaYPausaDelSemaforoTest {
         assertThat(vigente.dias().getFirst().estado()).isEqualTo(EstadoDiaSemaforo.PENDIENTE);
     }
 
+    // spec 053 FR-004
+    @Test
+    void alaMadrugadaLaVentanaVigenteTerminaAyerYHoyAMedioHacerNoLaBaja() {
+        // 00:30 en Lima del jueves 24: hoy no hay nada hecho todavía. Lo que se ve es lo cerrado, hasta el miércoles 23.
+        FixedClock madrugada = FixedClock.at(Instant.parse("2026-09-24T05:30:00Z"));
+        ConsultaDelSemaforoService deMadrugada = new ConsultaDelSemaforoService(
+                new LecturaDeMediciones(programasFinder, tablas, tablas, madrugada), userSummaryFinder, tablas, tablas);
+        diaGuardado(aprendiz, LocalDate.of(2026, 9, 23), 5, 5);   // ayer: 100
+        diaGuardado(aprendiz, LocalDate.of(2026, 9, 24), 5, 0);   // hoy, a medio hacer: 0 (no debe contar)
+
+        VentanaDelSemaforo vigente = deMadrugada.vigenteDe(List.of(aprendiz)).get(aprendiz);
+
+        assertThat(vigente.hasta()).isEqualTo(LocalDate.of(2026, 9, 23));
+        assertThat(vigente.porcentaje()).isEqualByComparingTo("100.0");
+        assertThat(vigente.color()).isEqualTo(ColorSemaforo.VERDE);
+    }
+
     @Test
     void sinProgramaActivadoElDetalleNoAplica() {
         DetalleDelSemaforo detalle = consulta.consultar(sinPrograma, 8);

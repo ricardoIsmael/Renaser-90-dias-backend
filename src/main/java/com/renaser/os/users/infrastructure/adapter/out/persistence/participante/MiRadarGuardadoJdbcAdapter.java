@@ -9,8 +9,11 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 
 /**
  * {@code participantes_programa.mi_radar_encendido} y {@code dias_mi_radar} (V122) con {@link JdbcClient}: dos columnas de
@@ -32,7 +35,14 @@ class MiRadarGuardadoJdbcAdapter implements MiRadarGuardadoPort {
     private static final String GUARDAR = """
             UPDATE renaser.participantes_programa
             SET mi_radar_encendido = :encendido,
-                dias_mi_radar = CAST(:dias AS jsonb)
+                dias_mi_radar = CAST(:dias AS jsonb),
+                mi_radar_actualizado_en = :actualizadoEn
+            WHERE usuario_id = :participante
+            """;
+
+    private static final String LEER_HORA = """
+            SELECT mi_radar_actualizado_en
+            FROM renaser.participantes_programa
             WHERE usuario_id = :participante
             """;
 
@@ -57,13 +67,21 @@ class MiRadarGuardadoJdbcAdapter implements MiRadarGuardadoPort {
     }
 
     @Override
-    public void guardar(UserId participanteId, MiRadarGuardado guardado) {
+    public void guardar(UserId participanteId, MiRadarGuardado guardado, Instant actualizadoEn) {
         String dias = guardado.dias().isEmpty() ? null : JSON.writeValueAsString(guardado.dias());
         int filas = jdbc.sql(GUARDAR).param("participante", participanteId.value())
-                .param("encendido", guardado.encendido()).param("dias", dias).update();
+                .param("encendido", guardado.encendido()).param("dias", dias)
+                .param("actualizadoEn", Timestamp.from(actualizadoEn)).update();
         if (filas == 0) {
             throw sinPrograma(participanteId);
         }
+    }
+
+    @Override
+    public Optional<Instant> actualizadoEn(UserId participanteId) {
+        return jdbc.sql(LEER_HORA).param("participante", participanteId.value())
+                .query((rs, fila) -> Optional.ofNullable(rs.getTimestamp("mi_radar_actualizado_en")).map(Timestamp::toInstant))
+                .optional().flatMap(hora -> hora);
     }
 
     private static MiRadarGuardado leer(ResultSet rs) throws SQLException {

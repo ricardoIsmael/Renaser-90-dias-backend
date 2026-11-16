@@ -1,5 +1,7 @@
 package com.renaser.os.chat.infrastructure.adapter.in.websocket;
 
+import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.TopeDeSesion;
 import com.renaser.os.shared.web.security.SesionDeSoloLectura;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -20,6 +22,8 @@ import org.springframework.session.Session;
 import org.springframework.session.SessionRepository;
 import org.springframework.web.socket.WebSocketHandler;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +31,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -44,7 +49,7 @@ class ActorHandshakeInterceptorTest {
     private WebSocketHandler handler;
 
     private ActorHandshakeInterceptor interceptor() {
-        return new ActorHandshakeInterceptor(sessionRepository);
+        return new ActorHandshakeInterceptor(sessionRepository, TopeDeSesion.sinTope(), FixedClock.at(Instant.now()));
     }
 
     private static MapSession sesionAutenticadaDe(UUID actor) {
@@ -159,5 +164,51 @@ class ActorHandshakeInterceptorTest {
                 new ServletServerHttpResponse(new MockHttpServletResponse()), handler, atributos);
 
         assertThat(SesionDeSoloLectura.loEs(atributos)).isFalse();
+    }
+
+    // spec 050 FR-028
+    @Test
+    @DisplayName("una sesión de más de 90 días no abre el socket ni por header ni por ?token=: 401 y la sesión se borra")
+    void sesionPasadaDelTopeAbsoluto() {
+        MapSession sesion = sesionAutenticadaDe(ACTOR);
+        // 03:00 UTC: la hora en la que el día de Lima y el de UTC no coinciden (FR-031).
+        Instant ahora = Instant.parse("2026-11-20T03:00:00Z");
+        sesion.setCreationTime(ahora.minus(Duration.ofDays(91)));
+        when(sessionRepository.findById("sesion-valida")).thenReturn(sesion);
+        ActorHandshakeInterceptor conTope = new ActorHandshakeInterceptor(sessionRepository,
+                TopeDeSesion.de(Duration.ofDays(90)), FixedClock.at(ahora));
+        MockHttpServletRequest peticion = new MockHttpServletRequest("GET", "/ws");
+        peticion.setQueryString("token=sesion-valida");
+        peticion.setRequestURI("/ws");
+        ServletServerHttpResponse respuesta = new ServletServerHttpResponse(new MockHttpServletResponse());
+        Map<String, Object> atributos = new HashMap<>();
+
+        boolean permitido = conTope.beforeHandshake(new ServletServerHttpRequest(peticion), respuesta, handler,
+                atributos);
+
+        assertThat(permitido).isFalse();
+        respuesta.close();
+        assertThat(respuesta.getServletResponse().getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        assertThat(atributos).isEmpty();
+        verify(sessionRepository).deleteById("sesion-valida");
+    }
+
+    // spec 050 FR-029
+    @Test
+    @DisplayName("una sesión de 89 días con tope de 90 sigue abriendo el socket")
+    void sesionDentroDelTopeAbsoluto() {
+        MapSession sesion = sesionAutenticadaDe(ACTOR);
+        Instant ahora = Instant.parse("2026-11-20T03:00:00Z");
+        sesion.setCreationTime(ahora.minus(Duration.ofDays(89)));
+        when(sessionRepository.findById("sesion-valida")).thenReturn(sesion);
+        ActorHandshakeInterceptor conTope = new ActorHandshakeInterceptor(sessionRepository,
+                TopeDeSesion.de(Duration.ofDays(90)), FixedClock.at(ahora));
+        MockHttpServletRequest peticion = new MockHttpServletRequest("GET", "/ws");
+        peticion.addHeader("X-Auth-Token", "sesion-valida");
+
+        boolean permitido = conTope.beforeHandshake(new ServletServerHttpRequest(peticion),
+                new ServletServerHttpResponse(new MockHttpServletResponse()), handler, new HashMap<>());
+
+        assertThat(permitido).isTrue();
     }
 }

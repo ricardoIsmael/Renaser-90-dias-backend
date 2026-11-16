@@ -60,7 +60,7 @@ public class TicketMentorController {
         return ResponseEntity.status(HttpStatus.CREATED).body(TicketMentorResponse.from(ticket));
     }
 
-    @RequiresPermission(value = Permission.USE_MENTOR_TICKETS, scope = "un TRAINEE ve los suyos; hoy un MENTOR ve todos y no solo los de sus aprendices (deuda ya anotada en TicketMentorService)")
+    @RequiresPermission(value = Permission.USE_MENTOR_TICKETS, scope = "un TRAINEE ve los suyos; un MENTOR o una guia (TRAINEE_GUIDE) ve solo los de los aprendices que acompaña hoy (TicketMentorService.propios)")
     @GetMapping
     public TicketsMentorPageResponse propios(@ActorAutenticado UserId actor,
                                               @RequestParam(required = false) String cursor) {

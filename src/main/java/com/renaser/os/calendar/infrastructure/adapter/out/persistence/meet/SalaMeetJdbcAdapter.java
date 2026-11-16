@@ -5,6 +5,7 @@ import com.renaser.os.calendar.application.ports.out.meet.SaveSalaMeetPort;
 import com.renaser.os.calendar.domain.model.evento.EventoId;
 import com.renaser.os.calendar.domain.model.meet.AccesoSalaMeet;
 import com.renaser.os.calendar.domain.model.meet.ArtefactosDeLaSala;
+import com.renaser.os.calendar.domain.model.meet.EstadoDeCoanfitriones;
 import com.renaser.os.calendar.domain.model.meet.EstadoSalaMeet;
 import com.renaser.os.calendar.domain.model.meet.PoliticaDeReintentos;
 import com.renaser.os.calendar.domain.model.meet.SalaMeet;
@@ -17,6 +18,7 @@ import java.sql.Date;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.HashMap;
@@ -36,7 +38,7 @@ class SalaMeetJdbcAdapter implements LoadSalaMeetPort, SaveSalaMeetPort {
 
     private static final String COLUMNAS = "id, evento_id, fecha_ocurrencia, id_google, enlace, estado, acceso_elegido, acceso_confirmado, "
             + "intentos, proximo_intento, ultimo_error, creada_en, actualizada_en, version, grabacion_confirmada, transcripcion_confirmada, "
-            + "notas_confirmadas";
+            + "notas_confirmadas, coanfitriones_estado, coanfitriones_motivo, con_meet_api, enlace_anterior";
 
     /** Lo que sigue faltando por hacer con Google: sin hacer, o con el acceso a medias. */
     private static final String CON_TRABAJO = "(estado IN ('PENDIENTE', 'FALLIDO', 'PENDIENTE_DE_SINCRONIZAR') "
@@ -99,18 +101,31 @@ class SalaMeetJdbcAdapter implements LoadSalaMeetPort, SaveSalaMeetPort {
     }
 
     @Override
+    public List<EventoId> eventosConSalasPorMigrar(LocalDate desde, int limite) {
+        return jdbcClient.sql("SELECT evento_id FROM renaser.eventos_meet WHERE estado = 'CREADO' AND fecha_ocurrencia >= :desde "
+                        + "AND intentos < :maximo AND (con_meet_api = false OR enlace_anterior IS NOT NULL) GROUP BY evento_id ORDER BY MIN(fecha_ocurrencia) LIMIT :limite")
+                .param("desde", Date.valueOf(desde))
+                .param("maximo", PoliticaDeReintentos.MAXIMO_DE_INTENTOS)
+                .param("limite", limite)
+                .query((rs, n) -> EventoId.of(rs.getObject("evento_id", UUID.class)))
+                .list();
+    }
+
+    @Override
     public SalaMeet guardar(SalaMeet sala) {
         jdbcClient.sql("""
                         INSERT INTO renaser.eventos_meet (%s)
                         VALUES (:id, :evento, :fecha, :idGoogle, :enlace, :estado, :elegido, :confirmado, :intentos, :proximo,
-                                :error, :creada, :actualizada, 0, :grabacion, :transcripcion, :notas)
+                                :error, :creada, :actualizada, 0, :grabacion, :transcripcion, :notas, :coEstado, :coMotivo, :conMeetApi, :anterior)
                         ON CONFLICT (id) DO UPDATE SET fecha_ocurrencia = EXCLUDED.fecha_ocurrencia, enlace = EXCLUDED.enlace,
                             estado = EXCLUDED.estado, acceso_elegido = EXCLUDED.acceso_elegido,
                             acceso_confirmado = EXCLUDED.acceso_confirmado, intentos = EXCLUDED.intentos,
                             proximo_intento = EXCLUDED.proximo_intento, ultimo_error = EXCLUDED.ultimo_error,
                             actualizada_en = EXCLUDED.actualizada_en, version = eventos_meet.version + 1,
                             grabacion_confirmada = EXCLUDED.grabacion_confirmada,
-                            transcripcion_confirmada = EXCLUDED.transcripcion_confirmada, notas_confirmadas = EXCLUDED.notas_confirmadas
+                            transcripcion_confirmada = EXCLUDED.transcripcion_confirmada, notas_confirmadas = EXCLUDED.notas_confirmadas,
+                            coanfitriones_estado = EXCLUDED.coanfitriones_estado, coanfitriones_motivo = EXCLUDED.coanfitriones_motivo,
+                            con_meet_api = EXCLUDED.con_meet_api, enlace_anterior = EXCLUDED.enlace_anterior
                         """.formatted(COLUMNAS))
                 .param("id", sala.id())
                 .param("evento", sala.eventoId().value())
@@ -128,6 +143,10 @@ class SalaMeetJdbcAdapter implements LoadSalaMeetPort, SaveSalaMeetPort {
                 .param("grabacion", sala.artefactos().grabacion())
                 .param("transcripcion", sala.artefactos().transcripcion())
                 .param("notas", sala.artefactos().notas())
+                .param("coEstado", sala.coanfitriones() == null ? null : sala.coanfitriones().name())
+                .param("coMotivo", sala.coanfitrionesMotivo())
+                .param("conMeetApi", sala.conMeetApi())
+                .param("anterior", sala.enlaceAnterior())
                 .update();
         return sala;
     }
@@ -154,6 +173,17 @@ class SalaMeetJdbcAdapter implements LoadSalaMeetPort, SaveSalaMeetPort {
 
     @Override
     @Transactional
+    public void pedirDeNuevoLosCoanfitrionesFallidos(Instant ahora) {
+        // «Hoy» es el de la zona del evento (como en SincronizadorDeSalas); sin evento a la vista, el de UTC.
+        jdbcClient.sql("UPDATE renaser.eventos_meet m SET coanfitriones_estado = NULL, coanfitriones_motivo = NULL, actualizada_en = :ahora, "
+                        + "version = version + 1 WHERE m.estado = 'CREADO' AND m.coanfitriones_estado = 'FALLIDO' "
+                        + "AND m.fecha_ocurrencia >= (:ahora AT TIME ZONE COALESCE((SELECT e.timezone FROM renaser.eventos e WHERE e.id = m.evento_id), 'UTC'))::date")
+                .param("ahora", utc(ahora))
+                .update();
+    }
+
+    @Override
+    @Transactional
     public void detenerLoPendiente(String motivo, Instant ahora) {
         jdbcClient.sql("UPDATE renaser.eventos_meet SET estado = CASE WHEN estado = 'PENDIENTE' THEN 'FALLIDO' ELSE estado END, "
                         + "proximo_intento = NULL, ultimo_error = :motivo, actualizada_en = :ahora, version = version + 1 WHERE " + CON_TRABAJO)
@@ -174,6 +204,7 @@ class SalaMeetJdbcAdapter implements LoadSalaMeetPort, SaveSalaMeetPort {
 
     private static SalaMeet aSala(ResultSet rs, int fila) throws SQLException {
         String confirmado = rs.getString("acceso_confirmado");
+        String coEstado = rs.getString("coanfitriones_estado");
         return SalaMeet.rehydrate(rs.getObject("id", UUID.class), EventoId.of(rs.getObject("evento_id", UUID.class)),
                 rs.getDate("fecha_ocurrencia").toLocalDate(), rs.getString("id_google"), rs.getString("enlace"),
                 EstadoSalaMeet.valueOf(rs.getString("estado")), AccesoSalaMeet.valueOf(rs.getString("acceso_elegido")),
@@ -181,7 +212,9 @@ class SalaMeetJdbcAdapter implements LoadSalaMeetPort, SaveSalaMeetPort {
                 instante(rs, "proximo_intento"), rs.getString("ultimo_error"), instante(rs, "creada_en"),
                 instante(rs, "actualizada_en"), rs.getLong("version"),
                 new ArtefactosDeLaSala(booleano(rs, "grabacion_confirmada"), booleano(rs, "transcripcion_confirmada"),
-                        booleano(rs, "notas_confirmadas")));
+                        booleano(rs, "notas_confirmadas")),
+                coEstado == null ? null : EstadoDeCoanfitriones.valueOf(coEstado), rs.getString("coanfitriones_motivo"),
+                rs.getBoolean("con_meet_api"), rs.getString("enlace_anterior"));
     }
 
     private static Boolean booleano(ResultSet rs, String columna) throws SQLException {

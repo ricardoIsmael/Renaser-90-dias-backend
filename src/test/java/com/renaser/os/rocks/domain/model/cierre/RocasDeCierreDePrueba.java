@@ -25,6 +25,13 @@ public final class RocasDeCierreDePrueba {
         return roca(fecha, posicion, titulo, hora, false, null, 0, null);
     }
 
+    /** Una pendiente que se creó en ese instante (spec 048: las creadas después de lo que hizo el teléfono no se exigen al cerrar). */
+    public static RocaDiaria pendienteCreadaEn(LocalDate fecha, int posicion, String titulo, LocalTime hora, Instant creadoEn) {
+        return RocaDiaria.rehydrate(new RocaDiariaId(UUID.randomUUID()), ANA, fecha, posicion, titulo, null,
+                ColorPareto.paraPosicion(posicion), 5, false, EjeObjetivo.CUERPO, null, hora, null, List.of(), false, null, 0,
+                creadoEn, creadoEn, null);
+    }
+
     public static RocaDiaria cumplida(LocalDate fecha, int posicion, String titulo, LocalTime hora, int puntos) {
         return roca(fecha, posicion, titulo, hora, true, ANTES, puntos, null);
     }

@@ -8,6 +8,7 @@ import com.renaser.os.calendar.domain.model.meet.ArtefactosDeLaSala;
 import com.renaser.os.calendar.domain.model.meet.AccionDeAuditoriaGoogle;
 import com.renaser.os.calendar.domain.model.meet.CuentaDeGoogle;
 import com.renaser.os.calendar.domain.model.meet.EstadoDeLaCuenta;
+import com.renaser.os.calendar.domain.model.meet.EstadoDeCoanfitriones;
 import com.renaser.os.calendar.domain.model.meet.EstadoSalaMeet;
 import com.renaser.os.calendar.domain.model.meet.RegistroDeAuditoriaGoogle;
 import com.renaser.os.calendar.domain.model.meet.SalaMeet;
@@ -31,6 +32,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.groups.Tuple.tuple;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
@@ -82,6 +84,37 @@ class SalasYCuentaDeGooglePersistenceTest {
         }).isInstanceOf(DataIntegrityViolationException.class);
     }
 
+    // spec 040 FR-041
+    @Test
+    @DisplayName("FR-041: el origen de la sala y la sala vieja por cerrar se guardan y se leen, y solo salen a migrar las de hoy en adelante (V196)")
+    void laMigracionSeGuardaYSeLee() {
+        EventoId evento = EventoId.of(UUID.randomUUID());
+        EventoId pasado = EventoId.of(UUID.randomUUID());
+        SalaMeet nueva = sala(evento, LocalDate.of(2026, 11, 10), "a".repeat(32));
+        nueva.completarCon("https://meet.google.com/aaa-bbbb-ccc", AHORA);
+        salas.guardar(nueva);
+        SalaMeet vieja = sala(pasado, LocalDate.of(2026, 11, 1), "b".repeat(32));
+        vieja.completarCon("https://meet.google.com/ddd-eeee-fff", AHORA);
+        salas.guardar(vieja);
+
+        assertThat(salas.eventosConSalasPorMigrar(LocalDate.of(2026, 11, 5), 10)).containsExactly(evento);
+
+        nueva.migrarA("https://meet.google.com/ggg-hhhh-iii", AHORA);
+        salas.guardar(nueva);
+
+        assertThat(salas.porEvento(evento)).singleElement().satisfies(s -> {
+            assertThat(s.conMeetApi()).isTrue();
+            assertThat(s.enlace()).isEqualTo("https://meet.google.com/ggg-hhhh-iii");
+            assertThat(s.enlaceAnterior()).isEqualTo("https://meet.google.com/aaa-bbbb-ccc");
+        });
+        assertThat(salas.eventosConSalasPorMigrar(LocalDate.of(2026, 11, 5), 10)).containsExactly(evento); // falta cerrar la vieja
+
+        nueva.anteriorCerrada(AHORA);
+        salas.guardar(nueva);
+        assertThat(salas.porEvento(evento)).singleElement().satisfies(s -> assertThat(s.enlaceAnterior()).isNull());
+        assertThat(salas.eventosConSalasPorMigrar(LocalDate.of(2026, 11, 5), 10)).isEmpty();
+    }
+
     // spec 040 FR-036, FR-037
     @Test
     @DisplayName("FR-036: lo que Google confirmó de la grabación, la transcripción y las notas se guarda por sala con sus tres estados (V171)")
@@ -97,6 +130,75 @@ class SalasYCuentaDeGooglePersistenceTest {
         auditoria.registrar(new RegistroDeAuditoriaGoogle(UUID.randomUUID(), AHORA, AccionDeAuditoriaGoogle.AJUSTAR_GRABACION, null,
                 evento.value(), false, 403, "corr-grabacion"));
         assertThat(auditoria.ultimos(50)).extracting(RegistroDeAuditoriaGoogle::correlacion).contains("corr-grabacion");
+    }
+
+    // spec 040 FR-038
+    @Test
+    @DisplayName("FR-038: cómo quedaron los coanfitriones se guarda por sala (V195), con la auditoría AJUSTAR_COANFITRIONES, y las filas viejas quedan en NULL")
+    void losCoanfitrionesSeGuardan() {
+        EventoId evento = EventoId.of(UUID.randomUUID());
+        SalaMeet creada = sala(evento, LocalDate.of(2026, 11, 12), "h".repeat(32));
+        creada.completarCon("https://meet.google.com/abc-defg-hij", AHORA);
+        salas.guardar(creada);
+        assertThat(salas.porEvento(evento)).singleElement().extracting(SalaMeet::coanfitriones).isNull();
+
+        creada.registrarCoanfitriones(EstadoDeCoanfitriones.FALLIDO, "Google no dejó (código 403).", AHORA);
+        salas.guardar(creada);
+
+        assertThat(salas.porEvento(evento)).singleElement().satisfies(s -> {
+            assertThat(s.coanfitriones()).isEqualTo(EstadoDeCoanfitriones.FALLIDO);
+            assertThat(s.coanfitrionesMotivo()).isEqualTo("Google no dejó (código 403).");
+        });
+        auditoria.registrar(new RegistroDeAuditoriaGoogle(UUID.randomUUID(), AHORA, AccionDeAuditoriaGoogle.AJUSTAR_COANFITRIONES, null,
+                evento.value(), false, 403, "corr-coanfitriones"));
+        assertThat(auditoria.ultimos(50)).extracting(RegistroDeAuditoriaGoogle::correlacion).contains("corr-coanfitriones");
+    }
+
+    // spec 040 FR-038
+    @Test
+    @DisplayName("FR-038: pedir de nuevo los coanfitriones solo suelta las salas CREADO y FALLIDO de hoy en adelante, con «hoy» en la zona del evento")
+    void pedirDeNuevoLosCoanfitrionesFallidos() {
+        // 2026-11-06 02:00 UTC es todavía el 5 de noviembre en Lima y ya el 6 en UTC.
+        Instant madrugadaUtc = Instant.parse("2026-11-06T02:00:00Z");
+        EventoId deLima = EventoId.of(UUID.randomUUID());
+        EventoId sinEvento = EventoId.of(UUID.randomUUID());
+        jdbc.update("""
+                INSERT INTO renaser.eventos (id, titulo, inicia_en, duracion_minutos, timezone, tipo_ubicacion, tipo_audiencia, estado, tipo_evento)
+                VALUES (?, 'Clase', ?, 60, 'America/Lima', 'MEET', 'TODOS', 'PUBLICADO', 'ESPONTANEO')
+                """, deLima.value(), java.sql.Timestamp.from(madrugadaUtc));
+        SalaMeet ayerLima = salaConCoanfitriones(deLima, LocalDate.of(2026, 11, 4), EstadoDeCoanfitriones.FALLIDO, "1");
+        SalaMeet hoyLima = salaConCoanfitriones(deLima, LocalDate.of(2026, 11, 5), EstadoDeCoanfitriones.FALLIDO, "2");
+        SalaMeet maniana = salaConCoanfitriones(deLima, LocalDate.of(2026, 11, 6), EstadoDeCoanfitriones.FALLIDO, "3");
+        SalaMeet bien = salaConCoanfitriones(deLima, LocalDate.of(2026, 11, 7), EstadoDeCoanfitriones.OK, "4");
+        SalaMeet parcial = salaConCoanfitriones(deLima, LocalDate.of(2026, 11, 8), EstadoDeCoanfitriones.PARCIAL, "5");
+        SalaMeet huerfanaUtc = salaConCoanfitriones(sinEvento, LocalDate.of(2026, 11, 5), EstadoDeCoanfitriones.FALLIDO, "6");
+        for (SalaMeet s : List.of(ayerLima, hoyLima, maniana, bien, parcial, huerfanaUtc)) {
+            salas.guardar(s);
+        }
+
+        salas.pedirDeNuevoLosCoanfitrionesFallidos(madrugadaUtc);
+
+        assertThat(salas.porEvento(deLima)).extracting(SalaMeet::fechaOcurrencia, SalaMeet::coanfitriones).containsExactly(
+                tuple(LocalDate.of(2026, 11, 4), EstadoDeCoanfitriones.FALLIDO),
+                tuple(LocalDate.of(2026, 11, 5), null),
+                tuple(LocalDate.of(2026, 11, 6), null),
+                tuple(LocalDate.of(2026, 11, 7), EstadoDeCoanfitriones.OK),
+                tuple(LocalDate.of(2026, 11, 8), EstadoDeCoanfitriones.PARCIAL));
+        assertThat(salas.porEvento(deLima)).filteredOn(s -> s.coanfitriones() == null)
+                .allSatisfy(s -> {
+                    assertThat(s.coanfitrionesMotivo()).isNull();
+                    assertThat(s.coanfitrionesPorPedir()).isTrue();
+                });
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM renaser.eventos_meet WHERE evento_id = ? AND version = 1", Integer.class, deLima.value()))
+                .as("solo las dos soltadas suben de versión").isEqualTo(2);
+        assertThat(salas.porEvento(sinEvento)).singleElement().extracting(SalaMeet::coanfitriones).as("sin evento se usa UTC: el 5 ya pasó").isEqualTo(EstadoDeCoanfitriones.FALLIDO);
+    }
+
+    private SalaMeet salaConCoanfitriones(EventoId evento, LocalDate fecha, EstadoDeCoanfitriones estado, String sufijo) {
+        SalaMeet s = sala(evento, fecha, sufijo.repeat(32));
+        s.completarCon("https://meet.google.com/abc-defg-hi" + sufijo, AHORA);
+        s.registrarCoanfitriones(estado, estado == EstadoDeCoanfitriones.OK ? null : "Google no dejó (código 403).", AHORA);
+        return s;
     }
 
     // spec 040 FR-007

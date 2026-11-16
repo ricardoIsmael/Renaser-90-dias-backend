@@ -43,6 +43,14 @@ public final class SalaMeet {
     private long version;
     /** La grabación, la transcripción y las notas que Google dejó encendidas (FR-036); {@link ArtefactosDeLaSala#NADA} si todavía no se pidieron. */
     private ArtefactosDeLaSala artefactos;
+    /** Cómo quedó el pedido de coanfitriones (spec 040 FR-038); {@code null} = todavía no se pidió. Nunca guarda correos. */
+    private EstadoDeCoanfitriones coanfitriones;
+    /** Frase fija con el porqué cuando {@link #coanfitriones} no es {@code OK}; nunca texto de Google ni correos. */
+    private String coanfitrionesMotivo;
+    /** La sala se creó con la Meet API ({@code spaces.create}, spec 040 FR-040): Renaser es su dueña. {@code false} = nació como conferencia de Calendar. */
+    private boolean conMeetApi;
+    /** El enlace de la sala vieja de Calendar a la que esta reemplazó (FR-041) y que todavía falta cerrar; {@code null} = nada por cerrar. */
+    private String enlaceAnterior;
 
     /** Una sala que todavía no se le pidió a Google: nace {@code PENDIENTE} y lista para el primer intento. */
     public static SalaMeet nueva(UUID id, EventoId eventoId, LocalDate fecha, String idGoogle, AccesoSalaMeet acceso,
@@ -53,7 +61,7 @@ public final class SalaMeet {
         Objects.requireNonNull(idGoogle, "idGoogle es obligatorio");
         Objects.requireNonNull(acceso, "acceso es obligatorio");
         return new SalaMeet(id, eventoId, fecha, idGoogle, null, EstadoSalaMeet.PENDIENTE, acceso, null, 0, ahora, null,
-                ahora, ahora, 0L, ArtefactosDeLaSala.NADA);
+                ahora, ahora, 0L, ArtefactosDeLaSala.NADA, null, null, false, null);
     }
 
     /** Solo para el adaptador de persistencia: reconstruye una fila existente sin revalidar. */
@@ -72,7 +80,7 @@ public final class SalaMeet {
                                      String ultimoError, Instant creadaEn, Instant actualizadaEn, long version,
                                      ArtefactosDeLaSala artefactos) {
         return new SalaMeet(id, eventoId, fecha, idGoogle, enlace, estado, accesoElegido, accesoConfirmado, intentos,
-                proximoIntento, ultimoError, creadaEn, actualizadaEn, version, artefactos == null ? ArtefactosDeLaSala.NADA : artefactos);
+                proximoIntento, ultimoError, creadaEn, actualizadaEn, version, artefactos == null ? ArtefactosDeLaSala.NADA : artefactos, null, null, false, null);
     }
 
     /**
@@ -82,6 +90,115 @@ public final class SalaMeet {
     public void registrarArtefactos(ArtefactosDeLaSala confirmados, Instant ahora) {
         this.artefactos = confirmados == null ? ArtefactosDeLaSala.NADA : confirmados;
         this.actualizadaEn = ahora;
+    }
+
+    /** Igual, con el estado de los coanfitriones (V195). */
+    public static SalaMeet rehydrate(UUID id, EventoId eventoId, LocalDate fecha, String idGoogle, String enlace,
+                                     EstadoSalaMeet estado, AccesoSalaMeet accesoElegido,
+                                     AccesoSalaMeet accesoConfirmado, int intentos, Instant proximoIntento,
+                                     String ultimoError, Instant creadaEn, Instant actualizadaEn, long version,
+                                     ArtefactosDeLaSala artefactos, EstadoDeCoanfitriones coanfitriones, String coanfitrionesMotivo) {
+        SalaMeet sala = rehydrate(id, eventoId, fecha, idGoogle, enlace, estado, accesoElegido, accesoConfirmado, intentos, proximoIntento,
+                ultimoError, creadaEn, actualizadaEn, version, artefactos);
+        sala.coanfitriones = coanfitriones;
+        sala.coanfitrionesMotivo = coanfitrionesMotivo;
+        return sala;
+    }
+
+    /** Lo que Google dejó de los coanfitriones (FR-038). No genera reintentos: un rechazo de Google no cambia solo. */
+    public void registrarCoanfitriones(EstadoDeCoanfitriones estadoNuevo, String motivo, Instant ahora) {
+        this.coanfitriones = Objects.requireNonNull(estadoNuevo, "el estado es obligatorio");
+        this.coanfitrionesMotivo = estadoNuevo == EstadoDeCoanfitriones.OK ? null : limpiar(motivo);
+        this.actualizadaEn = ahora;
+    }
+
+    /** Igual, con el origen de la sala y la sala vieja por cerrar (V196). */
+    public static SalaMeet rehydrate(UUID id, EventoId eventoId, LocalDate fecha, String idGoogle, String enlace,
+                                     EstadoSalaMeet estado, AccesoSalaMeet accesoElegido,
+                                     AccesoSalaMeet accesoConfirmado, int intentos, Instant proximoIntento,
+                                     String ultimoError, Instant creadaEn, Instant actualizadaEn, long version,
+                                     ArtefactosDeLaSala artefactos, EstadoDeCoanfitriones coanfitriones, String coanfitrionesMotivo,
+                                     boolean conMeetApi, String enlaceAnterior) {
+        SalaMeet sala = rehydrate(id, eventoId, fecha, idGoogle, enlace, estado, accesoElegido, accesoConfirmado, intentos, proximoIntento,
+                ultimoError, creadaEn, actualizadaEn, version, artefactos, coanfitriones, coanfitrionesMotivo);
+        sala.conMeetApi = conMeetApi;
+        sala.enlaceAnterior = enlaceAnterior;
+        return sala;
+    }
+
+    /** Google creó la sala con la Meet API (FR-040): se guarda su enlace y queda marcada como de Renaser. */
+    public void completarConMeetApi(String enlaceDeLaSala, Instant ahora) {
+        completarCon(enlaceDeLaSala, ahora);
+        this.conMeetApi = true;
+    }
+
+    /**
+     * Una sala que nació como conferencia de Calendar pasa a una sala nueva de la Meet API (FR-041): el enlace de la fila es el nuevo y el viejo
+     * queda anotado hasta que se cierre. Lo que se había confirmado de la sala vieja (acceso, grabación, coanfitriones) ya no vale.
+     */
+    public void migrarA(String enlaceNuevo, Instant ahora) {
+        Objects.requireNonNull(enlaceNuevo, "enlace es obligatorio");
+        this.enlaceAnterior = this.enlace;
+        this.enlace = enlaceNuevo;
+        this.conMeetApi = true;
+        this.estado = EstadoSalaMeet.CREADO;
+        this.accesoConfirmado = null;
+        this.artefactos = ArtefactosDeLaSala.NADA;
+        this.coanfitriones = null;
+        this.coanfitrionesMotivo = null;
+        this.intentos = 0;
+        this.proximoIntento = null;
+        this.ultimoError = null;
+        this.actualizadaEn = ahora;
+    }
+
+    /** Falta migrarla: existe, nació en Calendar y todavía no tiene su sala de la Meet API. */
+    public boolean migracionPorHacer() {
+        return estado == EstadoSalaMeet.CREADO && !conMeetApi && enlace != null;
+    }
+
+    /** Ya tiene la sala nueva, pero la vieja sigue abierta. */
+    public boolean anteriorPorCerrar() {
+        return estado == EstadoSalaMeet.CREADO && enlaceAnterior != null;
+    }
+
+    /** La sala vieja ya se cerró (o Google dijo que no se puede y no se insiste). */
+    public void anteriorCerrada(Instant ahora) {
+        this.enlaceAnterior = null;
+        this.intentos = 0;
+        this.proximoIntento = null;
+        this.ultimoError = null;
+        this.actualizadaEn = ahora;
+    }
+
+    /** No se pudo migrar ni cerrar la vieja: la sala sigue como estaba (el enlace que funciona se conserva) y se reintenta con espera. */
+    public void fallarLaMigracion(String motivo, Instant ahora, Instant proximo) {
+        registrarFallo(motivo, ahora, proximo);
+    }
+
+    /** Es el turno de volver a intentar la migración o el cierre: sin esperas pendientes y con intentos por delante (o forzado a mano). */
+    public boolean turnoDeMigrar(Instant ahora, boolean forzar) {
+        return forzar || (intentos < PoliticaDeReintentos.MAXIMO_DE_INTENTOS && (proximoIntento == null || !ahora.isBefore(proximoIntento)));
+    }
+
+    /** Todavía no se pidió hacer coanfitrión a quien dirige esta sala, o se pidió y no había a quién (se vuelve a mirar: puede haberse asignado). */
+    public boolean coanfitrionesPorPedir() {
+        return estado == EstadoSalaMeet.CREADO && (coanfitriones == null || coanfitriones == EstadoDeCoanfitriones.SIN_CORREO);
+    }
+
+    /** Vuelve a pedirlos en la próxima sincronización (p. ej. cuando cambia quien dirige o el dueño dio el permiso). */
+    public void olvidarCoanfitriones(Instant ahora) {
+        this.coanfitriones = null;
+        this.coanfitrionesMotivo = null;
+        this.actualizadaEn = ahora;
+    }
+
+    public EstadoDeCoanfitriones coanfitriones() {
+        return coanfitriones;
+    }
+
+    public String coanfitrionesMotivo() {
+        return coanfitrionesMotivo;
     }
 
     /** Todavía no se le pidió a Google la grabación ni lo demás de esta sala. */
@@ -148,6 +265,10 @@ public final class SalaMeet {
         this.enlace = null;
         this.accesoConfirmado = null;
         this.artefactos = ArtefactosDeLaSala.NADA;
+        this.coanfitriones = null;
+        this.coanfitrionesMotivo = null;
+        this.conMeetApi = false;
+        this.enlaceAnterior = null;
         this.intentos = 0;
         this.proximoIntento = null;
         this.ultimoError = null;
@@ -161,6 +282,10 @@ public final class SalaMeet {
         this.accesoElegido = acceso;
         this.accesoConfirmado = null;
         this.artefactos = ArtefactosDeLaSala.NADA;
+        this.coanfitriones = null;
+        this.coanfitrionesMotivo = null;
+        this.conMeetApi = false;
+        this.enlaceAnterior = null;
         this.intentos = 0;
         this.proximoIntento = ahora;
         this.ultimoError = null;

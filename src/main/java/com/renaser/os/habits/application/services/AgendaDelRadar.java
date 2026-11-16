@@ -12,6 +12,7 @@ import com.renaser.os.shared.domain.UserId;
 import org.springframework.stereotype.Component;
 
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
@@ -39,7 +40,17 @@ class AgendaDelRadar {
 
     /** Hoy en la zona de la persona (regla 02). */
     LocalDate hoy(ZoneId zona) {
-        return clock.now().atZone(zona).toLocalDate();
+        return hoy(zona, clock.now());
+    }
+
+    /** El «hoy» de la persona en ese instante (spec 048: la hora real de lo hecho sin red). */
+    LocalDate hoy(ZoneId zona, Instant instante) {
+        return instante.atZone(zona).toLocalDate();
+    }
+
+    /** El instante del reloj del programa (para dejar la hora lógica de lo que se guarda). */
+    Instant ahora() {
+        return clock.now();
     }
 
     /** Los siete dias de la semana que se muestra. */
@@ -49,6 +60,14 @@ class AgendaDelRadar {
         List<DiaDelRadar> dias = IntStream.rangeClosed(1, 7).mapToObj(dia -> diaResuelto(participanteId, guardado, hoy,
                 HorarioDelRadar.proximaFecha(dia, hoy), lunes.plusDays(dia - 1L), dia)).toList();
         return new PlanDeMiRadar(guardado.encendido(), hoy, dias);
+    }
+
+    /**
+     * Un día cualquiera con el horario DE ESA FECHA (spec 048: el Código Renaser hecho ayer sin red se revisa con el Despertar y
+     * el Dormir de ayer, no con los de hoy).
+     */
+    DiaDelRadar delDia(UserId participanteId, MiRadar guardado, LocalDate fecha) {
+        return diaResuelto(participanteId, guardado, fecha, fecha, fecha, fecha.getDayOfWeek().getValue());
     }
 
     /** Solo el dia de hoy: lo que necesitan registrar y las fichas. */

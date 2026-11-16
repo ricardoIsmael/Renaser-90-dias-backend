@@ -1,6 +1,7 @@
 package com.renaser.os.calendar.application.ports.in.meet;
 
 import com.renaser.os.calendar.domain.model.evento.EventoId;
+import com.renaser.os.calendar.domain.model.meet.transcripcion.DiagnosticoDeReunion;
 import com.renaser.os.shared.domain.UserId;
 
 import java.time.Instant;
@@ -28,8 +29,16 @@ public interface TranscripcionesDeMeetUseCase {
      */
     void borrarAPedido(UserId actor, EventoId eventoId, LocalDate fecha, String motivo);
 
-    /** El estado de una fecha, sin texto (FR-012). */
-    record EstadoDeLaFecha(LocalDate fecha, String estado, String motivo, Instant obtenidaEn, Instant borrarDespuesDe, boolean grabacion) {
+    /**
+     * Issue #151, FR-022: vuelve a leer en Google qué pasó en la sala de esa fecha (quién entró por tipo, cuánto duró cada conexión, qué estados
+     * dejó) y, si la fecha terminó sin transcripción, guarda el resultado. Sirve mientras Google aún tiene los datos (unos 30 días). Solo ADMIN y
+     * ALCHEMIST. Sin nombres ni correos.
+     */
+    DiagnosticoDeReunion diagnosticar(UserId actor, EventoId eventoId, LocalDate fecha);
+
+    /** El estado de una fecha, sin texto (FR-012); con el diagnóstico si terminó sin transcripción (FR-022). */
+    record EstadoDeLaFecha(LocalDate fecha, String estado, String motivo, Instant obtenidaEn, Instant borrarDespuesDe, boolean grabacion,
+                           DiagnosticoDeReunion diagnostico) {
     }
 
     record TranscripcionDescargada(LocalDate fecha, String texto, String enlaceDeLaGrabacion, boolean recortada) {

@@ -8,6 +8,7 @@ import com.renaser.os.support.domain.model.ticketmentor.TicketMentor;
 import com.renaser.os.support.domain.model.ticketmentor.TicketMentorId;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,6 +37,16 @@ class InMemoryTicketMentorPort implements LoadTicketMentorPort, SaveTicketMentor
     @Override
     public List<TicketMentor> todos(Instant cursor, int limite) {
         return store.values().stream()
+                .filter(t -> cursor == null || t.creadoEn().isBefore(cursor))
+                .sorted((a, b) -> b.creadoEn().compareTo(a.creadoEn()))
+                .limit(limite)
+                .toList();
+    }
+
+    @Override
+    public List<TicketMentor> deParticipantes(Collection<UserId> participantes, Instant cursor, int limite) {
+        return store.values().stream()
+                .filter(t -> participantes.contains(t.participanteId()))
                 .filter(t -> cursor == null || t.creadoEn().isBefore(cursor))
                 .sorted((a, b) -> b.creadoEn().compareTo(a.creadoEn()))
                 .limit(limite)

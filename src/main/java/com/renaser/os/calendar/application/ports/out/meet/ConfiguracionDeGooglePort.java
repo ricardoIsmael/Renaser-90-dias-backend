@@ -34,4 +34,20 @@ public interface ConfiguracionDeGooglePort {
     default boolean tomarNotas() {
         return true;
     }
+
+    /**
+     * Hacer coanfitrión de cada sala a quien dirige la sesión, para que Meet grabe y transcriba solo ({@code EVENTOS_MEET_COANFITRIONES}, NO por
+     * defecto; spec 040 FR-038). Apagado, no se llama a Google. Prenderlo exige el permiso {@code meetings.space.created}: ver el README de la spec.
+     */
+    default boolean coanfitriones() {
+        return false;
+    }
+
+    /**
+     * Crear las salas con la Meet API ({@code spaces.create}) en vez de como conferencia de Calendar, y reemplazar las ya creadas de hoy en
+     * adelante ({@code EVENTOS_MEET_SALAS_CON_MEET_API}, NO por defecto; spec 040 FR-040 y FR-041). Apagado, todo sigue como siempre.
+     */
+    default boolean salasConMeetApi() {
+        return false;
+    }
 }

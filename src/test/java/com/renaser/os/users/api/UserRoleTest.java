@@ -123,27 +123,26 @@ class UserRoleTest {
     }
 
     /**
-     * HUECO DE SEGURIDAD DELIBERADO Y TEMPORAL (A-1): para MENTOR, ADMIN y ALCHEMIST, can()
-     * falla-abierto (devuelve true) para CUALQUIER permiso, porque el dueño del proyecto
-     * todavia no definio su matriz. Este test documenta el hueco a proposito — el dia que se
-     * defina una de esas matrices, este test tiene que ponerse rojo y avisar, no quedar en
+     * HUECO DE SEGURIDAD DELIBERADO Y TEMPORAL (A-1): para ADMIN y ALCHEMIST, can() falla-abierto (devuelve true)
+     * para CUALQUIER permiso, porque el dueño del proyecto todavia no definio su matriz. Este test documenta el hueco a
+     * proposito — el dia que se defina una de esas matrices, este test tiene que ponerse rojo y avisar, no quedar en
      * verde silenciosamente.
      *
      * <blockquote><b>Corregido 2026-09-09.</b> Este test incluia tambien a MENTOR_LEAD. Salio
      * de la lista al definirse su matriz real (SDD 002, DL-08); su cobertura esta en los cuatro
      * tests de arriba.</blockquote>
+     *
+     * <blockquote><b>Corregido 2026-11-12 (spec 050, tramo H, D-349).</b> Este test incluia tambien a MENTOR y
+     * TRAINEE_GUIDE. Salieron al aprobar el dueño su lista de permitidos; su cobertura esta en
+     * {@code MatrizDeMentorYGuiaTest}, que ademas falla si cualquier rol vuelve a caer en el falla-abierto.</blockquote>
      */
     @ParameterizedTest
-    @EnumSource(value = UserRole.class, names = {"MENTOR", "TRAINEE_GUIDE", "ADMIN", "ALCHEMIST"})
-    @DisplayName("TEMPORAL: los roles sin matriz definida pasan cualquier permiso (fail-open, no verificado todavia); "
-            + "el guía de aprendiz, igual que el mentor (D-265)")
+    @EnumSource(value = UserRole.class, names = {"ADMIN", "ALCHEMIST"})
+    @DisplayName("TEMPORAL: los roles sin matriz definida pasan cualquier permiso (fail-open, no verificado todavia)")
     void rolesSinMatrizDefinidaFallanAbiertoParaCualquierPermiso(UserRole rol) {
         for (Permission permiso : Permission.values()) {
             if (permiso.exclusivoDeSoporteTi()) {
                 continue; // D-267: lo exclusivo de Soporte TI no pasa por el falla-abierto (prueba aparte, abajo)
-            }
-            if (permiso == Permission.EXPORT_RANKING && !rol.canManageRoles()) {
-                continue; // D-278: el mentor y el guía NO pueden descargar el podio (prueba aparte, abajo)
             }
             assertThat(rol.can(permiso))
                     .as("%s deberia pasar %s porque su matriz todavia no esta definida (hueco temporal A-1)",
@@ -201,9 +200,9 @@ class UserRoleTest {
     }
 
     /**
-     * D-278: descargar la imagen del podio es de cuatro roles que nombro el dueño. La matriz de MENTOR y
-     * TRAINEE_GUIDE falla abierta con todo lo demas (A-1), asi que este permiso es la excepcion explicita: si
-     * alguien la borra, el mentor vuelve a ver un boton que no le dieron.
+     * D-278: descargar la imagen del podio es de cuatro roles que nombro el dueño. Desde el tramo H la matriz de MENTOR y
+     * TRAINEE_GUIDE es una lista de permitidos y este permiso ya no es una excepcion: sigue negado porque no esta en
+     * la lista. Si alguien lo agrega, el mentor vuelve a ver un boton que no le dieron.
      */
     @ParameterizedTest
     @EnumSource(value = UserRole.class, names = {"MENTOR_LEAD", "ADMIN", "ALCHEMIST", "IT_SUPPORT"})

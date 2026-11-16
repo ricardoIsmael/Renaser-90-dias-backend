@@ -21,6 +21,14 @@ public interface PedirCodigoPorWhatsAppUseCase {
      */
     String paraElRegistro(CodigoDelRegistroCommand command);
 
+    /**
+     * Spec 053: el paso del WhatsApp de «Solicitar acceso» pregunta si el numero ya es de otra cuenta, antes de pedir nada mas. Con limites por
+     * origen y globales (es una pregunta publica, asi que no se deja correr libre).
+     *
+     * @throws com.renaser.os.shared.domain.WhatsappDeLaCuentaException 409 {@code NUMERO_EN_USO}; 422 {@code NUMERO_INVALIDO} si no tiene forma de numero
+     */
+    void comprobarNumeroDelRegistro(NumeroDelRegistroCommand command);
+
     /** El codigo de la recuperacion al WhatsApp guardado de la cuenta. No devuelve nada: la respuesta es la misma exista o no la cuenta (FR-009). */
     void paraRecuperar(CodigoDeRecuperacionCommand command);
 
@@ -39,6 +47,18 @@ public interface PedirCodigoPorWhatsAppUseCase {
     record CodigoDeRecuperacionCommand(@NotBlank @Email String email, String requestIp) {
         public CodigoDeRecuperacionCommand {
             SelfValidating.validateConstructorArgs(CodigoDeRecuperacionCommand.class, email, requestIp);
+        }
+    }
+
+    record NumeroDelRegistroCommand(@NotBlank String whatsapp, String requestIp) {
+        public NumeroDelRegistroCommand {
+            SelfValidating.validateConstructorArgs(NumeroDelRegistroCommand.class, whatsapp, requestIp);
+        }
+
+        /** El numero no se imprime entero. */
+        @Override
+        public String toString() {
+            return "NumeroDelRegistroCommand[whatsapp=oculto]";
         }
     }
 }

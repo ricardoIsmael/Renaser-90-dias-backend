@@ -10,7 +10,7 @@ el dueño desde su máquina; nadie más escribe en producción.
 
 | Fuente (`--fuentes`) | Qué es | Cuántos | Visible desde |
 |---|---|---|---|
-| `lecciones` | Las 124 clases de los cursos (`transcripciones/salida/*.json`) | 124 (2.526 chunks) | el día en que se desbloquea cada lección |
+| `lecciones` | Las 124 clases de los cursos (`transcripciones/salida/*.json`, que genera `extraer_todo.py` y **no se versiona** desde el 2026-11-09) | 124 (2.526 chunks) | el día en que se desbloquea cada lección |
 | `drive-audios` | Drive «36. SESIONES / Transcripción de audios»: `DIA01 - …` a `DIA43 - …` | 43 | **el día 0** (ver abajo) |
 | `drive-canal` | Drive «37. TRANSCRIPCIONES YT»: transcripciones del canal de YouTube | 81 − 1 − 5 = **75** | **el día 0** |
 | `youtube-ensenanza` | Lista **fija** de videos de enseñanza de YouTube, escrita a mano en `indexar.py` (`VIDEOS_YOUTUBE_ENSENANZA`); la transcripción sale de los subtítulos automáticos con `yt-dlp` | 1 en la lista: «Crea riqueza en el 2025» (**6 chunks**) | **el día 0** |

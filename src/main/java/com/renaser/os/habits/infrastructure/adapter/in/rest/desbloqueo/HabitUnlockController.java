@@ -1,6 +1,7 @@
 package com.renaser.os.habits.infrastructure.adapter.in.rest.desbloqueo;
 
 import com.renaser.os.habits.application.ports.in.desbloqueo.ConsultarDesbloqueosHabitoUseCase;
+import com.renaser.os.habits.application.ports.in.desbloqueo.DesbloqueosSinRedUseCase;
 import com.renaser.os.habits.application.ports.in.desbloqueo.ElegirHabitoUseCase;
 import com.renaser.os.habits.application.ports.in.desbloqueo.CambiarEstadoHabitoDelPlanUseCase;
 import com.renaser.os.habits.application.ports.in.desbloqueo.CambiarEstadoHabitoDelPlanUseCase.CambiarEstadoHabitoCommand;
@@ -8,6 +9,7 @@ import com.renaser.os.habits.application.ports.in.desbloqueo.ElegirHabitoUseCase
 import com.renaser.os.habits.application.ports.in.desbloqueo.QuitarHabitoDelPlanUseCase;
 import com.renaser.os.habits.application.ports.in.desbloqueo.QuitarHabitoDelPlanUseCase.QuitarHabitoCommand;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
+import com.renaser.os.shared.domain.HechoSinRed;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
@@ -41,11 +43,13 @@ public class HabitUnlockController {
     private final ElegirHabitoUseCase elegirUseCase;
     private final CambiarEstadoHabitoDelPlanUseCase cambiarEstadoUseCase;
     private final QuitarHabitoDelPlanUseCase quitarUseCase;
+    private final DesbloqueosSinRedUseCase sinRedUseCase;
 
     public HabitUnlockController(ConsultarDesbloqueosHabitoUseCase consultarUseCase,
                                   ElegirHabitoUseCase elegirUseCase,
                                   CambiarEstadoHabitoDelPlanUseCase cambiarEstadoUseCase,
-                                  QuitarHabitoDelPlanUseCase quitarUseCase) {
+                                  QuitarHabitoDelPlanUseCase quitarUseCase, DesbloqueosSinRedUseCase sinRedUseCase) {
+        this.sinRedUseCase = sinRedUseCase;
         this.consultarUseCase = consultarUseCase;
         this.elegirUseCase = elegirUseCase;
         this.cambiarEstadoUseCase = cambiarEstadoUseCase;
@@ -73,11 +77,13 @@ public class HabitUnlockController {
     @RequiresPermission(Permission.USE_APP)
     @PutMapping("/{habitId}")
     public HabitUnlockPlanResponse.HabitUnlockItemResponse elegir(@ActorAutenticado UserId actor,
-                                                                    @PathVariable UUID habitId,
+                                                                    @PathVariable UUID habitId, HechoSinRed sinRed,
                                                                     @RequestBody(required = false) @Valid
                                                                     ElegirHabitoRequest request) {
         Integer diaPedido = request == null ? null : request.unlockDay();
-        var desbloqueo = elegirUseCase.elegir(new ElegirHabitoCommand(actor, HabitoId.of(habitId), diaPedido));
+        var comando = new ElegirHabitoCommand(actor, HabitoId.of(habitId), diaPedido);
+        // Spec 048 (FR-019): con X-Id-Cliente y X-Hecho-En es lo hecho sin red, con su hora real; sin ellas, lo de siempre.
+        var desbloqueo = sinRed == null ? elegirUseCase.elegir(comando) : sinRedUseCase.elegir(comando, sinRed);
         return HabitUnlockPlanResponse.HabitUnlockItemResponse.from(desbloqueo);
     }
 
@@ -89,19 +95,24 @@ public class HabitUnlockController {
     @RequiresPermission(Permission.USE_APP)
     @PatchMapping("/{habitId}")
     public HabitUnlockPlanResponse.HabitUnlockItemResponse cambiarEstado(
-            @ActorAutenticado UserId actor, @PathVariable UUID habitId,
+            @ActorAutenticado UserId actor, @PathVariable UUID habitId, HechoSinRed sinRed,
             @RequestBody @Valid CambiarEstadoHabitoRequest request) {
-        var desbloqueo = cambiarEstadoUseCase.cambiarEstado(
-                new CambiarEstadoHabitoCommand(actor, HabitoId.of(habitId), request.active(),
-                        request.pausedUntil()));
+        var comando = new CambiarEstadoHabitoCommand(actor, HabitoId.of(habitId), request.active(), request.pausedUntil());
+        var desbloqueo = sinRed == null ? cambiarEstadoUseCase.cambiarEstado(comando)
+                : sinRedUseCase.cambiarEstado(comando, sinRed);
         return HabitUnlockPlanResponse.HabitUnlockItemResponse.from(desbloqueo);
     }
 
     /** Idempotente: quitar un habito que no esta en el plan tambien devuelve 204. */
     @RequiresPermission(Permission.USE_APP)
     @DeleteMapping("/{habitId}")
-    public ResponseEntity<Void> quitar(@ActorAutenticado UserId actor, @PathVariable UUID habitId) {
-        quitarUseCase.quitar(new QuitarHabitoCommand(actor, HabitoId.of(habitId)));
+    public ResponseEntity<Void> quitar(@ActorAutenticado UserId actor, @PathVariable UUID habitId, HechoSinRed sinRed) {
+        var comando = new QuitarHabitoCommand(actor, HabitoId.of(habitId));
+        if (sinRed == null) {
+            quitarUseCase.quitar(comando);
+        } else {
+            sinRedUseCase.quitar(comando, sinRed);
+        }
         return ResponseEntity.noContent().build();
     }
 }

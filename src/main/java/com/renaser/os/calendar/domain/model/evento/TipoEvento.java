@@ -14,5 +14,7 @@ public enum TipoEvento {
     MENTORIA_ALQUIMISTA,
     ESPONTANEO,
     SEMANA_MANIFESTACION,
-    SESION_ESPECIAL
+    SESION_ESPECIAL,
+    /** Spec 053 (D-355): la que crea el líder de mentores; es la única que se le ofrece. Mismas reglas que {@link #SESION_ESPECIAL}. */
+    SESION_PERSONALIZADA
 }

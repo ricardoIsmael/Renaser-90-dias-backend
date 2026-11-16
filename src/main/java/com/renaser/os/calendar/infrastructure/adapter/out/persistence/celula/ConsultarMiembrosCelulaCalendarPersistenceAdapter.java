@@ -2,6 +2,7 @@ package com.renaser.os.calendar.infrastructure.adapter.out.persistence.celula;
 
 import com.renaser.os.calendar.application.ports.out.celula.ConsultarMiembrosCelulaPort;
 import com.renaser.os.calendar.application.ports.out.celula.ConsultarPertenenciaAGrupoPort;
+import com.renaser.os.calendar.application.ports.out.celula.MentorDelGrupoPort;
 import com.renaser.os.community.api.AcompanamientoFinder;
 import com.renaser.os.community.api.CelulaFinder;
 import com.renaser.os.shared.domain.Clock;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -37,7 +39,7 @@ import java.util.UUID;
  */
 @Component
 class ConsultarMiembrosCelulaCalendarPersistenceAdapter implements ConsultarMiembrosCelulaPort,
-        ConsultarPertenenciaAGrupoPort {
+        ConsultarPertenenciaAGrupoPort, MentorDelGrupoPort {
 
     private final ParticipacionProgramaFinder participacionFinder;
     private final CelulaFinder celulaFinder;
@@ -65,6 +67,11 @@ class ConsultarMiembrosCelulaCalendarPersistenceAdapter implements ConsultarMiem
         porAsignacion.removeAll(destinatarios);
         destinatarios.addAll(soloActivos(porAsignacion));
         return List.copyOf(destinatarios);
+    }
+
+    @Override
+    public Optional<UserId> mentorDe(UUID celulaId) {
+        return celulaFinder.mentorDe(celulaId);
     }
 
     /** Cualquier funcion vigente, con el grupo operativo: la misma pregunta con que el chat del grupo decide

@@ -30,6 +30,9 @@ public interface CrearPlanDiarioUseCase {
 
     List<RocaDiaria> crear(CrearPlanDiarioCommand command);
 
+    /** Lo mismo con el instante ya decidido (spec 048): lo hecho sin red corre sus reglas con la hora real, no con la de llegada. */
+    List<RocaDiaria> crear(CrearPlanDiarioCommand command, java.time.Instant referencia);
+
     record CrearPlanDiarioCommand(@NotNull UserId actorId, @NotNull LocalDate fecha,
                                    @NotNull @Size(min = 1, max = 9) List<ItemRocaDiaria> rocas) {
 

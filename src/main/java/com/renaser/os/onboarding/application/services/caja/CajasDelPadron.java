@@ -20,13 +20,14 @@ import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -91,16 +92,35 @@ class CajasDelPadron {
         return new PaginaDelPadron(cajas, pagina.size() < TAMANO_LOTE);
     }
 
-    /** Todo el padrón, página por página. */
-    List<CajaConFicha> todas() {
-        List<CajaConFicha> todas = new ArrayList<>();
+    /**
+     * Recorre todo el padrón de a {@link #TAMANO_LOTE}, entregando cada lote a {@code porLote} y soltándolo: nada se junta
+     * (spec 050, tramo F). Quien necesita algo de todas las cajas se queda con lo mínimo de cada una, no con la caja.
+     */
+    void recorrer(Consumer<List<CajaConFicha>> porLote) {
         for (int offset = 0; ; offset += TAMANO_LOTE) {
             PaginaDelPadron pagina = pagina(offset);
-            todas.addAll(pagina.cajas());
+            porLote.accept(pagina.cajas());
             if (pagina.ultima()) {
-                return todas;
+                return;
             }
         }
+    }
+
+    /**
+     * Las cajas de esas personas, EN LOTE (una consulta por fuente), en el orden en que se piden. Solo las que siguen
+     * siendo del padrón: aprendices con el programa activado y sin cuentas de prueba, como en {@link #pagina}; las que
+     * dejaron de serlo desde que se pidió se omiten.
+     */
+    List<CajaConFicha> deAprendices(Collection<UserId> ids) {
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        Map<UserId, UserSummary> personas = usuarios.findByIds(ids);
+        Map<UserId, ProgramaActivado> porPersona = programas.deVarios(ids);
+        List<UserSummary> aprendices = ids.stream().map(personas::get).filter(Objects::nonNull)
+                .filter(persona -> persona.role() == UserRole.TRAINEE && !persona.esCuentaDePrueba()
+                        && porPersona.containsKey(persona.id())).toList();
+        return aprendices.isEmpty() ? List.of() : armar(aprendices, porPersona, clock.now());
     }
 
     private List<CajaConFicha> armar(List<UserSummary> personas, Map<UserId, ProgramaActivado> porPersona,

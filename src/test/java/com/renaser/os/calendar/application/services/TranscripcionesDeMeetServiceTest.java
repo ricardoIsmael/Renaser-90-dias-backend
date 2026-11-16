@@ -19,6 +19,7 @@ import com.renaser.os.calendar.domain.model.evento.EventoId;
 import com.renaser.os.calendar.domain.model.meet.AccionDeAuditoriaGoogle;
 import com.renaser.os.calendar.domain.model.meet.CuentaDeGoogle;
 import com.renaser.os.calendar.domain.model.meet.RegistroDeAuditoriaGoogle;
+import com.renaser.os.calendar.domain.model.meet.transcripcion.DiagnosticoDeReunion;
 import com.renaser.os.calendar.domain.model.meet.transcripcion.EstadoDeTranscripcion;
 import com.renaser.os.calendar.domain.model.meet.transcripcion.LecturaDeReunion;
 import com.renaser.os.calendar.domain.model.meet.transcripcion.PendienteDeTranscripcion;
@@ -297,6 +298,70 @@ class TranscripcionesDeMeetServiceTest {
         }
     }
 
+    private static DiagnosticoDeReunion diagnosticoSinCuentas() {
+        return DiagnosticoDeReunion.de(List.of(new DiagnosticoDeReunion.Conferencia(FIN, FIN.plusSeconds(1200), 20, 0, 2, 0, List.of(), List.of())),
+                "ON", "ON");
+    }
+
+    // spec 047 FR-022
+    @Test
+    @DisplayName("FR-022: al acabarse el plazo sin transcripción, la fila guarda el diagnóstico que dio Google")
+    void guardaElDiagnosticoAlTerminarSin() {
+        PendienteDeTranscripcion p = pendiente(true);
+        when(reuniones.leer(any(), any(), any())).thenReturn(new LecturaDeReunion(1, 0, "", null, false, diagnosticoSinCuentas()));
+
+        servicio.buscarPendientes(FIN.plus(Duration.ofHours(9)));
+
+        TranscripcionDeSesion t = puerto.guardadas.get(p.salaId());
+        assertThat(t.estado()).isEqualTo(EstadoDeTranscripcion.SIN_TRANSCRIPCION);
+        assertThat(t.diagnostico().motivoProbable()).isEqualTo("SOLO_ANONIMOS_O_TELEFONO");
+    }
+
+    // spec 047 FR-022
+    @Test
+    @DisplayName("FR-022: con organización y grabación el camino a LISTA no cambia y no queda diagnóstico")
+    void conGrabacionNoHayDiagnostico() {
+        PendienteDeTranscripcion p = pendiente(true);
+        when(reuniones.leer(any(), any(), any())).thenReturn(new LecturaDeReunion(1, 2, TEXTO, GRABACION, false));
+
+        servicio.buscarPendientes(AHORA);
+
+        TranscripcionDeSesion t = puerto.guardadas.get(p.salaId());
+        assertThat(t.estado()).isEqualTo(EstadoDeTranscripcion.LISTA);
+        assertThat(t.diagnostico()).isNull();
+    }
+
+    // spec 047 FR-022
+    @Test
+    @DisplayName("FR-022: el diagnóstico a pedido vuelve a leer en Google y lo guarda en la fila que terminó sin transcripción")
+    void diagnosticarAPedido() {
+        PendienteDeTranscripcion p = pendiente(true);
+        TranscripcionDeSesion t = TranscripcionDeSesion.nueva(UUID.randomUUID(), p.salaId(), AHORA);
+        t.sinTranscripcionPorLaCuenta(AHORA);
+        puerto.guardadas.put(p.salaId(), t);
+        when(reuniones.leer(p.enlace(), p.desde(), p.hasta())).thenReturn(new LecturaDeReunion(1, 0, "", null, false, diagnosticoSinCuentas()));
+
+        DiagnosticoDeReunion d = servicio.diagnosticar(ADMIN, p.eventoId(), p.fecha());
+
+        assertThat(d.motivoProbable()).isEqualTo("SOLO_ANONIMOS_O_TELEFONO");
+        assertThat(puerto.guardadas.get(p.salaId()).diagnostico()).isEqualTo(d);
+    }
+
+    // spec 047 FR-022
+    @Test
+    @DisplayName("FR-022: si Google falla o el rol no puede, no hay diagnóstico, no se toca la fila y no se rompe nada")
+    void diagnosticarSinGoogleOSinPermiso() {
+        PendienteDeTranscripcion p = pendiente(true);
+        TranscripcionDeSesion t = TranscripcionDeSesion.nueva(UUID.randomUUID(), p.salaId(), AHORA);
+        t.sinTranscripcionPorLaCuenta(AHORA);
+        puerto.guardadas.put(p.salaId(), t);
+        when(reuniones.leer(any(), any(), any())).thenThrow(new GoogleNoRespondeException("sin red", 503));
+
+        assertThatThrownBy(() -> servicio.diagnosticar(ADMIN, p.eventoId(), p.fecha())).isInstanceOf(IllegalStateException.class);
+        assertThat(t.diagnostico()).isNull();
+        assertThatThrownBy(() -> servicio.diagnosticar(MENTOR, p.eventoId(), p.fecha())).isInstanceOf(NotAuthorizedException.class);
+    }
+
     private static final class Puerto implements TranscripcionesDeMeetPort {
         final List<PendienteDeTranscripcion> pendientes = new ArrayList<>();
         final Map<UUID, TranscripcionDeSesion> guardadas = new HashMap<>();
@@ -308,6 +373,11 @@ class TranscripcionesDeMeetServiceTest {
         @Override
         public List<PendienteDeTranscripcion> pendientes(Instant ahora, int limite) {
             return List.copyOf(pendientes);
+        }
+
+        @Override
+        public Optional<PendienteDeTranscripcion> salaDeLaFecha(EventoId eventoId, LocalDate fecha) {
+            return pendientes.stream().filter(p -> p.eventoId().equals(eventoId) && p.fecha().equals(fecha)).findFirst();
         }
 
         @Override

@@ -75,7 +75,8 @@ class AudienciaController {
     }
 
     record OpcionesResponse(boolean canCreate, List<String> parts, List<String> eventTypes, String defaultPart, boolean canChooseAll,
-                            Map<String, Integer> trafficLight, int myLearners, List<GrupoResponse> groups, List<PersonaResponse> staff) {
+                            Map<String, Integer> trafficLight, int myLearners, List<GrupoResponse> groups, List<PersonaResponse> staff,
+                            String trafficLightDate) {
 
         static OpcionesResponse from(Opciones o) {
             return new OpcionesResponse(o.puedeCrear(),
@@ -86,7 +87,8 @@ class AudienciaController {
                     colores(o.colores()),
                     o.misAlumnos(),
                     o.grupos().stream().map(g -> new GrupoResponse(g.id().toString(), g.nombre(), g.integrantes())).toList(),
-                    o.personal().stream().map(PersonaResponse::from).toList());
+                    o.personal().stream().map(PersonaResponse::from).toList(),
+                    o.fechaDelSemaforo() == null ? null : o.fechaDelSemaforo().toString());
         }
 
         private static Map<String, Integer> colores(Map<String, Integer> porColor) {

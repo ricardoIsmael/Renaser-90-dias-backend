@@ -727,4 +727,65 @@ class AcompanamientoServiceTest {
             assertThat(g.mentorId()).isEqualTo(EXMENTOR);
         });
     }
+
+    // ── D19: a quiénes acompaña hoy una persona (los tickets de mentoría de un mentor o una guía) ─────────────────────
+    @Test
+    @DisplayName("aprendices que acompaña: el mentor, los de su grupo y de ningún otro; no cuenta al que ya salió ni a quien solo cursa")
+    void aprendicesQueAcompanaElMentor() {
+        escenarioBase();
+        UserId quienSalio = UserId.of(UUID.randomUUID());
+        persona(quienSalio, "Salio del grupo");
+        asignar(MI_GRUPO, quienSalio, FuncionAcompanamiento.APRENDIZ, AHORA.minusSeconds(172_800), AHORA.minusSeconds(86_400));
+
+        assertThat(finder().aprendicesQueAcompana(MENTOR, AHORA)).containsExactlyInAnyOrder(ANA, LUIS);
+        // un aprendiz del grupo no acompaña a nadie, ni a sus compañeros
+        assertThat(finder().aprendicesQueAcompana(ANA, AHORA)).isEmpty();
+        // el del grupo ajeno no ve a los del mío
+        assertThat(finder().aprendicesQueAcompana(AJENO, AHORA)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("aprendices que acompaña: la guía y el soporte del grupo también; el exmentor ya no")
+    void aprendicesQueAcompanaLaGuiaYElSoporteNoElExmentor() {
+        escenarioBase();
+        UserId guia = UserId.of(UUID.randomUUID());
+        UserId soporte = UserId.of(UUID.randomUUID());
+        asignar(MI_GRUPO, guia, FuncionAcompanamiento.GUIA, AHORA.minusSeconds(86_400), null);
+        asignar(MI_GRUPO, soporte, FuncionAcompanamiento.SOPORTE, AHORA.minusSeconds(86_400), null);
+        asignar(MI_GRUPO, EXMENTOR, FuncionAcompanamiento.MENTOR, AHORA.minusSeconds(172_800), AHORA.minusSeconds(86_400));
+
+        assertThat(finder().aprendicesQueAcompana(guia, AHORA)).containsExactlyInAnyOrder(ANA, LUIS);
+        assertThat(finder().aprendicesQueAcompana(soporte, AHORA)).containsExactlyInAnyOrder(ANA, LUIS);
+        assertThat(finder().aprendicesQueAcompana(EXMENTOR, AHORA)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("aprendices que acompaña: un grupo que ya cerró o que todavía no empieza no cuenta, aunque la asignación siga abierta")
+    void aprendicesQueAcompanaSoloDeGruposEnCurso() {
+        CelulaId cerrado = CelulaId.of(UUID.randomUUID());
+        CelulaId programado = CelulaId.of(UUID.randomUUID());
+        grupoConPeriodo(cerrado, "Grupo Viejo", LocalDate.of(2026, 7, 1), LocalDate.of(2026, 7, 31));
+        grupoConPeriodo(programado, "Grupo Futuro", LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31));
+        persona(ANA, "Ana Perez");
+        persona(LUIS, "Luis Gomez");
+        asignar(cerrado, MENTOR, FuncionAcompanamiento.MENTOR, AHORA.minusSeconds(86_400 * 60), null);
+        asignar(cerrado, ANA, FuncionAcompanamiento.APRENDIZ, AHORA.minusSeconds(86_400 * 60), null);
+        asignar(programado, LUIS, FuncionAcompanamiento.APRENDIZ, AHORA.minusSeconds(86_400), null);
+        UserId mentorDelFuturo = UserId.of(UUID.randomUUID());
+        asignar(programado, mentorDelFuturo, FuncionAcompanamiento.MENTOR, AHORA.minusSeconds(86_400), null);
+
+        assertThat(finder().aprendicesQueAcompana(MENTOR, AHORA)).isEmpty();
+        assertThat(finder().aprendicesQueAcompana(mentorDelFuturo, AHORA)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("aprendices que acompaña: coincide con lo que el padrón del grupo deja abrir (la misma pregunta, no una copia)")
+    void aprendicesQueAcompanaCoincideConElPadronDelGrupo() {
+        escenarioBase();
+
+        var delPadron = servicio().aprendices(new ConsultaAprendices(MENTOR, MI_GRUPO.value(), null, 25)).aprendices().stream()
+                .map(a -> UserId.of(a.participanteId())).toList();
+
+        assertThat(finder().aprendicesQueAcompana(MENTOR, AHORA)).containsExactlyInAnyOrderElementsOf(delPadron);
+    }
 }

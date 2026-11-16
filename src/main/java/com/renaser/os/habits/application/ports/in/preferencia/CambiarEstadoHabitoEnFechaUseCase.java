@@ -26,4 +26,7 @@ public interface CambiarEstadoHabitoEnFechaUseCase {
      *               es lo que "volver a lo normal" significa — no una fila que diga que si.
      */
     void cambiarEstadoEnFecha(UserId actorId, HabitoId habitoId, LocalDate fecha, boolean activo);
+
+    /** Lo mismo con el instante ya decidido (spec 048): lo hecho sin red corre sus reglas (ventana, cuota, semana libre) con la hora real. */
+    void cambiarEstadoEnFecha(UserId actorId, HabitoId habitoId, LocalDate fecha, boolean activo, java.time.Instant ahora);
 }

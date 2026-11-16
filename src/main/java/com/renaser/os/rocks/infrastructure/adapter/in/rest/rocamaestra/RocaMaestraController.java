@@ -5,6 +5,8 @@ import com.renaser.os.rocks.application.ports.in.rocamaestra.DefinirRocaMaestraU
 import com.renaser.os.rocks.application.ports.in.rocamaestra.DefinirRocaMaestraUseCase.DefinirRocaMaestraCommand;
 import com.renaser.os.rocks.domain.model.rocamaestra.EjeObjetivo;
 import com.renaser.os.rocks.domain.model.rocamaestra.RocaMaestraFijaException;
+import com.renaser.os.rocks.application.ports.in.rocasemanal.ObjetivosSinRedUseCase;
+import com.renaser.os.shared.domain.HechoSinRed;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
@@ -32,9 +34,11 @@ public class RocaMaestraController {
 
     private final ConsultarRocasMaestrasUseCase consultarUseCase;
     private final DefinirRocaMaestraUseCase definirUseCase;
+    private final ObjetivosSinRedUseCase sinRedUseCase;
 
     public RocaMaestraController(ConsultarRocasMaestrasUseCase consultarUseCase,
-                                  DefinirRocaMaestraUseCase definirUseCase) {
+                                  DefinirRocaMaestraUseCase definirUseCase, ObjetivosSinRedUseCase sinRedUseCase) {
+        this.sinRedUseCase = sinRedUseCase;
         this.consultarUseCase = consultarUseCase;
         this.definirUseCase = definirUseCase;
     }
@@ -65,11 +69,14 @@ public class RocaMaestraController {
      */
     @RequiresPermission(value = Permission.FOLLOW_OWN_PROGRAM, scope = "solo sobre las rocas del propio aprendiz")
     @PutMapping("/{eje}")
-    public RocaMaestraResponse definir(@ActorAutenticado UserId actor, @PathVariable EjeObjetivo eje,
+    public RocaMaestraResponse definir(@ActorAutenticado UserId actor, @PathVariable EjeObjetivo eje, HechoSinRed sinRed,
                                         @Valid @RequestBody DefinirRocaMaestraRequest request) {
-        return RocaMaestraResponse.from(definirUseCase.definir(new DefinirRocaMaestraCommand(
+        var comando = new DefinirRocaMaestraCommand(
                 actor, eje, request.objetivo(), request.meta(), request.avance(), request.unidad(), request.lineaBase(),
-                request.desdeElMapa())));
+                request.desdeElMapa());
+        // Spec 048 (FR-019): con X-Id-Cliente y X-Hecho-En es lo hecho sin red, con su hora real; sin ellas, lo de siempre.
+        return RocaMaestraResponse.from(sinRed == null ? definirUseCase.definir(comando)
+                : sinRedUseCase.definirObjetivoDe90Dias(comando, sinRed));
     }
 
     /** El 409 con su codigo, para que la app lo distinga sin adivinar por el texto (D-234). */

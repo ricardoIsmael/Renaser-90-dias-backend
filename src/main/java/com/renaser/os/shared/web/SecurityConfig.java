@@ -330,7 +330,8 @@ public class SecurityConfig {
      * ({@link #httpSessionIdResolver()}): va en {@code allowedHeaders} porque el build web
      * lo MANDA en cada request, y en {@code exposedHeaders} porque despues de {@code /login}
      * el JS del navegador necesita LEER ese header de la respuesta para poder guardarlo — sin
-     * exponerlo, `fetch` desde un origen cruzado lo esconde aunque el header viaje igual.
+     * exponerlo, `fetch` desde un origen cruzado lo esconde aunque el header viaje igual. Lo mismo vale
+     * para {@code Retry-After} (spec 050): el 429 del limite por cuenta lo manda y la app web lo respeta.
      */
     @Bean
     CorsConfigurationSource corsConfigurationSource() {
@@ -341,7 +342,9 @@ public class SecurityConfig {
         // interruptores con 304 desde el build web (spec 002, contrato §6).
         config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Actor-Id", "X-Auth-Token",
                 "X-Consola-Token", "X-Reautenticacion", "If-None-Match"));
-        config.setExposedHeaders(List.of("X-Auth-Token", "ETag"));
+        // Retry-After (spec 050, FR-015 y FR-020): el 429 del límite por cuenta dice cuánto esperar y el build web, que es de otro origen, no
+        // la puede leer si no se expone (no es una cabecera de respuesta «segura» de CORS).
+        config.setExposedHeaders(List.of("X-Auth-Token", "ETag", "Retry-After"));
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
 

@@ -34,6 +34,8 @@ import static com.renaser.os.habits.application.ports.in.espiritu.CompletarPasti
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -53,10 +55,12 @@ class PastillaRenacerHabitoServiceTest {
     private ConsultarProgresoParticipanteHabitsPort progresoPort;
     @Mock
     private CompletarRegistroUseCase completarRegistroUseCase;
+    @Mock
+    private RegistroService registros;
 
     private PastillaRenacerHabitoService service() {
         return new PastillaRenacerHabitoService(loadHabitoPort, loadRegistroPort, progresoPort,
-                completarRegistroUseCase, CLOCK);
+                completarRegistroUseCase, registros, CLOCK);
     }
 
     private static UserId participante() {
@@ -208,6 +212,82 @@ class PastillaRenacerHabitoServiceTest {
                 .thenReturn(Optional.of(new ProgresoParticipanteHabits(8, "UTC", RolParticipante.TRAINEE, true, false)));
 
         assertThatThrownBy(() -> service().completarDeHoy(participanteId, RESUMEN))
+                .isInstanceOf(NotAuthorizedException.class);
+    }
+
+    // ─── Spec 048 (#186): la entrega sin red cierra el hábito de ESE día con la hora real ──────────────────
+
+    @Test
+    @DisplayName("sin red: cierra el hábito del día de la hora real con esa hora y el gesto PROPIO, no con la hora de llegada") // spec 048 FR-010
+    void completarSinRedUsaLaHoraRealYElDiaDeEsaHora() {
+        UserId participanteId = participante();
+        Habito habito = habitoPastilla();
+        RegistroHabito pendiente = registroPendiente(participanteId, habito.id());
+        RegistroHabito completado = registroPendiente(participanteId, habito.id());
+        completado.completar(10, RESUMEN, null, null, CLOCK.now());
+        Instant hechoEn = Instant.parse("2026-08-24T16:00:00Z");
+
+        mockProgresoActivo(participanteId);
+        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_PASTILLA_RENACER, Formacion.ESCUELA)).thenReturn(Optional.of(habito));
+        when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(participanteId, habito.id(), HOY))
+                .thenReturn(Optional.of(pendiente));
+        when(registros.completarConHoraReal(any(), any(), anyBoolean())).thenReturn(completado);
+
+        var resultado = service().completarSinRed(participanteId, RESUMEN, HOY, hechoEn, true);
+
+        assertThat(resultado).isPresent();
+        assertThat(resultado.get().puntosOtorgados()).isEqualTo(10);
+        verify(registros).completarConHoraReal(new CompletarRegistroCommand(participanteId, pendiente.id(), RESUMEN, null,
+                GestoCompletar.PROPIO_DEL_HABITO), hechoEn, true);
+        verify(completarRegistroUseCase, never()).completar(any());
+    }
+
+    @Test
+    @DisplayName("sin red: una entrega fuera de regla (hora futura, más de 48 h) cierra el hábito igual, pero sin puntos") // spec 048 FR-015
+    void completarSinRedFueraDeReglaVaSinPuntos() {
+        UserId participanteId = participante();
+        Habito habito = habitoPastilla();
+        RegistroHabito pendiente = registroPendiente(participanteId, habito.id());
+        Instant hechoEn = Instant.parse("2026-08-24T16:00:00Z");
+
+        mockProgresoActivo(participanteId);
+        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_PASTILLA_RENACER, Formacion.ESCUELA)).thenReturn(Optional.of(habito));
+        when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(participanteId, habito.id(), HOY))
+                .thenReturn(Optional.of(pendiente));
+        when(registros.completarConHoraReal(any(), any(), anyBoolean())).thenReturn(pendiente);
+
+        service().completarSinRed(participanteId, RESUMEN, HOY, hechoEn, false);
+
+        verify(registros).completarConHoraReal(any(), eq(hechoEn), eq(false));
+    }
+
+    @Test
+    @DisplayName("sin red: si el hábito ya estaba COMPLETADO no se vuelve a cerrar ni a pagar; sin hábito o sin registro de ese día, vacío")
+    void completarSinRedEsIdempotenteYVacioSiNoHayNada() {
+        UserId participanteId = participante();
+        Habito habito = habitoPastilla();
+        RegistroHabito yaCompletado = registroPendiente(participanteId, habito.id());
+        yaCompletado.completar(10, "original", null, null, CLOCK.now());
+
+        mockProgresoActivo(participanteId);
+        when(loadHabitoPort.porClaveSistema(CLAVE_SISTEMA_PASTILLA_RENACER, Formacion.ESCUELA)).thenReturn(Optional.of(habito));
+        when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(participanteId, habito.id(), HOY))
+                .thenReturn(Optional.of(yaCompletado));
+        assertThat(service().completarSinRed(participanteId, RESUMEN, HOY, CLOCK.now(), true)).isPresent();
+        verify(registros, never()).completarConHoraReal(any(), any(), anyBoolean());
+
+        when(loadRegistroPort.porParticipanteHabitoYFechaParaEscritura(participanteId, habito.id(), HOY)).thenReturn(Optional.empty());
+        assertThat(service().completarSinRed(participanteId, RESUMEN, HOY, CLOCK.now(), true)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("sin red: cuenta suspendida -> NotAuthorizedException también")
+    void completarSinRedRechazaSuspendido() {
+        UserId participanteId = participante();
+        when(progresoPort.deParticipante(participanteId))
+                .thenReturn(Optional.of(new ProgresoParticipanteHabits(8, "UTC", RolParticipante.TRAINEE, true, false)));
+
+        assertThatThrownBy(() -> service().completarSinRed(participanteId, RESUMEN, HOY, CLOCK.now(), true))
                 .isInstanceOf(NotAuthorizedException.class);
     }
 }

@@ -52,6 +52,14 @@ public enum EstadoRegistro {
         return this == PENDIENTE || this == EN_CURSO;
     }
 
+    /**
+     * Spec 048: lo marcado sin red con su hora real llega a veces cuando el barrido ya lo venció; por eso admite también
+     * {@code EXPIRADO}. COMPLETADO y FALLIDO siguen fuera.
+     */
+    public boolean puedeCompletarseHechoSinRed() {
+        return puedeCompletarse() || this == EXPIRADO;
+    }
+
     public boolean puedeExpirar() {
         return this == PENDIENTE || this == EN_CURSO;
     }

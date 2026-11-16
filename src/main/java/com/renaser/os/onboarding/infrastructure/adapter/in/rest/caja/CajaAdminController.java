@@ -1,6 +1,7 @@
 package com.renaser.os.onboarding.infrastructure.adapter.in.rest.caja;
 
 import com.renaser.os.onboarding.application.ports.in.caja.ConsultarCajasUseCase;
+import com.renaser.os.onboarding.application.ports.in.caja.ConsultarCajasUseCase.ExportacionDeCajas;
 import com.renaser.os.onboarding.application.ports.in.caja.ConsultarCajasUseCase.FiltroDeCajas;
 import com.renaser.os.onboarding.application.ports.in.caja.ContenidoDeCajaUseCase;
 import com.renaser.os.onboarding.application.ports.in.caja.ContenidoDeCajaUseCase.PedidoDeElemento;
@@ -10,6 +11,7 @@ import com.renaser.os.onboarding.infrastructure.adapter.in.rest.caja.CajaRequest
 import com.renaser.os.onboarding.infrastructure.adapter.in.rest.caja.CajaResponses.ContenidoResponse;
 import com.renaser.os.onboarding.infrastructure.adapter.in.rest.caja.CajaResponses.DetalleResponse;
 import com.renaser.os.onboarding.infrastructure.adapter.in.rest.caja.CajaResponses.PaginaResponse;
+import com.renaser.os.shared.domain.PaginaAcotada;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
@@ -27,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -62,18 +65,29 @@ public class CajaAdminController {
                                  @RequestParam(required = false) String q,
                                  @RequestParam(defaultValue = "0") int page,
                                  @RequestParam(defaultValue = "50") int size) {
-        return PaginaResponse.from(consultar.listar(actorId, new FiltroDeCajas(estado, q, page, size)));
+        // Spec 050 tramo F (FR-034): el tamaño se acota aquí, en un solo lugar. Esta lista siempre recortó en silencio (no
+        // da 400) y se conserva: la app puede depender de ello.
+        PaginaAcotada pagina = PaginaAcotada.recortada(page, size, ConsultarCajasUseCase.TAMANO_MAXIMO);
+        return PaginaResponse.from(consultar.listar(actorId,
+                new FiltroDeCajas(estado, q, pagina.pagina(), pagina.tamano())));
     }
 
+    /**
+     * La descarga, en streaming (spec 050, tramo F; FR-032). El caso de uso comprueba que sea ADMIN activo <b>aquí</b>, antes
+     * de devolver el cuerpo: un rechazo sigue siendo un 403 con su motivo. Después las filas salen por lotes, sin armar el
+     * archivo entero en memoria; un fallo a mitad ya no puede cambiar el estado HTTP, así que corta la conexión y el archivo
+     * llega incompleto (el cliente lo ve), no como un archivo bueno.
+     */
     @RequiresPermission(value = Permission.MANAGE_RENASER_BOX, scope = SOLO_ADMIN)
     @GetMapping("/export.csv")
-    public ResponseEntity<byte[]> exportar(@ActorAutenticado UserId actorId) {
+    public ResponseEntity<StreamingResponseBody> exportar(@ActorAutenticado UserId actorId) {
+        ExportacionDeCajas exportacion = consultar.exportar(actorId);
         return ResponseEntity.ok()
                 .contentType(CSV)
                 .cacheControl(CacheControl.noStore())
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         ContentDisposition.attachment().filename("caja-renaser.csv").build().toString())
-                .body(CsvDeCajas.escribir(consultar.exportar(actorId)));
+                .body(salida -> CsvDeCajas.escribir(exportacion, salida));
     }
 
     @RequiresPermission(value = Permission.MANAGE_RENASER_BOX, scope = SOLO_ADMIN)

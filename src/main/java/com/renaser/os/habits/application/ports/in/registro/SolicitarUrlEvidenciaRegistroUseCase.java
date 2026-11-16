@@ -29,6 +29,9 @@ public interface SolicitarUrlEvidenciaRegistroUseCase {
 
     UrlEvidenciaRegistro solicitarUrl(SolicitarUrlEvidenciaRegistroCommand command);
 
+    /** Spec 048 (FR-012): la URL para la foto de lo marcado sin red; sin la guarda del día, como {@code subirHechoSinRed}. */
+    UrlEvidenciaRegistro solicitarUrlHechoSinRed(SolicitarUrlEvidenciaRegistroCommand command);
+
     record SolicitarUrlEvidenciaRegistroCommand(@NotNull UserId actorId, @NotNull RegistroHabitoId registroId,
                                                  @NotBlank String tipoContenido) {
 

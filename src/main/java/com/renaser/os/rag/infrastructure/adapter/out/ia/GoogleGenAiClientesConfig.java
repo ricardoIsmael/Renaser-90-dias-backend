@@ -134,6 +134,9 @@ class GoogleGenAiClientesConfig {
         return ToolCallingManager.builder()
                 .observationRegistry(observationRegistry)
                 .toolCallbackResolver(new ResolverDeHerramientasDesconocidas(herramientas))
+                // Spring AI 2.0.2 dejo de consultar el resolver por defecto (resolutionFallbackEnabled = false): sin esto, un
+                // nombre mal escrito vuelve a tumbar el turno (E-454; lo cuida herramientaMalEscritaNoTumbaElTurno).
+                .resolutionFallbackEnabled(true)
                 .build();
     }
 

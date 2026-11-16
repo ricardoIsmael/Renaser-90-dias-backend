@@ -16,6 +16,9 @@ public final class QuienConvoca {
 
     private static final Set<TipoEvento> TIPOS_DEL_EQUIPO = EnumSet.of(TipoEvento.SESION_ESPECIAL, TipoEvento.ESPONTANEO);
 
+    /** Spec 053 (D-355, 2026-11-14): el líder de mentores ve UN solo tipo, «Sesión personalizada», y no elige. */
+    private static final Set<TipoEvento> TIPOS_DEL_LIDER = EnumSet.of(TipoEvento.SESION_PERSONALIZADA);
+
     private QuienConvoca() {
     }
 
@@ -44,10 +47,16 @@ public final class QuienConvoca {
         };
     }
 
-    /** Los tipos de evento que el rol puede crear (FR-007, P9). */
+    /** Los tipos de evento que el rol puede crear (FR-007, P9; el del líder, spec 053 FR-001). */
     public static Set<TipoEvento> tiposDe(RolUsuario rol) {
         if (administra(rol)) {
-            return EnumSet.allOf(TipoEvento.class);
+            // «Sesión personalizada» es del líder (spec 053): Administración y Alquimista conservan sus cuatro de siempre.
+            Set<TipoEvento> todos = EnumSet.allOf(TipoEvento.class);
+            todos.remove(TipoEvento.SESION_PERSONALIZADA);
+            return todos;
+        }
+        if (rol == RolUsuario.MENTOR_LEAD) {
+            return TIPOS_DEL_LIDER;
         }
         return puedeCrear(rol) ? TIPOS_DEL_EQUIPO : EnumSet.noneOf(TipoEvento.class);
     }

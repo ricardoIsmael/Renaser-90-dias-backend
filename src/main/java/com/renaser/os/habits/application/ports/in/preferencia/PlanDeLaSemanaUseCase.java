@@ -31,6 +31,13 @@ public interface PlanDeLaSemanaUseCase {
      */
     void guardar(UserId actorId, HabitoId habitoId, SemanaCalendaria semana, List<CambioDeFecha> cambios);
 
+    /** Lo mismo con el instante ya decidido (spec 048): lo hecho sin red corre sus reglas (ventana, cuota, semana libre) con la hora real. */
+    void guardar(UserId actorId, HabitoId habitoId, SemanaCalendaria semana, List<CambioDeFecha> cambios,
+                 java.time.Instant ahora);
+
     /** Vuelve al plan de siempre: borra las fechas propias de ese habito en la semana, solo las posteriores a hoy. Idempotente. */
     void volverAlPlanDeSiempre(UserId actorId, HabitoId habitoId, SemanaCalendaria semana);
+
+    /** Lo mismo con el instante ya decidido (spec 048): lo hecho sin red corre sus reglas (ventana, cuota, semana libre) con la hora real. */
+    void volverAlPlanDeSiempre(UserId actorId, HabitoId habitoId, SemanaCalendaria semana, java.time.Instant ahora);
 }

@@ -109,4 +109,54 @@ class TranscripcionDeSesionTest {
         assertThat(t.enlaceDeLaGrabacion()).isNull();
         assertThat(t.borradaEn()).isNotNull();
     }
+
+    private static DiagnosticoDeReunion diagnosticoDe(int conCuenta, int anonimos, int minutos) {
+        return DiagnosticoDeReunion.de(java.util.List.of(new DiagnosticoDeReunion.Conferencia(FIN, FIN.plusSeconds(minutos * 60L), minutos, conCuenta,
+                anonimos, 0, java.util.List.of(), java.util.List.of())), "ON", "ON");
+    }
+
+    // spec 047 FR-022
+    @Test
+    @DisplayName("FR-022: sin transcripción al acabarse el plazo, la fila guarda el diagnóstico; con transcripción lista, no")
+    void diagnosticoSoloSiTerminaSin() {
+        Instant tarde = FIN.plus(Duration.ofHours(9));
+        TranscripcionDeSesion sin = nueva(tarde);
+        sin.registrarLectura(new LecturaDeReunion(1, 0, "", null, false, diagnosticoDe(0, 2, 30)), FIN, tarde, SEIS_MESES);
+        assertThat(sin.estado()).isEqualTo(EstadoDeTranscripcion.SIN_TRANSCRIPCION);
+        assertThat(sin.diagnostico().motivoProbable()).isEqualTo("SOLO_ANONIMOS_O_TELEFONO");
+
+        TranscripcionDeSesion lista = nueva(tarde);
+        lista.registrarLectura(new LecturaDeReunion(1, 2, TEXTO, null, false, diagnosticoDe(3, 0, 30)), FIN, tarde, SEIS_MESES);
+        assertThat(lista.estado()).isEqualTo(EstadoDeTranscripcion.LISTA);
+        assertThat(lista.diagnostico()).isNull();
+
+        TranscripcionDeSesion esperando = nueva(FIN.plus(Duration.ofMinutes(20)));
+        esperando.registrarLectura(new LecturaDeReunion(1, 0, "", null, true, diagnosticoDe(0, 2, 30)), FIN, FIN.plus(Duration.ofMinutes(20)),
+                SEIS_MESES);
+        assertThat(esperando.diagnostico()).as("mientras se espera no se guarda un diagnóstico a medias").isNull();
+    }
+
+    // spec 047 FR-022
+    @Test
+    @DisplayName("FR-022: el diagnóstico a pedido solo se acepta en SIN_TRANSCRIPCION o SIN_REUNION")
+    void diagnosticoAPedido() {
+        TranscripcionDeSesion t = nueva(FIN);
+        assertThat(t.registrarDiagnostico(diagnosticoDe(0, 1, 5), FIN)).isFalse();
+        t.sinTranscripcionPorLaCuenta(FIN);
+        assertThat(t.registrarDiagnostico(diagnosticoDe(0, 1, 5), FIN)).isTrue();
+        assertThat(t.diagnostico()).isNotNull();
+        assertThat(t.registrarDiagnostico(null, FIN)).isFalse();
+    }
+
+    // spec 047 FR-022
+    @Test
+    @DisplayName("FR-022: el motivo probable y su explicación en español, sin nombres")
+    void motivos() {
+        assertThat(diagnosticoDe(0, 1, 0).motivoProbable()).isEqualTo("CONEXIONES_MUY_CORTAS");
+        assertThat(diagnosticoDe(0, 1, 10).explicacion()).contains("Google no grabó").contains("anónimos (1)");
+        assertThat(diagnosticoDe(2, 0, 10).motivoProbable()).isEqualTo("CON_CUENTAS_Y_SIN_ARCHIVOS");
+        assertThat(DiagnosticoDeReunion.de(java.util.List.of(), null, null).motivoProbable()).isEqualTo("SIN_CONFERENCIAS");
+        assertThat(DiagnosticoDeReunion.de(java.util.List.of(new DiagnosticoDeReunion.Conferencia(FIN, FIN, 10, 2, 0, 0, null, null)), "OFF", "OFF")
+                .motivoProbable()).isEqualTo("AUTOMATICO_APAGADO");
+    }
 }

@@ -76,6 +76,19 @@ public final class RocaDiaria {
                                          int puntajeImpacto, boolean esDelegable, EjeObjetivo eje,
                                          RocaSemanalId rocaSemanalId, LocalTime horaInicio,
                                          LocalTime horaFin, List<AccionDiaria> acciones, Clock clock) {
+        return planificar(id, participanteId, fecha, posicion, titulo, descripcion, puntajeImpacto, esDelegable, eje,
+                rocaSemanalId, horaInicio, horaFin, acciones, clock.now());
+    }
+
+    /**
+     * Lo mismo con el instante ya decidido (spec 048): lo planificado sin red nace con la hora real en que se hizo
+     * ({@code RevisionDeLaHora#referencia}), no con la de llegada.
+     */
+    public static RocaDiaria planificar(RocaDiariaId id, UserId participanteId, LocalDate fecha,
+                                         int posicion, String titulo, String descripcion,
+                                         int puntajeImpacto, boolean esDelegable, EjeObjetivo eje,
+                                         RocaSemanalId rocaSemanalId, LocalTime horaInicio,
+                                         LocalTime horaFin, List<AccionDiaria> acciones, Instant ahora) {
         Objects.requireNonNull(id, "id es obligatorio");
         Objects.requireNonNull(participanteId, "participanteId es obligatorio");
         Objects.requireNonNull(fecha, "fecha es obligatoria");
@@ -83,7 +96,6 @@ public final class RocaDiaria {
         ColorPareto color = ColorPareto.paraPosicion(posicion);
         requireImpacto(puntajeImpacto);
         AccionDiaria.requireListaValida(acciones);
-        Instant ahora = clock.now();
         return new RocaDiaria(id, participanteId, fecha, posicion, requireTitulo(titulo),
                 requireDescripcion(descripcion), color, puntajeImpacto, esDelegable, eje, rocaSemanalId, horaInicio,
                 horaFin, copiaOrdenada(acciones), false, null, 0, ahora, ahora, null);
@@ -123,12 +135,17 @@ public final class RocaDiaria {
 
     /** Marca la roca completada. Solo se puede completar una vez (ALREADY_COMPLETED en el repo viejo). */
     public void completar(Instant completadaEn, Clock clock) {
+        completar(completadaEn, clock.now());
+    }
+
+    /** Lo mismo con el instante de {@code actualizadoEn} ya decidido (spec 048: lo hecho sin red lo deja con la hora real). */
+    public void completar(Instant completadaEn, Instant ahora) {
         if (completada) {
             throw new IllegalStateException("Esta roca ya tiene evidencia registrada");
         }
         this.completada = true;
         this.completadaEn = Objects.requireNonNull(completadaEn, "completadaEn es obligatorio");
-        this.actualizadoEn = clock.now();
+        this.actualizadoEn = ahora;
     }
 
     /**
@@ -140,11 +157,18 @@ public final class RocaDiaria {
             throw new IllegalStateException("Esta acción ya está cumplida: no lleva respuesta de cierre");
         }
         this.cierre = new CierreDeAccion(respuesta, ahora);
+        this.actualizadoEn = ahora;
     }
 
     /** Olvida la respuesta de cierre (la accion se cumplio despues de cerrar el dia, o se vuelve a cerrar sin ella). */
     public void quitarCierre() {
         this.cierre = null;
+    }
+
+    /** Lo mismo, dejando {@code actualizadoEn} en {@code ahora}: cerrar el día mueve la hora lógica de la fila (spec 048, R1). */
+    public void quitarCierre(Instant ahora) {
+        quitarCierre();
+        this.actualizadoEn = ahora;
     }
 
     /** Idempotencia del pago de puntos: un track solo premia una vez (mismo criterio que `habits`). */

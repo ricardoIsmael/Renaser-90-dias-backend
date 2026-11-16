@@ -22,4 +22,10 @@ public interface LoadSalaMeetPort {
      * termine su serie): el proceso horario les vuelve a calcular las salas, así las fechas que entraron a la ventana reciben la suya.
      */
     List<EventoId> eventosConSalaAutomatica(Instant ahora);
+
+    /**
+     * Los eventos con salas creadas que todavía faltan por pasar a la Meet API o con la sala vieja por cerrar (spec 040 FR-041), de fechas de
+     * {@code desde} en adelante, los de fecha más cercana primero. Las pasadas no se tocan.
+     */
+    List<EventoId> eventosConSalasPorMigrar(java.time.LocalDate desde, int limite);
 }

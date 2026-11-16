@@ -55,7 +55,12 @@ class PublicacionCreadaHabitoListener {
     @ApplicationModuleListener
     void on(PublicacionCreadaEvent evento) {
         try {
-            cerrarPostDiarioUseCase.alPublicarEnElMuro(evento.autorId(), evento.occurredAt());
+            if (evento.hechoSinRedEn() != null) {
+                // Spec 048, fase 2: escrita sin internet; el «Post diario» cuenta el dia de la hora real (D17).
+                cerrarPostDiarioUseCase.alPublicarSinRed(evento.autorId(), evento.publicacionId(), evento.hechoSinRedEn());
+            } else {
+                cerrarPostDiarioUseCase.alPublicarEnElMuro(evento.autorId(), evento.occurredAt());
+            }
         } catch (RuntimeException fallaDelNegocio) {
             log.warn("[habits] la publicacion {} no pudo cerrar el habito de post diario: {}",
                     evento.publicacionId(), fallaDelNegocio.toString());

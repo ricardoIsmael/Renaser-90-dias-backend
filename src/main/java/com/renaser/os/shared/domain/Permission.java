@@ -23,6 +23,12 @@ package com.renaser.os.shared.domain;
  * No son preguntas de rol y siguen viviendo en el caso de uso (§5.3.4: {@code requireSelf} y
  * {@code requireMentorScope} no cambian). Cada endpoint que ademas depende de una relacion lo
  * dice en {@code @RequiresPermission(scope = "...")}.
+ *
+ * <blockquote><b>Corregido 2026-11-12 (spec 050, tramo H, D-349).</b> Varios valores de abajo dicen que MENTOR y
+ * TRAINEE_GUIDE «todavía no tienen matriz (A-1, falla-abierto)» y que el 403 de un mentor lo da el servicio. Ya no es
+ * así: tienen una lista de permitidos ({@code UserRole.PERMISOS_MENTOR_Y_GUIA}) y el interceptor la aplica con el modo
+ * sombra / aplicar de {@code renaser.security.mentor-enforcement}; el guard del servicio se queda como segunda línea.
+ * Solo ADMIN y ALCHEMIST siguen sin matriz. Cada javadoc se corrige cuando se toca ese permiso.</blockquote>
  */
 public enum Permission {
 

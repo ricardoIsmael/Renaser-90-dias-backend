@@ -1,8 +1,10 @@
 package com.renaser.os.habits.infrastructure.adapter.in.rest.preferencia;
 
+import com.renaser.os.habits.application.ports.in.preferencia.PlanDeLaSemanaSinRedUseCase;
 import com.renaser.os.habits.application.ports.in.preferencia.PlanDeLaSemanaUseCase;
 import com.renaser.os.habits.domain.model.habito.HabitoId;
 import com.renaser.os.habits.domain.model.preferencia.SemanaCalendaria;
+import com.renaser.os.shared.domain.HechoSinRed;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
@@ -35,9 +37,11 @@ import java.util.UUID;
 public class PlanDeLaSemanaController {
 
     private final PlanDeLaSemanaUseCase useCase;
+    private final PlanDeLaSemanaSinRedUseCase sinRedUseCase;
 
-    public PlanDeLaSemanaController(PlanDeLaSemanaUseCase useCase) {
+    public PlanDeLaSemanaController(PlanDeLaSemanaUseCase useCase, PlanDeLaSemanaSinRedUseCase sinRedUseCase) {
         this.useCase = useCase;
+        this.sinRedUseCase = sinRedUseCase;
     }
 
     /** Los siete dias de la semana que empieza ese lunes ({@code 400} si no es lunes), con el plan de siempre y lo «solo esta semana». */
@@ -56,7 +60,13 @@ public class PlanDeLaSemanaController {
     @RequiresPermission(Permission.USE_APP)
     @PutMapping
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void guardar(@ActorAutenticado UserId actor, @PathVariable UUID habitId, @RequestBody @Valid WeekChangesRequest request) {
+    public void guardar(@ActorAutenticado UserId actor, @PathVariable UUID habitId, HechoSinRed sinRed,
+            @RequestBody @Valid WeekChangesRequest request) {
+        if (sinRed != null) {
+            // Spec 048 (FR-019): con X-Id-Cliente y X-Hecho-En es lo hecho sin red, con su hora real; sin ellas, lo de siempre.
+            sinRedUseCase.guardar(actor, HabitoId.of(habitId), SemanaCalendaria.desde(request.weekStart()), request.toChanges(), sinRed);
+            return;
+        }
         useCase.guardar(actor, HabitoId.of(habitId), SemanaCalendaria.desde(request.weekStart()), request.toChanges());
     }
 
@@ -64,8 +74,12 @@ public class PlanDeLaSemanaController {
     @RequiresPermission(Permission.USE_APP)
     @DeleteMapping
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void volverAlPlanDeSiempre(@ActorAutenticado UserId actor, @PathVariable UUID habitId,
+    public void volverAlPlanDeSiempre(@ActorAutenticado UserId actor, @PathVariable UUID habitId, HechoSinRed sinRed,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate weekStart) {
+        if (sinRed != null) {
+            sinRedUseCase.volverAlPlanDeSiempre(actor, HabitoId.of(habitId), SemanaCalendaria.desde(weekStart), sinRed);
+            return;
+        }
         useCase.volverAlPlanDeSiempre(actor, HabitoId.of(habitId), SemanaCalendaria.desde(weekStart));
     }
 }

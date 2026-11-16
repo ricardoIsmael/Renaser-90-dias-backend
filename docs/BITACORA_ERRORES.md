@@ -5136,7 +5136,10 @@ funcionó. Lo mismo para el límite de altas (60/h) y el de reset.
 
 **Solución.** `server.forward-headers-strategy: framework` (`FORWARD_HEADERS_STRATEGY`): Spring
 registra el `ForwardedHeaderFilter`, que reescribe la dirección remota con el primer valor de
-`X-Forwarded-For` — el que CloudFront pone: el cliente real. **Se confía en ese header porque el
+`X-Forwarded-For` — el que CloudFront pone: el cliente real.
+> **Corregido 2026-11-11 (E-678).** Esta línea decía que el primer valor es el que pone CloudFront. No lo es: CloudFront
+> agrega el suyo al final y lo que va antes lo escribe quien hace la petición. Hoy la IP sale del último valor y
+> `server.forward-headers-strategy` es `none`. **Se confía en ese header porque el
 security group solo deja llegar al 8080 desde los rangos de CloudFront (y la IP del dueño)**;
 falsearlo exige saltarse CloudFront, que es exactamente el pendiente de la cabecera secreta de
 origen (informe, §2.3). Cuando eso se cierre, la confianza en `X-Forwarded-For` queda completa.
@@ -12661,8 +12664,8 @@ segundo backend (tope de 1.400 MB) sigue siendo imposible en esta máquina.
   repositorio `DESPLIEGUE_MODO=reemplazo`. **En la t3.small de hoy el script elige este modo solo**: el
   cambio se puede subir sin riesgo, y el corte desaparece el día que la instancia pase a `t3.medium`.
 
-nginx es transparente a propósito: no toca `X-Forwarded-For` (la app toma el valor más a la izquierda,
-E-149/OUT-1) y conserva `Host`; soporta WebSocket (`/ws` y la voz en vivo), no guarda en buffer (streaming
+nginx es transparente a propósito: no toca `X-Forwarded-For` (la app toma el valor más a la derecha, el que
+agrega CloudFront; *corregido 2026-11-11, E-678: decía «a la izquierda»*) y conserva `Host`; soporta WebSocket (`/ws` y la voz en vivo), no guarda en buffer (streaming
 del chat, subidas), y el tope de tamaño lo sigue poniendo Spring. Los schedulers no se pisan durante los
 segundos con dos instancias: 20 de 22 llevan ShedLock sobre JDBC, y los otros dos pueden correr en todas
 las instancias (`SchedulerLockConfig`).
@@ -16073,7 +16076,173 @@ De las 78 tablas que compara la prueba, solo esa. A «la otra persona» no se le
 
 **Cómo evitar que vuelva a pasar.** Una prueba de WebSocket no espera un tiempo fijo: espera la trama O el cierre. Con STOMP de Spring, un ERROR seguido de cierre puede perderse si coincide con otro envío a la misma sesión; si algún día el cliente real depende de leer el código del ERROR, el cierre 1002 también hay que tratarlo como rechazo.
 
-## E-673 · SER no proponía planes a quien tenía objetivos del diagnóstico pero aún no abría Plan (backend, issue #60, 09/11, RESUELTO)
+## E-672 · Spring Modulith lanzaba «Cannot invoke "java.lang.Class.getTypeName()" because "type" is null» al llamar a un bean con un parámetro genérico (backend, spec 048 fase 3, 10/11, RESUELTO antes de publicar)
+
+**Síntoma.** Las pruebas de integración de lo hecho sin red fallaban todas con `java.lang.NullPointerException: Cannot invoke "java.lang.Class.getTypeName()" because "type" is null`, en
+`FormattableType.of` ← `DefaultObservedModule.render` ← `ModuleEntryInterceptor.invoke`, y la traza apuntaba a `EntregaSinRed$$SpringCGLIB$$0.entregar`. Las pruebas unitarias, que construyen la clase a mano,
+pasaban.
+
+**Causa real.** La observabilidad de Spring Modulith envuelve cada bean de un módulo (también el de `shared`) y, para dar nombre a la entrada, pinta los tipos de los parámetros con
+`ResolvableType.resolve()`. Un parámetro como `Supplier<Aplicado<T>>` o `Function<EnvioRegistrado, T>` tiene un `T` que no se resuelve: `resolve()` devuelve `null` y el pintado revienta, en
+cada llamada. No es un error del código ni de la configuración: es el pintado de cualquier método público de un bean con una variable de tipo en un parámetro genérico.
+
+**Solución.** `EntregaSinRed` pasó de bean a clase común (`new EntregaSinRed(envios, clock)` en cada caso de uso, con el puerto y el reloj que ya recibe): sin proxy no hay traza. `EnviosSinRedGeneralIT` la
+cubre contra Postgres, con dos pedidos concurrentes.
+
+**Cómo evitar que vuelva a pasar.** Un método público de un bean (servicio, adaptador, controller) no lleva una variable de tipo en un parámetro genérico (`Supplier<T>`, `Function<X, T>`, `List<T>`): usa tipos concretos
+o una clase común que no sea bean. Las pruebas de integración con el contexto real son las que lo atrapan; una unitaria con `new` no.
+
+
+## E-673 · Sin señal, Plan mostraba en rojo «No se pudo conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.» en «Esta semana» y «Acciones que mueven la meta» (app, issue #182, spec 048 fase 3, 10/11, RESUELTO)
+
+**Síntoma literal** (E2E de la fase 3, cuenta `e2e-t-dia1` que nunca abrió Plan con señal, backend apagado): en Plan, «Esta semana» decía «Primero define tus tres objetivos de 90 días…» y debajo, en rojo, «No se pudo conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.»; «Acciones que mueven la meta» decía «Primero arma tu semana…» y el mismo error en rojo.
+
+**Causa real.** Cada hook de lectura (`useRocasSemanales`, `useRocasDiarias`, `useRocasMaestras`, `usePlanMensual`) guardaba en su estado `mensajeDeObjetivos(e, …)` → `mensajeDeError`, y para un `ApiError` de red (`status` 0) ese devuelve el texto del cliente HTTP tal cual. Sin señal y sin lectura guardada (`lecturasGuardadas` solo devuelve lo que la cuenta ya leyó con señal) eso es un estado normal del modo sin internet, no una falla; la tarjeta lo pintaba como error y, sin saber si había semana o acciones, además ofrecía «Arma tu semana» o decía «Primero arma tu semana». No se volvía a pedir al volver la señal. Mismo patrón en otras 23 lecturas del barrido (Hoy, Entrenar, Cierra tu día, la Pastilla, cursos, tribu, chat, evidencias de Yo…); `PlanificarDimensionModal` ya lo había resuelto a mano.
+
+**Solución.** Una sola pieza en `src/features/sinRed/`: `mensajeDeCarga` / `mensajeDeCargaEnLinea` (`utils/sinSenal.ts`: «Todavía no hay nada guardado de esto en este teléfono. Se cargará solo cuando vuelva la señal.» o «Necesitas conexión para usar esto…»), `<ErrorDeCarga>` (color suave, sin alerta; el error de verdad sigue en rojo) y `useRecargarAlVolverLaSenal`. Las tarjetas de Plan, con la lectura fallida, dicen eso y no ofrecen armar la semana. Las pantallas del personal y el inicio de sesión (sin modo sin internet) quedan en `excepciones.json` con su motivo.
+
+**Cómo evitar que vuelva a pasar.** Ya es ejecutable: `src/__tests__/reglas/sinSenalSeDiceSinSenal.test.ts` falla si una lectura guarda `mensajeDeError(e, 'No pudimos cargar…')` en su estado (y si usa `mensajeDeCarga` sin volver a pedir al volver la señal); su mensaje dice cómo arreglarlo. Toda lectura nueva usa `mensajeDeCarga` + `<ErrorDeCarga>` + `useRecargarAlVolverLaSenal`. Y un estado vacío («Primero arma tu semana») nunca se dibuja cuando la lectura falló: no se sabe si está vacío.
+
+## E-674 · Sin señal, la acción agendada en espera no contaba en «Agendar mis acciones» («Cuerpo · 0/3») (app, issue #183, spec 048 fase 3, 10/11, RESUELTO)
+
+**Síntoma literal** (E2E de la fase 3): con la semana armada y sin señal, agendar una acción de Cuerpo para mañana, tocarla en Plan («Se guardará al volver la señal») y abrir la hoja del día: «Cuerpo · 0/3», sin la acción.
+
+**Causa real.** `AgendarAccionesModal` contaba solo lo que se elegía en esa apertura (`elegidas`) y arrancaba siempre limpia; la acción en espera existía en las lecturas (`pendienteDeEnvio`, por el ajuste de lectura de `planSinRed`) pero la hoja nunca la recibía. Se podía pasar de tres por eje o agendarla dos veces. Y el plan nuevo del mismo día, al reemplazar al anterior (E-208), habría borrado la que esperaba; con el día en curso, el servidor lo rechaza (409), así que el segundo pedido de la cola chocaba con el primero.
+
+**Solución.** La hoja recibe las acciones en espera (`enEspera`), las del día elegido cuentan para el tope, se ven con «Se guardará al volver la señal» y no se vuelven a ofrecer; tocar una acción de otro día abre la hoja en ese día. Al guardar viaja el plan del día entero y, en la cola, `quitarPlanesEnEsperaDe(fecha)` retira el pedido anterior de esa fecha: sale uno por día.
+
+**Cómo evitar que vuelva a pasar.** Una pantalla que edita algo que se reemplaza entero (como el plan de un día) parte de lo que ya existe, incluido lo que espera en la cola, no de una hoja en blanco: probarla con una escritura pendiente (`agendarAccionesEnEspera.test.ts`, `planSinRed.test.ts`). Con la cola, un reemplazo se hace sustituyendo el pedido anterior, no sumando otro.
+
+## E-675 · «Agendar mis acciones» abría en «Cuerpo · 0/3» aunque el día ya tuviera acciones en el servidor, y agendar otra borraba las que había (app, issue #185, spec 048 fase 3, 10/11, RESUELTO)
+
+**Síntoma literal** (E2E de la fase 3, también en `master`): con la semana armada y acciones ya agendadas (con señal, ya confirmadas) para un día que todavía no llegó, abrir «Agendar mis acciones» en ese día decía «Cuerpo · 0/3» y no mostraba ninguna; elegir otra y agendar dejaba el día solo con la nueva: las que había desaparecieron de Plan y de Entrenar.
+
+**Causa real.** `AgendarAccionesModal` solo contaba lo que se elegía en esa apertura (`elegidas`) y lo que esperaba señal (`enEspera`, #183); lo que el servidor ya tenía de ese día —que la pantalla ya leía en `GET /rocks/upcoming`— nunca llegaba a la hoja. Y `POST /rocks/plan` sobre un día que todavía no llegó **reemplaza el plan entero** (E-208): lo que no viaja se borra. Se podía pasar de tres por eje, agendar lo mismo dos veces y perder acciones sin aviso. Si la lectura de la semana fallaba aparte de la de hoy y mañana (`useRocasDiarias` la tolera), la hoja tampoco tenía cómo saberlo.
+
+**Solución.** La hoja recibe lo que el servidor ya tiene en los días que vienen (`delServidor`, `agendadasDeDiasQueVienen`; el día en curso queda fuera: el servidor no deja rehacerlo, 409): se ve con su hora y «Ya agendada», cuenta para el tope de tres por eje y no se vuelve a ofrecer. La persona puede quitar una de forma explícita («Quitar» / «Deshacer», «Se quitará al guardar»). Al guardar viaja el plan del día entero —lo que ya tenía y siguió, con su hora y sus pasos, más lo que espera señal y lo nuevo—, así que solo desaparece lo que se quitó. Al cambiar de día lo elegido se recorta al tope del día nuevo (`recortadasAlTope`). Si la lectura de la semana no se pudo hacer (`agendadasLeidas` falso), la hoja avisa, ofrece «Volver a leer» y no deja agendar. Un día no puede quedar sin acciones (`rocas` es `@NotEmpty`).
+
+**Cómo evitar que vuelva a pasar.** Una pantalla que edita algo que el servidor reemplaza entero (el plan de un día) parte siempre de lo que ya existe —confirmado y en espera—, nunca de una hoja en blanco, y manda el conjunto completo; lo que borra la persona lo borra ella, a propósito. Probarla con el día ya poblado (`agendarAccionesYaAgendadas.test.ts`, `agendadasLeidas.test.ts`) además de vacío.
+
+## E-677 · Sin señal, la Pastilla Renacer se registraba con la hora de llegada y no con la hora real: tardía si llegaba pasado el mediodía y «Ya se registró este día (enviado o vencido): PERDIDO» si llegaba otro día (backend y app, issue #186, spec 048, 11/11, RESUELTO)
+
+**Síntoma literal.** Entregar la Pastilla sin señal a las 11:00 y volver la señal a las 13:00 la dejaba con `{"onTime":false}` (el audio PENDIENTE, con la hora de llegada en `entregado_en`); si la señal volvía al día siguiente, `POST /api/v1/spirit-audio/submit`
+respondía 409 «Ya se registró este día (enviado o vencido): PERDIDO» y la app lo dejaba como «No se pudo» en la hoja de avisos, aunque se hubiera entregado antes del mediodía. Además la app daba por entregada el 409 «…: ENVIADO» de un reintento, pero el servidor
+dice «…: ENTREGADO» (`EstadoRegistroEspiritu`): esa respuesta nunca se reconocía, y su prueba usaba un mensaje inventado.
+
+**Causa real.** `SubmitSpiritSummaryRequest` solo traía `day` y `summaryText`, y `EspirituService.entregar` corría todo con `clock.now()`: `asegurarAvance(ahora)` pasaba a PERDIDO el audio del día anterior antes de mirar la entrega, `RegistroEspiritu.entregar(texto, ahora)` medía el plazo
+(mediodía del día del audio) contra la llegada y el hábito se buscaba para «hoy». La fase 3 de la spec 048 (D14, FR-010) dio a las demás escrituras las tres cabeceras `X-Id-Cliente`, `X-Hecho-En`, `X-Origen-De-La-Hora` y `RevisionDeLaHora`, pero la Pastilla quedó fuera
+(riesgo R9 del plan, «trabajo del backend aparte»). Y el PERDIDO de la lectura perezosa no es un cambio de la persona: es solo que la entrega todavía no había llegado.
+
+**Solución.** `POST /spirit-audio/submit` acepta el parámetro `HechoSinRed` y, con él, va por `PastillaSinRedService` (`EntregarResumenEspirituSinRedUseCase`) dentro de `EntregaSinRed`: las reglas corren con `referencia = min(hechoEn, ahora)`; a tiempo queda ENTREGADO con su hora real aunque ya estuviera PERDIDO
+(`RegistroEspiritu.entregarSinRed`); el hábito del día de la hora real se cierra con esa hora (`CompletarPastillaRenacerUseCase.completarSinRed`); el día cerrado es 409 `FUERA_DE_SU_DIA` (D29), el ya entregado `YA_ESTABA_HECHO`, sin ese día `RECURSO_YA_NO_EXISTE`; un reintento devuelve lo mismo (`envios_sin_red`, `tipo = ENTREGAR_PASTILLA`);
+hora futura o >48 h dejan el hábito sin puntos y la respuesta suma `motivoSinPuntos`. Sin cabeceras no cambia nada (mismo caso de uso, misma respuesta). Sin migración. La app manda las cabeceras desde la cola y avisa lo no aplicado y lo sin puntos; se quitó el 409 «ENVIADO».
+
+**Cómo evitar que vuelva a pasar.** `EntregarPastillaSinRedIT` (Postgres real: 11:00 que llega a las 13:00, llegada al otro día con el audio ya PERDIDO, reintento y cuatro pedidos a la vez, madrugada UTC, día cerrado, 48 h, sin cabeceras igual que antes) y `PastillaSinRedServiceTest`. Todo endpoint que cierre un hábito o una entrega con la hora del servidor y que la
+app pueda hacer sin señal acepta las tres cabeceras desde el primer día: al sumar una escritura que la cola de la app pueda encolar, se revisa si usa `clock.now()` para una regla de calendario. Un mensaje de error que la app reconoce por su texto se prueba con el texto que el servidor de verdad escribe (aquí, `EstadoRegistroEspiritu.name()`), no con uno inventado;
+mejor aún, con un `codigo`.
+
+## E-678 · La IP del cliente se leía del primer valor de `X-Forwarded-For` y no del que agrega CloudFront (backend, 11/11, RESUELTO)
+
+**Síntoma exacto.** Los límites por IP (login, ingreso con Google o Apple, cambio de contraseña, verificación de correo, solicitudes de cuenta, código por WhatsApp, cierre de cuenta) y `solicitudes_cuenta.ip_solicitud` contaban contra la dirección que traía el **primer** valor de `X-Forwarded-For`. No hubo mensaje de error: la dirección que se guardaba y se contaba no era siempre la de la conexión del cliente.
+
+**Causa real.** `server.forward-headers-strategy=framework` registra el `ForwardedHeaderFilter` de Spring, que reescribe `getRemoteAddr()` con el valor más a la izquierda de `X-Forwarded-For` (o el `for=` de `Forwarded`). La cadena de producción (CloudFront → EC2:8080 → nginx → Spring) entrega esa cabecera como «lo que traía la petición, valor que agrega CloudFront»: el valor de CloudFront va al **final**, y lo que va antes lo escribe quien hace la petición. E-149 y su comentario «POR CONFIRMAR OUT-1» daban por hecho lo contrario. El filtro además esconde esas cabeceras de lo que viene después, así que ningún código posterior podía corregirlo.
+
+**Solución.** `server.forward-headers-strategy: none` (fijo, sin variable de entorno): nada reescribe la dirección remota, el esquema ni el host desde cabeceras reenviadas. `DireccionIpDelCliente.de(request)` es el único lugar que resuelve la IP: valor más a la derecha de `X-Forwarded-For` (la última línea de la cabecera y el último valor de la línea), o la dirección de la conexión si no hay uno o no es una dirección literal. `Forwarded` y `X-Real-IP` no se leen. La cabecera `CloudFront-Viewer-Address` se lee solo con `renaser.security.ip-del-cliente.confiar-en-cloudfront-viewer-address=true` (por defecto no): la política de origen `Managed-AllViewer` no la agrega (solo `AllViewerAndCloudFrontHeaders-2022-06`) y reenvía las cabeceras del visitante tal cual. Todos los puntos que limitan por IP ya pasaban por ese método; el conteo sigue siendo por /64 en IPv6 (`UnidadDeConteoPorIp`). Nada en el backend arma URLs desde el esquema o el host de la petición, y CloudFront y nginx no agregan esas cabeceras: `framework` no hacía nada útil ahí. El nginx sigue transparente: si agregara su propio valor a `X-Forwarded-For`, ese pasaría a ser el último.
+
+**Cómo evitar que vuelva a pasar.** `DireccionIpDelClienteTest` (valor falso a la izquierda, varias líneas de cabecera, IPv4 e IPv6 con y sin puerto, `Forwarded` ignorado, sin cabeceras, el /64 del IPv6 resuelto), `CabecerasReenviadasTest` (la estrategia sigue en `none`; falla si alguien vuelve a `framework` o la saca de `application.yaml`) y `IpDelClienteIT` (por HTTP real: dos intentos de login con distinto valor a la izquierda y el mismo cliente real gastan el mismo cupo, y otro cliente real no queda bloqueado). Detrás de un proxy, la IP se toma del lado que escribe **tu** proxy, no del que escribe el cliente; se comprueba contra la cadena real y no contra la documentación de la cabecera. D-342.
+
+## E-679 · La administración de sobrenombres y de palabras prohibidas exige ser moderador también en el servicio (backend, 12/11, RESUELTO)
+
+**Síntoma exacto.** Ninguno: no hubo mensaje de error. Es la comprobación del rol que los demás servicios de administración ya hacen dentro del servicio (FR-042 de la spec 050: los guards de los servicios se quedan).
+
+**Causa real.** La regla de quién usa las siete rutas de `SobrenombresAdminController` estaba solo en el permiso del endpoint (`MODERATE_WALL`); `SobrenombreService` no la repetía.
+
+**Solución.** Las seis operaciones de `SobrenombreService` que usa Administración (`de`, `cambiar`, `listar`, `palabras`, `agregarPalabra`, `quitarPalabra`) empiezan por `exigirModerador(actor)`: solo ADMIN y ALCHEMIST con la cuenta activa, el mismo criterio de `PublicacionMuroService.esModerador`; cualquier otro, una cuenta suspendida o una que no existe reciben `NotAuthorizedException` (403) y no se toca nada. Los endpoints declaran ese alcance en `@RequiresPermission(scope = …)`. `UserRole.can` y el permiso de los endpoints no cambian (su ajuste es el tramo H de la spec 050). Lo que cada persona hace con su propio sobrenombre (`/api/v1/me/sobrenombre`) no cambia.
+
+**Cómo evitar que vuelva a pasar.** `SobrenombreServiceTest` recorre las seis operaciones con cada rol y `SobrenombresAdminControllerTest` hace lo mismo por HTTP en las siete rutas, con el servicio real detrás (con el servicio simulado la prueba no probaría nada); `SobrenombreEnElMuroIT` lo comprueba contra Postgres. Un servicio de administración repite el rol que pide su regla; al sumar uno, su prueba lo recorre con todos los roles. D-349.
+## E-680 · Los tickets de mentoría de un mentor o una guía se acotan a los aprendices que acompaña (backend, 12/11, RESUELTO)
+
+**Síntoma exacto.** Ninguno visible: no hubo mensaje de error. `GET /api/v1/tickets` para un MENTOR o una guía (TRAINEE_GUIDE) llamaba a `LoadTicketMentorPort.todos` (la deuda D-S3 de `docs/MODULO_SUPPORT.md`, anotada desde agosto: «para rol `MENTOR` devuelven todos los tickets, no solo los de su célula»).
+
+**Causa real.** El puerto de lectura de `support` solo sabía listar por un participante o todos, y `support` no tenía cómo preguntar a quién acompaña una persona (la noción de «acompañante vigente» vive en `community`, y `AcompanamientoFinder` tiene dobles de prueba escritos a mano que no se querían tocar). El comentario de la deuda decía que faltaba «un puerto hacia `participantes_programa.celula_id`», pero ese puntero no es la fuente de verdad del acompañamiento desde la spec de mentoría (V45): lo son las asignaciones vigentes.
+
+**Solución.** `community.api.AprendicesDelAcompananteFinder` (implementado por `AcompanamientoFinderService`) devuelve los aprendices con pertenencia vigente a los grupos que la persona acompaña hoy, preguntando por cada grupo suyo lo mismo que `acompanaVigente` (en curso, formación activa, asignación vigente que no es de aprendiz). `support` lo consume por `AprendicesDelAcompanantePort` y `LoadTicketMentorPort.deParticipantes` trae solo los tickets de esos aprendices; sin aprendices la página es vacía, nunca «todos». El aprendiz, `todos()` (MENTOR_LEAD, ADMIN, ALCHEMIST) y el 403 de ADMIN/ALCHEMIST en `GET /tickets` no cambian; responder y archivar siguen exigiendo al mentor asignado (E-38). Sin migración.
+
+**Cómo evitar que vuelva a pasar.** `TicketMentorServiceTest` (mentor y guía ven solo los de sus aprendices, sin aprendices ven vacío, quien dejó de acompañar ya no ve, `todos()` por rol, la guía no asignada no responde), `AcompanamientoServiceTest` (el finder: mentor, guía, soporte, exmentor, grupo cerrado o programado, y que coincide con el padrón del grupo), `TicketMentorControllerTest` (por HTTP con el servicio real: no se llama a `todos` para un mentor), `TicketMentorPersistenceAdapterTest` (la consulta, el orden y el cursor) y `TicketsDeMentoriaAcotadosIT` (Postgres real: grupos, asignaciones y tickets, con paginación). Una lectura «de lo mío» para el personal sale de las asignaciones vigentes de `community`, no de un puntero ni de un `todos()` con el comentario «deuda»; una deuda de alcance se anota en `docs/MODULO_SUPPORT.md` y se salda con una prueba que falle contra el código viejo. D-350.
+## E-676 · Cumplir la Pastilla, la Audioterapia o la Clase desde SER no apagaba las alarmas ni celebraba (backend, issue #99 de la app, 09/11, RESUELTO)
+
+**Síntoma.** Si la persona entregaba la Clase diaria, las respuestas de la Audioterapia o el resumen de Espíritu (que marca la Pastilla Renacer) confirmando una propuesta de SER, el hábito quedaba cumplido en el servidor, pero en el teléfono seguían sonando sus alarmas de ese día, no salía la celebración y el semáforo no se refrescaba.
+
+**Causa real.** La spec 038 hizo que `POST /renasia/propuestas/{id}/confirmar` devolviera `habitoCumplido`, pero solo lo armaba `CompletacionDeHabito.completar` (el camino genérico de `marcar_habito_completado`). `EntregarClaseDeHoyConfirmable`, `EntregarResumenAudioterapiaConfirmable` y `EntregarResumenEspirituConfirmable` cierran el hábito por su propio caso de uso y devolvían `ResultadoHerramienta.exito(texto)` sin el hábito ni el día, así que la app no tenía con qué emitir `habitoCumplido`.
+
+**Solución.** Las tres leen el registro de hoy ANTES de entregar (`CompletacionDeHabito.porHacerDeHoy`, por clave de sistema o por id de registro) y devuelven `HabitoCumplido` con `exitoConElHabito`. Solo si estaba `PENDIENTE` o `EN_CURSO`: un segundo resumen de la Clase, que no suma, no vuelve a celebrar. La entrega de Espíritu no devuelve puntos: se usan los que estaban en juego justo antes. Si la agenda no se puede leer, la entrega sale igual, sin el dato. La app no cambió: ya emitía `habitoCumplido` cuando venía.
+
+**Cómo evitar que vuelva a pasar.** `EntregasDeSerAvisanElHabitoCumplidoTest` cubre las tres entregas. Toda `AccionConfirmable` nueva que cierre un hábito devuelve `HabitoCumplido` (spec 038 FR-009, ampliada el 09/11).
+
+## E-681 · `npm test` de la Lambda de miniaturas no corría en un checkout limpio: faltaba `@aws-sdk/client-s3` (backend, 12/11, RESUELTO)
+
+**Síntoma exacto.** `npm install && npm test` en `infra/lambda-miniaturas-muro/` (lo que decía su README) terminaba con `Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@aws-sdk/client-s3' imported from …/index.mjs` y `not ok 1 - miniatura.test.mjs`. Hallado al armar el despliegue automático (D-351), cuyo primer paso es correr esas pruebas en una máquina limpia.
+
+**Causa real.** `index.mjs` importa el SDK de S3 y las pruebas importan `index.mjs`, pero `package.json` no lo declaraba: en AWS ya viene en el runtime de Lambda y `construir.sh` no lo empaqueta. Las pruebas solo corrían donde el SDK ya estaba instalado por otro lado. Tampoco había `package-lock.json`, y ningún workflow corría esas pruebas (`ci.yml`, `trazabilidad.yml` y `seguridad.yml` no tocan `infra/`).
+
+**Solución.** `@aws-sdk/client-s3` pasa a `devDependency` (3.1153.0; `construir.sh` instala con `--omit=dev`, así que no viaja en el zip), se versiona `package-lock.json` y `construir.sh` instala con `npm ci` desde él (lo que se prueba es lo que se sube). El README ya no promete `npm install && npm test` sino `npm ci && npm test`. Sin issue aparte: se arregló en el mismo cambio que lo descubrió, porque sin esto el workflow no puede correr sus pruebas.
+
+**Cómo evitar que vuelva a pasar.** `lambda-miniaturas.yml` corre `npm ci` y `node --test` en una máquina limpia antes de cada despliegue, y `scripts/lambda-miniaturas-ci.test.mjs` comprueba que el lock coincide con `package.json` y que el SDK es `devDependency` y no `dependency`. Una carpeta con código que se ejecuta en producción necesita un workflow que corra sus pruebas en limpio, no solo un README que diga cómo. D-351.
+
+## E-682 · El código por WhatsApp de la recuperación no dejaba rastro de por qué no se enviaba (backend, issue #145, 12/11, RESUELTO)
+
+**Síntoma exacto.** `POST /api/v1/auth/whatsapp-code/password` respondía 202 en ~12 ms y no llegaba nada; en el log solo estaba la línea del pedido HTTP. No había cómo saber si fue por una cuenta sin contraseña, sin número de WhatsApp en la ficha, con un número inválido, por el tope del número o el global, o porque el canal no estaba configurado.
+
+**Causa real.** `CodigoPorWhatsAppDeAccesoService.paraRecuperar` devuelve 202 siempre a propósito (FR-009: no revelar si el correo tiene cuenta) y para eso abandonaba el camino en silencio: `return` si el canal no estaba configurado y un `Optional.filter` encadenado que se vaciaba sin decir en cuál de las condiciones. El silencio hacia quien pide es lo correcto; hacia el servidor no.
+
+**Solución.** Cada recuperación deja UNA línea INFO, `[users.codigo-whatsapp] recuperacion: <desenlace> (cuenta <id|->)`, con el desenlace en `ResultadoDelCodigo`: `canal-no-configurado`, `sin-cuenta-o-sin-contrasena`, `sin-numero`, `numero-invalido`, `tope-numero`, `tope-global` o `enviado`. Nunca lleva correo ni número (FR-011); el id de la cuenta solo aparece si el correo la tiene. La respuesta al cliente y los 429 de origen no cambian. Si el proveedor rechaza el envío, ya lo dice `CodigoPorWhatsAppService` con un WARN y el número enmascarado.
+
+**Cómo evitar que vuelva a pasar.** `CodigoPorWhatsAppDeAccesoServiceTest` recorre los siete desenlaces, comprueba que sale una sola línea INFO por pedido y que ni el correo, ni el número, ni el código aparecen en ella. Un camino que termina «sin hacer nada» a propósito tiene que dejar en el log por qué, sin datos personales: «responder siempre igual» es una regla hacia el cliente, no hacia quien opera el servidor.
+## E-683 · El chat abría lento en teléfonos de gama baja: cada burbuja se re-dibujaba por cualquier cambio y montaba un valor animado (app, issue #190 de la app, 12/11, RESUELTO)
+
+**Síntoma.** El dueño reportó que en algunos celulares el chat de Comunidad (grupo, comunidad, 1 a 1 y soporte) tardaba en mostrar los mensajes y se sentía pesado al tocar una nota de voz o abrir el menú de un mensaje.
+
+**Qué se descartó primero (medido, no supuesto).** El servidor no es la causa. `GET /chat/conversations/{id}/messages` pagina por `mensajes_conversacion_idx (conversacion_id, creado_en)`: `EXPLAIN ANALYZE` en la base local con 50.000 mensajes en una conversación dio 0,07 ms de ejecución (31 filas, `Index Scan Backward`). La página enriquece y firma en lote (`MensajesParaMostrar`: una consulta para los citados, una para las personas, la firma es cálculo local) y la lista de conversaciones usa `LATERAL … LIMIT 1` (E-471). Como un servidor lento sería lento en TODOS los teléfonos, y el síntoma era «en algunos», se buscó en la app.
+
+**Causa real.** Tres cosas que solo pesan donde la CPU es corta. (1) `BurbujaDeMensaje` no era `React.memo` y la lista le pasaba una función nueva por fila (`alActivarAudio={() => …}`); además `renderElementoDelChat` cambia con `playingAudioId` e `idResaltado`, así que tocar una nota de voz o abrir el menú de un mensaje re-dibujaba las 30 burbujas de la página. (2) Cada burbuja montaba un `useSharedValue` + `useAnimatedStyle` de Reanimated solo para el tinte del renglón resaltado, casi siempre apagado: 30 al abrir el chat. (3) `initialNumToRender={20}` y la ventana por defecto de `FlatList` (21 pantallas) sobre ~35 filas: se montaba casi todo en el primer pase. Medido con `rendimientoDeLaLista.test.ts` antes del arreglo: 30 valores animados al montar y 30 re-renders por cada cambio de resaltado o de audio activo.
+
+**Solución.** `BurbujaDeMensaje` es `memo`; `alActivarAudio` recibe el id y la pantalla pasa `setPlayingAudioId` (una sola función para todas las filas); `irAlMensaje` lee la lista desde una ref para no cambiar con cada mensaje que llega; el tinte vive en `TinteDelRenglon`, que solo existe mientras el renglón está resaltado y lo que dura su fundido; la lista usa `VENTANA_DEL_CHAT` (10 filas iniciales, tandas de 8, ventana de 11). El comportamiento no cambia: mismo orden, no leídos, ✓✓, citas y moderación.
+
+**Qué NO se tocó y queda como mejora posible.** Las fotos del chat se bajan a 1.440 px (la subida ya las acota); el Muro tiene miniaturas (spec 049) y el chat no. Una miniatura del chat pide extender la Lambda de miniaturas al prefijo del chat y un campo nuevo en `MensajeResponse`: es otra funcionalidad, con su spec. Tampoco se tocó `GET /chat/members`, que resuelve a TODA la comunidad en memoria para devolver 30 y la app lo pide en cada refresco de la lista: con una comunidad grande vale una consulta propia.
+
+**Cómo evitar que vuelva a pasar.** `rendimientoDeLaLista.test.ts` (app): cero valores animados al abrir la página, a lo sumo 2 re-renders al resaltar o activar un audio, el tinte sigue apareciendo, la ventana de la lista acotada y la pantalla sin funciones nuevas por fila. Una fila de una lista larga es `memo` y recibe funciones estables; un valor animado por fila solo si la fila anima de verdad.
+
+## E-684 · Meet no grabó una sesión y no había forma de saber por qué: no se guardaba quién entró ni cuánto duró cada conexión (backend, issue #151, 14/11, RESUELTO)
+
+**Síntoma.** «Sesión II - Miguel» (13/11/2026, 11:00 Lima) tuvo cuatro conferencias en una sala con grabación y transcripción automáticas confirmadas por Google y quedó `SIN_TRANSCRIPCION`; «Sesión II - Carlos», con la misma configuración, quedó `LISTA` con grabación.
+
+**Causa.** Google decide en el momento de la reunión si graba (depende de quién la dirige y de quién entra), y la lectura de la 047 solo conservaba el texto y cantidades. De una sesión sin transcripción no quedaba nada que permitiera explicarla, y Google borra las conferencias a los 30 días. El error no estaba en el código de la lectura sino en que la evidencia se perdía.
+
+**Solución.** V194 agrega `eventos_meet_transcripciones.diagnostico` (jsonb). Al terminar `SIN_TRANSCRIPCION` o `SIN_REUNION` se guarda, sin nombres ni correos, por conferencia: inicio, fin, minutos, participantes por tipo (con cuenta, anónimos, teléfono) y estados de grabaciones y transcripciones; más la configuración automática de la sala y un `motivoProbable`. `GET …/meet/transcripciones` lo devuelve y `POST …/meet/transcripciones/{fecha}/diagnostico` lo vuelve a leer para sesiones ya terminadas (spec 047 FR-022).
+
+**Límite conocido.** La Meet REST API no dice si un participante con cuenta es de la organización, así que «cuenta de fuera» y «cuenta de Renaser» salen juntas como «con cuenta»; el motivo `CON_CUENTAS_Y_SIN_ARCHIVOS` lo reconoce y no adivina.
+
+**Cómo evitar que vuelva a pasar.** Un estado final «sin datos» guarda la evidencia mínima y anónima que permite explicarlo mientras la fuente todavía la tiene (`TranscripcionDeSesionTest`, `GoogleMeetReunionesAdapterTest`, `TranscripcionesDeMeetServiceTest`).
+
+## E-685 · Meet no grababa si no entraba la cuenta conectada: la anfitriona era una cuenta que nadie usa y quien dirige no era coanfitrión (backend, issue #151, 14/11, RESUELTO detrás de un interruptor)
+
+- **Fecha:** 2026-11-14
+- **Dónde:** `PasosConGoogle`, `GoogleCalendarMeetAdapter`, `SincronizadorDeSalas` (spec 040 FR-038, spec 047 FR-023)
+- **Síntoma:** «Sesión II - Miguel» (13/11/2026): cuatro conferencias en una sala con grabación y transcripción automáticas confirmadas por Google (`ON` al leerlas de vuelta) y ni un archivo (`SIN_TRANSCRIPCION`); «Sesión II - Carlos», con la misma configuración, sí.
+- **Causa real:** Google solo empieza a grabar y transcribir solo cuando entra alguien «con permiso para grabar»: el anfitrión o un coanfitrión, desde la web. La anfitriona de todas las salas es la cuenta conectada (`renasercorporation@gmail.com`), a la que no entra nadie, y a quien dirige solo se lo invitaba al evento de Calendar (FR-035), lo que no da ese permiso. Con ella o con otro coanfitrión adentro graba; si no, no.
+- **Solución:** FR-038: `POST spaces/{sala}/members` con rol `COHOST` para quien creó el evento y el mentor del grupo, por sala y sin romper el evento; el diagnóstico de #151 dice `QUIEN_DIRIGE_NO_ERA_COANFITRION`. Apagado por defecto (`EVENTOS_MEET_COANFITRIONES`): `spaces.members.create` pide `meetings.space.created`, que Google limita a espacios creados por la app, y estas salas las crea la Calendar API; el resultado real (`OK` o 403) lo dice `meet.coanfitriones` en el detalle del evento. Pasos del dueño en la spec 040 FR-038.
+- **Cómo evitarlo:** `CoanfitrionesDeLaSalaTest` (alta al crear, sin duplicar, 403 sin romper, interruptor apagado, relleno) y `GoogleCalendarMeetAdapterTest`. Pendiente verificar con la cuenta real si Google acepta coanfitriones en salas de Calendar; si no, crear las salas con `spaces.create` (otra decisión).
+
+## E-686 · Reconectar la cuenta de Google no reintentaba los coanfitriones que Google había rechazado: la sala quedaba `FALLIDO` para siempre (backend, issue #159, 16/11, RESUELTO)
+
+- **Fecha:** 2026-11-16
+- **Dónde:** `CuentaDeGoogleService.conectar`, `SalaMeet.coanfitrionesPorPedir`, `SalaMeetJdbcAdapter` (spec 040 FR-038)
+- **Síntoma:** en producción, al prender `EVENTOS_MEET_COANFITRIONES`, 5 salas quedaron con `coanfitriones_estado = 'FALLIDO'` y motivo «Google no dejó (código 403)». El dueño reconectó la cuenta con el permiso `meetings.space.created` (auditoría `CONECTAR`) y ninguna se volvió a pedir.
+- **Causa real:** `coanfitrionesPorPedir()` solo es verdadero con estado `NULL` o `SIN_CORREO`, y `FALLIDO` se decidió que no se reintenta solo. El único que lo soltaba (`olvidarCoanfitriones`) era la edición de un evento por una persona. Reconectar la cuenta solo reencolaba lo pendiente de crear (`reencolarLoPendiente`), pero no tocaba los coanfitriones, aunque el 403 más probable es justo el permiso que la reconexión arregla.
+- **Solución:** al conectar la cuenta con éxito, y solo con el interruptor encendido, `SaveSalaMeetPort.pedirDeNuevoLosCoanfitrionesFallidos` deja en `NULL` (con `actualizada_en` y `version`) las salas `CREADO` y `FALLIDO` de hoy en adelante, con «hoy» en la zona del evento. La siguiente pasada de mantenimiento (`SalasDeMeetScheduler`, a los :10) las vuelve a pedir. No toca fechas pasadas ni salas `OK`, `PARCIAL` o `SIN_CORREO`. Los 5 casos de producción se habían destrabado a mano con un UPDATE.
+- **Cómo evitarlo:** `ConectarLaCuentaDeGoogleTest` (reconectar repite los `FALLIDO`; no toca la de ayer ni las `OK`; sin interruptor no hace nada) y `SalasYCuentaDeGooglePersistenceTest.pedirDeNuevoLosCoanfitrionesFallidos` (la zona de Lima frente a UTC). Cuando un estado terminal depende de un permiso o una credencial, el evento que los cambia tiene que soltarlo.
+
+## E-687 · SER no proponía planes a quien tenía objetivos del diagnóstico pero aún no abría Plan (backend, issue #60, 09/11, RESUELTO)
 
 **Causa real.** `CompuertaDeRocasService.maestrasDe` leía las Rocas Maestras con `LoadRocaMaestraPort` sin crearlas; `RocaMaestraService.misRocasMaestras` (lo que usa Plan) crea las que nacieron del diagnóstico al leerlas. Hasta abrir Plan, la compuerta decía «cerrada» y SER mandaba a Plan en vez de proponer.
 
