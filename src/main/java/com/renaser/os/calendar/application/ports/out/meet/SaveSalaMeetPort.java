@@ -16,6 +16,12 @@ public interface SaveSalaMeetPort {
     void reencolarLoPendiente(Instant ahora);
 
     /**
+     * Reconectada la cuenta: las salas cuyo pedido de coanfitriones quedó en {@code FALLIDO} vuelven a quedar por pedir (FR-038), porque la causa
+     * más común (el permiso que faltaba) es justo lo que la reconexión arregla. Solo las de hoy en adelante, con «hoy» en la zona de cada evento.
+     */
+    void pedirDeNuevoLosCoanfitrionesFallidos(Instant ahora);
+
+    /**
      * La cuenta quedó revocada: reintentar sería inútil (FR-009). Lo que esperaba a Google deja de reintentarse solo, con {@code motivo}; las salas
      * que ni siquiera se habían creado pasan a {@code FALLIDO}.
      */

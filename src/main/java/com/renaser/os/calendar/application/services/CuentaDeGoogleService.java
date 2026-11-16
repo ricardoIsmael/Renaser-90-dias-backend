@@ -134,6 +134,10 @@ class CuentaDeGoogleService implements CuentaDeGoogleUseCase {
         cuenta.fijarCalendario(calendarioPara(cuenta, permiso.refreshToken()));
         saveCuentaPort.guardar(cuenta);
         saveSalaPort.reencolarLoPendiente(ahora);
+        if (configuracion.coanfitriones()) {
+            // FR-038: un pedido que Google rechazó (casi siempre por el permiso que faltaba) se vuelve a hacer; lo toma el proceso de fondo.
+            saveSalaPort.pedirDeNuevoLosCoanfitrionesFallidos(ahora);
+        }
         auditoria.registrar(AccionDeAuditoriaGoogle.CONECTAR, actor, null, true, null, auditoria.nuevaCorrelacion());
         return new ResultadoDeLaConexion(true, CONECTADA);
     }
