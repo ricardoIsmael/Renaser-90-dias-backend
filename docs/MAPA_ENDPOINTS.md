@@ -293,6 +293,7 @@ semana en curso de la persona; una semana futura, anterior a la primera de su pr
 | POST | `/api/v1/admin/integraciones/google/connect` (D-321: devuelve la dirección de Google para conectar la cuenta) |
 | GET | `/api/v1/integraciones/google/callback` (D-321: regreso de Google, sin sesión; protegido por el `state` de un solo uso) |
 | GET | `/api/v1/calendar/events/{id}/whatsapp` (D-322, spec 041: conteos de los WhatsApp del evento; solo ADMIN y ALCHEMIST; `eventos.whatsapp`) |
+| GET | `/api/v1/admin/whatsapp/estado` (D-361, spec 054: si los WhatsApp no salen por falta de saldo de YCloud, cuántos y desde cuándo; solo ADMIN y ALCHEMIST) |
 
 ### `chat`
 
