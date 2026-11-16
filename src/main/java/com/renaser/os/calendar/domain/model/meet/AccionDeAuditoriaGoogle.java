@@ -15,6 +15,8 @@ public enum AccionDeAuditoriaGoogle {
     AJUSTAR_GRABACION,
     /** Hacer coanfitrión de la sala a quien dirige la sesión (spec 040, FR-038). */
     AJUSTAR_COANFITRIONES,
+    /** Cerrar la sala vieja de Calendar cuando la reemplaza una de la Meet API (spec 040, FR-041). */
+    CERRAR_SALA_ANTERIOR,
     /** Spec 047: la transcripción de una sesión quedó guardada (cifrada). */
     TRANSCRIPCION_GUARDADA,
     /** Spec 047: la sesión terminó sin transcripción que guardar (sin reunión, sin transcripción o sin permiso). */

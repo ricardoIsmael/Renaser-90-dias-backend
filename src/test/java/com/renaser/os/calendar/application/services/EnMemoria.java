@@ -125,6 +125,14 @@ final class EnMemoria {
         }
 
         @Override
+        public List<EventoId> eventosConSalasPorMigrar(LocalDate desde, int limite) {
+            return porId.values().stream().filter(s -> s.estado() == EstadoSalaMeet.CREADO && !s.fechaOcurrencia().isBefore(desde)
+                            && s.intentos() < com.renaser.os.calendar.domain.model.meet.PoliticaDeReintentos.MAXIMO_DE_INTENTOS
+                            && (!s.conMeetApi() || s.enlaceAnterior() != null))
+                    .sorted(Comparator.comparing(SalaMeet::fechaOcurrencia)).map(SalaMeet::eventoId).distinct().limit(limite).toList();
+        }
+
+        @Override
         public SalaMeet guardar(SalaMeet sala) {
             porId.put(sala.id(), sala);
             return sala;

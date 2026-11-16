@@ -2,6 +2,7 @@ package com.renaser.os.calendar.infrastructure.adapter.out.google;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.renaser.os.calendar.application.ports.out.meet.CuentaGoogleRevocadaException;
+import com.renaser.os.calendar.application.ports.out.meet.EspacioDeMeet;
 import com.renaser.os.calendar.application.ports.out.meet.GoogleNoRespondeException;
 import com.renaser.os.calendar.application.ports.out.meet.GoogleRechazoException;
 import com.renaser.os.calendar.application.ports.out.meet.PedidoDeSala;
@@ -281,6 +282,121 @@ class GoogleCalendarMeetAdapter implements SalaDeReunionPort {
             }
         }
         return actuales;
+    }
+
+    // ─── Salas con la Meet API (FR-040, FR-041) ─────────────────────────────────
+
+    @Override
+    public EspacioDeMeet crearEspacio(AccesoSalaMeet acceso, ArtefactosDeLaSala pedidos) {
+        List<Artefacto> aPedir = new ArrayList<>();
+        for (Artefacto a : Artefacto.values()) {
+            if (a.pedido(pedidos)) {
+                aPedir.add(a);
+            }
+        }
+        Respuesta respuesta = pedirEspacio(acceso, aPedir);
+        boolean conArtefactos = !aPedir.isEmpty();
+        if (!respuesta.ok() && respuesta.codigo() == 400 && conArtefactos) {
+            // Una cuenta sin el plan puede rechazar la configuración entera: se crea solo con el acceso y lo demás se pide de a uno después (FR-037).
+            respuesta = pedirEspacio(acceso, List.of());
+            conArtefactos = false;
+        }
+        if (!respuesta.ok()) {
+            throw llamadas.falla(respuesta);
+        }
+        String enlace = respuesta.cuerpo().path("meetingUri").asText("");
+        if (enlace.isEmpty()) {
+            throw new GoogleNoRespondeException("Google no devolvió el enlace de la sala. Se reintenta solo.", respuesta.codigo());
+        }
+        JsonNode config = respuesta.cuerpo().path("config");
+        Optional<AccesoSalaMeet> accesoLeido = switch (config.path("accessType").asText("")) {
+            case "OPEN" -> Optional.of(AccesoSalaMeet.ABIERTA);
+            case "TRUSTED" -> Optional.of(AccesoSalaMeet.CON_PERMISO);
+            default -> Optional.empty();
+        };
+        ArtefactosDeLaSala leidos = !conArtefactos ? ArtefactosDeLaSala.NADA : new ArtefactosDeLaSala(
+                Artefacto.GRABACION.pedido(pedidos) ? Artefacto.GRABACION.leido(config) : null,
+                Artefacto.TRANSCRIPCION.pedido(pedidos) ? Artefacto.TRANSCRIPCION.leido(config) : null,
+                Artefacto.NOTAS.pedido(pedidos) ? Artefacto.NOTAS.leido(config) : null);
+        return new EspacioDeMeet(enlace, accesoLeido.orElse(null), leidos);
+    }
+
+    private Respuesta pedirEspacio(AccesoSalaMeet acceso, List<Artefacto> artefactos) {
+        Map<String, Object> config = new LinkedHashMap<>();
+        config.put("accessType", tipoDeAcceso(acceso));
+        if (!artefactos.isEmpty()) {
+            Map<String, Object> artifactConfig = new LinkedHashMap<>();
+            for (Artefacto a : artefactos) {
+                artifactConfig.put(a.bloque, Map.of(a.campo, "ON"));
+            }
+            config.put("artifactConfig", artifactConfig);
+        }
+        return conToken(c -> llamadas.api(HttpMethod.POST, URI.create(MEET + "/spaces"), c.tokenDeAcceso(), Map.of("config", config)));
+    }
+
+    @Override
+    public void publicarEnCalendario(PedidoDeSala pedido, String enlace) {
+        Map<String, Object> cuerpo = cuerpoDelEvento(pedido);
+        cuerpo.put("location", enlace);
+        Map<String, Object> alta = new LinkedHashMap<>(cuerpo);
+        alta.put("id", pedido.idGoogle());
+        Respuesta insercion = conToken(c -> llamadas.api(HttpMethod.POST,
+                URI.create(CALENDAR + "/calendars/" + segmento(c.calendarioId()) + "/events?sendUpdates=none"), c.tokenDeAcceso(), alta));
+        if (insercion.ok()) {
+            return;
+        }
+        if (insercion.codigo() != 409) {
+            throw llamadas.falla(insercion);
+        }
+        // El evento ya existe (o estaba cancelado): se confirma y se le quita la conferencia de Calendar, que apunta a la sala vieja.
+        Map<String, Object> parche = new LinkedHashMap<>(cuerpo);
+        parche.put("status", "confirmed");
+        parche.put("conferenceData", null);
+        Respuesta cambio = conToken(c -> llamadas.api(HttpMethod.PATCH, urlDelEvento(c, pedido.idGoogle(), "?conferenceDataVersion=1&sendUpdates=none"),
+                c.tokenDeAcceso(), parche));
+        if (!cambio.ok() && cambio.codigo() == 400) {
+            // Google no dejó quitar la conferencia: el enlace nuevo igual queda en la ubicación y la sala vieja se cierra aparte.
+            parche.remove("conferenceData");
+            cambio = conToken(c -> llamadas.api(HttpMethod.PATCH, urlDelEvento(c, pedido.idGoogle(), "?sendUpdates=none"), c.tokenDeAcceso(), parche));
+        }
+        if (!cambio.ok()) {
+            throw llamadas.falla(cambio);
+        }
+    }
+
+    @Override
+    public void cerrar(String enlace) {
+        String codigo = CodigoDeSalaMeet.deEnlace(enlace)
+                .orElseThrow(() -> new GoogleRechazoException("El enlace no es de una sala de Meet.", 0));
+        String nombre;
+        try {
+            nombre = nombreDeLaSala(codigo);
+        } catch (GoogleRechazoException noExiste) {
+            if (noExiste.codigoHttp() == 404) {
+                return; // La sala ya no existe: nadie puede entrar.
+            }
+            throw noExiste;
+        }
+        Respuesta cambio = conToken(c -> llamadas.api(HttpMethod.PATCH, URI.create(MEET + "/" + nombre + "?updateMask=config.accessType"),
+                c.tokenDeAcceso(), Map.of("config", Map.of("accessType", "RESTRICTED"))));
+        if (!cambio.ok()) {
+            throw llamadas.falla(cambio);
+        }
+        Respuesta sala = conToken(c -> llamadas.api(HttpMethod.GET, URI.create(MEET + "/" + nombre), c.tokenDeAcceso(), null));
+        if (!sala.ok()) {
+            throw llamadas.falla(sala);
+        }
+        if (!"RESTRICTED".equals(sala.cuerpo().path("config").path("accessType").asText(""))) {
+            throw new GoogleRechazoException("Google no dejó la sala vieja restringida.", sala.codigo());
+        }
+        // Termina la conferencia activa, si hay una: sin conferencia activa Google responde con error y no importa.
+        Respuesta fin = conToken(c -> llamadas.api(HttpMethod.POST, URI.create(MEET + "/" + nombre + ":endActiveConference"), c.tokenDeAcceso(), Map.of()));
+        if (!fin.ok()) {
+            RuntimeException falla = llamadas.falla(fin);
+            if (!(falla instanceof GoogleRechazoException)) {
+                throw falla;
+            }
+        }
     }
 
     // ─── Crear: 409, pendiente ──────────────────────────────────────────────────

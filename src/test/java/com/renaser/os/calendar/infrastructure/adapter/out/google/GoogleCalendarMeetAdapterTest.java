@@ -560,7 +560,7 @@ class GoogleCalendarMeetAdapterTest {
         ConfiguracionDeGoogle config = g.configuracion;
         assertThat(config.permisosPedidos()).doesNotContain(ConfiguracionDeGoogle.PERMISO_DE_COANFITRIONES);
 
-        config.opcionesDeLaSala(true, true, true, true, true);
+        config.opcionesDeLaSala(true, true, true, true, true, false);
 
         assertThat(config.permisosPedidos()).contains(ConfiguracionDeGoogle.PERMISO_DE_COANFITRIONES);
         assertThat(config.permisosObligatorios()).doesNotContain(ConfiguracionDeGoogle.PERMISO_DE_COANFITRIONES);
@@ -572,6 +572,138 @@ class GoogleCalendarMeetAdapterTest {
     void nadaQuePedir() {
         assertThat(adapter.fijarArtefactos(ENLACE, ArtefactosDeLaSala.NADA)).isEqualTo(ArtefactosDeLaSala.NADA);
         servidor.verify();
+    }
+
+    // spec 040 FR-040
+    @Test
+    @DisplayName("FR-040: crearEspacio = POST spaces con config.accessType y artifactConfig ON; el enlace sale de meetingUri y se lee lo que Google dejó")
+    void crearElEspacioConLaMeetApi() {
+        tokenDeAcceso();
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces")).andExpect(method(HttpMethod.POST))
+                .andExpect(header("Authorization", "Bearer " + GoogleDeMentira.TOKEN_DE_ACCESO))
+                .andExpect(jsonPath("$.config.accessType").value("OPEN"))
+                .andExpect(jsonPath("$.config.artifactConfig.recordingConfig.autoRecordingGeneration").value("ON"))
+                .andExpect(jsonPath("$.config.artifactConfig.transcriptionConfig.autoTranscriptionGeneration").value("ON"))
+                .andExpect(jsonPath("$.config.artifactConfig.smartNotesConfig.autoSmartNotesGeneration").value("ON"))
+                .andRespond(withSuccess("{\"name\":\"spaces/Zk3jd8\",\"meetingUri\":\"" + ENLACE + "\",\"config\":{\"accessType\":\"OPEN\","
+                        + "\"artifactConfig\":{\"recordingConfig\":{\"autoRecordingGeneration\":\"ON\"},"
+                        + "\"transcriptionConfig\":{\"autoTranscriptionGeneration\":\"OFF\"},"
+                        + "\"smartNotesConfig\":{\"autoSmartNotesGeneration\":\"ON\"}}}}", MediaType.APPLICATION_JSON));
+
+        var espacio = adapter.crearEspacio(AccesoSalaMeet.ABIERTA, new ArtefactosDeLaSala(true, true, true));
+
+        assertThat(espacio.enlace()).isEqualTo(ENLACE);
+        assertThat(espacio.acceso()).isEqualTo(AccesoSalaMeet.ABIERTA);
+        assertThat(espacio.artefactos()).isEqualTo(new ArtefactosDeLaSala(true, false, true));
+        servidor.verify();
+    }
+
+    // spec 040 FR-040
+    @Test
+    @DisplayName("FR-040: si Google rechaza la configuración de grabación (400), la sala se crea solo con el acceso")
+    void sinElPlanSeCreaSoloConElAcceso() {
+        tokenDeAcceso();
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces")).andExpect(method(HttpMethod.POST))
+                .andExpect(jsonPath("$.config.artifactConfig").exists())
+                .andRespond(withStatus(HttpStatus.BAD_REQUEST).contentType(MediaType.APPLICATION_JSON).body("{\"error\":{\"code\":400}}"));
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces")).andExpect(method(HttpMethod.POST))
+                .andExpect(jsonPath("$.config.accessType").value("OPEN"))
+                .andExpect(jsonPath("$.config.artifactConfig").doesNotExist())
+                .andRespond(withSuccess("{\"name\":\"spaces/Zk3jd8\",\"meetingUri\":\"" + ENLACE + "\",\"config\":{\"accessType\":\"OPEN\"}}",
+                        MediaType.APPLICATION_JSON));
+
+        var espacio = adapter.crearEspacio(AccesoSalaMeet.ABIERTA, new ArtefactosDeLaSala(true, true, true));
+
+        assertThat(espacio.enlace()).isEqualTo(ENLACE);
+        assertThat(espacio.artefactos()).isEqualTo(ArtefactosDeLaSala.NADA);
+        servidor.verify();
+    }
+
+    // spec 040 FR-040
+    @Test
+    @DisplayName("FR-040: publicarEnCalendario crea el evento con el enlace en la ubicación y SIN conferencia de Calendar")
+    void publicarCreaElEventoSinConferencia() {
+        tokenDeAcceso();
+        servidor.expect(requestTo(EVENTOS + "?sendUpdates=none")).andExpect(method(HttpMethod.POST))
+                .andExpect(jsonPath("$.id").value(PEDIDO.idGoogle()))
+                .andExpect(jsonPath("$.location").value(ENLACE))
+                .andExpect(jsonPath("$.conferenceData").doesNotExist())
+                .andRespond(withSuccess("{\"id\":\"x\"}", MediaType.APPLICATION_JSON));
+
+        adapter.publicarEnCalendario(PEDIDO, ENLACE);
+
+        servidor.verify();
+    }
+
+    // spec 040 FR-041
+    @Test
+    @DisplayName("FR-041: si el evento ya existe (409) se actualiza con el enlace nuevo y se le quita la conferencia de Calendar; si Google no deja quitarla, queda el enlace")
+    void publicarSobreUnEventoExistente() {
+        tokenDeAcceso();
+        servidor.expect(requestTo(EVENTOS + "?sendUpdates=none")).andExpect(method(HttpMethod.POST))
+                .andRespond(withStatus(HttpStatus.CONFLICT).contentType(MediaType.APPLICATION_JSON).body("{\"error\":{\"code\":409}}"));
+        servidor.expect(requestTo(EVENTOS + "/" + PEDIDO.idGoogle() + "?conferenceDataVersion=1&sendUpdates=none")).andExpect(method(HttpMethod.PATCH))
+                .andExpect(jsonPath("$.location").value(ENLACE))
+                .andExpect(jsonPath("$.status").value("confirmed"))
+                .andExpect(org.springframework.test.web.client.match.MockRestRequestMatchers.content().string(
+                        org.hamcrest.Matchers.containsString("\"conferenceData\":null")))
+                .andRespond(withStatus(HttpStatus.BAD_REQUEST).contentType(MediaType.APPLICATION_JSON).body("{\"error\":{\"code\":400}}"));
+        servidor.expect(requestTo(EVENTOS + "/" + PEDIDO.idGoogle() + "?sendUpdates=none")).andExpect(method(HttpMethod.PATCH))
+                .andExpect(jsonPath("$.location").value(ENLACE))
+                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+
+        adapter.publicarEnCalendario(PEDIDO, ENLACE);
+
+        servidor.verify();
+    }
+
+    // spec 040 FR-041
+    @Test
+    @DisplayName("FR-041: cerrar = acceso RESTRICTED (leído de vuelta) y terminar la conferencia activa; que no haya conferencia no es un error")
+    void cerrarLaSalaVieja() {
+        tokenDeAcceso();
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces/abc-defg-hij")).andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("{\"name\":\"spaces/Zk3jd8\"}", MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces/Zk3jd8?updateMask=config.accessType")).andExpect(method(HttpMethod.PATCH))
+                .andExpect(jsonPath("$.config.accessType").value("RESTRICTED"))
+                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces/Zk3jd8")).andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("{\"name\":\"spaces/Zk3jd8\",\"config\":{\"accessType\":\"RESTRICTED\"}}", MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces/Zk3jd8:endActiveConference")).andExpect(method(HttpMethod.POST))
+                .andRespond(withStatus(HttpStatus.BAD_REQUEST).contentType(MediaType.APPLICATION_JSON).body("{\"error\":{\"code\":400}}"));
+
+        adapter.cerrar(ENLACE);
+
+        servidor.verify();
+    }
+
+    // spec 040 FR-041
+    @Test
+    @DisplayName("FR-041: si Google no deja restringir la sala vieja, cerrar lo dice (rechazo) y no termina nada")
+    void noSePuedeRestringir() {
+        tokenDeAcceso();
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces/abc-defg-hij")).andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("{\"name\":\"spaces/Zk3jd8\"}", MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo("https://meet.googleapis.com/v2/spaces/Zk3jd8?updateMask=config.accessType")).andExpect(method(HttpMethod.PATCH))
+                .andRespond(withStatus(HttpStatus.FORBIDDEN).contentType(MediaType.APPLICATION_JSON).body("{\"error\":{\"code\":403}}"));
+
+        assertThatThrownBy(() -> adapter.cerrar(ENLACE)).isInstanceOf(GoogleRechazoException.class);
+        servidor.verify();
+    }
+
+    // spec 040 FR-042
+    @Test
+    @DisplayName("FR-042: el interruptor de las salas con la Meet API nace apagado y, prendido, pide el permiso meetings.space.created sin hacerlo obligatorio")
+    void elInterruptorNaceApagado() {
+        ConfiguracionDeGoogle config = g.configuracion;
+        assertThat(config.salasConMeetApi()).isFalse();
+        assertThat(config.permisosPedidos()).doesNotContain(ConfiguracionDeGoogle.PERMISO_DE_COANFITRIONES);
+
+        config.opcionesDeLaSala(true, true, true, true, false, true);
+
+        assertThat(config.salasConMeetApi()).isTrue();
+        assertThat(config.permisosPedidos()).contains(ConfiguracionDeGoogle.PERMISO_DE_COANFITRIONES);
+        assertThat(config.permisosObligatorios()).doesNotContain(ConfiguracionDeGoogle.PERMISO_DE_COANFITRIONES);
     }
 
     private static String pendiente() {

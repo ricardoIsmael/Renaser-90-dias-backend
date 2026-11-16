@@ -84,6 +84,37 @@ class SalasYCuentaDeGooglePersistenceTest {
         }).isInstanceOf(DataIntegrityViolationException.class);
     }
 
+    // spec 040 FR-041
+    @Test
+    @DisplayName("FR-041: el origen de la sala y la sala vieja por cerrar se guardan y se leen, y solo salen a migrar las de hoy en adelante (V196)")
+    void laMigracionSeGuardaYSeLee() {
+        EventoId evento = EventoId.of(UUID.randomUUID());
+        EventoId pasado = EventoId.of(UUID.randomUUID());
+        SalaMeet nueva = sala(evento, LocalDate.of(2026, 11, 10), "a".repeat(32));
+        nueva.completarCon("https://meet.google.com/aaa-bbbb-ccc", AHORA);
+        salas.guardar(nueva);
+        SalaMeet vieja = sala(pasado, LocalDate.of(2026, 11, 1), "b".repeat(32));
+        vieja.completarCon("https://meet.google.com/ddd-eeee-fff", AHORA);
+        salas.guardar(vieja);
+
+        assertThat(salas.eventosConSalasPorMigrar(LocalDate.of(2026, 11, 5), 10)).containsExactly(evento);
+
+        nueva.migrarA("https://meet.google.com/ggg-hhhh-iii", AHORA);
+        salas.guardar(nueva);
+
+        assertThat(salas.porEvento(evento)).singleElement().satisfies(s -> {
+            assertThat(s.conMeetApi()).isTrue();
+            assertThat(s.enlace()).isEqualTo("https://meet.google.com/ggg-hhhh-iii");
+            assertThat(s.enlaceAnterior()).isEqualTo("https://meet.google.com/aaa-bbbb-ccc");
+        });
+        assertThat(salas.eventosConSalasPorMigrar(LocalDate.of(2026, 11, 5), 10)).containsExactly(evento); // falta cerrar la vieja
+
+        nueva.anteriorCerrada(AHORA);
+        salas.guardar(nueva);
+        assertThat(salas.porEvento(evento)).singleElement().satisfies(s -> assertThat(s.enlaceAnterior()).isNull());
+        assertThat(salas.eventosConSalasPorMigrar(LocalDate.of(2026, 11, 5), 10)).isEmpty();
+    }
+
     // spec 040 FR-036, FR-037
     @Test
     @DisplayName("FR-036: lo que Google confirmó de la grabación, la transcripción y las notas se guarda por sala con sus tres estados (V171)")
