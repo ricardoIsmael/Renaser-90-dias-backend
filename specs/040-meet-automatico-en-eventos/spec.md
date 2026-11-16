@@ -2,7 +2,7 @@
 
 **Feature Branch**: `040-meet-automatico` (backend y app)
 **Created**: 2026-11-04 · **Actualizada**: 2026-11-04 (segunda versión: ajustada a lo que RenaserOs ya hizo y probó; sin grabación) · **Tercera versión**: 2026-11-04 (decisiones del dueño; ver «Decisiones del dueño (04/11/2026)»)
-**Cuarta versión**: 2026-11-05 (decisión 6 del dueño: quien crea el evento va como invitado y la sala graba y transcribe sola; FR-035 a FR-037, SC-014 y SC-015).
+**Cuarta versión**: 2026-11-05 (decisión 6 del dueño: quien crea el evento va como invitado y la sala graba y transcribe sola; FR-035 a FR-037, SC-014 y SC-015). **Quinta versión**: 2026-11-16 (FR-039, botón para copiar el enlace del evento en la app).
 **Status**: Borrador de spec con las decisiones del dueño del 04/11/2026 ya incorporadas. **No se implementa nada todavía.** Antes de construir hay que pasar la prueba de SC-001 con la cuenta `renasercorporation@gmail.com`, y dentro de ella **la prueba de más de 60 minutos con 3 o más personas (SC-001 f), que es una puerta: si corta, se para y se avisa al dueño.**
 **Input** (pedido del dueño, 2026-11-04, textual): «Al crear un evento, que se cree automáticamente el enlace de Google Meet y que la sesión se grabe automáticamente.» Lo quiere con **Google Cloud, no con Google Workspace**; decisión firme: **nada de Workspace, ni siquiera una licencia**. La cuenta de la organización es un **Gmail normal**.
 **Input 2** (mismo día, después de ver RenaserOs): «`renaserlab/RenaserOs` ya tiene esa lógica, lo hizo con Google Cloud sin Workspace. Quiero lo mismo. Revísalo y copiemos, pero de acuerdo a nuestra regla. No queremos todo; solo quiero: **1. que el link se autogenere**; 2. los recordatorios (otra spec: la 041).» **La grabación ya no se pide: sale de esta spec** (ver «Fuera de alcance»).
@@ -208,6 +208,7 @@ Para el aprendiz, el mentor y el líder nada cambia: ven el evento con «Unirme�
   > transcribe con el mismo Gmail (`renasercorporation@gmail.com`) y Google One, sin Workspace, y lee la transcripción por la Meet REST API. El aviso del
   > detalle (`ResumenesDeMeet.TRANSCRIBIR`) ahora dice «un plan de Google One que incluya la transcripción de Meet». Lo de las notas de Gemini no cambió. La
   > regla de FR-037 sigue igual: si Google no lo deja, nada se rompe y se avisa.
+- **FR-039** **Copiar el enlace del evento (app)** (decisión del dueño, 16/11/2026). En el detalle de un evento que tiene enlace (Meet, Zoom u otro), al lado de «Unirme» hay un botón cuadrado de 52×52, solo ícono («copiar»), que copia el enlace al portapapeles. Lo ve **cualquiera** que vea el enlace en el detalle, no solo quien creó el evento. Al tocarlo, el ícono pasa a un check durante unos 2,5 s y sale el aviso «Enlace copiado. Pégalo en WhatsApp o donde quieras.». La etiqueta de accesibilidad es «Copiar el enlace de <Google Meet|Zoom|…>» y, ya copiado, «Enlace copiado». No aparece si el evento no tiene enlace ni si el binario no puede copiar (APK sin `expo-clipboard`). «Unirme» no cambia: principal si la persona va, secundario si no.
 
 ### Criterios de éxito
 
