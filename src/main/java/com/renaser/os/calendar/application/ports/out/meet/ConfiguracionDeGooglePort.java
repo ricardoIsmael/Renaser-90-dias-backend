@@ -42,4 +42,12 @@ public interface ConfiguracionDeGooglePort {
     default boolean coanfitriones() {
         return false;
     }
+
+    /**
+     * Crear las salas con la Meet API ({@code spaces.create}) en vez de como conferencia de Calendar, y reemplazar las ya creadas de hoy en
+     * adelante ({@code EVENTOS_MEET_SALAS_CON_MEET_API}, NO por defecto; spec 040 FR-040 y FR-041). Apagado, todo sigue como siempre.
+     */
+    default boolean salasConMeetApi() {
+        return false;
+    }
 }

@@ -39,6 +39,7 @@ class ConfiguracionDeGoogle implements ConfiguracionDeGooglePort {
     private boolean transcribir = true;
     private boolean tomarNotas = true;
     private boolean coanfitriones = false;
+    private boolean salasConMeetApi = false;
 
     ConfiguracionDeGoogle(@Value("${renaser.calendar.meet.oauth.client-id:}") String clientId,
                           @Value("${renaser.calendar.meet.oauth.client-secret:}") String clientSecret,
@@ -62,8 +63,10 @@ class ConfiguracionDeGoogle implements ConfiguracionDeGooglePort {
                           @Value("${renaser.calendar.meet.grabar:true}") boolean grabar,
                           @Value("${renaser.calendar.meet.transcribir:true}") boolean transcribir,
                           @Value("${renaser.calendar.meet.notas:true}") boolean tomarNotas,
-                          @Value("${renaser.calendar.meet.coanfitriones:false}") boolean coanfitriones) {
+                          @Value("${renaser.calendar.meet.coanfitriones:false}") boolean coanfitriones,
+                          @Value("${renaser.calendar.meet.salas-con-meet-api:false}") boolean salasConMeetApi) {
         this.coanfitriones = coanfitriones;
+        this.salasConMeetApi = salasConMeetApi;
         this.invitarAlCreador = invitarAlCreador;
         this.grabar = grabar;
         this.transcribir = transcribir;
@@ -88,6 +91,11 @@ class ConfiguracionDeGoogle implements ConfiguracionDeGooglePort {
     @Override
     public boolean tomarNotas() {
         return tomarNotas;
+    }
+
+    @Override
+    public boolean salasConMeetApi() {
+        return salasConMeetApi;
     }
 
     @Override
@@ -128,7 +136,7 @@ class ConfiguracionDeGoogle implements ConfiguracionDeGooglePort {
      * coanfitriones falla y queda anotado) hasta que el dueño la reconecte.
      */
     Set<String> permisosPedidos() {
-        if (!coanfitriones) {
+        if (!coanfitriones && !salasConMeetApi) {
             return permisos;
         }
         Set<String> con = new LinkedHashSet<>(permisos);

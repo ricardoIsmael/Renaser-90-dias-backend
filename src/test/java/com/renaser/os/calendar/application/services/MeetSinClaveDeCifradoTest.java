@@ -43,7 +43,8 @@ class MeetSinClaveDeCifradoTest {
     private final RevocacionDeLaCuenta revocacion = mock(RevocacionDeLaCuenta.class);
     private final AuditoriaDeGoogle auditoria = mock(AuditoriaDeGoogle.class);
     private final TrabajoEnSegundoPlanDeMeetService trabajo =
-            new TrabajoEnSegundoPlanDeMeetService(cuenta, salas, guardarSalas, auditoriaPort, sincronizador, revocacion, auditoria);
+            new TrabajoEnSegundoPlanDeMeetService(cuenta, salas, guardarSalas, auditoriaPort, sincronizador, revocacion, auditoria,
+                    mock(com.renaser.os.calendar.application.ports.out.meet.ConfiguracionDeGooglePort.class));
 
     private final ListAppender<ILoggingEvent> registro = new ListAppender<>();
     private final Logger logger = (Logger) LoggerFactory.getLogger(TrabajoEnSegundoPlanDeMeetService.class);

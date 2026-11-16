@@ -126,7 +126,7 @@ class SincronizadorDeSalas {
             existentes = acompanarAlEventoDeUnSoloDia(evento.get(), deseadas, existentes, ahora);
             alinearElAcceso(evento.get(), existentes, hoy, ahora);
         }
-        List<Paso> plan = PlanDeSalas.calcular(vivo, hoy, deseadas, existentes, ahora, forzar);
+        List<Paso> plan = PlanDeSalas.calcular(vivo, hoy, deseadas, existentes, ahora, forzar, configuracion.salasConMeetApi());
         Invitados invitados = new Invitados(evento.orElse(null), operacion.actor());
         for (Paso paso : plan) {
             ejecutar(paso, evento.orElse(null), deseadas, zona, invitados, operacion, limite);
@@ -201,6 +201,16 @@ class SincronizadorDeSalas {
             case AJUSTAR_ACCESO -> {
                 if (!sinTiempo) {
                     pasos.ajustarAcceso(paso.sala(), operacion);
+                }
+            }
+            case MIGRAR -> {
+                if (!sinTiempo) {
+                    pasos.migrar(paso.sala(), deseadas.get(paso.fecha()), zona, invitados.alEditar(), operacion);
+                }
+            }
+            case CERRAR_ANTERIOR -> {
+                if (!sinTiempo) {
+                    pasos.cerrarLaAnterior(paso.sala(), operacion);
                 }
             }
             case BORRAR -> {
