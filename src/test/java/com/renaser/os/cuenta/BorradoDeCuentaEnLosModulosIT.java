@@ -133,6 +133,47 @@ class BorradoDeCuentaEnLosModulosIT {
     }
 
     @Test
+    @DisplayName("spec 055 FR-025: la baja de un MENTOR conserva sus notas y sus versiones con el autor en NULL; la baja de un APRENDIZ borra las notas sobre él")
+    void lasNotasSobreviven_alAutor_yMuerenConElAprendiz() {
+        UUID aprendiz = semilla.nuevaPersona();
+        UUID mentor = semilla.nuevaPersona();
+        UUID otroAprendiz = semilla.nuevaPersona();
+        UUID delMentor = nota(otroAprendiz, mentor, "Nota del mentor");
+        UUID sobreElAprendiz = nota(aprendiz, mentor, "Sobre el aprendiz");
+        jdbc.update("INSERT INTO renaser.notas_del_mentor_versiones (nota_id, texto_anterior, reemplazado_en) VALUES (?, 'antes', now())",
+                delMentor);
+        jdbc.update("INSERT INTO renaser.notas_del_mentor_versiones (nota_id, texto_anterior, reemplazado_en) VALUES (?, 'antes', now())",
+                sobreElAprendiz);
+
+        borrarEnUnaTransaccion(mentor);
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM renaser.notas_del_mentor WHERE id = ? AND autor_id IS NULL AND texto = 'Nota del mentor'",
+                Long.class, delMentor)).as("la nota del mentor sigue, sin autor").isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM renaser.notas_del_mentor_versiones WHERE nota_id = ?", Long.class, delMentor))
+                .as("y su historia").isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM renaser.notas_del_mentor WHERE id = ?", Long.class, sobreElAprendiz))
+                .as("la nota sobre el mentor no existía; la del aprendiz sigue porque el mentor no es el aprendiz").isEqualTo(1);
+
+        borrarEnUnaTransaccion(aprendiz);
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM renaser.notas_del_mentor WHERE id = ?", Long.class, sobreElAprendiz))
+                .as("las notas sobre el aprendiz se borran con su cuenta").isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM renaser.notas_del_mentor_versiones WHERE nota_id = ?", Long.class, sobreElAprendiz))
+                .isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM renaser.notas_del_mentor WHERE id = ?", Long.class, delMentor))
+                .as("la del otro aprendiz no se toca").isEqualTo(1);
+        jdbc.update("DELETE FROM renaser.notas_del_mentor_versiones WHERE nota_id = ?", delMentor);
+        jdbc.update("DELETE FROM renaser.notas_del_mentor WHERE id = ?", delMentor);
+    }
+
+    private UUID nota(UUID aprendiz, UUID autor, String texto) {
+        UUID id = UUID.randomUUID();
+        jdbc.update("INSERT INTO renaser.notas_del_mentor (id, aprendiz_id, autor_id, texto, dia_del_autor, creado_en) "
+                + "VALUES (?, ?, ?, ?, CURRENT_DATE, now())", id, aprendiz, autor, texto);
+        return id;
+    }
+
+    @Test
     @DisplayName("lo que la persona hizo sobre lo de otros pierde el autor y sobrevive")
     void loQueHizoSobreOtrosQuedaSinAutor() {
         UUID otra = semilla.nuevaPersona();

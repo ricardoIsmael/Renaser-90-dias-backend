@@ -75,6 +75,13 @@ class NotificacionPersistenceAdapter implements LoadNotificacionPort, SaveNotifi
     }
 
     @Override
+    public int marcarSuperadas(UserId usuarioId, TipoNotificacion tipo, String rutaApp, String cuerpoComo,
+                               Long idVigente, Instant ahora) {
+        return repository.marcarSuperadas(usuarioId.value(), TipoNotificacionJpa.valueOf(tipo.name()), rutaApp,
+                cuerpoComo, idVigente, ahora);
+    }
+
+    @Override
     public int marcarTodasLeidas(UserId usuarioId, Instant ahora) {
         return repository.marcarTodasLeidas(usuarioId.value(), ahora);
     }

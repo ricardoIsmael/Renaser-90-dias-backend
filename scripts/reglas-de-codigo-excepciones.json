@@ -56,5 +56,20 @@
       "src/main/java/com/renaser/os/rag/application/services/EspejoSombraService.java",
       "src/main/java/com/renaser/os/support/application/services/TicketMentorService.java"
     ]
+  },
+  "avisoConClaveSinSuperar": {
+    "fecha": "2026-11-17",
+    "motivo": "Oyentes que ya existían cuando nació el chequeo (bug #165) y emiten con una clave de deduplicación sin declarar qué pasa con el aviso anterior sin leer. Cada uno se revisa aparte: si su clave es de un hecho único (la semana, el evento) no hay nada que superar y se le anota «SIN-SUPERAR: porque…»; si es de una condición que se repite, llama a superarAnteriores. Al hacerlo se borra su línea de aquí.",
+    "issue": "https://github.com/ricardoIsmael/Renaser-90-dias-backend/issues/165",
+    "archivos": [
+      "src/main/java/com/renaser/os/notifications/infrastructure/adapter/in/event/AnalisisListoNotificationListener.java",
+      "src/main/java/com/renaser/os/notifications/infrastructure/adapter/in/event/FaltaArmarGrupoNotificationListener.java",
+      "src/main/java/com/renaser/os/notifications/infrastructure/adapter/in/event/GrupoPorVencerNotificationListener.java",
+      "src/main/java/com/renaser/os/notifications/infrastructure/adapter/in/event/RecordatorioEventoNotificationListener.java",
+      "src/main/java/com/renaser/os/notifications/infrastructure/adapter/in/event/ResumenSemanalDelGrupoNotificationListener.java",
+      "src/main/java/com/renaser/os/notifications/infrastructure/adapter/in/event/ResumenSemanalGeneralNotificationListener.java",
+      "src/main/java/com/renaser/os/notifications/infrastructure/adapter/in/event/RevisionDelLiderNotificationListener.java",
+      "src/main/java/com/renaser/os/notifications/infrastructure/adapter/in/event/SemanaDelSemaforoCerradaNotificationListener.java"
+    ]
   }
 }

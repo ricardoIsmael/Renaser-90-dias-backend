@@ -18,6 +18,9 @@ import java.util.UUID;
  * @param claveSistema      la clave fija del hábito del catálogo ({@code habitos.clave_sistema}), o {@code null} si
  *                          no tiene. Sirve para reconocer a un hábito por lo que es y no por su título, que se
  *                          renombra desde el panel.
+ * @param pilar             spec 055: la {@code categoria_clave} del hábito del catálogo ({@code CUERPO}, {@code MENTE},
+ *                          {@code ESPIRITU}, {@code CONSCIENCIA} —«Emociones» de la Escuela— o la de otra formación), tal
+ *                          cual; {@code null} si el llamador no la conoce
  * @param respuestaTexto    lo que la persona escribió al cumplirlo («¿Qué sentiste?», el resumen de la Pastilla), o
  *                          {@code null} si no escribió nada. Es evidencia: la leen la ficha del mentor, la de
  *                          administración y la del líder (spec 005). Nunca entra a un cálculo.
@@ -25,14 +28,28 @@ import java.util.UUID;
 public record ObligacionHabito(UUID registroId, UserId participanteId, LocalDate fecha, int diaPrograma,
                                 String titulo, EstadoObligacion estado, boolean requiereEvidencia,
                                 boolean opcional, String claveSistema, String respuestaTexto,
-                                MedicionDeLaObligacion medicion) {
+                                MedicionDeLaObligacion medicion, String pilar) {
+
+    /** Sin pilar: la forma de los llamadores anteriores a la spec 055. */
+    public ObligacionHabito(UUID registroId, UserId participanteId, LocalDate fecha, int diaPrograma, String titulo,
+                            EstadoObligacion estado, boolean requiereEvidencia, boolean opcional, String claveSistema,
+                            String respuestaTexto, MedicionDeLaObligacion medicion) {
+        this(registroId, participanteId, fecha, diaPrograma, titulo, estado, requiereEvidencia, opcional, claveSistema,
+                respuestaTexto, medicion, null);
+    }
 
     /** Sin medición: la forma de los llamadores anteriores a la spec 037. */
     public ObligacionHabito(UUID registroId, UserId participanteId, LocalDate fecha, int diaPrograma, String titulo,
                             EstadoObligacion estado, boolean requiereEvidencia, boolean opcional, String claveSistema,
                             String respuestaTexto) {
         this(registroId, participanteId, fecha, diaPrograma, titulo, estado, requiereEvidencia, opcional, claveSistema,
-                respuestaTexto, null);
+                respuestaTexto, null, null);
+    }
+
+    /** La misma obligación con la medición dada (los km de una carrera); el pilar y lo demás no cambian. */
+    public ObligacionHabito conMedicion(MedicionDeLaObligacion nueva) {
+        return new ObligacionHabito(registroId, participanteId, fecha, diaPrograma, titulo, estado, requiereEvidencia,
+                opcional, claveSistema, respuestaTexto, nueva, pilar);
     }
 
     /**
@@ -44,7 +61,7 @@ public record ObligacionHabito(UUID registroId, UserId participanteId, LocalDate
     /** Sin clave de sistema ni respuesta: la forma de los llamadores anteriores a E-628. */
     public ObligacionHabito(UUID registroId, UserId participanteId, LocalDate fecha, int diaPrograma, String titulo,
                             EstadoObligacion estado, boolean requiereEvidencia, boolean opcional) {
-        this(registroId, participanteId, fecha, diaPrograma, titulo, estado, requiereEvidencia, opcional, null, null, null);
+        this(registroId, participanteId, fecha, diaPrograma, titulo, estado, requiereEvidencia, opcional, null, null, null, null);
     }
 
     /** Si este hábito se cumple publicando en el Muro (el post diario): su evidencia es la publicación. */

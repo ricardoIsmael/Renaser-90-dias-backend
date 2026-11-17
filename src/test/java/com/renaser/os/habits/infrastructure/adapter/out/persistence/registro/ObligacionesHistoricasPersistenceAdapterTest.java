@@ -65,6 +65,17 @@ class ObligacionesHistoricasPersistenceAdapterTest {
         assertThat(delaLectura.claveSistema()).isNull();
     }
 
+    @Test
+    @DisplayName("spec 055 FR-013: trae el pilar, la categoria_clave del habito, en cada obligacion")
+    void traeElPilarDelHabito() {
+        UserId persona = nuevaPersona();
+        guardar(persona, nuevoHabito("Meditacion (pilar)"), null, false);
+
+        List<ObligacionHabito> obligaciones = adapter.entre(List.of(persona), DIA, DIA);
+
+        assertThat(obligaciones).singleElement().extracting(ObligacionHabito::pilar).isEqualTo("MENTE");
+    }
+
     private void guardar(UserId persona, HabitoId habito, String respuesta, boolean completado) {
         RegistroHabito registro = RegistroHabito.generar(RegistroHabitoId.of(UUID.randomUUID()), persona, habito, DIA,
                 5, TipoDia.DISCIPLINA, false, AHORA);

@@ -23,14 +23,26 @@ import java.util.UUID;
  *                       Vacía si no subió ninguno. Cada una se abre por {@code GET /evidence/{id}}
  * @param medicion       spec 037: el número del día de un hábito medible (los km) y de dónde salió —la captura o los pasos
  *                       del teléfono, con su fuente y si quedó «por revisar»—; null en un hábito que no mide nada
+ * @param pilar          spec 055: la {@code categoria_clave} del hábito (el pilar en que la ficha del mentor lo agrupa:
+ *                       {@code CUERPO}, {@code MENTE}, {@code ESPIRITU}, {@code CONSCIENCIA} —«Emociones»— u otra clave de
+ *                       su formación); null si no la trae. Aditivo: las apps instaladas lo ignoran
  */
 public record ObligacionDelDia(UUID registroId, String titulo, String estadoHabito, boolean requiereEvidencia,
                                String entrega, Instant entregadaEn, String revision, UUID evidenciaId,
                                UUID publicacionId, String respuestaTexto, List<EvidenciaDeObligacion> evidencias,
-                               MedicionDeLaObligacion medicion) {
+                               MedicionDeLaObligacion medicion, String pilar) {
 
     public ObligacionDelDia {
         evidencias = evidencias == null ? List.of() : List.copyOf(evidencias);
+    }
+
+    /** Sin pilar: la forma de los llamadores anteriores a la spec 055. */
+    public ObligacionDelDia(UUID registroId, String titulo, String estadoHabito, boolean requiereEvidencia,
+                            String entrega, Instant entregadaEn, String revision, UUID evidenciaId, UUID publicacionId,
+                            String respuestaTexto, List<EvidenciaDeObligacion> evidencias,
+                            MedicionDeLaObligacion medicion) {
+        this(registroId, titulo, estadoHabito, requiereEvidencia, entrega, entregadaEn, revision, evidenciaId,
+                publicacionId, respuestaTexto, evidencias, medicion, null);
     }
 
     /** Sin medición: la forma de los llamadores anteriores a la spec 037. */
@@ -38,6 +50,6 @@ public record ObligacionDelDia(UUID registroId, String titulo, String estadoHabi
                             String entrega, Instant entregadaEn, String revision, UUID evidenciaId, UUID publicacionId,
                             String respuestaTexto, List<EvidenciaDeObligacion> evidencias) {
         this(registroId, titulo, estadoHabito, requiereEvidencia, entrega, entregadaEn, revision, evidenciaId,
-                publicacionId, respuestaTexto, evidencias, null);
+                publicacionId, respuestaTexto, evidencias, null, null);
     }
 }
