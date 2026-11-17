@@ -27,6 +27,8 @@ La fase 1 ordena el recorrido del mentor (Mis grupos → Mi grupo → ficha) par
 - P: Con un solo grupo, ¿se va directo al grupo o pasa por «Mis grupos»? → R: Directo al grupo; «Mis grupos» aparece con dos o más.
 - P: Al abrir la ficha, ¿qué pilar va desplegado? → R: El primer pilar con hábitos pendientes o vencidos; los demás cerrados.
 - P: Dentro de un mismo color, ¿en qué orden salen los aprendices? → R: Del que menos cumplió en la semana al que más; a igualdad, por nombre.
+- P: Si se elimina la cuenta de un mentor, ¿qué pasa con las notas que escribió? → R: Se quedan, con el autor «Cuenta eliminada»; las siguen viendo el mentor vigente, el liderazgo y Administración.
+- P: Si se elimina la cuenta de un aprendiz, ¿qué pasa con las notas sobre él? → R: Se borran con su cuenta, con su historial.
 
 ## Escenarios de uso y pruebas *(obligatorio)*
 
@@ -163,7 +165,7 @@ El ícono de lápiz junto al chat abre una hoja para escribir una nota privada s
 
 - **FR-023**: El mentor que acompaña hoy a un aprendiz puede escribir notas privadas sobre él; cada nota guarda su texto, su autor y su fecha y hora.
 - **FR-024**: Leen las notas de un aprendiz: el mentor que lo acompaña hoy (todas, también las de mentores anteriores), el liderazgo de su formación (MENTOR_LEAD con esa formación en su alcance) y Administración. El liderazgo y Administración solo leen, desde la ficha del aprendiz que ya abren en sus paneles y con el mismo ícono de lápiz; no escriben. El aprendiz y cualquier otro rol nunca las leen.
-- **FR-025**: El autor puede corregir su nota solo el mismo día en que la escribió (día del autor); después, y para cualquier otra persona, es solo lectura. Ninguna nota se borra; una corrección conserva el texto anterior en el historial.
+- **FR-025**: El autor puede corregir su nota solo el mismo día en que la escribió (día del autor); después, y para cualquier otra persona, es solo lectura. Ninguna nota se borra, salvo con la baja de la cuenta del aprendiz (se van con sus datos); si se da de baja la cuenta del autor, sus notas se quedan con el autor «Cuenta eliminada». Una corrección conserva el texto anterior en el historial.
 - **FR-026**: Una nota no puede estar vacía ni pasar de 2000 caracteres; el campo lo dice antes de guardar.
 - **FR-027**: La hoja de notas muestra la aclaración de quién la ve, el campo de texto y, debajo, las notas anteriores de la más nueva a la más vieja, con fecha y autor.
 

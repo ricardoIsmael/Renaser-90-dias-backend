@@ -8,13 +8,13 @@ Tabla `renaser.notas_del_mentor`
 |---|---|---|
 | id | uuid | PK |
 | aprendiz_id | uuid | NOT NULL, FK `participantes_programa(usuario_id)`; la nota sigue al aprendiz, no al grupo |
-| autor_id | uuid | NOT NULL, FK `usuarios(id)` |
+| autor_id | uuid | NULL solo tras la baja de la cuenta del autor (`ON DELETE SET NULL` o puesto en NULL por la baja); FK `usuarios(id)` |
 | texto | text | NOT NULL, 1–2000 caracteres sin contar espacios de los extremos (CHECK) |
 | dia_del_autor | date | NOT NULL: el día local del autor cuando la escribió (decide si se puede corregir) |
 | creado_en | timestamptz | NOT NULL |
 | corregido_en | timestamptz | NULL hasta la primera corrección |
 
-Índice `(aprendiz_id, creado_en DESC)`. Sin `ON DELETE CASCADE` desde el autor: si el autor deja de existir la nota se conserva (la FK es `RESTRICT`; los usuarios no se borran físicamente).
+Índice `(aprendiz_id, creado_en DESC)`. Baja del autor: la nota se conserva con `autor_id` NULL y se muestra como «Cuenta eliminada». Baja del aprendiz: sus notas y versiones se borran con su cuenta.
 
 Tabla `renaser.notas_del_mentor_versiones` (historia de correcciones, principio IV)
 

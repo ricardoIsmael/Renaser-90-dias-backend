@@ -1,6 +1,6 @@
 # Contratos — Spec 055 fase 1
 
-Todo en JSON; fechas ISO (`LocalDate` sin zona, `Instant` en UTC); errores con `{ codigo, mensaje }` como el resto de la API.
+Todo en JSON; fechas ISO (`LocalDate` sin zona, `Instant` en UTC); errores con `{ codigo, message }` como el resto de la API.
 
 ## Mentor (prefijo `/api/v1/mentor/groups/{groupId}/learners/{userId}`, `USE_APP`, `@Funcionalidad("mentor.mi_grupo")`)
 
@@ -15,7 +15,7 @@ Guard común: acompañante vigente del grupo (`acompanaVigente`) + cuenta activa
 - 200: `{ zona, diaUno, dias: [ { fecha, estado: MEDIDO|SIN_DATOS|PAUSADO|CUENTA_SUSPENDIDA|PENDIENTE, color: VERDE|AMARILLO|ROJO|SIN_DATOS, porcentaje } ] }`
 
 ### `GET /notas`
-- 200: `{ notas: [ { id, texto, autor: { id, nombre }, creadoEn, corregidoEn, puedeCorregir } ] }` (de la más nueva a la más vieja).
+- 200: `{ notas: [ { id, texto, autor: { id, nombre }, creadoEn, corregidoEn, puedeCorregir } ] }` (de la más nueva a la más vieja). Si el autor se dio de baja: `autor: { id: null, nombre: "Cuenta eliminada" }` y `puedeCorregir: false`.
 
 ### `POST /notas`  body `{ texto }`
 - 201: la nota creada. Vacía o > 2000 → 400 `NOTA_INVALIDA`.
@@ -35,7 +35,7 @@ Guard común: acompañante vigente del grupo (`acompanaVigente`) + cuenta activa
 
 ## Cambio aditivo en respuestas existentes
 
-- `ObligacionDelDia` suma `pilar` (`CUERPO|MENTE|ESPIRITU|EMOCIONES|null`) en todas las respuestas que la usan (mentor, líder, Administración). Las apps instaladas lo ignoran.
+- `ObligacionDelDia` suma `pilar` (la `categoria_clave` del hábito tal cual: `CUERPO`, `MENTE`, `ESPIRITU`, `CONSCIENCIA` = Emociones, u otra clave de la formación; `null` si no tiene) en todas las respuestas que la usan (mentor, líder, Administración). Las apps instaladas lo ignoran.
 
 ## Lo que se reutiliza sin cambios
 
