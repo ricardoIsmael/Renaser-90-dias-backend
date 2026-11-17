@@ -76,8 +76,9 @@ class NotasDelMentorJdbcAdapter implements GuardarNotaDelMentorPort, LeerNotasDe
 
     private static NotaDelMentor aNota(ResultSet rs, int fila) throws SQLException {
         Timestamp corregida = rs.getTimestamp("corregido_en");
+        UUID autor = rs.getObject("autor_id", UUID.class);
         return NotaDelMentor.rehidratar(rs.getObject("id", UUID.class), UserId.of(rs.getObject("aprendiz_id", UUID.class)),
-                UserId.of(rs.getObject("autor_id", UUID.class)), rs.getString("texto"),
+                autor == null ? null : UserId.of(autor), rs.getString("texto"),
                 rs.getObject("dia_del_autor", LocalDate.class), rs.getTimestamp("creado_en").toInstant(),
                 corregida == null ? null : corregida.toInstant());
     }

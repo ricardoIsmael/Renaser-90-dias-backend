@@ -29,7 +29,7 @@ curso (`SemanaDelMentor`).
 - Leen: el acompañante vigente (todas las del aprendiz), el liderazgo de su formación (`GET /leadership/people/{id}/notas`,
   `VIEW_MENTOR_CORPS`) y Administración (`GET /admin/trainees/{id}/notas`, `MANAGE_TRAINEES`), estos dos con `puedeCorregir=false`.
   El aprendiz no tiene ninguna ruta que las devuelva.
-- La baja de la cuenta (D-243) borra las notas sobre la persona y las que escribió.
+- La baja de la cuenta (D-243): la de un **aprendiz** borra las notas sobre él y sus versiones; la de un **mentor** conserva las que escribió y sus versiones con `autor_id` en NULL (la respuesta dice `autor: {id: null, nombre: "Cuenta eliminada"}` y `puedeCorregir=false`). Decisión del dueño del 17/11.
 
 ## Pilar de cada hábito
 

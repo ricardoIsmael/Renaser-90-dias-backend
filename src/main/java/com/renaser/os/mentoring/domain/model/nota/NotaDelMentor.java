@@ -41,7 +41,7 @@ public final class NotaDelMentor {
                           Instant creadoEn, Instant corregidoEn) {
         this.id = Objects.requireNonNull(id, "id es obligatorio");
         this.aprendizId = Objects.requireNonNull(aprendizId, "aprendizId es obligatorio");
-        this.autorId = Objects.requireNonNull(autorId, "autorId es obligatorio");
+        this.autorId = autorId;
         this.texto = texto;
         this.diaDelAutor = Objects.requireNonNull(diaDelAutor, "diaDelAutor es obligatorio");
         this.creadoEn = Objects.requireNonNull(creadoEn, "creadoEn es obligatorio");
@@ -52,6 +52,7 @@ public final class NotaDelMentor {
     public static NotaDelMentor escribir(UUID id, UserId aprendizId, UserId autorId, String texto, ZoneId zonaDelAutor,
                                          Clock clock) {
         Instant ahora = clock.now();
+        Objects.requireNonNull(autorId, "autorId es obligatorio");
         return new NotaDelMentor(id, aprendizId, autorId, validar(texto), ahora.atZone(zonaDelAutor).toLocalDate(), ahora,
                 null);
     }
@@ -70,7 +71,7 @@ public final class NotaDelMentor {
      *                                   {@link #NOTA_INVALIDA} (400) si el texto nuevo no sirve
      */
     public VersionDeLaNota corregir(UserId quien, String nuevoTexto, ZoneId zonaDelAutor, Clock clock) {
-        if (!autorId.equals(quien)) {
+        if (!quien.equals(autorId)) {
             throw new NotAuthorizedException("Solo quien escribió la nota puede corregirla.", NO_ES_EL_AUTOR);
         }
         Instant ahora = clock.now();
@@ -87,7 +88,7 @@ public final class NotaDelMentor {
 
     /** Si {@code quien} puede corregirla ahora: es el autor y es el mismo día. */
     public boolean puedeCorregirla(UserId quien, ZoneId zonaDelAutor, Clock clock) {
-        return autorId.equals(quien) && diaDelAutor.equals(clock.now().atZone(zonaDelAutor).toLocalDate());
+        return quien.equals(autorId) && diaDelAutor.equals(clock.now().atZone(zonaDelAutor).toLocalDate());
     }
 
     /** El texto recortado; falla si queda vacío o pasa del máximo. */
@@ -108,6 +109,7 @@ public final class NotaDelMentor {
         return aprendizId;
     }
 
+    /** Null si la cuenta de su autor se dio de baja: la nota se conserva sin autor y nadie la corrige. */
     public UserId autorId() {
         return autorId;
     }

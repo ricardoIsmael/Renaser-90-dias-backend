@@ -14,15 +14,17 @@
 -- * `notas_del_mentor_versiones`: la historia de las correcciones (constitución IV). Cada corrección guarda acá el texto que reemplaza;
 --   no hay borrado de notas desde el código.
 --
--- Sin ON DELETE CASCADE desde el autor: la FK es RESTRICT. La baja de una cuenta (D-243) borra primero las notas que la nombran (ver
--- `BorradoDeCuentaEnMentoringAdapter`); un usuario no desaparece por accidente dejando notas sin autor.
+-- `autor_id` es NULLABLE y su FK es RESTRICT (sin cascada, sin SET NULL): la baja de una cuenta (D-243) la gestionan los módulos, no la
+-- base (ver `BorradoDeCuentaEnMentoringAdapter`, igual que `asignaciones_celula.actor_id`). Cuando se da de baja a un MENTOR, sus notas NO se
+-- borran: el adaptador pone `autor_id` en NULL (la respuesta dice «Cuenta eliminada») y conserva también sus versiones. Cuando se da de baja a
+-- un APRENDIZ, se borran las notas sobre él y sus versiones. Decisión del dueño del 17/11/2026.
 
 SET search_path TO renaser, public;
 
 CREATE TABLE notas_del_mentor (
     id            uuid        PRIMARY KEY,
     aprendiz_id   uuid        NOT NULL REFERENCES participantes_programa (usuario_id),
-    autor_id      uuid        NOT NULL REFERENCES usuarios (id) ON DELETE RESTRICT,
+    autor_id      uuid        REFERENCES usuarios (id) ON DELETE RESTRICT,
     texto         text        NOT NULL,
     dia_del_autor date        NOT NULL,
     creado_en     timestamptz NOT NULL,

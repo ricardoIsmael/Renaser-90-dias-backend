@@ -117,15 +117,23 @@ public class NotasDelMentorService implements EscribirNotaDelAprendizUseCase, Co
         return participaciones.deParticipante(autor).map(p -> p.zona()).orElse(ZoneId.of("America/Lima"));
     }
 
+    /** Sin autor, la cuenta se dio de baja (el dueño, 17/11): {@code id} null y «Cuenta eliminada». */
+    private static NotaDelAprendiz.Autor autorDe(NotaDelMentor nota, UserSummary autor) {
+        if (nota.autorId() == null) {
+            return new NotaDelAprendiz.Autor(null, "Cuenta eliminada");
+        }
+        return new NotaDelAprendiz.Autor(nota.autorId().value(), autor == null ? null : autor.fullName());
+    }
+
     /** @param lector quien las pide para poder corregirlas; null = solo lee (liderazgo y Administración) */
     private List<NotaDelAprendiz> vistas(List<NotaDelMentor> notas, UserId lector) {
-        Map<UserId, UserSummary> autores = usuarios.findByIds(notas.stream().map(NotaDelMentor::autorId).distinct().toList());
+        Map<UserId, UserSummary> autores = usuarios.findByIds(notas.stream().map(NotaDelMentor::autorId).filter(java.util.Objects::nonNull).distinct().toList());
         ZoneId zonaDelLector = lector == null ? null : zonaDe(lector);
         return notas.stream().map(nota -> {
-            UserSummary autor = autores.get(nota.autorId());
+            UserSummary autor = nota.autorId() == null ? null : autores.get(nota.autorId());
             boolean puede = lector != null && nota.puedeCorregirla(lector, zonaDelLector, clock);
             return new NotaDelAprendiz(nota.id(), nota.texto(),
-                    new NotaDelAprendiz.Autor(nota.autorId().value(), autor == null ? null : autor.fullName()),
+                    autorDe(nota, autor),
                     nota.creadoEn(), nota.corregidoEn(), puede);
         }).toList();
     }

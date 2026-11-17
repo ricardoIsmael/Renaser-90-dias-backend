@@ -172,4 +172,25 @@ class NotasDelAprendizIT extends EscenarioDelMentorIT {
         assertThat(get(deAdmin, suspendido).statusCode()).isEqualTo(403);
         assertThat(get("/api/v1/admin/trainees/" + UUID.randomUUID() + "/notas", admin).statusCode()).as("no existe").isEqualTo(404);
     }
+
+    @Test
+    @DisplayName("spec 055 FR-025: la nota de una cuenta dada de baja sigue visible para el mentor, el líder y Administración, con «Cuenta eliminada» y sin poder corregirla")
+    void laNotaSinAutorSeLeeComoCuentaEliminada() throws Exception {
+        UUID nota = UUID.fromString(escribir(mentora, "Se queda").get("id").asText());
+        jdbc.update("UPDATE renaser.notas_del_mentor SET autor_id = NULL WHERE id = ?", nota);
+
+        for (HttpResponse<String> respuesta : new HttpResponse[] {get(notas(fenix, ana), mentora),
+                get("/api/v1/leadership/people/" + ana + "/notas", lider), get("/api/v1/admin/trainees/" + ana + "/notas", admin)}) {
+            assertThat(respuesta.statusCode()).as(respuesta.body()).isEqualTo(200);
+            JsonNode lista = cuerpo(respuesta).get("notas");
+            assertThat(lista).hasSize(1);
+            assertThat(lista.get(0).get("texto").asText()).isEqualTo("Se queda");
+            assertThat(lista.get(0).get("autor").get("id").isNull()).isTrue();
+            assertThat(lista.get(0).get("autor").get("nombre").asText()).isEqualTo("Cuenta eliminada");
+            assertThat(lista.get(0).get("puedeCorregir").asBoolean()).isFalse();
+        }
+        HttpResponse<String> ajena = pedir("PATCH", notas(fenix, ana) + "/" + nota, mentora, Map.of("texto", "Nadie"));
+        assertThat(ajena.statusCode()).isEqualTo(403);
+        assertThat(codigo(ajena)).isEqualTo("NO_ES_EL_AUTOR");
+    }
 }
