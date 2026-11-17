@@ -38,6 +38,14 @@ interface SpringDataNotificacionRepository extends JpaRepository<NotificacionJpa
     int marcarTodasLeidas(@Param("usuarioId") UUID usuarioId, @Param("ahora") Instant ahora);
 
     @Modifying
+    @Query("update NotificacionJpaEntity n set n.leidaEn = :ahora "
+            + "where n.usuarioId = :usuarioId and n.tipo = :tipo and n.rutaApp = :rutaApp "
+            + "and n.cuerpo like :cuerpoComo and n.id <> :idVigente and n.leidaEn is null")
+    int marcarSuperadas(@Param("usuarioId") UUID usuarioId, @Param("tipo") TipoNotificacionJpa tipo,
+                        @Param("rutaApp") String rutaApp, @Param("cuerpoComo") String cuerpoComo,
+                        @Param("idVigente") Long idVigente, @Param("ahora") Instant ahora);
+
+    @Modifying
     @Query("delete from NotificacionJpaEntity n where n.creadoEn < :limite")
     int deleteByCreadoEnBefore(@Param("limite") Instant limite);
 

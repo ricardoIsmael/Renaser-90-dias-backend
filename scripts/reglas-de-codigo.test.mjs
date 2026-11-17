@@ -241,6 +241,24 @@ test('entorno: ningún archivo de texto en git tiene finales de línea CRLF (sal
   assert.deepEqual(malos, [], 'Pásalo a LF (E-52): un CRLF hace que un cambio de una línea se vea como el archivo entero.');
 });
 
+// ── Familia «avisos» (E-302, E-645, #165: el aviso de ayer sigue sin leer junto al de hoy) ──────────────────────────
+test('avisos: todo oyente que emite con una clave de deduplicación declara qué pasa con el aviso anterior sin leer (superarAnteriores o SIN-SUPERAR)', () => {
+  const malos = [];
+  for (const f of JAVA_MAIN) {
+    const r = rel(f);
+    if (!r.includes('/notifications/infrastructure/adapter/in/event/') || EXC.avisoConClaveSinSuperar.archivos.includes(r)) continue;
+    const crudo = fs.readFileSync(f, 'utf8');
+    if (!/claveDeduplicacion/.test(sinComentarios(crudo))) continue;
+    if (!/superarAnteriores\(/.test(sinComentarios(crudo)) && !/SIN-SUPERAR:\s*\S+/.test(crudo)) malos.push(r);
+  }
+  assert.deepEqual(malos, [], 'La clave de deduplicación solo evita repetir UN mismo aviso; si la condición sigue y la clave cambia (el ancla se mueve, otro día), el anterior se queda sin leer con su cifra vieja (#165). Llama a SuperarNotificacionesUseCase.superarAnteriores tras emitir, o, si la clave es de un hecho único, escribe «// SIN-SUPERAR: <por qué no hay nada que superar>».');
+  const sobran = EXC.avisoConClaveSinSuperar.archivos.filter((a) => {
+    const t = fs.existsSync(path.join(RAIZ, a)) ? fs.readFileSync(path.join(RAIZ, a), 'utf8') : '';
+    return /superarAnteriores\(|SIN-SUPERAR:\s*\S+/.test(t);
+  });
+  assert.deepEqual(sobran, [], 'Ya declaran qué pasa con el anterior: borra su línea de scripts/reglas-de-codigo-excepciones.json (avisoConClaveSinSuperar).');
+});
+
 test('las excepciones tienen fecha y motivo', () => {
   for (const [k, v] of Object.entries(EXC)) {
     if (k.startsWith('$')) continue;
