@@ -139,7 +139,7 @@
 - [x] T052 Quitar lo que queda sin uso tras el rediseño (la rejilla y el detalle día por día de la ficha, `tituloDeAvisos`, `reglas.ts` sin uso, esquemas `/admin/cohorts` y `/admin/cells` de `mentorSchemas.ts`) solo si `graphify query` y `tsc` confirman que nadie más los usa
 - [ ] T053 `speckit-converge`: comparar el código con la spec y agregar aquí lo que falte
 - [ ] T054 `scripts/verificar.sh` (backend) y `npm run verificar` (app) en 0, con la trazabilidad de la 055 completa
-- [ ] T055 E2E: `npm run verificar -- --e2e .maestro/rediseno-del-mentor/` en el emulador + mobile-mcp por los escenarios del quickstart, con capturas; simulador de iPhone de EAS para la ficha y las hojas; revisar roles (mentor, guía, líder, admin, aprendiz) y estados (Día 0, suspendido, sin grupos); comprobar con captura de la primera pantalla, sin desplazarse, que se ven los rojos de Mi grupo (SC-001) y la semana, el día y el primer pilar en la ficha (SC-003); contar los toques: escribir = 1 desde Mi grupo (SC-002) y ver una evidencia = 1 desde la ficha (SC-005)
+- [ ] T055 E2E: `npm run verificar -- --e2e .maestro/rediseno-del-mentor/` en el emulador + mobile-mcp por los escenarios del quickstart, con capturas (solo el emulador de Android: el dueño pidió el 17/11 no usar el simulador de iPhone); revisar roles (mentor, guía, líder, admin, aprendiz) y estados (Día 0, suspendido, sin grupos); comprobar con captura de la primera pantalla, sin desplazarse, que se ven los rojos de Mi grupo (SC-001) y la semana, el día y el primer pilar en la ficha (SC-003); contar los toques: escribir = 1 desde Mi grupo (SC-002) y ver una evidencia = 1 desde la ficha (SC-005)
 - [ ] T056 Logs: backend local sin ERROR ni 5xx y `adb logcat` sin errores de JavaScript durante el E2E (`sin-senal.sh logs`)
 - [ ] T057 PR del backend y, cuando esté desplegado, PR de la app, con la verificación, el E2E, los logs y lo que no se pudo verificar
 
@@ -163,4 +163,4 @@
 
 1. **MVP**: Fases 1–3 (Historia 1) → probar en el emulador.
 2. Historia 2 (la ficha) → probar → Historia 3 (evidencia) → Historia 4 (notas).
-3. Terminación: converge, verificar, E2E en Android e iPhone, logs, docs y los dos PR.
+3. Terminación: converge, verificar, E2E en el emulador de Android, logs, docs y los dos PR.

@@ -82,7 +82,7 @@ src/features/admin/screens/FichaAprendizScreen.tsx               lápiz de lectu
 
 1. Backend: `pilar` en las obligaciones → semana y días del mentor → notas (dominio, migración, servicio, REST, lecturas del líder y de Administración) → pruebas por rol.
 2. App: utils puros → hooks → componentes → pantallas → lápiz en las fichas del líder y de Administración → navegación (`misGrupos`).
-3. E2E en el emulador (Android) y el simulador de iPhone de EAS, logs, docs y PR en cada repo (el de la app espera al despliegue del backend).
+3. E2E en el emulador de Android, logs, docs y PR en cada repo (el de la app espera al despliegue del backend).
 
 ## Seguimiento de complejidad
 
