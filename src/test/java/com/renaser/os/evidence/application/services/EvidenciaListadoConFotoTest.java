@@ -19,8 +19,7 @@ import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FasePrograma;
-import com.renaser.os.users.api.ParticipacionPrograma;
-import com.renaser.os.users.api.ParticipacionProgramaFinder;
+import com.renaser.os.evidence.application.ports.out.acompanamiento.AcompananteDelAprendizPort;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
@@ -77,7 +76,7 @@ class EvidenciaListadoConFotoTest {
     @Mock
     private UserSummaryFinder userSummaryFinder;
     @Mock
-    private ParticipacionProgramaFinder participacionFinder;
+    private AcompananteDelAprendizPort acompanante;
     @Mock
     private AjustarPuntosPort ajustarPuntosPort;
     @Mock
@@ -90,7 +89,7 @@ class EvidenciaListadoConFotoTest {
     @BeforeEach
     void setUp() {
         service = new EvidenciaService(loadEvidenciaPort, saveEvidenciaPort, validacionIAPort, userSummaryFinder,
-                participacionFinder, ajustarPuntosPort, almacenamientoPort, CLOCK, idGenerator);
+                acompanante, ajustarPuntosPort, almacenamientoPort, CLOCK, idGenerator);
         lenient().when(almacenamientoPort.firmarLectura(anyString(), any()))
                 .thenAnswer(inv -> URI.create("https://s3.test/" + inv.getArgument(0) + "?firma=x"));
     }
@@ -146,7 +145,7 @@ class EvidenciaListadoConFotoTest {
         UserId mentor = activo(UserRole.MENTOR);
         UserId otroMentor = activo(UserRole.MENTOR);
         UserId aprendiz = UserId.of(UUID.randomUUID());
-        when(participacionFinder.deParticipante(aprendiz)).thenReturn(Optional.of(participacionDe(aprendiz, mentor)));
+        when(acompanante.acompanaA(org.mockito.ArgumentMatchers.eq(mentor), org.mockito.ArgumentMatchers.eq(aprendiz), org.mockito.ArgumentMatchers.any())).thenReturn(true);
         when(loadEvidenciaPort.buscar(any(), any(), eq(20)))
                 .thenReturn(List.of(conArchivo(aprendiz, TipoEvidencia.FOTO, "evidencia-habitos/b/foto")));
 
@@ -211,8 +210,4 @@ class EvidenciaListadoConFotoTest {
                 null, null, null, false, CLOCK.now(), CLOCK);
     }
 
-    private static ParticipacionPrograma participacionDe(UserId participanteId, UserId mentorId) {
-        return new ParticipacionPrograma(participanteId, true, 20, LocalDate.of(2026, 1, 1),
-                ZoneId.of("America/Lima"), FasePrograma.initial(), null, mentorId, UserRole.TRAINEE, false, true);
-    }
 }

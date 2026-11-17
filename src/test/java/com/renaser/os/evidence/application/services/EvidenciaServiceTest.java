@@ -24,8 +24,7 @@ import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FasePrograma;
-import com.renaser.os.users.api.ParticipacionPrograma;
-import com.renaser.os.users.api.ParticipacionProgramaFinder;
+import com.renaser.os.evidence.application.ports.out.acompanamiento.AcompananteDelAprendizPort;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
@@ -49,6 +48,7 @@ import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -73,7 +73,7 @@ class EvidenciaServiceTest {
     @Mock
     private UserSummaryFinder userSummaryFinder;
     @Mock
-    private ParticipacionProgramaFinder participacionFinder;
+    private AcompananteDelAprendizPort acompanante;
     @Mock
     private AjustarPuntosPort ajustarPuntosPort;
     @Mock
@@ -87,7 +87,7 @@ class EvidenciaServiceTest {
     @BeforeEach
     void setUp() {
         service = new EvidenciaService(loadEvidenciaPort, saveEvidenciaPort, validacionIAPort, userSummaryFinder,
-                participacionFinder, ajustarPuntosPort, almacenamientoPort, CLOCK, idGenerator);
+                acompanante, ajustarPuntosPort, almacenamientoPort, CLOCK, idGenerator);
         lenient().when(saveEvidenciaPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
         // lenient: la mayoria de los casos no llega a registrar (cortan antes, en autorizacion).
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
@@ -421,10 +421,6 @@ class EvidenciaServiceTest {
 
     // ---- listado general (hueco #19): dueño / mentor asignado / admin ----
 
-    private ParticipacionPrograma participacionDe(UserId participanteId, UserId mentorId) {
-        return new ParticipacionPrograma(participanteId, true, 20, LocalDate.of(2026, 1, 1),
-                ZoneId.of("America/Lima"), FasePrograma.initial(), null, mentorId, UserRole.TRAINEE, false, true);
-    }
 
     @Test
     void elDuenoListaSuPropiaEvidenciaSinIndicarParticipanteId() {
@@ -496,8 +492,6 @@ class EvidenciaServiceTest {
         UserId aprendiz = UserId.of(UUID.randomUUID());
         EvidenciaId id = EvidenciaId.of(UUID.randomUUID());
         when(userSummaryFinder.findById(mentor)).thenReturn(Optional.of(activo(mentor, UserRole.MENTOR)));
-        when(participacionFinder.deParticipante(aprendiz))
-                .thenReturn(Optional.of(participacionDe(aprendiz, UserId.of(UUID.randomUUID()))));
         when(loadEvidenciaPort.byId(id)).thenReturn(Optional.of(evidenciaDe(aprendiz)));
 
         assertThatThrownBy(() -> service.urlDeLectura(mentor, id)).isInstanceOf(NotAuthorizedException.class);
@@ -525,8 +519,7 @@ class EvidenciaServiceTest {
         UserId aprendiz = UserId.of(UUID.randomUUID());
         EvidenciaId id = EvidenciaId.of(UUID.randomUUID());
         when(userSummaryFinder.findById(mentor)).thenReturn(Optional.of(activo(mentor, UserRole.MENTOR)));
-        when(participacionFinder.deParticipante(aprendiz))
-                .thenReturn(Optional.of(participacionDe(aprendiz, mentor)));
+        when(acompanante.acompanaA(org.mockito.ArgumentMatchers.eq(mentor), org.mockito.ArgumentMatchers.eq(aprendiz), org.mockito.ArgumentMatchers.any())).thenReturn(true);
         when(loadEvidenciaPort.byId(id)).thenReturn(Optional.of(evidenciaDe(aprendiz)));
 
         assertThat(service.porId(mentor, id)).isNotNull();
@@ -539,8 +532,6 @@ class EvidenciaServiceTest {
         UserId aprendiz = UserId.of(UUID.randomUUID());
         EvidenciaId id = EvidenciaId.of(UUID.randomUUID());
         when(userSummaryFinder.findById(mentor)).thenReturn(Optional.of(activo(mentor, UserRole.MENTOR)));
-        when(participacionFinder.deParticipante(aprendiz))
-                .thenReturn(Optional.of(participacionDe(aprendiz, UserId.of(UUID.randomUUID()))));
         when(loadEvidenciaPort.byId(id)).thenReturn(Optional.of(evidenciaDe(aprendiz)));
 
         assertThatThrownBy(() -> service.porId(mentor, id)).isInstanceOf(NotAuthorizedException.class);
@@ -580,7 +571,7 @@ class EvidenciaServiceTest {
 
         verify(loadEvidenciaPort).buscar(new FiltroEvidencia(mentor, null, null, null, null), null, 20);
         // No se consulta la asignacion: preguntarse si uno es su propio mentor no tiene sentido.
-        verify(participacionFinder, org.mockito.Mockito.never()).deParticipante(mentor);
+        verifyNoInteractions(acompanante);
     }
 
     @Test
@@ -589,7 +580,6 @@ class EvidenciaServiceTest {
         UserId mentor = UserId.of(UUID.randomUUID());
         UserId ajeno = UserId.of(UUID.randomUUID());
         when(userSummaryFinder.findById(mentor)).thenReturn(Optional.of(activo(mentor, UserRole.MENTOR)));
-        when(participacionFinder.deParticipante(ajeno)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.listar(new ListarEvidenciaComando(mentor, ajeno, null, null, null, null,
                 null))).isInstanceOf(NotAuthorizedException.class);
@@ -603,7 +593,6 @@ class EvidenciaServiceTest {
         UserId aprendiz = UserId.of(UUID.randomUUID());
         UserId otroMentor = UserId.of(UUID.randomUUID());
         when(userSummaryFinder.findById(mentor)).thenReturn(Optional.of(activo(mentor, UserRole.MENTOR)));
-        when(participacionFinder.deParticipante(aprendiz)).thenReturn(Optional.of(participacionDe(aprendiz, otroMentor)));
 
         assertThatThrownBy(() -> service.listar(new ListarEvidenciaComando(mentor, aprendiz, null, null, null, null,
                 null))).isInstanceOf(NotAuthorizedException.class);
@@ -614,7 +603,7 @@ class EvidenciaServiceTest {
         UserId mentor = UserId.of(UUID.randomUUID());
         UserId aprendiz = UserId.of(UUID.randomUUID());
         when(userSummaryFinder.findById(mentor)).thenReturn(Optional.of(activo(mentor, UserRole.MENTOR)));
-        when(participacionFinder.deParticipante(aprendiz)).thenReturn(Optional.of(participacionDe(aprendiz, mentor)));
+        when(acompanante.acompanaA(org.mockito.ArgumentMatchers.eq(mentor), org.mockito.ArgumentMatchers.eq(aprendiz), org.mockito.ArgumentMatchers.any())).thenReturn(true);
         when(loadEvidenciaPort.buscar(any(), any(), org.mockito.ArgumentMatchers.eq(20))).thenReturn(List.of());
 
         PaginaEvidencias pagina = service.listar(new ListarEvidenciaComando(mentor, aprendiz, null, null, null, null,

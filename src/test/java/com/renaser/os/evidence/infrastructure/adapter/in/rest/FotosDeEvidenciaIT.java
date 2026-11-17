@@ -2,6 +2,7 @@ package com.renaser.os.evidence.infrastructure.adapter.in.rest;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.renaser.os.FormacionesDePrueba;
 import com.renaser.os.TestcontainersConfiguration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -61,6 +62,8 @@ class FotosDeEvidenciaIT {
     private final HttpClient http = HttpClient.newHttpClient();
     private final ObjectMapper json = new ObjectMapper();
     private final List<UUID> usuarios = new ArrayList<>();
+    private final List<UUID> grupos = new ArrayList<>();
+    private final List<UUID> cohortes = new ArrayList<>();
 
     private UUID ana;
     private UUID luis;
@@ -74,8 +77,9 @@ class FotosDeEvidenciaIT {
     void seed() {
         ricardo = usuario("MENTOR", "Ricardo Palomino");
         jdbcTemplate.update("INSERT INTO renaser.perfiles_mentor (usuario_id) VALUES (?)", ricardo);
-        ana = aprendiz("Ana Pérez", ricardo);
+        ana = aprendiz("Ana Pérez", null);
         luis = aprendiz("Luis Soto", null);
+        grupoDeRicardo(ricardo, ana);
         kelin = usuario("ADMIN", "Kelin Rojas");
         UUID roca = rocaDeHoy(ana);
         rutaDeLaFoto = "evidencia-rocas/" + ana + "/" + roca + "/" + UUID.randomUUID();
@@ -85,8 +89,10 @@ class FotosDeEvidenciaIT {
 
     @AfterEach
     void limpiar() {
+        grupos.forEach(id -> jdbcTemplate.update("DELETE FROM renaser.celulas WHERE id = ?", id));
         // ON DELETE CASCADE arrastra participantes_programa, rocas_diarias, evidencias y perfiles_mentor.
         usuarios.reversed().forEach(id -> jdbcTemplate.update("DELETE FROM renaser.usuarios WHERE id = ?", id));
+        cohortes.forEach(id -> jdbcTemplate.update("DELETE FROM renaser.cohortes WHERE id = ?", id));
     }
 
     @Test
@@ -233,6 +239,7 @@ class FotosDeEvidenciaIT {
                 INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado)
                 VALUES (?, ?, ?, CAST(? AS renaser.rol_usuario), 'ACTIVO')
                 """, id, id + "@renaser.test", nombre, rol);
+        FormacionesDePrueba.alPersonalLeAsignaLaEscuela(jdbcTemplate, id, rol);
         usuarios.add(id);
         return id;
     }
@@ -242,6 +249,27 @@ class FotosDeEvidenciaIT {
         jdbcTemplate.update("INSERT INTO renaser.participantes_programa (usuario_id, dia_programa, mentor_id) VALUES (?, 20, ?)",
                 id, mentor);
         return id;
+    }
+
+    /** Ricardo acompaña a Ana HOY en un grupo: la asignación vigente, no participantes_programa.mentor_id (#167). */
+    private UUID grupoDeRicardo(UUID mentor, UUID aprendiz) {
+        UUID cohorte = UUID.randomUUID();
+        jdbcTemplate.update("INSERT INTO renaser.cohortes (id, nombre, fecha_inicio) VALUES (?, 'Cohorte fotos evidencia', CURRENT_DATE - 10)", cohorte);
+        UUID grupo = UUID.randomUUID();
+        jdbcTemplate.update("""
+                INSERT INTO renaser.celulas (id, nombre, cohorte_id, tipo, periodo_inicio, periodo_fin)
+                VALUES (?, 'Fotos evidencia', ?, CAST('REGULAR' AS renaser.tipo_celula), CURRENT_DATE - 10, CURRENT_DATE + 20)
+                """, grupo, cohorte);
+        cohortes.add(cohorte);
+        grupos.add(grupo);
+        for (UUID[] par : new UUID[][] {{mentor, null}, {aprendiz, null}}) {
+            UUID id = UUID.randomUUID();
+            jdbcTemplate.update("""
+                    INSERT INTO renaser.asignaciones_celula (id, celula_id, usuario_id, funcion, inicio, motivo, clave_operacion)
+                    VALUES (?, ?, ?, CAST(? AS renaser.funcion_acompanamiento), now() - interval '9 days', 'ADMINISTRATIVO', ?)
+                    """, id, grupo, par[0], par[0].equals(mentor) ? "MENTOR" : "APRENDIZ", "prueba|" + id);
+        }
+        return grupo;
     }
 
     private UUID rocaDeHoy(UUID participante) {

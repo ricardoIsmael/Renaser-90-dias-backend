@@ -22,9 +22,9 @@ import java.util.Objects;
  *   <li>MENTOR: sin {@code participanteId} (o con el suyo), su propia evidencia — un mentor
  *       también puede cursar el programa (D-07). Para la de un aprendiz tiene que nombrarlo
  *       ({@code participanteId}; no hay forma pública de listar "todos mis aprendices" — ver
- *       docs/MODULO_EVIDENCE.md) y ser el mentor asignado a ese aprendiz, según
- *       {@code users.api.ParticipacionProgramaFinder} (mismo puerto y mismo criterio que
- *       {@code support.TicketMentorService.requireMentorAsignado}).
+ *       docs/MODULO_EVIDENCE.md) y acompañarlo HOY, según la asignación vigente de su
+ *       grupo ({@code community.api.AprendicesDelAcompananteFinder}, el mismo criterio que los tickets de mentoría y la ficha;
+ *       #167: ya no se mira {@code participantes_programa.mentor_id}).
  *       <b>Corregido 2026-10-05 (E-519).</b> Decía que para el MENTOR {@code participanteId} era
  *       OBLIGATORIO; desde el arreglo de la autoconsulta ({@code EvidenciaService.resolverFiltroSegunRol})
  *       no lo es, y este javadoc había quedado atrás.</li>

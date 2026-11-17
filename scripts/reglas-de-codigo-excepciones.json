@@ -48,6 +48,15 @@
       "src/main/java/com/renaser/os/users/infrastructure/adapter/in/rest/admin/TraineeAdminController.java"
     ]
   },
+  "mentorIdDeParticipacionComoPermiso": {
+    "fecha": "2026-11-17",
+    "motivo": "Issue #167: «su mentor» es la asignación vigente del grupo (community.api), no participantes_programa.mentor_id, que puede estar vacío o ser de un mentor anterior. Estos tres usos ya existían el día que nació la regla; solo se achica: al migrar uno a AprendicesDelAcompananteFinder, se borra.",
+    "archivos": [
+      "src/main/java/com/renaser/os/notifications/infrastructure/adapter/in/event/TicketMentorAbiertoNotificationListener.java",
+      "src/main/java/com/renaser/os/rag/application/services/EspejoSombraService.java",
+      "src/main/java/com/renaser/os/support/application/services/TicketMentorService.java"
+    ]
+  },
   "avisoConClaveSinSuperar": {
     "fecha": "2026-11-17",
     "motivo": "Oyentes que ya existían cuando nació el chequeo (bug #165) y emiten con una clave de deduplicación sin declarar qué pasa con el aviso anterior sin leer. Cada uno se revisa aparte: si su clave es de un hecho único (la semana, el evento) no hay nada que superar y se le anota «SIN-SUPERAR: porque…»; si es de una condición que se repite, llama a superarAnteriores. Al hacerlo se borra su línea de aquí.",

@@ -13,6 +13,7 @@ import com.renaser.os.evidence.application.ports.in.evidencia.ListarEvidenciaUse
 import com.renaser.os.evidence.application.ports.in.evidencia.ListarEvidenciaUseCase.TipoDestino;
 import com.renaser.os.evidence.application.ports.in.evidencia.ProcesarColaValidacionUseCase;
 import com.renaser.os.evidence.application.ports.in.evidencia.RevisarManualmenteUseCase;
+import com.renaser.os.evidence.application.ports.out.acompanamiento.AcompananteDelAprendizPort;
 import com.renaser.os.evidence.application.ports.out.evidencia.LoadEvidenciaPort;
 import com.renaser.os.evidence.application.ports.out.evidencia.LoadEvidenciaPort.FiltroEvidencia;
 import com.renaser.os.evidence.application.ports.out.evidencia.SaveEvidenciaPort;
@@ -30,8 +31,6 @@ import java.time.Duration;
 import java.util.Optional;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
-import com.renaser.os.users.api.ParticipacionPrograma;
-import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
@@ -75,7 +74,7 @@ public class EvidenciaService implements RegistrarEvidenciaPort, ConsultarEviden
     private final SaveEvidenciaPort saveEvidenciaPort;
     private final ValidacionIAPort validacionIAPort;
     private final UserSummaryFinder userSummaryFinder;
-    private final ParticipacionProgramaFinder participacionFinder;
+    private final AcompananteDelAprendizPort acompanante;
     private final AjustarPuntosPort ajustarPuntosPort;
     private final AlmacenamientoPort almacenamientoPort;
     private final Clock clock;
@@ -83,13 +82,13 @@ public class EvidenciaService implements RegistrarEvidenciaPort, ConsultarEviden
 
     public EvidenciaService(LoadEvidenciaPort loadEvidenciaPort, SaveEvidenciaPort saveEvidenciaPort,
                              ValidacionIAPort validacionIAPort, UserSummaryFinder userSummaryFinder,
-                             ParticipacionProgramaFinder participacionFinder, AjustarPuntosPort ajustarPuntosPort,
+                             AcompananteDelAprendizPort acompanante, AjustarPuntosPort ajustarPuntosPort,
                              AlmacenamientoPort almacenamientoPort, Clock clock, IdGenerator idGenerator) {
         this.loadEvidenciaPort = loadEvidenciaPort;
         this.saveEvidenciaPort = saveEvidenciaPort;
         this.validacionIAPort = validacionIAPort;
         this.userSummaryFinder = userSummaryFinder;
-        this.participacionFinder = participacionFinder;
+        this.acompanante = acompanante;
         this.ajustarPuntosPort = ajustarPuntosPort;
         this.almacenamientoPort = almacenamientoPort;
         this.clock = clock;
@@ -341,12 +340,16 @@ public class EvidenciaService implements RegistrarEvidenciaPort, ConsultarEviden
         return new FiltroEvidencia(actor.id(), estado, tipoDestino, desde, hasta);
     }
 
+    /**
+     * El mentor o la guía que acompaña HOY a ese aprendiz: asignación vigente de su grupo, la misma regla que la ficha del
+     * mentor ({@link AcompananteDelAprendizPort}). <b>Corregido 2026-11-17 (#167).</b> Decía «el {@code mentor_id} de
+     * {@code participantes_programa}», que puede estar vacío o ser de un mentor anterior: el mentor vigente recibía 403 al
+     * abrir la foto de su aprendiz. Ese campo ya no autoriza nada acá, ni siquiera como respaldo: un mentor rotado con el
+     * campo desactualizado conservaría el acceso.
+     */
     private void requireMentorAsignado(UserId mentorId, UserId participanteId) {
-        UserId asignado = participacionFinder.deParticipante(participanteId)
-                .map(ParticipacionPrograma::mentorId)
-                .orElse(null);
-        if (!mentorId.equals(asignado)) {
-            throw new NotAuthorizedException("Solo el mentor asignado a ese aprendiz puede listar su evidencia");
+        if (!acompanante.acompanaA(mentorId, participanteId, clock.now())) {
+            throw new NotAuthorizedException("Solo quien acompaña hoy a ese aprendiz puede ver su evidencia");
         }
     }
 

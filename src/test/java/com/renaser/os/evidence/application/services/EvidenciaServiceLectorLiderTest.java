@@ -16,7 +16,7 @@ import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
-import com.renaser.os.users.api.ParticipacionProgramaFinder;
+import com.renaser.os.evidence.application.ports.out.acompanamiento.AcompananteDelAprendizPort;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
@@ -62,7 +62,7 @@ class EvidenciaServiceLectorLiderTest {
     @Mock
     private UserSummaryFinder userSummaryFinder;
     @Mock
-    private ParticipacionProgramaFinder participacionFinder;
+    private AcompananteDelAprendizPort acompanante;
     @Mock
     private AjustarPuntosPort ajustarPuntosPort;
     @Mock
@@ -75,7 +75,7 @@ class EvidenciaServiceLectorLiderTest {
     @BeforeEach
     void preparar() {
         service = new EvidenciaService(loadEvidenciaPort, saveEvidenciaPort, validacionIAPort, userSummaryFinder,
-                participacionFinder, ajustarPuntosPort, almacenamientoPort, CLOCK, idGenerator);
+                acompanante, ajustarPuntosPort, almacenamientoPort, CLOCK, idGenerator);
     }
 
     private void actor(UserId id, UserRole rol, UserStatus estado) {
