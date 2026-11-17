@@ -4,6 +4,8 @@ import com.renaser.os.notifications.application.ports.in.notificacion.EmitirNoti
 import com.renaser.os.notifications.application.ports.in.notificacion.ListarNotificacionesUseCase;
 import com.renaser.os.notifications.application.ports.in.notificacion.MarcarLeidaUseCase;
 import com.renaser.os.notifications.application.ports.in.notificacion.MarcarTodasLeidasUseCase;
+import com.renaser.os.notifications.application.ports.in.notificacion.SuperarNotificacionesUseCase;
+import com.renaser.os.notifications.domain.model.notificacion.TipoNotificacion;
 import com.renaser.os.notifications.application.ports.out.notificacion.LoadNotificacionPort;
 import com.renaser.os.notifications.application.ports.out.notificacion.SaveNotificacionPort;
 import com.renaser.os.notifications.application.ports.out.preferencia.LoadPreferenciasPort;
@@ -38,7 +40,7 @@ import java.util.Optional;
 
 @Service
 public class NotificacionService implements EmitirNotificacionUseCase, ListarNotificacionesUseCase,
-        MarcarLeidaUseCase, MarcarTodasLeidasUseCase {
+        MarcarLeidaUseCase, MarcarTodasLeidasUseCase, SuperarNotificacionesUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(NotificacionService.class);
     static final String CLAVE_NOTIFICACIONES = "notificaciones";
@@ -313,5 +315,13 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
     public int marcarTodas(UserId actorId) {
         actorGuard.requireActivo(actorId);
         return saveNotificacionPort.marcarTodasLeidas(actorId, clock.now());
+    }
+
+    /** Sin guard de actor, como {@link #emitir}: lo llama un oyente de eventos sobre un destinatario. */
+    @Override
+    @Transactional
+    public int superarAnteriores(UserId usuarioId, TipoNotificacion tipo, String rutaApp, String cuerpoComo,
+                                 Long idVigente) {
+        return saveNotificacionPort.marcarSuperadas(usuarioId, tipo, rutaApp, cuerpoComo, idVigente, clock.now());
     }
 }

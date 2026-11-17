@@ -19,6 +19,11 @@ public interface SaveNotificacionPort {
     /** Vacia el badge completo. Devuelve cuantas filas cambiaron (0 es una respuesta valida). */
     int marcarTodasLeidas(UserId usuarioId, Instant ahora);
 
+    /** Issue #165: marca leidas las no leidas del usuario con ese tipo, esa ruta y un cuerpo que cumpla el
+     * patron {@code LIKE}, salvo {@code idVigente}. Un solo UPDATE atomico. Devuelve cuantas filas movio. */
+    int marcarSuperadas(UserId usuarioId, TipoNotificacion tipo, String rutaApp, String cuerpoComo, Long idVigente,
+                        Instant ahora);
+
     /** Retencion (CLAUDE.MD, `docs/PLAN_DE_MODULOS.md` §5): purga filas mas viejas que {@code limite}. */
     int purgarAnterioresA(Instant limite);
 

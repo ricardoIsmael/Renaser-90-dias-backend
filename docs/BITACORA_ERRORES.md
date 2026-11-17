@@ -16249,3 +16249,11 @@ mejor aún, con un `codigo`.
 **Solución.** La compuerta lee con `misRocasMaestras` (sin `readOnly`, porque puede crear esas filas una vez). Sin programa andando (no participa, suspendida) cae a la lectura de antes. Spec 038 FR-014.
 
 **Cómo evitar que vuelva a pasar.** Una lectura que decide lo mismo que otra pantalla usa el MISMO caso de uso, no el puerto crudo. `CompuertaDeRocasMaterializaTest`.
+
+## E-688 · Los avisos de acompañamiento se acumulaban: el mentor veía al mismo aprendiz varias veces con cifras viejas (backend, issue #165, 17/11, RESUELTO)
+
+**Causa real.** La clave de deduplicación del aviso (`origenEventoId`) identifica el EPISODIO, no el día, pero el episodio se mueve: el ancla de «sin actividad» es la obligación más vieja de una ventana de 45 días que avanza cada día, y la de «evidencia vencida» es la más vieja sin entregar. Cada vez que el ancla se movía, la clave cambiaba, el índice único no rechazaba nada y nacía otro `ACOMPANAMIENTO_ALUMNO`; nadie cerraba los anteriores. En la base `renaser_e2e_048`, el mentor tenía 45 avisos (40 sin leer), 9 de un mismo aprendiz.
+
+**Solución.** `AvisoAcompanamientoNotificationListener`, tras emitir uno nuevo, llama a `SuperarNotificacionesUseCase.superarAnteriores`: deja como leídos los sin leer del mismo mentor, la misma ruta (aprendiz y grupo) y el mismo motivo (patrón del cuerpo). Marcar leída y no borrar: la app ya oculta las leídas y la purga de 90 días limpia el resto. La migración V197 hace lo mismo una vez con lo acumulado (solo `leida_en`, nunca borra). `AvisoAcompanamientoSinAcumularIT`.
+
+**Cómo evitar que vuelva a pasar.** Una clave de deduplicación solo evita repetir UN mismo aviso; si la condición sigue y la clave cambia, hay que decir qué pasa con el anterior. `scripts/reglas-de-codigo.test.mjs` exige que todo oyente de `notifications/.../in/event` que emita con `claveDeduplicacion` llame a `superarAnteriores` o declare `// SIN-SUPERAR: <por qué>`; los 8 que ya existían quedan como deuda fechada en `avisoConClaveSinSuperar`.
