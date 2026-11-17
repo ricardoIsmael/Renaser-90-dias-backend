@@ -151,7 +151,7 @@ interface SpringDataRegistroHabitoRepository extends JpaRepository<RegistroHabit
             SELECT r.id, r.participanteId, r.fechaEjecucion, r.diaPrograma, h.titulo, r.estado,
                    h.exigenciaEvidencia, r.esOpcional, h.claveSistema, r.respuestaTexto,
                    r.valorMedido, r.origenMedicion, r.pasosMedidos, r.fuenteMedicion, r.dispositivoMedicion,
-                   r.medicionLeidaEn, r.medicionPorRevisar
+                   r.medicionLeidaEn, r.medicionPorRevisar, h.categoriaClave
             FROM RegistroHabitoJpaEntity r
             JOIN HabitoJpaEntity h ON h.id = r.habitoId
             WHERE r.participanteId IN :participantes

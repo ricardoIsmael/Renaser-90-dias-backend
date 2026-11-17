@@ -48,10 +48,11 @@ class ObligacionesHistoricasPersistenceAdapter implements ConsultarObligacionesH
                 Boolean.TRUE.equals(fila[7]),
                 (String) fila[8],
                 (String) fila[9],
-                medicionDe(fila));
+                medicionDe(fila),
+                (String) fila[17]);
     }
 
-    /** Las columnas 10 a 16 de la proyección: el número del día (D-226) y, si lo leyó el teléfono, su lectura (spec 037). */
+    /** Las columnas 10 a 16 de la proyección (la 17 es el pilar): el número del día (D-226) y, si lo leyó el teléfono, su lectura (spec 037). */
     private static MedicionDeLaObligacion medicionDe(Object[] fila) {
         if (fila[10] == null) {
             return null;
