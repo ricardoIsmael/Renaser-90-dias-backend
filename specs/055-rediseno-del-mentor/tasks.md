@@ -13,14 +13,14 @@
 ## Fase 1: Preparación
 
 - [ ] T001 Crear el worktree de la app con `.arnes/scripts/worktree-nuevo.sh 055-rediseno-del-mentor` desde `Renaser-90-dias-frontend-` y comprobar `graphify query "ficha del aprendiz mentor"` en los dos worktrees
-- [ ] T002 [P] Agregar `"055"` con FR-001…FR-029 y SC-001…SC-007 a `specs/trazabilidad.json`, marcando como exigidos los FR de la fase 1
+- [x] T002 [P] Agregar `"055"` con FR-001…FR-029 y SC-001…SC-007 a `specs/trazabilidad.json`, marcando como exigidos los FR de la fase 1
 
 ---
 
 ## Fase 2: Base (bloquea todas las historias)
 
-- [ ] T003 [P] Prueba que falla: `ObligacionDelDia.pilar` trae la `categoria_clave` del hábito (`CUERPO|MENTE|ESPIRITU|EMOCIONES|null`) en `src/test/java/com/renaser/os/mentoring/application/services/PilarEnLaObligacionTest.java` (spec 055 FR-013)
-- [ ] T004 Agregar `pilar` a `…/habits/api/ObligacionHabito.java` (leído de `habitos.categoria_clave` en su adaptador de lectura) y a `…/mentoring/api/ObligacionDelDia.java` (campo nuevo al final; constructores anteriores conservados), y pasarlo en `ArmadoDeLaSemana` / `ArmadoDeLaFicha`
+- [x] T003 [P] Prueba que falla: `ObligacionDelDia.pilar` trae la `categoria_clave` del hábito (`CUERPO|MENTE|ESPIRITU|EMOCIONES|null`) en `src/test/java/com/renaser/os/mentoring/application/services/PilarEnLaObligacionTest.java` (spec 055 FR-013)
+- [x] T004 Agregar `pilar` a `…/habits/api/ObligacionHabito.java` (leído de `habitos.categoria_clave` en su adaptador de lectura) y a `…/mentoring/api/ObligacionDelDia.java` (campo nuevo al final; constructores anteriores conservados), y pasarlo en `ArmadoDeLaSemana` / `ArmadoDeLaFicha`
 - [ ] T005 [P] app: agregar `pilar?: 'CUERPO'|'MENTE'|'ESPIRITU'|'EMOCIONES'|null` al esquema de la obligación en `app:src/features/mentor/api/mentorSchemas.ts`, tolerando que falte (apps y servidores viejos)
 
 **Punto de control**: `scripts/verificar.sh` y `npm run verificar -- --rapido` en verde con el campo nuevo.
@@ -61,14 +61,14 @@
 
 ### Pruebas del backend (primero)
 
-- [ ] T018 [P] [US2] Prueba de integración (Testcontainers) de `GET /api/v1/mentor/groups/{g}/learners/{u}/semana?semanaHasta=`: semana sábado–viernes, `diaUno`, `primeraSemana`, `pilar`; 400 `SEMANA_INVALIDA` si no es viernes; 400 `FUERA_DEL_PROGRAMA` antes del Día 1 o futura; 403 `NO_ACOMPANA` con otro mentor, en `src/test/java/com/renaser/os/mentoring/infrastructure/adapter/in/rest/SemanaDelAprendizIT.java` (spec 055 FR-011, FR-015, FR-017)
-- [ ] T019 [P] [US2] Prueba de integración de `GET …/dias?desde&hasta`: color y % por día con la regla de `ColorSemaforo` leída de `semaforo_dias`; estados `PAUSADO`/`CUENTA_SUSPENDIDA`/`SIN_DATOS`; máx. 62 días (400 `RANGO_INVALIDO`); recorta a `[diaUno, hoy]`; 403 a otro mentor, en `src/test/java/com/renaser/os/mentoring/infrastructure/adapter/in/rest/DiasDelAprendizIT.java` (spec 055 FR-012, FR-017)
+- [x] T018 [P] [US2] Prueba de integración (Testcontainers) de `GET /api/v1/mentor/groups/{g}/learners/{u}/semana?semanaHasta=`: semana sábado–viernes, `diaUno`, `primeraSemana`, `pilar`; 400 `SEMANA_INVALIDA` si no es viernes; 400 `FUERA_DEL_PROGRAMA` antes del Día 1 o futura; 403 `NO_ACOMPANA` con otro mentor, en `src/test/java/com/renaser/os/mentoring/infrastructure/adapter/in/rest/SemanaDelAprendizIT.java` (spec 055 FR-011, FR-015, FR-017)
+- [x] T019 [P] [US2] Prueba de integración de `GET …/dias?desde&hasta`: color y % por día con la regla de `ColorSemaforo` leída de `semaforo_dias`; estados `PAUSADO`/`CUENTA_SUSPENDIDA`/`SIN_DATOS`; máx. 62 días (400 `RANGO_INVALIDO`); recorta a `[diaUno, hoy]`; 403 a otro mentor, en `src/test/java/com/renaser/os/mentoring/infrastructure/adapter/in/rest/DiasDelAprendizIT.java` (spec 055 FR-012, FR-017)
 
 ### Implementación del backend
 
-- [ ] T020 [US2] Puerto `ConsultarSemanaDelAprendizUseCase` y servicio `SemanaDelAprendizService` (guard `acompanaVigente` + cuenta activa + aprendiz del grupo; reutiliza el armado de la ficha del líder vía su puerto de dominio, no su adaptador; agrega `diaUno`) en `…/mentoring/application/ports/in/` y `…/mentoring/application/services/SemanaDelAprendizService.java`
-- [ ] T021 [US2] Puerto y servicio `DiasDelAprendizService` (lee `semaforo_dias` por el puerto de salida del semáforo; color con `ColorSemaforo`) en `…/mentoring/application/services/DiasDelAprendizService.java`
-- [ ] T022 [US2] `SemanaDelAprendizController` y `DiasDelAprendizController` con `@Funcionalidad("mentor.mi_grupo")` y `@RequiresPermission(value = Permission.USE_APP, scope = "…: acompañante vigente del grupo Y el aprendiz del grupo")` en `…/mentoring/infrastructure/adapter/in/rest/`
+- [x] T020 [US2] Puerto `ConsultarSemanaDelAprendizUseCase` y servicio `SemanaDelAprendizService` (guard `acompanaVigente` + cuenta activa + aprendiz del grupo; reutiliza el armado de la ficha del líder vía su puerto de dominio, no su adaptador; agrega `diaUno`) en `…/mentoring/application/ports/in/` y `…/mentoring/application/services/SemanaDelAprendizService.java`
+- [x] T021 [US2] Puerto y servicio `DiasDelAprendizService` (lee `semaforo_dias` por el puerto de salida del semáforo; color con `ColorSemaforo`) en `…/mentoring/application/services/DiasDelAprendizService.java`
+- [x] T022 [US2] `SemanaDelAprendizController` y `DiasDelAprendizController` con `@Funcionalidad("mentor.mi_grupo")` y `@RequiresPermission(value = Permission.USE_APP, scope = "…: acompañante vigente del grupo Y el aprendiz del grupo")` en `…/mentoring/infrastructure/adapter/in/rest/`
 
 ### Pruebas de la app (primero)
 
@@ -108,16 +108,16 @@
 
 ### Pruebas del backend (primero)
 
-- [ ] T038 [P] [US4] Prueba de dominio de `NotaDelMentor`: «texto NOT NULL, 1–2000 caracteres sin contar espacios de los extremos»; corrige solo el autor y solo si `hoy en su zona == dia_del_autor`; cada corrección guarda el texto anterior; no hay borrado, en `src/test/java/com/renaser/os/mentoring/domain/model/nota/NotaDelMentorTest.java` (spec 055 FR-023, FR-025, FR-026)
-- [ ] T039 [P] [US4] Prueba de integración por rol de `/notas`: el acompañante vigente crea, lista (también las de mentores anteriores) y corrige hoy; 409 `YA_NO_SE_PUEDE_CORREGIR` otro día; 403 `NO_ES_EL_AUTOR`; 403 `NO_ACOMPANA` a un mentor de otro grupo o rotado; el aprendiz no tiene ninguna ruta que las devuelva; el liderazgo de su formación y Administración leen con `puedeCorregir=false`, en `src/test/java/com/renaser/os/mentoring/infrastructure/adapter/in/rest/NotasDelAprendizIT.java` (spec 055 FR-023…FR-026, FR-028, SC-006)
+- [x] T038 [P] [US4] Prueba de dominio de `NotaDelMentor`: «texto NOT NULL, 1–2000 caracteres sin contar espacios de los extremos»; corrige solo el autor y solo si `hoy en su zona == dia_del_autor`; cada corrección guarda el texto anterior; no hay borrado, en `src/test/java/com/renaser/os/mentoring/domain/model/nota/NotaDelMentorTest.java` (spec 055 FR-023, FR-025, FR-026)
+- [x] T039 [P] [US4] Prueba de integración por rol de `/notas`: el acompañante vigente crea, lista (también las de mentores anteriores) y corrige hoy; 409 `YA_NO_SE_PUEDE_CORREGIR` otro día; 403 `NO_ES_EL_AUTOR`; 403 `NO_ACOMPANA` a un mentor de otro grupo o rotado; el aprendiz no tiene ninguna ruta que las devuelva; el liderazgo de su formación y Administración leen con `puedeCorregir=false`, en `src/test/java/com/renaser/os/mentoring/infrastructure/adapter/in/rest/NotasDelAprendizIT.java` (spec 055 FR-023…FR-026, FR-028, SC-006)
 
 ### Implementación del backend
 
-- [ ] T040 [US4] Migración `src/main/resources/db/migration/V197__notas_del_mentor.sql` (o el siguiente número libre al fusionar): `notas_del_mentor (id uuid PK, aprendiz_id uuid NOT NULL FK participantes_programa(usuario_id), autor_id uuid NOT NULL FK usuarios(id) RESTRICT, texto text NOT NULL CHECK 1–2000 sin espacios de los extremos, dia_del_autor date NOT NULL, creado_en timestamptz NOT NULL, corregido_en timestamptz NULL)` con índice `(aprendiz_id, creado_en DESC)` y `notas_del_mentor_versiones (nota_id uuid FK, texto_anterior text NOT NULL, reemplazado_en timestamptz NOT NULL, PK (nota_id, reemplazado_en))`; `SET search_path` como exige la prueba de migraciones
-- [ ] T041 [US4] Dominio `NotaDelMentor` y sus reglas en `…/mentoring/domain/model/nota/`
-- [ ] T042 [US4] Puertos y `NotasDelMentorService` (guard del acompañante vigente con `acompanaVigente` + aprendiz del grupo; lectura del liderazgo con `AccesoDeLiderazgo` + `AlcanceDeFormacionFinder`; Administración ADMIN/ALCHEMIST activos; día del autor en su zona) en `…/mentoring/application/`
-- [ ] T043 [US4] Adaptador JPA de notas y versiones en `…/mentoring/infrastructure/adapter/out/persistence/nota/`
-- [ ] T044 [US4] `NotasDelAprendizController` (`GET`/`POST /notas`, `PATCH /notas/{notaId}`; `USE_APP` + `@Funcionalidad("mentor.mi_grupo")`) en `…/mentoring/infrastructure/adapter/in/rest/`; `GET /api/v1/leadership/people/{personId}/notas` (`VIEW_MENTOR_CORPS`) en `…/leadership/infrastructure/adapter/in/rest/PersonasDelProgramaController.java`; `GET /api/v1/admin/trainees/{traineeId}/notas` (`MANAGE_TRAINEES`) en `…/mentoring/infrastructure/adapter/in/rest/`
+- [x] T040 [US4] Migración `src/main/resources/db/migration/V198__notas_del_mentor.sql` (o el siguiente número libre al fusionar): `notas_del_mentor (id uuid PK, aprendiz_id uuid NOT NULL FK participantes_programa(usuario_id), autor_id uuid NOT NULL FK usuarios(id) RESTRICT, texto text NOT NULL CHECK 1–2000 sin espacios de los extremos, dia_del_autor date NOT NULL, creado_en timestamptz NOT NULL, corregido_en timestamptz NULL)` con índice `(aprendiz_id, creado_en DESC)` y `notas_del_mentor_versiones (nota_id uuid FK, texto_anterior text NOT NULL, reemplazado_en timestamptz NOT NULL, PK (nota_id, reemplazado_en))`; `SET search_path` como exige la prueba de migraciones
+- [x] T041 [US4] Dominio `NotaDelMentor` y sus reglas en `…/mentoring/domain/model/nota/`
+- [x] T042 [US4] Puertos y `NotasDelMentorService` (guard del acompañante vigente con `acompanaVigente` + aprendiz del grupo; lectura del liderazgo con `AccesoDeLiderazgo` + `AlcanceDeFormacionFinder`; Administración ADMIN/ALCHEMIST activos; día del autor en su zona) en `…/mentoring/application/`
+- [x] T043 [US4] Adaptador JPA de notas y versiones en `…/mentoring/infrastructure/adapter/out/persistence/nota/`
+- [x] T044 [US4] `NotasDelAprendizController` (`GET`/`POST /notas`, `PATCH /notas/{notaId}`; `USE_APP` + `@Funcionalidad("mentor.mi_grupo")`) en `…/mentoring/infrastructure/adapter/in/rest/`; `GET /api/v1/leadership/people/{personId}/notas` (`VIEW_MENTOR_CORPS`) en `…/leadership/infrastructure/adapter/in/rest/PersonasDelProgramaController.java`; `GET /api/v1/admin/trainees/{traineeId}/notas` (`MANAGE_TRAINEES`) en `…/mentoring/infrastructure/adapter/in/rest/`
 
 ### Pruebas de la app (primero)
 
@@ -135,7 +135,7 @@
 ## Fase 7: Terminación
 
 - [ ] T050 [P] Decisión del dueño en `app:docs/decisiones/liderazgo-y-administracion.md` (cambio de Yo y de Comunidad → Tribu del mentor, autorizado el 17/11 con los bocetos) y su fila en `app:docs/decisiones/README.md`; corregir con `> **Corregido 2026-11-17.**` las entradas de Mi grupo que queden desmentidas
-- [ ] T051 [P] Documentar las notas y las lecturas nuevas en el doc del módulo `docs/MODULO_MENTORING.md` (o el que exista) y en `docs/MODULOS_A_AVANZAR.md`
+- [x] T051 [P] Documentar las notas y las lecturas nuevas en el doc del módulo `docs/MODULO_MENTORING.md` (o el que exista) y en `docs/MODULOS_A_AVANZAR.md`
 - [ ] T052 Quitar lo que queda sin uso tras el rediseño (la rejilla y el detalle día por día de la ficha, `tituloDeAvisos`, `reglas.ts` sin uso, esquemas `/admin/cohorts` y `/admin/cells` de `mentorSchemas.ts`) solo si `graphify query` y `tsc` confirman que nadie más los usa
 - [ ] T053 `speckit-converge`: comparar el código con la spec y agregar aquí lo que falte
 - [ ] T054 `scripts/verificar.sh` (backend) y `npm run verificar` (app) en 0, con la trazabilidad de la 055 completa

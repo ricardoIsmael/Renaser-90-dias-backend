@@ -173,3 +173,9 @@ VALUES ('{{P}}', date_trunc('week', CURRENT_DATE)::date + 4, date_trunc('week', 
 -- mentoring (spec 015, V120)
 INSERT INTO renaser.huecos_semana (participante_id, semana_inicio, zona, minutos_ocupados, minutos_libres, cumplidos_a_tiempo, cumplidos_tarde, no_cumplidos, horario_que_regia, cerrada_en)
 VALUES ('{{P}}', date_trunc('week', CURRENT_DATE)::date - 7, 'America/Lima', 100, 900, 3, 1, 0, '[]'::jsonb, now());
+
+-- mentoring (spec 055, V198): una nota sobre ella escrita por ella y su historia
+INSERT INTO renaser.notas_del_mentor (id, aprendiz_id, autor_id, texto, dia_del_autor, creado_en)
+VALUES (md5('{{P}}-nota')::uuid, '{{P}}', '{{P}}', 'Nota de prueba', CURRENT_DATE, now());
+INSERT INTO renaser.notas_del_mentor_versiones (nota_id, texto_anterior, reemplazado_en)
+VALUES (md5('{{P}}-nota')::uuid, 'Texto anterior', now());
