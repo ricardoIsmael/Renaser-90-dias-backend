@@ -12,6 +12,7 @@ import com.renaser.os.shared.domain.IdentidadYaVinculadaException;
 import com.renaser.os.shared.domain.NoAplicadoSinRedException;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.ProveedorIaNoDisponibleException;
+import com.renaser.os.shared.domain.RechazoConCodigoException;
 import com.renaser.os.shared.domain.ReautenticacionRequeridaException;
 import com.renaser.os.shared.domain.RateLimitExceededException;
 import com.renaser.os.shared.domain.WhatsappDeLaCuentaException;
@@ -189,6 +190,14 @@ public class GlobalExceptionHandler {
         log.info("{} -> WhatsApp de la cuenta: {}", ex.motivo().estado(), ex.motivo());
         return ResponseEntity.status(ex.motivo().estado()).contentType(MediaType.APPLICATION_JSON)
                 .body(ApiErrorConCodigo.of(ex.getMessage(), ex.motivo().name(), null));
+    }
+
+    /** Spec 055: un rechazo con motivo (400 o 409) y un mensaje listo para mostrar; el {@code codigo} lo lee la app. */
+    @ExceptionHandler(RechazoConCodigoException.class)
+    public ResponseEntity<ApiErrorConCodigo> handleRechazoConCodigo(RechazoConCodigoException ex) {
+        log.info("{} -> {}", ex.estado(), ex.codigo());
+        return ResponseEntity.status(ex.estado()).contentType(MediaType.APPLICATION_JSON)
+                .body(ApiErrorConCodigo.of(ex.getMessage(), ex.codigo(), null));
     }
 
     @ExceptionHandler(IllegalStateException.class)

@@ -57,6 +57,11 @@ public record MedicionDeLaPersona(CalendarioDeMedicion calendario, Map<LocalDate
         return armar(desdeVigente(hoyLocal), hoyLocal.minusDays(1));
     }
 
+    /** Cada día de un rango, del más viejo al más nuevo, con la misma regla que la ventana vigente y la semana. */
+    public List<DiaDelSemaforo> dias(LocalDate desde, LocalDate hasta) {
+        return armar(desde, hasta).dias();
+    }
+
     /** Una semana sábado→viernes. Si ya se cerró, el promedio es el de la foto: lo que se informó. */
     public VentanaDelSemaforo semana(LocalDate semanaHasta, FotoSemanal foto) {
         VentanaDelSemaforo calculada = armar(SemanaDelSemaforo.desde(semanaHasta), semanaHasta);

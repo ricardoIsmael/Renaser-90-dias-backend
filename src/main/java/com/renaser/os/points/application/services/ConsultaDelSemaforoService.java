@@ -1,6 +1,8 @@
 package com.renaser.os.points.application.services;
 
 import com.renaser.os.points.api.DetalleDelSemaforo;
+import com.renaser.os.points.api.DiaDelSemaforo;
+import com.renaser.os.points.api.DiasDelSemaforoFinder;
 import com.renaser.os.points.api.PausaDelSemaforo;
 import com.renaser.os.points.api.SemaforoFinder;
 import com.renaser.os.points.api.SemanaCerrada;
@@ -36,7 +38,7 @@ import java.util.Optional;
  * en una lectura, y una consulta por tabla sirve a toda la colección pedida.
  */
 @Service
-public class ConsultaDelSemaforoService implements SemaforoFinder, ConsultarMiSemaforoUseCase {
+public class ConsultaDelSemaforoService implements SemaforoFinder, DiasDelSemaforoFinder, ConsultarMiSemaforoUseCase {
 
     static final int SEMANAS_POR_DEFECTO = 8;
     private static final int SEMANAS_MAXIMAS = 13;
@@ -73,6 +75,16 @@ public class ConsultaDelSemaforoService implements SemaforoFinder, ConsultarMiSe
         Map<UserId, VentanaDelSemaforo> resultado = new LinkedHashMap<>();
         lecturas.forEach((id, l) -> resultado.put(id, l.medicion().semana(semanaHasta, fotos.get(id))));
         return resultado;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<List<DiaDelSemaforo>> diasDe(UserId participante, LocalDate desde, LocalDate hasta) {
+        if (hasta.isBefore(desde)) {
+            throw new IllegalArgumentException("El rango va al revés: " + desde + " → " + hasta);
+        }
+        Lectura suya = lectura.de(List.of(participante), hoy -> desde, hoy -> hasta).get(participante);
+        return Optional.ofNullable(suya).map(l -> l.medicion().dias(desde, hasta));
     }
 
     @Override
