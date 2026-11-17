@@ -58,4 +58,10 @@ public class CumplimientoDePrueba {
     CierresDePersonaService cierresDePersonaService(BancoDeCumplimiento banco) {
         return banco.cierresService();
     }
+
+    /** Las notas (spec 055) no son de estas pruebas: el controlador las pide, y aquí no hay ninguna. */
+    @Bean
+    com.renaser.os.leadership.application.ports.in.ConsultarNotasDeLaPersonaUseCase notasDeLaPersona() {
+        return (actorId, personaId) -> java.util.List.of();
+    }
 }

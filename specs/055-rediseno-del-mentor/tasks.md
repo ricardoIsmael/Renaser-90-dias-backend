@@ -12,7 +12,7 @@
 
 ## Fase 1: Preparación
 
-- [ ] T001 Crear el worktree de la app con `.arnes/scripts/worktree-nuevo.sh 055-rediseno-del-mentor` desde `Renaser-90-dias-frontend-` y comprobar `graphify query "ficha del aprendiz mentor"` en los dos worktrees
+- [x] T001 Crear el worktree de la app con `.arnes/scripts/worktree-nuevo.sh 055-rediseno-del-mentor` desde `Renaser-90-dias-frontend-` y comprobar `graphify query "ficha del aprendiz mentor"` en los dos worktrees
 - [x] T002 [P] Agregar `"055"` con FR-001…FR-029 y SC-001…SC-007 a `specs/trazabilidad.json`, marcando como exigidos los FR de la fase 1
 
 ---
@@ -21,7 +21,7 @@
 
 - [x] T003 [P] Prueba que falla: `ObligacionDelDia.pilar` trae la `categoria_clave` del hábito (`CUERPO|MENTE|ESPIRITU|EMOCIONES|null`) en `src/test/java/com/renaser/os/mentoring/application/services/PilarEnLaObligacionTest.java` (spec 055 FR-013)
 - [x] T004 Agregar `pilar` a `…/habits/api/ObligacionHabito.java` (leído de `habitos.categoria_clave` en su adaptador de lectura) y a `…/mentoring/api/ObligacionDelDia.java` (campo nuevo al final; constructores anteriores conservados), y pasarlo en `ArmadoDeLaSemana` / `ArmadoDeLaFicha`
-- [ ] T005 [P] app: agregar `pilar?: 'CUERPO'|'MENTE'|'ESPIRITU'|'EMOCIONES'|null` al esquema de la obligación en `app:src/features/mentor/api/mentorSchemas.ts`, tolerando que falte (apps y servidores viejos)
+- [x] T005 [P] app: agregar `pilar?: 'CUERPO'|'MENTE'|'ESPIRITU'|'EMOCIONES'|null` al esquema de la obligación en `app:src/features/mentor/api/mentorSchemas.ts`, tolerando que falte (apps y servidores viejos)
 
 **Punto de control**: `scripts/verificar.sh` y `npm run verificar -- --rapido` en verde con el campo nuevo.
 
@@ -34,21 +34,21 @@
 
 ### Pruebas (primero)
 
-- [ ] T006 [P] [US1] Prueba de `ordenDeAprendices` (rojo → ámbar → verde → sin datos; dentro del color, menor % primero; a igualdad, por nombre) en `app:src/features/mentor/utils/__tests__/ordenDeAprendices.test.ts` (spec 055 FR-004)
-- [ ] T007 [P] [US1] Prueba de `motivoDeLaFila` (aviso vigente más reciente por `route` `/mentor/groups/{g}/learners/{u}`; si no hay, «Cumplió N de 7 días» / «Al día» / «Todavía sin datos») en `app:src/features/mentor/utils/__tests__/motivoDeLaFila.test.ts` (spec 055 FR-006)
-- [ ] T008 [P] [US1] Prueba de pantalla de `MisGruposScreen`: lista con la cantidad a la derecha; con un solo grupo entra directo; sin grupos, el mensaje sin huecos, en `app:src/features/mentor/screens/__tests__/misGrupos.test.ts` (spec 055 FR-001, FR-002)
-- [ ] T009 [P] [US1] Prueba de pantalla de `MiCelulaScreen`: borde del avatar con el color (gris suave sin datos), nombre en texto normal, sin lista de avisos, sin conteos ni insignia, enlace a «Mi evaluación», el chat llama a `abrirConversacionDirecta` una sola vez (un toque, un pedido), tocar la fila abre la ficha y cada toque mide al menos 48 de alto, en `app:src/features/mentor/screens/__tests__/miGrupoRediseno.test.ts` (spec 055 FR-005, FR-007, FR-008)
-- [ ] T010 [P] [US1] Prueba de las vistas: `misGrupos` en `vistasDeLosPaneles` y en `vistasDelMentor`, volver de Mi grupo lleva a Mis grupos (o a Yo/Tribu si hay un solo grupo), en `app:src/features/mentor/utils/__tests__/vistasDelMentor.test.ts` y `app:src/features/paneles-de-rol/utils/__tests__/vistasDeLosPaneles.test.ts` (spec 055 FR-003)
+- [x] T006 [P] [US1] Prueba de `ordenDeAprendices` (rojo → ámbar → verde → sin datos; dentro del color, menor % primero; a igualdad, por nombre) en `app:src/features/mentor/utils/__tests__/ordenDeAprendices.test.ts` (spec 055 FR-004)
+- [x] T007 [P] [US1] Prueba de `motivoDeLaFila` (aviso vigente más reciente por `route` `/mentor/groups/{g}/learners/{u}`; si no hay, «Cumplió N de 7 días» / «Al día» / «Todavía sin datos») en `app:src/features/mentor/utils/__tests__/motivoDeLaFila.test.ts` (spec 055 FR-006)
+- [x] T008 [P] [US1] Prueba de pantalla de `MisGruposScreen`: lista con la cantidad a la derecha; con un solo grupo entra directo; sin grupos, el mensaje sin huecos, en `app:src/features/mentor/screens/__tests__/misGrupos.test.ts` (spec 055 FR-001, FR-002)
+- [x] T009 [P] [US1] Prueba de pantalla de `MiCelulaScreen`: borde del avatar con el color (gris suave sin datos), nombre en texto normal, sin lista de avisos, sin conteos ni insignia, enlace a «Mi evaluación», el chat llama a `abrirConversacionDirecta` una sola vez (un toque, un pedido), tocar la fila abre la ficha y cada toque mide al menos 48 de alto, en `app:src/features/mentor/screens/__tests__/miGrupoRediseno.test.ts` (spec 055 FR-005, FR-007, FR-008)
+- [x] T010 [P] [US1] Prueba de las vistas: `misGrupos` en `vistasDeLosPaneles` y en `vistasDelMentor`, volver de Mi grupo lleva a Mis grupos (o a Yo/Tribu si hay un solo grupo), en `app:src/features/mentor/utils/__tests__/vistasDelMentor.test.ts` y `app:src/features/paneles-de-rol/utils/__tests__/vistasDeLosPaneles.test.ts` (spec 055 FR-003)
 
 ### Implementación
 
-- [ ] T011 [P] [US1] `ordenDeAprendices` y `motivoDeLaFila` (puras) en `app:src/features/mentor/utils/ordenDeAprendices.ts` y `app:src/features/mentor/utils/motivoDeLaFila.ts`
-- [ ] T012 [P] [US1] `AvatarConSemaforo` (reutiliza `AvatarPersona` de `app:src/components/ui.tsx` y `coloresDelSemaforo`; borde de 2,5 px con el color, gris suave `c.divider` sin datos) en `app:src/features/mentor/components/AvatarConSemaforo.tsx`
-- [ ] T013 [US1] `FilaDeAprendiz` (avatar, nombre, línea gris del motivo, ícono `chat` de 48 px de toque con `Presionable`) en `app:src/features/mentor/components/FilaDeAprendiz.tsx`
-- [ ] T014 [US1] `MisGruposScreen` (grupos de `gruposQueAcompana`; cantidad del semáforo del grupo; entra directo con uno) en `app:src/features/mentor/screens/MisGruposScreen.tsx`
-- [ ] T015 [US1] Rehacer `MiCelulaScreen` con `useSemaforoDelGrupo` + `useAvisosDeAcompanamiento`, `ordenDeAprendices` y `FilaDeAprendiz`; quitar la lista de avisos de arriba, los conteos y la insignia; pie con «Mi evaluación · N %» en `app:src/features/mentor/screens/MiCelulaScreen.tsx`
-- [ ] T016 [US1] Vista `misGrupos` en `app:src/features/paneles-de-rol/utils/vistasDeLosPaneles.ts`, `app:src/features/paneles-de-rol/screens/PantallaDelPanelDeRol.tsx`, `app:src/features/mentor/utils/vistasDelMentor.ts` y `app:src/screens/ComunidadScreen.tsx`; la fila de Yo pasa a «Mis grupos» (o «Mi grupo» con uno) en `app:src/screens/YoScreen.tsx`
-- [ ] T017 [US1] Flujo de Maestro `app:.maestro/rediseno-del-mentor/01-mis-grupos-y-mi-grupo.yaml` (cuenta del mentor; orden, colores, chat) con su siembra `siembra.sql` (spec 055 FR-001…FR-008)
+- [x] T011 [P] [US1] `ordenDeAprendices` y `motivoDeLaFila` (puras) en `app:src/features/mentor/utils/ordenDeAprendices.ts` y `app:src/features/mentor/utils/motivoDeLaFila.ts`
+- [x] T012 [P] [US1] `AvatarConSemaforo` (reutiliza `AvatarPersona` de `app:src/components/ui.tsx` y `coloresDelSemaforo`; borde de 2,5 px con el color, gris suave `c.divider` sin datos) en `app:src/features/mentor/components/AvatarConSemaforo.tsx`
+- [x] T013 [US1] `FilaDeAprendiz` (avatar, nombre, línea gris del motivo, ícono `chat` de 48 px de toque con `Presionable`) en `app:src/features/mentor/components/FilaDeAprendiz.tsx`
+- [x] T014 [US1] `MisGruposScreen` (grupos de `gruposQueAcompana`; cantidad del semáforo del grupo; entra directo con uno) en `app:src/features/mentor/screens/MisGruposScreen.tsx`
+- [x] T015 [US1] Rehacer `MiCelulaScreen` con `useSemaforoDelGrupo` + `useAvisosDeAcompanamiento`, `ordenDeAprendices` y `FilaDeAprendiz`; quitar la lista de avisos de arriba, los conteos y la insignia; pie con «Mi evaluación · N %» en `app:src/features/mentor/screens/MiCelulaScreen.tsx`
+- [x] T016 [US1] Vista `misGrupos` en `app:src/features/paneles-de-rol/utils/vistasDeLosPaneles.ts`, `app:src/features/paneles-de-rol/screens/PantallaDelPanelDeRol.tsx`, `app:src/features/mentor/utils/vistasDelMentor.ts` y `app:src/screens/ComunidadScreen.tsx`; la fila de Yo pasa a «Mis grupos» (o «Mi grupo» con uno) en `app:src/screens/YoScreen.tsx`
+- [x] T017 [US1] Flujo de Maestro `app:.maestro/rediseno-del-mentor/01-mis-grupos-y-mi-grupo.yaml` (cuenta del mentor; orden, colores, chat) con su siembra `siembra.sql` (spec 055 FR-001…FR-008)
 
 **Punto de control**: Historia 1 funciona sola en el emulador.
 
@@ -72,21 +72,21 @@
 
 ### Pruebas de la app (primero)
 
-- [ ] T023 [P] [US2] Prueba de `estadoDelHabito` (COMPLETADO → cumplido con `entregadaEn` en la zona del aprendiz; FALLIDO/EXPIRADO → vencido; PENDIENTE/EN_CURSO → pendiente) y `agruparPorPilar` (orden Cuerpo, Mente, Espíritu, Emociones; «N de M»; primer pilar con pendientes o vencidos abierto) en `app:src/features/mentor/utils/__tests__/habitosDelDia.test.ts` (spec 055 FR-013, FR-014)
-- [ ] T024 [P] [US2] Prueba de `useSemanasDelAprendiz`: al elegir una fecha pide su semana y adelanta la anterior; volver a una semana ya vista no pide de nuevo; desmontar descarta la caché; sin internet, una semana no cargada dice que hace falta conexión y lo cargado se sigue viendo, en `app:src/features/mentor/hooks/__tests__/useSemanasDelAprendiz.test.ts` (spec 055 FR-016, SC-004)
-- [ ] T025 [P] [US2] Prueba de pantalla de la ficha: cabecera (borde de color, «Día N · motivo», lápiz, chat), 7 círculos con hoy elegido, tocar un día cambia los pilares sin salir, «Mes ⌄» despliega el mes y no deja ir antes del Día 1 ni a futuros, accesos del final (sin Código Renaser si está apagado), toques de al menos 48 de alto, y si el servidor responde `NO_ACOMPANA` vuelve a «Mis grupos» con el motivo y sin datos viejos, en `app:src/features/mentor/screens/__tests__/fichaRediseno.test.ts` (spec 055 FR-010…FR-018)
+- [x] T023 [P] [US2] Prueba de `estadoDelHabito` (COMPLETADO → cumplido con `entregadaEn` en la zona del aprendiz; FALLIDO/EXPIRADO → vencido; PENDIENTE/EN_CURSO → pendiente) y `agruparPorPilar` (orden Cuerpo, Mente, Espíritu, Emociones; «N de M»; primer pilar con pendientes o vencidos abierto) en `app:src/features/mentor/utils/__tests__/habitosDelDia.test.ts` (spec 055 FR-013, FR-014)
+- [x] T024 [P] [US2] Prueba de `useSemanasDelAprendiz`: al elegir una fecha pide su semana y adelanta la anterior; volver a una semana ya vista no pide de nuevo; desmontar descarta la caché; sin internet, una semana no cargada dice que hace falta conexión y lo cargado se sigue viendo, en `app:src/features/mentor/hooks/__tests__/useSemanasDelAprendiz.test.ts` (spec 055 FR-016, SC-004)
+- [x] T025 [P] [US2] Prueba de pantalla de la ficha: cabecera (borde de color, «Día N · motivo», lápiz, chat), 7 círculos con hoy elegido, tocar un día cambia los pilares sin salir, «Mes ⌄» despliega el mes y no deja ir antes del Día 1 ni a futuros, accesos del final (sin Código Renaser si está apagado), toques de al menos 48 de alto, y si el servidor responde `NO_ACOMPANA` vuelve a «Mis grupos» con el motivo y sin datos viejos, en `app:src/features/mentor/screens/__tests__/fichaRediseno.test.ts` (spec 055 FR-010…FR-018)
 
 ### Implementación de la app
 
-- [ ] T026 [P] [US2] API y esquemas `obtenerSemanaDelAprendiz(g,u,semanaHasta)` y `obtenerDiasDelAprendiz(g,u,desde,hasta)` en `app:src/features/mentor/api/mentorApi.ts` y `mentorSchemas.ts`
-- [ ] T027 [P] [US2] `estadoDelHabito` y `agruparPorPilar` (puras) en `app:src/features/mentor/utils/habitosDelDia.ts`
-- [ ] T028 [US2] Hooks `useSemanasDelAprendiz` (Map por `semanaHasta` + adelanto de la anterior) y `useDiasDelMes` en `app:src/features/mentor/hooks/`
-- [ ] T029 [P] [US2] `SemanaDeCirculos` (sábado a viernes, círculos de 24 px con el color, día elegido con anillo dorado; toques de 48) en `app:src/features/mentor/components/SemanaDeCirculos.tsx`
-- [ ] T030 [P] [US2] `MesDeColores`: generalizar la grilla de `app:src/features/eventos/components/CalendarioDelMes.tsx` / `utils/calendarioDelMes.ts` para que no dependa de `Ocurrencia` (prop de render por día) y usarla con colores; sin días antes del Día 1 ni futuros, en `app:src/features/mentor/components/MesDeColores.tsx`
-- [ ] T031 [P] [US2] `PilarDeHabitos` (reutiliza `SeccionPlegable` de `app:src/components/Legible.tsx`; puntitos y «N de M») y `HabitoDelDia` (estado ✓/✕/punteado + hora) en `app:src/features/mentor/components/`
-- [ ] T032 [US2] Rehacer `AlumnoScreen`: cabecera, semana/mes, pilares del día elegido, accesos al final (Código Renaser, Diagnóstico, 80/20, Tiempo libre, que abren lo existente); quitar el detalle día por día y la lista larga de hábitos con horarios; un solo scroll, en `app:src/features/mentor/screens/AlumnoScreen.tsx`
-- [ ] T033 [US2] Al abrir la ficha, marcar leídos los avisos sin leer de ese aprendiz (por `route`) con `PUT /api/v1/notifications/{id}/read` en `app:src/features/mentor/hooks/useAvisosDelAprendiz.ts` (prueba en `__tests__`) (spec 055 FR-009, SC-007)
-- [ ] T034 [US2] Flujo de Maestro `app:.maestro/rediseno-del-mentor/02-ficha-semana-y-mes.yaml` (spec 055 FR-010…FR-017)
+- [x] T026 [P] [US2] API y esquemas `obtenerSemanaDelAprendiz(g,u,semanaHasta)` y `obtenerDiasDelAprendiz(g,u,desde,hasta)` en `app:src/features/mentor/api/mentorApi.ts` y `mentorSchemas.ts`
+- [x] T027 [P] [US2] `estadoDelHabito` y `agruparPorPilar` (puras) en `app:src/features/mentor/utils/habitosDelDia.ts`
+- [x] T028 [US2] Hooks `useSemanasDelAprendiz` (Map por `semanaHasta` + adelanto de la anterior) y `useDiasDelMes` en `app:src/features/mentor/hooks/`
+- [x] T029 [P] [US2] `SemanaDeCirculos` (sábado a viernes, círculos de 24 px con el color, día elegido con anillo dorado; toques de 48) en `app:src/features/mentor/components/SemanaDeCirculos.tsx`
+- [x] T030 [P] [US2] `MesDeColores`: generalizar la grilla de `app:src/features/eventos/components/CalendarioDelMes.tsx` / `utils/calendarioDelMes.ts` para que no dependa de `Ocurrencia` (prop de render por día) y usarla con colores; sin días antes del Día 1 ni futuros, en `app:src/features/mentor/components/MesDeColores.tsx`
+- [x] T031 [P] [US2] `PilarDeHabitos` (reutiliza `SeccionPlegable` de `app:src/components/Legible.tsx`; puntitos y «N de M») y `HabitoDelDia` (estado ✓/✕/punteado + hora) en `app:src/features/mentor/components/`
+- [x] T032 [US2] Rehacer `AlumnoScreen`: cabecera, semana/mes, pilares del día elegido, accesos al final (Código Renaser, Diagnóstico, 80/20, Tiempo libre, que abren lo existente); quitar el detalle día por día y la lista larga de hábitos con horarios; un solo scroll, en `app:src/features/mentor/screens/AlumnoScreen.tsx`
+- [x] T033 [US2] Al abrir la ficha, marcar leídos los avisos sin leer de ese aprendiz (por `route`) con `PUT /api/v1/notifications/{id}/read` en `app:src/features/mentor/hooks/useAvisosDelAprendiz.ts` (prueba en `__tests__`) (spec 055 FR-009, SC-007)
+- [x] T034 [US2] Flujo de Maestro `app:.maestro/rediseno-del-mentor/02-ficha-semana-y-mes.yaml` (spec 055 FR-010…FR-017)
 
 ---
 
@@ -95,9 +95,9 @@
 **Meta**: el ojo abre la evidencia en una hoja, con anterior y siguiente.
 **Prueba independiente**: aprendiz con foto, audio y texto (quickstart, escenario 5).
 
-- [ ] T035 [P] [US3] Prueba: el ojo aparece solo si el hábito cumplido tiene evidencia; la hoja muestra tipo, hora, pilar, texto y «1 de N»; anterior/siguiente dentro del día sin cerrar; enlace al Muro con `publicacionId`; cerrar con volver deja el día, en `app:src/features/mentor/components/__tests__/evidenciaDelHabito.test.ts` (spec 055 FR-019…FR-022)
-- [ ] T036 [US3] Extender `EvidenciaDeObligacion` (`app:src/features/lider-mentores/components/EvidenciaDeObligacion.tsx`) con navegación anterior/siguiente y enlace al Muro sin romper sus usos actuales (líder y Administración), y conectar el ojo en `HabitoDelDia`
-- [ ] T037 [US3] Flujo de Maestro `app:.maestro/rediseno-del-mentor/03-evidencia.yaml` (spec 055 FR-019…FR-022)
+- [x] T035 [P] [US3] Prueba: el ojo aparece solo si el hábito cumplido tiene evidencia; la hoja muestra tipo, hora, pilar, texto y «1 de N»; anterior/siguiente dentro del día sin cerrar; enlace al Muro con `publicacionId`; cerrar con volver deja el día, en `app:src/features/mentor/components/__tests__/evidenciaDelHabito.test.ts` (spec 055 FR-019…FR-022)
+- [x] T036 [US3] Extender `EvidenciaDeObligacion` (`app:src/features/lider-mentores/components/EvidenciaDeObligacion.tsx`) con navegación anterior/siguiente y enlace al Muro sin romper sus usos actuales (líder y Administración), y conectar el ojo en `HabitoDelDia`
+- [x] T037 [US3] Flujo de Maestro `app:.maestro/rediseno-del-mentor/03-evidencia.yaml` (spec 055 FR-019…FR-022)
 
 ---
 
@@ -121,22 +121,22 @@
 
 ### Pruebas de la app (primero)
 
-- [ ] T045 [P] [US4] Prueba de `HojaDeNotas` y del lápiz: puntito solo con notas; aclaración «Solo la ven tú, tu líder y Administración»; guardar agrega arriba; vacía o > 2000 no se guarda y dice qué falta; un toque, un pedido; sin internet conserva el texto y avisa; corregir solo las propias de hoy (`puedeCorregir`); el líder y Administración solo leen; toques de al menos 48 de alto; `NO_ACOMPANA` muestra el motivo, en `app:src/features/mentor/components/__tests__/notasDelAprendiz.test.ts` (spec 055 FR-024…FR-027)
+- [x] T045 [P] [US4] Prueba de `HojaDeNotas` y del lápiz: puntito solo con notas; aclaración «Solo la ven tú, tu líder y Administración»; guardar agrega arriba; vacía o > 2000 no se guarda y dice qué falta; un toque, un pedido; sin internet conserva el texto y avisa; corregir solo las propias de hoy (`puedeCorregir`); el líder y Administración solo leen; toques de al menos 48 de alto; `NO_ACOMPANA` muestra el motivo, en `app:src/features/mentor/components/__tests__/notasDelAprendiz.test.ts` (spec 055 FR-024…FR-027)
 
 ### Implementación de la app
 
-- [ ] T046 [P] [US4] API, esquema y hook `useNotasDelAprendiz` (mentor, líder y Administración según el origen) en `app:src/features/mentor/api/mentorApi.ts` y `app:src/features/mentor/hooks/useNotasDelAprendiz.ts`
-- [ ] T047 [US4] `HojaDeNotas` (reutiliza `HojaDesdeAbajo`, `FormField`, `BotonPrincipal`) en `app:src/features/mentor/components/HojaDeNotas.tsx`; lápiz en la cabecera de `AlumnoScreen`
-- [ ] T048 [US4] Lápiz de solo lectura en `app:src/features/lider-mentores/screens/PersonaDelLiderScreen.tsx` y `app:src/features/admin/screens/FichaAprendizScreen.tsx`
-- [ ] T049 [US4] Flujo de Maestro `app:.maestro/rediseno-del-mentor/04-notas.yaml` (mentor escribe y corrige; líder lee) (spec 055 FR-023…FR-027)
+- [x] T046 [P] [US4] API, esquema y hook `useNotasDelAprendiz` (mentor, líder y Administración según el origen) en `app:src/features/mentor/api/mentorApi.ts` y `app:src/features/mentor/hooks/useNotasDelAprendiz.ts`
+- [x] T047 [US4] `HojaDeNotas` (reutiliza `HojaDesdeAbajo`, `FormField`, `BotonPrincipal`) en `app:src/features/mentor/components/HojaDeNotas.tsx`; lápiz en la cabecera de `AlumnoScreen`
+- [x] T048 [US4] Lápiz de solo lectura en `app:src/features/lider-mentores/screens/PersonaDelLiderScreen.tsx` y `app:src/features/admin/screens/FichaAprendizScreen.tsx`
+- [x] T049 [US4] Flujo de Maestro `app:.maestro/rediseno-del-mentor/04-notas.yaml` (mentor escribe y corrige; líder lee) (spec 055 FR-023…FR-027)
 
 ---
 
 ## Fase 7: Terminación
 
-- [ ] T050 [P] Decisión del dueño en `app:docs/decisiones/liderazgo-y-administracion.md` (cambio de Yo y de Comunidad → Tribu del mentor, autorizado el 17/11 con los bocetos) y su fila en `app:docs/decisiones/README.md`; corregir con `> **Corregido 2026-11-17.**` las entradas de Mi grupo que queden desmentidas
+- [x] T050 [P] Decisión del dueño en `app:docs/decisiones/liderazgo-y-administracion.md` (cambio de Yo y de Comunidad → Tribu del mentor, autorizado el 17/11 con los bocetos) y su fila en `app:docs/decisiones/README.md`; corregir con `> **Corregido 2026-11-17.**` las entradas de Mi grupo que queden desmentidas
 - [x] T051 [P] Documentar las notas y las lecturas nuevas en el doc del módulo `docs/MODULO_MENTORING.md` (o el que exista) y en `docs/MODULOS_A_AVANZAR.md`
-- [ ] T052 Quitar lo que queda sin uso tras el rediseño (la rejilla y el detalle día por día de la ficha, `tituloDeAvisos`, `reglas.ts` sin uso, esquemas `/admin/cohorts` y `/admin/cells` de `mentorSchemas.ts`) solo si `graphify query` y `tsc` confirman que nadie más los usa
+- [x] T052 Quitar lo que queda sin uso tras el rediseño (la rejilla y el detalle día por día de la ficha, `tituloDeAvisos`, `reglas.ts` sin uso, esquemas `/admin/cohorts` y `/admin/cells` de `mentorSchemas.ts`) solo si `graphify query` y `tsc` confirman que nadie más los usa
 - [ ] T053 `speckit-converge`: comparar el código con la spec y agregar aquí lo que falte
 - [ ] T054 `scripts/verificar.sh` (backend) y `npm run verificar` (app) en 0, con la trazabilidad de la 055 completa
 - [ ] T055 E2E: `npm run verificar -- --e2e .maestro/rediseno-del-mentor/` en el emulador + mobile-mcp por los escenarios del quickstart, con capturas; simulador de iPhone de EAS para la ficha y las hojas; revisar roles (mentor, guía, líder, admin, aprendiz) y estados (Día 0, suspendido, sin grupos); comprobar con captura de la primera pantalla, sin desplazarse, que se ven los rojos de Mi grupo (SC-001) y la semana, el día y el primer pilar en la ficha (SC-003); contar los toques: escribir = 1 desde Mi grupo (SC-002) y ver una evidencia = 1 desde la ficha (SC-005)
