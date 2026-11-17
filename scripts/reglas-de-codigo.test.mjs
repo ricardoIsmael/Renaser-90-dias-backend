@@ -241,6 +241,38 @@ test('entorno: ningún archivo de texto en git tiene finales de línea CRLF (sal
   assert.deepEqual(malos, [], 'Pásalo a LF (E-52): un CRLF hace que un cambio de una línea se vea como el archivo entero.');
 });
 
+// ── Familia «dos fuentes de verdad» (issue #167, incidente I-002 del arnés: faltaba un chequeo) ──────────────────────
+/** ¿Lee `mentorId` de la ParticipacionPrograma (participantes_programa.mentor_id)? Ese puntero no es la asignación vigente. */
+function leeElMentorIdDeLaParticipacion(java) {
+  const limpio = sinComentarios(java);
+  return /import\s+com\.renaser\.os\.users\.api\.ParticipacionPrograma;/.test(limpio)
+    && /ParticipacionPrograma::mentorId|\b(participacion|participante)\w*\.mentorId\(\)/.test(limpio);
+}
+
+test('permisos: nadie autoriza con participantes_programa.mentor_id (ParticipacionPrograma.mentorId): «su mentor» es la asignación vigente (#167)', () => {
+  const malos = JAVA_MAIN.filter((f) => !rel(f).startsWith('src/main/java/com/renaser/os/users/'))
+    .filter((f) => !EXC.mentorIdDeParticipacionComoPermiso.archivos.includes(rel(f)))
+    .filter((f) => leeElMentorIdDeLaParticipacion(fs.readFileSync(f, 'utf8'))).map(rel);
+  assert.deepEqual(malos, [], 'participantes_programa.mentor_id puede estar vacío o ser de un mentor que ya rotó, y el mentor de hoy recibe 403 (#167). ' +
+    'Pregunta por la asignación vigente: AprendicesDelAcompananteFinder.aprendicesQueAcompana(mentor, ahora).contains(aprendiz) de community.api ' +
+    '(ver evidence.infrastructure.adapter.out.community.AcompananteDelAprendizAdapter), como la ficha del mentor.');
+});
+
+test('permisos: la lista de usos de mentor_id como permiso solo se achica (si uno ya no lo lee, bórralo de las excepciones)', () => {
+  const sobran = EXC.mentorIdDeParticipacionComoPermiso.archivos.filter((r) => !fs.existsSync(path.join(RAIZ, r))
+    || !leeElMentorIdDeLaParticipacion(fs.readFileSync(path.join(RAIZ, r), 'utf8')));
+  assert.deepEqual(sobran, [], 'Ya cumplen: quita estas líneas de scripts/reglas-de-codigo-excepciones.json (mentorIdDeParticipacionComoPermiso).');
+});
+
+test('permisos: el chequeo reconoce el caso malo (ParticipacionPrograma::mentorId) y deja pasar el bueno (la asignación vigente)', () => {
+  const malo = 'import com.renaser.os.users.api.ParticipacionPrograma;\nclass A { Object f(){ return p.map(ParticipacionPrograma::mentorId); } }';
+  const bueno = 'import com.renaser.os.community.api.AprendicesDelAcompananteFinder;\nclass A { boolean f(){ return finder.aprendicesQueAcompana(m, t).contains(a); } }';
+  const comentado = 'import com.renaser.os.users.api.ParticipacionPrograma;\n// antes: ParticipacionPrograma::mentorId\nclass A { }';
+  assert.equal(leeElMentorIdDeLaParticipacion(malo), true);
+  assert.equal(leeElMentorIdDeLaParticipacion(bueno), false);
+  assert.equal(leeElMentorIdDeLaParticipacion(comentado), false);
+});
+
 test('las excepciones tienen fecha y motivo', () => {
   for (const [k, v] of Object.entries(EXC)) {
     if (k.startsWith('$')) continue;
