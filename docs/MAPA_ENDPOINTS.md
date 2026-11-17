@@ -174,6 +174,12 @@ Todas exigen sesión (`SecurityConfig`, E-254).
 | GET | `/api/v1/home` → campo `semaforo` (con los 7 días) | el propio |
 | GET | `/api/v1/mentor/groups/{groupId}/semaforo?semanaHasta=` | mentor · acompaña vigentemente el grupo y cuenta activa |
 | GET | `/api/v1/mentor/groups/{groupId}/learners/{userId}/semaforo?semanas=8` | mentor · ídem y el alumno es del grupo |
+| GET | `/api/v1/mentor/groups/{groupId}/learners/{userId}/semana?semanaHasta=AAAA-MM-DD` | spec 055 · mentor · ídem. La semana de sábado a viernes (la del semáforo) con `diaUno`, `primeraSemana`, el color y los hábitos de cada día con su `pilar`; sin fecha, la semana en curso. 400 `SEMANA_INVALIDA` (no es viernes) o `FUERA_DEL_PROGRAMA`; 403 `NO_ACOMPANA`. No deja registro de consulta |
+| GET | `/api/v1/mentor/groups/{groupId}/learners/{userId}/dias?desde=&hasta=` | spec 055 · mentor · ídem. `{zona, diaUno, dias:[{fecha, estado, color, porcentaje}]}` leído de `semaforo_dias` con la regla de `ColorSemaforo`, recortado a [Día 1, hoy]; máx. 62 días (400 `RANGO_INVALIDO`) |
+| GET · POST | `/api/v1/mentor/groups/{groupId}/learners/{userId}/notas` | spec 055 · mentor · ídem. Notas privadas (de la más nueva a la más vieja); `POST {texto}` → 201 (400 `NOTA_INVALIDA` si está vacía o pasa de 2000) |
+| PATCH | `/api/v1/mentor/groups/{groupId}/learners/{userId}/notas/{notaId}` | spec 055 · solo su autor y solo el mismo día (en su zona): 403 `NO_ES_EL_AUTOR`, 409 `YA_NO_SE_PUEDE_CORREGIR`; cada corrección guarda el texto anterior |
+| GET | `/api/v1/leadership/people/{personId}/notas` | spec 055 · líder (`VIEW_MENTOR_CORPS`) · personas de su formación; solo lectura (`puedeCorregir=false`) |
+| GET | `/api/v1/admin/trainees/{traineeId}/notas` | spec 055 · admin, alquimista (`MANAGE_TRAINEES`) · solo lectura; 404 si la persona no existe |
 | GET | `/api/v1/semaforo/groups?semanaHasta=` | líder, admin, alquimista · sin nombres de aprendices |
 | GET | `/api/v1/admin/semaforo/groups/{groupId}?semanaHasta=` | admin, alquimista (`MANAGE_TRAINEES`) |
 | GET | `/api/v1/admin/trainees/{traineeId}/semaforo?semanas=8` | admin, alquimista · 404 si la persona no existe |

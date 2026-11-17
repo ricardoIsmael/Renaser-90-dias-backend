@@ -31,6 +31,9 @@ import java.util.UUID;
 @Component
 class AccesoAVistasDelSemaforo {
 
+    /** Spec 055: el motivo del 403 de quien no acompaña hoy el grupo o al aprendiz; la app vuelve a «Mis grupos» con él. */
+    static final String NO_ACOMPANA = "NO_ACOMPANA";
+
     private static final Set<UserRole> ADMINISTRACION = EnumSet.of(UserRole.ADMIN, UserRole.ALCHEMIST);
     private static final Set<UserRole> LIDERAZGO = EnumSet.of(UserRole.MENTOR_LEAD, UserRole.ADMIN, UserRole.ALCHEMIST);
 
@@ -49,7 +52,7 @@ class AccesoAVistasDelSemaforo {
     void requireAcompananteVigente(UserId actorId, UUID grupoId, Instant ahora) {
         if (!acompanamientoFinder.acompanaVigente(actorId, grupoId, ahora)) {
             // Mismo mensaje exista o no el grupo: distinguirlos confirmaria ids a quien los prueba.
-            throw new NotAuthorizedException("No acompanas ese grupo");
+            throw new NotAuthorizedException("No acompanas ese grupo", NO_ACOMPANA);
         }
         requireCuentaActiva(actorId);
     }
@@ -57,7 +60,7 @@ class AccesoAVistasDelSemaforo {
     /** El aprendiz pedido es de ESE grupo, con el mismo padrón que muestra la tabla. */
     void requireAprendizDelGrupo(UserId aprendizId, UUID grupoId, Instant ahora) {
         if (!medicion.aprendicesDe(grupoId, ahora).contains(aprendizId)) {
-            throw new NotAuthorizedException("Ese aprendiz no pertenece al grupo que acompanas");
+            throw new NotAuthorizedException("Ese aprendiz no pertenece al grupo que acompanas", NO_ACOMPANA);
         }
     }
 

@@ -4,6 +4,7 @@ import com.renaser.os.leadership.application.ports.in.ConsultarCierresDePersonaU
 import com.renaser.os.leadership.application.ports.in.ConsultarCierresDePersonaUseCase.ConsultaCierresDeUnaPersona;
 import com.renaser.os.leadership.application.ports.in.ConsultarHuecosDePersonaUseCase;
 import com.renaser.os.leadership.application.ports.in.ConsultarHuecosDePersonaUseCase.ConsultaHuecosDeUnaPersona;
+import com.renaser.os.leadership.application.ports.in.ConsultarNotasDeLaPersonaUseCase;
 import com.renaser.os.leadership.application.ports.in.ConsultarPersonasDelProgramaUseCase;
 import com.renaser.os.leadership.application.ports.in.ConsultarPersonasDelProgramaUseCase.ConsultaPersonasDelPrograma;
 import com.renaser.os.leadership.application.ports.in.ConsultarRadarDePersonaUseCase;
@@ -11,6 +12,7 @@ import com.renaser.os.leadership.application.ports.in.ConsultarRadarDePersonaUse
 import com.renaser.os.leadership.application.ports.in.ConsultarSemanaDePersonaUseCase;
 import com.renaser.os.leadership.application.ports.in.ConsultarSemanaDePersonaUseCase.ConsultaSemanaDeUnaPersona;
 import com.renaser.os.mentoring.api.HuecosDeLaSemana;
+import com.renaser.os.mentoring.api.NotaDelAprendiz;
 import com.renaser.os.rocks.api.CierresDelDiaFinder.CierresDeLaSemana;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.PaginaAcotada;
@@ -29,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -64,17 +67,20 @@ public class PersonasDelProgramaController {
     private final ConsultarRadarDePersonaUseCase radarDePersona;
     private final ConsultarHuecosDePersonaUseCase huecosDePersona;
     private final ConsultarCierresDePersonaUseCase cierresDePersona;
+    private final ConsultarNotasDeLaPersonaUseCase notasDePersona;
 
     public PersonasDelProgramaController(ConsultarPersonasDelProgramaUseCase personas,
                                          ConsultarSemanaDePersonaUseCase semanaDePersona,
                                          ConsultarRadarDePersonaUseCase radarDePersona,
                                          ConsultarHuecosDePersonaUseCase huecosDePersona,
-                                         ConsultarCierresDePersonaUseCase cierresDePersona) {
+                                         ConsultarCierresDePersonaUseCase cierresDePersona,
+                                         ConsultarNotasDeLaPersonaUseCase notasDePersona) {
         this.personas = personas;
         this.semanaDePersona = semanaDePersona;
         this.radarDePersona = radarDePersona;
         this.huecosDePersona = huecosDePersona;
         this.cierresDePersona = cierresDePersona;
+        this.notasDePersona = notasDePersona;
     }
 
     @RequiresPermission(value = Permission.VIEW_MENTOR_CORPS, scope = GUARD)
@@ -129,6 +135,19 @@ public class PersonasDelProgramaController {
                                                      @RequestParam(required = false)
                                                      @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate semana) {
         return sinCache(cierresDePersona.cierresDeUnaPersona(new ConsultaCierresDeUnaPersona(actorId, personId, semana)));
+    }
+
+    /**
+     * Spec 055 (FR-024): las notas privadas que los mentores escribieron sobre la persona, solo lectura ({@code puedeCorregir} siempre
+     * false). Misma forma que la del mentor: {@code { notas: [...] }}. Datos privados: {@code no-store}.
+     */
+    @RequiresPermission(value = Permission.VIEW_MENTOR_CORPS, scope = GUARD)
+    @GetMapping("/{personId}/notas")
+    public ResponseEntity<NotasDeLaPersonaResponse> notas(@ActorAutenticado UserId actorId, @PathVariable UUID personId) {
+        return sinCache(new NotasDeLaPersonaResponse(notasDePersona.notasDeUnaPersona(actorId, personId)));
+    }
+
+    public record NotasDeLaPersonaResponse(List<NotaDelAprendiz> notas) {
     }
 
     private static <T> ResponseEntity<T> sinCache(T cuerpo) {

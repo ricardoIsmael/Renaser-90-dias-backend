@@ -65,8 +65,7 @@ class ObligacionesHistoricasFinderService implements ObligacionesHistoricasFinde
         }
         MedicionDeLaObligacion medicion = o.medicion() == null ? MedicionDeLaObligacion.soloCarreras(delDia)
                 : o.medicion().conCarreras(delDia);
-        return new ObligacionHabito(o.registroId(), o.participanteId(), o.fecha(), o.diaPrograma(), o.titulo(), o.estado(),
-                o.requiereEvidencia(), o.opcional(), o.claveSistema(), o.respuestaTexto(), medicion);
+        return o.conMedicion(medicion);
     }
 
     private static boolean esDeKilometros(ObligacionHabito o) {
