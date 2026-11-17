@@ -16241,3 +16241,11 @@ mejor aún, con un `codigo`.
 - **Causa real:** `coanfitrionesPorPedir()` solo es verdadero con estado `NULL` o `SIN_CORREO`, y `FALLIDO` se decidió que no se reintenta solo. El único que lo soltaba (`olvidarCoanfitriones`) era la edición de un evento por una persona. Reconectar la cuenta solo reencolaba lo pendiente de crear (`reencolarLoPendiente`), pero no tocaba los coanfitriones, aunque el 403 más probable es justo el permiso que la reconexión arregla.
 - **Solución:** al conectar la cuenta con éxito, y solo con el interruptor encendido, `SaveSalaMeetPort.pedirDeNuevoLosCoanfitrionesFallidos` deja en `NULL` (con `actualizada_en` y `version`) las salas `CREADO` y `FALLIDO` de hoy en adelante, con «hoy» en la zona del evento. La siguiente pasada de mantenimiento (`SalasDeMeetScheduler`, a los :10) las vuelve a pedir. No toca fechas pasadas ni salas `OK`, `PARCIAL` o `SIN_CORREO`. Los 5 casos de producción se habían destrabado a mano con un UPDATE.
 - **Cómo evitarlo:** `ConectarLaCuentaDeGoogleTest` (reconectar repite los `FALLIDO`; no toca la de ayer ni las `OK`; sin interruptor no hace nada) y `SalasYCuentaDeGooglePersistenceTest.pedirDeNuevoLosCoanfitrionesFallidos` (la zona de Lima frente a UTC). Cuando un estado terminal depende de un permiso o una credencial, el evento que los cambia tiene que soltarlo.
+
+## E-687 · SER no proponía planes a quien tenía objetivos del diagnóstico pero aún no abría Plan (backend, issue #60, 09/11, RESUELTO)
+
+**Causa real.** `CompuertaDeRocasService.maestrasDe` leía las Rocas Maestras con `LoadRocaMaestraPort` sin crearlas; `RocaMaestraService.misRocasMaestras` (lo que usa Plan) crea las que nacieron del diagnóstico al leerlas. Hasta abrir Plan, la compuerta decía «cerrada» y SER mandaba a Plan en vez de proponer.
+
+**Solución.** La compuerta lee con `misRocasMaestras` (sin `readOnly`, porque puede crear esas filas una vez). Sin programa andando (no participa, suspendida) cae a la lectura de antes. Spec 038 FR-014.
+
+**Cómo evitar que vuelva a pasar.** Una lectura que decide lo mismo que otra pantalla usa el MISMO caso de uso, no el puerto crudo. `CompuertaDeRocasMaterializaTest`.
