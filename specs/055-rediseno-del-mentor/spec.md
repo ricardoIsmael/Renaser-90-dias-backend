@@ -62,7 +62,7 @@ El mentor abre la ficha de un aprendiz y en una pantalla ve su semana como 7 cí
 1. **Dado** un aprendiz en el día 78, **cuando** el mentor abre su ficha, **entonces** arriba ve su foto con el borde de su color, su nombre, «Día 78 · <motivo>», el ícono de nota y el ícono de chat, y debajo la semana en 7 círculos con el color de cada día, con hoy elegido.
 2. **Dado** la ficha abierta, **cuando** el mentor toca un día, **entonces** abajo se muestran los hábitos de ese día agrupados por pilar (Cuerpo, Mente, Espíritu, Emociones), cada pilar con su avance «N de M», y la ficha no se va a otra pantalla.
 3. **Dado** un pilar, **cuando** el mentor lo toca, **entonces** se abre o se cierra; cerrado muestra su avance en puntitos y «N de M».
-4. **Dado** un hábito, **entonces** se ve con su estado: cumplido (con la hora en la zona del aprendiz), vencido o pendiente.
+4. **Dado** un hábito, **entonces** se ve con su estado: cumplido (con la hora de su entrega, en la zona del aprendiz, si la hubo), vencido o pendiente.
 5. **Dado** la ficha, **cuando** el mentor toca «<Mes> ⌄», **entonces** se despliega el mes en el mismo lugar, con el color de cada día, y puede pasar a meses anteriores hasta el del día 1 del programa; al elegir un día, los hábitos cambian a ese día; «Ver solo la semana» lo vuelve a plegar.
 6. **Dado** que el mentor elige una fecha, **cuando** se cargan los hábitos, **entonces** se carga su semana y se adelanta la semana anterior; volver a una semana ya vista en la misma ficha no la vuelve a pedir.
 7. **Dado** un día anterior al día 1 del programa o posterior a hoy, **entonces** se ve sin color y no se puede elegir.
@@ -146,7 +146,7 @@ El ícono de lápiz junto al chat abre una hoja para escribir una nota privada s
 - **FR-011**: Debajo, la semana del aprendiz (sábado a viernes, la misma del semáforo) en 7 círculos con el color del semáforo de cada día; hoy aparece elegido al abrir.
 - **FR-012**: El color de cada día es el estado diario que ya calcula el semáforo (verde, ámbar, rojo); los días sin obligaciones, anteriores al día 1 del programa o futuros, van sin color. No se crea una regla de color nueva.
 - **FR-013**: Al elegir un día se muestran sus hábitos agrupados por pilar (Cuerpo, Mente, Espíritu, Emociones), en secciones que se abren y se cierran; cada sección muestra su avance «N de M» y, cerrada, puntitos por hábito. Al abrir, el primer pilar con hábitos pendientes o vencidos va abierto y los demás cerrados.
-- **FR-014**: Cada hábito muestra su estado del día: cumplido con su hora de registro (zona del aprendiz), vencido o pendiente (con su ventana, si tiene horario).
+- **FR-014**: Cada hábito muestra su estado del día: cumplido (con la hora de su entrega, en la zona del aprendiz, si la hubo), vencido o pendiente. La ventana horaria del pendiente queda fuera de la fase 1 (el servidor no la guarda en el día).
 - **FR-015**: «<Mes> ⌄» despliega el mes en el mismo lugar de la semana, con el color de cada día; se puede ir a meses anteriores hasta el del día 1 del programa, y no a meses futuros. Elegir un día del mes cambia los hábitos a ese día; «Ver solo la semana» lo pliega.
 - **FR-016**: Al elegir una fecha se cargan los hábitos de su semana y, además, se adelanta la carga de la semana anterior; lo ya cargado se reutiliza mientras la ficha esté abierta.
 - **FR-017**: El mentor ve los días desde el día 1 del programa del aprendiz mientras lo acompañe hoy; si ya no lo acompaña, no ve ningún día.
@@ -162,7 +162,7 @@ El ícono de lápiz junto al chat abre una hoja para escribir una nota privada s
 **Nota privada**
 
 - **FR-023**: El mentor que acompaña hoy a un aprendiz puede escribir notas privadas sobre él; cada nota guarda su texto, su autor y su fecha y hora.
-- **FR-024**: Leen las notas de un aprendiz: el mentor que lo acompaña hoy (todas, también las de mentores anteriores), el líder de ese mentor y Administración. El líder y Administración solo leen, desde la ficha del aprendiz que ya abren en sus paneles y con el mismo ícono de lápiz; no escriben. El aprendiz y cualquier otro rol nunca las leen.
+- **FR-024**: Leen las notas de un aprendiz: el mentor que lo acompaña hoy (todas, también las de mentores anteriores), el liderazgo de su formación (MENTOR_LEAD con esa formación en su alcance) y Administración. El liderazgo y Administración solo leen, desde la ficha del aprendiz que ya abren en sus paneles y con el mismo ícono de lápiz; no escriben. El aprendiz y cualquier otro rol nunca las leen.
 - **FR-025**: El autor puede corregir su nota solo el mismo día en que la escribió (día del autor); después, y para cualquier otra persona, es solo lectura. Ninguna nota se borra; una corrección conserva el texto anterior en el historial.
 - **FR-026**: Una nota no puede estar vacía ni pasar de 2000 caracteres; el campo lo dice antes de guardar.
 - **FR-027**: La hoja de notas muestra la aclaración de quién la ve, el campo de texto y, debajo, las notas anteriores de la más nueva a la más vieja, con fecha y autor.
