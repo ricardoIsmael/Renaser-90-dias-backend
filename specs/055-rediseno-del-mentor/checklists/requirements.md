@@ -31,4 +31,4 @@
 
 ## Notas
 
-- Supuestos que conviene confirmar en «aclarar»: entrar directo con un solo grupo (FR-002), el orden dentro de cada color (FR-004), qué pilar va abierto al entrar (FR-013), dónde leen las notas el líder y Administración, y el límite de 2000 caracteres.
+- Aclarado el 17/11: notas (solo leen líder y Administración), un solo grupo (directo), pilar abierto (el de pendientes) y orden (el que menos cumplió). Queda como supuesto el límite de 2000 caracteres.

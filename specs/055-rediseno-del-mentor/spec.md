@@ -19,6 +19,15 @@ Visto en el emulador el 17/11 con la app de master:
 
 La fase 1 ordena el recorrido del mentor (Mis grupos → Mi grupo → ficha) para que en una pantalla vea quién necesita ayuda, qué cumplió cada uno y pueda actuar en un toque.
 
+## Aclaraciones
+
+### Sesión 2026-11-17
+
+- P: ¿Dónde leen las notas privadas el líder y Administración, y pueden escribir? → R: Solo leen, desde la ficha del aprendiz que ya abren en sus paneles, con el mismo lápiz; escribe solo el mentor que lo acompaña hoy.
+- P: Con un solo grupo, ¿se va directo al grupo o pasa por «Mis grupos»? → R: Directo al grupo; «Mis grupos» aparece con dos o más.
+- P: Al abrir la ficha, ¿qué pilar va desplegado? → R: El primer pilar con hábitos pendientes o vencidos; los demás cerrados.
+- P: Dentro de un mismo color, ¿en qué orden salen los aprendices? → R: Del que menos cumplió en la semana al que más; a igualdad, por nombre.
+
 ## Escenarios de uso y pruebas *(obligatorio)*
 
 ### Historia 1 — Ver quién necesita ayuda en mi grupo (Prioridad: P1)
@@ -93,9 +102,10 @@ El ícono de lápiz junto al chat abre una hoja para escribir una nota privada s
 2. **Dado** el lápiz, **cuando** el mentor lo toca, **entonces** se abre una hoja desde abajo con un campo de texto, la aclaración «Solo la ven tú, tu líder y Administración» y, debajo, las notas anteriores con su fecha y su autor, de la más nueva a la más vieja.
 3. **Dado** una nota escrita, **cuando** el mentor toca «Guardar nota», **entonces** queda guardada con su fecha y su autor y aparece arriba de las anteriores.
 4. **Dado** una nota propia escrita hoy, **entonces** el mentor puede corregirla; de días anteriores, o escrita por otra persona, solo puede leerla. Ninguna nota se borra.
-5. **Dado** que el aprendiz cambia de mentor, **cuando** el mentor nuevo abre la ficha, **entonces** ve las notas del mentor anterior (con su nombre) y no puede corregirlas.
-6. **Dado** el aprendiz, **entonces** nunca ve las notas en ninguna parte de la app.
-7. **Dado** una nota vacía o solo con espacios, **entonces** no se puede guardar y se dice qué falta.
+5. **Dado** el líder del mentor o Administración, **cuando** abren la ficha del aprendiz en sus paneles, **entonces** ven el lápiz y leen las notas, sin poder escribir ni corregir.
+6. **Dado** que el aprendiz cambia de mentor, **cuando** el mentor nuevo abre la ficha, **entonces** ve las notas del mentor anterior (con su nombre) y no puede corregirlas.
+7. **Dado** el aprendiz, **entonces** nunca ve las notas en ninguna parte de la app.
+8. **Dado** una nota vacía o solo con espacios, **entonces** no se puede guardar y se dice qué falta.
 
 ---
 
@@ -152,7 +162,7 @@ El ícono de lápiz junto al chat abre una hoja para escribir una nota privada s
 **Nota privada**
 
 - **FR-023**: El mentor que acompaña hoy a un aprendiz puede escribir notas privadas sobre él; cada nota guarda su texto, su autor y su fecha y hora.
-- **FR-024**: Leen las notas de un aprendiz: el mentor que lo acompaña hoy (todas, también las de mentores anteriores), el líder de ese mentor y Administración. El aprendiz y cualquier otro rol nunca las leen.
+- **FR-024**: Leen las notas de un aprendiz: el mentor que lo acompaña hoy (todas, también las de mentores anteriores), el líder de ese mentor y Administración. El líder y Administración solo leen, desde la ficha del aprendiz que ya abren en sus paneles y con el mismo ícono de lápiz; no escriben. El aprendiz y cualquier otro rol nunca las leen.
 - **FR-025**: El autor puede corregir su nota solo el mismo día en que la escribió (día del autor); después, y para cualquier otra persona, es solo lectura. Ninguna nota se borra; una corrección conserva el texto anterior en el historial.
 - **FR-026**: Una nota no puede estar vacía ni pasar de 2000 caracteres; el campo lo dice antes de guardar.
 - **FR-027**: La hoja de notas muestra la aclaración de quién la ve, el campo de texto y, debajo, las notas anteriores de la más nueva a la más vieja, con fecha y autor.
@@ -190,8 +200,6 @@ El ícono de lápiz junto al chat abre una hoja para escribir una nota privada s
 ## Supuestos
 
 - Se reutiliza lo que ya existe: la semana del aprendiz por fecha, el semáforo diario y del grupo, el enlace firmado de la evidencia, la conversación 1 a 1, las vistas de Código Renaser, Diagnóstico, 80/20 y Tiempo libre, y los componentes de hoja desde abajo de la app. Lo nuevo de servidor es solo la nota privada.
-- Con un solo grupo activo se entra directo al grupo (FR-002): la lista de un solo elemento sería un toque de más.
-- El líder y Administración leen las notas desde la ficha del aprendiz que ya abren hoy en sus paneles; no se crea una pantalla nueva para ellos en esta fase.
 - «El mismo día» de una nota es el día del autor (su zona), porque es el autor quien corrige.
 - El límite de 2000 caracteres alcanza para una nota de seguimiento; se puede ajustar sin cambiar la spec.
 - Cambia el tab Yo (la fila de entrada) y la vista de Comunidad → Tribu del mentor: es un cambio pedido y aprobado por el dueño el 17/11 con los bocetos (se anota en `docs/decisiones/` de la app).
