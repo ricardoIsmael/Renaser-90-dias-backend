@@ -48,4 +48,9 @@ public class LiderazgoDePrueba {
     ReporteDeMentoresService reporteDeMentoresService(BancoDeLiderazgo banco) {
         return banco.reporte();
     }
+
+    @Bean
+    PorResolverService porResolverService(BancoDeLiderazgo banco) {
+        return banco.porResolver();
+    }
 }

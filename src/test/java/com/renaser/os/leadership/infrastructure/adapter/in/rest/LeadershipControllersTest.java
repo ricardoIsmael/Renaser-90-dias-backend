@@ -107,6 +107,93 @@ class LeadershipControllersTest {
                 .andExpect(content().string(not(containsString(ANA.toString()))));
     }
 
+    // ── Spec 056: el cupo, los colores y «por resolver» ────────────────────
+
+    @Test
+    @DisplayName("spec 056 FR-003: el padrón trae por mentor su cupo y sus aprendices por color, sin cambiar lo que ya traía")
+    void padronConCupoYPorColor() throws Exception {
+        banco.grupo(FENIX, "Grupo Fénix", LUISA, List.of(ANA));
+
+        pedir(PADRON, LIDER)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mentors[0].cupo.acompanados").value(1))
+                .andExpect(jsonPath("$.mentors[0].cupo.maximo").value(10))
+                .andExpect(jsonPath("$.mentors[0].porColor.verde").value(1))
+                .andExpect(jsonPath("$.mentors[0].porColor.rojo").value(0))
+                .andExpect(jsonPath("$.mentors[0].porColor.ambar").value(0))
+                .andExpect(jsonPath("$.mentors[0].porColor.sinDatos").value(0))
+                .andExpect(jsonPath("$.mentors[0].traineeCount").value(1))
+                .andExpect(jsonPath("$.mentors[1].cupo.acompanados").value(0))
+                .andExpect(jsonPath("$.mentors[1].cupo.maximo").value(0));
+    }
+
+    @Test
+    @DisplayName("spec 056 FR-003: la ficha del mentor trae el mismo cupo y los mismos colores en su bloque «mentor»")
+    void fichaConCupoYPorColor() throws Exception {
+        banco.grupo(FENIX, "Grupo Fénix", LUISA, List.of(ANA));
+
+        pedir(PADRON + "/" + LUISA, LIDER)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mentor.cupo.acompanados").value(1))
+                .andExpect(jsonPath("$.mentor.cupo.maximo").value(10))
+                .andExpect(jsonPath("$.mentor.porColor.verde").value(1));
+    }
+
+    @Test
+    @DisplayName("spec 056 RL-21: con el cupo de los grupos caído el cupo viaja en null y lo demás del padrón se entrega")
+    void padronSinElCupo() throws Exception {
+        banco.grupo(FENIX, "Grupo Fénix", LUISA, List.of(ANA));
+        banco.cuposCaidos = true;
+
+        pedir(PADRON, LIDER)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mentors[0].cupo").value(nullValue()))
+                .andExpect(jsonPath("$.mentors[0].porColor.verde").value(1))
+                .andExpect(jsonPath("$.mentors[0].traineeCount").value(1));
+    }
+
+    @Test
+    @DisplayName("spec 056 FR-002: por-resolver trae los grupos sin mentor, las consultas con los días de la más vieja y el peor mentor, y ningún aprendiz")
+    void porResolver() throws Exception {
+        banco.grupo(FENIX, "Grupo Fénix", LUISA, List.of(ANA));
+        banco.grupoSinMentor(UUID.fromString("00000000-0000-0000-0000-00000000f0a1"), "Huérfano", com.renaser.os.shared.domain.Formacion.ESCUELA);
+        banco.evaluacion(LUISA, "42.0");
+
+        pedir(PADRON + "/por-resolver", LIDER)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.gruposSinMentor").value(1))
+                .andExpect(jsonPath("$.consultas.cantidad").value(1))
+                .andExpect(jsonPath("$.consultas.diasDeLaMasVieja").value(1))
+                .andExpect(jsonPath("$.peorMentor.id").value(LUISA.toString()))
+                .andExpect(jsonPath("$.peorMentor.nombre").value("Luisa Rojas"))
+                .andExpect(jsonPath("$.peorMentor.evaluacion").value(42.0))
+                .andExpect(content().string(not(containsString("Ana Pérez"))))
+                .andExpect(content().string(not(containsString(ANA.toString()))));
+    }
+
+    @Test
+    @DisplayName("spec 056 FR-002: sin nada que resolver, por-resolver trae ceros, sin días y sin peor mentor")
+    void porResolverSinNada() throws Exception {
+        banco.pendientes.clear();
+
+        pedir(PADRON + "/por-resolver", ALQUIMISTA)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.gruposSinMentor").value(0))
+                .andExpect(jsonPath("$.consultas.cantidad").value(0))
+                .andExpect(jsonPath("$.consultas.diasDeLaMasVieja").value(nullValue()))
+                .andExpect(jsonPath("$.peorMentor").value(nullValue()));
+    }
+
+    @Test
+    @DisplayName("spec 056 FR-042: por-resolver da 403 a un mentor y a un aprendiz, y a un líder suspendido aunque su token sea válido")
+    void porResolverSinPermiso() throws Exception {
+        pedir(PADRON + "/por-resolver", LUISA).andExpect(status().isForbidden());
+        pedir(PADRON + "/por-resolver", ANA).andExpect(status().isForbidden());
+        banco.usuario(LIDER, "Líder", UserRole.MENTOR_LEAD, UserStatus.SUSPENDED);
+
+        pedir(PADRON + "/por-resolver", LIDER).andExpect(status().isForbidden());
+    }
+
     @Test
     @DisplayName("ficha: perfil y observaciones; un aprendiz no tiene ficha (404)")
     void ficha() throws Exception {

@@ -3,6 +3,7 @@ package com.renaser.os.leadership.infrastructure.adapter.in.rest;
 import com.renaser.os.leadership.application.ports.in.ConsultarFichaDeMentorUseCase;
 import com.renaser.os.leadership.application.ports.in.ConsultarObservacionesUseCase;
 import com.renaser.os.leadership.application.ports.in.ConsultarPadronDeMentoresUseCase;
+import com.renaser.os.leadership.application.ports.in.ConsultarPorResolverUseCase;
 import com.renaser.os.leadership.application.ports.in.RegistrarObservacionUseCase;
 import com.renaser.os.leadership.application.ports.in.RegistrarObservacionUseCase.RegistrarObservacionCommand;
 import com.renaser.os.shared.domain.Permission;
@@ -26,7 +27,7 @@ import java.util.UUID;
 
 /**
  * La gestión del cuerpo de mentores por el Líder de Mentores (SDD 002; D-241): padrón, ficha y
- * observaciones.
+ * observaciones; y, desde la spec 056, lo que tiene que resolver hoy ({@code GET /por-resolver}).
  *
  * <p>El permiso declarado no alcanza solo: MENTOR pasa el interceptor sin que se le mire nada (A-1) y
  * MENTOR_LEAD está en modo sombra. Quien decide es {@code AccesoDeLiderazgo}: MENTOR_LEAD, ADMIN o
@@ -43,20 +44,29 @@ public class LeadershipMentorsController {
     private final ConsultarFichaDeMentorUseCase ficha;
     private final ConsultarObservacionesUseCase observaciones;
     private final RegistrarObservacionUseCase registrar;
+    private final ConsultarPorResolverUseCase porResolver;
 
     public LeadershipMentorsController(ConsultarPadronDeMentoresUseCase padron, ConsultarFichaDeMentorUseCase ficha,
-                                       ConsultarObservacionesUseCase observaciones,
-                                       RegistrarObservacionUseCase registrar) {
+                                       ConsultarObservacionesUseCase observaciones, RegistrarObservacionUseCase registrar,
+                                       ConsultarPorResolverUseCase porResolver) {
         this.padron = padron;
         this.ficha = ficha;
         this.observaciones = observaciones;
         this.registrar = registrar;
+        this.porResolver = porResolver;
     }
 
     @RequiresPermission(value = Permission.VIEW_MENTOR_CORPS, scope = GUARD)
     @GetMapping
     public MentorRosterResponse padron(@ActorAutenticado UserId actorId) {
         return MentorRosterResponse.from(padron.padron(actorId));
+    }
+
+    /** Spec 056, FR-002. La ruta fija gana sobre {@code /{mentorId}}: «por-resolver» no es un id. */
+    @RequiresPermission(value = Permission.VIEW_MENTOR_CORPS, scope = GUARD)
+    @GetMapping("/por-resolver")
+    public PorResolverResponse porResolver(@ActorAutenticado UserId actorId) {
+        return PorResolverResponse.from(porResolver.porResolver(actorId));
     }
 
     @RequiresPermission(value = Permission.VIEW_MENTOR_CORPS, scope = GUARD)
