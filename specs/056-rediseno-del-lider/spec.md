@@ -37,6 +37,8 @@ Esta spec ordena el recorrido del líder (Mis mentores → mentor → grupo → 
 - P: ¿Qué se construye ahora? → R: Las 6 historias, en una entrega.
 - P: Cuando el líder responde una consulta, ¿qué ve el aprendiz? → R: Que respondió el líder, con su nombre; el mentor también la ve.
 - P: ¿El mentor puede descargar el documento semanal de sus aprendices? → R: Sí, de los que acompaña hoy, desde su ficha del aprendiz.
+- P: Si el chat falla al entregar una observación, ¿se guarda? → R: No; el líder ve el motivo y la reintenta (nunca queda una observación que el mentor no recibió).
+- P: ¿Cuántos avisos le llegan al mentor por una observación o un «Avisar a su mentor»? → R: Uno solo, el del mensaje del chat.
 - P: ¿Cómo se calcula el cupo de un mentor? → R: Aprendices que acompaña hoy sobre la suma de los cupos de sus grupos (el servidor guarda el cupo por grupo, no por mentor).
 
 ## Escenarios de uso y pruebas *(obligatorio)*
@@ -187,7 +189,7 @@ El líder ve las consultas sin responder y le recuerda al mentor o responde él;
 - **FR-016**: Debajo de los pilares, en el mismo estilo plegable: objetivos con su avance, caja, Código Renaser, 80/20 de SER, tiempo libre y cierres, y la evaluación de su mentor.
 - **FR-017**: El líder ve los días del aprendiz desde su día 1, esté o no en un grupo, siempre que sea de una formación que el líder tiene activa.
 - **FR-018**: El color de cada día que ve el líder es el mismo estado diario que ve el mentor.
-- **FR-019**: «Avisar a su mentor» abre una hoja con un mensaje sugerido editable; al enviar, el mentor recibe un aviso en su teléfono y el mensaje en su chat con el líder, con el enlace a la ficha. Sin mentor, el botón no se muestra.
+- **FR-019**: «Avisar a su mentor» abre una hoja con un mensaje sugerido editable; al enviar, el mentor recibe el mensaje en su chat con el líder, con el enlace a la ficha, y el aviso de ese mensaje en su teléfono (un solo aviso). Sin mentor, el botón no se muestra.
 - **FR-020**: La ficha tiene «Descargar semana» (FR-039).
 
 **Ficha del mentor**
@@ -196,7 +198,7 @@ El líder ve las consultas sin responder y le recuerda al mentor o responde él;
 - **FR-022**: Si el mentor no sigue su programa, en lugar de la semana y los pilares va una línea que lo dice (regla #202); si su cuenta está suspendida, la ficha solo dice eso.
 - **FR-023**: En la cabecera, en lugar de la nota, una estrella que abre «Reconocer, sugerir o alertar», y el chat.
 - **FR-024**: Debajo, la sección «Como mentor» con el mismo estilo plegable: sus grupos (cada uno con su barra de colores), su evaluación del mes, las evaluaciones que debe, sus consultas sin responder con los días, y «Lo que le dijiste».
-- **FR-025**: Al guardar un reconocimiento, una sugerencia o una alerta, el mentor recibe un aviso en su teléfono y el texto en su chat con el líder; la observación queda en «Lo que le dijiste».
+- **FR-025**: Al guardar un reconocimiento, una sugerencia o una alerta, el mentor recibe el texto en su chat con el líder y el aviso de ese mensaje (un solo aviso); si el mensaje no se puede entregar, la observación no se guarda y el líder ve el motivo. La observación queda en «Lo que le dijiste».
 - **FR-026**: La ficha del mentor tiene «Descargar semana» (FR-039), «Alertar» y «Programar sesión» (FR-033).
 
 **Objetivos**

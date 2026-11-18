@@ -14,6 +14,9 @@ import java.util.UUID;
  * crea otro aviso ni otro push.
  *
  * <p>El aviso no lleva el texto ({@link ObservacionDelLiderEvent}); apunta al chat donde quedó.
+ *
+ * <p><b>Sin push propio (decisión del dueño, 2026-11-18):</b> al mentor le llega un solo aviso, el del mensaje del chat; el evento queda
+ * como constancia de la entrega y nadie lo convierte en notificación.
  */
 @Component
 class AvisosDeObservaciones {
