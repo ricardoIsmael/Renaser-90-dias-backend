@@ -41,8 +41,8 @@
 - [x] T025 `ObservacionDelLiderEvent` + listener push en `notifications` + mensaje por `MensajeDirectoPort` desde `ObservacionesDeMentorService`
 - [x] T026 Prueba que falla: `POST /leadership/people/{p}/avisar-al-mentor` (mensaje con enlace + aviso, `SIN_MENTOR`, idempotente por `operationKey`) (FR-019)
 - [x] T027 Implementar avisar al mentor
-- [ ] T028 Prueba que falla: el líder de la formación responde una consulta; `respondidoPor {id, nombre}`; el aprendiz recibe el aviso; `POST /leadership/tickets/{id}/recordar` (FR-029, FR-030)
-- [ ] T029 Relajar `TicketMentorService.responder` para el líder de la formación, exponer `respondidoPor`, endpoint `recordar`
+- [x] T028 Prueba que falla: el líder de la formación responde una consulta; `respondidoPor {id, nombre}`; el aprendiz recibe el aviso; `POST /leadership/tickets/{id}/recordar` (FR-029, FR-030)
+- [x] T029 Relajar `TicketMentorService.responder` para el líder de la formación, exponer `respondidoPor`, endpoint `recordar`
 
 ### Carril BC — documento (después de T013) 
 
