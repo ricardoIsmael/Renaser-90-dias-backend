@@ -110,7 +110,7 @@ class NotasDelAprendizIT extends EscenarioDelMentorIT {
         UUID nueva = usuario("MENTOR", "Nora Nueva", "ACTIVO");
         jdbc.update("INSERT INTO renaser.perfiles_mentor (usuario_id) VALUES (?) ON CONFLICT DO NOTHING", nueva);
         jdbc.update("UPDATE renaser.celulas SET mentor_id = ? WHERE id = ?", nueva, fenix);
-        asignarDesde(fenix, nueva, "MENTOR", "now() - interval '20 minutes'");
+        asignarDesde(fenix, nueva, "MENTOR", "TIMESTAMPTZ '2026-11-18 14:40:00+00'");
 
         JsonNode lista = cuerpo(get(notas(fenix, ana), nueva)).get("notas");
         assertThat(lista).hasSize(1);

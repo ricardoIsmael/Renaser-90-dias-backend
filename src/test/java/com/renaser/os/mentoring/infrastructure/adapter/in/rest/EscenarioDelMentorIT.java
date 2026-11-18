@@ -29,7 +29,11 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * El escenario de las pruebas de integración de la ficha del mentor (spec 055) sobre el Tomcat real, con sesión de verdad y todo
+ * <b>Todas las fechas y horas se fijan respecto de {@link #AHORA}</b>, el reloj de la prueba, y no de {@code now()} ni de {@code CURRENT_DATE}: el reloj queda quieto
+ * el 18 de noviembre de 2026 pero la base sigue la hora real, y una asignación que «empieza hace una hora» según la base deja de ser vigente para el reloj de la
+ * prueba en cuanto la hora real lo pasa (las pruebas pasaban solo la mañana en que se escribieron).
+ *
+ * <p>El escenario de las pruebas de integración de la ficha del mentor (spec 055) sobre el Tomcat real, con sesión de verdad y todo
  * en Postgres: el grupo «Fénix» con su mentora y su aprendiz Ana (Día 1 el lunes 5 de octubre), otro grupo con otra mentora, y
  * quienes no tienen nada que ver (líder, Administración, la propia aprendiz). Hoy es el miércoles 18 de noviembre de 2026 a las
  * 10:00 en Lima.
@@ -70,7 +74,7 @@ abstract class EscenarioDelMentorIT {
     void sembrarElEscenario() {
         reloj.fijar(AHORA);
         cohorte = UUID.randomUUID();
-        jdbc.update("INSERT INTO renaser.cohortes (id, nombre, fecha_inicio) VALUES (?, 'Cohorte spec 055', CURRENT_DATE - 60)", cohorte);
+        jdbc.update("INSERT INTO renaser.cohortes (id, nombre, fecha_inicio) VALUES (?, 'Cohorte spec 055', DATE '2026-09-19')", cohorte);
         mentora = usuario("MENTOR", "Luisa Rojas", "ACTIVO");
         otraMentora = usuario("MENTOR", "Marta Otra", "ACTIVO");
         ana = usuario("APRENDIZ", "Ana Pérez", "ACTIVO");
@@ -128,14 +132,14 @@ abstract class EscenarioDelMentorIT {
         UUID id = UUID.randomUUID();
         jdbc.update("""
                 INSERT INTO renaser.celulas (id, nombre, cohorte_id, tipo, periodo_inicio, periodo_fin, mentor_id)
-                VALUES (?, ?, ?, CAST('REGULAR' AS renaser.tipo_celula), CURRENT_DATE - 30, CURRENT_DATE + 60, ?)
+                VALUES (?, ?, ?, CAST('REGULAR' AS renaser.tipo_celula), DATE '2026-10-19', DATE '2027-01-17', ?)
                 """, id, nombre, cohorte, mentor);
         grupos.add(id);
         return id;
     }
 
     void asignar(UUID grupo, UUID usuario, String funcion) {
-        asignarDesde(grupo, usuario, funcion, "now() - interval '1 hour'");
+        asignarDesde(grupo, usuario, funcion, "TIMESTAMPTZ '2026-11-17 15:00:00+00'");
     }
 
     /** @param inicio expresión SQL del inicio de la asignación */
@@ -147,9 +151,9 @@ abstract class EscenarioDelMentorIT {
                 """.formatted(inicio), id, grupo, usuario, funcion, "prueba|" + id);
     }
 
-    /** Termina hoy la asignación del usuario en el grupo: ya no lo acompaña ni es de él. */
+    /** Termina hoy la asignación del usuario en el grupo (a las 09:30 de Lima, media hora antes del reloj de la prueba): ya no lo acompaña ni es de él. */
     void terminarAsignacion(UUID grupo, UUID usuario) {
-        jdbc.update("UPDATE renaser.asignaciones_celula SET fin = now() - interval '30 minutes' WHERE celula_id = ? AND usuario_id = ?", grupo, usuario);
+        jdbc.update("UPDATE renaser.asignaciones_celula SET fin = TIMESTAMPTZ '2026-11-18 14:30:00+00' WHERE celula_id = ? AND usuario_id = ?", grupo, usuario);
         jdbc.update("UPDATE renaser.celulas SET mentor_id = NULL WHERE id = ? AND mentor_id = ?", grupo, usuario);
     }
 
