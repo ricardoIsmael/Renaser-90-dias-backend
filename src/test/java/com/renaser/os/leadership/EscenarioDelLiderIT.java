@@ -36,9 +36,12 @@ import java.util.UUID;
  * mentor que lleva su propio programa y otro que no; el líder y Administración. Dani cursa el Diplomado: el líder de la Escuela no lo ve.
  *
  * <p>Se pide con el token de sesión de cada persona, nunca con el header {@code X-Actor-Id}.
+ *
+ * <p>El almacenamiento es uno en memoria ({@link AlmacenamientoDeLasPruebasDelLider}): las pruebas del documento semanal (spec 056) leen lo que se subió.
+ * Vive aquí y no en cada prueba para que todas compartan UN contexto de Spring (E-649).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import(TestcontainersConfiguration.class)
+@Import({TestcontainersConfiguration.class, AlmacenamientoDeLasPruebasDelLider.class})
 abstract class EscenarioDelLiderIT {
 
     /** Miércoles 18 de noviembre de 2026, 10:00 en Lima. */
