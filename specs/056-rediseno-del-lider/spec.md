@@ -32,6 +32,12 @@ Esta spec ordena el recorrido del líder (Mis mentores → mentor → grupo → 
 - P: ¿Cómo es la ficha del mentor? → R: La misma ficha del aprendiz de la 055 con sus propios datos, y debajo lo suyo como mentor con el mismo estilo.
 - P: ¿Las pantallas llevan textos de ayuda? → R: No: nada de guías ni párrafos de relleno; cifras, nombres y botones.
 
+### Sesión 2026-11-18 (aclarar)
+
+- P: ¿Qué se construye ahora? → R: Las 6 historias, en una entrega.
+- P: Cuando el líder responde una consulta, ¿qué ve el aprendiz? → R: Que respondió el líder, con su nombre; el mentor también la ve.
+- P: ¿El mentor puede descargar el documento semanal de sus aprendices? → R: Sí, de los que acompaña hoy, desde su ficha del aprendiz.
+
 ## Escenarios de uso y pruebas *(obligatorio)*
 
 ### Historia 1 — Ver qué hay que resolver hoy (Prioridad: P1)
@@ -200,7 +206,7 @@ El líder ve las consultas sin responder y le recuerda al mentor o responde él;
 
 - **FR-028**: Consultas muestra «Sin responder» y «Respondidas»; cada consulta dice quién pregunta, a qué mentor le toca y hace cuántos días.
 - **FR-029**: «Recordar al mentor» le manda al mentor, en su chat con el líder, un mensaje con la consulta.
-- **FR-030**: «Responder yo» deja al líder responder la consulta; el aprendiz recibe la respuesta y la consulta pasa a «Respondidas».
+- **FR-030**: «Responder yo» deja al líder responder la consulta; el aprendiz recibe la respuesta con el nombre del líder, el mentor la ve en su bandeja y la consulta pasa a «Respondidas».
 
 **Reporte del mes**
 
@@ -229,6 +235,7 @@ El líder ve las consultas sin responder y le recuerda al mentor o responde él;
 - **FR-044**: Toda acción tiene un botón visible de 44 a 48 de alto; deslizar, si existe, es solo un atajo.
 - **FR-045**: Las pantallas del líder no tienen textos de ayuda ni párrafos de relleno: cifras, nombres, estados y botones.
 - **FR-046**: Toda subpantalla, hoja o paso del asistente responde al gesto de volver del sistema yendo un nivel atrás; nunca cierra la app.
+- **FR-047**: La ficha del aprendiz que ve el mentor (055) suma «Descargar semana» para los aprendices que acompaña hoy.
 
 ### Entidades clave
 
