@@ -124,7 +124,8 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
     @Override
     @Transactional
     public CelulaDetalle crear(CrearCelulaCommand command) {
-        requireAdmin(command.actorId());
+        UserSummary actor = requireGestor(command.actorId());
+        formacionDelGrupo.exigirQueLaGestione(actor, command.formacionEfectiva());
         requireCohorte(command.cohorteId());
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD sec. 5.4.7).
         Celula celula = Celula.crear(CelulaId.of(idGenerator.newId()), command.nombre(), command.cohorteId(),
@@ -181,8 +182,8 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
                     .filter(c -> c.cohorteId().equals(cohorteId))
                     .toList());
         } else {
-            requireRolAdmin(actor);
-            celulas = loadCelulaPort.porCohorte(cohorteId);
+            formacionDelGrupo.exigirQueGestioneGrupos(actor);
+            celulas = formacionDelGrupo.gestionablesPor(actor, loadCelulaPort.porCohorte(cohorteId));
         }
         return celulas.stream().map(this::aResumen).toList();
     }
@@ -200,7 +201,8 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
                 throw new NotAuthorizedException("No lideras esta celula");
             }
         } else {
-            requireRolAdmin(actor);
+            formacionDelGrupo.exigirQueGestioneGrupos(actor);
+            formacionDelGrupo.exigirQueLaGestione(actor, celula.formacion());
         }
         return aDetalle(celula);
     }
@@ -280,22 +282,28 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
      * Solo ADMIN/ALCHEMIST: un MENTOR sigue viendo la propia por {@code GET /me/cell}. */
     @Override
     public List<CelulaConCohorte> dashboard(UserId actorId, Formacion formacion) {
-        requireAdmin(actorId);
-        return loadCelulaPort.todas().stream()
+        UserSummary actor = requireGestor(actorId);
+        List<Celula> pedidos = loadCelulaPort.todas().stream()
                 .filter(celula -> formacion == null || celula.formacion() == formacion)
-                .map(this::aCelulaConCohorte).toList();
+                .toList();
+        // Spec 056 (FR-010): el líder arma sus grupos en este mismo tablero, pero solo ve los de sus formaciones.
+        return formacionDelGrupo.gestionablesPor(actor, pedidos).stream().map(this::aCelulaConCohorte).toList();
     }
 
-    /** Spec 022: el selector de un grupo ofrece solo a las personas de SU formación; {@code null} = todas. */
-    private List<UserId> deLaFormacion(List<UserId> candidatos, Formacion formacion) {
-        return formacion == null ? candidatos : formacionDelGrupo.soloDe(formacion, candidatos);
+    /**
+     * Spec 022: el selector de un grupo ofrece solo a las personas de SU formación; {@code null} = todas. Spec 056: al líder, además, solo las de
+     * sus formaciones.
+     */
+    private List<UserId> deLaFormacion(UserSummary actor, List<UserId> candidatos, Formacion formacion) {
+        return formacionDelGrupo.ofrecibles(actor, formacion, candidatos);
     }
 
+    /** Spec 056 (FR-008): cada grupo del tablero dice su cupo máximo ({@code null} en recepción, que no tiene tope), para que el asistente apague los llenos. */
     private CelulaConCohorte aCelulaConCohorte(Celula celula) {
         int cantidad = consultarMiembrosCelulaPort.contarMiembros(celula.id());
         PerfilBasico mentor = perfilDelMentor(celula);
         Cohorte cohorte = requireCohorte(celula.cohorteId());
-        return new CelulaConCohorte(celula, cantidad, mentor, cohorte);
+        return new CelulaConCohorte(celula, cantidad, mentor, cohorte, cupoMaximo(celula));
     }
 
     /** #25: mentores ACTIVOS que hoy no lideran ninguna celula — candidatos del selector
@@ -303,9 +311,9 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
      * tocar `perfiles_mentor` (tabla ajena, mismo criterio que {@link #asignar}). */
     @Override
     public List<MentorCandidato> mentoresDisponibles(UserId actorId, Formacion formacion) {
-        requireAdmin(actorId);
+        UserSummary actor = requireGestor(actorId);
         Set<UserId> yaLideran = mentoresQueYaLideran();
-        List<UserId> disponibles = deLaFormacion(
+        List<UserId> disponibles = deLaFormacion(actor,
                 mentoresActivos().stream().filter(id -> !yaLideran.contains(id)).toList(), formacion);
         Map<UserId, EspecialidadMentor> especialidades = especialidadesDe(disponibles);
         return disponibles.stream().map(id -> aMentorCandidato(id, List.of(), especialidades.get(id))).toList();
@@ -316,9 +324,9 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
      * (mismo criterio que el frontend ya documenta para este picker). */
     @Override
     public List<MentorCandidato> mentores(UserId actorId, Formacion formacion) {
-        requireAdmin(actorId);
+        UserSummary actor = requireGestor(actorId);
         Map<UserId, List<CelulaId>> celulasPorMentor = celulasPorMentor();
-        List<UserId> todos = deLaFormacion(mentoresActivos(), formacion);
+        List<UserId> todos = deLaFormacion(actor, mentoresActivos(), formacion);
         Map<UserId, EspecialidadMentor> especialidades = especialidadesDe(todos);
         return todos.stream()
                 .map(id -> aMentorCandidato(id, celulasPorMentor.getOrDefault(id, List.of()),
@@ -355,9 +363,9 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
      * uno, {@link #celulaPorAprendiz()}. */
     @Override
     public List<AprendizCandidato> aprendicesDisponibles(UserId actorId, Formacion formacion) {
-        requireAdmin(actorId);
+        UserSummary actor = requireGestor(actorId);
         Map<UserId, CelulaId> grupoDeCadaUno = celulaPorAprendiz();
-        List<UserId> disponibles = deLaFormacion(aprendicesQueSePuedenAgregarAUnGrupo(), formacion);
+        List<UserId> disponibles = deLaFormacion(actor, aprendicesQueSePuedenAgregarAUnGrupo(), formacion);
         Map<UserId, UserSummary> resumenes = userSummaryFinder.findByIds(disponibles);
         return disponibles.stream()
                 .map(id -> {
@@ -563,8 +571,16 @@ public class CelulaService implements CrearCelulaUseCase, ActualizarCelulaUseCas
         return actor;
     }
 
+    /** Solo Administración y Alquimista: editar, programar sesión y eliminar un grupo no se le abrieron al líder (spec 056, FR-009 no los nombra). */
     private void requireAdmin(UserId actorId) {
         requireRolAdmin(requireActorActivo(actorId));
+    }
+
+    /** Quien arma grupos: Administración, Alquimista o el líder de mentores (spec 056, FR-010), con la cuenta activa. El alcance del líder lo acota {@link FormacionDelGrupo}. */
+    private UserSummary requireGestor(UserId actorId) {
+        UserSummary actor = requireActorActivo(actorId);
+        formacionDelGrupo.exigirQueGestioneGrupos(actor);
+        return actor;
     }
 
     private void requireRolAdmin(UserSummary actor) {

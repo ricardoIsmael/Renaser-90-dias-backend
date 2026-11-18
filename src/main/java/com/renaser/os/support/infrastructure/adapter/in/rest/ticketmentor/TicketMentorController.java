@@ -14,6 +14,7 @@ import com.renaser.os.support.application.ports.in.ticketmentor.GuardarEnBibliot
 import com.renaser.os.support.application.ports.in.ticketmentor.ListarTicketsMentorUseCase;
 import com.renaser.os.support.application.ports.in.ticketmentor.ResponderTicketMentorUseCase;
 import com.renaser.os.support.application.ports.in.ticketmentor.ResponderTicketMentorUseCase.ResponderTicketMentorCommand;
+import com.renaser.os.support.application.ports.in.ticketmentor.TicketConAutor;
 import com.renaser.os.support.domain.model.ticketmentor.TicketMentor;
 import com.renaser.os.support.domain.model.ticketmentor.TicketMentorId;
 import jakarta.validation.Valid;
@@ -67,11 +68,11 @@ public class TicketMentorController {
         return TicketsMentorPageResponse.from(listarUseCase.propios(actor, parseCursor(cursor)));
     }
 
-    @RequiresPermission(value = Permission.ANSWER_MENTOR_TICKET, scope = "solo el mentor asignado a ese aprendiz")
+    @RequiresPermission(value = Permission.ANSWER_MENTOR_TICKET, scope = "el mentor asignado a ese aprendiz o, desde el 18/11 (spec 056), el líder de mentores de su formación")
     @PostMapping("/{id}/answer")
     public TicketMentorResponse responder(@PathVariable UUID id, @ActorAutenticado UserId actor,
                                            @RequestBody @Valid ResponderTicketMentorRequest request) {
-        TicketMentor ticket = responderUseCase.responder(new ResponderTicketMentorCommand(TicketMentorId.of(id),
+        TicketConAutor ticket = responderUseCase.responder(new ResponderTicketMentorCommand(TicketMentorId.of(id),
                 actor, request.mentorAnswer()));
         return TicketMentorResponse.from(ticket);
     }
@@ -80,7 +81,7 @@ public class TicketMentorController {
     @PostMapping("/{id}/save-to-library")
     public TicketMentorResponse guardarEnBiblioteca(@PathVariable UUID id,
                                                       @ActorAutenticado UserId actor) {
-        TicketMentor ticket = guardarUseCase.guardar(new GuardarEnBibliotecaCommand(TicketMentorId.of(id),
+        TicketConAutor ticket = guardarUseCase.guardar(new GuardarEnBibliotecaCommand(TicketMentorId.of(id),
                 actor));
         return TicketMentorResponse.from(ticket);
     }

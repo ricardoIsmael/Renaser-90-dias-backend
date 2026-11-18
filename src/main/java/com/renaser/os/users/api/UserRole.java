@@ -102,6 +102,13 @@ public enum UserRole {
      * {@code MODERATE_WALL}. Gestionar el cuerpo de mentores no es administrar la plataforma
      * (SDD 002, CL-04).
      *
+     * <blockquote><b>Corregido 2026-11-18 (spec 056, FR-010; decision del dueño).</b> Esta lista nombra {@code MANAGE_CELLS}
+     * (y {@code MANAGE_CALENDAR}, que ya se le dio en la spec 044): CL-04 le negaba al lider armar grupos. <b>Desde el 18/11 el líder gestiona los grupos de sus
+     * formaciones, decisión del dueño, spec 056</b>: crea el grupo, asigna o cambia su mentor y suma o retira aprendices. El
+     * permiso solo abre la puerta; el alcance lo dan los servicios de {@code community}, que aceptan al lider unicamente en
+     * las formaciones que tiene activas (fuera: 403 {@code FUERA_DE_SU_ALCANCE}) y siguen reservando a Administracion
+     * editar, programar sesion y borrar un grupo. Lo demas de CL-04 sigue en pie.</blockquote>
+     *
      * <p>{@link Permission#EXPORT_RANKING} (D-278): descargar la imagen del podio; el dueño nombró al líder de
      * mentores, al alquimista, al administrador y a Soporte TI.
      *
@@ -113,6 +120,11 @@ public enum UserRole {
      * comportamiento actual exactamente igual</b>: el 403 lo da el interceptor en vez del
      * servicio. Los dos ultimos pertenecen a la misma familia que E-169 y se revisan cuando esa
      * decision se tome, no antes.
+     *
+     * <blockquote><b>Corregido 2026-11-18 (spec 056, FR-030; decision del dueño).</b> Esta lista nombra tambien
+     * {@code ANSWER_MENTOR_TICKET}. <b>Desde el 18/11 el lider de la formacion del aprendiz puede responder su consulta</b>
+     * ({@code TicketMentorService.responder}, que sigue exigiendo ser el mentor asignado o el lider de esa formacion): el
+     * permiso entra a la matriz para que la respuesta no se cierre el dia que se encienda el cumplimiento del lider.</blockquote>
      */
     private static final Set<Permission> PERMISOS_MENTOR_LEAD = EnumSet.of(
             Permission.USE_APP,
@@ -127,7 +139,11 @@ public enum UserRole {
             Permission.SET_MENTOR_OPERATIONAL_STATUS,
             Permission.EXPORT_RANKING,
             // Spec 044 (FR-001): el líder crea eventos para su gente y edita los de sus mentores; el servicio acota el alcance.
-            Permission.MANAGE_CALENDAR);
+            Permission.MANAGE_CALENDAR,
+            // Spec 056 (FR-010, decisión del dueño del 18/11): arma los grupos de sus formaciones; el servicio acota el alcance.
+            Permission.MANAGE_CELLS,
+            // Spec 056 (FR-030): responde la consulta de un aprendiz de su formación; el servicio acota el alcance.
+            Permission.ANSWER_MENTOR_TICKET);
 
     /**
      * Matriz de MENTOR y TRAINEE_GUIDE (spec 050, tramo H, FR-040; D-349): <b>una lista de permitidos, negada por

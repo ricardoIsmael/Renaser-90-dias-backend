@@ -88,7 +88,13 @@ public enum Permission {
     /** Guard: {@code CategoriaMuroService.requireAdmin} -> "Solo ADMIN/ALCHEMIST administran categorias del Muro". */
     MANAGE_WALL_CATEGORIES,
 
-    /** Guard: {@code CelulaService.requireAdmin} -> "Solo ADMIN/ALCHEMIST administran celulas". */
+    /**
+     * Guard: {@code CelulaService.requireAdmin} -> "Solo ADMIN/ALCHEMIST administran celulas".
+     *
+     * <p><b>Corregido 2026-11-18 (spec 056, FR-010).</b> Decia que era solo de ADMIN/ALCHEMIST. Desde el 18/11 tambien lo tiene el lider de mentores
+     * (decision del dueño): crear grupos, asignar su mentor y sumar o retirar aprendices, solo en las formaciones que tiene activas. Editar, programar
+     * sesion y borrar un grupo siguen siendo de Administracion; el filtro lo dan los servicios de {@code community}.
+     */
     MANAGE_CELLS,
 
     /** Guard: {@code CohorteService.requireAdmin} -> "Solo ADMIN/ALCHEMIST administran cohortes". */
@@ -301,6 +307,9 @@ public enum Permission {
      * Guard de rol: {@code requireRol(MENTOR)}. La restriccion de relacion — "Solo el mentor
      * asignado a ese aprendiz puede operar su ticket" — es {@code requireMentorScope} y se
      * queda en el servicio.
+     *
+     * <p><b>Corregido 2026-11-18 (spec 056, FR-030).</b> Desde el 18/11 tambien el lider de mentores puede responder la consulta de un aprendiz de
+     * SU formacion (decision del dueño); guardarla en la biblioteca sigue siendo del mentor asignado.
      */
     ANSWER_MENTOR_TICKET,
 

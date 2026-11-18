@@ -7,7 +7,9 @@ import java.util.List;
 public record TicketsMentorPageResponse(List<TicketMentorResponse> tickets, String nextCursor) {
 
     public static TicketsMentorPageResponse from(TicketsMentorPage page) {
-        List<TicketMentorResponse> tickets = page.tickets().stream().map(TicketMentorResponse::from).toList();
+        List<TicketMentorResponse> tickets = page.tickets().stream()
+                .map(ticket -> TicketMentorResponse.from(ticket, ticket.respondidoPor() == null ? null
+                        : page.nombresDeQuienRespondio().get(ticket.respondidoPor()))).toList();
         String nextCursor = page.nextCursor() != null ? page.nextCursor().toString() : null;
         return new TicketsMentorPageResponse(tickets, nextCursor);
     }

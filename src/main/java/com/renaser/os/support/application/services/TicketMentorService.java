@@ -11,12 +11,16 @@ import com.renaser.os.support.application.ports.in.ticketmentor.BuscarBiblioteca
 import com.renaser.os.support.application.ports.in.ticketmentor.GuardarEnBibliotecaUseCase;
 import com.renaser.os.support.application.ports.in.ticketmentor.ListarTicketsMentorUseCase;
 import com.renaser.os.support.application.ports.in.ticketmentor.ResponderTicketMentorUseCase;
+import com.renaser.os.support.application.ports.in.ticketmentor.TicketConAutor;
 import com.renaser.os.support.application.ports.out.ticketmentor.AprendicesDelAcompanantePort;
 import com.renaser.os.support.application.ports.out.ticketmentor.BuscarBibliotecaPort;
 import com.renaser.os.support.application.ports.out.ticketmentor.LoadTicketMentorPort;
 import com.renaser.os.support.application.ports.out.ticketmentor.SaveTicketMentorPort;
 import com.renaser.os.support.domain.model.ticketmentor.TicketMentor;
 import com.renaser.os.support.domain.model.ticketmentor.TicketMentorId;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
+import com.renaser.os.shared.domain.Formacion;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import com.renaser.os.users.api.ParticipacionPrograma;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.UserSummary;
@@ -28,7 +32,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 
@@ -45,6 +52,7 @@ public class TicketMentorService implements AbrirTicketMentorUseCase, ResponderT
     private final UserSummaryFinder userSummaryFinder;
     private final ParticipacionProgramaFinder participacionFinder;
     private final AprendicesDelAcompanantePort aprendicesDelAcompanante;
+    private final AlcanceDeFormacionFinder formaciones;
     private final ApplicationEventPublisher events;
     private final Clock clock;
     private final IdGenerator idGenerator;
@@ -52,7 +60,7 @@ public class TicketMentorService implements AbrirTicketMentorUseCase, ResponderT
     public TicketMentorService(LoadTicketMentorPort loadTicketMentorPort, SaveTicketMentorPort saveTicketMentorPort,
                                 BuscarBibliotecaPort buscarBibliotecaPort, UserSummaryFinder userSummaryFinder,
                                 ParticipacionProgramaFinder participacionFinder,
-                                AprendicesDelAcompanantePort aprendicesDelAcompanante,
+                                AprendicesDelAcompanantePort aprendicesDelAcompanante, AlcanceDeFormacionFinder formaciones,
                                 ApplicationEventPublisher events, Clock clock, IdGenerator idGenerator) {
         this.loadTicketMentorPort = loadTicketMentorPort;
         this.saveTicketMentorPort = saveTicketMentorPort;
@@ -60,6 +68,7 @@ public class TicketMentorService implements AbrirTicketMentorUseCase, ResponderT
         this.userSummaryFinder = userSummaryFinder;
         this.participacionFinder = participacionFinder;
         this.aprendicesDelAcompanante = aprendicesDelAcompanante;
+        this.formaciones = formaciones;
         this.events = events;
         this.clock = clock;
         this.idGenerator = idGenerator;
@@ -78,26 +87,62 @@ public class TicketMentorService implements AbrirTicketMentorUseCase, ResponderT
         return saved;
     }
 
+    /**
+     * Responde el mentor asignado al aprendiz (E-38) o, desde el 18/11 (spec 056, FR-030; decisión del dueño), el líder de mentores de la formación del
+     * aprendiz. El líder no tiene que ser «el asignado»: basta que el aprendiz sea de una de las formaciones que tiene activas, y fuera de ellas es 403
+     * {@code FUERA_DE_SU_ALCANCE}. Quien respondió queda en el ticket ({@code respondido_por}, V88) y de ahí sale el nombre que ve el aprendiz.
+     */
     @Override
     @Transactional
-    public TicketMentor responder(ResponderTicketMentorCommand command) {
-        requireActuaComoMentor(command.actorId(), "Solo el mentor asignado puede responder un ticket");
-        TicketMentor ticket = requireTicket(command.ticketId());
-        requireMentorAsignado(command.actorId(), ticket);
+    public TicketConAutor responder(ResponderTicketMentorCommand command) {
+        UserSummary actor = requireActor(command.actorId());
+        TicketMentor ticket;
+        if (actor.role() == UserRole.MENTOR_LEAD) {
+            ticket = requireTicket(command.ticketId());
+            exigirQueSeaDeSuFormacion(actor, ticket);
+        } else {
+            requireActuaComoMentor(command.actorId(), "Solo el mentor asignado puede responder un ticket");
+            ticket = requireTicket(command.ticketId());
+            requireMentorAsignado(command.actorId(), ticket);
+        }
         ticket.responder(command.respuesta(), command.actorId(), clock);
         TicketMentor saved = saveTicketMentorPort.save(ticket);
         events.publishEvent(new TicketMentorRespondidoEvent(saved.id().value(), saved.participanteId(), clock.now()));
-        return saved;
+        return conAutor(saved);
+    }
+
+    /** El líder solo responde a aprendices de las formaciones que tiene activas (spec 056, FR-030); el 403 lleva su código para que la app lo reconozca. */
+    private void exigirQueSeaDeSuFormacion(UserSummary lider, TicketMentor ticket) {
+        AlcanceDeFormacion alcance = formaciones.de(lider.id());
+        Set<Formacion> delAprendiz = formaciones.formacionesDe(ticket.participanteId());
+        if (delAprendiz.stream().noneMatch(alcance::incluye)) {
+            throw new NotAuthorizedException("Ese aprendiz es de otra formación: tú respondes solo las consultas de tus formaciones.",
+                    NotAuthorizedException.FUERA_DE_SU_ALCANCE);
+        }
+    }
+
+    private TicketConAutor conAutor(TicketMentor ticket) {
+        return new TicketConAutor(ticket, nombresDeQuienRespondio(List.of(ticket)).get(ticket.respondidoPor()));
+    }
+
+    /** Una sola lectura de cuentas para todos los tickets, nunca una por ticket; quien no está (cuenta borrada) no aparece. */
+    private Map<UserId, String> nombresDeQuienRespondio(Collection<TicketMentor> tickets) {
+        List<UserId> autores = tickets.stream().map(TicketMentor::respondidoPor).filter(java.util.Objects::nonNull).distinct().toList();
+        Map<UserId, String> nombres = new HashMap<>();
+        if (!autores.isEmpty()) {
+            userSummaryFinder.findByIds(autores).forEach((id, perfil) -> nombres.put(id, perfil.fullName()));
+        }
+        return nombres;
     }
 
     @Override
     @Transactional
-    public TicketMentor guardar(GuardarEnBibliotecaCommand command) {
+    public TicketConAutor guardar(GuardarEnBibliotecaCommand command) {
         requireActuaComoMentor(command.actorId(), "Solo el mentor asignado puede guardar en la biblioteca");
         TicketMentor ticket = requireTicket(command.ticketId());
         requireMentorAsignado(command.actorId(), ticket);
         ticket.guardarEnBiblioteca();
-        return saveTicketMentorPort.save(ticket);
+        return conAutor(saveTicketMentorPort.save(ticket));
     }
 
     @Override
@@ -148,7 +193,7 @@ public class TicketMentorService implements AbrirTicketMentorUseCase, ResponderT
         boolean hasMore = rows.size() > PAGE_SIZE;
         List<TicketMentor> page = hasMore ? rows.subList(0, PAGE_SIZE) : rows;
         Instant nextCursor = hasMore ? page.get(page.size() - 1).creadoEn() : null;
-        return new TicketsMentorPage(page, nextCursor);
+        return new TicketsMentorPage(page, nextCursor, nombresDeQuienRespondio(page));
     }
 
     private void requireRol(UserId actorId, UserRole requerido, String mensaje) {
