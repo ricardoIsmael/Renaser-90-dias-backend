@@ -22,14 +22,14 @@
 
 ### Carril BA — lecturas (`leadership`, sin migración) [P]
 
-- [ ] T010 Prueba que falla: `GET /leadership/people/{p}/dias` devuelve los colores del día igual que el `/dias` del mentor para la misma persona y rango, recorta a [Día 1, hoy] y da 403 fuera del alcance (FR-017, FR-018, SC-004)
-- [ ] T011 `DiasDeLaPersonaService` sobre `points.api.DiasDelSemaforoFinder` + controlador
-- [ ] T012 Prueba que falla: `GET /leadership/people/{p}/semana` con la forma de la 055 (sábado a viernes, `diaUno`, `pilar`), 404 `SIN_PROGRAMA` para un mentor que no sigue su programa (FR-014, FR-021, FR-022)
-- [ ] T013 `SemanaDeLaPersonaService` reutilizando el armado de la 055 por puerto + controlador
-- [ ] T014 Prueba que falla: `GET /leadership/people/{p}/objetivos` (aprendiz y mentor; solo lectura; 403 fuera del alcance) (FR-027)
-- [ ] T015 `ObjetivosDeLaPersonaService` sobre `rocks.api.RocasDelAprendizFinder` + controlador
-- [ ] T016 Prueba que falla: padrón y ficha del mentor traen `cupo {acompanados, maximo}` (suma de cupos de sus grupos) y `porColor`; `GET /leadership/mentors/por-resolver` (FR-002, FR-003, FR-004)
-- [ ] T017 Implementar cupo derivado, `porColor` y `por-resolver` (umbral 60 % del reporte)
+- [x] T010 Prueba que falla: `GET /leadership/people/{p}/dias` devuelve los colores del día igual que el `/dias` del mentor para la misma persona y rango, recorta a [Día 1, hoy] y da 403 fuera del alcance (FR-017, FR-018, SC-004)
+- [x] T011 `DiasDeLaPersonaService` sobre `points.api.DiasDelSemaforoFinder` + controlador
+- [x] T012 Prueba que falla: `GET /leadership/people/{p}/semana` con la forma de la 055 (sábado a viernes, `diaUno`, `pilar`), 404 `SIN_PROGRAMA` para un mentor que no sigue su programa (FR-014, FR-021, FR-022)
+- [x] T013 `SemanaDeLaPersonaService` reutilizando el armado de la 055 por puerto + controlador
+- [x] T014 Prueba que falla: `GET /leadership/people/{p}/objetivos` (aprendiz y mentor; solo lectura; 403 fuera del alcance) (FR-027)
+- [x] T015 `ObjetivosDeLaPersonaService` sobre `rocks.api.RocasDelAprendizFinder` + controlador
+- [x] T016 Prueba que falla: padrón y ficha del mentor traen `cupo {acompanados, maximo}` (suma de cupos de sus grupos) y `porColor`; `GET /leadership/mentors/por-resolver` (FR-002, FR-003, FR-004)
+- [x] T017 Implementar cupo derivado, `porColor` y `por-resolver` (umbral 60 % del reporte)
 
 ### Carril BB — acciones (`users`, `community`, `support`, `chat`, `notifications`) [P]
 
