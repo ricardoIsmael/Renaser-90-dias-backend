@@ -46,13 +46,13 @@
 
 ### Carril BC — documento (después de T013) 
 
-- [ ] T030 V199 `documentos_semanales` y `descargas_de_documentos` (data-model.md)
-- [ ] T031 Prueba que falla (dominio): `DocumentoSemanal` arma la ruta determinista y la huella SHA-256; misma huella → se reutiliza (FR-039)
-- [ ] T032 Prueba que falla (plantilla): el HTML del aprendiz trae las secciones de FR-035 en orden, escapa todo texto de personas, nunca contiene notas privadas ni «90 días» escrito; semana vacía → «Sin actividad esta semana» (FR-035, FR-037, FR-038)
-- [ ] T033 Prueba que falla (plantilla): el HTML del mentor trae FR-036 y, si sigue su programa, su semana
-- [ ] T034 `PlantillaDelDocumento` (text blocks + `HtmlUtils.htmlEscape`, A4 imprimible)
-- [ ] T035 Prueba que falla (servicio + REST): `POST /leadership/people/{p}/documento`, `/mentors/{id}/documento`, `/report/documento`; enlace de 10 minutos; registro de cada pedido; permisos por rol (mentor solo de los que acompaña hoy) (FR-032, FR-039, FR-040, FR-041, FR-047, SC-006, SC-007)
-- [ ] T036 `DocumentoSemanalService` (datos → huella → reutiliza o `subir(text/html)` → `firmarLectura(10 min)` → registra) + controladores
+- [x] T030 V199 `documentos_semanales` y `descargas_de_documentos` (data-model.md)
+- [x] T031 Prueba que falla (dominio): `DocumentoSemanal` arma la ruta determinista y la huella SHA-256; misma huella → se reutiliza (FR-039)
+- [x] T032 Prueba que falla (plantilla): el HTML del aprendiz trae las secciones de FR-035 en orden, escapa todo texto de personas, nunca contiene notas privadas ni «90 días» escrito; semana vacía → «Sin actividad esta semana» (FR-035, FR-037, FR-038)
+- [x] T033 Prueba que falla (plantilla): el HTML del mentor trae FR-036 y, si sigue su programa, su semana
+- [x] T034 `PlantillaDelDocumento` (text blocks + `HtmlUtils.htmlEscape`, A4 imprimible)
+- [x] T035 Prueba que falla (servicio + REST): `POST /leadership/people/{p}/documento`, `/mentors/{id}/documento`, `/report/documento`; enlace de 10 minutos; registro de cada pedido; permisos por rol (mentor solo de los que acompaña hoy) (FR-032, FR-039, FR-040, FR-041, FR-047, SC-006, SC-007)
+- [x] T036 `DocumentoSemanalService` (datos → huella → reutiliza o `subir(text/html)` → `firmarLectura(10 min)` → registra) + controladores
 
 **Punto de control servidor**: `scripts/verificar.sh` en verde (incluye `ArchitectureTest`); contratos de `contracts/api.md` cumplidos.
 
