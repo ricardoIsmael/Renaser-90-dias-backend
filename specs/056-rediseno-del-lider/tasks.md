@@ -33,8 +33,8 @@
 
 ### Carril BB — acciones (`users`, `community`, `support`, `chat`, `notifications`) [P]
 
-- [ ] T020 Cambiar `UserRoleTest.mentorLeadNoEsAdministrador` y `MatrizPorRolEnTodoEndpointTest` para exigir `MANAGE_CELLS` en MENTOR_LEAD (FR-010); prueba que falla: el líder crea grupo, asigna mentor y suma/retira aprendices de su formación y recibe 403 `FUERA_DE_SU_ALCANCE` en otra (FR-008, FR-009, FR-010)
-- [ ] T021 `MANAGE_CELLS` en `PERMISOS_MENTOR_LEAD`; `requireAdmin` de `CelulaService`, `SumarAprendizAGrupoService`, `SumarMentorAGrupoService`, `ComposicionDeCelulaService` acepta al líder dentro de `AlcanceDeFormacionFinder`; javadoc de `UserRole` con el rastro de CL-04 → decisión del 18/11; `capacity` en `CelulaDashboardResponse`
+- [x] T020 Cambiar `UserRoleTest.mentorLeadNoEsAdministrador` y `MatrizPorRolEnTodoEndpointTest` para exigir `MANAGE_CELLS` en MENTOR_LEAD (FR-010); prueba que falla: el líder crea grupo, asigna mentor y suma/retira aprendices de su formación y recibe 403 `FUERA_DE_SU_ALCANCE` en otra (FR-008, FR-009, FR-010)
+- [x] T021 `MANAGE_CELLS` en `PERMISOS_MENTOR_LEAD`; `requireAdmin` de `CelulaService`, `SumarAprendizAGrupoService`, `SumarMentorAGrupoService`, `ComposicionDeCelulaService` acepta al líder dentro de `AlcanceDeFormacionFinder`; javadoc de `UserRole` con el rastro de CL-04 → decisión del 18/11; `capacity` en `CelulaDashboardResponse`
 - [ ] T022 Prueba que falla: `chat.api.MensajeDirectoPort` abre o reutiliza la conversación 1 a 1 y guarda el mensaje (que dispara su push)
 - [ ] T023 Puerto `MensajeDirectoPort` en `chat/api` y adaptador sobre `CrearConversacionDirectaUseCase` + `EnviarMensajeUseCase`
 - [ ] T024 Prueba que falla: guardar una observación manda el mensaje y el aviso al mentor una sola vez (con `messageId` de una app vieja no reenvía) (FR-025, SC-005)

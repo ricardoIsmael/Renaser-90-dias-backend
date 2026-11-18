@@ -91,8 +91,9 @@ public class SumarMentorAGrupoService implements SumarMentorAGrupoUseCase {
     @Override
     @Transactional
     public CelulaDetalle sumar(SumarMentorAGrupoCommand command) {
-        requireAdmin(command.actorId());
+        UserSummary actor = requireGestor(command.actorId());
         Celula destino = requireCelula(command.celulaId());
+        formacionDelGrupo.exigirQueLaGestione(actor, destino.formacion());
         requireMentorElegible(command.mentorId(), destino);
 
         Instant ahora = clock.now();
@@ -199,14 +200,14 @@ public class SumarMentorAGrupoService implements SumarMentorAGrupoUseCase {
         return loadCelulaPort.porId(id).orElseThrow(() -> new NoSuchElementException("Celula no encontrada: " + id));
     }
 
-    private void requireAdmin(UserId actorId) {
+    /** Quien arma grupos: Administración, Alquimista o el líder de mentores (spec 056, FR-010), con la cuenta activa. El alcance del líder lo acota {@link FormacionDelGrupo}. */
+    private UserSummary requireGestor(UserId actorId) {
         UserSummary actor = userSummaryFinder.findById(actorId)
                 .orElseThrow(() -> new NoSuchElementException("Actor no encontrado: " + actorId));
         if (actor.status() != UserStatus.ACTIVE) {
             throw new NotAuthorizedException("La cuenta esta suspendida");
         }
-        if (actor.role() != UserRole.ADMIN && actor.role() != UserRole.ALCHEMIST) {
-            throw new NotAuthorizedException("Solo ADMIN/ALCHEMIST administran celulas");
-        }
+        formacionDelGrupo.exigirQueGestioneGrupos(actor);
+        return actor;
     }
 }

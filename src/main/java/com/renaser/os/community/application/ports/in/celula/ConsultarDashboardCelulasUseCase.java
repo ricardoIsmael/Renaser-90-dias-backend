@@ -15,6 +15,9 @@ import java.util.List;
  * elegir una cohorte primero. Solo ADMIN/ALCHEMIST (mismo criterio que el resto del panel
  * admin de celulas) — un MENTOR sigue viendo su celula por {@code GET /me/cell}, no este
  * dashboard.
+ *
+ * <blockquote><b>Corregido 2026-11-18 (spec 056, FR-010).</b> Decia «solo ADMIN/ALCHEMIST». Desde el 18/11 tambien el lider de mentores, que ve
+ * unicamente los grupos de las formaciones que tiene activas.</blockquote>
  */
 public interface ConsultarDashboardCelulasUseCase {
 
@@ -26,6 +29,7 @@ public interface ConsultarDashboardCelulasUseCase {
     /** @param formacion {@code null} = «Todas»; si viene, solo los grupos de esa formación (filtro «Formación» de Administración). */
     List<CelulaConCohorte> dashboard(UserId actorId, Formacion formacion);
 
-    record CelulaConCohorte(Celula celula, int cantidadMiembros, PerfilBasico mentor, Cohorte cohorte) {
+    /** {@code cupoMaximo} (spec 056, FR-008): el tope de aprendices del grupo; {@code null} en recepción, que no tiene tope. */
+    record CelulaConCohorte(Celula celula, int cantidadMiembros, PerfilBasico mentor, Cohorte cohorte, Integer cupoMaximo) {
     }
 }

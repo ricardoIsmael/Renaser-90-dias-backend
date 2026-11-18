@@ -59,9 +59,9 @@ class UserRoleTest {
     }
 
     /**
-     * Los 11 permisos de MENTOR_LEAD (SDD 002, DL-08, mas EXPORT_RANKING de D-278). Cada uno tiene su
-     * justificacion en el javadoc de {@code UserRole.PERMISOS_MENTOR_LEAD}: o el rol ya lo ejercia, o la
-     * matriz de roles de la especificacion del cliente §2.3 se lo concede, o el dueño lo nombro.
+     * Los 14 permisos de MENTOR_LEAD (SDD 002, DL-08, mas EXPORT_RANKING de D-278, MANAGE_CALENDAR de la spec 044 y, desde el 18/11, MANAGE_CELLS y
+     * ANSWER_MENTOR_TICKET de la spec 056). Cada uno tiene su justificacion en el javadoc de {@code UserRole.PERMISOS_MENTOR_LEAD}: o el rol ya lo
+     * ejercia, o la matriz de roles de la especificacion del cliente §2.3 se lo concede, o el dueño lo nombro.
      */
     private static final Set<Permission> PERMISOS_MENTOR_LEAD_ESPERADOS = EnumSet.of(
             Permission.USE_APP,
@@ -76,15 +76,19 @@ class UserRoleTest {
             Permission.SET_MENTOR_OPERATIONAL_STATUS,
             Permission.EXPORT_RANKING,
             // spec 044 FR-001: el líder crea eventos para su gente (el servicio acota el alcance).
-            Permission.MANAGE_CALENDAR);
+            Permission.MANAGE_CALENDAR,
+            // spec 056 FR-010 y FR-030 (decisión del dueño del 18/11): arma los grupos de sus formaciones y responde las consultas de sus aprendices.
+            Permission.MANAGE_CELLS,
+            Permission.ANSWER_MENTOR_TICKET);
 
     @ParameterizedTest
     @EnumSource(value = Permission.class, names = {
             "USE_APP", "TRACK_PROGRAM_AS_STAFF", "FOLLOW_OWN_PROGRAM", "PUBLISH_ON_WALL",
             "OPEN_SUPPORT_TICKET", "VIEW_ALL_MENTOR_TICKETS", "VIEW_MENTOR_CORPS",
-            "VIEW_MENTOR_REPORT", "FOLLOW_UP_MENTOR", "SET_MENTOR_OPERATIONAL_STATUS", "EXPORT_RANKING"})
-    @DisplayName("MENTOR_LEAD tiene exactamente los 11 permisos de su alcance")
-    void mentorLeadTieneSusOncePermisos(Permission permiso) {
+            "VIEW_MENTOR_REPORT", "FOLLOW_UP_MENTOR", "SET_MENTOR_OPERATIONAL_STATUS", "EXPORT_RANKING", "MANAGE_CALENDAR",
+            "MANAGE_CELLS", "ANSWER_MENTOR_TICKET"})
+    @DisplayName("MENTOR_LEAD tiene exactamente los 14 permisos de su alcance")
+    void mentorLeadTieneSusPermisos(Permission permiso) {
         assertThat(UserRole.MENTOR_LEAD.can(permiso)).isTrue();
     }
 
@@ -92,10 +96,13 @@ class UserRoleTest {
      * La mitad que importa de verdad: gestionar el cuerpo de mentores <b>no</b> es administrar
      * la plataforma (SDD 002, CL-04). Si alguien agrega un {@code MANAGE_*} a la matriz para
      * destrabar un 403, este test se pone rojo.
+     *
+     * <blockquote><b>Corregido 2026-11-18 (spec 056, FR-010).</b> La lista incluia {@code MANAGE_CELLS}: el dueño revirtio esa parte de CL-04 y ahora el
+     * lider arma los grupos de sus formaciones (prueba de abajo). Todo lo demas sigue negado.</blockquote>
      */
     @ParameterizedTest
     @EnumSource(value = Permission.class, names = {
-            "MANAGE_STAFF", "MANAGE_ROLES", "MANAGE_CELLS", "MANAGE_COHORTS", "MANAGE_TRAINEES",
+            "MANAGE_STAFF", "MANAGE_ROLES", "MANAGE_COHORTS", "MANAGE_TRAINEES",
             "MANAGE_MENTOR_PROFILE", "MANAGE_HABIT_CATALOG", "MANAGE_EVIDENCE",
             "MANAGE_KNOWLEDGE_BASE", "MANAGE_SUPPORT_TICKETS", "MANAGE_WALL_CATEGORIES",
             "MODERATE_WALL", "PROMOTE_TESTIMONIAL", "APPROVE_ACCOUNT_REQUEST", "ASSIGN_MENTOR",
@@ -106,6 +113,20 @@ class UserRoleTest {
         assertThat(UserRole.MENTOR_LEAD.can(permiso)).isFalse();
     }
 
+    // spec 056 FR-010
+    @Test
+    @DisplayName("spec 056 FR-010: desde el 18/11 el líder de mentores tiene MANAGE_CELLS (arma los grupos de sus formaciones; el servicio acota el alcance)")
+    void mentorLeadGestionaGrupos() {
+        assertThat(UserRole.MENTOR_LEAD.can(Permission.MANAGE_CELLS)).isTrue();
+    }
+
+    // spec 056 FR-030
+    @Test
+    @DisplayName("spec 056 FR-030: el líder de mentores puede responder la consulta de un aprendiz de su formación (ANSWER_MENTOR_TICKET)")
+    void mentorLeadRespondeConsultas() {
+        assertThat(UserRole.MENTOR_LEAD.can(Permission.ANSWER_MENTOR_TICKET)).isTrue();
+    }
+
     @Test
     @DisplayName("MENTOR_LEAD no promueve de nivel a un mentor, pero si mueve su semaforo operativo (DL-09)")
     void mentorLeadMueveElSemaforoPeroNoElNivel() {
@@ -114,8 +135,8 @@ class UserRoleTest {
     }
 
     @Test
-    @DisplayName("la matriz de MENTOR_LEAD tiene exactamente 11 permisos, ni uno mas ni uno menos")
-    void laMatrizDeMentorLeadTieneOncePermisos() {
+    @DisplayName("la matriz de MENTOR_LEAD tiene exactamente 14 permisos, ni uno mas ni uno menos")
+    void laMatrizDeMentorLeadTieneCatorcePermisos() {
         long otorgados = EnumSet.allOf(Permission.class).stream()
                 .filter(UserRole.MENTOR_LEAD::can)
                 .count();
