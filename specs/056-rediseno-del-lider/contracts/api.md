@@ -29,6 +29,8 @@ Misma forma que el `/dias` del mentor (055). Máx. 62 días; recorta a `[diaUno,
 ### `POST /avisar-al-mentor`  body `{ texto, operationKey }`
 204. El mentor vigente recibe el mensaje en su chat con el actor (con el enlace a la ficha) y un aviso. Sin mentor → 409 `SIN_MENTOR`. Mismo `operationKey` → 204 sin duplicar.
 
+> **Precisado 2026-11-18 (E2E).** El mensaje del chat es el texto del líder y, **separada por una línea en blanco, una última línea con la ficha** en este formato exacto (el que la app reconoce para volverla tocable; la ruta no cambia): `Ficha de <nombre>: /mentor/groups/<grupoId>/learners/<personaId>`. El formato y su patrón viven en `LineaDeLaFicha` (`FORMATO`, `PATRON`); el nombre nunca parte la línea (los saltos de línea se vuelven un espacio). La observación guardada («Lo que le dijiste») lleva solo el texto del líder, sin esa línea.
+
 ### `POST /documento`  body `{ tipo: APRENDIZ|MENTOR, semanaHasta?: AAAA-MM-DD }`
 200: `{ url, venceEn, reutilizado, semana: { desde, hasta } }`. Permite también al MENTOR que acompaña hoy a la persona (tipo `APRENDIZ`) — 403 `NO_ACOMPANA` si no. Semana sin datos → el documento lo dice (FR-038), no es error.
 

@@ -3,6 +3,7 @@ package com.renaser.os.leadership.application.services;
 import com.renaser.os.leadership.application.ports.in.AvisarAlMentorUseCase;
 import com.renaser.os.leadership.application.services.EntregaDeAvisosAlMentor.Entrega;
 import com.renaser.os.leadership.application.services.PersonasDelPrograma.Mirada;
+import com.renaser.os.leadership.domain.model.observacion.LineaDeLaFicha;
 import com.renaser.os.leadership.domain.model.observacion.ObservacionDeMentor;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.RechazoConCodigoException;
@@ -52,10 +53,12 @@ public class AvisoAlMentorService implements AvisarAlMentorUseCase {
         entrega.entregar(new Entrega(comando.actorId(), mentor, comando.personaId(), texto, mensajeConEnlace(texto, mirada), comando.claveOperacion()));
     }
 
-    /** El texto del líder y, en otra línea, la ficha de la persona: la ruta con que el mentor abre a SU aprendiz (la misma de los avisos de acompañamiento). */
+    /**
+     * El texto del líder y, como última línea y separada por una línea en blanco, la ficha de la persona ({@link LineaDeLaFicha}): la ruta con que el mentor abre a
+     * SU aprendiz (la misma de los avisos de acompañamiento), en el formato que la app reconoce para volverla tocable.
+     */
     private static String mensajeConEnlace(String texto, Mirada mirada) {
-        String nombre = mirada.miembro().perfil().fullName();
-        return texto + "\n\nFicha de " + nombre + ": /mentor/groups/" + mirada.grupoId() + "/learners/" + mirada.personaId().value();
+        return LineaDeLaFicha.alFinalDe(texto, mirada.miembro().perfil().fullName(), mirada.grupoId(), mirada.personaId().value());
     }
 
     private static void exigirTextoYClave(AvisarAlMentorCommand comando) {

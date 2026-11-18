@@ -5,6 +5,7 @@ import com.renaser.os.leadership.application.ports.in.AvisarAlMentorUseCase.Avis
 import com.renaser.os.leadership.application.services.PersonasDelGrupo.Miembro;
 import com.renaser.os.leadership.application.services.PersonasDelPrograma.Mirada;
 import com.renaser.os.leadership.domain.model.cumplimiento.GrupoDeLaPersona;
+import com.renaser.os.leadership.domain.model.observacion.LineaDeLaFicha;
 import com.renaser.os.leadership.domain.model.observacion.ObservacionDeMentor;
 import com.renaser.os.leadership.domain.model.observacion.TipoObservacion;
 import com.renaser.os.shared.domain.AlcanceDeFormacion;
@@ -98,6 +99,20 @@ class AvisoAlMentorServiceTest {
             assertThat(evento.mentorId()).isEqualTo(LUISA.value());
             assertThat(evento.rutaApp()).isEqualTo("/chat/" + banco.mensajesDirectos.getFirst().conversacionId());
         });
+    }
+
+    // spec 056 FR-019
+    @Test
+    @DisplayName("spec 056 FR-019: la ficha va separada en su propia línea final, con el formato «Ficha de <nombre>: /mentor/groups/<g>/learners/<p>» que la app reconoce")
+    void laFichaVaEnSuPropiaLineaFinal() {
+        servicio.avisar(aviso("k1"));
+
+        String[] lineas = banco.mensajesDirectos.getFirst().texto().split("\n", -1);
+        assertThat(lineas).hasSize(3);
+        assertThat(lineas[0]).isEqualTo("Ana lleva tres días en rojo, ¿puedes llamarla?");
+        assertThat(lineas[1]).isEmpty();
+        assertThat(lineas[2]).isEqualTo("Ficha de Ana Pérez: /mentor/groups/" + FENIX + "/learners/" + ANA.value());
+        assertThat(LineaDeLaFicha.PATRON.matcher(lineas[2]).matches()).isTrue();
     }
 
     // spec 056 FR-019
