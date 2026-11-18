@@ -3,7 +3,6 @@ package com.renaser.os.leadership.application.services;
 import com.renaser.os.chat.api.MensajeDirectoPort;
 import com.renaser.os.chat.api.MensajeDirectoPort.MensajeDirecto;
 import com.renaser.os.community.api.AcompanamientoFinder;
-import com.renaser.os.leadership.api.ObservacionDelLiderEvent;
 import com.renaser.os.leadership.application.ports.in.ConsultarObservacionesUseCase;
 import com.renaser.os.leadership.application.ports.in.RegistrarObservacionUseCase;
 import com.renaser.os.leadership.application.ports.out.GuardarObservacionPort;
@@ -17,18 +16,15 @@ import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.UserSummaryFinder;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * Registrar y leer las observaciones del líder sobre un mentor (SDD 002, RL-15..RL-18; D-241).
@@ -38,9 +34,15 @@ import java.util.UUID;
  * semana. La persona tiene que estar HOY en un grupo que ese mentor acompaña; si no, 400.
  *
  * <p><b>Spec 056 (FR-025, SC-005): el servidor se la entrega al mentor.</b> Al guardarla le escribe el texto por el chat directo del líder con el mentor
- * ({@link MensajeDirectoPort}) y publica {@link ObservacionDelLiderEvent}, de donde sale el aviso para su teléfono. Todo en la misma transacción: sin
- * chat no hay observación guardada a medias, y repetir la {@code claveOperacion} devuelve lo ya creado sin reenviar nada, así que llega una sola vez.
- * Si el pedido trae {@code messageId} es una app vieja que ya mandó el mensaje: no se reenvía, y el aviso sale igual.
+ * ({@link MensajeDirectoPort}) y publica el aviso para su teléfono ({@link AvisosDeObservaciones}). Todo en la misma transacción, y repetir la
+ * {@code claveOperacion} devuelve lo ya creado sin reenviar nada, así que llega una sola vez: dos pedidos a la vez chocan contra el índice único y el que
+ * pierde deshace también su mensaje. Si el pedido trae {@code messageId} es una app vieja que ya mandó el mensaje: no se reenvía, y el aviso sale igual.
+ *
+ * <p><b>RL-16 deja de aplicar a lo que se envía desde el servidor</b> (SC-005: el 100 % de las observaciones llegan al mentor como mensaje y como aviso).
+ * Antes la observación se guardaba aunque el chat fallara, porque la app mandaba el mensaje por su cuenta y podía fallar a medias. Ahora, si el chat no puede
+ * entregarlo (los chats directos apagados en esa formación, dos personas sin formación en común, una cuenta suspendida), el error sube con su motivo y no
+ * queda nada guardado: el líder sabe que el mentor no se enteró y conserva su texto para reintentar. Sigue valiendo para una app vieja que ya mandó el
+ * mensaje (trae {@code messageId}).
  *
  * <blockquote><b>Corregido 2026-11-18 (spec 056).</b> Esta clase decía «no manda nada solo»: el mensaje por el chat lo mandaba la app antes de pedir
  * este registro, y si fallaba a medias el mentor no se enteraba de nada.</blockquote>
@@ -58,12 +60,12 @@ public class ObservacionesDeMentorService implements RegistrarObservacionUseCase
     private final UserSummaryFinder usuarios;
     private final AcompanamientoFinder acompanamiento;
     private final MensajeDirectoPort chat;
-    private final ApplicationEventPublisher eventos;
+    private final AvisosDeObservaciones avisos;
 
     ObservacionesDeMentorService(AccesoDeLiderazgo acceso, GuardarObservacionPort guardar,
                                  LeerObservacionesPort leer, IdGenerator idGenerator, Clock clock,
                                  UserSummaryFinder usuarios, AcompanamientoFinder acompanamiento,
-                                 MensajeDirectoPort chat, ApplicationEventPublisher eventos) {
+                                 MensajeDirectoPort chat, AvisosDeObservaciones avisos) {
         this.acceso = acceso;
         this.guardar = guardar;
         this.leer = leer;
@@ -72,7 +74,7 @@ public class ObservacionesDeMentorService implements RegistrarObservacionUseCase
         this.usuarios = usuarios;
         this.acompanamiento = acompanamiento;
         this.chat = chat;
-        this.eventos = eventos;
+        this.avisos = avisos;
     }
 
     @Override
@@ -86,18 +88,18 @@ public class ObservacionesDeMentorService implements RegistrarObservacionUseCase
         }
         SobrePersona sobre = sobre(comando);
         MensajeDirecto entregado = entregarPorElChat(comando);
-        Envio envio = entregado != null ? new Envio(true, entregado.mensajeId()) : new Envio(comando.enviadaPorChat(), comando.mensajeId());
+        Envio envio = envioDe(comando, entregado);
         Contenido contenido = new Contenido(comando.mentorId(), comando.actorId(), TipoObservacion.de(comando.tipo()),
                 comando.texto(), envio, comando.claveOperacion(), sobre);
         ObservacionDeMentor guardada = guardar.insertar(ObservacionDeMentor.registrar(idGenerator.newId(), contenido, clock));
-        avisarAlMentor(guardada, entregado);
+        avisos.alMentor(guardada, entregado == null ? null : entregado.conversacionId());
         return guardada;
     }
 
     /**
-     * El texto al mentor por el chat de dos del líder con él (spec 056, FR-025). {@code null} si el pedido ya trae el mensaje: una app vieja lo mandó antes
-     * y reenviarlo lo duplicaría en el chat. Va ANTES de insertar para que el id del mensaje quede en la observación, y dentro de la misma transacción:
-     * dos pedidos a la vez con la misma clave chocan contra el índice único al insertar y el perdedor deshace también su mensaje.
+     * El texto al mentor por el chat de dos del líder con él (spec 056, FR-025). {@code null} si el pedido ya trae el mensaje: una app vieja lo mandó antes y
+     * reenviarlo lo duplicaría en el chat. Va ANTES de insertar para que el id del mensaje quede en la observación, y dentro de la misma transacción: el
+     * mensaje de un pedido que pierde la carrera contra el índice único se deshace con él, y un rechazo del chat deshace todo con su motivo.
      */
     private MensajeDirecto entregarPorElChat(RegistrarObservacionCommand comando) {
         if (comando.mensajeId() != null) {
@@ -107,11 +109,9 @@ public class ObservacionesDeMentorService implements RegistrarObservacionUseCase
         return chat.enviar(comando.actorId(), comando.mentorId(), texto);
     }
 
-    /** El aviso para el teléfono del mentor: sin el texto (va por push) y con una clave que la redelivery del outbox no duplica. */
-    private void avisarAlMentor(ObservacionDeMentor observacion, MensajeDirecto entregado) {
-        UUID clave = UUID.nameUUIDFromBytes(("observacion-del-lider:" + observacion.id()).getBytes(StandardCharsets.UTF_8));
-        eventos.publishEvent(new ObservacionDelLiderEvent(clave, observacion.id(), observacion.mentorId().value(), observacion.autorId().value(),
-                observacion.tipo().name(), entregado == null ? null : entregado.conversacionId(), observacion.creadoEn()));
+    /** Lo que la observación dice de su envío: el mensaje que salió ahora, o el que ya mandó la app. */
+    private static Envio envioDe(RegistrarObservacionCommand comando, MensajeDirecto entregado) {
+        return entregado != null ? new Envio(true, entregado.mensajeId()) : new Envio(comando.enviadaPorChat(), comando.mensajeId());
     }
 
     /** La persona de la que trata, si trata de alguien: tiene que ser hoy de un grupo de ESE mentor. */

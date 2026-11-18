@@ -18,6 +18,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -27,6 +28,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Lo que el mentor recibe cuando el líder le deja una observación (spec 056, FR-025 y SC-005), contra Postgres de verdad: el texto en su chat con el líder,
@@ -71,6 +73,18 @@ class ObservacionesAlMentorIT {
                 VALUES (?, ?, ?, CAST(? AS renaser.rol_usuario), 'ACTIVO')
                 """, id, id + "@renaser.test", nombre, rol);
         FormacionesDePrueba.alPersonalLeAsignaLaEscuela(jdbc, id, rol);
+        usuarios.add(id);
+        return id;
+    }
+
+    /** Un mentor que trabaja SOLO en el Diplomado: no comparte ninguna formación con el líder de la Escuela, así que el chat de dos no se puede abrir. */
+    private UUID mentorDelDiplomado() {
+        UUID id = UUID.randomUUID();
+        jdbc.update("""
+                INSERT INTO renaser.usuarios (id, email, nombre_completo, rol, estado)
+                VALUES (?, ?, 'Dora Diplomado', 'MENTOR', 'ACTIVO')
+                """, id, id + "@renaser.test");
+        jdbc.update("INSERT INTO renaser.formaciones_personal (usuario_id, formacion, activa) VALUES (?, 'DIPLOMADO', true)", id);
         usuarios.add(id);
         return id;
     }
@@ -148,5 +162,20 @@ class ObservacionesAlMentorIT {
         assertThat(cuenta("SELECT count(*) FROM renaser.observaciones_mentor WHERE autor_id = ?", lider)).isEqualTo(1);
         assertThat(mensajesDelLiderAlMentor()).as("el mensaje del que perdió se deshizo con su transacción").isEqualTo(1);
         assertThat(avisosDelMentor()).hasSize(1);
+    }
+
+    // spec 056 FR-025
+    @Test
+    @DisplayName("spec 056 FR-025 SC-005: si el chat de dos no se puede abrir (el mentor es de otra formación), el motivo sube y no queda ni la observación, ni el mensaje, ni el aviso")
+    void siElChatNoSePuedeAbrirNoQuedaNada() {
+        UUID deOtraFormacion = mentorDelDiplomado();
+
+        assertThatThrownBy(() -> registrar.registrar(new RegistrarObservacionCommand(UserId.of(lider), UserId.of(deOtraFormacion), "ALERTA",
+                "Revisa el cierre de la semana", false, null, "k-it-3"))).isInstanceOf(NoSuchElementException.class);
+        EventosPendientes.esperarQueTerminen(jdbc);
+
+        assertThat(cuenta("SELECT count(*) FROM renaser.observaciones_mentor WHERE autor_id = ?", lider)).isZero();
+        assertThat(cuenta("SELECT count(*) FROM renaser.mensajes WHERE emisor_id = ?", lider)).isZero();
+        assertThat(cuenta("SELECT count(*) FROM renaser.notificaciones WHERE usuario_id = ? AND tipo = 'REVISION_DEL_LIDER'", deOtraFormacion)).isZero();
     }
 }

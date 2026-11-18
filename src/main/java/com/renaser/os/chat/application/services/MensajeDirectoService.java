@@ -20,6 +20,9 @@ import org.springframework.transaction.annotation.Transactional;
  * (con sus chequeos de cuenta activa, formación en común e interruptor de chats directos) y {@link EnviarMensajeUseCase} guarda el mensaje (con la
  * pertenencia a la conversación, el largo máximo y el aviso que dispara el push). Que el guardado sea el de siempre es lo que evita un segundo camino
  * hacia el chat que se salte los interruptores de Soporte TI.
+ *
+ * <p>Corre dentro de la transacción de quien llama, así que si esa se deshace el mensaje también (dos pedidos a la vez con la misma clave no dejan dos
+ * mensajes), y un rechazo del chat deshace la de quien llama con su motivo.
  */
 @Service
 public class MensajeDirectoService implements MensajeDirectoPort {

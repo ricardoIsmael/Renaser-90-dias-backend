@@ -431,7 +431,8 @@ public class BancoDeLiderazgo {
     public final ApplicationEventPublisher publicador = avisosPublicados::add;
 
     public ObservacionesDeMentorService observacionesService() {
-        return new ObservacionesDeMentorService(acceso(), almacen, almacen, ids, reloj, usuariosFinder, acompanamiento, chatDirecto, publicador);
+        return new ObservacionesDeMentorService(acceso(), almacen, almacen, ids, reloj, usuariosFinder, acompanamiento, chatDirecto,
+                new AvisosDeObservaciones(publicador));
     }
 
     public ReporteDeMentoresService reporte() {

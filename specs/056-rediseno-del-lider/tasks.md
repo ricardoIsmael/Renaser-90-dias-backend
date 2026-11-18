@@ -39,8 +39,8 @@
 - [x] T023 Puerto `MensajeDirectoPort` en `chat/api` y adaptador sobre `CrearConversacionDirectaUseCase` + `EnviarMensajeUseCase`
 - [x] T024 Prueba que falla: guardar una observación manda el mensaje y el aviso al mentor una sola vez (con `messageId` de una app vieja no reenvía) (FR-025, SC-005)
 - [x] T025 `ObservacionDelLiderEvent` + listener push en `notifications` + mensaje por `MensajeDirectoPort` desde `ObservacionesDeMentorService`
-- [ ] T026 Prueba que falla: `POST /leadership/people/{p}/avisar-al-mentor` (mensaje con enlace + aviso, `SIN_MENTOR`, idempotente por `operationKey`) (FR-019)
-- [ ] T027 Implementar avisar al mentor
+- [x] T026 Prueba que falla: `POST /leadership/people/{p}/avisar-al-mentor` (mensaje con enlace + aviso, `SIN_MENTOR`, idempotente por `operationKey`) (FR-019)
+- [x] T027 Implementar avisar al mentor
 - [ ] T028 Prueba que falla: el líder de la formación responde una consulta; `respondidoPor {id, nombre}`; el aprendiz recibe el aviso; `POST /leadership/tickets/{id}/recordar` (FR-029, FR-030)
 - [ ] T029 Relajar `TicketMentorService.responder` para el líder de la formación, exponer `respondidoPor`, endpoint `recordar`
 

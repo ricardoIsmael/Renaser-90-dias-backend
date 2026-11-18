@@ -104,7 +104,7 @@ class ObservacionAvisaAlMentorTest {
 
     // spec 056 FR-025
     @Test
-    @DisplayName("spec 056 FR-025: si el chat rechaza el mensaje, no queda guardada la observación ni sale el aviso, y el motivo sube")
+    @DisplayName("spec 056 FR-025 SC-005: si el chat no puede entregar el mensaje, el motivo sube y no queda guardada la observación ni sale el aviso")
     void siElChatRechazaNoQuedaNada() {
         banco.chatRechaza = new NotAuthorizedException("Los chats directos no están disponibles en esta formación");
 

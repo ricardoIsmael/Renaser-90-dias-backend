@@ -14,7 +14,8 @@ import java.util.UUID;
  * destinatario. Quien llama no manda un segundo push por el mismo mensaje.
  *
  * <p>Corre en la transacción de quien llama, si hay una: si esta se deshace, el mensaje también, y el aviso del chat con él. Un rechazo del chat (los
- * chats directos apagados en esa formación, dos personas sin formación en común, una cuenta suspendida) sube como la excepción de siempre, con su motivo.
+ * chats directos apagados en esa formación, dos personas sin formación en común, una cuenta suspendida) sube como la excepción de siempre, con su motivo,
+ * y la transacción de quien llama queda marcada para deshacerse: el mensaje y lo que se guardó con él no se separan.
  */
 public interface MensajeDirectoPort {
 
