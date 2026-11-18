@@ -35,6 +35,8 @@ class ObservacionDelLiderNotificationListener {
 
     @ApplicationModuleListener
     void on(ObservacionDelLiderEvent event) {
+        // SIN-SUPERAR: la clave es la de UNA observación concreta (un hecho único): cada observación es un aviso distinto y no hay un aviso anterior
+        // que quede sin leer con una cifra vieja.
         emitirNotificacionUseCase.emitir(new EmitirNotificacionCommand(UserId.of(event.mentorId()), TipoNotificacion.REVISION_DEL_LIDER,
                 titulo(event.tipo()), CUERPO, event.rutaApp(), event.claveDeduplicacion()));
     }
