@@ -4,6 +4,7 @@ import com.renaser.os.leadership.application.ports.in.ConsultarReporteDeMentores
 import com.renaser.os.leadership.application.ports.out.GuardarObservacionPort;
 import com.renaser.os.leadership.application.ports.out.LeerObservacionesPort;
 import com.renaser.os.leadership.domain.model.observacion.ObservacionDeMentor;
+import com.renaser.os.chat.api.MensajeDirectoPort;
 import com.renaser.os.community.api.AcompanamientoFinder;
 import com.renaser.os.mentoring.api.EvaluacionDeMentorFinder;
 import com.renaser.os.mentoring.api.MedicionDeMentoresFinder;
@@ -23,6 +24,7 @@ import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -405,8 +407,31 @@ public class BancoDeLiderazgo {
         return new FichaDeMentorService(acceso(), indicadores(), almacen, programa(), reloj);
     }
 
+    /** Spec 056: lo que el servidor le escribe a una persona por su chat directo (un mensaje por llamada, con su conversación y su id). */
+    public record MensajeDirectoEscrito(UserId de, UserId para, String texto, UUID conversacionId, UUID mensajeId) {
+    }
+
+    /** Spec 056: los mensajes directos que el servidor escribió, en orden. */
+    public final List<MensajeDirectoEscrito> mensajesDirectos = new ArrayList<>();
+    /** Spec 056: los avisos entre módulos que se publicaron, en orden. */
+    public final List<Object> avisosPublicados = new ArrayList<>();
+    /** Spec 056: si no es null, el chat rechaza el mensaje con esto (los chats directos apagados, dos personas sin formación en común). */
+    public RuntimeException chatRechaza;
+
+    public final MensajeDirectoPort chatDirecto = (remitente, destinatario, texto) -> {
+        if (chatRechaza != null) {
+            throw chatRechaza;
+        }
+        UUID conversacion = UUID.nameUUIDFromBytes((remitente.value() + "|" + destinatario.value()).getBytes());
+        MensajeDirectoEscrito escrito = new MensajeDirectoEscrito(remitente, destinatario, texto, conversacion, UUID.randomUUID());
+        mensajesDirectos.add(escrito);
+        return new MensajeDirectoPort.MensajeDirecto(escrito.conversacionId(), escrito.mensajeId());
+    };
+
+    public final ApplicationEventPublisher publicador = avisosPublicados::add;
+
     public ObservacionesDeMentorService observacionesService() {
-        return new ObservacionesDeMentorService(acceso(), almacen, almacen, ids, reloj, usuariosFinder, acompanamiento);
+        return new ObservacionesDeMentorService(acceso(), almacen, almacen, ids, reloj, usuariosFinder, acompanamiento, chatDirecto, publicador);
     }
 
     public ReporteDeMentoresService reporte() {

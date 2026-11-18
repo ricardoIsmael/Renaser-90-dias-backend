@@ -37,8 +37,8 @@
 - [x] T021 `MANAGE_CELLS` en `PERMISOS_MENTOR_LEAD`; `requireAdmin` de `CelulaService`, `SumarAprendizAGrupoService`, `SumarMentorAGrupoService`, `ComposicionDeCelulaService` acepta al líder dentro de `AlcanceDeFormacionFinder`; javadoc de `UserRole` con el rastro de CL-04 → decisión del 18/11; `capacity` en `CelulaDashboardResponse`
 - [x] T022 Prueba que falla: `chat.api.MensajeDirectoPort` abre o reutiliza la conversación 1 a 1 y guarda el mensaje (que dispara su push)
 - [x] T023 Puerto `MensajeDirectoPort` en `chat/api` y adaptador sobre `CrearConversacionDirectaUseCase` + `EnviarMensajeUseCase`
-- [ ] T024 Prueba que falla: guardar una observación manda el mensaje y el aviso al mentor una sola vez (con `messageId` de una app vieja no reenvía) (FR-025, SC-005)
-- [ ] T025 `ObservacionDelLiderEvent` + listener push en `notifications` + mensaje por `MensajeDirectoPort` desde `ObservacionesDeMentorService`
+- [x] T024 Prueba que falla: guardar una observación manda el mensaje y el aviso al mentor una sola vez (con `messageId` de una app vieja no reenvía) (FR-025, SC-005)
+- [x] T025 `ObservacionDelLiderEvent` + listener push en `notifications` + mensaje por `MensajeDirectoPort` desde `ObservacionesDeMentorService`
 - [ ] T026 Prueba que falla: `POST /leadership/people/{p}/avisar-al-mentor` (mensaje con enlace + aviso, `SIN_MENTOR`, idempotente por `operationKey`) (FR-019)
 - [ ] T027 Implementar avisar al mentor
 - [ ] T028 Prueba que falla: el líder de la formación responde una consulta; `respondidoPor {id, nombre}`; el aprendiz recibe el aviso; `POST /leadership/tickets/{id}/recordar` (FR-029, FR-030)
