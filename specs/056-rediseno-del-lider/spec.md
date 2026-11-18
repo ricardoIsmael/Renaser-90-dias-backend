@@ -254,7 +254,7 @@ El líder ve las consultas sin responder y le recuerda al mentor o responde él;
 ### Resultados medibles
 
 - **SC-001**: Al abrir «Mis mentores», el líder ve «Por resolver» y al menos 3 mentores en la primera pantalla, sin desplazarse (teléfono de 1080 × 2400).
-- **SC-002**: Desde «Mis mentores», resolver un grupo sin mentor (elegir y confirmar el mentor) toma como mucho 3 toques.
+- **SC-002**: Desde «Mis mentores», resolver un grupo sin mentor (elegir y confirmar el mentor) toma como mucho 4 toques (Asignar → Asignar del grupo → mentor → Asignar; ajustado en el E2E del 18/11 al recorrido aprobado).
 - **SC-003**: Crear un grupo con su mentor y 2 aprendices toma menos de 1 minuto y como mucho 3 pantallas más el resumen.
 - **SC-004**: La ficha del aprendiz que ve el líder y la que ve su mentor muestran los mismos días, colores, hábitos y evidencias para la misma persona y fecha.
 - **SC-005**: El 100 % de las observaciones del líder y de los «Avisar a su mentor» llegan al mentor como aviso y como mensaje en su chat.

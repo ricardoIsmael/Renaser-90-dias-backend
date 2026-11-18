@@ -13,8 +13,8 @@
 ## Fase 1: Preparación
 
 - [x] T001 Worktrees `056-lider-de-mentores` en los dos repos con su grafo (`worktree-nuevo.sh`)
-- [ ] T002 [P] Agregar `"056"` con FR-001…FR-047 y SC-001…SC-008 a `specs/trazabilidad.json` como exigidos
-- [ ] T003 [P] Reservar V199 para BC (ningún otro carril crea migraciones)
+- [x] T002 [P] Agregar `"056"` con FR-001…FR-047 y SC-001…SC-008 a `specs/trazabilidad.json` como exigidos
+- [x] T003 [P] Reservar V199 para BC (ningún otro carril crea migraciones)
 
 ---
 
