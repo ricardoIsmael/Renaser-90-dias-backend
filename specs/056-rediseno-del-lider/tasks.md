@@ -73,7 +73,7 @@
 - [ ] T050 Componentes con sus pruebas: `EstadoConForma` (× ! ✓ · con etiqueta accesible), `AnilloDeCupo` (progressbar), `BarraDeColores`, `FilaPorResolver`, `SeccionPlegable` (FR-003, FR-043, FR-044)
 - [ ] T051 Prueba que falla + `MisMentoresScreen`: sin insignia, Por resolver (filas ocultas sin datos), lista con cupo y colores, suspendido apagado, accesos (FR-001…FR-005, SC-001)
 - [ ] T052 Prueba que falla + `FichaDelAprendizDelLider`: `FichaDePersona` origen líder, nota en lectura, Avisar a su mentor (sin mentor → sin botón), Descargar semana (FR-014…FR-020)
-- [ ] T053 Prueba que falla + `FichaDelMentorScreen`: misma ficha con sus datos; sin programa → línea #202; suspendido; estrella; «Como mentor» (grupos con barra, su evaluación, evaluaciones que debe, consultas, lo que le dijiste); Alertar; Descargar semana (FR-021…FR-026)
+- [ ] T053 Prueba que falla + `FichaDelMentorScreen`: misma ficha con sus datos; sin programa → línea #202; suspendido; estrella; «Como mentor» (grupos con barra, su evaluación, consultas, lo que le dijiste (sin «evaluaciones que debe», E2E 18/11)); Alertar; Descargar semana (FR-021…FR-026)
 - [ ] T054 Prueba que falla + `GrupoDelLiderScreen` rehecho: cabecera con forma y frase, 4 contadores, orden de la 055, + Aprendices, Cambiar mentor (FR-011…FR-013)
 - [ ] T055 Prueba que falla + `GruposDelLiderScreen` (filtros, Asignar) y `CrearGrupoScreen` (3 pasos, llenos apagados, resumen, validación de nombre) sobre `adminApi` (FR-006…FR-009, SC-002, SC-003)
 - [ ] T056 Prueba que falla + `ConsultasDelLiderScreen`: Sin responder/Respondidas, Recordar al mentor, Responder yo (FR-028…FR-030)
