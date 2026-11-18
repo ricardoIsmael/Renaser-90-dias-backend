@@ -1,6 +1,8 @@
 package com.renaser.os.support.application.services;
 
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.FixedClock;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -10,9 +12,11 @@ import com.renaser.os.support.application.ports.in.ticketmentor.AbrirTicketMento
 import com.renaser.os.support.application.ports.in.ticketmentor.BuscarBibliotecaUseCase.BuscarBibliotecaCommand;
 import com.renaser.os.support.application.ports.in.ticketmentor.GuardarEnBibliotecaUseCase.GuardarEnBibliotecaCommand;
 import com.renaser.os.support.application.ports.in.ticketmentor.ResponderTicketMentorUseCase.ResponderTicketMentorCommand;
+import com.renaser.os.support.application.ports.in.ticketmentor.TicketConAutor;
 import com.renaser.os.support.domain.model.ticketmentor.EstadoTicketMentor;
 import com.renaser.os.support.domain.model.ticketmentor.TicketMentor;
 import com.renaser.os.support.domain.model.ticketmentor.TicketMentorId;
+import com.renaser.os.users.api.AlcanceDeFormacionPermisivo;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,6 +24,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.Set;
 import java.util.NoSuchElementException;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -41,6 +46,10 @@ class TicketMentorServiceTest {
     private UserId trainee;
     private UserId mentor;
     private UserId admin;
+    private UserId lider;
+    private UserId liderSuspendido;
+    /** Spec 056: el líder tiene activa la Escuela; el aprendiz de esta prueba es de la Escuela salvo que se diga otra cosa. */
+    private Formacion formacionDelAprendiz = Formacion.ESCUELA;
 
     @BeforeEach
     void setUp() {
@@ -49,16 +58,34 @@ class TicketMentorServiceTest {
         participaciones = new FakeParticipacionProgramaFinder();
         acompanamiento = new FakeAprendicesDelAcompanante();
         events = new RecordingEventPublisher();
-        service = new TicketMentorService(port, port, port, actores, participaciones, acompanamiento, events, CLOCK,
+        lider = UserId.of(UUID.randomUUID());
+        liderSuspendido = UserId.of(UUID.randomUUID());
+        service = new TicketMentorService(port, port, port, actores, participaciones, acompanamiento, alcanceDelLider(), events, CLOCK,
                 idsSecuenciales());
 
         trainee = UserId.of(UUID.randomUUID());
         mentor = UserId.of(UUID.randomUUID());
         admin = UserId.of(UUID.randomUUID());
         actores.conActor(trainee, UserRole.TRAINEE).conActor(mentor, UserRole.MENTOR)
-                .conActor(admin, UserRole.ADMIN);
+                .conActor(admin, UserRole.ADMIN).conActor(lider, UserRole.MENTOR_LEAD)
+                .conActor(liderSuspendido, UserRole.MENTOR_LEAD, UserStatus.SUSPENDED);
         participaciones.conMentorAsignado(trainee, mentor);
         acompanamiento.acompana(mentor, trainee);
+    }
+
+    /** Spec 056: el líder ve solo la Escuela; Administración y los demás, todas; cada aprendiz es de la formación que diga la prueba. */
+    private AlcanceDeFormacionPermisivo alcanceDelLider() {
+        return new AlcanceDeFormacionPermisivo() {
+            @Override
+            public AlcanceDeFormacion de(UserId actor) {
+                return lider.equals(actor) || liderSuspendido.equals(actor) ? AlcanceDeFormacion.de(Formacion.ESCUELA) : AlcanceDeFormacion.todas();
+            }
+
+            @Override
+            public Set<Formacion> formacionesDe(UserId persona) {
+                return Set.of(formacionDelAprendiz);
+            }
+        };
     }
 
     /**
@@ -113,7 +140,7 @@ class TicketMentorServiceTest {
         TicketMentor ticket = abrirTicketDeTrainee();
 
         TicketMentor respondido = service.responder(new ResponderTicketMentorCommand(ticket.id(), mentor,
-                "Reduci las notificaciones"));
+                "Reduci las notificaciones")).ticket();
 
         assertThat(respondido.estado()).isEqualTo(EstadoTicketMentor.RESPONDIDO);
         assertThat(respondido.respuestaMentor()).isEqualTo("Reduci las notificaciones");
@@ -133,7 +160,7 @@ class TicketMentorServiceTest {
         TicketMentor ticket = service.abrir(new AbrirTicketMentorCommand(aprendizDelGuia, "Bloqueo", "Intento",
                 "Impacto"));
 
-        TicketMentor respondido = service.responder(new ResponderTicketMentorCommand(ticket.id(), guia, "Respuesta"));
+        TicketMentor respondido = service.responder(new ResponderTicketMentorCommand(ticket.id(), guia, "Respuesta")).ticket();
         service.guardar(new GuardarEnBibliotecaCommand(ticket.id(), guia));
 
         assertThat(respondido.respondidoPor()).isEqualTo(guia);
@@ -164,7 +191,7 @@ class TicketMentorServiceTest {
         TicketMentor ticket = abrirTicketDeTrainee();
         service.responder(new ResponderTicketMentorCommand(ticket.id(), mentor, "Respuesta"));
 
-        TicketMentor guardado = service.guardar(new GuardarEnBibliotecaCommand(ticket.id(), mentor));
+        TicketMentor guardado = service.guardar(new GuardarEnBibliotecaCommand(ticket.id(), mentor)).ticket();
 
         assertThat(guardado.guardadoEnBiblioteca()).isTrue();
     }
@@ -382,5 +409,73 @@ class TicketMentorServiceTest {
                 .isInstanceOf(NotAuthorizedException.class);
         assertThatThrownBy(() -> service.guardar(new GuardarEnBibliotecaCommand(ticket.id(), guia)))
                 .isInstanceOf(NotAuthorizedException.class);
+    }
+
+    // ── Spec 056 (FR-029, FR-030): el líder de la formación responde ─────────
+
+    // spec 056 FR-030
+    @Test
+    @DisplayName("spec 056 FR-030: el líder de la formación del aprendiz responde su consulta; queda quién respondió y el aprendiz recibe el aviso")
+    void elLiderDeLaFormacionResponde() {
+        TicketMentor ticket = abrirTicketDeTrainee();
+
+        TicketConAutor respondido = service.responder(new ResponderTicketMentorCommand(ticket.id(), lider, "Prueba con una sola cosa"));
+
+        assertThat(respondido.ticket().estado()).isEqualTo(EstadoTicketMentor.RESPONDIDO);
+        assertThat(respondido.ticket().respondidoPor()).as("queda el líder, no el mentor de hoy del aprendiz").isEqualTo(lider);
+        assertThat(respondido.nombreDeQuienRespondio()).isEqualTo("Actor de prueba");
+        assertThat(events.eventosPublicados()).last().isInstanceOfSatisfying(TicketMentorRespondidoEvent.class,
+                evento -> assertThat(evento.participanteId()).isEqualTo(trainee));
+    }
+
+    // spec 056 FR-030
+    @Test
+    @DisplayName("spec 056 FR-030: el líder no responde la consulta de un aprendiz de otra formación: 403 FUERA_DE_SU_ALCANCE y el ticket sigue abierto")
+    void elLiderNoRespondeFueraDeSuFormacion() {
+        TicketMentor ticket = abrirTicketDeTrainee();
+        formacionDelAprendiz = Formacion.DIPLOMADO;
+
+        assertThatThrownBy(() -> service.responder(new ResponderTicketMentorCommand(ticket.id(), lider, "No me toca")))
+                .isInstanceOfSatisfying(NotAuthorizedException.class, e -> assertThat(e.codigo()).isEqualTo(NotAuthorizedException.FUERA_DE_SU_ALCANCE));
+
+        assertThat(port.byId(ticket.id()).orElseThrow().estado()).isEqualTo(EstadoTicketMentor.ABIERTO);
+    }
+
+    // spec 056 FR-030
+    @Test
+    @DisplayName("spec 056 FR-030: un líder suspendido no responde, y responder un ticket que no existe es 404")
+    void unLiderSuspendidoNoResponde() {
+        TicketMentor ticket = abrirTicketDeTrainee();
+
+        assertThatThrownBy(() -> service.responder(new ResponderTicketMentorCommand(ticket.id(), liderSuspendido, "Hola")))
+                .isInstanceOf(NotAuthorizedException.class);
+        assertThatThrownBy(() -> service.responder(new ResponderTicketMentorCommand(TicketMentorId.of(UUID.randomUUID()), lider, "Hola")))
+                .isInstanceOf(NoSuchElementException.class);
+    }
+
+    // spec 056 FR-030
+    @Test
+    @DisplayName("spec 056 FR-030: lo que el líder abrió es solo responder: guardar en la biblioteca sigue siendo del mentor asignado, y Administración sigue sin responder")
+    void guardarYAdministracionNoCambian() {
+        TicketMentor ticket = abrirTicketDeTrainee();
+
+        assertThatThrownBy(() -> service.responder(new ResponderTicketMentorCommand(ticket.id(), admin, "No soy el mentor"))).isInstanceOf(NotAuthorizedException.class);
+        service.responder(new ResponderTicketMentorCommand(ticket.id(), lider, "Respuesta del líder"));
+
+        assertThatThrownBy(() -> service.guardar(new GuardarEnBibliotecaCommand(ticket.id(), lider))).isInstanceOf(NotAuthorizedException.class);
+    }
+
+    // spec 056 FR-030
+    @Test
+    @DisplayName("spec 056 FR-030: lo que se escribe se lee: las listas traen el nombre de quien respondió cada consulta, en una página sola, y vacío en las abiertas")
+    void laListaTraeElNombreDeQuienRespondio() {
+        TicketMentor respondida = abrirTicketDeTrainee();
+        service.responder(new ResponderTicketMentorCommand(respondida.id(), lider, "Respuesta"));
+        TicketMentor abierta = abrirTicketDeTrainee();
+
+        var pagina = service.todos(lider, null);
+
+        assertThat(pagina.tickets()).extracting(TicketMentor::id).contains(respondida.id(), abierta.id());
+        assertThat(pagina.nombresDeQuienRespondio()).containsOnlyKeys(lider).containsEntry(lider, "Actor de prueba");
     }
 }

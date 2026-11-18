@@ -145,7 +145,7 @@ class TicketsDeMentoriaAcotadosIT {
         assertThatThrownBy(() -> responder.responder(new ResponderTicketMentorCommand(ticketDeAna, guia, "Tampoco la mía")))
                 .isInstanceOf(NotAuthorizedException.class);
 
-        TicketMentor respondido = responder.responder(new ResponderTicketMentorCommand(ticketDeAna, mentor1, "Prueba con una sola cosa"));
+        TicketMentor respondido = responder.responder(new ResponderTicketMentorCommand(ticketDeAna, mentor1, "Prueba con una sola cosa")).ticket();
 
         assertThat(respondido.estado().estaRespondido()).isTrue();
     }
