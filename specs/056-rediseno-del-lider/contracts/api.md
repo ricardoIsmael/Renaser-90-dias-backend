@@ -32,11 +32,19 @@ Misma forma que el `/dias` del mentor (055). Máx. 62 días; recorta a `[diaUno,
 ### `POST /documento`  body `{ tipo: APRENDIZ|MENTOR, semanaHasta?: AAAA-MM-DD }`
 200: `{ url, venceEn, reutilizado, semana: { desde, hasta } }`. Permite también al MENTOR que acompaña hoy a la persona (tipo `APRENDIZ`) — 403 `NO_ACOMPANA` si no. Semana sin datos → el documento lo dice (FR-038), no es error.
 
+> **Ajustado 2026-11-18 (carril BC, documento).** Lo que quedó escrito en el código y cambia o precisa lo de arriba:
+> - **`url`** es el enlace firmado de lectura del archivo `reportes/{persona}/{inicio}-{tipo}-{huella8}.html` (`text/html; charset=utf-8`); **`venceEn`** es un instante UTC, 10 minutos después del pedido. Pedirlo otra vez da **otro enlace** al mismo archivo. La respuesta lleva `Cache-Control: no-store`.
+> - **`reutilizado`** es `true` si ya existía un documento de esa persona, tipo y período con **los mismos datos** (misma huella SHA-256), y también para el pedido que pierde una carrera con otro idéntico. Si los datos cambian sale otro documento y el anterior se queda (se guardan para siempre).
+> - **`tipo`** es obligatorio y solo admite `APRENDIZ` o `MENTOR` (`MES` es de `/report/documento`): falta o desconocido → 400. `tipo: MENTOR` es lo mismo que `POST /mentors/{id}/documento`. `tipo: APRENDIZ` de un mentor que sigue su programa da **solo su propia semana**; si no la sigue, 404 `SIN_PROGRAMA`.
+> - **Quién**: `tipo APRENDIZ` — MENTOR_LEAD de la formación, ADMIN, ALCHEMIST y el MENTOR o la guía que lo acompaña **hoy** (asignación vigente, no `participantes_programa.mentor_id`); otro mentor → 403 `NO_ACOMPANA`, sin decir si el aprendiz existe; un aprendiz, un IT_SUPPORT o una cuenta suspendida → 403 (`CUENTA_SUSPENDIDA` si lo está). Persona de otra formación o inexistente → 404 sin código (spec 022). El endpoint declara `USE_APP` (el permiso con el que el mentor llega a la ficha de sus aprendices) porque el permiso no alcanza: decide el servicio, por relación.
+> - **`semanaHasta`** debe ser un viernes que ya empezó: 400 `SEMANA_INVALIDA` / `FUERA_DEL_PROGRAMA`. Para un aprendiz, sin tope hacia atrás más que su Día 1 (como `/semana`); para un mentor **no hay tope por su Día 1** (lo que cuenta es su grupo). Sin fecha: la semana en curso de la persona.
+> - Se registra **cada pedido** (también los reutilizados) en `descargas_de_documentos`: quién, cuándo y `reutilizado`. Un pedido rechazado (403, 404, 400) no genera ni registra nada.
+
 ## Mentores (`/api/v1/leadership/mentors…`)
 
 - `GET /` (padrón) y `GET /{id}` (ficha): + `cupo: { acompanados, maximo }` y + `porColor: { rojo, ambar, verde, sinDatos }`, **dentro del objeto de cada mentor** (`mentors[i]` en el padrón; `mentor` en la ficha), junto a `traineeCount` y `semaforo`. `acompanados` son los aprendices vigentes de sus grupos sin repetir; `maximo`, la suma de los cupos de esos grupos (el propio de cada grupo si lo tiene y, si no, el de la política de su cohorte). Un mentor sin grupo: `0/0` y ceros. `ambar` es el amarillo del semáforo. Si la fuente cae, `cupo` y/o `porColor` van en `null`, nunca en cero. También salen en `GET /leadership/report` (mismo objeto de mentor).
 - `POST /{id}/observations`: igual; además el servidor manda el mensaje y el aviso (ignora `sentByChat` de una app vieja si ya lo mandó la app: `messageId` presente → no reenvía).
-- `POST /{id}/documento`  body `{ semanaHasta? }` → como el de persona, tipo `MENTOR`.
+- `POST /{id}/documento`  body `{ semanaHasta? }` (el cuerpo puede ir vacío) → como el de persona, tipo `MENTOR`: solo el liderazgo (MENTOR_LEAD, ADMIN, ALCHEMIST); el propio mentor, otro mentor y un aprendiz → 403; un id que no es de un mentor activo **de las formaciones de quien pide** → 404. Trae, en este orden: encabezado, titular de su grupo, conteo por color, aprendices por riesgo con su tendencia, pendientes (consultas sin responder con los días de la más vieja, evaluación del mes y a quién escribirle por estar en rojo), alertas (**3 o más días medidos sin ningún cumplimiento**), lo que el líder le dijo esa semana, el foco y, si sigue su programa, su propia semana. Un mentor sin grupo dice «Sin grupo asignado». Una fuente que no responde sale «No disponible», nunca como cero.
 - `GET /por-resolver` → `{ gruposSinMentor, consultas: { cantidad, diasDeLaMasVieja }, peorMentor: { id, nombre, evaluacion } | null }`. `gruposSinMentor`: grupos regulares **en curso** de las formaciones del líder sin mentor vigente. `consultas`: consultas abiertas de los aprendices de los grupos con mentor (una consulta no se cuenta dos veces); `diasDeLaMasVieja` es `null` sin consultas. `peorMentor.evaluacion` es el porcentaje de su evaluación del mes y solo aparece si es el más bajo y está **por debajo de 60**. Una parte cuya fuente cae va en `null` (no en 0).
 
 ## Grupos (`/api/v1/admin/cells…`, `MANAGE_CELLS`)
@@ -51,7 +59,7 @@ Sin rutas nuevas. El líder (con `MANAGE_CELLS`) opera solo sobre grupos y perso
 
 ## Reporte del mes
 
-- `POST /api/v1/leadership/report/documento`  body `{ month: AAAA-MM }` → como `/documento`, tipo `MES`.
+- `POST /api/v1/leadership/report/documento`  body `{ month: AAAA-MM }` → como `/documento`, tipo `MES`. Solo el liderazgo (`VIEW_MENTOR_REPORT`); `month` mal escrito o de un mes que todavía no empezó → 400; la `semana` de la respuesta es el primer y el último día del mes. En el registro, la «persona» del documento es **quien lo pidió** (el reporte depende de las formaciones que ve): dos líderes de formaciones distintas nunca comparten el mismo documento. Trae el promedio de las evaluaciones, cuántos mentores están debajo del 60 % (el umbral de «Por resolver»), el ranking con su estado (palabra y símbolo) y sus consultas respondidas, y los mentores sin evaluación calculada aparte.
 
 ## Sin cambios
 

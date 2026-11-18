@@ -13,7 +13,11 @@
  * depende de este módulo, así que no hay ciclo.
  *
  * <p>Lo único que escribe es lo suyo: las observaciones del líder sobre un mentor
- * ({@code observaciones_mentor}, V89, append-only).
+ * ({@code observaciones_mentor}, V89, append-only), la constancia de que alguien miró una ficha ({@code consultas_de_ficha}, V109) y,
+ * desde la spec 056, los documentos semanales ({@code documentos_semanales} y {@code descargas_de_documentos}, V199): la semana de un
+ * aprendiz o de un mentor, o el reporte del mes, como una página HTML que se guarda para siempre en el almacenamiento privado
+ * ({@code shared.AlmacenamientoPort}) y se entrega con un enlace que vence a los 10 minutos. Los datos del documento salen de las mismas
+ * lecturas de la ficha, y la nota privada del mentor ({@code mentoring.api.NotasDelMentorFinder}) nunca entra: ninguna clase del documento la conoce.
  *
  * <p>El líder NO entra al detalle de un grupo ni ve aprendices con nombre (decisión del dueño,
  * 2026-10-01): todo lo que sale de acá sobre aprendices son cantidades.

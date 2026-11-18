@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -64,7 +65,7 @@ final class Textos {
     /** {@code 17 de noviembre de 2026, 22:00}: el instante en la zona de la persona, no en la del servidor. */
     static String generado(Instant instante, String zona) {
         ZonedDateTime local = instante.atZone(ZoneId.of(zona));
-        return fechaLarga(local.toLocalDate()) + String.format(", %02d:%02d", local.getHour(), local.getMinute());
+        return fechaLarga(local.toLocalDate()) + String.format(Locale.ROOT, ", %02d:%02d", local.getHour(), local.getMinute());
     }
 
     /** {@code 66.7 %}: un decimal solo si lo hay; el punto decimal es el del español de Perú. */
@@ -85,7 +86,7 @@ final class Textos {
 
     /** La clase de color del estado, solo para pintar: el significado lo dicen la palabra y el símbolo. */
     static String clase(ColorDeLaFila estado) {
-        return "estado-" + estado.name().toLowerCase(java.util.Locale.ROOT).replace('_', '-');
+        return "estado-" + estado.name().toLowerCase(Locale.ROOT).replace('_', '-');
     }
 
     static String tipoDeEvidencia(String tipo) {
