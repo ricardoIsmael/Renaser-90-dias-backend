@@ -114,7 +114,7 @@ class ObservacionesAlMentorIT {
 
     // spec 056 FR-025
     @Test
-    @DisplayName("spec 056 FR-025 SC-005: la observación llega al mentor como mensaje en su chat con el líder y como aviso con la ruta de ese chat, una sola vez por clave")
+    @DisplayName("spec 056 FR-025 SC-005: la observación llega al mentor como un solo mensaje en su chat con el líder (con su aviso de chat), una sola vez por clave")
     void llegaUnaSolaVez() {
         ObservacionDeMentor primera = registrar.registrar(sugerencia("k-it-1"));
         ObservacionDeMentor repetida = registrar.registrar(sugerencia("k-it-1"));
@@ -123,15 +123,14 @@ class ObservacionesAlMentorIT {
         assertThat(repetida.id()).isEqualTo(primera.id());
         assertThat(primera.enviadaPorChat()).isTrue();
         assertThat(mensajesDelLiderAlMentor()).as("un solo mensaje en el chat").isEqualTo(1);
-        UUID conversacion = jdbc.queryForObject("SELECT conversacion_id FROM renaser.mensajes WHERE id = ?", UUID.class, primera.mensajeId());
-        assertThat(avisosDelMentor()).as("un solo aviso, con la ruta del chat donde está el texto")
-                .containsExactly("Tu líder te dejó una sugerencia|/chat/" + conversacion);
+        // Decisión del dueño del 18/11: un solo aviso, el del mensaje del chat; no hay aviso aparte de «Revisión del líder».
+        assertThat(avisosDelMentor()).as("sin aviso aparte de la observación: el aviso es el del mensaje del chat").isEmpty();
         assertThat(cuenta("SELECT count(*) FROM renaser.observaciones_mentor WHERE autor_id = ?", lider)).isEqualTo(1);
     }
 
     // spec 056 FR-025
     @Test
-    @DisplayName("spec 056 FR-025 SC-005: dos pedidos a la vez con la misma clave dejan una observación, un mensaje y un aviso")
+    @DisplayName("spec 056 FR-025 SC-005: dos pedidos a la vez con la misma clave dejan una observación y un mensaje (su aviso es el del chat)")
     void dosPedidosALaVezNoDuplican() throws Exception {
         CountDownLatch salida = new CountDownLatch(1);
         ExecutorService hilos = Executors.newFixedThreadPool(2);
@@ -161,7 +160,7 @@ class ObservacionesAlMentorIT {
 
         assertThat(cuenta("SELECT count(*) FROM renaser.observaciones_mentor WHERE autor_id = ?", lider)).isEqualTo(1);
         assertThat(mensajesDelLiderAlMentor()).as("el mensaje del que perdió se deshizo con su transacción").isEqualTo(1);
-        assertThat(avisosDelMentor()).hasSize(1);
+        assertThat(avisosDelMentor()).as("sin aviso aparte: el del chat basta").isEmpty();
     }
 
     // spec 056 FR-025
