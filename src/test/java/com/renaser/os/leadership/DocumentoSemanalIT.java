@@ -1,16 +1,10 @@
 package com.renaser.os.leadership;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.renaser.os.TestcontainersConfiguration;
-import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 
 import java.net.URI;
 import java.net.http.HttpResponse;
@@ -20,11 +14,8 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -35,61 +26,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * «Descargar semana» de punta a punta sobre el Tomcat real, con la sesión de verdad y todo en Postgres (spec 056, FR-032, FR-035 a FR-041, FR-047,
  * SC-006 y SC-007): los tres documentos, su reutilización, el enlace de 10 minutos, el registro de cada pedido y quién puede pedir qué. El
- * almacenamiento es uno en memoria que anota cada subida y cada enlace: el de las pruebas (noop) no guarda nada que después se pueda leer.
+ * almacenamiento es el de memoria del escenario común ({@link AlmacenamientoDeLasPruebasDelLider}), que anota cada subida y cada enlace: el de las
+ * pruebas (noop) no guarda nada que después se pueda leer.
  */
-@Import({TestcontainersConfiguration.class, DocumentoSemanalIT.AlmacenamientoDePrueba.class})
 class DocumentoSemanalIT extends EscenarioDelLiderIT {
 
-    /** Guarda de verdad, en memoria, y firma un enlace que dice cuánto vence. */
-    static class AlmacenamientoDelDocumento implements AlmacenamientoPort {
-        final Map<String, byte[]> objetos = new ConcurrentHashMap<>();
-        final List<String> subidas = new CopyOnWriteArrayList<>();
-        final Map<String, String> tipos = new ConcurrentHashMap<>();
-
-        @Override
-        public URI firmarSubida(String ruta, String tipoContenido, Duration validez) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public URI firmarLectura(String ruta, Duration validez) {
-            return URI.create("https://almacen.test/" + ruta + "?vence=" + validez.toSeconds());
-        }
-
-        @Override
-        public URI urlPublica(String ruta) {
-            throw new UnsupportedOperationException("un documento privado nunca tiene enlace público");
-        }
-
-        @Override
-        public void subir(String ruta, byte[] contenido, String tipoContenido) {
-            objetos.put(ruta, contenido);
-            subidas.add(ruta);
-            tipos.put(ruta, tipoContenido);
-        }
-
-        @Override
-        public void borrar(String ruta) {
-            objetos.remove(ruta);
-        }
-
-        @Override
-        public Optional<byte[]> leer(String ruta, long pesoMaximo) {
-            return Optional.ofNullable(objetos.get(ruta));
-        }
-    }
-
-    @TestConfiguration
-    static class AlmacenamientoDePrueba {
-        @Bean
-        @Primary
-        AlmacenamientoDelDocumento almacenamientoDelDocumento() {
-            return new AlmacenamientoDelDocumento();
-        }
-    }
-
     @Autowired
-    AlmacenamientoDelDocumento almacen;
+    AlmacenamientoDeLasPruebasDelLider.AlmacenamientoDelLiderEnMemoria almacen;
 
     @AfterEach
     void limpiarLosDocumentos() {
@@ -101,9 +44,7 @@ class DocumentoSemanalIT extends EscenarioDelLiderIT {
         });
         jdbc.update("DELETE FROM renaser.notas_del_mentor WHERE aprendiz_id = ?", ana);
         jdbc.update("DELETE FROM renaser.observaciones_mentor WHERE mentor_id = ?", mentora);
-        almacen.objetos.clear();
-        almacen.subidas.clear();
-        almacen.tipos.clear();
+        almacen.vaciar();
     }
 
     // ── pedidos y lecturas ──────────────────────────────────────────────────
