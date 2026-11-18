@@ -37,6 +37,7 @@ Esta spec ordena el recorrido del líder (Mis mentores → mentor → grupo → 
 - P: ¿Qué se construye ahora? → R: Las 6 historias, en una entrega.
 - P: Cuando el líder responde una consulta, ¿qué ve el aprendiz? → R: Que respondió el líder, con su nombre; el mentor también la ve.
 - P: ¿El mentor puede descargar el documento semanal de sus aprendices? → R: Sí, de los que acompaña hoy, desde su ficha del aprendiz.
+- P: ¿Cómo se calcula el cupo de un mentor? → R: Aprendices que acompaña hoy sobre la suma de los cupos de sus grupos (el servidor guarda el cupo por grupo, no por mentor).
 
 ## Escenarios de uso y pruebas *(obligatorio)*
 
@@ -161,7 +162,7 @@ El líder ve las consultas sin responder y le recuerda al mentor o responde él;
 
 - **FR-001**: «Mis mentores» no muestra la insignia del rol en la cabecera.
 - **FR-002**: Arriba, «Por resolver» muestra hasta tres filas, cada una con un símbolo de estado, una cifra corta y un botón: grupos sin mentor → «Asignar»; consultas sin respuesta con los días de la más vieja → «Recordar»; el mentor con la peor evaluación del mes por debajo del 60 % → «Ver». Una fila sin nada que resolver no se muestra; sin ninguna, la sección no aparece.
-- **FR-003**: Cada mentor se muestra con un anillo de cupo con el número escrito («n/máx»), su nombre, la cantidad de sus aprendices en cada estado con su forma (× rojo, ! ámbar, ✓ verde, · sin datos) y una barra de colores proporcional; ordenados por urgencia (más aprendices en rojo primero).
+- **FR-003**: Cada mentor se muestra con un anillo de cupo con el número escrito («n/máx», donde n son los aprendices que acompaña hoy y máx la suma de los cupos de sus grupos), su nombre, la cantidad de sus aprendices en cada estado con su forma (× rojo, ! ámbar, ✓ verde, · sin datos) y una barra de colores proporcional; ordenados por urgencia (más aprendices en rojo primero).
 - **FR-004**: Un mentor sin grupo dice «Sin grupo» con su cupo libre; un mentor suspendido se ve apagado, sin anillo ni acciones.
 - **FR-005**: Al pie, accesos a Grupos, Consultas (con su cantidad), Reporte del mes y Todos los aprendices.
 
@@ -220,7 +221,7 @@ El líder ve las consultas sin responder y le recuerda al mentor o responde él;
 
 **Documento semanal**
 
-- **FR-035**: El documento semanal del aprendiz trae, en este orden: encabezado (nombre, su formación y su día —nunca un plazo fijo escrito—, mentor, grupo, semana y fecha de generación); titular con el estado de la semana y una frase; cuatro cifras comparadas con la semana anterior (hábitos cumplidos, días activos, evidencias, días programados); tabla pilar × día; evidencias de la semana (tipo, fecha y estado); «En sus palabras»; evaluación y nota compartida de su mentor; un foco para la próxima semana; y una segunda página con el detalle día por día.
+- **FR-035**: El documento semanal del aprendiz trae, en este orden: encabezado (nombre, su formación y su día —nunca un plazo fijo escrito—, mentor, grupo, semana y fecha de generación); titular con el estado de la semana y una frase; cuatro cifras comparadas con la semana anterior (hábitos cumplidos, días activos, evidencias, días programados); tabla pilar × día; evidencias de la semana (tipo, fecha y estado); «En sus palabras»; la evaluación del mes de su mentor; un foco para la próxima semana; y una segunda página con el detalle día por día.
 - **FR-036**: El documento semanal del mentor trae: encabezado; titular de su grupo; conteo por color; aprendices ordenados por riesgo con su tendencia; sus pendientes (evaluaciones, consultas, mensajes a aprendices en rojo); alertas (aprendices con 3 o más días sin actividad); lo que le dijo el líder; y el foco de la semana. Si el mentor sigue su programa, suma su propia semana como en FR-035.
 - **FR-037**: La nota privada del mentor nunca sale en un documento.
 - **FR-038**: Una semana sin datos dice «Sin actividad esta semana» en lugar de tablas vacías.
@@ -240,7 +241,7 @@ El líder ve las consultas sin responder y le recuerda al mentor o responde él;
 ### Entidades clave
 
 - **Grupo** (ya existe): nombre, formación, mentor, aprendices y cupo.
-- **Cupo del mentor** (ya existe): máximo de aprendices que puede acompañar y los que acompaña hoy.
+- **Cupo del mentor** (derivado): aprendices que acompaña hoy sobre la suma de los cupos de sus grupos; no se guarda.
 - **Observación del líder** (ya existe): reconocimiento, sugerencia o alerta sobre un mentor, con autor y fecha; ahora además se le entrega al mentor.
 - **Consulta** (ya existe): pregunta de un aprendiz a su mentor, con estado y respuesta.
 - **Documento semanal** (nuevo): persona, semana, tipo (aprendiz o mentor), dónde está guardado, una huella de los datos con que se generó y la fecha de generación.
