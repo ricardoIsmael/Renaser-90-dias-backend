@@ -87,8 +87,32 @@ class PlantillaDelDocumentoDelMentorYDelMesTest {
     void losPendientes() {
         String html = html(DatosDePruebaDelDocumento.mentor());
 
-        assertThat(html).contains("2 consultas sin responder", "5 días").contains("Evaluación del mes", "82.5 %")
+        assertThat(html).contains("2 consultas sin responder", "5 días").contains("Evaluación del mes: 83 %").doesNotContain("82.5")
                 .contains("Escribir a los aprendices en rojo");
+    }
+
+    @Test
+    @DisplayName("spec 056 FR-036: un conteo concuerda con su palabra: «1 consulta sin responder», «de hace 1 día», «1 aprendiz» y «1 día sin actividad»")
+    void losConteosEnSingular() {
+        DatosDelMentor base = DatosDePruebaDelDocumento.mentor();
+        DatosDelMentor datos = new DatosDelMentor(base.encabezado(), new TitularDelGrupo(ColorDeLaFila.AMARILLO, new BigDecimal("71.5"), 1, List.of("Fénix")),
+                base.conteo(), base.aprendices(), new Pendientes(1, 1, "CALCULADA", new BigDecimal("82.5"), List.of("Ana Pérez")),
+                List.of(new AprendizEnAlerta("Ana Pérez", 1)), base.observaciones(), new Foco("RESPONDER_CONSULTAS", 1), null);
+
+        String html = html(datos);
+
+        assertThat(html).contains("1 consulta sin responder", "de hace 1 día").contains("1 aprendiz ·").contains("1 día sin actividad")
+                .contains("Responder 1 consulta pendiente.")
+                .doesNotContain("1 consultas").doesNotContain("1 días").doesNotContain("1 aprendices").doesNotContain("consulta pendientes");
+    }
+
+    @Test
+    @DisplayName("spec 056 FR-036: la evaluación del mes de los pendientes sale entera: el 0.1323 del servidor (0,13 %) es «0 %», nunca «0.1323 %», y 13,23 es «13 %»")
+    void laEvaluacionDeLosPendientesSaleEntera() {
+        DatosDelMentor base = DatosDePruebaDelDocumento.mentor();
+
+        assertThat(html(conEvaluacion(base, new BigDecimal("0.1323")))).contains("Evaluación del mes: 0 %").doesNotContain("0.1323");
+        assertThat(html(conEvaluacion(base, new BigDecimal("13.2300")))).contains("Evaluación del mes: 13 %").doesNotContain("13.23");
     }
 
     @Test
@@ -172,8 +196,21 @@ class PlantillaDelDocumentoDelMentorYDelMesTest {
         String html = plantilla.renderizar(DatosDePruebaDelDocumento.mes(), GENERADO);
 
         assertThat(SeccionesDelHtml.de(html)).containsExactly("encabezado", "promedio", "ranking", "sin-muestra");
-        assertThat(html).contains("noviembre de 2026", "72.4 %").contains("Debajo del 60 %").contains("Luisa Rojas", "84.2 %", "Marco Díaz", "55 %")
+        assertThat(html).contains("noviembre de 2026", "72 %").contains("Debajo del 60 %").contains("Luisa Rojas", "84 %", "Marco Díaz", "55 %")
+                .doesNotContain("72.4").doesNotContain("84.2")
                 .contains("Al día", "Con problemas").contains("Nora Sin Muestra").contains("Sin evaluación calculada");
+    }
+
+    @Test
+    @DisplayName("spec 056 FR-032: el promedio y la evaluación de cada mentor salen enteros, como en la app: 0.1323 (0,13 %) es «0 %» y 13,23 es «13 %», nunca con cuatro decimales")
+    void elReporteDelMesDiceLasEvaluacionesEnteras() {
+        DatosDelMes datos = new DatosDelMes("2026-11", LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30), ZONA, new BigDecimal("0.1323"), 1,
+                List.of(new MentorDelRanking("Luisa Rojas", new BigDecimal("13.2300"), 6, 2), new MentorDelRanking("Marco Díaz", new BigDecimal("0.1323"), 1, 0)),
+                List.of());
+
+        String html = plantilla.renderizar(datos, GENERADO);
+
+        assertThat(html).contains(">0 %<", ">13 %<").doesNotContain("0.1323").doesNotContain("13.23");
     }
 
     @Test
@@ -185,6 +222,11 @@ class PlantillaDelDocumentoDelMentorYDelMesTest {
 
         assertThat(plantilla.renderizar(vacio, GENERADO)).contains("Sin mentores evaluados este mes").doesNotContain("<table").doesNotContain("null");
         assertThat(plantilla.renderizar(malo, GENERADO)).doesNotContain("<script>x").contains("&lt;script&gt;x&lt;/script&gt;").doesNotContain("null");
+    }
+
+    private static DatosDelMentor conEvaluacion(DatosDelMentor base, BigDecimal porcentaje) {
+        return new DatosDelMentor(base.encabezado(), base.titular(), base.conteo(), base.aprendices(),
+                new Pendientes(2, 5, "CALCULADA", porcentaje, List.of("Ana Pérez")), base.alertas(), base.observaciones(), base.foco(), null);
     }
 
     private static DatosDelMentor conFoco(DatosDelMentor base, Foco foco) {

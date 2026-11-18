@@ -14,8 +14,11 @@ public sealed interface DatosDelDocumento permits DatosDelAprendiz, DatosDelMent
     /**
      * Cambia al cambiar la forma del documento: entra a la huella, así un documento guardado con la plantilla anterior se vuelve a
      * generar en vez de reutilizarse.
+     *
+     * <p>2 (2026-11-18, E2E de la spec 056): las evaluaciones salen enteras («13 %» y no «0.1323 %»), los hábitos del catálogo en tipo oración y los
+     * conteos concuerdan en singular («1 consulta»).
      */
-    int VERSION_DE_LA_PLANTILLA = 1;
+    int VERSION_DE_LA_PLANTILLA = 2;
 
     TipoDeDocumento tipo();
 

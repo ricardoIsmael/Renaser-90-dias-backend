@@ -14,6 +14,7 @@ import com.renaser.os.leadership.domain.model.documento.DatosDePruebaDelDocument
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -139,7 +140,7 @@ class PlantillaDelDocumentoDelAprendizTest {
     @Test
     @DisplayName("spec 056 FR-035: la evaluación del mes de su mentor dice el porcentaje; sin calcular, lo dice en palabras; sin mentor, también")
     void laEvaluacionDelMentor() {
-        assertThat(html(DatosDePruebaDelDocumento.aprendiz())).contains("Evaluación de su mentor", "82.5 %");
+        assertThat(html(DatosDePruebaDelDocumento.aprendiz())).contains("Evaluación de su mentor", "Evaluación del mes 83 %").doesNotContain("82.5");
 
         DatosDelAprendiz base = DatosDePruebaDelDocumento.aprendiz();
         DatosDelAprendiz sinCalcular = new DatosDelAprendiz(base.encabezado(), base.titular(), base.cifras(), base.tabla(), base.evidencias(),
@@ -187,6 +188,52 @@ class PlantillaDelDocumentoDelAprendizTest {
                 base.evaluacionDelMentor(), base.foco(), base.detalle());
 
         assertThat(html(datos)).doesNotContain("Sin actividad esta semana").contains("<table");
+    }
+
+    @Test
+    @DisplayName("spec 056 FR-035: la evaluación del mes del mentor sale como porcentaje entero: 13,23 es «13 %» y el 0.1323 del servidor (0,13 %, ya en escala de 0 a 100) es «0 %», nunca «0.1323 %»")
+    void laEvaluacionSaleEntera() {
+        DatosDelAprendiz base = DatosDePruebaDelDocumento.aprendiz();
+        DatosDelAprendiz conTrece = conEvaluacion(base, new BigDecimal("13.2300"));
+        DatosDelAprendiz conMinima = conEvaluacion(base, new BigDecimal("0.1323"));
+
+        assertThat(html(conTrece)).contains("Evaluación del mes 13 %").doesNotContain("13.23");
+        assertThat(html(conMinima)).contains("Evaluación del mes 0 %").doesNotContain("0.1323");
+    }
+
+    @Test
+    @DisplayName("spec 056 FR-035: los hábitos del catálogo, que llegan en MAYÚSCULAS, se leen en tipo oración en las evidencias, en sus palabras y en el detalle; las siglas y lo que ya viene bien se respetan")
+    void losHabitosEnTipoOracion() {
+        DatosDelAprendiz base = DatosDePruebaDelDocumento.aprendiz();
+        DatosDelAprendiz datos = new DatosDelAprendiz(base.encabezado(), base.titular(), base.cifras(), base.tabla(),
+                List.of(new EvidenciaDeLaSemana("FOTO", LocalDate.of(2026, 11, 14), "VALIDA", "AGUA TIBIA CON LIMÓN")),
+                List.of(new PalabraDeLaPersona(LocalDate.of(2026, 11, 16), "RITUAL TIERRA - AGUA - FUEGO (mañana)", "Me sentí bien.")),
+                base.evaluacionDelMentor(), base.foco(),
+                List.of(new DetalleDelDia(LocalDate.of(2026, 11, 14), 46, null, List.of(
+                        new HabitoDelDia("Cuerpo", "AGUA TIBIA CON LIMÓN", "COMPLETADO", "ENTREGADA"),
+                        new HabitoDelDia("Mente", "HABLAR CON SER", "PENDIENTE", null),
+                        new HabitoDelDia("Mente", "Pastilla Renacer", "PENDIENTE", null)))));
+
+        String html = html(datos);
+
+        assertThat(html).contains("Agua tibia con limón", "Ritual tierra - agua - fuego (mañana)", "Hablar con SER", "Pastilla Renacer")
+                .doesNotContain("AGUA TIBIA CON LIMÓN").doesNotContain("RITUAL TIERRA").doesNotContain("HABLAR CON SER");
+    }
+
+    @Test
+    @DisplayName("spec 056 FR-035: el foco dice «1 hábito» en singular y «4 hábitos» en plural")
+    void elFocoConcuerdaEnNumero() {
+        DatosDelAprendiz base = DatosDePruebaDelDocumento.aprendiz();
+        DatosDelAprendiz conUno = new DatosDelAprendiz(base.encabezado(), base.titular(), base.cifras(), base.tabla(), base.evidencias(),
+                base.palabras(), base.evaluacionDelMentor(), new DatosDelAprendiz.FocoDeLaSemana("Emociones", 0, 1), base.detalle());
+
+        assertThat(html(conUno)).contains("cumplió 0 de 1 hábito.").doesNotContain("1 hábitos");
+        assertThat(html(base)).contains("cumplió 2 de 4 hábitos.");
+    }
+
+    private static DatosDelAprendiz conEvaluacion(DatosDelAprendiz base, BigDecimal porcentaje) {
+        return new DatosDelAprendiz(base.encabezado(), base.titular(), base.cifras(), base.tabla(), base.evidencias(), base.palabras(),
+                new DatosDelAprendiz.EvaluacionDelMentor("2026-11", porcentaje, "CALCULADA"), base.foco(), base.detalle());
     }
 
     @Test

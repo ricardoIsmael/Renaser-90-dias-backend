@@ -57,7 +57,7 @@ final class DocumentoDelMentorEnHtml {
         String grupos = String.join(", ", titular.grupos().stream().map(Html::e).toList());
         return Html.seccion("titular", "Su grupo", "<p><span class=\"estado " + Textos.clase(titular.estado()) + "\">"
                 + Textos.simbolo(titular.estado()) + " " + e(titular.estado().etiqueta()) + "</span>" + promedio + "</p>"
-                + Html.parrafo(titular.aprendices() + " aprendices · " + grupos));
+                + Html.parrafo(Textos.cantidad(titular.aprendices(), "aprendiz", "aprendices") + " · " + grupos));
     }
 
     private static String conteo(ConteoPorColor conteo) {
@@ -89,8 +89,9 @@ final class DocumentoDelMentorEnHtml {
         if (pendientes.consultas() == null) {
             return "Consultas: No disponible";
         }
-        String dias = pendientes.diasDeLaMasVieja() == null ? "" : " · la más vieja, de hace " + pendientes.diasDeLaMasVieja() + " días";
-        return pendientes.consultas() + " consultas sin responder" + dias;
+        String dias = pendientes.diasDeLaMasVieja() == null ? ""
+                : " · la más vieja, de hace " + Textos.cantidad(pendientes.diasDeLaMasVieja(), "día", "días");
+        return Textos.cantidad(pendientes.consultas(), "consulta", "consultas") + " sin responder" + dias;
     }
 
     private static String evaluacion(Pendientes pendientes) {
@@ -98,7 +99,7 @@ final class DocumentoDelMentorEnHtml {
             return "Evaluación del mes: No disponible";
         }
         return "Evaluación del mes: " + (pendientes.evaluacionPorcentaje() == null ? "sin calcular"
-                : Textos.porcentaje(pendientes.evaluacionPorcentaje()));
+                : Textos.evaluacion(pendientes.evaluacionPorcentaje()));
     }
 
     private static String enRojo(Pendientes pendientes) {
@@ -113,7 +114,7 @@ final class DocumentoDelMentorEnHtml {
             return Html.seccion("alertas", "Alertas", Html.parrafo("Sin alertas esta semana."));
         }
         return Html.seccion("alertas", "Alertas", Html.lista(datos.alertas().stream()
-                .map(alerta -> e(alerta.nombre()) + " · " + alerta.diasSinActividad() + " días sin actividad").toList()));
+                .map(alerta -> e(alerta.nombre()) + " · " + Textos.cantidad(alerta.diasSinActividad(), "día", "días") + " sin actividad").toList()));
     }
 
     private static String observaciones(DatosDelMentor datos) {
@@ -133,8 +134,8 @@ final class DocumentoDelMentorEnHtml {
 
     private static String foco(Foco foco) {
         String frase = switch (foco.tipo()) {
-            case "ESCRIBIR_A_LOS_ROJOS" -> "Escribir a " + foco.cantidad() + (foco.cantidad() == 1 ? " aprendiz" : " aprendices") + " en rojo.";
-            case "RESPONDER_CONSULTAS" -> "Responder " + foco.cantidad() + (foco.cantidad() == 1 ? " consulta" : " consultas") + " pendientes.";
+            case "ESCRIBIR_A_LOS_ROJOS" -> "Escribir a " + Textos.cantidad(foco.cantidad(), "aprendiz", "aprendices") + " en rojo.";
+            case "RESPONDER_CONSULTAS" -> "Responder " + Textos.cantidad(foco.cantidad(), "consulta pendiente", "consultas pendientes") + ".";
             case "REVISAR_ALERTAS" -> "Revisar las alertas de los aprendices sin actividad.";
             default -> "Mantener el ritmo de su grupo.";
         };

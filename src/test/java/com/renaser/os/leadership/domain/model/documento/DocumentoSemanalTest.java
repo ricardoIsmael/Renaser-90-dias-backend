@@ -53,6 +53,13 @@ class DocumentoSemanalTest {
     }
 
     @Test
+    @DisplayName("spec 056 FR-039: la plantilla corregida (evaluaciones enteras, hábitos en tipo oración, conteos en singular) es la versión 2: un documento guardado con la 1 se vuelve a generar y no se reutiliza")
+    void laPlantillaCorregidaEsOtraVersion() {
+        assertThat(DatosDelDocumento.VERSION_DE_LA_PLANTILLA)
+                .as("si cambias cómo se dice un documento, sube la versión: entra a la huella y los guardados se regeneran").isGreaterThanOrEqualTo(2);
+    }
+
+    @Test
     @DisplayName("spec 056 FR-039: un dato distinto cambia la huella, hasta el más chico: una palabra, el día o la tendencia")
     void unDatoDistintoCambiaLaHuella() {
         String base = DocumentoSemanal.huellaDe(DatosDePruebaDelDocumento.aprendiz());

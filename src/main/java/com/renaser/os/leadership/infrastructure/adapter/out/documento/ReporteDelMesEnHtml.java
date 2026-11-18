@@ -37,7 +37,7 @@ final class ReporteDelMesEnHtml {
     }
 
     private static String promedio(DatosDelMes datos) {
-        String promedio = datos.promedio() == null ? "Sin promedio" : Textos.porcentaje(datos.promedio());
+        String promedio = datos.promedio() == null ? "Sin promedio" : Textos.evaluacion(datos.promedio());
         return Html.seccion("promedio", "Promedio de los mentores", "<div class=\"cifras\"><div class=\"cifra\"><span class=\"valor\">" + promedio
                 + "</span>Promedio de las evaluaciones</div><div class=\"cifra\"><span class=\"valor\">" + datos.debajoDelUmbral()
                 + "</span>Debajo del " + Textos.porcentaje(PeorEvaluacion.UMBRAL) + "</div></div>");
@@ -59,7 +59,7 @@ final class ReporteDelMesEnHtml {
 
     private static String fila(int puesto, MentorDelRanking mentor) {
         ColorDeLaFila estado = ColorDeLaFila.de(ColorSemaforo.delPorcentaje(mentor.evaluacion()));
-        return "<tr><td class=\"num\">" + puesto + "</td><td>" + e(mentor.nombre()) + "</td><td class=\"num\">" + Textos.porcentaje(mentor.evaluacion())
+        return "<tr><td class=\"num\">" + puesto + "</td><td>" + e(mentor.nombre()) + "</td><td class=\"num\">" + Textos.evaluacion(mentor.evaluacion())
                 + "</td><td><span class=\"estado " + Textos.clase(estado) + "\">" + Textos.simbolo(estado) + " " + e(estado.etiqueta())
                 + "</span></td><td class=\"num\">" + (mentor.respondidas() == null ? "No disponible" : mentor.respondidas())
                 + "</td><td class=\"num\">" + (mentor.observaciones() == null ? "No disponible" : mentor.observaciones()) + "</td></tr>";

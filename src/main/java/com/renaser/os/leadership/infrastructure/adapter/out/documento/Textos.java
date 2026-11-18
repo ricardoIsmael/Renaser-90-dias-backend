@@ -1,8 +1,10 @@
 package com.renaser.os.leadership.infrastructure.adapter.out.documento;
 
 import com.renaser.os.leadership.domain.model.cumplimiento.ColorDeLaFila;
+import com.renaser.os.shared.domain.TituloEnTipoOracion;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -72,6 +74,24 @@ final class Textos {
     static String porcentaje(BigDecimal valor) {
         BigDecimal limpio = valor.signum() == 0 ? BigDecimal.ZERO : valor.stripTrailingZeros();
         return limpio.toPlainString() + " %";
+    }
+
+    /**
+     * {@code 83 %}: la evaluación del mes de un mentor, entera y redondeada, como la dice la app (RL-23: se redondea solo al mostrar). El valor ya viene en
+     * escala de 0 a 100 —{@code 0.1323} es el 0,13 %, no el 13,23 %—, así que no se multiplica: solo se redondea.
+     */
+    static String evaluacion(BigDecimal valor) {
+        return valor.setScale(0, RoundingMode.HALF_UP).toPlainString() + " %";
+    }
+
+    /** {@code 1 consulta}, {@code 2 consultas}: el número con su palabra en singular o en plural. */
+    static String cantidad(int cantidad, String singular, String plural) {
+        return cantidad + " " + (cantidad == 1 ? singular : plural);
+    }
+
+    /** El nombre de un hábito del catálogo, que llega en MAYÚSCULAS, en tipo oración como en la app; sin escapar (quien lo escribe en el HTML lo escapa). */
+    static String habito(String titulo) {
+        return TituloEnTipoOracion.de(titulo);
     }
 
     static String simbolo(ColorDeLaFila estado) {

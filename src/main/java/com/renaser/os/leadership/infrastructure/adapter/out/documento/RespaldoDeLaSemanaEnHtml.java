@@ -24,7 +24,7 @@ final class RespaldoDeLaSemanaEnHtml {
             return Html.seccion(prefijo + "evidencias", "Evidencias de la semana", Html.parrafo("Sin evidencias esta semana."));
         }
         List<List<String>> filas = datos.evidencias().stream().map(evidencia -> List.of(Textos.tipoDeEvidencia(evidencia.tipo()),
-                Textos.fechaCorta(evidencia.fecha()), e(evidencia.habito()), Textos.revision(evidencia.estado()))).toList();
+                Textos.fechaCorta(evidencia.fecha()), e(Textos.habito(evidencia.habito())), Textos.revision(evidencia.estado()))).toList();
         return Html.seccion(prefijo + "evidencias", "Evidencias de la semana", Html.tabla(List.of("Tipo", "Fecha", "Hábito", "Estado"), filas));
     }
 
@@ -34,7 +34,7 @@ final class RespaldoDeLaSemanaEnHtml {
             return "";
         }
         StringBuilder citas = new StringBuilder();
-        datos.palabras().forEach(palabra -> citas.append("<blockquote><strong>").append(e(palabra.habito())).append("</strong> · ")
+        datos.palabras().forEach(palabra -> citas.append("<blockquote><strong>").append(e(Textos.habito(palabra.habito()))).append("</strong> · ")
                 .append(Textos.fechaCorta(palabra.fecha())).append("<br>").append(e(palabra.texto())).append("</blockquote>"));
         return Html.seccion(prefijo + "en-sus-palabras", "En sus palabras", citas.toString());
     }
@@ -52,7 +52,7 @@ final class RespaldoDeLaSemanaEnHtml {
         if (evaluacion == null) {
             return "No disponible";
         }
-        return evaluacion.porcentaje() == null ? "Sin evaluación calculada este mes" : "Evaluación del mes " + Textos.porcentaje(evaluacion.porcentaje());
+        return evaluacion.porcentaje() == null ? "Sin evaluación calculada este mes" : "Evaluación del mes " + Textos.evaluacion(evaluacion.porcentaje());
     }
 
     static String foco(DatosDelAprendiz datos, String prefijo) {
@@ -61,7 +61,8 @@ final class RespaldoDeLaSemanaEnHtml {
             return "";
         }
         String frase = foco.pilar() == null ? "Sostener el ritmo de esta semana."
-                : e(foco.pilar()) + ": cumplió " + foco.cumplidos() + " de " + foco.programados() + " hábitos. Es el pilar que más necesita foco.";
+                : e(foco.pilar()) + ": cumplió " + foco.cumplidos() + " de " + Textos.cantidad(foco.programados(), "hábito", "hábitos")
+                + ". Es el pilar que más necesita foco.";
         return Html.seccion(prefijo + "foco", "Foco para la próxima semana", Html.parrafo(frase));
     }
 
@@ -80,7 +81,7 @@ final class RespaldoDeLaSemanaEnHtml {
 
     private static String habito(HabitoDelDia habito) {
         String entrega = Textos.entrega(habito.entrega());
-        return e(habito.pilar()) + " · " + e(habito.titulo()) + " · " + Textos.estadoDelHabito(habito.estado())
+        return e(habito.pilar()) + " · " + e(Textos.habito(habito.titulo())) + " · " + Textos.estadoDelHabito(habito.estado())
                 + (entrega.isEmpty() ? "" : " · " + entrega);
     }
 }
