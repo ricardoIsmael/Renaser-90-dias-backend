@@ -11,6 +11,9 @@ import com.renaser.os.support.application.ports.out.ticketmentor.SaveTicketMento
 import com.renaser.os.support.application.services.TicketMentorService;
 import com.renaser.os.support.domain.model.ticketmentor.TicketMentor;
 import com.renaser.os.support.domain.model.ticketmentor.TicketMentorId;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
+import com.renaser.os.shared.domain.Formacion;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
@@ -73,6 +76,8 @@ class TicketMentorControllerTest {
     private ParticipacionProgramaFinder participaciones;
     @MockitoBean
     private AprendicesDelAcompanantePort acompanamiento;
+    @MockitoBean
+    private AlcanceDeFormacionFinder formaciones;
     @Autowired
     private RelojDePrueba reloj;
     @MockitoBean
@@ -185,5 +190,57 @@ class TicketMentorControllerTest {
                         .contentType("application/json").content("{\"mentorAnswer\":\"Una respuesta\"}"))
                 .andExpect(status().isForbidden());
         verify(guardaTickets, never()).save(any());
+    }
+
+    // spec 056 FR-030
+    @Test
+    @DisplayName("spec 056 FR-030: el líder de la formación responde con POST /answer y la respuesta trae respondidoPor {id, nombre}")
+    void elLiderRespondeYSeVeQuienRespondio() throws Exception {
+        UUID lider = cuenta(UserRole.MENTOR_LEAD, UserStatus.ACTIVE);
+        UserId liderId = UserId.of(lider);
+        when(cargaTickets.byId(deAna.id())).thenReturn(Optional.of(deAna));
+        when(formaciones.de(liderId)).thenReturn(AlcanceDeFormacion.de(Formacion.ESCUELA));
+        when(formaciones.formacionesDe(ana)).thenReturn(Set.of(Formacion.ESCUELA));
+        when(guardaTickets.save(any())).thenAnswer(invocacion -> invocacion.getArgument(0));
+        when(userSummaryFinder.findByIds(any())).thenReturn(java.util.Map.of(liderId, new UserSummary(liderId, "Lucía Líder", null, UserRole.MENTOR_LEAD, UserStatus.ACTIVE)));
+
+        mockMvc.perform(post("/api/v1/tickets/{id}/answer", deAna.id().value()).header("X-Actor-Id", lider.toString())
+                        .contentType("application/json").content("{\"mentorAnswer\":\"Prueba con una sola cosa\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ANSWERED"))
+                .andExpect(jsonPath("$.respondidoPor.id").value(lider.toString()))
+                .andExpect(jsonPath("$.respondidoPor.nombre").value("Lucía Líder"));
+    }
+
+    // spec 056 FR-030
+    @Test
+    @DisplayName("spec 056 FR-030: fuera de su formación el líder recibe 403 con codigo FUERA_DE_SU_ALCANCE")
+    void elLiderFueraDeSuFormacionRecibe403ConCodigo() throws Exception {
+        UUID lider = cuenta(UserRole.MENTOR_LEAD, UserStatus.ACTIVE);
+        when(cargaTickets.byId(deAna.id())).thenReturn(Optional.of(deAna));
+        when(formaciones.de(UserId.of(lider))).thenReturn(AlcanceDeFormacion.de(Formacion.ESCUELA));
+        when(formaciones.formacionesDe(ana)).thenReturn(Set.of(Formacion.DIPLOMADO));
+
+        mockMvc.perform(post("/api/v1/tickets/{id}/answer", deAna.id().value()).header("X-Actor-Id", lider.toString())
+                        .contentType("application/json").content("{\"mentorAnswer\":\"No me toca\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.codigo").value("FUERA_DE_SU_ALCANCE"));
+        verify(guardaTickets, never()).save(any());
+    }
+
+    // spec 056 FR-030
+    @Test
+    @DisplayName("spec 056 FR-030: la lista de la plataforma trae respondidoPor con el nombre en las respondidas y null en las abiertas")
+    void laListaTraeRespondidoPor() throws Exception {
+        UUID quien = cuenta(UserRole.MENTOR_LEAD, UserStatus.ACTIVE);
+        UserId mentora = UserId.of(UUID.randomUUID());
+        deAna.responder("Respuesta", mentora, FixedClock.at(AHORA));
+        when(userSummaryFinder.findByIds(any())).thenReturn(java.util.Map.of(mentora, new UserSummary(mentora, "Marta Mentora", null, UserRole.MENTOR, UserStatus.ACTIVE)));
+
+        mockMvc.perform(get("/api/v1/admin/tickets").header("X-Actor-Id", quien.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tickets[0].respondidoPor.id").value(mentora.value().toString()))
+                .andExpect(jsonPath("$.tickets[0].respondidoPor.nombre").value("Marta Mentora"))
+                .andExpect(jsonPath("$.tickets[1].respondidoPor").doesNotExist());
     }
 }

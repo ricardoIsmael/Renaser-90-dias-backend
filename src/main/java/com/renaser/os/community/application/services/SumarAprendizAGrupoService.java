@@ -49,6 +49,10 @@ import java.util.NoSuchElementException;
  * Acá son los mismos porque hoy las dos operaciones piden lo mismo (ADMIN/ALCHEMIST activo sobre
  * un aprendiz ACTIVO), y si mañana una de las dos cambia, cambia sola.
  *
+ * <blockquote><b>Corregido 2026-11-18 (spec 056, FR-010).</b> Decía que las dos piden ADMIN/ALCHEMIST activo. Desde el 18/11 también el líder de
+ * mentores activo, solo sobre grupos de sus formaciones ({@link FormacionDelGrupo#exigirQueLaGestione}); fuera de ellas, 403
+ * {@code FUERA_DE_SU_ALCANCE}.</blockquote>
+ *
  * <p><b>Lo que NO hace, y es lo importante:</b> no mueve
  * {@code participantes_programa.celula_id}. Esa columna es UNA sola y siete lecturas del producto
  * dependen de ella; sigue nombrando al grupo PRINCIPAL —el primero— y un alta adicional no lo
@@ -98,8 +102,9 @@ public class SumarAprendizAGrupoService implements SumarAprendizAGrupoUseCase {
     @Override
     @Transactional
     public CelulaDetalle sumar(SumarAprendizAGrupoCommand command) {
-        requireAdmin(command.actorId());
+        UserSummary actor = requireGestor(command.actorId());
         Celula destino = requireCelula(command.celulaId());
+        formacionDelGrupo.exigirQueLaGestione(actor, destino.formacion());
         requireAprendizElegible(command.traineeId());
         formacionDelGrupo.exigirQueElAprendizSea(command.traineeId(), destino);
 
@@ -221,14 +226,14 @@ public class SumarAprendizAGrupoService implements SumarAprendizAGrupoUseCase {
         return loadCelulaPort.porId(id).orElseThrow(() -> new NoSuchElementException("Celula no encontrada: " + id));
     }
 
-    private void requireAdmin(UserId actorId) {
+    /** Quien arma grupos: Administración, Alquimista o el líder de mentores (spec 056, FR-010), con la cuenta activa. El alcance del líder lo acota {@link FormacionDelGrupo}. */
+    private UserSummary requireGestor(UserId actorId) {
         UserSummary actor = userSummaryFinder.findById(actorId)
                 .orElseThrow(() -> new NoSuchElementException("Actor no encontrado: " + actorId));
         if (actor.status() != UserStatus.ACTIVE) {
             throw new NotAuthorizedException("La cuenta esta suspendida");
         }
-        if (actor.role() != UserRole.ADMIN && actor.role() != UserRole.ALCHEMIST) {
-            throw new NotAuthorizedException("Solo ADMIN/ALCHEMIST administran celulas");
-        }
+        formacionDelGrupo.exigirQueGestioneGrupos(actor);
+        return actor;
     }
 }

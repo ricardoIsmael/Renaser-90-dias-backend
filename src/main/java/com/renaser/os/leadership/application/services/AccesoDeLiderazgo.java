@@ -47,7 +47,19 @@ class AccesoDeLiderazgo {
      * ven los de las tres. Nunca una lista con mentores de dos formaciones a la vez para quien tiene una activa.
      */
     List<FichaDeMentor> mentoresDelAlcance(UserId actorId) {
-        List<FichaDeMentor> todos = fichaDeMentorFinder.mentoresActivos();
+        return delAlcance(actorId, fichaDeMentorFinder.mentoresActivos());
+    }
+
+    /**
+     * Spec 056 FR-004: los mentores con la cuenta suspendida que ve {@code actorId}, con el mismo filtro de formaciones que
+     * {@link #mentoresDelAlcance}. Solo el padrón los pide, para mostrarlos apagados: el reporte del mes, «Por resolver» y los documentos
+     * siguen con los activos, porque un mentor suspendido no atiende ni se evalúa.
+     */
+    List<FichaDeMentor> mentoresSuspendidosDelAlcance(UserId actorId) {
+        return delAlcance(actorId, fichaDeMentorFinder.mentoresSuspendidos());
+    }
+
+    private List<FichaDeMentor> delAlcance(UserId actorId, List<FichaDeMentor> todos) {
         Set<UserId> visibles = formaciones.dentroDelAlcance(todos.stream().map(FichaDeMentor::id).toList(),
                 formaciones.de(actorId));
         return todos.stream().filter(ficha -> visibles.contains(ficha.id())).toList();

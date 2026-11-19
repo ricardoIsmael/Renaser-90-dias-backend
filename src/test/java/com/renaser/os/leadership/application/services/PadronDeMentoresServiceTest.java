@@ -2,6 +2,8 @@ package com.renaser.os.leadership.application.services;
 
 import com.renaser.os.leadership.application.ports.in.ConsultarPadronDeMentoresUseCase.PadronDeMentores;
 import com.renaser.os.leadership.application.ports.in.IndicadoresDeMentor;
+import com.renaser.os.leadership.domain.model.mentor.AprendicesPorColor;
+import com.renaser.os.leadership.domain.model.mentor.CupoDelMentor;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.support.api.AtencionDeTicketsFinder.TicketPendiente;
@@ -33,6 +35,7 @@ class PadronDeMentoresServiceTest {
     static final UserId ANA = id("b1");
     static final UserId LUIS = id("b2");
     static final UserId PIA = id("b3");
+    static final UserId NORA = id("a4");
     static final UUID FENIX = UUID.fromString("00000000-0000-0000-0000-00000000f001");
     static final UUID AURORA = UUID.fromString("00000000-0000-0000-0000-00000000f002");
 
@@ -170,5 +173,127 @@ class PadronDeMentoresServiceTest {
         assertThatThrownBy(() -> servicio.padron(LIDER)).isInstanceOf(NotAuthorizedException.class)
                 .hasMessage("La cuenta esta suspendida");
         assertThat(banco.mesesEvaluados).isEmpty();
+    }
+
+    // ── Spec 056: el cupo y los aprendices por color ────────────────────────
+
+    @Test
+    @DisplayName("spec 056 FR-003: el cupo de Luisa son sus 2 aprendices sobre el tope de su grupo (10 de la política), y sus aprendices por color salen del semáforo")
+    void cupoYColoresDeUnMentor() {
+        IndicadoresDeMentor luisa = de(banco.padron().padron(LIDER), LUISA);
+
+        assertThat(luisa.cupo()).isEqualTo(new CupoDelMentor(2, 10));
+        assertThat(luisa.porColor()).isEqualTo(new AprendicesPorColor(1, 0, 1, 0));
+    }
+
+    @Test
+    @DisplayName("spec 056 FR-003: el amarillo del semáforo es el «ámbar» de la app, y los sin datos no se cuentan en ningún color")
+    void elAmarilloEsAmbar() {
+        banco.semaforoDe(RAUL, new com.renaser.os.mentoring.api.MedicionDeMentoresFinder.SemaforoResumido(2, 3, 4, 5,
+                new BigDecimal("50.0"), "AMARILLO", "Atención"));
+
+        assertThat(de(banco.padron().padron(LIDER), RAUL).porColor()).isEqualTo(new AprendicesPorColor(4, 3, 2, 5));
+    }
+
+    @Test
+    @DisplayName("spec 056 FR-003: el máximo suma el tope de cada uno de sus grupos, el propio del grupo si lo tiene")
+    void elMaximoSumaLosGrupos() {
+        UUID brisa = UUID.fromString("00000000-0000-0000-0000-00000000f003");
+        banco.grupo(brisa, "Grupo Brisa", LUISA, List.of(PIA));
+        banco.cupoDelGrupo(FENIX, 12);
+
+        IndicadoresDeMentor luisa = de(banco.padron().padron(LIDER), LUISA);
+
+        assertThat(luisa.cupo()).as("Ana, Luis y Pía sobre 12 + 10").isEqualTo(new CupoDelMentor(3, 22));
+    }
+
+    @Test
+    @DisplayName("spec 056 FR-004: un mentor sin grupo tiene 0 de 0 y ningún aprendiz por color: ceros verdaderos, no datos que faltan")
+    void mentorSinGrupoTieneCeros() {
+        IndicadoresDeMentor marta = de(banco.padron().padron(LIDER), MARTA);
+
+        assertThat(marta.cupo()).isEqualTo(new CupoDelMentor(0, 0));
+        assertThat(marta.porColor()).isEqualTo(AprendicesPorColor.ninguno());
+    }
+
+    @Test
+    @DisplayName("spec 056 RL-21: con el semáforo caído ni el cupo ni los colores se inventan: null, nunca ceros")
+    void sinSemaforoNoHayCupoNiColores() {
+        banco.medicionCaida = true;
+
+        IndicadoresDeMentor luisa = de(banco.padron().padron(LIDER), LUISA);
+
+        assertThat(luisa.cupo()).isNull();
+        assertThat(luisa.porColor()).isNull();
+    }
+
+    @Test
+    @DisplayName("spec 056 RL-21: con el cupo de los grupos caído solo el cupo queda sin dato; los colores y lo demás se entregan")
+    void sinElCupoDeLosGrupos() {
+        banco.cuposCaidos = true;
+
+        IndicadoresDeMentor luisa = de(banco.padron().padron(LIDER), LUISA);
+
+        assertThat(luisa.cupo()).isNull();
+        assertThat(luisa.porColor()).isEqualTo(new AprendicesPorColor(1, 0, 1, 0));
+        assertThat(luisa.grupos().disponible()).isTrue();
+        assertThat(luisa.aprendices()).isEqualTo(2);
+    }
+
+    // ── Spec 056 FR-004: el mentor suspendido ───────────────────────────────
+
+    // spec 056 FR-004
+    @Test
+    @DisplayName("spec 056 FR-004: un mentor suspendido de su formación sigue en el padrón, al final y marcado como suspendido, con sus indicadores leídos")
+    void elSuspendidoDelAlcanceSigueEnElPadron() {
+        banco.usuario(NORA, "Nora Aguirre", UserRole.MENTOR, UserStatus.SUSPENDED);
+        UUID brisa = UUID.fromString("00000000-0000-0000-0000-00000000f003");
+        banco.grupo(brisa, "Grupo Brisa", NORA, List.of(PIA));
+
+        PadronDeMentores padron = banco.padron().padron(LIDER);
+
+        assertThat(padron.mentores()).extracting(IndicadoresDeMentor::nombre)
+                .as("los activos primero, cada grupo por nombre, y la suspendida al final aunque su nombre vaya antes que el de Raúl")
+                .containsExactly("Luisa Rojas", "Marta Ruiz", "Raúl Soto", "Nora Aguirre");
+        assertThat(padron.suspendidos()).containsExactly(NORA);
+        IndicadoresDeMentor nora = de(padron, NORA);
+        assertThat(nora.grupos().disponible()).isTrue();
+        assertThat(nora.evaluacion().disponible()).isTrue();
+    }
+
+    // spec 056 FR-004
+    @Test
+    @DisplayName("spec 056 FR-004: un mentor suspendido de otra formación no aparece, ni apagado")
+    void elSuspendidoDeOtraFormacionNoAparece() {
+        banco.usuario(NORA, "Nora Aguirre", UserRole.MENTOR, UserStatus.SUSPENDED);
+        banco.deOtraFormacion(NORA);
+
+        PadronDeMentores padron = banco.padron().padron(LIDER);
+
+        assertThat(padron.mentores()).extracting(IndicadoresDeMentor::nombre).containsExactly("Luisa Rojas", "Marta Ruiz", "Raúl Soto");
+        assertThat(padron.suspendidos()).isEmpty();
+    }
+
+    // spec 056 FR-004
+    @Test
+    @DisplayName("spec 056 FR-004: sin mentores suspendidos nadie va marcado; los activos nunca se marcan")
+    void sinSuspendidosNadieVaMarcado() {
+        PadronDeMentores padron = banco.padron().padron(LIDER);
+
+        assertThat(padron.mentores()).hasSize(3);
+        assertThat(padron.suspendidos()).isEmpty();
+    }
+
+    // spec 056 FR-004
+    @Test
+    @DisplayName("spec 056 FR-004: el suspendido se lee con lo mismo que un activo: un cupo, un mes y una atención, no un hueco")
+    void elSuspendidoNoSeCuentaComoFuenteCaida() {
+        banco.usuario(NORA, "Nora Aguirre", UserRole.MENTOR, UserStatus.SUSPENDED);
+
+        IndicadoresDeMentor nora = de(banco.padron().padron(LIDER), NORA);
+
+        assertThat(nora.atencion().disponible()).isTrue();
+        assertThat(nora.semaforo().disponible()).isTrue();
+        assertThat(nora.cupo()).isEqualTo(new CupoDelMentor(0, 0));
     }
 }

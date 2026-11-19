@@ -9,6 +9,7 @@ import com.renaser.os.leadership.application.services.PersonasDelGrupo.Miembro;
 import com.renaser.os.leadership.domain.model.cumplimiento.BusquedaPorNombre;
 import com.renaser.os.leadership.domain.model.cumplimiento.GrupoDeLaPersona;
 import com.renaser.os.shared.domain.AlcanceDeFormacion;
+import com.renaser.os.shared.domain.RechazoConCodigoException;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.AlcanceDeFormacionFinder;
 import com.renaser.os.users.api.CuentasDePruebaFinder;
@@ -48,6 +49,9 @@ import java.util.UUID;
 @Component
 class PersonasDelPrograma {
 
+    /** El motivo del 404 de un mentor o una guía que no sigue su programa (spec 056, FR-022). */
+    static final String SIN_PROGRAMA = "SIN_PROGRAMA";
+
     private final AcompanamientoFinder acompanamiento;
     private final ParticipacionProgramaFinder participaciones;
     private final UserSummaryFinder usuarios;
@@ -68,6 +72,19 @@ class PersonasDelPrograma {
      * guía de aprendiz que ya activó el suyo (D-318).
      */
     Mirada mirar(UserId actor, UserId personaId, Instant ahora) {
+        return mirar(actor, personaId, ahora, false);
+    }
+
+    /**
+     * Igual que {@link #mirar}, pero al mentor o la guía que el líder SÍ puede ver y que no sigue su programa (no lo activó) lo rechaza con el
+     * motivo {@code SIN_PROGRAMA} (404 con código) y no con el 404 de siempre: la ficha del líder lo dice en una línea (spec 056, FR-022). Lo
+     * demás —la cuenta que no se muestra, el id que no existe, la persona de otra formación— sigue siendo el 404 sin pista de antes.
+     */
+    Mirada mirarYDecirSiNoSigueSuPrograma(UserId actor, UserId personaId, Instant ahora) {
+        return mirar(actor, personaId, ahora, true);
+    }
+
+    private Mirada mirar(UserId actor, UserId personaId, Instant ahora, boolean conMotivo) {
         UserSummary perfil = usuarios.findById(personaId).filter(this::seMuestra).orElseThrow(PersonasDelPrograma::noEncontrada);
         boolean acompanante = UserRole.ROLES_QUE_ACTUAN_COMO_MENTOR.contains(perfil.role());
         if (!acompanante && perfil.role() != UserRole.TRAINEE) {
@@ -77,7 +94,7 @@ class PersonasDelPrograma {
                 .filter(ParticipacionPrograma::inscrito)
                 // Al aprendiz se lo ve aunque no haya elegido su Día 1 (sale «sin datos»); al mentor, solo con su programa activado.
                 .filter(programa -> !acompanante || programa.activado())
-                .orElseThrow(PersonasDelPrograma::noEncontrada);
+                .orElseThrow(() -> acompanante && conMotivo ? sinPrograma(actor, personaId) : noEncontrada());
         // Spec 022: una persona de otra formación se responde como si no existiera (404).
         formaciones.exigirQueLaVea(actor, participacion.formacion());
         if (acompanante) {
@@ -208,6 +225,12 @@ class PersonasDelPrograma {
 
     private static NoSuchElementException noEncontrada() {
         return new NoSuchElementException("Esa persona no esta en el programa");
+    }
+
+    /** Spec 022 primero: quien es de otra formación se responde como si no existiera, sin decir siquiera que no sigue su programa. */
+    private RuntimeException sinPrograma(UserId actor, UserId personaId) {
+        formaciones.exigirQueLaVea(actor, personaId);
+        return RechazoConCodigoException.noEncontrado(SIN_PROGRAMA, "Esta persona no sigue su programa.");
     }
 
     /**

@@ -127,8 +127,9 @@ public class ComposicionDeCelulaService implements AsignarMentorCelulaUseCase, Q
     @Override
     @Transactional
     public CelulaDetalle asignar(AsignarAprendizCelulaCommand command) {
-        requireAdmin(command.actorId());
+        UserSummary actor = requireGestor(command.actorId());
         Celula destino = requireCelula(command.celulaId());
+        formacionDelGrupo.exigirQueLaGestione(actor, destino.formacion());
         requireAprendizElegible(command.traineeId());
         formacionDelGrupo.exigirQueElAprendizSea(command.traineeId(), destino);
 
@@ -160,7 +161,10 @@ public class ComposicionDeCelulaService implements AsignarMentorCelulaUseCase, Q
     @Override
     @Transactional
     public void quitar(QuitarAprendizCelulaCommand command) {
-        requireAdmin(command.actorId());
+        UserSummary actor = requireGestor(command.actorId());
+        if (formacionDelGrupo.acotaAlAlcance(actor)) {
+            formacionDelGrupo.exigirQueLaGestione(actor, requireCelula(command.celulaId()).formacion());
+        }
         Instant ahora = clock.now();
 
         List<AsignacionCelula> vigentes = loadAsignacionesPort.porUsuario(command.traineeId()).stream()
@@ -238,8 +242,9 @@ public class ComposicionDeCelulaService implements AsignarMentorCelulaUseCase, Q
     @Override
     @Transactional
     public CelulaDetalle asignar(AsignarMentorCelulaCommand command) {
-        requireAdmin(command.actorId());
+        UserSummary actor = requireGestor(command.actorId());
         Celula celula = requireCelula(command.celulaId());
+        formacionDelGrupo.exigirQueLaGestione(actor, celula.formacion());
         requireMentorElegible(command.mentorId(), celula);
 
         Instant ahora = clock.now();
@@ -269,8 +274,9 @@ public class ComposicionDeCelulaService implements AsignarMentorCelulaUseCase, Q
     @Override
     @Transactional
     public CelulaDetalle quitar(QuitarMentorCelulaCommand command) {
-        requireAdmin(command.actorId());
+        UserSummary actor = requireGestor(command.actorId());
         Celula celula = requireCelula(command.celulaId());
+        formacionDelGrupo.exigirQueLaGestione(actor, celula.formacion());
         Instant ahora = clock.now();
 
         cerrarMentorVigente(celula.id(), ahora);
@@ -471,14 +477,14 @@ public class ComposicionDeCelulaService implements AsignarMentorCelulaUseCase, Q
         return loadCelulaPort.porId(id).orElseThrow(() -> new NoSuchElementException("Celula no encontrada: " + id));
     }
 
-    private void requireAdmin(UserId actorId) {
+    /** Quien arma grupos: Administración, Alquimista o el líder de mentores (spec 056, FR-010), con la cuenta activa. El alcance del líder lo acota {@link FormacionDelGrupo}. */
+    private UserSummary requireGestor(UserId actorId) {
         UserSummary actor = userSummaryFinder.findById(actorId)
                 .orElseThrow(() -> new NoSuchElementException("Actor no encontrado: " + actorId));
         if (actor.status() != UserStatus.ACTIVE) {
             throw new NotAuthorizedException("La cuenta esta suspendida");
         }
-        if (actor.role() != UserRole.ADMIN && actor.role() != UserRole.ALCHEMIST) {
-            throw new NotAuthorizedException("Solo ADMIN/ALCHEMIST administran celulas");
-        }
+        formacionDelGrupo.exigirQueGestioneGrupos(actor);
+        return actor;
     }
 }

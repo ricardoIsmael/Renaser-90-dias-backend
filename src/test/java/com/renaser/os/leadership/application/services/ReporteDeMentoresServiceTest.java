@@ -4,6 +4,8 @@ import com.renaser.os.leadership.application.ports.in.ConsultarReporteDeMentores
 import com.renaser.os.leadership.application.ports.in.ConsultarReporteDeMentoresUseCase.ReporteDeMentores;
 import com.renaser.os.leadership.application.ports.in.RegistrarObservacionUseCase.RegistrarObservacionCommand;
 import com.renaser.os.shared.domain.NotAuthorizedException;
+import com.renaser.os.users.api.UserRole;
+import com.renaser.os.users.api.UserStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -13,6 +15,7 @@ import java.time.YearMonth;
 import static com.renaser.os.leadership.application.services.PadronDeMentoresServiceTest.LIDER;
 import static com.renaser.os.leadership.application.services.PadronDeMentoresServiceTest.LUISA;
 import static com.renaser.os.leadership.application.services.PadronDeMentoresServiceTest.MARTA;
+import static com.renaser.os.leadership.application.services.PadronDeMentoresServiceTest.NORA;
 import static com.renaser.os.leadership.application.services.PadronDeMentoresServiceTest.RAUL;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -77,5 +80,18 @@ class ReporteDeMentoresServiceTest {
     @DisplayName("RL-26: un MENTOR no lee el reporte")
     void mentorNoLee() {
         assertThatThrownBy(() -> banco.reporte().reporte(LUISA, null)).isInstanceOf(NotAuthorizedException.class);
+    }
+
+    // spec 056 FR-004
+    @Test
+    @DisplayName("spec 056 FR-004: el padrón muestra apagado al mentor suspendido, pero el reporte del mes no lo lista ni lo ordena")
+    void elReporteSigueSinSuspendidos() {
+        banco.usuario(NORA, "Nora Aguirre", UserRole.MENTOR, UserStatus.SUSPENDED);
+        banco.evaluacion(NORA, "99.0");
+
+        ReporteDeMentores reporte = banco.reporte().reporte(LIDER, null);
+
+        assertThat(reporte.ordenados()).extracting(ReporteDeMentoresServiceTest::nombre).containsExactly("Raúl Soto", "Luisa Rojas");
+        assertThat(reporte.sinMuestra()).extracting(ReporteDeMentoresServiceTest::nombre).containsExactly("Marta Ruiz");
     }
 }

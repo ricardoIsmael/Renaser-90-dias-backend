@@ -521,6 +521,11 @@ public class BancoDeCumplimiento {
         }
 
         @Override
+        public List<FichaDeMentor> mentoresSuspendidos() {
+            return List.of();
+        }
+
+        @Override
         public Optional<FichaDeMentor> mentor(UserId usuarioId) {
             return Optional.empty();
         }

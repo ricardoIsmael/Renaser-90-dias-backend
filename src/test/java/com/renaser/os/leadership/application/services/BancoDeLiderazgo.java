@@ -4,16 +4,22 @@ import com.renaser.os.leadership.application.ports.in.ConsultarReporteDeMentores
 import com.renaser.os.leadership.application.ports.out.GuardarObservacionPort;
 import com.renaser.os.leadership.application.ports.out.LeerObservacionesPort;
 import com.renaser.os.leadership.domain.model.observacion.ObservacionDeMentor;
+import com.renaser.os.chat.api.MensajeDirectoPort;
 import com.renaser.os.community.api.AcompanamientoFinder;
+import com.renaser.os.community.api.CupoDeLosGruposFinder;
+import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.mentoring.api.EvaluacionDeMentorFinder;
 import com.renaser.os.mentoring.api.MedicionDeMentoresFinder;
 import com.renaser.os.mentoring.api.MedicionDeMentoresFinder.GrupoMedido;
 import com.renaser.os.mentoring.api.MedicionDeMentoresFinder.MedicionVigente;
 import com.renaser.os.mentoring.api.MedicionDeMentoresFinder.SemaforoResumido;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.support.api.AtencionDeTicketsFinder;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
+import com.renaser.os.users.api.AlcanceDeFormacionPermisivo;
 import com.renaser.os.users.api.CuentasDePruebaFinder;
 import com.renaser.os.users.api.FasePrograma;
 import com.renaser.os.users.api.FichaDeMentorFinder;
@@ -23,6 +29,7 @@ import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -32,6 +39,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -60,8 +68,13 @@ public class BancoDeLiderazgo {
     public final List<AtencionDeTicketsFinder.TicketRespondido> respondidos = new ArrayList<>();
     public final List<ObservacionDeMentor> observaciones = new ArrayList<>();
     public final List<YearMonth> mesesEvaluados = new ArrayList<>();
+    /** Spec 056: el tope de cada grupo; el que no figura tiene el de la política por defecto (10). */
+    private final Map<UUID, Integer> cupoPorGrupo = new HashMap<>();
+    /** Spec 056: los grupos en curso que no tienen mentor, por formación. */
+    private final List<AcompanamientoFinder.GrupoAcompanado> gruposSinMentor = new ArrayList<>();
     public boolean medicionCaida;
     public boolean ticketsCaidos;
+    public boolean cuposCaidos;
     private int siguienteId = 1;
 
     public final Clock reloj = new Clock() {
@@ -102,11 +115,32 @@ public class BancoDeLiderazgo {
         }
     };
 
+    /** Spec 056 FR-004: las personas que NO son de la formación de quien mira; el resto sigue siendo de todas, como en el permisivo. */
+    private final Set<UserId> deOtraFormacion = new HashSet<>();
+
+    private final AlcanceDeFormacionFinder formaciones = new AlcanceDeFormacionPermisivo() {
+        @Override
+        public Set<UserId> dentroDelAlcance(Collection<UserId> personas, AlcanceDeFormacion alcance) {
+            Set<UserId> visibles = new HashSet<>(personas);
+            visibles.removeAll(deOtraFormacion);
+            return visibles;
+        }
+    };
+
     public final FichaDeMentorFinder fichas = new FichaDeMentorFinder() {
         @Override
         public List<FichaDeMentor> mentoresActivos() {
             return usuarios.values().stream()
                     .filter(u -> u.role() == UserRole.MENTOR && u.status() == UserStatus.ACTIVE)
+                    .sorted(Comparator.comparing(UserSummary::fullName))
+                    .map(u -> new FichaDeMentor(u.id(), u.fullName(), null, u.status(), perfiles.get(u.id())))
+                    .toList();
+        }
+
+        @Override
+        public List<FichaDeMentor> mentoresSuspendidos() {
+            return usuarios.values().stream()
+                    .filter(u -> u.role() == UserRole.MENTOR && u.status() == UserStatus.SUSPENDED)
                     .sorted(Comparator.comparing(UserSummary::fullName))
                     .map(u -> new FichaDeMentor(u.id(), u.fullName(), null, u.status(), perfiles.get(u.id())))
                     .toList();
@@ -280,7 +314,9 @@ public class BancoDeLiderazgo {
 
         @Override
         public List<GrupoAcompanado> gruposRegularesEnCurso(Instant instante) {
-            return gruposConMentorVigente(instante);
+            List<GrupoAcompanado> enCurso = new ArrayList<>(gruposConMentorVigente(instante));
+            enCurso.addAll(gruposSinMentor);
+            return enCurso;
         }
 
         @Override
@@ -292,6 +328,17 @@ public class BancoDeLiderazgo {
         public List<GrupoConAprendices> gruposOperativos(Instant instante) {
             return List.of();
         }
+    };
+
+    /** Spec 056: el tope de cada grupo pedido; falla como lo haría {@code community} si {@link #cuposCaidos}. */
+    public final CupoDeLosGruposFinder cupos = grupoIds -> {
+        if (cuposCaidos) {
+            throw new IllegalStateException("cupos caidos");
+        }
+        Map<UUID, Integer> maximos = new HashMap<>();
+        grupos.stream().filter(g -> grupoIds.contains(g.grupoId()))
+                .forEach(g -> maximos.put(g.grupoId(), cupoPorGrupo.getOrDefault(g.grupoId(), 10)));
+        return maximos;
     };
 
     public final InMemoryObservaciones almacen = new InMemoryObservaciones();
@@ -339,12 +386,22 @@ public class BancoDeLiderazgo {
     /** El banco de las pruebas del controller es un bean compartido: cada prueba arma sus grupos desde cero. */
     public void limpiarGrupos() {
         grupos.clear();
+        cupoPorGrupo.clear();
+        gruposSinMentor.clear();
+        cuposCaidos = false;
+        usuarios.clear();
+        deOtraFormacion.clear();
         programasPropios.clear();
         cuentasDePrueba.clear();
     }
 
     public void usuario(UserId id, String nombre, UserRole rol, UserStatus estado) {
         usuarios.put(id, new UserSummary(id, nombre, null, rol, estado));
+    }
+
+    /** Spec 056 FR-004: esta persona es de otra formación, así que el líder de las pruebas no la ve en el padrón. */
+    public void deOtraFormacion(UserId persona) {
+        deOtraFormacion.add(persona);
     }
 
     /** D-318: el mentor o la guía lleva su propio programa; {@code activado} = ya eligió su Día 1. */
@@ -368,6 +425,17 @@ public class BancoDeLiderazgo {
         grupos.add(new GrupoMedido(grupoId, nombre, mentor, aprendices, semaforo(aprendices.size(), 0, 0, 0, "80.0")));
     }
 
+    /** Spec 056: el grupo tiene su propio tope (de 10 a 15) en vez del de la política. */
+    public void cupoDelGrupo(UUID grupoId, int maximo) {
+        cupoPorGrupo.put(grupoId, maximo);
+    }
+
+    /** Spec 056: un grupo regular en curso que no tiene mentor, de esa formación. */
+    public void grupoSinMentor(UUID grupoId, String nombre, Formacion formacion) {
+        gruposSinMentor.add(new AcompanamientoFinder.GrupoAcompanado(grupoId, nombre, null, UUID.randomUUID(), "America/Lima", 3,
+                formacion));
+    }
+
     public void semaforoDe(UserId mentor, SemaforoResumido semaforo) {
         semaforoPorMentor.put(mentor, semaforo);
     }
@@ -385,11 +453,15 @@ public class BancoDeLiderazgo {
     // ── Servicios reales ───────────────────────────────────────────────
 
     public AccesoDeLiderazgo acceso() {
-        return new AccesoDeLiderazgo(usuariosFinder, fichas, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
+        return new AccesoDeLiderazgo(usuariosFinder, fichas, formaciones);
     }
 
     public IndicadoresDeMentores indicadores() {
-        return new IndicadoresDeMentores(medicion, evaluacion, new AtencionDeConsultas(tickets, reloj));
+        return new IndicadoresDeMentores(medicion, evaluacion, new AtencionDeConsultas(tickets, reloj), cupos);
+    }
+
+    public PorResolverService porResolver() {
+        return new PorResolverService(acceso(), indicadores(), acompanamiento, tickets, reloj);
     }
 
     public PadronDeMentoresService padron() {
@@ -405,8 +477,32 @@ public class BancoDeLiderazgo {
         return new FichaDeMentorService(acceso(), indicadores(), almacen, programa(), reloj);
     }
 
+    /** Spec 056: lo que el servidor le escribe a una persona por su chat directo (un mensaje por llamada, con su conversación y su id). */
+    public record MensajeDirectoEscrito(UserId de, UserId para, String texto, UUID conversacionId, UUID mensajeId) {
+    }
+
+    /** Spec 056: los mensajes directos que el servidor escribió, en orden. */
+    public final List<MensajeDirectoEscrito> mensajesDirectos = new ArrayList<>();
+    /** Spec 056: los avisos entre módulos que se publicaron, en orden. */
+    public final List<Object> avisosPublicados = new ArrayList<>();
+    /** Spec 056: si no es null, el chat rechaza el mensaje con esto (los chats directos apagados, dos personas sin formación en común). */
+    public RuntimeException chatRechaza;
+
+    public final MensajeDirectoPort chatDirecto = (remitente, destinatario, texto) -> {
+        if (chatRechaza != null) {
+            throw chatRechaza;
+        }
+        UUID conversacion = UUID.nameUUIDFromBytes((remitente.value() + "|" + destinatario.value()).getBytes());
+        MensajeDirectoEscrito escrito = new MensajeDirectoEscrito(remitente, destinatario, texto, conversacion, UUID.randomUUID());
+        mensajesDirectos.add(escrito);
+        return new MensajeDirectoPort.MensajeDirecto(escrito.conversacionId(), escrito.mensajeId());
+    };
+
+    public final ApplicationEventPublisher publicador = avisosPublicados::add;
+
     public ObservacionesDeMentorService observacionesService() {
-        return new ObservacionesDeMentorService(acceso(), almacen, almacen, ids, reloj, usuariosFinder, acompanamiento);
+        return new ObservacionesDeMentorService(acceso(), almacen, almacen, ids, reloj, usuariosFinder, acompanamiento, chatDirecto,
+                new AvisosDeObservaciones(publicador));
     }
 
     public ReporteDeMentoresService reporte() {

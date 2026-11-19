@@ -4,6 +4,8 @@ import com.renaser.os.leadership.application.ports.in.Fuente;
 import com.renaser.os.leadership.application.ports.in.IndicadoresDeMentor;
 import com.renaser.os.leadership.application.ports.in.IndicadoresDeMentor.GrupoACargo;
 import com.renaser.os.leadership.domain.model.atencion.AtencionDeTickets;
+import com.renaser.os.leadership.domain.model.mentor.AprendicesPorColor;
+import com.renaser.os.leadership.domain.model.mentor.CupoDelMentor;
 import com.renaser.os.mentoring.api.EvaluacionDeMentorFinder.EvaluacionDeMentor;
 import com.renaser.os.mentoring.api.MedicionDeMentoresFinder.SemaforoResumido;
 
@@ -19,18 +21,38 @@ import java.util.UUID;
  * id (RL-07).
  *
  * @param traineeCount aprendices activos de sus grupos, sin repetir; null si no se pudo saber
+ * @param cupo         spec 056: los aprendices que acompaña sobre la suma de los cupos de sus grupos; null si no se pudo saber. Aditivo: una app
+ *                     anterior lo ignora
+ * @param porColor     spec 056: sus aprendices en cada color del semáforo ({@code ambar} es el amarillo del semáforo); null si el semáforo no
+ *                     respondió. Aditivo
+ * @param accountActive spec 056 FR-004: {@code false} = la cuenta del mentor está suspendida (la app lo muestra apagado, sin anillo ni acciones);
+ *                     {@code true} = activa. Aditivo: una app anterior lo ignora. Siempre viene con valor: el padrón lo trae con los suspendidos
+ *                     al final, la ficha con el de su cuenta y el reporte del mes solo lista cuentas activas
  */
 public record MentorIndicatorsResponse(UUID userId, String fullName, String avatarUrl, GroupsBlock groups,
                                        Integer traineeCount, SemaforoBlock semaforo, AttentionBlock attention,
-                                       EvaluationBlock evaluation) {
+                                       EvaluationBlock evaluation, CupoResponse cupo, PorColorResponse porColor,
+                                       Boolean accountActive) {
 
     static final String OK = "OK";
     static final String UNAVAILABLE = "UNAVAILABLE";
 
-    static MentorIndicatorsResponse from(IndicadoresDeMentor i, boolean conPendientes) {
+    static MentorIndicatorsResponse from(IndicadoresDeMentor i, boolean conPendientes, boolean cuentaActiva) {
         return new MentorIndicatorsResponse(i.mentorId().value(), i.nombre(), i.avatarUrl(), GroupsBlock.from(i.grupos()),
                 i.aprendices(), SemaforoBlock.from(i.semaforo()), AttentionBlock.from(i.atencion(), conPendientes),
-                EvaluationBlock.from(i.evaluacion()));
+                EvaluationBlock.from(i.evaluacion()), CupoResponse.from(i.cupo()), PorColorResponse.from(i.porColor()), cuentaActiva);
+    }
+
+    public record CupoResponse(int acompanados, int maximo) {
+        static CupoResponse from(CupoDelMentor cupo) {
+            return cupo == null ? null : new CupoResponse(cupo.acompanados(), cupo.maximo());
+        }
+    }
+
+    public record PorColorResponse(int rojo, int ambar, int verde, int sinDatos) {
+        static PorColorResponse from(AprendicesPorColor colores) {
+            return colores == null ? null : new PorColorResponse(colores.rojo(), colores.ambar(), colores.verde(), colores.sinDatos());
+        }
     }
 
     public record GroupsBlock(String source, List<GroupResponse> items) {

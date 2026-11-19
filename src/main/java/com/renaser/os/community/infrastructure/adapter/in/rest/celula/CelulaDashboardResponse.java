@@ -11,10 +11,14 @@ import com.renaser.os.community.domain.model.cohorte.EstadoCohorte;
  * porcentaje EN LOTE de habitos/rocas/cursos) — mismo gap ya documentado en CM-12,
  * docs/MODULO_COMMUNITY.md sec. 5. Un futuro agregador puede sumar esos dos campos sin
  * tocar este endpoint.
+ *
+ * <p>{@code capacity} (spec 056, FR-008): el tope de aprendices de cada grupo, para que el asistente de «Crear grupo» del líder apague los que
+ * están llenos. {@code null} en un grupo de recepción, que no tiene tope; un campo nuevo no rompe a la app instalada.
  */
 public record CelulaDashboardResponse(String id, String name, String cohortId, String cohortName,
                                        String cohortStatus, String videoCallUrl, String nextSessionAt,
-                                       int memberCount, PerfilBasicoResponse mentor, String formation) {
+                                       int memberCount, PerfilBasicoResponse mentor, String formation,
+                                       Integer capacity) {
 
     public static CelulaDashboardResponse from(CelulaConCohorte item) {
         var c = item.celula();
@@ -22,7 +26,7 @@ public record CelulaDashboardResponse(String id, String name, String cohortId, S
         return new CelulaDashboardResponse(c.id().toString(), c.nombre(), c.cohorteId().toString(), cohorte.nombre(),
                 toWireEstado(cohorte.estado()), c.urlVideollamada(),
                 c.proximaSesionEn() != null ? c.proximaSesionEn().toString() : null, item.cantidadMiembros(),
-                PerfilBasicoResponse.from(item.mentor()), c.formacion().codigo());
+                PerfilBasicoResponse.from(item.mentor()), c.formacion().codigo(), item.cupoMaximo());
     }
 
     private static String toWireEstado(EstadoCohorte estado) {

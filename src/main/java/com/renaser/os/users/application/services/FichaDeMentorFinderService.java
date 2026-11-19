@@ -41,7 +41,17 @@ public class FichaDeMentorFinderService implements FichaDeMentorFinder {
     @Override
     @Transactional(readOnly = true)
     public List<FichaDeMentor> mentoresActivos() {
-        List<User> mentores = mentoresConCuentaActiva();
+        return mentoresConCuenta(UserStatus.ACTIVE);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<FichaDeMentor> mentoresSuspendidos() {
+        return mentoresConCuenta(UserStatus.SUSPENDED);
+    }
+
+    private List<FichaDeMentor> mentoresConCuenta(UserStatus estado) {
+        List<User> mentores = mentoresConEstado(estado);
         Map<UserId, MentorProfile> perfiles = loadMentorProfilePort.byUserIds(mentores.stream().map(User::id).toList())
                 .stream().collect(Collectors.toMap(MentorProfile::userId, Function.identity()));
         return mentores.stream()
@@ -59,10 +69,10 @@ public class FichaDeMentorFinderService implements FichaDeMentorFinder {
                 .map(usuario -> aFicha(usuario, loadMentorProfilePort.byUserId(usuarioId).orElse(null)));
     }
 
-    private List<User> mentoresConCuentaActiva() {
+    private List<User> mentoresConEstado(UserStatus estado) {
         List<User> todos = new ArrayList<>();
         for (int pagina = 0; ; pagina++) {
-            List<User> lote = loadUserPort.byRoles(List.copyOf(UserRole.ROLES_QUE_ACTUAN_COMO_MENTOR), UserStatus.ACTIVE, pagina, TAMANO_LOTE);
+            List<User> lote = loadUserPort.byRoles(List.copyOf(UserRole.ROLES_QUE_ACTUAN_COMO_MENTOR), estado, pagina, TAMANO_LOTE);
             todos.addAll(lote);
             if (lote.size() < TAMANO_LOTE) {
                 return todos;

@@ -67,12 +67,16 @@ class MatrizPorRolEnTodoEndpointTest {
             Permission.VIEW_OWN_PHASE_CONTRACTS, Permission.SIGN_PHASE_CONTRACT, Permission.MANAGE_CALENDAR,
             Permission.MANAGE_CELLS, Permission.MANAGE_COHORTS);
 
-    /** SDD 002 (DL-08), D-278 y spec 044: los 12 del líder de mentores. */
+    /**
+     * SDD 002 (DL-08), D-278 y spec 044, más lo que el dueño le dio el 18/11 (spec 056, FR-010 y FR-030): los 14 del líder de mentores.
+     * {@code MANAGE_CELLS} revierte esa parte de CL-04 (arma los grupos de sus formaciones; el servicio acota el alcance) y
+     * {@code ANSWER_MENTOR_TICKET} le deja responder la consulta de un aprendiz de su formación.
+     */
     private static final Set<Permission> MENTOR_LEAD = EnumSet.of(
             Permission.USE_APP, Permission.TRACK_PROGRAM_AS_STAFF, Permission.FOLLOW_OWN_PROGRAM, Permission.PUBLISH_ON_WALL,
             Permission.OPEN_SUPPORT_TICKET, Permission.VIEW_ALL_MENTOR_TICKETS, Permission.VIEW_MENTOR_CORPS,
             Permission.VIEW_MENTOR_REPORT, Permission.FOLLOW_UP_MENTOR, Permission.SET_MENTOR_OPERATIONAL_STATUS,
-            Permission.EXPORT_RANKING, Permission.MANAGE_CALENDAR);
+            Permission.EXPORT_RANKING, Permission.MANAGE_CALENDAR, Permission.MANAGE_CELLS, Permission.ANSWER_MENTOR_TICKET);
 
     /** Los 8 del aprendiz. */
     private static final Set<Permission> TRAINEE = EnumSet.of(
