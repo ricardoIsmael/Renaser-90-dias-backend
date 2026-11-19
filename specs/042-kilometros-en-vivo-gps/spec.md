@@ -203,6 +203,33 @@ cuenta regresiva, pausa, cola sin red por `carreraId`, envío único) vale igual
 y con la app en segundo plano, que la barra azul aparezca, que `Pedometer.watchStepCount` entregue pasos mientras corres, y los dos
 permisos (ubicación y movimiento).
 
+### El punto del mapa con GPS malo (agregado 2026-11-19, pedido del dueño, app #236)
+
+El dueño, en su casa: «estoy en mi casa y me pone al frente o en otra casa». Bajo techo el GPS tiene de 10 a 30 m de error y salta de casa en casa; el motor
+acepta puntos hasta 20 m (FR-030) y, antes del primer punto, el mapa se centraba en una lectura vieja o gruesa. No existe un servicio de Google más preciso (la
+Geolocation API da de 20 a 100 m y Android ya usa el proveedor combinado), así que se mejora lo que se ve. **Todo esto es solo para mirar (FR-037): no cambia el filtro
+de 20 m del motor, la ruta, la distancia ni el cuerpo de la carrera.**
+
+- **FR-053** **Una lectura buena antes de centrar.** Al tocar «Correr» (con el permiso ya dado), además de mostrar al instante lo que haya (el centro guardado, la última
+  conocida, la aproximada), la app pide lecturas nuevas al GPS con la mayor precisión (sin el diálogo de ajustes encima de la cuenta) y las muestra a medida que llegan.
+  Se detiene en la primera de 15 m o menos de precisión o a los 10 s, y se queda con lo que llegó (el promedio de FR-054 pesa más a la mejor). Una lectura de hace más de 5 s
+  no cuenta (iPhone entrega primero la última guardada). La cuenta regresiva no espera esta búsqueda: el mapa sigue apareciendo en la cuenta (FR-037) y se afina solo. Si el
+  teléfono no deja buscar, la carrera sigue con lo que haya.
+- **FR-054** **Promedio de la persona quieta.** El punto donde se dibuja a la persona es el promedio de las lecturas frescas de los últimos 15 s, ponderado por 1 / precisión²
+  (el mismo peso de FR-030). El promedio se reinicia con la lectura nueva si la persona se movió: velocidad de caminata (0,6 m/s o más) en dos lecturas seguidas, o una lectura
+  que cae más lejos del promedio que 25 m más su propio error de precisión. Corriendo, con el punto del motor ya en el mapa, el promedio manda solo si la persona está quieta
+  (sin pasos recientes y sin avance del GPS, FR-033) y ya hay 3 lecturas o más; al moverse, el punto del motor (FR-031, FR-032).
+- **FR-055** **Círculo de precisión.** Alrededor del punto del mapa se dibuja un círculo cuyo radio es la mejor precisión de esas lecturas, en metros (se dibuja con 150 m como
+  máximo), con relleno y borde dorados del tema: el borde y el avatar, que sigue a la vista, evitan que dependa solo del color. Una chapa «Precisión de 18 m» lo dice y el lector
+  de pantalla la dice en palabras («Precisión de 18 metros»), porque el mapa está oculto para él. Solo con lecturas frescas del GPS: sin ellas (el centro guardado, la última
+  conocida) y en «Terminaste», no hay círculo.
+- **FR-056** **Ubicación aproximada.** Si el permiso de ubicación está concedido pero es solo aproximado (Android 12 o más: `coarse`; iPhone: exactitud `reduced`), la pantalla de
+  la carrera muestra una línea corta («Tu ubicación es aproximada y el punto puede salir desviado.») y un botón «Abrir ajustes» de 48 que abre los ajustes de la app
+  (`Linking.openSettings`); si no abren, un aviso dice el camino. Se vuelve a leer al volver al frente de la app, así que desaparece al activar la ubicación precisa. No aparece con
+  la ubicación precisa, sin permiso ni en la pausa manual.
+- **FR-057** Nada de FR-053 a FR-056 entra a la ruta, a la distancia, al tiempo ni al cuerpo de la carrera: el motor sigue aceptando hasta 20 m de precisión (FR-030) y su
+  filtro, su quietud y su distancia no cambian. Límite conocido: al empezar a moverse, el punto vuelve al del motor, cuyo primer punto puede tener hasta 20 m de error.
+
 ### Envío único e idempotencia
 
 - **FR-016** Al tocar «Terminar» la app arma **un único** pedido `POST /api/v1/carreras` con la `carreraId`, el resumen, los tramos y, si
@@ -269,7 +296,7 @@ permisos (ubicación y movimiento).
   señal: el tramo se marca sin GPS y no suma (supuesto del equipo, ver «Decisiones del dueño»).
 - **FR-036** Sin permiso de actividad física o sin sensor de pasos, el avatar se mueve solo con el GPS (con la misma reconciliación) y las
   estadísticas de pasos no se muestran.
-- **FR-037** **El mapa no calcula nada:** dibuja la ruta aceptada como una línea que crece (dorado `#B2924F`) y el avatar propio animado entre
+- **FR-037** **El mapa no calcula nada** (corregido 2026-11-19: ver FR-053 a FR-057): dibuja la ruta aceptada como una línea que crece (dorado `#B2924F`) y el avatar propio animado entre
   posiciones; la cámara inclinada (≈ 60°) con edificios sigue el rumbo de la persona.
   **Corregido 05/11/2026 (pedidos del dueño en su teléfono):** (a) el mapa aparece en la cuenta 3, 2, 1, centrado en la última posición
   conocida, la aproximada o el primer punto crudo del GPS, **solo para mirar** (no entra a la ruta, la distancia ni el cuerpo de la carrera);
