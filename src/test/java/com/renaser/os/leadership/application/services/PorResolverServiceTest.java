@@ -19,6 +19,7 @@ import static com.renaser.os.leadership.application.services.PadronDeMentoresSer
 import static com.renaser.os.leadership.application.services.PadronDeMentoresServiceTest.ANA;
 import static com.renaser.os.leadership.application.services.PadronDeMentoresServiceTest.LIDER;
 import static com.renaser.os.leadership.application.services.PadronDeMentoresServiceTest.LUISA;
+import static com.renaser.os.leadership.application.services.PadronDeMentoresServiceTest.NORA;
 import static com.renaser.os.leadership.application.services.PadronDeMentoresServiceTest.PIA;
 import static com.renaser.os.leadership.application.services.PadronDeMentoresServiceTest.RAUL;
 import static com.renaser.os.leadership.application.services.PadronDeMentoresServiceTest.prepararCuerpo;
@@ -146,5 +147,18 @@ class PorResolverServiceTest {
         assertThatThrownBy(() -> porResolver(ANA)).isInstanceOf(NotAuthorizedException.class);
         banco.usuario(LIDER, "Líder", UserRole.MENTOR_LEAD, UserStatus.SUSPENDED);
         assertThatThrownBy(() -> porResolver(LIDER)).isInstanceOf(NotAuthorizedException.class);
+    }
+
+    // spec 056 FR-004
+    @Test
+    @DisplayName("spec 056 FR-004: «por resolver» sigue sin mirar a los suspendidos: su evaluación no compite por ser la peor")
+    void porResolverSigueSinSuspendidos() {
+        banco.usuario(NORA, "Nora Aguirre", UserRole.MENTOR, UserStatus.SUSPENDED);
+        banco.evaluacion(NORA, "10.0");
+        banco.evaluacion(LUISA, "45.5");
+
+        PorResolver resultado = porResolver(LIDER);
+
+        assertThat(resultado.peorMentor().id()).as("Nora, suspendida, tiene 10 % pero no es la peor: no entra a la comparación").isEqualTo(LUISA.value());
     }
 }

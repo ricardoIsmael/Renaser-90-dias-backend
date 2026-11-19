@@ -25,18 +25,22 @@ import java.util.UUID;
  *                     anterior lo ignora
  * @param porColor     spec 056: sus aprendices en cada color del semáforo ({@code ambar} es el amarillo del semáforo); null si el semáforo no
  *                     respondió. Aditivo
+ * @param accountActive spec 056 FR-004: {@code false} = la cuenta del mentor está suspendida (la app lo muestra apagado, sin anillo ni acciones);
+ *                     {@code true} = activa. Aditivo: una app anterior lo ignora. Siempre viene con valor: el padrón lo trae con los suspendidos
+ *                     al final, la ficha con el de su cuenta y el reporte del mes solo lista cuentas activas
  */
 public record MentorIndicatorsResponse(UUID userId, String fullName, String avatarUrl, GroupsBlock groups,
                                        Integer traineeCount, SemaforoBlock semaforo, AttentionBlock attention,
-                                       EvaluationBlock evaluation, CupoResponse cupo, PorColorResponse porColor) {
+                                       EvaluationBlock evaluation, CupoResponse cupo, PorColorResponse porColor,
+                                       Boolean accountActive) {
 
     static final String OK = "OK";
     static final String UNAVAILABLE = "UNAVAILABLE";
 
-    static MentorIndicatorsResponse from(IndicadoresDeMentor i, boolean conPendientes) {
+    static MentorIndicatorsResponse from(IndicadoresDeMentor i, boolean conPendientes, boolean cuentaActiva) {
         return new MentorIndicatorsResponse(i.mentorId().value(), i.nombre(), i.avatarUrl(), GroupsBlock.from(i.grupos()),
                 i.aprendices(), SemaforoBlock.from(i.semaforo()), AttentionBlock.from(i.atencion(), conPendientes),
-                EvaluationBlock.from(i.evaluacion()), CupoResponse.from(i.cupo()), PorColorResponse.from(i.porColor()));
+                EvaluationBlock.from(i.evaluacion()), CupoResponse.from(i.cupo()), PorColorResponse.from(i.porColor()), cuentaActiva);
     }
 
     public record CupoResponse(int acompanados, int maximo) {

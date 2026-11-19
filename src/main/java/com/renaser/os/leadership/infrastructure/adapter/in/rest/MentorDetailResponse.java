@@ -21,7 +21,8 @@ public record MentorDetailResponse(MentorIndicatorsResponse mentor, boolean acco
                                    boolean haceSuPrograma) {
 
     static MentorDetailResponse from(FichaDeMentor ficha) {
-        return new MentorDetailResponse(MentorIndicatorsResponse.from(ficha.indicadores(), true), ficha.cuentaActiva(),
+        return new MentorDetailResponse(MentorIndicatorsResponse.from(ficha.indicadores(), true, ficha.cuentaActiva()),
+                ficha.cuentaActiva(),
                 ProfileResponse.from(ficha.perfil()), ficha.mes(), ficha.zona(), ficha.corteEn(),
                 ficha.semaforoDesde(), ficha.semaforoHasta(),
                 ficha.ultimasObservaciones().stream().map(ObservationResponse::from).toList(), ficha.haceSuPrograma());

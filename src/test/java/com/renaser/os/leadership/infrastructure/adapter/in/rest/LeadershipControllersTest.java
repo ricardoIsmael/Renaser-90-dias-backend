@@ -48,6 +48,7 @@ class LeadershipControllersTest {
     private static final UserId LUISA = id("a1");
     private static final UserId RAUL = id("a2");
     private static final UserId ANA = id("b1");
+    private static final UserId NORA = id("a4");
     private static final UUID FENIX = UUID.fromString("00000000-0000-0000-0000-00000000f001");
 
     @Autowired
@@ -150,6 +151,44 @@ class LeadershipControllersTest {
                 .andExpect(jsonPath("$.mentors[0].cupo").value(nullValue()))
                 .andExpect(jsonPath("$.mentors[0].porColor.verde").value(1))
                 .andExpect(jsonPath("$.mentors[0].traineeCount").value(1));
+    }
+
+    // spec 056 FR-004
+    @Test
+    @DisplayName("spec 056 FR-004: el padrón trae al mentor suspendido al final con accountActive en false, y a los activos en true")
+    void padronConSuspendido() throws Exception {
+        banco.usuario(NORA, "Nora Aguirre", UserRole.MENTOR, UserStatus.SUSPENDED);
+
+        pedir(PADRON, LIDER)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mentors.length()").value(3))
+                .andExpect(jsonPath("$.mentors[0].fullName").value("Luisa Rojas"))
+                .andExpect(jsonPath("$.mentors[0].accountActive").value(true))
+                .andExpect(jsonPath("$.mentors[1].fullName").value("Raúl Soto"))
+                .andExpect(jsonPath("$.mentors[1].accountActive").value(true))
+                .andExpect(jsonPath("$.mentors[2].fullName").value("Nora Aguirre"))
+                .andExpect(jsonPath("$.mentors[2].accountActive").value(false))
+                .andExpect(jsonPath("$.mentors[2].groups.source").value("OK"));
+    }
+
+    // spec 056 FR-004
+    @Test
+    @DisplayName("spec 056 FR-004: el reporte del mes no lista al suspendido, y la ficha dice lo mismo en su accountActive de siempre y en el del mentor")
+    void reporteYFichaConSuspendido() throws Exception {
+        banco.usuario(NORA, "Nora Aguirre", UserRole.MENTOR, UserStatus.SUSPENDED);
+
+        pedir(REPORTE, LIDER)
+                .andExpect(status().isOk())
+                .andExpect(content().string(not(containsString("Nora Aguirre"))))
+                .andExpect(jsonPath("$.ranked[0].mentor.accountActive").value(true));
+        pedir(PADRON + "/" + NORA, LIDER)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accountActive").value(false))
+                .andExpect(jsonPath("$.mentor.accountActive").value(false));
+        pedir(PADRON + "/" + LUISA, LIDER)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accountActive").value(true))
+                .andExpect(jsonPath("$.mentor.accountActive").value(true));
     }
 
     @Test

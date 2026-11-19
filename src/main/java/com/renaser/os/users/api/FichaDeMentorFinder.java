@@ -23,6 +23,12 @@ public interface FichaDeMentorFinder {
     /** Usuarios con rol MENTOR o GUÍA DE APRENDIZ (D-265) y cuenta ACTIVA, ordenados por nombre. */
     List<FichaDeMentor> mentoresActivos();
 
+    /**
+     * Usuarios con rol MENTOR o GUÍA DE APRENDIZ (D-265) y cuenta SUSPENDIDA, ordenados por nombre como {@link #mentoresActivos()} (spec 056 FR-004: el
+     * padrón del líder los muestra apagados en vez de hacerlos desaparecer). Una cuenta INACTIVE (registrada y todavia sin aprobar) no entra: aun no es del cuerpo.
+     */
+    List<FichaDeMentor> mentoresSuspendidos();
+
     /** Ese usuario si su rol es MENTOR o GUÍA DE APRENDIZ (D-265), en cualquier estado de cuenta; vacio si no existe o no es mentor. */
     Optional<FichaDeMentor> mentor(UserId usuarioId);
 

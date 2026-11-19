@@ -13,10 +13,13 @@ import com.renaser.os.mentoring.api.MedicionDeMentoresFinder;
 import com.renaser.os.mentoring.api.MedicionDeMentoresFinder.GrupoMedido;
 import com.renaser.os.mentoring.api.MedicionDeMentoresFinder.MedicionVigente;
 import com.renaser.os.mentoring.api.MedicionDeMentoresFinder.SemaforoResumido;
+import com.renaser.os.shared.domain.AlcanceDeFormacion;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.support.api.AtencionDeTicketsFinder;
+import com.renaser.os.users.api.AlcanceDeFormacionFinder;
+import com.renaser.os.users.api.AlcanceDeFormacionPermisivo;
 import com.renaser.os.users.api.CuentasDePruebaFinder;
 import com.renaser.os.users.api.FasePrograma;
 import com.renaser.os.users.api.FichaDeMentorFinder;
@@ -36,6 +39,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -111,11 +115,32 @@ public class BancoDeLiderazgo {
         }
     };
 
+    /** Spec 056 FR-004: las personas que NO son de la formación de quien mira; el resto sigue siendo de todas, como en el permisivo. */
+    private final Set<UserId> deOtraFormacion = new HashSet<>();
+
+    private final AlcanceDeFormacionFinder formaciones = new AlcanceDeFormacionPermisivo() {
+        @Override
+        public Set<UserId> dentroDelAlcance(Collection<UserId> personas, AlcanceDeFormacion alcance) {
+            Set<UserId> visibles = new HashSet<>(personas);
+            visibles.removeAll(deOtraFormacion);
+            return visibles;
+        }
+    };
+
     public final FichaDeMentorFinder fichas = new FichaDeMentorFinder() {
         @Override
         public List<FichaDeMentor> mentoresActivos() {
             return usuarios.values().stream()
                     .filter(u -> u.role() == UserRole.MENTOR && u.status() == UserStatus.ACTIVE)
+                    .sorted(Comparator.comparing(UserSummary::fullName))
+                    .map(u -> new FichaDeMentor(u.id(), u.fullName(), null, u.status(), perfiles.get(u.id())))
+                    .toList();
+        }
+
+        @Override
+        public List<FichaDeMentor> mentoresSuspendidos() {
+            return usuarios.values().stream()
+                    .filter(u -> u.role() == UserRole.MENTOR && u.status() == UserStatus.SUSPENDED)
                     .sorted(Comparator.comparing(UserSummary::fullName))
                     .map(u -> new FichaDeMentor(u.id(), u.fullName(), null, u.status(), perfiles.get(u.id())))
                     .toList();
@@ -364,12 +389,19 @@ public class BancoDeLiderazgo {
         cupoPorGrupo.clear();
         gruposSinMentor.clear();
         cuposCaidos = false;
+        usuarios.clear();
+        deOtraFormacion.clear();
         programasPropios.clear();
         cuentasDePrueba.clear();
     }
 
     public void usuario(UserId id, String nombre, UserRole rol, UserStatus estado) {
         usuarios.put(id, new UserSummary(id, nombre, null, rol, estado));
+    }
+
+    /** Spec 056 FR-004: esta persona es de otra formación, así que el líder de las pruebas no la ve en el padrón. */
+    public void deOtraFormacion(UserId persona) {
+        deOtraFormacion.add(persona);
     }
 
     /** D-318: el mentor o la guía lleva su propio programa; {@code activado} = ya eligió su Día 1. */
@@ -421,7 +453,7 @@ public class BancoDeLiderazgo {
     // ── Servicios reales ───────────────────────────────────────────────
 
     public AccesoDeLiderazgo acceso() {
-        return new AccesoDeLiderazgo(usuariosFinder, fichas, new com.renaser.os.users.api.AlcanceDeFormacionPermisivo());
+        return new AccesoDeLiderazgo(usuariosFinder, fichas, formaciones);
     }
 
     public IndicadoresDeMentores indicadores() {

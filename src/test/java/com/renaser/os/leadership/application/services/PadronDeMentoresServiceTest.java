@@ -35,6 +35,7 @@ class PadronDeMentoresServiceTest {
     static final UserId ANA = id("b1");
     static final UserId LUIS = id("b2");
     static final UserId PIA = id("b3");
+    static final UserId NORA = id("a4");
     static final UUID FENIX = UUID.fromString("00000000-0000-0000-0000-00000000f001");
     static final UUID AURORA = UUID.fromString("00000000-0000-0000-0000-00000000f002");
 
@@ -237,5 +238,62 @@ class PadronDeMentoresServiceTest {
         assertThat(luisa.porColor()).isEqualTo(new AprendicesPorColor(1, 0, 1, 0));
         assertThat(luisa.grupos().disponible()).isTrue();
         assertThat(luisa.aprendices()).isEqualTo(2);
+    }
+
+    // ── Spec 056 FR-004: el mentor suspendido ───────────────────────────────
+
+    // spec 056 FR-004
+    @Test
+    @DisplayName("spec 056 FR-004: un mentor suspendido de su formación sigue en el padrón, al final y marcado como suspendido, con sus indicadores leídos")
+    void elSuspendidoDelAlcanceSigueEnElPadron() {
+        banco.usuario(NORA, "Nora Aguirre", UserRole.MENTOR, UserStatus.SUSPENDED);
+        UUID brisa = UUID.fromString("00000000-0000-0000-0000-00000000f003");
+        banco.grupo(brisa, "Grupo Brisa", NORA, List.of(PIA));
+
+        PadronDeMentores padron = banco.padron().padron(LIDER);
+
+        assertThat(padron.mentores()).extracting(IndicadoresDeMentor::nombre)
+                .as("los activos primero, cada grupo por nombre, y la suspendida al final aunque su nombre vaya antes que el de Raúl")
+                .containsExactly("Luisa Rojas", "Marta Ruiz", "Raúl Soto", "Nora Aguirre");
+        assertThat(padron.suspendidos()).containsExactly(NORA);
+        IndicadoresDeMentor nora = de(padron, NORA);
+        assertThat(nora.grupos().disponible()).isTrue();
+        assertThat(nora.evaluacion().disponible()).isTrue();
+    }
+
+    // spec 056 FR-004
+    @Test
+    @DisplayName("spec 056 FR-004: un mentor suspendido de otra formación no aparece, ni apagado")
+    void elSuspendidoDeOtraFormacionNoAparece() {
+        banco.usuario(NORA, "Nora Aguirre", UserRole.MENTOR, UserStatus.SUSPENDED);
+        banco.deOtraFormacion(NORA);
+
+        PadronDeMentores padron = banco.padron().padron(LIDER);
+
+        assertThat(padron.mentores()).extracting(IndicadoresDeMentor::nombre).containsExactly("Luisa Rojas", "Marta Ruiz", "Raúl Soto");
+        assertThat(padron.suspendidos()).isEmpty();
+    }
+
+    // spec 056 FR-004
+    @Test
+    @DisplayName("spec 056 FR-004: sin mentores suspendidos nadie va marcado; los activos nunca se marcan")
+    void sinSuspendidosNadieVaMarcado() {
+        PadronDeMentores padron = banco.padron().padron(LIDER);
+
+        assertThat(padron.mentores()).hasSize(3);
+        assertThat(padron.suspendidos()).isEmpty();
+    }
+
+    // spec 056 FR-004
+    @Test
+    @DisplayName("spec 056 FR-004: el suspendido se lee con lo mismo que un activo: un cupo, un mes y una atención, no un hueco")
+    void elSuspendidoNoSeCuentaComoFuenteCaida() {
+        banco.usuario(NORA, "Nora Aguirre", UserRole.MENTOR, UserStatus.SUSPENDED);
+
+        IndicadoresDeMentor nora = de(banco.padron().padron(LIDER), NORA);
+
+        assertThat(nora.atencion().disponible()).isTrue();
+        assertThat(nora.semaforo().disponible()).isTrue();
+        assertThat(nora.cupo()).isEqualTo(new CupoDelMentor(0, 0));
     }
 }

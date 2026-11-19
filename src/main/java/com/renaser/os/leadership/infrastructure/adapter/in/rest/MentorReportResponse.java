@@ -28,10 +28,10 @@ public record MentorReportResponse(String month, String timezone, Instant cutoff
                 reporte.sinMuestra().stream().map(e -> EntryResponse.from(e, enCurso)).toList());
     }
 
-    /** Los pendientes son de HOY: en un mes cerrado no se muestran como si fueran de ese mes. */
+    /** Los pendientes son de HOY: en un mes cerrado no se muestran como si fueran de ese mes. El reporte solo lista mentores de cuenta activa. */
     public record EntryResponse(MentorIndicatorsResponse mentor, ObservationsBlock observations) {
         static EntryResponse from(EntradaDelReporte entrada, boolean conPendientes) {
-            return new EntryResponse(MentorIndicatorsResponse.from(entrada.indicadores(), conPendientes),
+            return new EntryResponse(MentorIndicatorsResponse.from(entrada.indicadores(), conPendientes, true),
                     ObservationsBlock.from(entrada.observaciones()));
         }
     }
