@@ -297,6 +297,7 @@ Administración y quienes ya ven hoy la ficha de una persona (con las reglas de 
 
 - **FR-043**: Las respuestas del diagnóstico MUST ser visibles solo para la persona y para quienes hoy pueden ver su ficha; esta spec no amplía ningún permiso. *(Quiénes: pregunta Q11.)*
 - **FR-044**: Una pregunta retirada MUST seguir mostrándose, con su texto original, en la ficha de quien la respondió.
+- **FR-045** (2026-11-19, decisión del dueño, app #235): En la ficha estándar, la ubicación («¿Dónde vives?») MUST quedar vacía (departamento, ciudad y distrito) hasta que la persona la elige. La app MUST NOT rellenarla por IP, por GPS ni con valores de ejemplo, ni ofrecer «Usar mi ubicación»; al abrir solo completa el país y el prefijo cuando faltan. Elegir un nivel distinto vacía los de abajo. El paso MUST pedir ciudad y distrito diciendo qué falta.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -315,7 +316,7 @@ Administración y quienes ya ven hoy la ficha de una persona (con las reglas de 
 - **SC-001**: El **90 %** de las personas completa el diagnóstico en **20 minutos o menos** en el celular (el formulario original promete 15).
 - **SC-002**: **0** respuestas perdidas: el **100 %** de quienes cierran la app a mitad retoman en el mismo paso con todo lo respondido.
 - **SC-003**: El **100 %** de las personas que terminan el diagnóstico con las tres áreas respondidas ven en Plan **tres objetivos** con el texto que escribieron, el eje de su prioridad principal primero y su primera acción como sugerencia, sin hacer otro recorrido.
-- **SC-004**: La ficha estándar tiene **0 cambios visibles** para quien entra sin diagnóstico (se compara paso a paso con la actual) y para las personas que ya existen.
+- **SC-004**: La ficha estándar tiene **0 cambios visibles** para quien entra sin diagnóstico (se compara paso a paso con la actual) y para las personas que ya existen. Salvo la ubicación del FR-045 (19/11).
 - **SC-005**: Administración **agrega una pregunta y la publica en menos de 2 minutos**, y **importa las 27 preguntas del anexo en menos de 5 minutos**.
 - **SC-006**: El **100 %** de las filas inválidas de un archivo se señalan por número de fila antes de guardar, y **0** importaciones quedan a medias.
 - **SC-007**: Quitar preguntas con respuestas conserva el **100 %** de esas respuestas, visibles en la ficha de cada persona.
