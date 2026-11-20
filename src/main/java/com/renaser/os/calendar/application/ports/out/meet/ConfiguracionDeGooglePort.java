@@ -44,10 +44,25 @@ public interface ConfiguracionDeGooglePort {
     }
 
     /**
-     * Crear las salas con la Meet API ({@code spaces.create}) en vez de como conferencia de Calendar, y reemplazar las ya creadas de hoy en
-     * adelante ({@code EVENTOS_MEET_SALAS_CON_MEET_API}, NO por defecto; spec 040 FR-040 y FR-041). Apagado, todo sigue como siempre.
+     * Crear las salas NUEVAS con la Meet API ({@code spaces.create}) en vez de como conferencia de Calendar ({@code EVENTOS_MEET_SALAS_CON_MEET_API},
+     * NO por defecto; spec 040 FR-040). Apagado, todo sigue como siempre. Las salas que ya existen no se tocan salvo que también esté prendido
+     * {@link #migrarSalasExistentes()}.
      */
     default boolean salasConMeetApi() {
         return false;
+    }
+
+    /**
+     * Reemplazar por una sala de la Meet API las ya creadas de hoy en adelante y cerrar la vieja ({@code EVENTOS_MEET_MIGRAR_SALAS}, NO por defecto;
+     * spec 040 FR-041). Solo tiene efecto con {@link #salasConMeetApi()} prendido. Apagado (decisión del dueño del 20/11, «solo las nuevas»), las
+     * salas existentes no se migran ni se cierran nunca.
+     */
+    default boolean migrarSalasExistentes() {
+        return false;
+    }
+
+    /** La migración de FR-041 corre solo si las dos cosas están prendidas: crear con la Meet API y migrar las existentes. */
+    default boolean migracionActiva() {
+        return salasConMeetApi() && migrarSalasExistentes();
     }
 }

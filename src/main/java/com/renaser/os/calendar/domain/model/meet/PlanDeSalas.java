@@ -50,7 +50,7 @@ public final class PlanDeSalas {
         return calcular(eventoVivo, hoy, deseadas, existentes, ahora, forzar, false);
     }
 
-    /** @param migrar la migración a la Meet API está prendida ({@code EVENTOS_MEET_SALAS_CON_MEET_API}) */
+    /** @param migrar la migración de FR-041 está prendida ({@code EVENTOS_MEET_SALAS_CON_MEET_API} y {@code EVENTOS_MEET_MIGRAR_SALAS}) */
     public static List<Paso> calcular(boolean eventoVivo, LocalDate hoy, Map<LocalDate, OcurrenciaDeseada> deseadas,
                                       List<SalaMeet> existentes, Instant ahora, boolean forzar, boolean migrar) {
         Map<LocalDate, SalaMeet> porFecha = new HashMap<>();
@@ -89,7 +89,7 @@ public final class PlanDeSalas {
             case PENDIENTE, FALLIDO -> toca ? new Paso(Accion.CREAR, fecha, sala) : null;
             case PENDIENTE_DE_SINCRONIZAR -> toca ? new Paso(Accion.ACTUALIZAR, fecha, sala) : null;
             case CREADO -> {
-                if (sala.anteriorPorCerrar() && sala.turnoDeMigrar(ahora, forzar)) {
+                if (aMigrar != null && sala.anteriorPorCerrar() && sala.turnoDeMigrar(ahora, forzar)) {
                     yield new Paso(Accion.CERRAR_ANTERIOR, fecha, sala);
                 }
                 if (sala.accesoPendiente() && toca) {

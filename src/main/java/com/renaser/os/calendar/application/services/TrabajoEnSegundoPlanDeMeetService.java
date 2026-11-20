@@ -81,7 +81,7 @@ class TrabajoEnSegundoPlanDeMeetService implements SincronizarSalasDeMeetUseCase
     @Override
     public void mantenimiento(Instant ahora) {
         revocacion.avisarSiSigueRevocada();
-        if (hayCuentaActiva() && configuracion.salasConMeetApi()) {
+        if (hayCuentaActiva() && configuracion.migracionActiva()) {
             migrarSalasViejas(ahora);
         }
         if (hayCuentaActiva()) {

@@ -158,10 +158,18 @@ final class MundoDeMeet {
         public boolean salasConMeetApi() {
             return salasConMeetApi;
         }
+
+        @Override
+        public boolean migrarSalasExistentes() {
+            return migrarSalas;
+        }
     };
 
     /** FR-040/FR-041: crear con la Meet API y migrar las de Calendar. Apagado por defecto, como en producción. */
     boolean salasConMeetApi = false;
+
+    /** FR-041: migrar las salas ya creadas (solo con salasConMeetApi). Apagado por defecto, como en producción. */
+    boolean migrarSalas = false;
 
     /** FR-038: hacer coanfitrión a quien dirige. Apagado por defecto, como en producción. */
     boolean coanfitriones = false;

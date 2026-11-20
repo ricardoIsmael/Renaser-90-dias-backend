@@ -184,6 +184,19 @@ class PlanDeSalasTest {
 
     // spec 040 FR-041
     @Test
+    @DisplayName("FR-041: con la migración apagada no se pide ni migrar ni cerrar la anterior")
+    void sinMigracionNoHayPasos() {
+        LocalDate manana = LocalDate.of(2026, 11, 6);
+        SalaMeet sala = creada(manana);
+        sala.migrarA("https://meet.google.com/zzz-zzzz-zzz", AHORA);
+        sala.registrarAccesoConfirmado(AccesoSalaMeet.ABIERTA, AHORA);
+
+        assertThat(PlanDeSalas.calcular(true, HOY, fechas(manana), List.of(sala), AHORA, false, false)).isEmpty();
+        assertThat(PlanDeSalas.calcular(true, HOY, fechas(manana), List.of(creada(manana)), AHORA, false, false)).isEmpty();
+    }
+
+    // spec 040 FR-041
+    @Test
     @DisplayName("FR-041: una sala nueva con la vieja por cerrar pide cerrarla; si falló, espera su turno")
     void cierraLaAnterior() {
         LocalDate manana = LocalDate.of(2026, 11, 6);

@@ -126,7 +126,7 @@ class SincronizadorDeSalas {
             existentes = acompanarAlEventoDeUnSoloDia(evento.get(), deseadas, existentes, ahora);
             alinearElAcceso(evento.get(), existentes, hoy, ahora);
         }
-        List<Paso> plan = PlanDeSalas.calcular(vivo, hoy, deseadas, existentes, ahora, forzar, configuracion.salasConMeetApi());
+        List<Paso> plan = PlanDeSalas.calcular(vivo, hoy, deseadas, existentes, ahora, forzar, configuracion.migracionActiva());
         Invitados invitados = new Invitados(evento.orElse(null), operacion.actor());
         for (Paso paso : plan) {
             ejecutar(paso, evento.orElse(null), deseadas, zona, invitados, operacion, limite);
