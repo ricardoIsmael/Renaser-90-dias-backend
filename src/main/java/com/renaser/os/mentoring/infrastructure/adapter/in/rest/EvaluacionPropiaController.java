@@ -18,8 +18,9 @@ import java.time.YearMonth;
  * {@code GET /api/v1/mentor/me/evaluation?month=YYYY-MM} — la nota propia del mes.
  *
  * <p>Autoconsulta pura: se arma desde los intervalos del actor, no hay id ajeno que pasar. La
- * respuesta es agregada y no lleva nombres de alumnos, ni siquiera de los que sigue acompañando:
- * el mentor saliente conserva su resumen, no el expediente (P-07).
+ * respuesta es agregada: el mentor saliente conserva su resumen, no el expediente (P-07). Desde la
+ * spec 057 suma {@code porcentajeMesAnterior}, {@code quienBaja[]} y {@code acciones[]} («Qué sigue»), y solo
+ * con nombres de quienes acompaña HOY.
  */
 @RestController
 @RequestMapping("/api/v1/mentor/me/evaluation")

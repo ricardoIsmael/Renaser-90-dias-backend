@@ -92,7 +92,14 @@ class SeguimientoServiceTest {
             }
             @Override
             public List<TramoDeAcompanamiento> tramosDeMentor(UserId mentorId, Instant desde, Instant hasta) {
-                return mentorId.equals(MENTOR) ? tramosDelMentor : List.of();
+                // Recortado a la ventana, como el real: sin esto el mes anterior veria los tramos de este.
+                return !mentorId.equals(MENTOR) ? List.of() : tramosDelMentor.stream()
+                        .filter(t -> t.hasta() == null || t.hasta().isAfter(desde))
+                        .filter(t -> hasta == null || t.desde().isBefore(hasta))
+                        .map(t -> new TramoDeAcompanamiento(t.grupoId(), t.grupoNombre(),
+                                t.desde().isAfter(desde) ? t.desde() : desde,
+                                t.hasta() == null || (hasta != null && hasta.isBefore(t.hasta())) ? hasta : t.hasta()))
+                        .toList();
             }
 
             @Override
@@ -236,7 +243,9 @@ class SeguimientoServiceTest {
 
             @Override
             public Map<UserId, UserSummary> findByIds(java.util.Collection<UserId> ids) {
-                return Map.of();
+                Map<UserId, UserSummary> resueltos = new LinkedHashMap<>();
+                ids.forEach(id -> findById(id).ifPresent(u -> resueltos.put(id, u)));
+                return resueltos;
             }
             @Override
             public java.util.Optional<UserSummary> findByEmail(String email) {
@@ -269,7 +278,7 @@ class SeguimientoServiceTest {
         armado = new ArmadoDeLaSemana(obligacionesFinder, entregasFinder, participaciones, usuarios, muro,
                 FixedClock.at(AHORA));
         servicio = new SeguimientoService(acompanamiento, armado, obligacionesFinder, entregasFinder, calculo,
-                participaciones, usuarios, FixedClock.at(AHORA));
+                participaciones, usuarios, new ArmadoDeQueSigue(acompanamiento, usuarios), FixedClock.at(AHORA));
     }
 
     // ── armado ──────────────────────────────────────────────────────────────
@@ -687,5 +696,92 @@ class SeguimientoServiceTest {
 
         assertThat(evaluacion.toString()).doesNotContain("Ana", ANA.value().toString());
         assertThat(evaluacion.tramos()).extracting("grupoNombre").containsOnly("Grupo Amanecer");
+    }
+
+    // ── spec 057: Qué sigue y Quién baja ────────────────────────────────────
+
+    private void acompanaDesdeAgosto() {
+        tramosDelMentor.add(new AcompanamientoFinder.TramoDeAcompanamiento(MI_GRUPO, "Grupo Amanecer",
+                Instant.parse("2026-08-01T05:00:00Z"), null));
+    }
+
+    private void entrega(UserId alumno, LocalDate dia) {
+        entregada(obligacion(alumno, dia, "H", EstadoObligacion.COMPLETADO, true), dia, EstadoValidacion.PENDIENTE);
+    }
+
+    private void falla(UserId alumno, LocalDate dia) {
+        obligacion(alumno, dia, "H", EstadoObligacion.FALLIDO, true);
+    }
+
+    @Test
+    @DisplayName("spec 057 FR-010: el porcentaje del mes anterior sale del mismo motor; sin mes anterior calculado va null")
+    void porcentajeDelMesAnterior() { // spec 057 FR-010
+        acompanaDesdeAgosto();
+        alumnoEnGrupo(ANA, Instant.parse("2026-08-01T05:00:00Z"), null);
+        entrega(ANA, LocalDate.of(2026, 8, 10));
+        falla(ANA, LocalDate.of(2026, 8, 11));
+        entrega(ANA, LocalDate.of(2026, 9, 3));
+        entrega(ANA, LocalDate.of(2026, 9, 4));
+
+        EvaluacionPropia setiembre = servicio.evaluacionDe(MENTOR, YearMonth.of(2026, 9));
+        EvaluacionPropia agosto = servicio.evaluacionDe(MENTOR, YearMonth.of(2026, 8));
+
+        assertThat(setiembre.porcentaje()).isEqualByComparingTo("100");
+        assertThat(setiembre.porcentajeMesAnterior()).isEqualByComparingTo("50");
+        assertThat(agosto.porcentajeMesAnterior()).as("julio no tiene historial").isNull();
+    }
+
+    @Test
+    @DisplayName("spec 057 FR-011 y FR-012: Ana en rojo sale en Quién baja y en Escríbele, y el mes anterior más alto suma Conversa con tu grupo")
+    void queSigueConUnaAprendizEnRojo() { // spec 057 FR-011, FR-012
+        acompanaDesdeAgosto();
+        alumnoEnGrupo(ANA, Instant.parse("2026-08-01T05:00:00Z"), null);
+        alumnoEnGrupo(LUIS, Instant.parse("2026-08-01T05:00:00Z"), null);
+        entrega(ANA, LocalDate.of(2026, 8, 10));
+        entrega(LUIS, LocalDate.of(2026, 8, 10));
+        entrega(ANA, LocalDate.of(2026, 9, 3));
+        falla(ANA, LocalDate.of(2026, 9, 4));
+        falla(ANA, LocalDate.of(2026, 9, 5));
+        entrega(LUIS, LocalDate.of(2026, 9, 3));
+        entrega(LUIS, LocalDate.of(2026, 9, 4));
+
+        EvaluacionPropia e = servicio.evaluacionDe(MENTOR, YearMonth.of(2026, 9));
+
+        assertThat(e.porcentaje()).as("promedio de Ana 33,3 y Luis 100").isEqualByComparingTo("66.6667");
+        assertThat(e.quienBaja()).hasSize(1);
+        assertThat(e.quienBaja().getFirst().aprendizId()).isEqualTo(ANA.value());
+        assertThat(e.quienBaja().getFirst().grupoId()).isEqualTo(MI_GRUPO);
+        assertThat(e.quienBaja().getFirst().entregadas()).isEqualTo(1);
+        assertThat(e.quienBaja().getFirst().esperadas()).isEqualTo(3);
+        assertThat(e.acciones()).extracting("tipo").extracting(Object::toString).containsExactly("ESCRIBIR", "REVISAR_GRUPO");
+        assertThat(e.acciones().get(1).motivo()).isEqualTo("Bajaste 33 puntos desde agosto");
+    }
+
+    @Test
+    @DisplayName("spec 057 FR-012: quien ya salió del grupo no aparece en Quién baja aunque haya bajado el promedio de ese mes (P-07)")
+    void elMentorSalienteNoVeAQuienYaNoAcompana() { // spec 057 FR-012
+        acompanaTodoElMes();
+        alumnoEnGrupo(ANA, Instant.parse("2026-09-01T05:00:00Z"), null);
+        // Luis se fue del grupo el 8: entró en la nota del mes, pero hoy el mentor ya no lo acompaña.
+        alumnoEnGrupo(LUIS, Instant.parse("2026-09-01T05:00:00Z"), Instant.parse("2026-09-08T05:00:00Z"));
+        entrega(ANA, LocalDate.of(2026, 9, 3));
+        falla(LUIS, LocalDate.of(2026, 9, 3));
+        falla(LUIS, LocalDate.of(2026, 9, 4));
+
+        EvaluacionPropia e = servicio.evaluacionDe(MENTOR, YearMonth.of(2026, 9));
+
+        assertThat(e.alumnosEvaluados()).isEqualTo(2);
+        assertThat(e.quienBaja()).isEmpty();
+        assertThat(e.toString()).doesNotContain(LUIS.value().toString());
+    }
+
+    @Test
+    @DisplayName("spec 057 FR-011: sin muestra o sin historial no hay acciones ni lista")
+    void sinCalculoNoHayAcciones() { // spec 057 FR-011
+        EvaluacionPropia e = servicio.evaluacionDe(MENTOR, YearMonth.of(2026, 7));
+
+        assertThat(e.quienBaja()).isEmpty();
+        assertThat(e.acciones()).isEmpty();
+        assertThat(e.porcentajeMesAnterior()).isNull();
     }
 }

@@ -1,9 +1,10 @@
-package com.renaser.os.leadership.infrastructure.adapter.in.rest;
+package com.renaser.os.rocks.api;
 
-import com.renaser.os.leadership.application.ports.in.ConsultarObjetivosDeLaPersonaUseCase.ObjetivoDeLaSemana;
-import com.renaser.os.leadership.application.ports.in.ConsultarObjetivosDeLaPersonaUseCase.ObjetivosDeLaPersona;
-import com.renaser.os.leadership.application.ports.in.ConsultarObjetivosDeLaPersonaUseCase.ObjetivosDeLaSemana;
-import com.renaser.os.leadership.application.ports.in.ConsultarObjetivosDeLaPersonaUseCase.ObjetivosDelMes;
+import com.renaser.os.rocks.api.ObjetivosDelAprendizFinder.FaseDelPrograma;
+import com.renaser.os.rocks.api.ObjetivosDelAprendizFinder.ObjetivoDeLaSemana;
+import com.renaser.os.rocks.api.ObjetivosDelAprendizFinder.ObjetivosDeLaSemana;
+import com.renaser.os.rocks.api.ObjetivosDelAprendizFinder.ObjetivosDelAprendiz;
+import com.renaser.os.rocks.api.ObjetivosDelAprendizFinder.ObjetivosDelMes;
 import com.renaser.os.rocks.api.RocasDelAprendizFinder.ObjetivoDeNoventaDias;
 import com.renaser.os.rocks.api.RocasDelAprendizFinder.ObjetivoDelMesDelEje;
 
@@ -12,17 +13,31 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * {@code GET /api/v1/leadership/people/{personId}/objetivos} (spec 056, FR-027): lo que da {@code RocasDelAprendizFinder}, solo para leer.
+ * La respuesta de los objetivos de un aprendiz, solo para leer: la comparten {@code GET /api/v1/leadership/people/{personId}/objetivos}
+ * (spec 056, FR-027) y {@code GET /api/v1/mentor/groups/{g}/learners/{u}/objetivos} (spec 057, FR-001). Vive en {@code rocks.api} para que
+ * los dos módulos la usen sin copiarla.
  *
  * @param noventaDias uno por eje, ordenados por eje; vacío si todavía no los definió
  * @param mes         el mes en curso; null si no hay
  * @param semana      la semana de programa en curso; null si no tiene objetivos semanales
+ * @param duracionDias el plazo de la formación de la persona (campo aditivo de la spec 057: las apps viejas lo ignoran)
+ * @param fase         la fase en la que va hoy (campo aditivo de la spec 057)
  */
-public record ObjetivosDeLaPersonaResponse(List<NoventaDiasResponse> noventaDias, MesResponse mes, SemanaResponse semana) {
+public record ObjetivosDelAprendizResponse(List<NoventaDiasResponse> noventaDias, MesResponse mes, SemanaResponse semana,
+                                           int duracionDias, FaseResponse fase) {
 
-    static ObjetivosDeLaPersonaResponse from(ObjetivosDeLaPersona objetivos) {
-        return new ObjetivosDeLaPersonaResponse(objetivos.noventaDias().stream().map(NoventaDiasResponse::from).toList(),
-                MesResponse.from(objetivos.mes()), SemanaResponse.from(objetivos.semana()));
+    public static ObjetivosDelAprendizResponse from(ObjetivosDelAprendiz objetivos) {
+        return new ObjetivosDelAprendizResponse(objetivos.noventaDias().stream().map(NoventaDiasResponse::from).toList(),
+                MesResponse.from(objetivos.mes()), SemanaResponse.from(objetivos.semana()), objetivos.duracionDias(),
+                FaseResponse.from(objetivos.fase()));
+    }
+
+    /** @param numero la fase, de 1 a 4; {@code primerDia} y {@code ultimoDia} los días del programa que abarca, estirados al plazo */
+    public record FaseResponse(int numero, int primerDia, int ultimoDia) {
+
+        static FaseResponse from(FaseDelPrograma fase) {
+            return new FaseResponse(fase.numero(), fase.primerDia(), fase.ultimoDia());
+        }
     }
 
     /**

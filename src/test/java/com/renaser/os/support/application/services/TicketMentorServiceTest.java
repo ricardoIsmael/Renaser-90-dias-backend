@@ -50,6 +50,7 @@ class TicketMentorServiceTest {
     private UserId liderSuspendido;
     /** Spec 056: el líder tiene activa la Escuela; el aprendiz de esta prueba es de la Escuela salvo que se diga otra cosa. */
     private Formacion formacionDelAprendiz = Formacion.ESCUELA;
+    private final java.util.Map<UserId, Formacion> formacionDeCadaAprendiz = new java.util.HashMap<>();
 
     @BeforeEach
     void setUp() {
@@ -83,7 +84,13 @@ class TicketMentorServiceTest {
 
             @Override
             public Set<Formacion> formacionesDe(UserId persona) {
-                return Set.of(formacionDelAprendiz);
+                return Set.of(formacionDeCadaAprendiz.getOrDefault(persona, formacionDelAprendiz));
+            }
+
+            @Override
+            public Set<UserId> dentroDelAlcance(java.util.Collection<UserId> personas, AlcanceDeFormacion alcance) {
+                return personas.stream().filter(p -> formacionesDe(p).stream().anyMatch(alcance::incluye))
+                        .collect(java.util.stream.Collectors.toSet());
             }
         };
     }
@@ -477,5 +484,65 @@ class TicketMentorServiceTest {
 
         assertThat(pagina.tickets()).extracting(TicketMentor::id).contains(respondida.id(), abierta.id());
         assertThat(pagina.nombresDeQuienRespondio()).containsOnlyKeys(lider).containsEntry(lider, "Actor de prueba");
+    }
+
+    // N-1 (auditoría 20/11): la vista de plataforma del líder respeta la frontera de formación que ya exige responder()
+    @Test
+    @DisplayName("todos(): el líder ve las consultas de aprendices de su formación y no las de otra; ADMIN y ALCHEMIST ven las de todas")
+    void elLiderNoVeLasConsultasDeOtraFormacion() {
+        TicketMentor deLaEscuela = abrirTicketDeTrainee();
+        UserId deOtraFormacion = aprendizAjeno();
+        Formacion otra = java.util.Arrays.stream(Formacion.values()).filter(f -> f != Formacion.ESCUELA).findFirst().orElseThrow();
+        formacionDeCadaAprendiz.put(deOtraFormacion, otra);
+        TicketMentor ajeno = service.abrir(new AbrirTicketMentorCommand(deOtraFormacion, "Bloqueo ajeno", "Solucion ajena", "Impacto ajeno"));
+        UserId alquimista = UserId.of(UUID.randomUUID());
+        actores.conActor(alquimista, UserRole.ALCHEMIST);
+
+        assertThat(service.todos(lider, null).tickets()).extracting(TicketMentor::id).containsExactly(deLaEscuela.id());
+        assertThat(service.todos(admin, null).tickets()).extracting(TicketMentor::id).containsExactlyInAnyOrder(deLaEscuela.id(), ajeno.id());
+        assertThat(service.todos(alquimista, null).tickets()).extracting(TicketMentor::id).containsExactlyInAnyOrder(deLaEscuela.id(), ajeno.id());
+    }
+
+    @Test
+    @DisplayName("todos(): el filtro del líder no rompe la paginación por cursor: 35 propias entre 150 ajenas salen en dos páginas sin repetir ni perder")
+    void laPaginacionDelLiderSigueFuncionandoConElFiltro() {
+        // reloj que avanza un segundo por lectura: el cursor es por creadoEn y con el reloj fijo todas serían iguales
+        java.util.concurrent.atomic.AtomicLong segundos = new java.util.concurrent.atomic.AtomicLong();
+        com.renaser.os.shared.domain.Clock reloj = new com.renaser.os.shared.domain.Clock() {
+            @Override
+            public Instant now() {
+                return CLOCK.now().plusSeconds(segundos.incrementAndGet());
+            }
+
+            @Override
+            public java.time.LocalDate today() {
+                return CLOCK.today();
+            }
+        };
+        service = new TicketMentorService(port, port, port, actores, participaciones, acompanamiento, alcanceDelLider(), events, reloj,
+                idsSecuenciales());
+        UserId deOtraFormacion = aprendizAjeno();
+        Formacion otra = java.util.Arrays.stream(Formacion.values()).filter(f -> f != Formacion.ESCUELA).findFirst().orElseThrow();
+        formacionDeCadaAprendiz.put(deOtraFormacion, otra);
+        java.util.List<com.renaser.os.support.domain.model.ticketmentor.TicketMentorId> propios = new java.util.ArrayList<>();
+        for (int i = 0; i < 150; i++) {
+            service.abrir(new AbrirTicketMentorCommand(deOtraFormacion, "Ajeno " + i, "S", "I"));
+            if (i % 4 == 0 && propios.size() < 35) {
+                propios.add(abrirTicketDeTrainee().id());
+            }
+        }
+        while (propios.size() < 35) {
+            propios.add(abrirTicketDeTrainee().id());
+        }
+
+        var primera = service.todos(lider, null);
+        assertThat(primera.tickets()).hasSize(30);
+        assertThat(primera.nextCursor()).isNotNull();
+        var segunda = service.todos(lider, primera.nextCursor());
+        assertThat(segunda.tickets()).hasSize(5);
+        java.util.List<com.renaser.os.support.domain.model.ticketmentor.TicketMentorId> vistos = new java.util.ArrayList<>();
+        primera.tickets().forEach(t -> vistos.add(t.id()));
+        segunda.tickets().forEach(t -> vistos.add(t.id()));
+        assertThat(vistos).containsExactlyInAnyOrderElementsOf(propios).doesNotHaveDuplicates();
     }
 }

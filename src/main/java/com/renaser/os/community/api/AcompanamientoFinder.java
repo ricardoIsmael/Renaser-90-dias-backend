@@ -29,6 +29,14 @@ public interface AcompanamientoFinder {
      */
     List<TramoDeAcompanamiento> tramosDeMentor(UserId mentorId, Instant desde, Instant hasta);
 
+    /**
+     * Igual que {@link #tramosDeMentor} pero también con los tramos de función GUIA (spec 057, «Mis grupos anteriores»: mentor o guía). El
+     * valor por defecto devuelve solo los de mentor; {@code community} lo sobrescribe.
+     */
+    default List<TramoDeAcompanamiento> tramosDeAcompanante(UserId acompananteId, Instant desde, Instant hasta) {
+        return tramosDeMentor(acompananteId, desde, hasta);
+    }
+
     /** Aprendices con pertenencia vigente a ese grupo en ese instante. */
     List<UserId> aprendicesVigentes(UUID grupoId, Instant instante);
 
@@ -80,6 +88,23 @@ public interface AcompanamientoFinder {
      * no está asignado solo mientras ese grupo siga en curso, igual que sus integrantes.
      */
     boolean grupoOperativo(UUID grupoId, Instant instante);
+
+    /**
+     * El día en que terminó el grupo (el último día de su periodo, inclusivo), si ya terminó mirado en el día de su cohorte en ese instante
+     * (spec 057, «Mis grupos anteriores»). Vacío si el grupo no tiene periodo, todavía corre o todavía no empezó: un grupo programado no es un
+     * grupo anterior.
+     */
+    default java.util.Optional<java.time.LocalDate> finDelGrupoYaTerminado(UUID grupoId, Instant instante) {
+        return java.util.Optional.empty();
+    }
+
+    /**
+     * Si el grupo es la recepción de bienvenida (el grupo inicial que atienden las guías). Spec 057: «Mis grupos anteriores» no lo lista, igual
+     * que los grupos activos del mentor no lo muestran. El valor por defecto es {@code false}; {@code community} lo sobrescribe.
+     */
+    default boolean esGrupoDeRecepcion(UUID grupoId) {
+        return false;
+    }
 
     /** Nombre y cohorte de un grupo, sin exponer el agregado. */
     java.util.Optional<GrupoBasico> grupo(UUID grupoId);

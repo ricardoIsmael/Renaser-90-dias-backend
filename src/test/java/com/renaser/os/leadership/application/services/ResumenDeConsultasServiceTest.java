@@ -9,7 +9,6 @@ import com.renaser.os.leadership.domain.model.consulta.ReglaDelResumenDeConsulta
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.users.api.FasePrograma;
-import com.renaser.os.users.api.ParticipacionPrograma;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.UserRole;
 import com.renaser.os.users.api.UserStatus;
@@ -35,13 +34,13 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 
 /**
@@ -67,8 +66,9 @@ class ResumenDeConsultasServiceTest {
 
     @Mock
     private AcompanamientoFinder acompanamiento;
+    /** La regla de la zona (programa, primer grupo, Lima) es de community y tiene su propia prueba; acá se simula con la zona del grupo. */
     @Mock
-    private ParticipacionProgramaFinder participaciones;
+    private com.renaser.os.community.api.ZonaDelAcompananteFinder zonas;
     @Mock
     private UserSummaryFinder usuarios;
 
@@ -91,7 +91,6 @@ class ResumenDeConsultasServiceTest {
         nombres.put(ANA, "Ana María Pérez");
         nombres.put(LUIS, "Luis Soto");
         nombres.put(PIA, "Pía Rojas");
-        lenient().when(participaciones.deParticipante(any())).thenReturn(Optional.empty());
         lenient().when(usuarios.findByIds(any())).thenAnswer(invocacion -> {
             Map<UserId, UserSummary> encontrados = new HashMap<>();
             for (UserId persona : (Collection<UserId>) invocacion.getArgument(0)) {
@@ -104,10 +103,19 @@ class ResumenDeConsultasServiceTest {
         });
     }
 
+    private static ZoneId zonaOLima(String zona) {
+        try {
+            return ZoneId.of(zona);
+        } catch (java.time.DateTimeException e) {
+            return ZoneId.of("America/Lima");
+        }
+    }
+
     private void grupo(UUID grupoId, UserId mentor, String zona) {
         List<GrupoAcompanado> actuales = new ArrayList<>(acompanamiento.gruposConMentorVigente(LAS_VEINTE_EN_LIMA));
         actuales.add(new GrupoAcompanado(grupoId, "Grupo " + grupoId, mentor, UUID.randomUUID(), zona, 3));
         lenient().when(acompanamiento.gruposConMentorVigente(any())).thenReturn(actuales);
+        lenient().when(zonas.zonaDe(eq(mentor), any())).thenReturn(zonaOLima(zona));
     }
 
     private void consulta(UserId consultor, UserRole rol, UserId persona, UUID grupo, UserId mentor, Instant cuando) {
@@ -147,7 +155,7 @@ class ResumenDeConsultasServiceTest {
                 transaccionAbierta = false;
             }
         };
-        return new ResumenDeConsultasService(acompanamiento, participaciones, puerto, usuarios, evento -> {
+        return new ResumenDeConsultasService(acompanamiento, zonas, puerto, usuarios, evento -> {
             publicados.add(evento);
             enTransaccion.add(transaccionAbierta);
         }, transacciones, FixedClock.at(ahora));
@@ -228,12 +236,10 @@ class ResumenDeConsultasServiceTest {
     }
 
     @Test
-    @DisplayName("la zona sale del programa del mentor si tiene uno; si no, de su primer grupo; por defecto Lima")
+    @DisplayName("la zona de cada mentor sale de ZonaDelAcompananteFinder: Madrid para Luisa y Lima para Raúl")
     void zonaDelMentor() {
         grupo(FENIX, LUISA, "Europe/Madrid");
         grupo(AURORA, RAUL, "esto-no-es-una-zona");
-        lenient().when(participaciones.deParticipante(RAUL)).thenReturn(Optional.of(participacion(RAUL, false, "Asia/Tokyo")));
-        lenient().when(participaciones.deParticipante(LUISA)).thenReturn(Optional.of(participacion(LUISA, true, "Europe/Madrid")));
         delLider(ANA, FENIX, LUISA, Instant.parse("2026-10-18T10:00:00Z"));
         delLider(PIA, AURORA, RAUL, Instant.parse("2026-10-18T15:00:00Z"));
 
@@ -245,11 +251,6 @@ class ResumenDeConsultasServiceTest {
         // 01:10 UTC = 20:10 en Lima (Raul, por defecto), pero no es la hora de Madrid.
         servicio(LAS_VEINTE_EN_LIMA).resumir();
         assertThat(avisos()).singleElement().satisfies(aviso -> assertThat(aviso.mentorId()).isEqualTo(RAUL.value()));
-    }
-
-    private static ParticipacionPrograma participacion(UserId id, boolean inscrito, String zona) {
-        return new ParticipacionPrograma(id, inscrito, 3, LocalDate.of(2026, 9, 1), ZoneId.of(zona),
-                FasePrograma.PHASE_1_REBIRTH, null, null, UserRole.MENTOR, false, true);
     }
 
     @Test
@@ -305,6 +306,7 @@ class ResumenDeConsultasServiceTest {
         List<GrupoAcompanado> grupos = mentores.stream().map(m -> new GrupoAcompanado(UUID.randomUUID(), "G", m,
                 UUID.randomUUID(), "America/Lima", 3)).toList();
         lenient().when(acompanamiento.gruposConMentorVigente(any())).thenReturn(grupos);
+        lenient().when(zonas.zonaDe(any(), any())).thenReturn(ZoneId.of("America/Lima"));
 
         servicio(LAS_VEINTE_EN_LIMA).resumir();
 

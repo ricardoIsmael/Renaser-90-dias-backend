@@ -590,6 +590,30 @@ class AcompanamientoServiceTest {
     }
 
     @Test
+    @DisplayName("spec 057 FR-020: los tramos del acompañante incluyen los de guía; tramosDeMentor sigue devolviendo solo los de mentor")
+    void tramosDelAcompananteIncluyenALaGuia() { // spec 057 FR-020
+        escenarioBase();
+        UserId guia = UserId.of(UUID.randomUUID());
+        asignar(MI_GRUPO, guia, FuncionAcompanamiento.GUIA, AHORA.minusSeconds(172_800), AHORA.minusSeconds(86_400));
+        asignar(GRUPO_AJENO, guia, FuncionAcompanamiento.SOPORTE, AHORA.minusSeconds(172_800), null);
+        asignar(GRUPO_AJENO, guia, FuncionAcompanamiento.APRENDIZ, AHORA.minusSeconds(172_800), null);
+
+        assertThat(finder().tramosDeAcompanante(guia, Instant.EPOCH, null)).extracting(t -> t.grupoId()).containsExactly(MI_GRUPO.value());
+        assertThat(finder().tramosDeMentor(guia, Instant.EPOCH, null)).as("tramosDeMentor no cambia").isEmpty();
+        assertThat(finder().tramosDeAcompanante(MENTOR, Instant.EPOCH, null)).extracting(t -> t.grupoId()).containsExactly(MI_GRUPO.value());
+    }
+
+    @Test
+    @DisplayName("spec 057: el fin del grupo ya terminado sale solo si el periodo ya venció en el día de su cohorte")
+    void finDelGrupoYaTerminado() { // spec 057 FR-020
+        grupoConPeriodo(MI_GRUPO, "Grupo Viejo", LocalDate.of(2026, 7, 1), LocalDate.of(2026, 7, 31));
+        grupoConPeriodo(GRUPO_AJENO, "Grupo en curso", LocalDate.of(2020, 1, 1), LocalDate.of(2099, 1, 1));
+
+        assertThat(finder().finDelGrupoYaTerminado(MI_GRUPO.value(), AHORA)).contains(LocalDate.of(2026, 7, 31));
+        assertThat(finder().finDelGrupoYaTerminado(GRUPO_AJENO.value(), AHORA)).isEmpty();
+    }
+
+    @Test
     @DisplayName("un grupo que ya cerró no tiene acompañantes vigentes")
     void grupoCerradoNoTieneAcompanantes() {
         grupoConPeriodo(MI_GRUPO, "Grupo Viejo", LocalDate.of(2026, 7, 1), LocalDate.of(2026, 7, 31));

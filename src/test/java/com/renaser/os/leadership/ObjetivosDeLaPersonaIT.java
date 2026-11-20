@@ -49,6 +49,10 @@ class ObjetivosDeLaPersonaIT extends EscenarioDelLiderIT {
             assertThat(o.get("eje").asText()).isEqualTo("TRABAJO");
             assertThat(o.get("titulo").asText()).isEqualTo("Cerrar 2 ventas");
         });
+        assertThat(cuerpo.get("duracionDias").asInt()).as("spec 057 FR-001: el plazo de su formación").isEqualTo(90);
+        assertThat(cuerpo.get("fase").get("numero").asInt()).as("día 45: fase 3, de 35 a 64").isEqualTo(3);
+        assertThat(cuerpo.get("fase").get("primerDia").asInt()).isEqualTo(35);
+        assertThat(cuerpo.get("fase").get("ultimoDia").asInt()).isEqualTo(64);
         JsonNode semana = cuerpo.get("semana");
         assertThat(semana.get("numeroSemana").asInt()).isEqualTo(7);
         assertThat(semana.get("objetivos")).hasSize(1);
