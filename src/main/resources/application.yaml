@@ -787,9 +787,12 @@ renaser:
       # Spec 040 FR-038: hacer coanfitrión de la sala a quien dirige la sesión para que Meet grabe solo. NO por defecto: exige el permiso
       # meetings.space.created (reconectar la cuenta) y Google solo lo da para salas creadas por la app (ver la spec).
       coanfitriones: ${EVENTOS_MEET_COANFITRIONES:false}
-      # Spec 040 FR-040/FR-041: crear las salas con la Meet API (spaces.create) y reemplazar las de Calendar de hoy en adelante. NO por defecto:
+      # Spec 040 FR-040/FR-041: crear las salas con la Meet API (spaces.create) (las nuevas). NO por defecto:
       # exige el permiso meetings.space.created (reconectar la cuenta). Con el interruptor apagado todo sigue como siempre.
       salas-con-meet-api: ${EVENTOS_MEET_SALAS_CON_MEET_API:false}
+      # Spec 040 FR-041 (decisión del dueño del 20/11, «solo las nuevas»): reemplazar las salas ya creadas y cerrar la vieja. NO por defecto y solo
+      # tiene efecto con salas-con-meet-api prendido: la migración falló el 16/11 y cambia el enlace que la gente ya tiene.
+      migrar-salas: ${EVENTOS_MEET_MIGRAR_SALAS:false}
       # Spec 047: la transcripcion de cada sesion se lee de Google (Meet REST API, meetings.space.readonly) y se guarda CIFRADA, sin mostrarse
       # en la app. Se prende con el interruptor de Soporte TI `eventos.meet.transcripcion` (nace apagado). Se guarda `retencion-dias` (decision
       # P3 del duenio: 6 meses) y despues se borra sola.

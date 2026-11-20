@@ -40,6 +40,7 @@ class ConfiguracionDeGoogle implements ConfiguracionDeGooglePort {
     private boolean tomarNotas = true;
     private boolean coanfitriones = false;
     private boolean salasConMeetApi = false;
+    private boolean migrarSalasExistentes = false;
 
     ConfiguracionDeGoogle(@Value("${renaser.calendar.meet.oauth.client-id:}") String clientId,
                           @Value("${renaser.calendar.meet.oauth.client-secret:}") String clientSecret,
@@ -64,7 +65,9 @@ class ConfiguracionDeGoogle implements ConfiguracionDeGooglePort {
                           @Value("${renaser.calendar.meet.transcribir:true}") boolean transcribir,
                           @Value("${renaser.calendar.meet.notas:true}") boolean tomarNotas,
                           @Value("${renaser.calendar.meet.coanfitriones:false}") boolean coanfitriones,
-                          @Value("${renaser.calendar.meet.salas-con-meet-api:false}") boolean salasConMeetApi) {
+                          @Value("${renaser.calendar.meet.salas-con-meet-api:false}") boolean salasConMeetApi,
+                          @Value("${renaser.calendar.meet.migrar-salas:false}") boolean migrarSalasExistentes) {
+        this.migrarSalasExistentes = migrarSalasExistentes;
         this.coanfitriones = coanfitriones;
         this.salasConMeetApi = salasConMeetApi;
         this.invitarAlCreador = invitarAlCreador;
@@ -96,6 +99,11 @@ class ConfiguracionDeGoogle implements ConfiguracionDeGooglePort {
     @Override
     public boolean salasConMeetApi() {
         return salasConMeetApi;
+    }
+
+    @Override
+    public boolean migrarSalasExistentes() {
+        return migrarSalasExistentes;
     }
 
     @Override

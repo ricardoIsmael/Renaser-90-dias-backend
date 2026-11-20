@@ -560,7 +560,7 @@ class GoogleCalendarMeetAdapterTest {
         ConfiguracionDeGoogle config = g.configuracion;
         assertThat(config.permisosPedidos()).doesNotContain(ConfiguracionDeGoogle.PERMISO_DE_COANFITRIONES);
 
-        config.opcionesDeLaSala(true, true, true, true, true, false);
+        config.opcionesDeLaSala(true, true, true, true, true, false, false);
 
         assertThat(config.permisosPedidos()).contains(ConfiguracionDeGoogle.PERMISO_DE_COANFITRIONES);
         assertThat(config.permisosObligatorios()).doesNotContain(ConfiguracionDeGoogle.PERMISO_DE_COANFITRIONES);
@@ -699,10 +699,17 @@ class GoogleCalendarMeetAdapterTest {
         assertThat(config.salasConMeetApi()).isFalse();
         assertThat(config.permisosPedidos()).doesNotContain(ConfiguracionDeGoogle.PERMISO_DE_COANFITRIONES);
 
-        config.opcionesDeLaSala(true, true, true, true, false, true);
+        config.opcionesDeLaSala(true, true, true, true, false, true, false);
 
         assertThat(config.salasConMeetApi()).isTrue();
         assertThat(config.permisosPedidos()).contains(ConfiguracionDeGoogle.PERMISO_DE_COANFITRIONES);
+        // spec 040 FR-041 y FR-042: la migración de las existentes tiene su propio interruptor y solo cuenta con la Meet API prendida.
+        assertThat(config.migrarSalasExistentes()).isFalse();
+        assertThat(config.migracionActiva()).isFalse();
+        config.opcionesDeLaSala(true, true, true, true, false, true, true);
+        assertThat(config.migracionActiva()).isTrue();
+        config.opcionesDeLaSala(true, true, true, true, false, false, true);
+        assertThat(config.migracionActiva()).isFalse();
         assertThat(config.permisosObligatorios()).doesNotContain(ConfiguracionDeGoogle.PERMISO_DE_COANFITRIONES);
     }
 

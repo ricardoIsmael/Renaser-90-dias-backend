@@ -100,6 +100,7 @@ class SalasConMeetApiTest {
         m.servicio.crear(comando());
         String viejo = unicaSala().enlace();
         m.salasConMeetApi = true;
+        m.migrarSalas = true;
 
         m.trabajo.mantenimiento(m.reloj.now());
 
@@ -126,6 +127,7 @@ class SalasConMeetApiTest {
     void laPasadaNoSeToca() {
         m.servicio.crear(comando());
         m.salasConMeetApi = true;
+        m.migrarSalas = true;
         m.reloj.avanzar(Duration.ofDays(2));
 
         m.trabajo.mantenimiento(m.reloj.now());
@@ -140,6 +142,7 @@ class SalasConMeetApiTest {
     void laQueYaEmpezoNoSeToca() {
         m.servicio.crear(comando());
         m.salasConMeetApi = true;
+        m.migrarSalas = true;
         m.reloj.avanzar(Duration.ofHours(10)); // 01:00Z: la sesión empezó a las 00:00Z
 
         m.trabajo.mantenimiento(m.reloj.now());
@@ -155,6 +158,7 @@ class SalasConMeetApiTest {
         m.servicio.crear(comando());
         String viejo = unicaSala().enlace();
         m.salasConMeetApi = true;
+        m.migrarSalas = true;
         m.google.fallaAlCrearEspacio = new GoogleNoRespondeException("5xx", 503);
 
         m.trabajo.mantenimiento(m.reloj.now());
@@ -182,6 +186,7 @@ class SalasConMeetApiTest {
         m.servicio.crear(comando());
         String viejo = unicaSala().enlace();
         m.salasConMeetApi = true;
+        m.migrarSalas = true;
         m.google.fallaAlPublicar = new GoogleNoRespondeException("5xx", 503);
 
         m.trabajo.mantenimiento(m.reloj.now());
@@ -209,6 +214,7 @@ class SalasConMeetApiTest {
         m.servicio.crear(comando());
         String viejo = unicaSala().enlace();
         m.salasConMeetApi = true;
+        m.migrarSalas = true;
         m.google.fallaAlCerrar = new GoogleNoRespondeException("5xx", 503);
 
         m.trabajo.mantenimiento(m.reloj.now());
@@ -228,6 +234,7 @@ class SalasConMeetApiTest {
     void cierreRechazado() {
         m.servicio.crear(comando());
         m.salasConMeetApi = true;
+        m.migrarSalas = true;
         m.google.fallaAlCerrar = new GoogleRechazoException("no", 403);
 
         m.trabajo.mantenimiento(m.reloj.now());
@@ -272,6 +279,39 @@ class SalasConMeetApiTest {
         assertThat(unicaSala().enlace()).isEqualTo(enlace);
         assertThat(m.google.espaciosCreados).isEqualTo(1);
         assertThat(m.google.llamadasDe("publicar:")).isEqualTo(2);
+    }
+
+    // spec 040 FR-041
+    // spec 040 FR-042
+    @Test
+    @DisplayName("FR-041/FR-042: con la Meet API prendida y la migración apagada, la sala nueva nace con la Meet API y la existente no se migra ni se cierra")
+    void soloLasNuevas() {
+        m.servicio.crear(comando()); // sala de Calendar, de antes del interruptor
+        SalaMeet vieja = unicaSala();
+        String enlaceViejo = vieja.enlace();
+        m.salasConMeetApi = true;
+        assertThat(m.migrarSalas).isFalse();
+
+        m.trabajo.mantenimiento(m.reloj.now());
+        m.reloj.avanzar(Duration.ofHours(1));
+        m.trabajo.mantenimiento(m.reloj.now());
+        m.salas.marcarParaSincronizar(vieja.eventoId(), m.reloj.now());
+        m.trabajo.reintentarLoPendiente(m.reloj.now());
+
+        SalaMeet sala = unicaSala();
+        assertThat(sala.conMeetApi()).isFalse();
+        assertThat(sala.enlace()).isEqualTo(enlaceViejo);
+        assertThat(sala.enlaceAnterior()).isNull();
+        assertThat(m.google.llamadasDe("crearEspacio:")).isZero();
+        assertThat(m.google.llamadasDe("cerrar:")).isZero();
+        assertThat(m.google.cerradas).isEmpty();
+
+        // Un evento nuevo, con el mismo interruptor, sí nace con la Meet API.
+        m.servicio.crear(comando());
+        assertThat(m.salas.todas()).hasSize(2);
+        assertThat(m.salas.todas().stream().filter(SalaMeet::conMeetApi)).hasSize(1);
+        assertThat(m.google.llamadasDe("crearEspacio:")).isEqualTo(1);
+        assertThat(m.google.cerradas).isEmpty();
     }
 
     private SalaMeet unicaSala() {
