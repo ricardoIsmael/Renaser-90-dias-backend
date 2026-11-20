@@ -71,7 +71,14 @@ public enum TipoNotificacion {
      * mensaje del chat son {@link #RECORDATORIO_EVENTO}). Sirve para que la persona se de de baja del WhatsApp sin perder el aviso del telefono: el boton «No recibir más», un
      * «BAJA» que responde a un mensaje nuestro y el interruptor de Yo → Notificaciones apagan ESTA preferencia. Sin fila esta encendida, como todas.
      */
-    RECORDATORIO_EVENTO_WHATSAPP;
+    RECORDATORIO_EVENTO_WHATSAPP,
+
+    /**
+     * V200 (spec 057, FR-030): un aprendiz del grupo del mentor cayó a rojo hoy, según el semáforo del día. Le llega al mentor a las 19:00 de su
+     * zona, una vez por aprendiz y semana, con los botones «Escribirle» y «Ver ficha». Tipo propio y no {@code ACOMPANAMIENTO_ALUMNO} para que se
+     * pueda apagar por separado («Aprendices en rojo» en Yo → Notificaciones).
+     */
+    ROJO_DEL_DIA;
 
     /**
      * Si este aviso sale aunque Soporte TI haya apagado la funcionalidad {@code notificaciones} (spec 002). Solo el de
