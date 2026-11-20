@@ -81,6 +81,15 @@ public interface AcompanamientoFinder {
      */
     boolean grupoOperativo(UUID grupoId, Instant instante);
 
+    /**
+     * El día en que terminó el grupo (el último día de su periodo, inclusivo), si ya terminó mirado en el día de su cohorte en ese instante
+     * (spec 057, «Mis grupos anteriores»). Vacío si el grupo no tiene periodo, todavía corre o todavía no empezó: un grupo programado no es un
+     * grupo anterior.
+     */
+    default java.util.Optional<java.time.LocalDate> finDelGrupoYaTerminado(UUID grupoId, Instant instante) {
+        return java.util.Optional.empty();
+    }
+
     /** Nombre y cohorte de un grupo, sin exponer el agregado. */
     java.util.Optional<GrupoBasico> grupo(UUID grupoId);
 

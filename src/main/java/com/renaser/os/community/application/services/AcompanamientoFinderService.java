@@ -197,6 +197,14 @@ class AcompanamientoFinderService implements AcompanamientoFinder, MentorVigente
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<java.time.LocalDate> finDelGrupoYaTerminado(UUID grupoId, Instant instante) {
+        return loadCelulaPort.porId(CelulaId.of(grupoId))
+                .filter(celula -> celula.vencidoEn(vigencia.hoyDe(celula, instante)))
+                .map(celula -> celula.periodo().fin());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Optional<GrupoBasico> grupo(UUID grupoId) {
         return loadCelulaPort.porId(CelulaId.of(grupoId)).map(celula -> new GrupoBasico(
                 celula.id().value(), celula.nombre(), celula.cohorteId().value(),
