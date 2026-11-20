@@ -337,6 +337,9 @@ renaser:
     # Spec 043 (D-325): la plantilla de categoria AUTENTICACION del codigo de verificacion. La crea el dueño en YCloud; hasta que Meta la apruebe,
     # el interruptor auth.codigo_whatsapp sigue apagado.
     plantilla-codigo: ${WHATSAPP_PLANTILLA_CODIGO:renaser_codigo_v1}
+    # Prefijos de pais (sin el +, separados por comas) a los que el ALTA anonima puede mandar un codigo por WhatsApp: cada envio cuesta saldo de YCloud.
+    # Por defecto, Peru y el resto de Hispanoamerica hispanohablante, Espana y +1 (EE. UU. y Canada). La recuperacion y Yo no lo usan.
+    paises-del-codigo: ${WHATSAPP_PAISES_DEL_CODIGO:51,52,53,54,56,57,58,34,1,591,593,595,598,502,503,504,505,506,507}
   scheduling:
     shedlock:
       # Spec 040: los reintentos de las salas de Meet (cada minuto) y su mantenimiento (cada hora). Sin lock, dos instancias le pedirian lo

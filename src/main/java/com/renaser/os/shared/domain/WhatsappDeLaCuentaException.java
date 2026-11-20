@@ -15,6 +15,8 @@ public class WhatsappDeLaCuentaException extends RuntimeException {
         CANAL_NO_DISPONIBLE(409, "Por ahora no podemos enviar códigos por WhatsApp. Intenta más tarde."),
         /** Lo escrito no tiene forma de numero de WhatsApp. */
         NUMERO_INVALIDO(422, "Escribe un número de WhatsApp válido, con el código de país."),
+        /** El prefijo de pais del numero no esta entre los admitidos para el codigo del alta ({@code renaser.whatsapp.paises-del-codigo}). */
+        PAIS_NO_ADMITIDO(422, "Por ahora no enviamos códigos por WhatsApp a números de ese país. Pide el código por correo."),
         /** El proveedor rechazo el envio. */
         CODIGO_NO_SALIO(409, "No pudimos enviar el código por WhatsApp. Intenta de nuevo en unos minutos."),
         /** Ese numero ya es el confirmado de esta misma cuenta. */

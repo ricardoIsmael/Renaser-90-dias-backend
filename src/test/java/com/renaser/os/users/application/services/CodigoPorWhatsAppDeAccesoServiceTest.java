@@ -83,7 +83,8 @@ class CodigoPorWhatsAppDeAccesoServiceTest {
                 };
         service = new CodigoPorWhatsAppDeAccesoService(registro, recuperacion, limites, credenciales, deLaFicha, whatsapp,
                 confirmadosFalsos, new NumeroUnicoDeWhatsApp(whatsapp, confirmadosFalsos, (numero, excepto) -> false,
-                        (numero, excepto) -> false));
+                        (numero, excepto) -> false),
+                CodigoPorWhatsAppDeAccesoService.PAISES_DEL_CODIGO_POR_DEFECTO);
     }
 
     @BeforeEach
@@ -155,6 +156,43 @@ class CodigoPorWhatsAppDeAccesoServiceTest {
         assertThatThrownBy(() -> service.paraElRegistro(new CodigoDelRegistroCommand("otra@renaser.dev", NUMERO_ESCRITO, IP)))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("No pudimos enviar");
         assertThat(whatsapp.enviados).isEmpty();
+    }
+
+    @Test
+    @DisplayName("el alta no manda el codigo a un pais fuera de la lista: 422 PAIS_NO_ADMITIDO, sin gastar cupo ni enviar")
+    void paisNoAdmitido() {
+        assertThatThrownBy(() -> service.paraElRegistro(new CodigoDelRegistroCommand(CORREO, "+44 7911123456", IP)))
+                .isInstanceOfSatisfying(WhatsappDeLaCuentaException.class,
+                        e -> assertThat(e.motivo()).isEqualTo(WhatsappDeLaCuentaException.Motivo.PAIS_NO_ADMITIDO));
+        assertThat(whatsapp.enviados).isEmpty();
+        // el prefijo se compara entero: +5 no es de nadie, +51 si
+        service.paraElRegistro(new CodigoDelRegistroCommand(CORREO, NUMERO_ESCRITO, IP));
+        assertThat(whatsapp.enviados).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("la lista de paises sale de la configuracion")
+    void paisesPorConfiguracion() {
+        CodigoPorWhatsAppDeAccesoService soloPeru = new CodigoPorWhatsAppDeAccesoService(registro, recuperacion, limites, email -> Optional.empty(),
+                personas -> Map.of(), whatsapp, null, null, "+51, ");
+        assertThatThrownBy(() -> soloPeru.paraElRegistro(new CodigoDelRegistroCommand(CORREO, "+34 612345678", IP)))
+                .isInstanceOf(WhatsappDeLaCuentaException.class);
+    }
+
+    @Test
+    @DisplayName("el alta agota su propio cupo global sin tocar el de la recuperacion de clave")
+    void elAltaTieneSuCupoGlobalPropio() {
+        UserId id = cuentaConContrasena("rec@renaser.dev", "+51 912345678");
+        for (int i = 0; i < CodigoPorWhatsAppDeAccesoService.LIMITE_GLOBAL_DEL_ALTA_POR_HORA; i++) {
+            limites.registrarIntento("codigo-whatsapp:global-alta", Duration.ofHours(1), CodigoPorWhatsAppDeAccesoService.LIMITE_GLOBAL_DEL_ALTA_POR_HORA);
+        }
+        assertThatThrownBy(() -> service.paraElRegistro(new CodigoDelRegistroCommand(CORREO, NUMERO_ESCRITO, IP)))
+                .isInstanceOf(RateLimitExceededException.class);
+
+        pedir("rec@renaser.dev", "190.9.9.9");
+
+        assertThat(lineasDelRegistro()).containsExactly("[users.codigo-whatsapp] recuperacion: enviado (cuenta " + id.value() + ")");
+        assertThat(whatsapp.enviadosSinEsperar).hasSize(1);
     }
 
     // spec 043 FR-010
