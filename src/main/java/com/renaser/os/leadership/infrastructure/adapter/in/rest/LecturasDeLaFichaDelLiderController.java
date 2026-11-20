@@ -7,6 +7,7 @@ import com.renaser.os.leadership.application.ports.in.ConsultarObjetivosDeLaPers
 import com.renaser.os.leadership.application.ports.in.ConsultarSemanaDeLaPersonaUseCase;
 import com.renaser.os.leadership.application.ports.in.ConsultarSemanaDeLaPersonaUseCase.ConsultaSemanaDeLaPersona;
 import com.renaser.os.leadership.infrastructure.adapter.in.rest.SemanaDelAprendizController.SemanaDelAprendizResponse;
+import com.renaser.os.rocks.api.ObjetivosDelAprendizResponse;
 import com.renaser.os.shared.domain.Permission;
 import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
@@ -78,8 +79,8 @@ public class LecturasDeLaFichaDelLiderController {
 
     @RequiresPermission(value = Permission.VIEW_MENTOR_CORPS, scope = GUARD)
     @GetMapping("/objetivos")
-    public ResponseEntity<ObjetivosDeLaPersonaResponse> objetivos(@ActorAutenticado UserId actorId, @PathVariable UUID personId) {
-        return sinCache(ObjetivosDeLaPersonaResponse.from(objetivos.objetivosDe(new ConsultaObjetivosDeLaPersona(actorId, personId))));
+    public ResponseEntity<ObjetivosDelAprendizResponse> objetivos(@ActorAutenticado UserId actorId, @PathVariable UUID personId) {
+        return sinCache(ObjetivosDelAprendizResponse.from(objetivos.objetivosDe(new ConsultaObjetivosDeLaPersona(actorId, personId))));
     }
 
     private static <T> ResponseEntity<T> sinCache(T cuerpo) {
