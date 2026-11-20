@@ -16275,3 +16275,12 @@ mejor aún, con un `codigo`.
 - **Causa real:** el padrón partía de `FichaDeMentorFinder.mentoresActivos()` (solo ACTIVE), heredado de SDD 002, y la fila no decía el estado de la cuenta. La app ya sabía pintar al suspendido apagado, pero nunca le llegaba.
 - **Solución:** `FichaDeMentorFinder.mentoresSuspendidos()` y `AccesoDeLiderazgo.mentoresSuspendidosDelAlcance()` (mismo filtro de formaciones); el padrón los suma al final y cada fila lleva `accountActive` (aditivo). `mentoresDelAlcance` no cambia: el reporte del mes, «Por resolver» y los documentos siguen solo con activos.
 - **Cómo evitarlo:** `PadronDeMentoresServiceTest`, `LeadershipControllersTest`, `ReporteDeMentoresServiceTest` y `PorResolverServiceTest` con la marca `spec 056 FR-004` (el suspendido del alcance aparece marcado, el de otra formación no, y no se cuela en el reporte ni en «Por resolver»). Un requisito de estado de cuenta en la spec se prueba con una cuenta en ese estado en el E2E, no solo con Jest.
+
+## E-691 · La vista de plataforma de consultas de mentoría no respetaba la frontera de formación del líder de mentores (backend, hallazgo N-1 de la auditoría del 20/11, RESUELTO)
+
+- **Fecha:** 2026-11-20
+- **Dónde:** `TicketMentorService.todos` (`GET /api/v1/admin/tickets`)
+- **Síntoma:** un líder de mentores veía las consultas de aprendices de todas las formaciones, aunque para responderlas sí se le exige que el aprendiz sea de una formación suya.
+- **Causa real:** dos reglas distintas para el mismo dato. `responder` pasaba por `AlcanceDeFormacionFinder` y el listado leía la tabla entera sin mirar el alcance del actor; el repo trata la frontera de formación como «no existe» (404 / filas ausentes).
+- **Solución:** `todos` consulta `AlcanceDeFormacionFinder.de(actor)`. Con alcance de todas (Administración, Alquimista) no cambia nada; con un alcance acotado lee en tandas por `creadoEn` y se queda con las consultas de aprendices del alcance (`dentroDelAlcance`, una consulta por tanda) hasta llenar la página, de modo que el cursor sigue siendo el `creadoEn` de la última consulta devuelta. Misma ruta y misma forma de respuesta; sin migraciones.
+- **Cómo evitarlo:** `TicketMentorServiceTest` (el líder de una formación no ve las consultas de otra y sí las suyas; Administración y Alquimista ven todas; la paginación por cursor no pierde ni repite con el filtro). Todo listado de plataforma que cruce formaciones se filtra por el alcance del actor, no solo la acción de escritura.

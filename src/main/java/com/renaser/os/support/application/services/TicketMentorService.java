@@ -32,6 +32,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -45,6 +46,8 @@ public class TicketMentorService implements AbrirTicketMentorUseCase, ResponderT
 
     private static final int PAGE_SIZE = 30;
     private static final int LIBRARY_SEARCH_COUNT = 5;
+    private static final int TANDA_DE_LECTURA = 100;
+    private static final int MAX_TANDAS_POR_PAGINA = 20;
 
     private final LoadTicketMentorPort loadTicketMentorPort;
     private final SaveTicketMentorPort saveTicketMentorPort;
@@ -178,7 +181,12 @@ public class TicketMentorService implements AbrirTicketMentorUseCase, ResponderT
         throw new NotAuthorizedException("Solo un aprendiz o un mentor pueden listar estos tickets");
     }
 
-    /** MENTOR_LEAD/ADMIN/ALCHEMIST unicamente (vista de plataforma, solo lectura). */
+    /**
+     * MENTOR_LEAD/ADMIN/ALCHEMIST unicamente (vista de plataforma, solo lectura). ADMIN y ALCHEMIST ven todas las formaciones; el líder, solo
+     * las consultas de aprendices de las formaciones que tiene activas (la misma frontera que exige {@link #responder}): las de otra formación
+     * no aparecen, como si no existieran. Para no romper la paginación por cursor, se lee la tabla en tandas por {@code creadoEn} y se quedan
+     * las del alcance hasta llenar la página.
+     */
     @Override
     public TicketsMentorPage todos(UserId actorId, Instant cursor) {
         UserSummary actor = requireActor(actorId);
@@ -186,7 +194,47 @@ public class TicketMentorService implements AbrirTicketMentorUseCase, ResponderT
                 && actor.role() != UserRole.ALCHEMIST) {
             throw new NotAuthorizedException("Solo MENTOR_LEAD/ADMIN/ALCHEMIST ven todos los tickets");
         }
-        return paginar(loadTicketMentorPort.todos(cursor, PAGE_SIZE + 1));
+        AlcanceDeFormacion alcance = formaciones.de(actorId);
+        if (alcance.esTodas()) {
+            return paginar(loadTicketMentorPort.todos(cursor, PAGE_SIZE + 1));
+        }
+        return paginarDentroDelAlcance(alcance, cursor);
+    }
+
+    private TicketsMentorPage paginarDentroDelAlcance(AlcanceDeFormacion alcance, Instant cursor) {
+        List<TicketMentor> visibles = new ArrayList<>();
+        Instant desde = cursor;
+        Instant ultimoLeido = null;
+        for (int tanda = 0; tanda < MAX_TANDAS_POR_PAGINA && !alcance.esVacio() && visibles.size() <= PAGE_SIZE; tanda++) {
+            List<TicketMentor> leidos = loadTicketMentorPort.todos(desde, TANDA_DE_LECTURA);
+            if (leidos.isEmpty()) {
+                ultimoLeido = null;
+                break;
+            }
+            Set<UserId> delAlcance = formaciones.dentroDelAlcance(
+                    leidos.stream().map(TicketMentor::participanteId).distinct().toList(), alcance);
+            for (TicketMentor ticket : leidos) {
+                if (delAlcance.contains(ticket.participanteId()) && visibles.size() <= PAGE_SIZE) {
+                    visibles.add(ticket);
+                }
+            }
+            ultimoLeido = leidos.get(leidos.size() - 1).creadoEn();
+            if (leidos.size() < TANDA_DE_LECTURA) {
+                ultimoLeido = null;
+                break;
+            }
+            desde = ultimoLeido;
+        }
+        boolean hayMas = visibles.size() > PAGE_SIZE;
+        List<TicketMentor> pagina = hayMas ? new ArrayList<>(visibles.subList(0, PAGE_SIZE)) : visibles;
+        Instant siguiente = null;
+        if (hayMas) {
+            siguiente = pagina.get(pagina.size() - 1).creadoEn();
+        } else if (ultimoLeido != null) {
+            // tope de lecturas alcanzado sin llenar la página: que la app siga desde donde se quedó la lectura
+            siguiente = ultimoLeido;
+        }
+        return new TicketsMentorPage(pagina, siguiente, nombresDeQuienRespondio(pagina));
     }
 
     private TicketsMentorPage paginar(List<TicketMentor> rows) {
