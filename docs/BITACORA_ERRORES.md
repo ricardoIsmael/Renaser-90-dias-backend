@@ -16276,7 +16276,7 @@ mejor aún, con un `codigo`.
 - **Solución:** `FichaDeMentorFinder.mentoresSuspendidos()` y `AccesoDeLiderazgo.mentoresSuspendidosDelAlcance()` (mismo filtro de formaciones); el padrón los suma al final y cada fila lleva `accountActive` (aditivo). `mentoresDelAlcance` no cambia: el reporte del mes, «Por resolver» y los documentos siguen solo con activos.
 - **Cómo evitarlo:** `PadronDeMentoresServiceTest`, `LeadershipControllersTest`, `ReporteDeMentoresServiceTest` y `PorResolverServiceTest` con la marca `spec 056 FR-004` (el suspendido del alcance aparece marcado, el de otra formación no, y no se cuela en el reporte ni en «Por resolver»). Un requisito de estado de cuenta en la spec se prueba con una cuenta en ese estado en el E2E, no solo con Jest.
 
-## E-691 · El código por WhatsApp del alta (anónimo) podía ir a cualquier país y gastaba el mismo cupo global que la recuperación de clave y la confirmación en Yo (backend, 20/11, RESUELTO)
+## E-692 · El código por WhatsApp del alta (anónimo) podía ir a cualquier país y gastaba el mismo cupo global que la recuperación de clave y la confirmación en Yo (backend, 20/11, RESUELTO)
 
 - **Fecha:** 2026-11-20
 - **Dónde:** `CodigoPorWhatsAppDeAccesoService.paraElRegistro`, `NumeroDeWhatsApp`, contador `codigo-whatsapp:global`
