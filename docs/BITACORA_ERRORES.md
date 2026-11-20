@@ -16276,7 +16276,7 @@ mejor aún, con un `codigo`.
 - **Solución:** `FichaDeMentorFinder.mentoresSuspendidos()` y `AccesoDeLiderazgo.mentoresSuspendidosDelAlcance()` (mismo filtro de formaciones); el padrón los suma al final y cada fila lleva `accountActive` (aditivo). `mentoresDelAlcance` no cambia: el reporte del mes, «Por resolver» y los documentos siguen solo con activos.
 - **Cómo evitarlo:** `PadronDeMentoresServiceTest`, `LeadershipControllersTest`, `ReporteDeMentoresServiceTest` y `PorResolverServiceTest` con la marca `spec 056 FR-004` (el suspendido del alcance aparece marcado, el de otra formación no, y no se cuela en el reporte ni en «Por resolver»). Un requisito de estado de cuenta en la spec se prueba con una cuenta en ese estado en el E2E, no solo con Jest.
 
-## E-691 · Las subidas prefirmadas a S3 firmaban el `Content-Type` que elegía el cliente y no ponían tope de tamaño (backend, hallazgo N-3 de la auditoría del 20/11, RESUELTO en evidencias y avatar)
+## E-693 · Las subidas prefirmadas a S3 firmaban el `Content-Type` que elegía el cliente y no ponían tope de tamaño (backend, hallazgo N-3 de la auditoría del 20/11, RESUELTO en evidencias y avatar)
 
 - **Fecha:** 2026-11-20
 - **Dónde:** `S3AlmacenamientoAdapter.firmarSubida`, `EvidenciaRegistroService.firmar`, `AvatarService` (el avatar tiene lectura pública)
