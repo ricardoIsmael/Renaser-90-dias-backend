@@ -109,6 +109,21 @@ class EvidenciaServiceLectorLiderTest {
         assertThat(leida.contenidoTexto()).isEqualTo("Mis respuestas de la audioterapia");
     }
 
+    /* N-3: lo que no es una foto se firma como descarga (Content-Disposition: attachment). */
+    @Test
+    @DisplayName("N-3: la URL de un video de evidencia se firma como descarga; la de una foto, no")
+    void elVideoSeFirmaComoDescarga() {
+        actor(LIDER, UserRole.MENTOR_LEAD, UserStatus.ACTIVE);
+        Evidencia video = Evidencia.registrar(EvidenciaId.of(UUID.randomUUID()), ANA,
+                new DestinoEvidencia.RegistroHabito(UUID.randomUUID()), TipoEvidencia.VIDEO, "renaser",
+                "evidencia-habitos/" + ANA + "/v.mp4", null, null, null, null, false, CLOCK.now(), CLOCK);
+        when(loadEvidenciaPort.byId(video.id())).thenReturn(Optional.of(video));
+        when(almacenamientoPort.firmarLecturaComoDescarga(any(), any())).thenReturn(URI.create("https://almacen/video?descarga"));
+
+        assertThat(service.urlDeLectura(LIDER, video.id())).get().extracting("url").isEqualTo("https://almacen/video?descarga");
+        verify(almacenamientoPort, never()).firmarLectura(any(), any());
+    }
+
     @Test
     @DisplayName("un lider activo recibe el archivo firmado de la evidencia de otra persona; un texto no tiene archivo")
     void liderRecibeElArchivoFirmado() {

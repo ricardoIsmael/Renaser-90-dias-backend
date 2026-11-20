@@ -2,6 +2,7 @@ package com.renaser.os.users.application.services;
 
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Clock;
+import com.renaser.os.shared.domain.TipoDeSubida;
 import com.renaser.os.users.application.ports.in.user.ConfirmarAvatarUseCase;
 import com.renaser.os.users.application.ports.in.user.SolicitarUrlAvatarUseCase;
 import com.renaser.os.users.application.ports.out.user.SaveUserPort;
@@ -54,6 +55,8 @@ class AvatarService implements SolicitarUrlAvatarUseCase, ConfirmarAvatarUseCase
     @Override
     public UrlAvatar solicitarUrl(SolicitarUrlAvatarCommand command) {
         requireActiveUserGuard.of(command.actorId());
+        // N-3: el avatar tiene lectura pública; solo imágenes de mapa de bits (nunca svg ni html).
+        TipoDeSubida.AVATAR.exigirTipoPermitido(command.tipoContenido());
         String ruta = rutaDe(command.actorId().toString());
         URI url = almacenamientoPort.firmarSubida(ruta, command.tipoContenido(), VALIDEZ_URL_SUBIDA);
         return new UrlAvatar(url, BUCKET_AVATARES, ruta);
@@ -80,7 +83,15 @@ class AvatarService implements SolicitarUrlAvatarUseCase, ConfirmarAvatarUseCase
     @Transactional
     public void confirmar(ConfirmarAvatarCommand command) {
         User actor = requireActiveUserGuard.of(command.actorId());
-        URI url = almacenamientoPort.urlPublica(rutaDe(command.actorId().toString()));
+        String ruta = rutaDe(command.actorId().toString());
+        // N-3: la firma no lleva el tamaño (la app no lo manda); se mira el objeto ya subido y, si pasa del tope, se borra.
+        almacenamientoPort.pesoDe(ruta).ifPresent(peso -> {
+            if (peso > TipoDeSubida.AVATAR.pesoMaximo("image/jpeg")) {
+                almacenamientoPort.borrar(ruta);
+                TipoDeSubida.AVATAR.exigirPeso(peso, "image/jpeg");
+            }
+        });
+        URI url = almacenamientoPort.urlPublica(ruta);
         actor.changeAvatar(conVersion(url.toString(), clock.now().toEpochMilli()));
         saveUserPort.save(actor);
     }

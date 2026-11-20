@@ -200,6 +200,33 @@ class S3AlmacenamientoAdapterTest {
         assertThat(adapter().leer("bienvenida/portadas/no-existe", 10)).isEmpty();
     }
 
+    /* N-3: lo que no es una imagen se entrega como descarga; el parámetro va firmado en la URL. */
+    @Test
+    void lecturaComoDescargaFirmaElContentDispositionAttachment() {
+        URI url = adapter().firmarLecturaComoDescarga("evidencia-habitos/a/b/c", Duration.ofMinutes(10));
+
+        assertThat(url.getQuery()).contains("response-content-disposition=attachment");
+        assertThat(adapter().firmarLectura("evidencia-habitos/a/b/c", Duration.ofMinutes(10)).getQuery())
+                .doesNotContain("response-content-disposition");
+    }
+
+    /* N-3: el peso del objeto ya subido, para el tope al confirmar. */
+    @Test
+    void pesoDeLeeElTamanoDelObjetoConUnHead() {
+        when(s3Client.headObject(any(software.amazon.awssdk.services.s3.model.HeadObjectRequest.class)))
+                .thenReturn(software.amazon.awssdk.services.s3.model.HeadObjectResponse.builder().contentLength(1234L).build());
+
+        assertThat(adapter().pesoDe("avatares/u")).hasValue(1234L);
+    }
+
+    @Test
+    void pesoDeUnObjetoInexistenteEsVacio() {
+        when(s3Client.headObject(any(software.amazon.awssdk.services.s3.model.HeadObjectRequest.class)))
+                .thenThrow(S3Exception.builder().statusCode(404).build());
+
+        assertThat(adapter().pesoDe("avatares/no-existe")).isEmpty();
+    }
+
     private static ResponseInputStream<GetObjectResponse> objeto(byte[] contenido, Long declarado) {
         return new ResponseInputStream<>(GetObjectResponse.builder().contentLength(declarado).build(),
                 AbortableInputStream.create(new ByteArrayInputStream(contenido)));

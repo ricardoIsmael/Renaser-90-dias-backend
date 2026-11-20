@@ -277,4 +277,50 @@ class AvatarServiceTest {
         assertThat(ConfirmarAvatarCommand.class.getRecordComponents()).extracting("name")
                 .containsExactly("actorId", "bucket", "ruta");
     }
+
+    /* N-3: el avatar tiene lectura pública; con un tipo ejecutable (html, svg) cualquiera servía contenido activo desde nuestro bucket. */
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"text/html", "image/svg+xml", "application/octet-stream"})
+    @DisplayName("N-3: solicitarUrl rechaza un tipo que no es imagen de mapa de bits y no firma nada")
+    void solicitarUrlRechazaTiposQueNoSonImagen(String tipo) {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId)));
+
+        assertThatThrownBy(() -> service.solicitarUrl(new SolicitarUrlAvatarCommand(actorId, tipo)))
+                .isInstanceOfSatisfying(com.renaser.os.shared.domain.RechazoConCodigoException.class,
+                        e -> assertThat(e.codigo()).isEqualTo("TIPO_DE_ARCHIVO_NO_PERMITIDO"));
+        verify(almacenamientoPort, never()).firmarSubida(anyString(), anyString(), any(Duration.class));
+    }
+
+    /* N-3: la app no manda el tamaño; el tope se pone al confirmar, mirando el objeto subido. */
+    @Test
+    @DisplayName("N-3: confirmar un avatar que pesa más que el tope lo borra, lo rechaza y no guarda la URL")
+    void confirmarRechazaYBorraElAvatarDemasiadoPesado() {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId)));
+        when(almacenamientoPort.pesoDe("avatares/" + actorId))
+                .thenReturn(java.util.OptionalLong.of(5L * 1024 * 1024 * 1024));
+
+        assertThatThrownBy(() -> service.confirmar(new ConfirmarAvatarCommand(actorId, AvatarService.BUCKET_AVATARES,
+                "avatares/" + actorId)))
+                .isInstanceOfSatisfying(com.renaser.os.shared.domain.RechazoConCodigoException.class,
+                        e -> assertThat(e.codigo()).isEqualTo("ARCHIVO_DEMASIADO_GRANDE"));
+
+        verify(almacenamientoPort).borrar("avatares/" + actorId);
+        verify(saveUserPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("N-3: un avatar dentro del tope se confirma y no se borra")
+    void confirmarAceptaElAvatarNormal() {
+        UserId actorId = UserId.of(UUID.randomUUID());
+        when(loadUserPort.byId(actorId)).thenReturn(Optional.of(activo(actorId)));
+        stubUrlPublicaDeterminista();
+        when(almacenamientoPort.pesoDe("avatares/" + actorId)).thenReturn(java.util.OptionalLong.of(300_000));
+
+        service.confirmar(new ConfirmarAvatarCommand(actorId, AvatarService.BUCKET_AVATARES, "avatares/" + actorId));
+
+        verify(saveUserPort).save(any());
+        verify(almacenamientoPort, never()).borrar(anyString());
+    }
 }

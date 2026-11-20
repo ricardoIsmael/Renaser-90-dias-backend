@@ -3,6 +3,7 @@ package com.renaser.os.shared.application.ports.out;
 import java.net.URI;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.OptionalLong;
 
 public interface AlmacenamientoPort {
 
@@ -11,6 +12,23 @@ public interface AlmacenamientoPort {
 
     /** URL prefirmada de lectura (GET) para un objeto ya subido. */
     URI firmarLectura(String ruta, Duration validez);
+
+    /**
+     * Como {@link #firmarLectura} pero con {@code Content-Disposition: attachment}: el navegador descarga el objeto en vez de
+     * abrirlo en línea. Para todo lo que no es una imagen que la app dibuja (N-3). Los adaptadores que no guardan nada heredan
+     * la lectura normal.
+     */
+    default URI firmarLecturaComoDescarga(String ruta, Duration validez) {
+        return firmarLectura(ruta, validez);
+    }
+
+    /**
+     * Cuánto pesa, en bytes, el objeto que ya está subido. Vacío si no existe o si el almacenamiento es de marcador (no guarda
+     * nada). Es lo que permite poner el tope al CONFIRMAR una subida prefirmada, ya que la firma no lleva el tamaño (N-3).
+     */
+    default OptionalLong pesoDe(String ruta) {
+        return OptionalLong.empty();
+    }
 
     /**
      * URL permanente y SIN firmar del objeto. Solo sirve si el objeto es de lectura publica:

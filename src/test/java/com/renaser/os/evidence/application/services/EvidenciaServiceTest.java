@@ -114,6 +114,39 @@ class EvidenciaServiceTest {
 
     // ---- registrar (defensa en profundidad, CLAUDE.MD §0.3) ----
 
+    /* N-3: la firma no lleva el tamaño (la app no lo manda); el tope se pone al registrar, con el objeto ya subido. */
+    @Test
+    @DisplayName("N-3: una evidencia cuyo archivo pesa más que el tope de su tipo se borra y no se guarda")
+    void evidenciaDemasiadoPesadaSeBorraYSeRechaza() {
+        UserId participanteId = UserId.of(UUID.randomUUID());
+        when(userSummaryFinder.findById(participanteId)).thenReturn(Optional.of(activo(participanteId, UserRole.TRAINEE)));
+        when(almacenamientoPort.pesoDe("evidencia-habitos/x")).thenReturn(java.util.OptionalLong.of(5L * 1024 * 1024 * 1024));
+        var comando = new RegistrarEvidenciaComando(participanteId, new DestinoEvidencia.RegistroHabito(UUID.randomUUID()),
+                TipoEvidencia.VIDEO, "renaser-files", "evidencia-habitos/x", null, null, null, null, false, CLOCK.now());
+
+        assertThatThrownBy(() -> service.registrar(comando))
+                .isInstanceOfSatisfying(com.renaser.os.shared.domain.RechazoConCodigoException.class,
+                        e -> assertThat(e.codigo()).isEqualTo("ARCHIVO_DEMASIADO_GRANDE"));
+
+        verify(almacenamientoPort).borrar("evidencia-habitos/x");
+        verify(saveEvidenciaPort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("N-3: una evidencia dentro del tope se registra y no se borra nada")
+    void evidenciaNormalSeRegistra() {
+        UserId participanteId = UserId.of(UUID.randomUUID());
+        when(userSummaryFinder.findById(participanteId)).thenReturn(Optional.of(activo(participanteId, UserRole.TRAINEE)));
+        when(almacenamientoPort.pesoDe("evidencia-habitos/x")).thenReturn(java.util.OptionalLong.of(800_000));
+        var comando = new RegistrarEvidenciaComando(participanteId, new DestinoEvidencia.RegistroHabito(UUID.randomUUID()),
+                TipoEvidencia.FOTO, "renaser-files", "evidencia-habitos/x", null, null, null, null, false, CLOCK.now());
+
+        service.registrar(comando);
+
+        verify(saveEvidenciaPort).save(any());
+        verify(almacenamientoPort, never()).borrar(any());
+    }
+
     @Test
     @DisplayName("actor SUSPENDIDO no puede registrar evidencia propia, aunque el llamador ya haya validado")
     void actorSuspendidoNoRegistraEvidencia() {
