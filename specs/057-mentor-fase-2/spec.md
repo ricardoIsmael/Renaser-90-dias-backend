@@ -104,7 +104,7 @@ La fase 1 (055) ordenó el recorrido del mentor, pero quedaron cuatro huecos que
 ## Criterios de éxito
 
 - **SC-001**: Ninguna tabla nueva; una sola migración (V200, un valor de enum).
-- **SC-002**: Ningún componente, hook o servicio duplicado: lo listado en «Lo que se reutiliza» se usa tal cual o se amplía.
+- **SC-002**: Ningún componente, hook o servicio duplicado: lo listado en «Lo que se reutiliza» se usa tal cual o se amplía. [sin prueba automática: es una regla de revisión del código; se comprobó pieza por pieza en la revisión del 20/11 (la zona del acompañante quedó en un solo finder, los objetivos en un servicio compartido con el líder)]
 - **SC-003**: Las apps 1.8.0 (135) siguen funcionando contra el backend nuevo (campos aditivos, rutas que ya conocen).
 - **SC-004**: El mentor ve objetivos, «Qué sigue», anteriores y recibe el aviso en el E2E del emulador.
 
