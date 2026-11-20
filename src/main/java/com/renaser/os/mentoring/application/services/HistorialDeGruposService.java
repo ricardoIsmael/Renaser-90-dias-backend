@@ -6,6 +6,8 @@ import com.renaser.os.community.api.AcompanamientoFinder.TramoDeAcompanamiento;
 import com.renaser.os.mentoring.application.ports.in.ConsultarHistorialDeGruposUseCase;
 import com.renaser.os.mentoring.application.ports.in.ConsultarRankingDeGruposUseCase;
 import com.renaser.os.mentoring.application.ports.in.ConsultarRankingDeGruposUseCase.FilaDeGrupo;
+import com.renaser.os.mentoring.domain.model.historial.TramosDelGrupo;
+import com.renaser.os.mentoring.domain.model.historial.TramosDelGrupo.Tramo;
 import com.renaser.os.mentoring.domain.model.semaforo.MedicionDelAprendiz;
 import com.renaser.os.mentoring.domain.model.semaforo.ResumenDelGrupo;
 import com.renaser.os.points.api.ColorSemaforo;
@@ -60,50 +62,65 @@ class HistorialDeGruposService implements ConsultarHistorialDeGruposUseCase {
         this.clock = clock;
     }
 
-    /** Un tramo ya terminado, con sus días locales (primero y último) en la zona de su grupo. */
-    private record TramoAnterior(TramoDeAcompanamiento tramo, GrupoBasico grupo, Instant hasta, LocalDate primerDia, LocalDate ultimoDia) {
-    }
-
     @Override
     @Transactional(readOnly = true)
     public HistorialDeGrupos historialDe(UserId actorId) {
         Instant ahora = clock.now();
-        Map<String, List<FilaDeGrupo>> rankings = new HashMap<>();
-        List<GrupoAnterior> grupos = acompanamiento.tramosDeAcompanante(actorId, Instant.EPOCH, null).stream()
-                .map(tramo -> anterior(tramo, ahora))
+        Map<UUID, GrupoBasico> grupos = new HashMap<>();
+        List<Tramo> tramos = acompanamiento.tramosDeAcompanante(actorId, Instant.EPOCH, null).stream()
+                .map(tramo -> aTramo(tramo, ahora, grupos))
                 .flatMap(Optional::stream)
-                .sorted(Comparator.comparing(TramoAnterior::ultimoDia).thenComparing(TramoAnterior::primerDia).reversed())
-                .map(t -> armar(actorId, t, rankings))
                 .toList();
-        return new HistorialDeGrupos(grupos);
+        Map<String, List<FilaDeGrupo>> rankings = new HashMap<>();
+        List<GrupoAnterior> anteriores = TramosDelGrupo.juntar(tramos).stream()
+                .filter(t -> !t.enCurso())
+                .sorted(Comparator.comparing(Tramo::ultimoDia).thenComparing(Tramo::primerDia).reversed())
+                .map(t -> armar(actorId, t, grupos.get(t.grupoId()), rankings))
+                .flatMap(Optional::stream)
+                .toList();
+        return new HistorialDeGrupos(anteriores);
     }
 
-    private Optional<TramoAnterior> anterior(TramoDeAcompanamiento tramo, Instant ahora) {
+    /**
+     * El tramo con sus días locales en la zona de su grupo. Los grupos de recepción no entran (como en «Mis grupos», que no los muestra). Un
+     * tramo que sigue abierto en un grupo que corre, o que termina más adelante, queda {@code enCurso}: sirve para juntar y no se lista.
+     */
+    private Optional<Tramo> aTramo(TramoDeAcompanamiento tramo, Instant ahora, Map<UUID, GrupoBasico> grupos) {
+        if (acompanamiento.esGrupoDeRecepcion(tramo.grupoId())) {
+            return Optional.empty();
+        }
         Optional<GrupoBasico> grupo = acompanamiento.grupo(tramo.grupoId());
         if (grupo.isEmpty()) {
             return Optional.empty();
         }
+        grupos.put(tramo.grupoId(), grupo.get());
         ZoneId zona = ZoneId.of(grupo.get().zonaHoraria());
         LocalDate primerDia = tramo.desde().atZone(zona).toLocalDate();
         if (tramo.hasta() != null && !tramo.hasta().isAfter(ahora)) {
-            LocalDate ultimoDia = tramo.hasta().minusMillis(1).atZone(zona).toLocalDate();
-            return ultimoDia.isBefore(primerDia) ? Optional.empty()
-                    : Optional.of(new TramoAnterior(tramo, grupo.get(), tramo.hasta(), primerDia, ultimoDia));
+            return conDias(tramo, tramo.hasta(), primerDia, tramo.hasta().minusMillis(1).atZone(zona).toLocalDate(), false);
         }
-        if (tramo.hasta() != null) {
-            return Optional.empty();
+        Optional<LocalDate> fin = tramo.hasta() == null ? acompanamiento.finDelGrupoYaTerminado(tramo.grupoId(), ahora) : Optional.empty();
+        if (fin.isPresent()) {
+            // Tramo abierto de un grupo que ya terminó: el último día es el del grupo.
+            return conDias(tramo, fin.get().plusDays(1).atStartOfDay(zona).toInstant(), primerDia, fin.get(), false);
         }
-        // Tramo abierto: solo es anterior si el grupo ya terminó (un grupo programado no lo es).
-        return acompanamiento.finDelGrupoYaTerminado(tramo.grupoId(), ahora)
-                .filter(fin -> !fin.isBefore(primerDia))
-                .map(fin -> new TramoAnterior(tramo, grupo.get(), fin.plusDays(1).atStartOfDay(zona).toInstant(), primerDia, fin));
+        return conDias(tramo, tramo.hasta(), primerDia, ahora.atZone(zona).toLocalDate(), true);
     }
 
-    private GrupoAnterior armar(UserId actorId, TramoAnterior t, Map<String, List<FilaDeGrupo>> rankings) {
-        UUID grupoId = t.tramo().grupoId();
+    private static Optional<Tramo> conDias(TramoDeAcompanamiento tramo, Instant hasta, LocalDate primerDia, LocalDate ultimoDia, boolean enCurso) {
+        return ultimoDia.isBefore(primerDia) ? Optional.empty()
+                : Optional.of(new Tramo(tramo.grupoId(), tramo.grupoNombre(), tramo.desde(), hasta, primerDia, ultimoDia, enCurso));
+    }
+
+    private Optional<GrupoAnterior> armar(UserId actorId, Tramo t, GrupoBasico grupo, Map<String, List<FilaDeGrupo>> rankings) {
+        UUID grupoId = t.grupoId();
         Set<UserId> aprendices = new LinkedHashSet<>();
-        acompanamiento.tramosDeAprendices(grupoId, t.tramo().desde(), t.hasta()).forEach(a -> aprendices.add(a.aprendizId()));
-        Map<UserId, UserSummary> perfiles = aprendices.isEmpty() ? Map.of() : usuarios.findByIds(aprendices);
+        acompanamiento.tramosDeAprendices(grupoId, t.desde(), t.hasta()).forEach(a -> aprendices.add(a.aprendizId()));
+        if (aprendices.isEmpty()) {
+            // Un paso por un grupo sin nadie no dice nada de cómo cerró.
+            return Optional.empty();
+        }
+        Map<UserId, UserSummary> perfiles = usuarios.findByIds(aprendices);
         List<UserId> visibles = aprendices.stream().filter(a -> perfiles.containsKey(a) && perfiles.get(a).status().allowsAccess()).toList();
 
         Optional<LocalDate> cierre = ultimaSemanaCerradaDentro(t);
@@ -116,24 +133,24 @@ class HistorialDeGruposService implements ConsultarHistorialDeGruposUseCase {
             personas.add(new PersonaAnterior(perfiles.get(visibles.get(i)).fullName(), mediciones.get(i).color().name()));
         }
         personas.sort(Comparator.comparing(PersonaAnterior::nombre, Comparator.nullsLast(Comparator.naturalOrder())));
-        return new GrupoAnterior(grupoId, t.tramo().grupoNombre(), t.primerDia(), t.ultimoDia(), aprendices.size(),
-                puestoFinal(actorId, t, rankings), (cierre.isPresent() ? resumen.colorDelPromedio() : ColorSemaforo.SIN_DATOS).name(),
-                cierre.isPresent() ? resumen.promedio() : null, personas);
+        return Optional.of(new GrupoAnterior(grupoId, t.nombre(), t.primerDia(), t.ultimoDia(), aprendices.size(),
+                puestoFinal(actorId, t, grupo, rankings), (cierre.isPresent() ? resumen.colorDelPromedio() : ColorSemaforo.SIN_DATOS).name(),
+                cierre.isPresent() ? resumen.promedio() : null, personas));
     }
 
     /** El viernes que cierra la última semana (sábado a viernes) que terminó dentro del tramo; vacío si el tramo no alcanzó a cerrar ninguna. */
-    private static Optional<LocalDate> ultimaSemanaCerradaDentro(TramoAnterior t) {
+    private static Optional<LocalDate> ultimaSemanaCerradaDentro(Tramo t) {
         LocalDate viernes = t.ultimoDia().with(TemporalAdjusters.previousOrSame(DayOfWeek.FRIDAY));
         return viernes.isBefore(t.primerDia()) ? Optional.empty() : Optional.of(viernes);
     }
 
     /** La posición de su grupo en el ranking del último mes del tramo; null si ese mes no lo midió. */
-    private PuestoFinal puestoFinal(UserId actorId, TramoAnterior t, Map<String, List<FilaDeGrupo>> rankings) {
+    private PuestoFinal puestoFinal(UserId actorId, Tramo t, GrupoBasico grupo, Map<String, List<FilaDeGrupo>> rankings) {
         YearMonth mes = YearMonth.from(t.ultimoDia());
-        UUID cohorte = t.grupo().cohorteId();
+        UUID cohorte = grupo.cohorteId();
         List<FilaDeGrupo> filas = rankings.computeIfAbsent(cohorte + "|" + mes,
                 k -> ranking.ranking(actorId, cohorte, mes).grupos());
-        return filas.stream().filter(f -> f.grupoId().equals(t.tramo().grupoId()) && f.porcentaje() != null).findFirst()
+        return filas.stream().filter(f -> f.grupoId().equals(t.grupoId()) && f.porcentaje() != null).findFirst()
                 .map(f -> new PuestoFinal(f.posicion(), (int) filas.stream().filter(o -> o.porcentaje() != null).count()))
                 .orElse(null);
     }

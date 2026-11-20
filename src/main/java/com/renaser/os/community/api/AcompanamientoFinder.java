@@ -98,6 +98,14 @@ public interface AcompanamientoFinder {
         return java.util.Optional.empty();
     }
 
+    /**
+     * Si el grupo es la recepción de bienvenida (el grupo inicial que atienden las guías). Spec 057: «Mis grupos anteriores» no lo lista, igual
+     * que los grupos activos del mentor no lo muestran. El valor por defecto es {@code false}; {@code community} lo sobrescribe.
+     */
+    default boolean esGrupoDeRecepcion(UUID grupoId) {
+        return false;
+    }
+
     /** Nombre y cohorte de un grupo, sin exponer el agregado. */
     java.util.Optional<GrupoBasico> grupo(UUID grupoId);
 

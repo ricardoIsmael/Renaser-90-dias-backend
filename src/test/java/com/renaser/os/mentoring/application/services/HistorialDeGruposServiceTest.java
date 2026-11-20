@@ -146,7 +146,7 @@ class HistorialDeGruposServiceTest {
         when(acompanamiento.tramosDeAcompanante(eq(mentora), any(), any())).thenReturn(List.of(
                 new TramoDeAcompanamiento(fenix, "Fénix", Instant.parse("2026-09-01T05:00:00Z"), Instant.parse("2026-10-15T05:00:00Z")),
                 new TramoDeAcompanamiento(aurora, "Aurora", Instant.parse("2026-10-20T05:00:00Z"), null)));
-        when(acompanamiento.tramosDeAprendices(any(), any(), any())).thenReturn(List.of());
+        when(acompanamiento.tramosDeAprendices(any(), any(), any())).thenReturn(List.of(new TramoDeAprendiz(ana, Instant.parse("2026-09-01T05:00:00Z"), null)));
         when(acompanamiento.finDelGrupoYaTerminado(eq(aurora), any())).thenReturn(Optional.of(LocalDate.of(2026, 11, 12)));
 
         List<GrupoAnterior> grupos = servicio.historialDe(mentora).grupos();
@@ -173,6 +173,53 @@ class HistorialDeGruposServiceTest {
     @DisplayName("spec 057 FR-020: sin grupos anteriores la lista va vacía")
     void sinAnteriores() { // spec 057 FR-020
         when(acompanamiento.tramosDeAcompanante(eq(mentora), any(), any())).thenReturn(List.of());
+
+        assertThat(servicio.historialDe(mentora).grupos()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("spec 057 FR-020: el mismo grupo con varios tramos pegados sale en UNA fila, con la unión de sus aprendices y su cierre del rango juntado")
+    void juntaLosTramosDelMismoGrupo() { // spec 057 FR-020, FR-021
+        when(acompanamiento.tramosDeAcompanante(eq(mentora), any(), any())).thenReturn(List.of(
+                new TramoDeAcompanamiento(fenix, "Fénix", Instant.parse("2026-09-01T05:00:00Z"), Instant.parse("2026-10-15T05:00:00Z")),
+                new TramoDeAcompanamiento(fenix, "Fénix", Instant.parse("2026-10-15T05:00:00Z"), Instant.parse("2026-10-15T05:00:01Z")),
+                new TramoDeAcompanamiento(fenix, "Fénix", Instant.parse("2026-10-16T05:00:00Z"), Instant.parse("2026-10-17T05:00:00Z"))));
+        when(acompanamiento.tramosDeAprendices(eq(fenix), eq(Instant.parse("2026-09-01T05:00:00Z")), eq(Instant.parse("2026-10-17T05:00:00Z"))))
+                .thenReturn(List.of(new TramoDeAprendiz(ana, Instant.parse("2026-09-01T05:00:00Z"), null),
+                        new TramoDeAprendiz(ana, Instant.parse("2026-10-01T05:00:00Z"), null),
+                        new TramoDeAprendiz(beto, Instant.parse("2026-10-16T05:00:00Z"), null)));
+        LocalDate viernes = LocalDate.of(2026, 10, 16);
+        when(semaforo.semanaDe(any(), eq(viernes))).thenReturn(Map.of(ana, semana(viernes, "90", ColorSemaforo.VERDE)));
+
+        List<GrupoAnterior> grupos = servicio.historialDe(mentora).grupos();
+
+        assertThat(grupos).hasSize(1);
+        assertThat(grupos.getFirst().desde()).isEqualTo(LocalDate.of(2026, 9, 1));
+        assertThat(grupos.getFirst().hasta()).isEqualTo(LocalDate.of(2026, 10, 16));
+        assertThat(grupos.getFirst().aprendices()).as("unión sin repetir").isEqualTo(2);
+        assertThat(grupos.getFirst().personas()).hasSize(2);
+        verify(semaforo).semanaDe(any(), eq(viernes));
+    }
+
+    @Test
+    @DisplayName("spec 057 FR-020: no se listan los tramos sin aprendices ni los de la recepción de bienvenida")
+    void sinVaciosNiRecepcion() { // spec 057 FR-020
+        when(acompanamiento.tramosDeAcompanante(eq(mentora), any(), any())).thenReturn(List.of(
+                new TramoDeAcompanamiento(fenix, "Fénix", Instant.parse("2026-09-01T05:00:00Z"), Instant.parse("2026-10-15T05:00:00Z")),
+                new TramoDeAcompanamiento(aurora, "Recepción", Instant.parse("2026-09-01T05:00:00Z"), Instant.parse("2026-10-15T05:00:00Z"))));
+        when(acompanamiento.esGrupoDeRecepcion(aurora)).thenReturn(true);
+        when(acompanamiento.tramosDeAprendices(any(), any(), any())).thenReturn(List.of());
+
+        assertThat(servicio.historialDe(mentora).grupos()).isEmpty();
+        verify(acompanamiento, org.mockito.Mockito.never()).tramosDeAprendices(eq(aurora), any(), any());
+    }
+
+    @Test
+    @DisplayName("spec 057 FR-020: un tramo cerrado pegado a uno abierto de un grupo que corre es el mismo paso: el grupo está activo y no sale en anteriores")
+    void elGrupoActivoNoSeRepiteEnAnteriores() { // spec 057 FR-020
+        when(acompanamiento.tramosDeAcompanante(eq(mentora), any(), any())).thenReturn(List.of(
+                new TramoDeAcompanamiento(fenix, "Fénix", Instant.parse("2026-09-01T05:00:00Z"), Instant.parse("2026-10-15T05:00:00Z")),
+                new TramoDeAcompanamiento(fenix, "Fénix", Instant.parse("2026-10-15T05:00:00Z"), null)));
 
         assertThat(servicio.historialDe(mentora).grupos()).isEmpty();
     }

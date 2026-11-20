@@ -217,6 +217,12 @@ class AcompanamientoFinderService implements AcompanamientoFinder, MentorVigente
 
     @Override
     @Transactional(readOnly = true)
+    public boolean esGrupoDeRecepcion(UUID grupoId) {
+        return loadCelulaPort.porId(CelulaId.of(grupoId)).map(Celula::esRecepcion).orElse(false);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Optional<GrupoBasico> grupo(UUID grupoId) {
         return loadCelulaPort.porId(CelulaId.of(grupoId)).map(celula -> new GrupoBasico(
                 celula.id().value(), celula.nombre(), celula.cohorteId().value(),
