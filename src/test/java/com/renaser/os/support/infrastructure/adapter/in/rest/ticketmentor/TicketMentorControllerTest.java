@@ -149,6 +149,8 @@ class TicketMentorControllerTest {
     @DisplayName("ADMIN, ALCHEMIST y MENTOR_LEAD ven todos los tickets en GET /api/v1/admin/tickets")
     void plataformaVeTodos(UserRole rol) throws Exception {
         UUID quien = cuenta(rol, UserStatus.ACTIVE);
+        // el alcance por formación se prueba en TicketMentorServiceTest; acá la vista ve todas
+        when(formaciones.de(any())).thenReturn(com.renaser.os.shared.domain.AlcanceDeFormacion.todas());
 
         mockMvc.perform(get("/api/v1/admin/tickets").header("X-Actor-Id", quien.toString()))
                 .andExpect(status().isOk())
@@ -160,6 +162,8 @@ class TicketMentorControllerTest {
     @DisplayName("un mentor o una guía no usan la vista de plataforma: 403")
     void mentorYGuiaNoUsanLaVistaDePlataforma(UserRole rol) throws Exception {
         UUID quien = cuenta(rol, UserStatus.ACTIVE);
+        // el alcance por formación se prueba en TicketMentorServiceTest; acá la vista ve todas
+        when(formaciones.de(any())).thenReturn(com.renaser.os.shared.domain.AlcanceDeFormacion.todas());
 
         mockMvc.perform(get("/api/v1/admin/tickets").header("X-Actor-Id", quien.toString()))
                 .andExpect(status().isForbidden());
@@ -233,6 +237,7 @@ class TicketMentorControllerTest {
     @DisplayName("spec 056 FR-030: la lista de la plataforma trae respondidoPor con el nombre en las respondidas y null en las abiertas")
     void laListaTraeRespondidoPor() throws Exception {
         UUID quien = cuenta(UserRole.MENTOR_LEAD, UserStatus.ACTIVE);
+        when(formaciones.de(any())).thenReturn(com.renaser.os.shared.domain.AlcanceDeFormacion.todas());
         UserId mentora = UserId.of(UUID.randomUUID());
         deAna.responder("Respuesta", mentora, FixedClock.at(AHORA));
         when(userSummaryFinder.findByIds(any())).thenReturn(java.util.Map.of(mentora, new UserSummary(mentora, "Marta Mentora", null, UserRole.MENTOR, UserStatus.ACTIVE)));
