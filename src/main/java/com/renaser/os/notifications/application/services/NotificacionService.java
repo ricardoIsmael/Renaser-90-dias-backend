@@ -123,6 +123,13 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
     @Transactional
     public Optional<Notificacion> emitir(EmitirNotificacionCommand command, EntregaPush entregaPush,
                                          String etiquetaDelPush, Instant venceEn) {
+        return emitir(command, entregaPush, etiquetaDelPush, venceEn, ExtrasDelPush.NINGUNO);
+    }
+
+    @Override
+    @Transactional
+    public Optional<Notificacion> emitir(EmitirNotificacionCommand command, EntregaPush entregaPush,
+                                         String etiquetaDelPush, Instant venceEn, ExtrasDelPush extras) {
         // Spec 002: lo llaman solo los oyentes de eventos de otros modulos. Con las notificaciones apagadas, el oyente
         // falla a proposito y el outbox lo reentrega cada 5 min hasta que se prendan; la fila es idempotente (C-7).
         // El aviso de operacion de la plataforma sale igual: es el que cuenta que se apagaron (D-267).
@@ -150,7 +157,7 @@ public class NotificacionService implements EmitirNotificacionUseCase, ListarNot
             return Optional.empty();
         }
         MensajePush mensaje = new MensajePush(command.tipo(), command.titulo(), command.cuerpo(), command.rutaApp(),
-                etiquetaDelPush, venceEn);
+                etiquetaDelPush, venceEn, extras.categoriaId(), extras.datos());
         pushDespuesDelCommit(command, entregaPush, mensaje);
         return guardada;
     }

@@ -16276,6 +16276,24 @@ mejor aún, con un `codigo`.
 - **Solución:** `FichaDeMentorFinder.mentoresSuspendidos()` y `AccesoDeLiderazgo.mentoresSuspendidosDelAlcance()` (mismo filtro de formaciones); el padrón los suma al final y cada fila lleva `accountActive` (aditivo). `mentoresDelAlcance` no cambia: el reporte del mes, «Por resolver» y los documentos siguen solo con activos.
 - **Cómo evitarlo:** `PadronDeMentoresServiceTest`, `LeadershipControllersTest`, `ReporteDeMentoresServiceTest` y `PorResolverServiceTest` con la marca `spec 056 FR-004` (el suspendido del alcance aparece marcado, el de otra formación no, y no se cuela en el reporte ni en «Por resolver»). Un requisito de estado de cuenta en la spec se prueba con una cuenta en ese estado en el E2E, no solo con Jest.
 
+## E-691 · La vista de plataforma de consultas de mentoría no respetaba la frontera de formación del líder de mentores (backend, hallazgo N-1 de la auditoría del 20/11, RESUELTO)
+
+- **Fecha:** 2026-11-20
+- **Dónde:** `TicketMentorService.todos` (`GET /api/v1/admin/tickets`)
+- **Síntoma:** un líder de mentores veía las consultas de aprendices de todas las formaciones, aunque para responderlas sí se le exige que el aprendiz sea de una formación suya.
+- **Causa real:** dos reglas distintas para el mismo dato. `responder` pasaba por `AlcanceDeFormacionFinder` y el listado leía la tabla entera sin mirar el alcance del actor; el repo trata la frontera de formación como «no existe» (404 / filas ausentes).
+- **Solución:** `todos` consulta `AlcanceDeFormacionFinder.de(actor)`. Con alcance de todas (Administración, Alquimista) no cambia nada; con un alcance acotado lee en tandas por `creadoEn` y se queda con las consultas de aprendices del alcance (`dentroDelAlcance`, una consulta por tanda) hasta llenar la página, de modo que el cursor sigue siendo el `creadoEn` de la última consulta devuelta. Misma ruta y misma forma de respuesta; sin migraciones.
+- **Cómo evitarlo:** `TicketMentorServiceTest` (el líder de una formación no ve las consultas de otra y sí las suyas; Administración y Alquimista ven todas; la paginación por cursor no pierde ni repite con el filtro). Todo listado de plataforma que cruce formaciones se filtra por el alcance del actor, no solo la acción de escritura.
+
+## E-692 · El código por WhatsApp del alta (anónimo) podía ir a cualquier país y gastaba el mismo cupo global que la recuperación de clave y la confirmación en Yo (backend, 20/11, RESUELTO)
+
+- **Fecha:** 2026-11-20
+- **Dónde:** `CodigoPorWhatsAppDeAccesoService.paraElRegistro`, `NumeroDeWhatsApp`, contador `codigo-whatsapp:global`
+- **Síntoma:** hallazgo N-2 de la auditoría del 20/11 (sin síntoma en producción): el pedido del alta no exige sesión y aceptaba cualquier número internacional, y su tope global por hora era el mismo contador de la recuperación y de Yo.
+- **Causa real:** la validación del número solo miraba la forma (E.164) y no el país; y tres flujos con riesgo distinto compartían un único contador global, de modo que agotarlo desde el flujo anónimo dejaba sin código por WhatsApp a los otros dos.
+- **Solución:** el alta solo manda a los prefijos de `renaser.whatsapp.paises-del-codigo` (variable `WHATSAPP_PAISES_DEL_CODIGO`); fuera de la lista responde 422 con `codigo` `PAIS_NO_ADMITIDO`. El alta tiene su propio contador global (`codigo-whatsapp:global-alta`, 150/h); la recuperación y Yo siguen con `codigo-whatsapp:global`. No se exige el `verificationToken` del correo: la app 1.8.0 no lo manda en ese pedido (queda para la próxima versión de la app).
+- **Cómo evitarlo:** un canal que cuesta dinero y lo puede pedir un anónimo lleva lista de destinos y cupo propio, no el de los flujos con sesión. `CodigoPorWhatsAppDeAccesoServiceTest` (`paisNoAdmitido`, `paisesPorConfiguracion`, `elAltaTieneSuCupoGlobalPropio`).
+
 ## E-693 · Las subidas prefirmadas a S3 firmaban el `Content-Type` que elegía el cliente y no ponían tope de tamaño (backend, hallazgo N-3 de la auditoría del 20/11, RESUELTO en evidencias y avatar)
 
 - **Fecha:** 2026-11-20

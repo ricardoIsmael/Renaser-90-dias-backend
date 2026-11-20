@@ -179,11 +179,25 @@ class ExpoPushTransporte implements TransportePush {
         // D-221: los avisos de un mismo chat se reemplazan (Android, `tag`) y se agrupan (iOS, `threadId`).
         mensaje.etiqueta().ifPresent(etiqueta -> json.append(",\"tag\":").append(comillas(etiqueta))
                 .append(",\"threadId\":").append(comillas(etiqueta)));
+        // Spec 057 (FR-035): los botones del aviso de rojo. Sin categoría, el cuerpo es EXACTAMENTE el de antes.
+        if (mensaje.categoriaId() != null && !mensaje.categoriaId().isBlank()) {
+            json.append(",\"categoryId\":").append(comillas(mensaje.categoriaId()));
+        }
+        json.append(datosDe(mensaje));
+        return json.append('}').toString();
+    }
+
+    /** {@code ,"data":{"route":…, + los extras}}, o nada si no hay ruta ni extras. Los extras van en orden alfabético para que el cuerpo sea estable. */
+    private static String datosDe(MensajePush mensaje) {
+        StringBuilder datos = new StringBuilder();
         String rutaApp = mensaje.rutaApp();
         if (rutaApp != null && !rutaApp.isBlank()) {
-            json.append(",\"data\":{\"route\":").append(comillas(rutaApp)).append("}");
+            datos.append("\"route\":").append(comillas(rutaApp));
         }
-        return json.append('}').toString();
+        for (var extra : new java.util.TreeMap<>(mensaje.datosExtra()).entrySet()) {
+            datos.append(datos.isEmpty() ? "" : ",").append(comillas(extra.getKey())).append(':').append(comillas(extra.getValue()));
+        }
+        return datos.isEmpty() ? "" : ",\"data\":{" + datos + "}";
     }
 
     /** El timestamp Unix, en segundos, que pide Expo; vacío si el aviso no caduca. */

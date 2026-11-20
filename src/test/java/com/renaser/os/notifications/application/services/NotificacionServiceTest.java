@@ -619,4 +619,26 @@ class NotificacionServiceTest {
         assertThat(emitida).isPresent();
         verify(pushPort, never()).enviar(anyList(), any());
     }
+
+    @Test
+    @DisplayName("spec 057 FR-030: con «Aprendices en rojo» apagado el mentor no recibe ni la fila ni el push; con el aviso encendido el push lleva la categoría y los datos extra")
+    void rojoDelDiaRespetaLaPreferenciaYLlevaBotones() { // spec 057 FR-030, FR-035
+        UserId mentor = usuario();
+        TokenPush token = TokenPush.registrar(TokenPushId.of(UUID.randomUUID()), mentor, "ExponentPushToken[vigente]", PlataformaPush.ANDROID, CLOCK);
+        lenient().when(loadTokenPushPort.tokensDe(mentor)).thenReturn(List.of(token));
+        lenient().when(pushPort.enviar(anyList(), any())).thenReturn(List.of());
+        var comando = new EmitirNotificacionCommand(mentor, TipoNotificacion.ROJO_DEL_DIA, "Ana está en rojo hoy", "Lleva 30 %.",
+                "/mentor/groups/g/learners/a", UUID.randomUUID());
+        var extras = new com.renaser.os.notifications.application.ports.in.notificacion.EmitirNotificacionUseCase.ExtrasDelPush("rojo-del-dia", java.util.Map.of("grupoId", "g", "aprendizId", "a"));
+
+        when(loadPreferenciasPort.habilitadaPara(mentor, TipoNotificacion.ROJO_DEL_DIA)).thenReturn(Optional.of(false));
+        assertThat(service.emitir(comando, EntregaPush.TODOS, null, null, extras)).isEmpty();
+        verify(saveNotificacionPort, never()).guardar(any());
+        verify(pushPort, never()).enviar(anyList(), any());
+
+        when(loadPreferenciasPort.habilitadaPara(mentor, TipoNotificacion.ROJO_DEL_DIA)).thenReturn(Optional.empty());
+        assertThat(service.emitir(comando, EntregaPush.TODOS, null, null, extras)).isPresent();
+        verify(pushPort).enviar(eq(List.of(token)), eq(new MensajePush(TipoNotificacion.ROJO_DEL_DIA, "Ana está en rojo hoy", "Lleva 30 %.",
+                "/mentor/groups/g/learners/a", null, null, "rojo-del-dia", java.util.Map.of("grupoId", "g", "aprendizId", "a"))));
+    }
 }
