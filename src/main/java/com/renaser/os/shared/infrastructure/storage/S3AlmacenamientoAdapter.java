@@ -7,6 +7,7 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.OptionalLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,8 +22,10 @@ import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.GetUrlRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
@@ -91,14 +94,44 @@ public class S3AlmacenamientoAdapter implements AlmacenamientoPort {
                 .contentType(tipoContenido)
                 .build();
         // El contentType va firmado: el cliente tiene que mandar EXACTAMENTE ese Content-Type en
-        // el PUT o S3 rechaza la firma. Es lo que impide que alguien pida una URL para una imagen
-        // y suba un ejecutable con la misma URL.
+        // el PUT o S3 rechaza la firma. Eso fija el tipo con el que S3 sirve el objeto, pero NO lo
+        // limita: el tipo lo elige el cliente al pedir la URL. Que sea uno permitido lo exige quien
+        // firma (TipoDeSubida.exigirTipoPermitido). El tamaño no va firmado (la app no lo manda al
+        // pedir la URL): se comprueba al confirmar, con pesoDe (N-3).
         URI url = URI.create(presigner.presignPutObject(PutObjectPresignRequest.builder()
                 .signatureDuration(validez)
                 .putObjectRequest(objeto)
                 .build()).url().toString());
         log.debug("URL de subida firmada para {} ({}), valida {}", ruta, tipoContenido, validez);
         return url;
+    }
+
+    @Override
+    public OptionalLong pesoDe(String ruta) {
+        try {
+            Long peso = cliente.headObject(HeadObjectRequest.builder().bucket(bucket).key(ruta).build()).contentLength();
+            return peso == null ? OptionalLong.empty() : OptionalLong.of(peso);
+        } catch (NoSuchKeyException sinObjeto) {
+            return OptionalLong.empty();
+        } catch (S3Exception e) {
+            if (e.statusCode() == 404) {
+                return OptionalLong.empty();
+            }
+            throw e;
+        }
+    }
+
+    @Override
+    public URI firmarLecturaComoDescarga(String ruta, Duration validez) {
+        GetObjectRequest objeto = GetObjectRequest.builder()
+                .bucket(bucket)
+                .key(ruta)
+                .responseContentDisposition("attachment")
+                .build();
+        return URI.create(presigner.presignGetObject(GetObjectPresignRequest.builder()
+                .signatureDuration(validez)
+                .getObjectRequest(objeto)
+                .build()).url().toString());
     }
 
     @Override

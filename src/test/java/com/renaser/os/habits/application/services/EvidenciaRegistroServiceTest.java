@@ -241,4 +241,19 @@ class EvidenciaRegistroServiceTest {
         assertThatThrownBy(() -> service.subirHechoSinRed(comandoTexto(actorId, ajeno))).isInstanceOf(RuntimeException.class);
         verify(registrarEvidenciaPort, never()).registrar(any());
     }
+
+    /* N-3: la firma llevaba el Content-Type que eligiera el cliente; con text/html o image/svg+xml se subía contenido activo. */
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"text/html", "image/svg+xml", "application/x-msdownload"})
+    @DisplayName("N-3: no se firma una subida de evidencia con un tipo que no es foto, video ni audio")
+    void noFirmaTiposQueNoSonMedia(String tipo) {
+        RegistroHabito registro = registroDe(actorId);
+        when(loadRegistroPort.byId(registro.id())).thenReturn(Optional.of(registro));
+        when(progresoPort.deParticipante(actorId)).thenReturn(Optional.of(progreso(false)));
+
+        assertThatThrownBy(() -> service.solicitarUrl(new SolicitarUrlEvidenciaRegistroCommand(actorId, registro.id(), tipo)))
+                .isInstanceOfSatisfying(com.renaser.os.shared.domain.RechazoConCodigoException.class,
+                        e -> assertThat(e.codigo()).isEqualTo("TIPO_DE_ARCHIVO_NO_PERMITIDO"));
+        verify(almacenamientoPort, org.mockito.Mockito.never()).firmarSubida(any(), any(), any());
+    }
 }

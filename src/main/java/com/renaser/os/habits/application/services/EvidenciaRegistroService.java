@@ -1,5 +1,6 @@
 package com.renaser.os.habits.application.services;
 
+import com.renaser.os.shared.domain.TipoDeSubida;
 import com.renaser.os.evidence.api.DestinoEvidencia;
 import com.renaser.os.evidence.api.RegistrarEvidenciaPort;
 import com.renaser.os.evidence.api.RegistrarEvidenciaPort.EvidenciaRegistrada;
@@ -87,6 +88,8 @@ public class EvidenciaRegistroService implements SubirEvidenciaRegistroUseCase,
             requireDeUnDiaQueNoTermino(registro, zona);
         }
 
+        // N-3: solo los tipos que la app captura (foto, video, audio); el peso se comprueba al registrar.
+        TipoDeSubida.EVIDENCIA.exigirTipoPermitido(command.tipoContenido());
         String ruta = PREFIJO_RUTA + "/" + command.actorId() + "/" + registro.id() + "/" + idGenerator.newId();
         URI url = almacenamientoPort.firmarSubida(ruta, command.tipoContenido(), VALIDEZ_URL_SUBIDA);
         return new UrlEvidenciaRegistro(url, BUCKET_EVIDENCIA, ruta);

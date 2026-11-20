@@ -25,6 +25,8 @@ import com.renaser.os.points.api.AjustarPuntosPort;
 import com.renaser.os.points.api.MotivoPuntos;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.IdGenerator;
+import com.renaser.os.shared.domain.TipoDeSubida;
+import java.net.URI;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.evidence.api.TipoEvidencia;
 import java.time.Duration;
@@ -104,6 +106,7 @@ public class EvidenciaService implements RegistrarEvidenciaPort, ConsultarEviden
     @Transactional
     public EvidenciaRegistrada registrar(RegistrarEvidenciaComando comando) {
         requireActivo(comando.participanteId());
+        exigirQueNoPaseDelTope(comando);
         // La identidad entra por el puerto IdGenerator, no la sortea el agregado (CLAUDE.MD §5.4.7).
         Evidencia evidencia = Evidencia.registrar(EvidenciaId.of(idGenerator.newId()), comando.participanteId(),
                 comando.destino(), comando.tipo(), comando.bucket(), comando.rutaStorage(), comando.contenidoTexto(),
@@ -121,6 +124,28 @@ public class EvidenciaService implements RegistrarEvidenciaPort, ConsultarEviden
         evidencia.darPorValidaSinRevision();
         Evidencia guardada = saveEvidenciaPort.save(evidencia);
         return new EvidenciaRegistrada(guardada.id().value(), guardada.estadoValidacion());
+    }
+
+    /**
+     * N-3: la URL de subida no lleva el tamaño firmado (la app no lo manda al pedirla), así que el tope se pone acá, al
+     * registrar: se mira el objeto ya subido y, si pasa del máximo de su tipo, se borra y se rechaza. Si el almacenamiento no
+     * lo conoce (marcador, objeto inexistente) no se exige nada: el comportamiento de antes.
+     */
+    private void exigirQueNoPaseDelTope(RegistrarEvidenciaComando comando) {
+        if (comando.rutaStorage() == null || comando.tipo() == TipoEvidencia.TEXTO) {
+            return;
+        }
+        String tipoDeReferencia = switch (comando.tipo()) {
+            case VIDEO -> "video/mp4";
+            case AUDIO -> "audio/m4a";
+            default -> "image/jpeg";
+        };
+        almacenamientoPort.pesoDe(comando.rutaStorage()).ifPresent(peso -> {
+            if (peso > TipoDeSubida.EVIDENCIA.pesoMaximo(tipoDeReferencia)) {
+                almacenamientoPort.borrar(comando.rutaStorage());
+                TipoDeSubida.EVIDENCIA.exigirPeso(peso, tipoDeReferencia);
+            }
+        });
     }
 
     @Override
@@ -148,9 +173,12 @@ public class EvidenciaService implements RegistrarEvidenciaPort, ConsultarEviden
             return Optional.empty();
         }
         Instant vence = clock.now().plus(VALIDEZ_URL_LECTURA);
-        return Optional.of(new UrlDeEvidencia(
-                almacenamientoPort.firmarLectura(evidencia.rutaStorage(), VALIDEZ_URL_LECTURA).toString(),
-                vence));
+        // N-3: lo que no es una foto se entrega como descarga (Content-Disposition: attachment), nunca para abrir en línea.
+        boolean esImagen = evidencia.tipo() == TipoEvidencia.FOTO || evidencia.tipo() == TipoEvidencia.CAPTURA;
+        URI url = esImagen
+                ? almacenamientoPort.firmarLectura(evidencia.rutaStorage(), VALIDEZ_URL_LECTURA)
+                : almacenamientoPort.firmarLecturaComoDescarga(evidencia.rutaStorage(), VALIDEZ_URL_LECTURA);
+        return Optional.of(new UrlDeEvidencia(url.toString(), vence));
     }
 
     @Override
