@@ -2,6 +2,7 @@ package com.renaser.os.mentoring.application.services;
 
 import com.renaser.os.community.api.AcompanamientoFinder;
 import com.renaser.os.community.api.AcompanamientoFinder.GrupoAcompanado;
+import com.renaser.os.community.api.ZonaDelAcompananteFinder;
 import com.renaser.os.mentoring.api.RojoDelDiaEvent;
 import com.renaser.os.points.api.ColorSemaforo;
 import com.renaser.os.points.api.DiaDelSemaforo;
@@ -53,6 +54,7 @@ class AvisoDeRojoServiceTest {
     private final UUID fenix = UUID.randomUUID();
     private final AcompanamientoFinder acompanamiento = mock(AcompanamientoFinder.class);
     private final ParticipacionProgramaFinder participaciones = mock(ParticipacionProgramaFinder.class);
+    private final ZonaDelAcompananteFinder zonas = mock(ZonaDelAcompananteFinder.class);
     private final MedicionDeGrupos medicion = mock(MedicionDeGrupos.class);
     private final SemaforoDelDiaFinder semaforoDelDia = mock(SemaforoDelDiaFinder.class);
     private final ApplicationEventPublisher eventos = mock(ApplicationEventPublisher.class);
@@ -66,7 +68,7 @@ class AvisoDeRojoServiceTest {
         padron.put(beto, new UserSummary(beto, "Beto Ríos", null, UserRole.TRAINEE, UserStatus.ACTIVE));
         padron.put(caro, new UserSummary(caro, "Caro Díaz", null, UserRole.TRAINEE, UserStatus.ACTIVE));
         when(medicion.padronDe(eq(fenix), any())).thenReturn(padron);
-        when(participaciones.deParticipante(mentora)).thenReturn(Optional.empty());
+        when(zonas.zonaDe(any(), any())).thenReturn(LIMA);
         when(participaciones.deParticipantes(any())).thenAnswer(inv -> {
             Map<UserId, ParticipacionPrograma> deTodos = new LinkedHashMap<>();
             for (UserId a : (Collection<UserId>) inv.getArgument(0)) {
@@ -79,7 +81,7 @@ class AvisoDeRojoServiceTest {
     }
 
     private AvisoDeRojoService servicio(Instant ahora) {
-        return new AvisoDeRojoService(acompanamiento, participaciones, medicion, semaforoDelDia, eventos, mock(PlatformTransactionManager.class),
+        return new AvisoDeRojoService(acompanamiento, participaciones, zonas, medicion, semaforoDelDia, eventos, mock(PlatformTransactionManager.class),
                 FixedClock.at(ahora));
     }
 
@@ -180,7 +182,6 @@ class AvisoDeRojoServiceTest {
                 new GrupoAcompanado(aurora, "Aurora", otraMentora, UUID.randomUUID(), "America/Lima", 3),
                 new GrupoAcompanado(fenix, "Fénix", mentora, UUID.randomUUID(), "America/Lima", 3)));
         when(medicion.padronDe(eq(aurora), any())).thenThrow(new IllegalStateException("falla de lectura"));
-        when(participaciones.deParticipante(otraMentora)).thenReturn(Optional.empty());
         LocalDate hoy = LocalDate.of(2026, 11, 20);
         when(semaforoDelDia.delDia(any(), eq(hoy))).thenReturn(Map.of(ana, dia(hoy, EstadoDiaSemaforo.MEDIDO, 10, ColorSemaforo.ROJO)));
 

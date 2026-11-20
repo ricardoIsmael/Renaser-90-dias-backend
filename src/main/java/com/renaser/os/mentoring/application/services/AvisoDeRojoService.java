@@ -2,6 +2,7 @@ package com.renaser.os.mentoring.application.services;
 
 import com.renaser.os.community.api.AcompanamientoFinder;
 import com.renaser.os.community.api.AcompanamientoFinder.GrupoAcompanado;
+import com.renaser.os.community.api.ZonaDelAcompananteFinder;
 import com.renaser.os.mentoring.api.RojoDelDiaEvent;
 import com.renaser.os.mentoring.application.ports.in.AvisarRojosDelDiaUseCase;
 import com.renaser.os.mentoring.domain.model.aviso.ReglaDelAvisoDeRojo;
@@ -11,7 +12,6 @@ import com.renaser.os.points.api.EstadoDiaSemaforo;
 import com.renaser.os.points.api.SemaforoDelDiaFinder;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
-import com.renaser.os.users.api.ParticipacionPrograma;
 import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.UserSummary;
 import org.slf4j.Logger;
@@ -22,7 +22,6 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -30,7 +29,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -41,7 +39,7 @@ import java.util.stream.Collectors;
  *
  * <p>Todo se reutiliza: el padrón de cada grupo es el de {@link MedicionDeGrupos} (solo cuentas activas, sin el propio mentor), el color del
  * día sale de {@link SemaforoDelDiaFinder} (solo cuenta un día {@code MEDIDO}: sin datos, pausado, suspendido o fuera del programa no avisa) y
- * la zona del mentor se toma como en el resumen del líder (su programa, si participa; si no, su primer grupo; Lima por defecto).
+ * la zona del mentor sale de {@link ZonaDelAcompananteFinder}, el mismo del resumen del líder.
  *
  * <p>El día es el LOCAL DEL APRENDIZ: las 19:00 del mentor pueden caer en otro día del aprendiz. Cada mentor sale en su PROPIA transacción real
  * ({@link TransactionTemplate}), no con un {@code @Transactional} de esta clase: la llamada interna no pasaría por el proxy y el
@@ -51,21 +49,23 @@ import java.util.stream.Collectors;
 class AvisoDeRojoService implements AvisarRojosDelDiaUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(AvisoDeRojoService.class);
-    private static final ZoneId ZONA_POR_DEFECTO = ZoneId.of("America/Lima");
 
     private final AcompanamientoFinder acompanamiento;
     private final ParticipacionProgramaFinder participaciones;
+    private final ZonaDelAcompananteFinder zonas;
     private final MedicionDeGrupos medicion;
     private final SemaforoDelDiaFinder semaforoDelDia;
     private final ApplicationEventPublisher eventos;
     private final TransactionTemplate transaccionPropia;
     private final Clock clock;
 
-    AvisoDeRojoService(AcompanamientoFinder acompanamiento, ParticipacionProgramaFinder participaciones, MedicionDeGrupos medicion,
+    AvisoDeRojoService(AcompanamientoFinder acompanamiento, ParticipacionProgramaFinder participaciones, ZonaDelAcompananteFinder zonas,
+                       MedicionDeGrupos medicion,
                        SemaforoDelDiaFinder semaforoDelDia, ApplicationEventPublisher eventos,
                        PlatformTransactionManager transactionManager, Clock clock) {
         this.acompanamiento = acompanamiento;
         this.participaciones = participaciones;
+        this.zonas = zonas;
         this.medicion = medicion;
         this.semaforoDelDia = semaforoDelDia;
         this.eventos = eventos;
@@ -81,7 +81,7 @@ class AvisoDeRojoService implements AvisarRojosDelDiaUseCase {
                 .collect(Collectors.groupingBy(GrupoAcompanado::mentorId, LinkedHashMap::new, Collectors.toList()));
         int publicados = 0;
         for (Map.Entry<UserId, List<GrupoAcompanado>> delMentor : gruposDeCadaMentor.entrySet()) {
-            if (!ReglaDelAvisoDeRojo.toca(ahora, zonaDe(delMentor.getKey(), delMentor.getValue().getFirst()))) {
+            if (!ReglaDelAvisoDeRojo.toca(ahora, zonas.zonaDe(delMentor.getKey(), ahora))) {
                 continue;
             }
             try {
@@ -136,21 +136,6 @@ class AvisoDeRojoService implements AvisarRojosDelDiaUseCase {
             }
         });
         return rojos;
-    }
-
-    /** La zona del mentor: la de su programa si tiene uno; si no, la de su primer grupo; por defecto, Lima (igual que el resumen del líder). */
-    private ZoneId zonaDe(UserId mentor, GrupoAcompanado primerGrupo) {
-        Optional<ZoneId> delPrograma = participaciones.deParticipante(mentor).filter(ParticipacionPrograma::inscrito)
-                .map(ParticipacionPrograma::zona);
-        return delPrograma.orElseGet(() -> zonaDelGrupo(primerGrupo));
-    }
-
-    private static ZoneId zonaDelGrupo(GrupoAcompanado grupo) {
-        try {
-            return ZoneId.of(grupo.zonaHoraria());
-        } catch (DateTimeException | NullPointerException e) {
-            return ZONA_POR_DEFECTO;
-        }
     }
 
     private static String nombreDe(UserSummary perfil) {

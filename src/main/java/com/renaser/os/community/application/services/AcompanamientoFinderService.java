@@ -60,9 +60,21 @@ class AcompanamientoFinderService implements AcompanamientoFinder, MentorVigente
     @Override
     @Transactional(readOnly = true)
     public List<TramoDeAcompanamiento> tramosDeMentor(UserId mentorId, Instant desde, Instant hasta) {
+        return tramosDe(mentorId, desde, hasta, a -> a.funcion() == FuncionAcompanamiento.MENTOR);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<TramoDeAcompanamiento> tramosDeAcompanante(UserId acompananteId, Instant desde, Instant hasta) {
+        return tramosDe(acompananteId, desde, hasta,
+                a -> a.funcion() == FuncionAcompanamiento.MENTOR || a.funcion() == FuncionAcompanamiento.GUIA);
+    }
+
+    private List<TramoDeAcompanamiento> tramosDe(UserId usuarioId, Instant desde, Instant hasta,
+                                                 java.util.function.Predicate<AsignacionCelula> funcion) {
         PeriodoAsignacion ventana = ventana(desde, hasta);
-        return loadAsignacionesPort.porUsuario(mentorId).stream()
-                .filter(a -> a.funcion() == FuncionAcompanamiento.MENTOR)
+        return loadAsignacionesPort.porUsuario(usuarioId).stream()
+                .filter(funcion)
                 .flatMap(a -> a.periodo().interseccionCon(ventana).stream()
                         .map(tramo -> new TramoDeAcompanamiento(a.celulaId().value(),
                                 loadCelulaPort.porId(a.celulaId()).map(Celula::nombre).orElse(null),

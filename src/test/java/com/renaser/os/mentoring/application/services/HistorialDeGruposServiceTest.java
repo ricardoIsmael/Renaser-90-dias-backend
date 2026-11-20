@@ -75,7 +75,7 @@ class HistorialDeGruposServiceTest {
 
     private void tramoCerradoDeFenix() {
         // Lima: del 1 de setiembre al 15 de octubre (el último día que lo acompañó es el 14, un miércoles).
-        when(acompanamiento.tramosDeMentor(eq(mentora), any(), any())).thenReturn(List.of(new TramoDeAcompanamiento(fenix, "Fénix",
+        when(acompanamiento.tramosDeAcompanante(eq(mentora), any(), any())).thenReturn(List.of(new TramoDeAcompanamiento(fenix, "Fénix",
                 Instant.parse("2026-09-01T05:00:00Z"), Instant.parse("2026-10-15T05:00:00Z"))));
         when(acompanamiento.tramosDeAprendices(eq(fenix), any(), any())).thenReturn(List.of(
                 new TramoDeAprendiz(ana, Instant.parse("2026-09-01T05:00:00Z"), null),
@@ -129,7 +129,7 @@ class HistorialDeGruposServiceTest {
     @DisplayName("spec 057 FR-020: un tramo que no alcanzó a cerrar ninguna semana queda con color SIN_DATOS y sin porcentaje, no con el de hoy")
     void tramoSinSemanaCerrada() { // spec 057 FR-021
         // Del lunes 5 al miércoles 7 de octubre: ningún viernes dentro del tramo.
-        when(acompanamiento.tramosDeMentor(eq(mentora), any(), any())).thenReturn(List.of(new TramoDeAcompanamiento(fenix, "Fénix",
+        when(acompanamiento.tramosDeAcompanante(eq(mentora), any(), any())).thenReturn(List.of(new TramoDeAcompanamiento(fenix, "Fénix",
                 Instant.parse("2026-10-05T05:00:00Z"), Instant.parse("2026-10-08T05:00:00Z"))));
         when(acompanamiento.tramosDeAprendices(eq(fenix), any(), any())).thenReturn(List.of(new TramoDeAprendiz(ana, Instant.parse("2026-09-01T05:00:00Z"), null)));
 
@@ -143,7 +143,7 @@ class HistorialDeGruposServiceTest {
     @Test
     @DisplayName("spec 057 FR-020: el grupo que sigue en curso no es anterior; el abierto de un grupo que ya terminó sí, hasta su último día; del más reciente al más viejo")
     void soloLosAnteriores() { // spec 057 FR-020
-        when(acompanamiento.tramosDeMentor(eq(mentora), any(), any())).thenReturn(List.of(
+        when(acompanamiento.tramosDeAcompanante(eq(mentora), any(), any())).thenReturn(List.of(
                 new TramoDeAcompanamiento(fenix, "Fénix", Instant.parse("2026-09-01T05:00:00Z"), Instant.parse("2026-10-15T05:00:00Z")),
                 new TramoDeAcompanamiento(aurora, "Aurora", Instant.parse("2026-10-20T05:00:00Z"), null)));
         when(acompanamiento.tramosDeAprendices(any(), any(), any())).thenReturn(List.of());
@@ -159,9 +159,20 @@ class HistorialDeGruposServiceTest {
     }
 
     @Test
+    @DisplayName("spec 057 FR-020: el historial pide los tramos de mentor Y de guía (tramosDeAcompanante), no solo los de mentor")
+    void incluyeLosTramosDeGuia() { // spec 057 FR-020
+        tramoCerradoDeFenix();
+
+        servicio.historialDe(mentora);
+
+        verify(acompanamiento).tramosDeAcompanante(eq(mentora), any(), any());
+        verify(acompanamiento, org.mockito.Mockito.never()).tramosDeMentor(any(), any(), any());
+    }
+
+    @Test
     @DisplayName("spec 057 FR-020: sin grupos anteriores la lista va vacía")
     void sinAnteriores() { // spec 057 FR-020
-        when(acompanamiento.tramosDeMentor(eq(mentora), any(), any())).thenReturn(List.of());
+        when(acompanamiento.tramosDeAcompanante(eq(mentora), any(), any())).thenReturn(List.of());
 
         assertThat(servicio.historialDe(mentora).grupos()).isEmpty();
     }

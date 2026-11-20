@@ -29,6 +29,14 @@ public interface AcompanamientoFinder {
      */
     List<TramoDeAcompanamiento> tramosDeMentor(UserId mentorId, Instant desde, Instant hasta);
 
+    /**
+     * Igual que {@link #tramosDeMentor} pero también con los tramos de función GUIA (spec 057, «Mis grupos anteriores»: mentor o guía). El
+     * valor por defecto devuelve solo los de mentor; {@code community} lo sobrescribe.
+     */
+    default List<TramoDeAcompanamiento> tramosDeAcompanante(UserId acompananteId, Instant desde, Instant hasta) {
+        return tramosDeMentor(acompananteId, desde, hasta);
+    }
+
     /** Aprendices con pertenencia vigente a ese grupo en ese instante. */
     List<UserId> aprendicesVigentes(UUID grupoId, Instant instante);
 

@@ -2,6 +2,7 @@ package com.renaser.os.leadership.application.services;
 
 import com.renaser.os.community.api.AcompanamientoFinder;
 import com.renaser.os.community.api.AcompanamientoFinder.GrupoAcompanado;
+import com.renaser.os.community.api.ZonaDelAcompananteFinder;
 import com.renaser.os.leadership.api.RevisionDelLiderEvent;
 import com.renaser.os.leadership.application.ports.in.ResumirConsultasDelLiderUseCase;
 import com.renaser.os.leadership.application.ports.out.LeerConsultasDeFichaPort;
@@ -11,8 +12,6 @@ import com.renaser.os.leadership.domain.model.consulta.ReglaDelResumenDeConsulta
 import com.renaser.os.leadership.domain.model.consulta.ReglaDelResumenDeConsultas.Resumen;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.UserId;
-import com.renaser.os.users.api.ParticipacionPrograma;
-import com.renaser.os.users.api.ParticipacionProgramaFinder;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
 import org.slf4j.Logger;
@@ -23,7 +22,6 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -54,23 +52,22 @@ import java.util.stream.Collectors;
 public class ResumenDeConsultasService implements ResumirConsultasDelLiderUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(ResumenDeConsultasService.class);
-    private static final ZoneId ZONA_POR_DEFECTO = ZoneId.of("America/Lima");
     private static final int MENTORES_POR_LOTE = 100;
 
     private final AcompanamientoFinder acompanamiento;
-    private final ParticipacionProgramaFinder participaciones;
+    private final ZonaDelAcompananteFinder zonas;
     private final LeerConsultasDeFichaPort consultas;
     private final UserSummaryFinder usuarios;
     private final ApplicationEventPublisher eventos;
     private final TransactionTemplate transaccionPropia;
     private final Clock clock;
 
-    ResumenDeConsultasService(AcompanamientoFinder acompanamiento, ParticipacionProgramaFinder participaciones,
+    ResumenDeConsultasService(AcompanamientoFinder acompanamiento, ZonaDelAcompananteFinder zonas,
                               LeerConsultasDeFichaPort consultas, UserSummaryFinder usuarios,
                               ApplicationEventPublisher eventos, PlatformTransactionManager transactionManager,
                               Clock clock) {
         this.acompanamiento = acompanamiento;
-        this.participaciones = participaciones;
+        this.zonas = zonas;
         this.consultas = consultas;
         this.usuarios = usuarios;
         this.eventos = eventos;
@@ -106,26 +103,12 @@ public class ResumenDeConsultasService implements ResumirConsultasDelLiderUseCas
                 .collect(Collectors.groupingBy(GrupoAcompanado::mentorId, LinkedHashMap::new, Collectors.toList()));
         List<DiaDelMentor> enSuHora = new ArrayList<>();
         gruposDeCadaMentor.forEach((mentor, grupos) -> {
-            ZoneId zona = zonaDe(mentor, grupos.getFirst());
+            ZoneId zona = zonas.zonaDe(mentor, ahora);
             if (ReglaDelResumenDeConsultas.toca(ahora, zona)) {
                 enSuHora.add(DiaDelMentor.de(mentor, zona, ahora));
             }
         });
         return enSuHora;
-    }
-
-    private ZoneId zonaDe(UserId mentor, GrupoAcompanado primerGrupo) {
-        Optional<ZoneId> delPrograma = participaciones.deParticipante(mentor).filter(ParticipacionPrograma::inscrito)
-                .map(ParticipacionPrograma::zona);
-        return delPrograma.orElseGet(() -> zonaDelGrupo(primerGrupo));
-    }
-
-    private static ZoneId zonaDelGrupo(GrupoAcompanado grupo) {
-        try {
-            return ZoneId.of(grupo.zonaHoraria());
-        } catch (DateTimeException | NullPointerException e) {
-            return ZONA_POR_DEFECTO;
-        }
     }
 
     /** Lotes de a 100 mentores que comparten ventana: una sola lectura de consultas por lote. */

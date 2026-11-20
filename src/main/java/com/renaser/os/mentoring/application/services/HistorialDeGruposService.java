@@ -69,7 +69,7 @@ class HistorialDeGruposService implements ConsultarHistorialDeGruposUseCase {
     public HistorialDeGrupos historialDe(UserId actorId) {
         Instant ahora = clock.now();
         Map<String, List<FilaDeGrupo>> rankings = new HashMap<>();
-        List<GrupoAnterior> grupos = acompanamiento.tramosDeMentor(actorId, Instant.EPOCH, null).stream()
+        List<GrupoAnterior> grupos = acompanamiento.tramosDeAcompanante(actorId, Instant.EPOCH, null).stream()
                 .map(tramo -> anterior(tramo, ahora))
                 .flatMap(Optional::stream)
                 .sorted(Comparator.comparing(TramoAnterior::ultimoDia).thenComparing(TramoAnterior::primerDia).reversed())
