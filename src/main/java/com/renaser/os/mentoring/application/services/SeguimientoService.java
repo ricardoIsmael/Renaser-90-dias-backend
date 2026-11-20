@@ -12,7 +12,9 @@ import com.renaser.os.mentoring.api.SemanaDelAlumno;
 import com.renaser.os.mentoring.application.ports.in.ConsultarEvaluacionPropiaUseCase;
 import com.renaser.os.mentoring.application.ports.in.ConsultarSeguimientoSemanalUseCase;
 import com.renaser.os.mentoring.application.ports.in.ConsultarSemanaAdministrativaUseCase;
+import com.renaser.os.mentoring.application.services.ArmadoDeQueSigue.QueSigueDelMes;
 import com.renaser.os.points.api.CalculoCumplimientoPort;
+import com.renaser.os.points.api.EstadoEvaluacion;
 import com.renaser.os.points.api.EvaluacionCumplimiento;
 import com.renaser.os.points.api.ObligacionEvidencia;
 import com.renaser.os.points.api.VentanaEvaluacion;
@@ -28,6 +30,7 @@ import com.renaser.os.users.api.UserSummaryFinder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -65,13 +68,14 @@ public class SeguimientoService implements ConsultarSeguimientoSemanalUseCase,
     private final CalculoCumplimientoPort calculoCumplimiento;
     private final ParticipacionProgramaFinder participacionProgramaFinder;
     private final UserSummaryFinder userSummaryFinder;
+    private final ArmadoDeQueSigue armadoDeQueSigue;
     private final Clock clock;
 
     SeguimientoService(AcompanamientoFinder acompanamientoFinder, ArmadoDeLaSemana armadoDeLaSemana,
                        ObligacionesHistoricasFinder obligacionesFinder, EntregasPorRegistroFinder entregasFinder,
                        CalculoCumplimientoPort calculoCumplimiento,
                        ParticipacionProgramaFinder participacionProgramaFinder,
-                       UserSummaryFinder userSummaryFinder, Clock clock) {
+                       UserSummaryFinder userSummaryFinder, ArmadoDeQueSigue armadoDeQueSigue, Clock clock) {
         this.acompanamientoFinder = acompanamientoFinder;
         this.armadoDeLaSemana = armadoDeLaSemana;
         this.obligacionesFinder = obligacionesFinder;
@@ -79,6 +83,7 @@ public class SeguimientoService implements ConsultarSeguimientoSemanalUseCase,
         this.calculoCumplimiento = calculoCumplimiento;
         this.participacionProgramaFinder = participacionProgramaFinder;
         this.userSummaryFinder = userSummaryFinder;
+        this.armadoDeQueSigue = armadoDeQueSigue;
         this.clock = clock;
     }
 
@@ -165,6 +170,34 @@ public class SeguimientoService implements ConsultarSeguimientoSemanalUseCase,
     @Transactional(readOnly = true)
     public EvaluacionPropia evaluacionDe(UserId actorId, YearMonth mes) {
         ZoneId zona = zonaDe(actorId);
+        MesEvaluado delMes = evaluarMes(actorId, mes, zona);
+        if (delMes.evaluacion() == null) {
+            // El mes pedido todavia no empezo.
+            return sinDatos(mes, zona);
+        }
+        EvaluacionCumplimiento evaluacion = delMes.evaluacion();
+        // Spec 057 (FR-010): el mes anterior sale del mismo motor y solo cuenta si esta CALCULADA.
+        YearMonth anterior = mes.minusMonths(1);
+        BigDecimal porcentajeAnterior = porcentajeCalculado(evaluarMes(actorId, anterior, zona).evaluacion());
+        Instant ahora = clock.now();
+        QueSigueDelMes queSigue = armadoDeQueSigue.armar(actorId, evaluacion, porcentajeAnterior, anterior, ahora);
+
+        return new EvaluacionPropia(mes.toString(), zona.getId(), evaluacion.porcentaje(),
+                evaluacion.entregadas(), evaluacion.esperadas(), evaluacion.aprendicesEvaluados(),
+                evaluacion.aprendicesExcluidos(), evaluacion.tardiasFueraDeVentana(),
+                evaluacion.verificadas(), evaluacion.estado().name(), evaluacion.versionFormula(),
+                ahora, tramosVisibles(delMes.tramos(), zona), porcentajeAnterior, queSigue.quienBaja(), queSigue.acciones());
+    }
+
+    private static BigDecimal porcentajeCalculado(EvaluacionCumplimiento evaluacion) {
+        return evaluacion != null && evaluacion.estado() == EstadoEvaluacion.CALCULADA ? evaluacion.porcentaje() : null;
+    }
+
+    /** El resultado de un mes y los tramos en los que acompañó; {@code evaluacion} null si el mes todavia no empezo. */
+    private record MesEvaluado(EvaluacionCumplimiento evaluacion, List<TramoDeAcompanamiento> tramos) {
+    }
+
+    private MesEvaluado evaluarMes(UserId actorId, YearMonth mes, ZoneId zona) {
         Instant inicioDelMes = mes.atDay(1).atStartOfDay(zona).toInstant();
         /*
          * El corte nunca va hacia adelante. Una obligacion "vencio" cuando termino su dia local;
@@ -176,8 +209,7 @@ public class SeguimientoService implements ConsultarSeguimientoSemanalUseCase,
         Instant corte = clock.now().isBefore(finDelMes) ? clock.now() : finDelMes;
 
         if (!corte.isAfter(inicioDelMes)) {
-            // El mes pedido todavia no empezo.
-            return sinDatos(mes, zona);
+            return new MesEvaluado(null, List.of());
         }
         List<TramoDeAcompanamiento> tramos =
                 acompanamientoFinder.tramosDeMentor(actorId, inicioDelMes, corte);
@@ -199,12 +231,7 @@ public class SeguimientoService implements ConsultarSeguimientoSemanalUseCase,
         EvaluacionCumplimiento evaluacion = ventanasPorAlumno.isEmpty()
                 ? calculoCumplimiento.evaluar(List.of(), Map.of())
                 : calcular(ventanasPorAlumno, zona);
-
-        return new EvaluacionPropia(mes.toString(), zona.getId(), evaluacion.porcentaje(),
-                evaluacion.entregadas(), evaluacion.esperadas(), evaluacion.aprendicesEvaluados(),
-                evaluacion.aprendicesExcluidos(), evaluacion.tardiasFueraDeVentana(),
-                evaluacion.verificadas(), evaluacion.estado().name(), evaluacion.versionFormula(),
-                clock.now(), tramosVisibles(tramos, zona));
+        return new MesEvaluado(evaluacion, tramos);
     }
 
     private EvaluacionPropia sinDatos(YearMonth mes, ZoneId zona) {

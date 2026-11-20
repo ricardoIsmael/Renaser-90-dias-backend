@@ -4,6 +4,7 @@ import com.renaser.os.notifications.domain.model.notificacion.EtiquetaDelAviso;
 import com.renaser.os.notifications.domain.model.notificacion.TipoNotificacion;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -31,9 +32,22 @@ import java.util.Optional;
  *                proveedor cuándo descartarlo. Solo lo ponen los avisos que son «a una hora» (hábitos y
  *                recordatorios de evento); chat, logros y avisos manuales van con {@code null} y no cambian.
  *                Viaja por aquí, igual que la etiqueta, y no por {@code EmitirNotificacionCommand}.
+ * @param categoriaId la categoría de acciones del push (los botones bajo el aviso: «Escribirle», «Ver ficha»), o {@code null} si no lleva
+ *                botones. Existe desde la spec 057 (FR-035). Solo Expo la usa ({@code categoryId}); una app que no la tenga registrada la ignora y
+ *                abre la ruta.
+ * @param datosExtra  campos que el aviso suma a {@code data} además de {@code route} (el grupo y el aprendiz del aviso de rojo), o vacío. Spec 057.
  */
 public record MensajePush(TipoNotificacion tipo, String titulo, String cuerpo, String rutaApp,
-                          String etiquetaPropia, Instant venceEn) {
+                          String etiquetaPropia, Instant venceEn, String categoriaId, Map<String, String> datosExtra) {
+
+    public MensajePush {
+        datosExtra = datosExtra == null ? Map.of() : Map.copyOf(datosExtra);
+    }
+
+    /** Un aviso sin botones ni datos extra: todos los de antes de la spec 057. */
+    public MensajePush(TipoNotificacion tipo, String titulo, String cuerpo, String rutaApp, String etiquetaPropia, Instant venceEn) {
+        this(tipo, titulo, cuerpo, rutaApp, etiquetaPropia, venceEn, null, null);
+    }
 
     /** Un aviso sin etiqueta propia: la de chat se sigue derivando de la ruta (D-221) y el resto no lleva. */
     public MensajePush(TipoNotificacion tipo, String titulo, String cuerpo, String rutaApp) {

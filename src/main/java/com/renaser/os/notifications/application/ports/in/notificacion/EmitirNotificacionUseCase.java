@@ -9,6 +9,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -70,6 +71,22 @@ public interface EmitirNotificacionUseCase {
      */
     Optional<Notificacion> emitir(EmitirNotificacionCommand command, EntregaPush entregaPush, String etiquetaDelPush,
                                   Instant venceEn);
+
+    /**
+     * Igual que {@link #emitir(EmitirNotificacionCommand, EntregaPush, String, Instant)}, ademas con los botones y los datos extra del push
+     * (spec 057, FR-035): lo usa el aviso de rojo del mentor. Solo afecta al push: bandeja, preferencia y deduplicacion no cambian.
+     */
+    Optional<Notificacion> emitir(EmitirNotificacionCommand command, EntregaPush entregaPush, String etiquetaDelPush,
+                                  Instant venceEn, ExtrasDelPush extras);
+
+    /**
+     * @param categoriaId la categoria de acciones del push (sus botones); null = sin botones
+     * @param datos       campos que se suman a {@code data} ademas de {@code route}; vacio o null = ninguno
+     */
+    record ExtrasDelPush(String categoriaId, Map<String, String> datos) {
+
+        public static final ExtrasDelPush NINGUNO = new ExtrasDelPush(null, Map.of());
+    }
 
     record EmitirNotificacionCommand(@NotNull UserId usuarioId, @NotNull TipoNotificacion tipo,
                                       @NotBlank String titulo, @NotBlank String cuerpo, String rutaApp,
