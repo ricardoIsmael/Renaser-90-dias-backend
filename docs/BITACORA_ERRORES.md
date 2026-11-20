@@ -16275,3 +16275,12 @@ mejor aún, con un `codigo`.
 - **Causa real:** el padrón partía de `FichaDeMentorFinder.mentoresActivos()` (solo ACTIVE), heredado de SDD 002, y la fila no decía el estado de la cuenta. La app ya sabía pintar al suspendido apagado, pero nunca le llegaba.
 - **Solución:** `FichaDeMentorFinder.mentoresSuspendidos()` y `AccesoDeLiderazgo.mentoresSuspendidosDelAlcance()` (mismo filtro de formaciones); el padrón los suma al final y cada fila lleva `accountActive` (aditivo). `mentoresDelAlcance` no cambia: el reporte del mes, «Por resolver» y los documentos siguen solo con activos.
 - **Cómo evitarlo:** `PadronDeMentoresServiceTest`, `LeadershipControllersTest`, `ReporteDeMentoresServiceTest` y `PorResolverServiceTest` con la marca `spec 056 FR-004` (el suspendido del alcance aparece marcado, el de otra formación no, y no se cuela en el reporte ni en «Por resolver»). Un requisito de estado de cuenta en la spec se prueba con una cuenta en ese estado en el E2E, no solo con Jest.
+
+## E-691 · El código por WhatsApp del alta (anónimo) podía ir a cualquier país y gastaba el mismo cupo global que la recuperación de clave y la confirmación en Yo (backend, 20/11, RESUELTO)
+
+- **Fecha:** 2026-11-20
+- **Dónde:** `CodigoPorWhatsAppDeAccesoService.paraElRegistro`, `NumeroDeWhatsApp`, contador `codigo-whatsapp:global`
+- **Síntoma:** hallazgo N-2 de la auditoría del 20/11 (sin síntoma en producción): el pedido del alta no exige sesión y aceptaba cualquier número internacional, y su tope global por hora era el mismo contador de la recuperación y de Yo.
+- **Causa real:** la validación del número solo miraba la forma (E.164) y no el país; y tres flujos con riesgo distinto compartían un único contador global, de modo que agotarlo desde el flujo anónimo dejaba sin código por WhatsApp a los otros dos.
+- **Solución:** el alta solo manda a los prefijos de `renaser.whatsapp.paises-del-codigo` (variable `WHATSAPP_PAISES_DEL_CODIGO`); fuera de la lista responde 422 con `codigo` `PAIS_NO_ADMITIDO`. El alta tiene su propio contador global (`codigo-whatsapp:global-alta`, 150/h); la recuperación y Yo siguen con `codigo-whatsapp:global`. No se exige el `verificationToken` del correo: la app 1.8.0 no lo manda en ese pedido (queda para la próxima versión de la app).
+- **Cómo evitarlo:** un canal que cuesta dinero y lo puede pedir un anónimo lleva lista de destinos y cupo propio, no el de los flujos con sesión. `CodigoPorWhatsAppDeAccesoServiceTest` (`paisNoAdmitido`, `paisesPorConfiguracion`, `elAltaTieneSuCupoGlobalPropio`).

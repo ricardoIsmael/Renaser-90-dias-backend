@@ -17,9 +17,11 @@ import com.renaser.os.users.application.ports.out.whatsapp.WhatsappConfirmadoPor
 import com.renaser.os.users.domain.model.user.Email;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Optional;
 import java.util.Set;
 
@@ -51,6 +53,13 @@ class CodigoPorWhatsAppDeAccesoService implements PedirCodigoPorWhatsAppUseCase 
     static final Duration ESPERA_ENTRE_ENVIOS = Duration.ofSeconds(60);
     /** Tope de todos los codigos por WhatsApp de una hora: el freno del costo si alguien reparte el abuso entre muchos origenes. */
     static final int LIMITE_GLOBAL_POR_HORA = 300;
+    /**
+     * Tope de los codigos del ALTA (anonima) por hora, con su propio contador: si alguien lo agota repartiendo el abuso entre muchos origenes, la
+     * recuperacion de la clave y la confirmacion en Yo (que comparten {@code codigo-whatsapp:global}) siguen mandando.
+     */
+    static final int LIMITE_GLOBAL_DEL_ALTA_POR_HORA = 150;
+    /** Prefijos de pais ({@code 51,34,...}, sin el +) a los que el alta puede mandar un codigo, si la configuracion no dice otra cosa. */
+    static final String PAISES_DEL_CODIGO_POR_DEFECTO = "51,52,53,54,56,57,58,34,1,591,593,595,598,502,503,504,505,506,507";
     /** Spec 053: consultas de «¿ese numero ya es de otra cuenta?» por hora desde un mismo origen: alcanza para equivocarse al escribirlo, no para recorrer numeros. */
     static final int LIMITE_DE_CONSULTAS_POR_ORIGEN = 20;
     /** Spec 053: consultas por hora de todo el servidor: el freno de quien reparte el recorrido de numeros entre muchos origenes. */
@@ -71,11 +80,13 @@ class CodigoPorWhatsAppDeAccesoService implements PedirCodigoPorWhatsAppUseCase 
     private final CodigoPorWhatsApp whatsapp;
     private final WhatsappConfirmadoPort whatsappConfirmado;
     private final NumeroUnicoDeWhatsApp numeroUnico;
+    private final java.util.List<String> paisesDelCodigo;
 
     CodigoPorWhatsAppDeAccesoService(CodigoVerificacionEmailPort codigosDelRegistro, CodigoResetContrasenaPort codigosDeRecuperacion,
                                      LimitarSolicitudesResetPort limites, LoadCredencialPort credenciales,
                                      WhatsappDeLaFichaFinder whatsappDeLaFicha, CodigoPorWhatsApp whatsapp,
-                                     WhatsappConfirmadoPort whatsappConfirmado, NumeroUnicoDeWhatsApp numeroUnico) {
+                                     WhatsappConfirmadoPort whatsappConfirmado, NumeroUnicoDeWhatsApp numeroUnico,
+                                     @Value("${renaser.whatsapp.paises-del-codigo:" + PAISES_DEL_CODIGO_POR_DEFECTO + "}") String paisesDelCodigo) {
         this.codigosDelRegistro = codigosDelRegistro;
         this.codigosDeRecuperacion = codigosDeRecuperacion;
         this.limites = limites;
@@ -84,6 +95,8 @@ class CodigoPorWhatsAppDeAccesoService implements PedirCodigoPorWhatsAppUseCase 
         this.whatsapp = whatsapp;
         this.whatsappConfirmado = whatsappConfirmado;
         this.numeroUnico = numeroUnico;
+        this.paisesDelCodigo = Arrays.stream(paisesDelCodigo.split(",")).map(String::trim).map(p -> p.startsWith("+") ? p.substring(1) : p)
+                .filter(p -> !p.isEmpty()).toList();
     }
 
     @Override
@@ -95,6 +108,7 @@ class CodigoPorWhatsAppDeAccesoService implements PedirCodigoPorWhatsAppUseCase 
     public String paraElRegistro(CodigoDelRegistroCommand command) {
         String email = new Email(command.email()).value();
         NumeroParaCodigo numero = whatsapp.numero(command.whatsapp()).orElseThrow(() -> new IllegalArgumentException(SIN_NUMERO));
+        exigirPaisAdmitido(numero);
         exigirDisponible();
         numeroUnico.exigirLibre(numero, null);
         exigirCupoDelRegistro(email, numero, command.requestIp());
@@ -196,6 +210,14 @@ class CodigoPorWhatsAppDeAccesoService implements PedirCodigoPorWhatsAppUseCase 
                 .orElseGet(() -> codigosDeRecuperacion.generarCodigo(email, VerificacionEmailService.VIGENCIA_CODIGO));
     }
 
+    /** El alta la pide un anonimo y cada codigo cuesta saldo: solo a los paises de la lista, que se cambia por configuracion sin desplegar codigo. */
+    private void exigirPaisAdmitido(NumeroParaCodigo numero) {
+        String digitos = numero.valor().substring(1);
+        if (paisesDelCodigo.stream().noneMatch(digitos::startsWith)) {
+            throw new WhatsappDeLaCuentaException(Motivo.PAIS_NO_ADMITIDO);
+        }
+    }
+
     private void exigirDisponible() {
         if (!whatsapp.configurado()) {
             throw new IllegalStateException(NO_DISPONIBLE);
@@ -210,7 +232,7 @@ class CodigoPorWhatsAppDeAccesoService implements PedirCodigoPorWhatsAppUseCase 
         }
         exigirCupo(PREFIJO + "email:" + email, LIMITE_POR_CORREO);
         exigirCupo(PREFIJO + "numero:" + numero.valor(), LIMITE_POR_NUMERO);
-        if (!hayCupoGlobal()) {
+        if (!hayCupo(PREFIJO + "global-alta", LIMITE_GLOBAL_DEL_ALTA_POR_HORA)) {
             throw new RateLimitExceededException(NO_DISPONIBLE);
         }
     }
