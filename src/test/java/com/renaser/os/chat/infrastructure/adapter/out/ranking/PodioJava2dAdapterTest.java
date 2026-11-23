@@ -55,6 +55,23 @@ class PodioJava2dAdapterTest {
     }
 
     @Test
+    @DisplayName("D-367: los cuatro rankings se dibujan con el mismo diseño y cada uno con su título y su unidad (imágenes distintas entre sí)")
+    void losCuatroRankings() throws IOException {
+        java.util.Set<String> huellas = new java.util.HashSet<>();
+        for (com.renaser.os.chat.domain.model.ranking.TipoDeRankingSemanal tipo : com.renaser.os.chat.domain.model.ranking.TipoDeRankingSemanal.values()) {
+            byte[] jpeg = adapter.dibujar(PodioDeLaSemana.de(tipo, List.of(aprendiz("Liz Mendoza", "42.5"), aprendiz("Jorge Pérez", "30"),
+                    aprendiz("Rosa Torres", "20"), aprendiz("Carlos Díaz", "10"))), SEMANA);
+
+            BufferedImage imagen = guardar(tipo.codigo() + ".jpg", jpeg);
+            assertThat(imagen.getWidth()).isEqualTo(1080);
+            assertThat(imagen.getHeight()).isEqualTo(1350);
+            assertThat(cerca(color(imagen, 540, 1000), new Color(0xA8, 0x8A, 0x4A), 30)).as("oro al centro en %s", tipo).isTrue();
+            huellas.add(java.util.Arrays.toString(jpeg));
+        }
+        assertThat(huellas).as("el título y la unidad cambian la imagen").hasSize(4);
+    }
+
+    @Test
     @DisplayName("empate en el primero: dos bloques de oro; sin 4.º ni 5.º no hay cápsulas")
     void empateEnElPrimero() throws IOException {
         BufferedImage imagen = guardar("empate.jpg", adapter.dibujar(podio(

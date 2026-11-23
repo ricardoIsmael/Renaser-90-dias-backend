@@ -6,6 +6,7 @@ import com.renaser.os.chat.application.ports.in.ranking.PublicarPodioDeLaSemanaU
 import com.renaser.os.chat.application.ports.in.ranking.VerPodioDeLaSemanaUseCase;
 import com.renaser.os.chat.application.ports.in.ranking.VerPodioDeLaSemanaUseCase.VistaPreviaDelPodio;
 import com.renaser.os.chat.domain.model.ranking.PodioDeLaSemana.Puesto;
+import com.renaser.os.chat.domain.model.ranking.TipoDeRankingSemanal;
 import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
@@ -64,7 +65,7 @@ class PodioDeLaSemanaAdminControllerTest {
     @DisplayName("vista previa: la semana, los puestos, el texto y la imagen como data URL, sin publicar")
     void vistaPrevia() throws Exception {
         UUID actor = cuenta(UserRole.ADMIN, UserStatus.ACTIVE);
-        when(verUseCase.vistaPrevia(UserId.of(actor), Formacion.POR_DEFECTO)).thenReturn(new VistaPreviaDelPodio(LUNES, DOMINGO,
+        when(verUseCase.vistaPrevia(UserId.of(actor), Formacion.POR_DEFECTO, com.renaser.os.chat.domain.model.ranking.TipoDeRankingSemanal.GENERAL)).thenReturn(new VistaPreviaDelPodio(LUNES, DOMINGO,
                 List.of(new Puesto(1, "Liz M.", new BigDecimal("96.4"))), "🏆 ¡Cerramos la semana!",
                 new byte[]{1, 2, 3}, "image/jpeg", "A", false));
 
@@ -80,6 +81,46 @@ class PodioDeLaSemanaAdminControllerTest {
                 .andExpect(jsonPath("$.text").value("🏆 ¡Cerramos la semana!"))
                 .andExpect(jsonPath("$.image").value("data:image/jpeg;base64,AQID"));
         verifyNoInteractions(publicarUseCase);
+    }
+
+    @Test
+    @DisplayName("D-367: sin ranking es el General (el contrato de siempre), con ranking=kilometros es el de km y trae su código")
+    void vistaPreviaPorRanking() throws Exception {
+        UUID actor = cuenta(UserRole.ADMIN, UserStatus.ACTIVE);
+        when(verUseCase.vistaPrevia(UserId.of(actor), Formacion.POR_DEFECTO, TipoDeRankingSemanal.KILOMETROS)).thenReturn(
+                new VistaPreviaDelPodio(LUNES, DOMINGO, List.of(new Puesto(1, "Liz M.", new BigDecimal("42.5"))), "🏃 km",
+                        new byte[]{1}, "image/jpeg", "B", false, TipoDeRankingSemanal.KILOMETROS));
+        when(verUseCase.vistaPrevia(UserId.of(actor), Formacion.POR_DEFECTO, TipoDeRankingSemanal.GENERAL)).thenReturn(
+                new VistaPreviaDelPodio(LUNES, DOMINGO, List.of(), null, null, "image/jpeg", "A", false));
+
+        mockMvc.perform(get(BASE + "/vista-previa").param("ranking", "kilometros").header("X-Actor-Id", actor.toString()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.ranking").value("kilometros"))
+                .andExpect(jsonPath("$.entries[0].score").value(42.5));
+        mockMvc.perform(get(BASE + "/vista-previa").header("X-Actor-Id", actor.toString()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.ranking").value("general"));
+    }
+
+    @Test
+    @DisplayName("D-367: un ranking que no existe es un 400")
+    void rankingInexistente() throws Exception {
+        UUID actor = cuenta(UserRole.ADMIN, UserStatus.ACTIVE);
+
+        mockMvc.perform(get(BASE + "/vista-previa").param("ranking", "liga").header("X-Actor-Id", actor.toString()))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("D-367: /vista-previa/todos devuelve los cuatro, en el orden en que se publican")
+    void vistaPreviaDeLosCuatro() throws Exception {
+        UUID actor = cuenta(UserRole.ADMIN, UserStatus.ACTIVE);
+        when(verUseCase.vistasPrevias(UserId.of(actor), Formacion.POR_DEFECTO)).thenReturn(
+                java.util.Arrays.stream(TipoDeRankingSemanal.values()).map(t -> new VistaPreviaDelPodio(LUNES, DOMINGO, List.of(), null,
+                        null, "image/jpeg", "A", false, t)).toList());
+
+        mockMvc.perform(get(BASE + "/vista-previa/todos").header("X-Actor-Id", actor.toString()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(4))
+                .andExpect(jsonPath("$[0].ranking").value("general")).andExpect(jsonPath("$[1].ranking").value("coherencia"))
+                .andExpect(jsonPath("$[2].ranking").value("kilometros")).andExpect(jsonPath("$[3].ranking").value("gimnasio"));
     }
 
     @Test
@@ -134,7 +175,7 @@ class PodioDeLaSemanaAdminControllerTest {
     void rechazoDelServicio() throws Exception {
         UUID actor = cuenta(UserRole.MENTOR, UserStatus.ACTIVE);
         NotAuthorizedException rechazo = new NotAuthorizedException("Solo Administración y Alquimista pueden publicar el podio de la semana");
-        when(verUseCase.vistaPrevia(any(), any())).thenThrow(rechazo);
+        when(verUseCase.vistaPrevia(any(), any(), any())).thenThrow(rechazo);
         when(publicarUseCase.publicarAhora(any())).thenThrow(rechazo);
 
         for (RequestBuilder pedido : los2(actor)) {

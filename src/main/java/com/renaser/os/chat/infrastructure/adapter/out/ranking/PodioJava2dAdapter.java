@@ -4,6 +4,7 @@ import com.renaser.os.chat.application.ports.out.ranking.DibujarPodioPort;
 import com.renaser.os.chat.domain.model.ranking.PodioDeLaSemana;
 import com.renaser.os.chat.domain.model.ranking.PodioDeLaSemana.Puesto;
 import com.renaser.os.chat.domain.model.ranking.SemanaDelRanking;
+import com.renaser.os.chat.domain.model.ranking.TipoDeRankingSemanal;
 import org.springframework.stereotype.Component;
 
 import javax.imageio.IIOImage;
@@ -70,12 +71,12 @@ class PodioJava2dAdapter implements DibujarPodioPort {
         try {
             suavizar(g);
             fondo(g);
-            encabezado(g, semana);
+            encabezado(g, podio.tipo(), semana);
             g.drawImage(tipos.fenix, 440, 300, 200, 200, null);
-            columnas.dibujar(g, podio.podio());
+            columnas.dibujar(g, podio.tipo(), podio.podio());
             g.setColor(LINEA);
             g.fill(new RoundRectangle2D.Float(60, 1060, ANCHO - 120, 4, 4, 4));
-            capsulas(g, podio.debajo());
+            capsulas(g, podio.tipo(), podio.debajo());
             pie(g);
         } finally {
             g.dispose();
@@ -107,23 +108,23 @@ class PodioJava2dAdapter implements DibujarPodioPort {
         g.fill(new Rectangle2D.Float(0, 150, ANCHO, 900));
     }
 
-    private void encabezado(Graphics2D g, SemanaDelRanking semana) {
+    private void encabezado(Graphics2D g, TipoDeRankingSemanal tipo, SemanaDelRanking semana) {
         g.setColor(TINTA);
-        centrado(g, "FORMACIÓN RENASER · RANKING GENERAL", tipos.jostSemibold.deriveFont(24f), 95, 24f * 0.32f);
+        centrado(g, "FORMACIÓN RENASER · " + tipo.rotulo(), tipos.jostSemibold.deriveFont(24f), 95, 24f * 0.32f);
         Font recta = tipos.frauncesSemibold.deriveFont(92f);
         Font italica = tipos.frauncesItalica.deriveFont(92f);
-        String antes = "Podio de la ";
-        float x = (ANCHO - TiposDelPodio.ancho(g, antes, recta, 0f) - TiposDelPodio.ancho(g, "semana", italica, 0f)) / 2f;
+        String antes = tipo.tituloRecto();
+        float x = (ANCHO - TiposDelPodio.ancho(g, antes, recta, 0f) - TiposDelPodio.ancho(g, tipo.tituloCursiva(), italica, 0f)) / 2f;
         g.setColor(TEXTO);
         x = TiposDelPodio.escribir(g, antes, recta, x, 206, 0f);
         g.setColor(DORADO);
-        TiposDelPodio.escribir(g, "semana", italica, x, 206, 0f);
+        TiposDelPodio.escribir(g, tipo.tituloCursiva(), italica, x, 206, 0f);
         g.setColor(SUAVE);
         centrado(g, semana.rango(), tipos.jostRegular.deriveFont(30f), 270, 0f);
     }
 
     /** El 4.º y el 5.º: «4.º Rosa T. · 85,0» en cápsulas blancas centradas, con 24 px entre ellas. */
-    private void capsulas(Graphics2D g, List<Puesto> debajo) {
+    private void capsulas(Graphics2D g, TipoDeRankingSemanal tipo, List<Puesto> debajo) {
         if (debajo.isEmpty()) {
             return;
         }
@@ -132,23 +133,23 @@ class PodioJava2dAdapter implements DibujarPodioPort {
         float[] anchos = new float[debajo.size()];
         float total = 24f * (debajo.size() - 1);
         for (int i = 0; i < debajo.size(); i++) {
-            anchos[i] = anchoDeCapsula(g, debajo.get(i), regular, negrita);
+            anchos[i] = anchoDeCapsula(g, tipo, debajo.get(i), regular, negrita);
             total += anchos[i];
         }
         float x = (ANCHO - total) / 2f;
         for (int i = 0; i < debajo.size(); i++) {
-            capsula(g, debajo.get(i), x, anchos[i], regular, negrita);
+            capsula(g, tipo, debajo.get(i), x, anchos[i], regular, negrita);
             x += anchos[i] + 24f;
         }
     }
 
-    private static float anchoDeCapsula(Graphics2D g, Puesto puesto, Font regular, Font negrita) {
+    private static float anchoDeCapsula(Graphics2D g, TipoDeRankingSemanal tipo, Puesto puesto, Font regular, Font negrita) {
         return 60f + TiposDelPodio.ancho(g, ordinal(puesto), regular, 0f)
                 + TiposDelPodio.ancho(g, puesto.nombre(), negrita, 0f)
-                + TiposDelPodio.ancho(g, " · " + ColumnasDelPodio.puntaje(puesto), regular, 0f);
+                + TiposDelPodio.ancho(g, " · " + valorEnCapsula(tipo, puesto), regular, 0f);
     }
 
-    private static void capsula(Graphics2D g, Puesto puesto, float x, float ancho, Font regular, Font negrita) {
+    private static void capsula(Graphics2D g, TipoDeRankingSemanal tipo, Puesto puesto, float x, float ancho, Font regular, Font negrita) {
         RoundRectangle2D forma = new RoundRectangle2D.Float(x, 1100, ancho, 70, 70, 70);
         g.setColor(Color.WHITE);
         g.fill(forma);
@@ -160,7 +161,12 @@ class PodioJava2dAdapter implements DibujarPodioPort {
         g.setColor(TEXTO);
         cursor = TiposDelPodio.escribir(g, puesto.nombre(), negrita, cursor, 1145, 0f);
         g.setColor(SUAVE);
-        TiposDelPodio.escribir(g, " · " + ColumnasDelPodio.puntaje(puesto), regular, cursor, 1145, 0f);
+        TiposDelPodio.escribir(g, " · " + valorEnCapsula(tipo, puesto), regular, cursor, 1145, 0f);
+    }
+
+    /** El General va sin unidad, como siempre; en los otros la unidad (km, días, %) dice de qué es el número. */
+    private static String valorEnCapsula(TipoDeRankingSemanal tipo, Puesto puesto) {
+        return tipo == TipoDeRankingSemanal.GENERAL ? tipo.numero(puesto.puntaje()) : tipo.conUnidad(puesto.puntaje());
     }
 
     private static String ordinal(Puesto puesto) {

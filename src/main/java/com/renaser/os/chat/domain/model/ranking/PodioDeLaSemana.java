@@ -33,13 +33,22 @@ public final class PodioDeLaSemana {
     public record Puesto(int lugar, String nombre, BigDecimal puntaje) {
     }
 
+    private final TipoDeRankingSemanal tipo;
     private final List<Puesto> puestos;
 
-    private PodioDeLaSemana(List<Puesto> puestos) {
+    private PodioDeLaSemana(TipoDeRankingSemanal tipo, List<Puesto> puestos) {
+        this.tipo = tipo;
         this.puestos = List.copyOf(puestos);
     }
 
+    /** El podio del ranking General: el de siempre (D-262). */
     public static PodioDeLaSemana de(List<Aprendiz> ranking) {
+        return de(TipoDeRankingSemanal.GENERAL, ranking);
+    }
+
+    /** D-367: el podio de cualquiera de los cuatro rankings, con las mismas reglas (top 5, sin ceros, empates). */
+    public static PodioDeLaSemana de(TipoDeRankingSemanal tipo, List<Aprendiz> ranking) {
+        Objects.requireNonNull(tipo, "tipo es obligatorio");
         List<Aprendiz> conPuntaje = ranking.stream()
                 .filter(a -> a.puntaje().signum() > 0)
                 .sorted(Comparator.comparing(Aprendiz::puntaje).reversed())
@@ -52,7 +61,11 @@ public final class PodioDeLaSemana {
             int lugar = empataConElAnterior ? puestos.get(i - 1).lugar() : i + 1;
             puestos.add(new Puesto(lugar, NombreCorto.de(aprendiz.nombreCompleto()), aprendiz.puntaje()));
         }
-        return new PodioDeLaSemana(puestos);
+        return new PodioDeLaSemana(tipo, puestos);
+    }
+
+    public TipoDeRankingSemanal tipo() {
+        return tipo;
     }
 
     public boolean estaVacio() {

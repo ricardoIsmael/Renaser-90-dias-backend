@@ -2,6 +2,7 @@ package com.renaser.os.chat.infrastructure.adapter.in.rest.ranking;
 
 import com.renaser.os.chat.application.ports.in.ranking.PublicarPodioDeLaSemanaUseCase;
 import com.renaser.os.chat.application.ports.in.ranking.VerPodioDeLaSemanaUseCase;
+import com.renaser.os.chat.domain.model.ranking.TipoDeRankingSemanal;
 import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.FormacionDelContenido;
 import com.renaser.os.shared.domain.Permission;
@@ -9,6 +10,8 @@ import com.renaser.os.shared.domain.UserId;
 import com.renaser.os.shared.web.security.ActorAutenticado;
 import com.renaser.os.shared.web.security.Funcionalidad;
 import com.renaser.os.shared.web.security.RequiresPermission;
+import java.util.List;
+
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -44,9 +47,33 @@ public class PodioDeLaSemanaAdminController {
     @RequiresPermission(value = Permission.ADJUST_POINTS, scope = SOLO_ADMIN)
     @GetMapping("/vista-previa")
     public VistaPreviaDelPodioResponse vistaPrevia(@ActorAutenticado UserId actorId,
-                                                   @RequestParam(required = false) String formation) {
+                                                   @RequestParam(required = false) String formation,
+                                                   @RequestParam(required = false) String ranking) {
         Formacion formacion = FormacionDelContenido.pedida(formation);
-        return VistaPreviaDelPodioResponse.from(verUseCase.vistaPrevia(actorId, formacion == null ? Formacion.POR_DEFECTO : formacion));
+        return VistaPreviaDelPodioResponse.from(verUseCase.vistaPrevia(actorId,
+                formacion == null ? Formacion.POR_DEFECTO : formacion, rankingPedido(ranking)));
+    }
+
+    /** D-367: los cuatro podios de la semana (General, Coherencia, Kilómetros y Gimnasio), en el orden en que se publican. */
+    @RequiresPermission(value = Permission.ADJUST_POINTS, scope = SOLO_ADMIN)
+    @GetMapping("/vista-previa/todos")
+    public List<VistaPreviaDelPodioResponse> vistasPrevias(@ActorAutenticado UserId actorId,
+                                                           @RequestParam(required = false) String formation) {
+        Formacion formacion = FormacionDelContenido.pedida(formation);
+        return verUseCase.vistasPrevias(actorId, formacion == null ? Formacion.POR_DEFECTO : formacion).stream()
+                .map(VistaPreviaDelPodioResponse::from).toList();
+    }
+
+    /** Sin {@code ranking} es el General, como antes de D-367 (el contrato no cambia); uno que no existe es un 400. */
+    private static TipoDeRankingSemanal rankingPedido(String ranking) {
+        if (ranking == null || ranking.isBlank()) {
+            return TipoDeRankingSemanal.GENERAL;
+        }
+        TipoDeRankingSemanal tipo = TipoDeRankingSemanal.deCodigo(ranking);
+        if (tipo == null) {
+            throw new IllegalArgumentException("ranking debe ser general, coherencia, kilometros o gimnasio");
+        }
+        return tipo;
     }
 
     @RequiresPermission(value = Permission.ADJUST_POINTS, scope = SOLO_ADMIN)

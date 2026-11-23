@@ -15,6 +15,9 @@ import com.renaser.os.chat.domain.model.mensaje.Mensaje;
 import com.renaser.os.chat.domain.model.ranking.SemanaDelRanking;
 import com.renaser.os.points.api.RankingGeneralFinder;
 import com.renaser.os.points.api.RankingGeneralFinder.PuestoEnElRankingGeneral;
+import com.renaser.os.points.api.RankingSemanalFinder;
+import com.renaser.os.points.api.RankingSemanalFinder.PuestoDeLaSemana;
+import com.renaser.os.chat.domain.model.ranking.TipoDeRankingSemanal;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.Formacion;
@@ -71,6 +74,8 @@ class PodioDeLaSemanaServiceTest {
     @Mock
     private RankingGeneralFinder ranking;
     @Mock
+    private RankingSemanalFinder semanal;
+    @Mock
     private DibujarPodioPort dibujo;
     @Mock
     private AlmacenamientoPort almacenamiento;
@@ -111,6 +116,119 @@ class PodioDeLaSemanaServiceTest {
         assertThat(entrega.piezas().get(1).id()).isEqualTo(SEMANA.idDelTexto());
         assertThat(entrega.piezas().get(1).aviso()).isEqualTo(AvisoDeLaPieza.A_TODOS);
         assertThat(entrega.piezas().get(1).contenido().texto()).contains("Liz M.").contains("Jorge P.");
+    }
+
+    @Test
+    @DisplayName("D-367: salen cuatro mensajes seguidos (General, Coherencia, Kilómetros, Gimnasio), cada uno con su imagen, su texto y sus ids; solo el General avisa")
+    void cuatroRankingsSeguidos() {
+        conLosTresRankingsSemanales();
+
+        ResultadoDelPodio resultado = servicio(true).publicarLaSemanaCerrada();
+
+        assertThat(resultado.estado()).isEqualTo(Estado.PUBLICADO);
+        assertThat(resultado.piezas()).isEqualTo(8);
+        ArgumentCaptor<EntregaDelPrograma> entregas = ArgumentCaptor.forClass(EntregaDelPrograma.class);
+        verify(delPrograma, org.mockito.Mockito.times(4)).enviarUnaVez(entregas.capture());
+        List<EntregaDelPrograma> enOrden = entregas.getAllValues();
+        TipoDeRankingSemanal[] orden = TipoDeRankingSemanal.values();
+        for (int i = 0; i < 4; i++) {
+            EntregaDelPrograma entrega = enOrden.get(i);
+            assertThat(entrega.conversacionId()).isEqualTo(GLOBAL);
+            assertThat(entrega.piezas().get(0).id()).isEqualTo(SEMANA.idDeLaImagen(Formacion.ESCUELA, orden[i]));
+            assertThat(entrega.piezas().get(1).id()).isEqualTo(SEMANA.idDelTexto(Formacion.ESCUELA, orden[i]));
+            assertThat(entrega.piezas().get(0).aviso()).isEqualTo(AvisoDeLaPieza.SIN_AVISO);
+            assertThat(entrega.piezas().get(1).aviso()).isEqualTo(i == 0 ? AvisoDeLaPieza.A_TODOS : AvisoDeLaPieza.SIN_AVISO);
+            verify(almacenamiento).subir(SEMANA.rutaDeLaImagen(Formacion.ESCUELA, orden[i]), PNG, "image/jpeg");
+        }
+        assertThat(enOrden.get(0).piezas().get(1).id()).as("el General conserva su id: no duplica la semana ya publicada").isEqualTo(SEMANA.idDelTexto());
+        assertThat(enOrden.get(1).piezas().get(1).contenido().texto()).contains("Ana C.").containsIgnoringCase("coherencia");
+        assertThat(enOrden.get(2).piezas().get(1).contenido().texto()).contains("Beto K.").containsIgnoringCase("kil");
+        assertThat(enOrden.get(3).piezas().get(1).contenido().texto()).contains("Carla G.").containsIgnoringCase("entren");
+        verify(semanal).coherencia(DOMINGO, Formacion.ESCUELA);
+        verify(semanal).kilometros(DOMINGO, Formacion.ESCUELA);
+        verify(semanal).gimnasio(DOMINGO, Formacion.ESCUELA);
+    }
+
+    @Test
+    @DisplayName("D-367: un ranking sin nadie con valor no se publica y no frena a los otros")
+    void rankingVacioNoFrena() {
+        conLosTresRankingsSemanales();
+        when(semanal.kilometros(DOMINGO, Formacion.ESCUELA)).thenReturn(List.of(valor("Beto Kilómetros", "0")));
+
+        ResultadoDelPodio resultado = servicio(true).publicarLaSemanaCerrada();
+
+        assertThat(resultado.estado()).isEqualTo(Estado.PUBLICADO);
+        verify(delPrograma, org.mockito.Mockito.times(3)).enviarUnaVez(any());
+        verify(almacenamiento, never()).subir(eq(SEMANA.rutaDeLaImagen(Formacion.ESCUELA, TipoDeRankingSemanal.KILOMETROS)), any(), anyString());
+    }
+
+    @Test
+    @DisplayName("D-367: un ranking que falla no frena a los otros; el error sale al final y el reintento de la hora siguiente completa lo que falta")
+    void unoFallaYElRestoSale() {
+        conLosTresRankingsSemanales();
+        doThrow(new IllegalStateException("S3 caído")).when(almacenamiento)
+                .subir(eq(SEMANA.rutaDeLaImagen(Formacion.ESCUELA, TipoDeRankingSemanal.COHERENCIA)), any(), anyString());
+
+        assertThatThrownBy(() -> servicio(true).publicarLaSemanaCerrada()).hasMessage("S3 caído");
+
+        ArgumentCaptor<EntregaDelPrograma> entregas = ArgumentCaptor.forClass(EntregaDelPrograma.class);
+        verify(delPrograma, org.mockito.Mockito.times(3)).enviarUnaVez(entregas.capture());
+        assertThat(entregas.getAllValues()).extracting(e -> e.piezas().get(1).id()).containsExactly(
+                SEMANA.idDelTexto(), SEMANA.idDelTexto(Formacion.ESCUELA, TipoDeRankingSemanal.KILOMETROS),
+                SEMANA.idDelTexto(Formacion.ESCUELA, TipoDeRankingSemanal.GIMNASIO));
+
+        // Reintento: ya están General, Kilómetros y Gimnasio; solo queda Coherencia.
+        org.mockito.Mockito.reset(delPrograma, almacenamiento);
+        when(almacenamiento.guardaObjetos()).thenReturn(true);
+        when(delPrograma.enviarUnaVez(any())).thenReturn(2);
+        for (TipoDeRankingSemanal tipo : List.of(TipoDeRankingSemanal.GENERAL, TipoDeRankingSemanal.KILOMETROS, TipoDeRankingSemanal.GIMNASIO)) {
+            when(mensajes.porId(SEMANA.idDelTexto(Formacion.ESCUELA, tipo))).thenReturn(Optional.of(mock(Mensaje.class)));
+        }
+
+        ResultadoDelPodio reintento = servicio(true).publicarLaSemanaCerrada();
+
+        assertThat(reintento.estado()).isEqualTo(Estado.PUBLICADO);
+        verify(delPrograma, org.mockito.Mockito.times(1)).enviarUnaVez(entregas.capture());
+        assertThat(entregas.getValue().piezas().get(1).id()).isEqualTo(SEMANA.idDelTexto(Formacion.ESCUELA, TipoDeRankingSemanal.COHERENCIA));
+    }
+
+    @Test
+    @DisplayName("D-367: el General ya publicado (el de antes de este cambio) no se repite y los otros tres sí salen")
+    void generalYaPublicado() {
+        conLosTresRankingsSemanales();
+        when(mensajes.porId(SEMANA.idDelTexto())).thenReturn(Optional.of(mock(Mensaje.class)));
+
+        servicio(true).publicarLaSemanaCerrada();
+
+        verify(delPrograma, org.mockito.Mockito.times(3)).enviarUnaVez(any());
+        verify(ranking, never()).alCorte(any(), any());
+    }
+
+    @Test
+    @DisplayName("D-367: la vista previa pedida por ranking y la de los cuatro, en orden, con su plantilla y su ranking")
+    void vistasPreviasDeLosCuatro() {
+        conLosTresRankingsSemanales();
+        UserId admin = cuenta(UserRole.ADMIN, UserStatus.ACTIVE);
+
+        List<VistaPreviaDelPodio> vistas = servicio(false).vistasPrevias(admin, Formacion.ESCUELA);
+
+        assertThat(vistas).extracting(VistaPreviaDelPodio::ranking).containsExactly(TipoDeRankingSemanal.values());
+        assertThat(vistas).allSatisfy(v -> assertThat(v.imagen()).isEqualTo(PNG));
+        assertThat(vistas.get(2).texto()).contains("Beto K.");
+        assertThat(vistas.get(2).plantilla()).isEqualTo(com.renaser.os.chat.domain.model.ranking.TextoDelPodio.plantillaDe(SEMANA, TipoDeRankingSemanal.KILOMETROS).name());
+        assertThat(servicio(false).vistaPrevia(admin, Formacion.ESCUELA, TipoDeRankingSemanal.GIMNASIO).texto()).contains("Carla G.");
+        assertThat(servicio(false).vistaPrevia(admin, Formacion.ESCUELA).ranking()).isEqualTo(TipoDeRankingSemanal.GENERAL);
+        verifyNoInteractions(delPrograma);
+    }
+
+    private void conLosTresRankingsSemanales() {
+        when(semanal.coherencia(DOMINGO, Formacion.ESCUELA)).thenReturn(List.of(valor("Ana Coherencia", "93.8")));
+        when(semanal.kilometros(DOMINGO, Formacion.ESCUELA)).thenReturn(List.of(valor("Beto Kilómetros", "42.5")));
+        when(semanal.gimnasio(DOMINGO, Formacion.ESCUELA)).thenReturn(List.of(valor("Carla Gimnasio", "5")));
+    }
+
+    private static PuestoDeLaSemana valor(String nombre, String valor) {
+        return new PuestoDeLaSemana(UserId.of(UUID.randomUUID()), nombre, new BigDecimal(valor));
     }
 
     @Test
@@ -219,7 +337,7 @@ class PodioDeLaSemanaServiceTest {
     }
 
     private PodioDeLaSemanaService servicio(boolean activo) {
-        return new PodioDeLaSemanaService(ranking, dibujo, almacenamiento, conversaciones, mensajes, delPrograma,
+        return new PodioDeLaSemanaService(ranking, semanal, dibujo, almacenamiento, conversaciones, mensajes, delPrograma,
                 usuarios, FixedClock.at(AHORA), activo);
     }
 

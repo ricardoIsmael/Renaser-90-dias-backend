@@ -26,16 +26,28 @@ public final class TextoDelPodio {
         if (podio.estaVacio()) {
             throw new IllegalArgumentException("Un podio vacío no se publica");
         }
-        List<String> lineas = switch (plantillaDe(semana)) {
-            case A -> plantillaA(podio.podio());
-            case B -> plantillaB(podio.podio());
-            case C -> plantillaC(podio.podio());
-        };
+        TipoDeRankingSemanal tipo = podio.tipo();
+        List<String> lineas = tipo != TipoDeRankingSemanal.GENERAL
+                ? TextosDeLosRankings.lineas(tipo, plantillaDe(semana, tipo), podio.podio())
+                : switch (plantillaDe(semana)) {
+                    case A -> plantillaA(podio.podio());
+                    case B -> plantillaB(podio.podio());
+                    case C -> plantillaC(podio.podio());
+                };
         return String.join("\n", lineas);
     }
 
+    /** La plantilla del General de esa semana (rota A, B, C). */
     public static Plantilla plantillaDe(SemanaDelRanking semana) {
-        return Plantilla.values()[(int) Math.floorMod(semana.numero(), Plantilla.values().length)];
+        return plantillaDe(semana, TipoDeRankingSemanal.GENERAL);
+    }
+
+    /**
+     * D-367: cada ranking rota SU plantilla, desfasada por su lugar en el orden de publicación, así los cuatro mensajes seguidos de un
+     * mismo lunes nunca usan la misma letra a la vez (y aunque la usaran, cada ranking tiene su propio texto).
+     */
+    public static Plantilla plantillaDe(SemanaDelRanking semana, TipoDeRankingSemanal tipo) {
+        return Plantilla.values()[(int) Math.floorMod(semana.numero() + tipo.ordinal(), Plantilla.values().length)];
     }
 
     private static List<String> plantillaA(List<Puesto> podio) {
@@ -81,19 +93,19 @@ public final class TextoDelPodio {
                 "💪 ¿Qué esperas para superar a tus compañeros? ¡Nos vemos en el podio! 🏆");
     }
 
-    private static List<Puesto> primeros(List<Puesto> podio) {
+    static List<Puesto> primeros(List<Puesto> podio) {
         return podio.stream().filter(p -> p.lugar() == 1).toList();
     }
 
-    private static List<Puesto> resto(List<Puesto> podio) {
+    static List<Puesto> resto(List<Puesto> podio) {
         return podio.stream().filter(p -> p.lugar() > 1).toList();
     }
 
-    private static List<String> nombres(List<Puesto> puestos, Function<Puesto, String> comoSeNombra) {
+    static List<String> nombres(List<Puesto> puestos, Function<Puesto, String> comoSeNombra) {
         return puestos.stream().map(comoSeNombra).toList();
     }
 
-    private static String medalla(Puesto puesto) {
+    static String medalla(Puesto puesto) {
         return switch (puesto.lugar()) {
             case 1 -> "🥇";
             case 2 -> "🥈";
@@ -102,7 +114,7 @@ public final class TextoDelPodio {
     }
 
     /** «Ana», «Ana y Luis», «Ana, Luis y Carla». */
-    private static String lista(List<String> nombres) {
+    static String lista(List<String> nombres) {
         if (nombres.size() == 1) {
             return nombres.get(0);
         }

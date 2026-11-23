@@ -1296,7 +1296,28 @@ una cuenta suspendida, 403.
 | `ConversacionServiceTest` (+3) | La lista del Admin suma los grupos en curso sin repetir y con 0 no leídos; la del mentor no; el Admin marca leído un grupo ajeno |
 | `AdminVeTodosLosGruposIT` (6) | Postgres + Tomcat + sesión real: lista con «Ricardo y sus aprendices» y sin el vencido; lee, escribe, marca leído y ve integrantes sin figurar ni quedar como participante; sin push para el Admin; mentor ajeno, aprendiz ajeno, alquimista y admin suspendido, 403; sesión viva que pasa a suspendida, 403 |
 
-## 20. El podio semanal del ranking general en el grupo general (2026-10-07, D-262)
+## 20. El podio semanal en el grupo general (2026-10-07, D-262; cuatro rankings desde 2026-11-23, D-367)
+
+> **Actualizado 2026-11-23 (D-367).** El podio ya no es solo el General: cada lunes salen **cuatro mensajes seguidos**
+> (General, Coherencia, Kilómetros y Gimnasio), cada uno con su imagen y su texto. La Liga no entra. Lo de abajo, escrito
+> para D-262, sigue valiendo para el General; lo que cambia está en este recuadro.
+>
+> - **Qué mide cada uno esa semana (lunes a domingo):** General = `RankingGeneralFinder` (como antes); Coherencia = % de
+>   acciones diarias cumplidas de los 7 días hasta el domingo (`PorcentajeRocasFinder`); **Kilómetros y Gimnasio = lo de la
+>   semana, no el acumulado del programa**: acumulado al domingo menos acumulado al domingo anterior. Los tres últimos
+>   salen de `points.api.RankingSemanalFinder` (`RankingSemanalAlCorteService`), con los mismos candidatos que el General.
+> - **Mismas reglas de `PodioDeLaSemana`** (top 5, solo valor > 0, empates comparten puesto) con el tipo
+>   `TipoDeRankingSemanal`, que también da el rótulo y el título de la imagen y la unidad (pts, %, km con 1 decimal, días).
+>   Un ranking sin nadie con valor no se publica y no frena a los otros.
+> - **Textos distintivos** (`TextosDeLosRankings`; el del General no cambió): cada ranking con su propio arranque,
+>   felicitación y cierre en sus plantillas A/B/C; la rotación va desfasada por ranking (`plantillaDe(semana, tipo)`).
+> - **Idempotencia por ranking:** ids y ruta por (semana, formación, ranking). El General conserva su id y su ruta
+>   (`ranking-semanal/<lunes>-v1.jpg`); los otros llevan el ranking (`ranking-semanal/<lunes>-kilometros-v1.jpg`). Uno que
+>   falla no frena a los otros y el reintento de la hora siguiente completa lo que falte.
+> - **Aviso:** solo el texto del General avisa a todos; los otros tres salen sin aviso (supuesto a confirmar con el dueño).
+> - **Administración:** `GET …/vista-previa` (General, igual que antes, con el campo `ranking`), `?ranking=` para elegir
+>   uno, `GET …/vista-previa/todos` para los cuatro; `POST …/publicar` publica los cuatro. Para revisar a ojo:
+>   `VistaPreviaDeLosCuatroPodiosManualTest` con `-Dpodio.vista=<carpeta>`.
 
 Los lunes a las 09:00 de Lima, en la conversación `GLOBAL` («Formación Renaser Global»), el programa publica el podio de
 la semana que cerró el domingo: **la imagen** (sin aviso) y, un milisegundo después, **el texto** (aviso a todos). La
