@@ -5,7 +5,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>4.1.2</version>
+		<version>4.2.0</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.renaser</groupId>
@@ -28,8 +28,8 @@
 	</scm>
 	<properties>
 		<java.version>25</java.version>
-		<spring-ai.version>2.0.2</spring-ai.version>
-		<spring-modulith.version>2.1.2</spring-modulith.version>
+		<spring-ai.version>2.1.0</spring-ai.version>
+		<spring-modulith.version>2.2.0</spring-modulith.version>
 		<!-- SDK de AWS v2 para el adaptador real de S3 (AlmacenamientoPort). El artefacto
 		     `s3` ya trae el S3Presigner: en la v2 no es un modulo aparte como en la v1.
 
@@ -42,7 +42,7 @@
 		     versiones menores mas viejo, y un `NoSuchMethodError` de ese tipo solo aparece en
 		     produccion, que es justo lo que no se puede probar desde aca. Con 2.54.3 el riesgo se
 		     traslada a nuestro adaptador de S3, que SI lo cubre la suite completa. -->
-		<aws-sdk.version>2.59.1</aws-sdk.version>
+		<aws-sdk.version>2.59.5</aws-sdk.version>
 		<!-- Spring Cloud AWS 4.1.1 (GA, 2026-08-28) es la linea que corresponde a Spring Boot 4.1:
 		     su POM hereda de `spring-cloud-dependencies-parent:5.0.3` (tren 2025.1.x) y alinea
 		     Spring Modulith 2.1.1, la misma linea que usa este repo. Verificado contra
@@ -54,7 +54,7 @@
 		     como experimental); 0.8.15 es la ultima y lo mantiene. Con una version anterior el
 		     agente no entiende los class files de version 69 y rompe la instrumentacion. -->
 		<jacoco.version>0.8.16</jacoco.version>
-		<sonar-maven-plugin.version>5.8.0.7211</sonar-maven-plugin.version>
+		<sonar-maven-plugin.version>5.9.0.7382</sonar-maven-plugin.version>
 		<!-- Obligatorio desde Lombok 1.18.16: hace que MapStruct espere a que Lombok
 		     genere getters/setters. Sin esto los mappers se generan vacios SIN fallar el build. -->
 		<lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
