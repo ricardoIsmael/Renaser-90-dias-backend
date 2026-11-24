@@ -89,6 +89,8 @@ public class EspirituService implements ConsultarEstadoEspirituUseCase, Entregar
     private final AlmacenamientoPort almacenamientoPort;
     /** Espejo hacia el habito de catalogo, best-effort: ver {@link #reflejarEnPastillaRenacer}. */
     private final CompletarPastillaRenacerUseCase completarPastillaRenacer;
+    /** Las cuentas de revisión de las tiendas, que siempre tienen un audio listo (D-368). */
+    private final CuentasDeRevisionDeTiendas cuentasDeRevision;
     private final Clock clock;
     private final IdGenerator idGenerator;
     /**
@@ -105,6 +107,7 @@ public class EspirituService implements ConsultarEstadoEspirituUseCase, Entregar
                             AudioCatalogPort audioCatalogPort, ConsultarProgresoParticipanteHabitsPort progresoPort,
                             AlmacenamientoPort almacenamientoPort,
                             CompletarPastillaRenacerUseCase completarPastillaRenacer,
+                            CuentasDeRevisionDeTiendas cuentasDeRevision,
                             Clock clock, IdGenerator idGenerator, PlatformTransactionManager transactionManager) {
         this.loadPort = loadPort;
         this.savePort = savePort;
@@ -112,6 +115,7 @@ public class EspirituService implements ConsultarEstadoEspirituUseCase, Entregar
         this.progresoPort = progresoPort;
         this.almacenamientoPort = almacenamientoPort;
         this.completarPastillaRenacer = completarPastillaRenacer;
+        this.cuentasDeRevision = cuentasDeRevision;
         this.clock = clock;
         this.idGenerator = idGenerator;
         this.transaccionPropia = new TransactionTemplate(transactionManager);
@@ -125,7 +129,7 @@ public class EspirituService implements ConsultarEstadoEspirituUseCase, Entregar
         ZoneId zona = ZoneId.of(progreso.timezone());
         Instant ahora = clock.now();
         asegurarAvance(actorId, progreso.diaEnEscalaBase(), zona, ahora);
-        return construirVista(actorId);
+        return construirVista(actorId, cuentasDeRevision.esDeRevision(actorId));
     }
 
     @Override
@@ -188,15 +192,21 @@ public class EspirituService implements ConsultarEstadoEspirituUseCase, Entregar
     // ─── State machine lazy (ensureAdvanced, spirit-audio/service.ts:127-173) ──────────────
 
     private void asegurarAvance(UserId participanteId, int diaPrograma, ZoneId zona, Instant ahora) {
-        if (ahora.atZone(zona).toLocalTime().isBefore(HORA_DESBLOQUEO)) {
+        /* D-368: la cuenta de revisión de las tiendas siempre tiene un audio listo; el resto, la regla de siempre. */
+        boolean deRevision = cuentasDeRevision.esDeRevision(participanteId);
+        if (!deRevision && ahora.atZone(zona).toLocalTime().isBefore(HORA_DESBLOQUEO)) {
             return;
         }
         Optional<RegistroEspiritu> ultimo = loadPort.ultimoDe(participanteId);
         if (ultimo.isEmpty()) {
+            if (deRevision) {
+                crearSiHayAudio(participanteId, 1, zona, ahora); // sin esperar al dia 8 del programa
+                return;
+            }
             desbloquearPrimerAudio(participanteId, diaPrograma, zona, ahora);
             return;
         }
-        avanzarDesde(participanteId, ultimo.get(), zona, ahora);
+        avanzarDesde(participanteId, ultimo.get(), zona, ahora, deRevision);
     }
 
     private void desbloquearPrimerAudio(UserId participanteId, int diaPrograma, ZoneId zona, Instant ahora) {
@@ -207,11 +217,13 @@ public class EspirituService implements ConsultarEstadoEspirituUseCase, Entregar
         crearSiHayAudio(participanteId, diaAudio, zona, ahora);
     }
 
-    private void avanzarDesde(UserId participanteId, RegistroEspiritu ultimo, ZoneId zona, Instant ahora) {
+    private void avanzarDesde(UserId participanteId, RegistroEspiritu ultimo, ZoneId zona, Instant ahora,
+                              boolean deRevision) {
         LocalDate hoy = ahora.atZone(zona).toLocalDate();
         LocalDate diaDelUltimo = diaCalendarioDe(ultimo, zona);
         long diasDesde = ChronoUnit.DAYS.between(diaDelUltimo, hoy);
-        if (diasDesde <= 0) {
+        // Un track pendiente de hoy sigue siendo el audio listo; el de revision, ya entregado o perdido, abre el siguiente de inmediato.
+        if (diasDesde <= 0 && (!deRevision || ultimo.estado() == EstadoRegistroEspiritu.PENDIENTE)) {
             return; // el ultimo track ya es de hoy: nada que avanzar
         }
 
@@ -221,8 +233,8 @@ public class EspirituService implements ConsultarEstadoEspirituUseCase, Entregar
             savePort.save(ultimo);
             estado = EstadoRegistroEspiritu.PERDIDO;
         }
-        // Exactamente un ciclo de bloqueo: el dia siguiente a un PERDIDO queda bloqueado.
-        if (estado == EstadoRegistroEspiritu.PERDIDO && diasDesde == 1) {
+        // Exactamente un ciclo de bloqueo: el dia siguiente a un PERDIDO queda bloqueado (la cuenta de revision no lo cumple).
+        if (!deRevision && estado == EstadoRegistroEspiritu.PERDIDO && diasDesde == 1) {
             return;
         }
         crearSiHayAudio(participanteId, ultimo.dia() + 1, zona, ahora);
@@ -275,7 +287,7 @@ public class EspirituService implements ConsultarEstadoEspirituUseCase, Entregar
 
     // ─── Vista de lectura ───────────────────────────────────────────────────────────────────
 
-    private EstadoEspiritu construirVista(UserId participanteId) {
+    private EstadoEspiritu construirVista(UserId participanteId, boolean deRevision) {
         List<RegistroEspiritu> tracks = loadPort.todosDe(participanteId);
         Map<Integer, RegistroEspiritu> tracksPorDia = new LinkedHashMap<>();
         for (RegistroEspiritu track : tracks) {
@@ -290,16 +302,18 @@ public class EspirituService implements ConsultarEstadoEspirituUseCase, Entregar
         dias.addAll(catalogoPorDia.keySet());
         dias.addAll(tracksPorDia.keySet());
 
+        Integer diaActual = tracksPorDia.keySet().stream().max(Integer::compareTo).orElse(null);
         List<DiaEspiritu> vista = new ArrayList<>();
         for (int dia : dias) {
-            vista.add(vistaDeUnDia(dia, catalogoPorDia.get(dia), tracksPorDia.get(dia)));
+            // La cuenta de revision, si llego al ultimo audio (el 45) y ya lo entrego, igual puede escucharlo.
+            boolean firmarAunqueNoEsteVigente = deRevision && diaActual != null && dia == diaActual;
+            vista.add(vistaDeUnDia(dia, catalogoPorDia.get(dia), tracksPorDia.get(dia), firmarAunqueNoEsteVigente));
         }
-        // nada mas: la URL del dia CURRENT ya se firmo dentro de vistaDeUnDia.
-        Integer diaActual = tracksPorDia.keySet().stream().max(Integer::compareTo).orElse(null);
         return new EstadoEspiritu(vista, diaActual);
     }
 
-    private DiaEspiritu vistaDeUnDia(int dia, AudioEspiritu audio, RegistroEspiritu track) {
+    private DiaEspiritu vistaDeUnDia(int dia, AudioEspiritu audio, RegistroEspiritu track,
+                                     boolean firmarAunqueNoEsteVigente) {
         String titulo = audio != null ? audio.titulo() : null;
         String mime = audio != null ? audio.mime() : null;
         Integer tamano = audio != null ? audio.tamanoBytes() : null;
@@ -313,7 +327,7 @@ public class EspirituService implements ConsultarEstadoEspirituUseCase, Entregar
         };
         // Solo el dia en curso se puede escuchar y entregar: firmar los otros 42 seria trabajo
         // tirado en un endpoint que la app consulta cada vez que abre Training.
-        String audioUrl = "CURRENT".equals(estado) ? firmarAudio(audio) : null;
+        String audioUrl = "CURRENT".equals(estado) || firmarAunqueNoEsteVigente ? firmarAudio(audio) : null;
         return new DiaEspiritu(dia, titulo, estado, track.desbloqueadoEn(), track.fechaLimite(), track.entregadoEn(),
                 track.resumenTexto(), audioUrl, mime, tamano);
     }

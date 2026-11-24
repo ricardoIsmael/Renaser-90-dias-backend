@@ -18,10 +18,13 @@ import com.renaser.os.shared.domain.FixedClock;
 import com.renaser.os.shared.domain.IdGenerator;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.UserSummary;
+import com.renaser.os.users.api.UserSummaryFinder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -39,6 +42,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -71,13 +75,16 @@ class EspirituServiceTest {
      * corre el callback directo, mismo criterio que PromocionCambioHorarioServiceTest. */
     @Mock
     private PlatformTransactionManager transactionManager;
+    @Mock
+    private UserSummaryFinder usuarios;
 
     private EspirituService service;
 
     @BeforeEach
     void setUp() {
         service = new EspirituService(loadPort, savePort, audioCatalogPort, progresoPort, almacenamientoPort,
-                completarPastillaRenacer, CLOCK, idGenerator, transactionManager);
+                completarPastillaRenacer, new CuentasDeRevisionDeTiendas("", usuarios, CLOCK), CLOCK, idGenerator,
+                transactionManager);
         lenient().when(idGenerator.newId()).thenReturn(ID_GENERADO);
         lenient().when(savePort.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
@@ -316,5 +323,210 @@ class EspirituServiceTest {
                 Optional.of(new ProgresoParticipanteHabits(10, "UTC", RolParticipante.MENTOR, false, true)));
 
         GuardDeRol.noRechaza(() -> service.consultar(actor), "Espiritu es exclusivo de aprendices");
+    }
+
+    // ─── Cuenta de revision de las tiendas (D-368, issue #184) ─────────────────────────────
+
+    private static final String CORREO_DE_REVISION = "revision@ejemplo.test";
+    /** 05:00 UTC: antes de las 07:00 de desbloqueo, para probar que la cuenta de revision no espera a la hora. */
+    private static final FixedClock MADRUGADA = FixedClock.at(Instant.parse("2026-08-24T05:00:00Z"));
+
+    private EspirituService servicioConRevision(UserId cuenta, String correos, FixedClock reloj) {
+        UserSummary resumen = org.mockito.Mockito.mock(UserSummary.class);
+        lenient().when(resumen.id()).thenReturn(cuenta);
+        lenient().when(usuarios.findByEmail(CORREO_DE_REVISION)).thenReturn(Optional.of(resumen));
+        return new EspirituService(loadPort, savePort, audioCatalogPort, progresoPort, almacenamientoPort,
+                completarPastillaRenacer, new CuentasDeRevisionDeTiendas(correos, usuarios, reloj), reloj,
+                idGenerator, transactionManager);
+    }
+
+    private void programaEnElDia(UserId actor, int diaPrograma) {
+        when(progresoPort.deParticipante(actor)).thenReturn(
+                Optional.of(new ProgresoParticipanteHabits(diaPrograma, "UTC", RolParticipante.TRAINEE, false, true)));
+        lenient().when(loadPort.todosDe(actor)).thenReturn(List.of());
+        lenient().when(audioCatalogPort.todos()).thenReturn(List.of());
+    }
+
+    private void catalogoConDias(int... dias) {
+        for (int dia : dias) {
+            lenient().when(audioCatalogPort.porDia(dia)).thenReturn(
+                    Optional.of(new AudioEspiritu(dia, "Dia " + dia, "drive-" + dia, "audio/mpeg", 1000, RUTA_AUDIO)));
+        }
+    }
+
+    private int diaGuardado() {
+        ArgumentCaptor<RegistroEspiritu> guardado = ArgumentCaptor.forClass(RegistroEspiritu.class);
+        verify(savePort).save(guardado.capture());
+        return guardado.getValue().dia();
+    }
+
+    @Test
+    @DisplayName("Revision: del dia 1 al 7 del programa y antes de las 7:00, la cuenta recibe el audio 1")
+    void laCuentaDeRevisionRecibeElAudio1DesdeElDia1DelPrograma() {
+        catalogoConDias(1);
+        for (int diaPrograma = 1; diaPrograma <= 7; diaPrograma++) {
+            org.mockito.Mockito.clearInvocations(savePort);
+            UserId actor = trainee();
+            EspirituService conRevision = servicioConRevision(actor, CORREO_DE_REVISION, MADRUGADA);
+            programaEnElDia(actor, diaPrograma);
+            when(loadPort.ultimoDe(actor)).thenReturn(Optional.empty());
+
+            conRevision.consultar(actor);
+
+            assertThat(diaGuardado()).as("dia de programa %d", diaPrograma).isEqualTo(1);
+        }
+    }
+
+    @Test
+    @DisplayName("Una cuenta normal, del dia 1 al 7 del programa, NO recibe ningun audio (la regla de siempre)")
+    void unaCuentaNormalNoRecibeAudioAntesDelDia8() {
+        catalogoConDias(1);
+        EspirituService conLaListaDeRevision = null;
+        for (int diaPrograma = 1; diaPrograma <= 7; diaPrograma++) {
+            UserId actor = trainee();
+            // la lista tiene OTRA cuenta: esta persona no esta en ella
+            conLaListaDeRevision = servicioConRevision(trainee(), CORREO_DE_REVISION, CLOCK);
+            programaEnElDia(actor, diaPrograma);
+            when(loadPort.ultimoDe(actor)).thenReturn(Optional.empty());
+
+            conLaListaDeRevision.consultar(actor);
+        }
+        verify(savePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Revision: si el audio quedo PERDIDO, el siguiente no queda bloqueado un dia")
+    void laCuentaDeRevisionNoQuedaBloqueadaTrasUnPerdido() {
+        catalogoConDias(1, 2, 3, 4);
+        UserId actor = trainee();
+        EspirituService conRevision = servicioConRevision(actor, CORREO_DE_REVISION, CLOCK);
+        programaEnElDia(actor, 12);
+        Instant ayerAlMediodia = Instant.parse("2026-08-23T12:00:00Z");
+        RegistroEspiritu perdido = RegistroEspiritu.rehydrate(RegistroEspirituId.of(UUID.randomUUID()), actor, 3,
+                ayerAlMediodia.minusSeconds(18000), ayerAlMediodia, null, null,
+                com.renaser.os.habits.domain.model.espiritu.EstadoRegistroEspiritu.PERDIDO, ayerAlMediodia,
+                ayerAlMediodia);
+        when(loadPort.ultimoDe(actor)).thenReturn(Optional.of(perdido));
+
+        conRevision.consultar(actor);
+
+        assertThat(diaGuardado()).isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("Una cuenta normal con un audio PERDIDO ayer sigue bloqueada ese dia (comportamiento de siempre)")
+    void unaCuentaNormalSigueBloqueadaTrasUnPerdido() {
+        catalogoConDias(4);
+        UserId actor = trainee();
+        programaEnElDia(actor, 12);
+        Instant ayerAlMediodia = Instant.parse("2026-08-23T12:00:00Z");
+        RegistroEspiritu perdido = RegistroEspiritu.rehydrate(RegistroEspirituId.of(UUID.randomUUID()), actor, 3,
+                ayerAlMediodia.minusSeconds(18000), ayerAlMediodia, null, null,
+                com.renaser.os.habits.domain.model.espiritu.EstadoRegistroEspiritu.PERDIDO, ayerAlMediodia,
+                ayerAlMediodia);
+        when(loadPort.ultimoDe(actor)).thenReturn(Optional.of(perdido));
+
+        service.consultar(actor);
+
+        verify(savePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Revision: al entregar el audio de hoy, el siguiente se abre de inmediato (sin esperar a manana)")
+    void laCuentaDeRevisionRecibeElSiguienteAlEntregar() {
+        catalogoConDias(1, 2);
+        UserId actor = trainee();
+        EspirituService conRevision = servicioConRevision(actor, CORREO_DE_REVISION, CLOCK);
+        programaEnElDia(actor, 3);
+        RegistroEspiritu entregado = RegistroEspiritu.rehydrate(RegistroEspirituId.of(UUID.randomUUID()), actor, 1,
+                CLOCK.now().minusSeconds(3600), CLOCK.now().plusSeconds(3600), CLOCK.now(), "resumen",
+                com.renaser.os.habits.domain.model.espiritu.EstadoRegistroEspiritu.ENTREGADO, CLOCK.now(), CLOCK.now());
+        when(loadPort.ultimoDe(actor)).thenReturn(Optional.of(entregado));
+
+        conRevision.consultar(actor);
+
+        assertThat(diaGuardado()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("Revision: con el audio de hoy todavia pendiente no se crea otro")
+    void laCuentaDeRevisionConservaElAudioPendienteDeHoy() {
+        catalogoConDias(1, 2);
+        UserId actor = trainee();
+        EspirituService conRevision = servicioConRevision(actor, CORREO_DE_REVISION, CLOCK);
+        programaEnElDia(actor, 3);
+        RegistroEspiritu pendiente = RegistroEspiritu.desbloquear(RegistroEspirituId.of(UUID.randomUUID()), actor, 1,
+                CLOCK.now(), CLOCK.now().plusSeconds(3600), CLOCK.now());
+        when(loadPort.ultimoDe(actor)).thenReturn(Optional.of(pendiente));
+
+        conRevision.consultar(actor);
+
+        verify(savePort, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Revision: al llegar al ultimo audio del catalogo y entregarlo, ese audio sigue con su URL para escucharlo")
+    void laCuentaDeRevisionSigueConAudioEnElUltimoDelCatalogo() {
+        catalogoConDias(45);
+        UserId actor = trainee();
+        EspirituService conRevision = servicioConRevision(actor, CORREO_DE_REVISION, CLOCK);
+        programaEnElDia(actor, 60);
+        RegistroEspiritu ultimoEntregado = RegistroEspiritu.rehydrate(RegistroEspirituId.of(UUID.randomUUID()), actor,
+                45, CLOCK.now().minusSeconds(3600), CLOCK.now().plusSeconds(3600), CLOCK.now(), "resumen",
+                com.renaser.os.habits.domain.model.espiritu.EstadoRegistroEspiritu.ENTREGADO, CLOCK.now(), CLOCK.now());
+        when(loadPort.ultimoDe(actor)).thenReturn(Optional.of(ultimoEntregado));
+        when(loadPort.todosDe(actor)).thenReturn(List.of(ultimoEntregado));
+        when(audioCatalogPort.todos()).thenReturn(
+                List.of(new AudioEspiritu(45, "Dia 45", "drive-45", "audio/mpeg", 1000, RUTA_AUDIO)));
+        when(audioCatalogPort.porDia(46)).thenReturn(Optional.empty());
+        when(almacenamientoPort.firmarLectura(RUTA_AUDIO, EspirituService.TTL_AUDIO)).thenReturn(URL_FIRMADA);
+
+        EstadoEspiritu estado = conRevision.consultar(actor);
+
+        assertThat(estado.dias().getFirst().estado()).isEqualTo("SUBMITTED");
+        assertThat(estado.dias().getFirst().audioUrl()).isEqualTo(URL_FIRMADA.toString());
+    }
+
+    @Test
+    @DisplayName("Una cuenta normal con su ultimo audio entregado NO recibe URL de ese audio (solo el vigente la trae)")
+    void unaCuentaNormalNoRecibeUrlDeUnAudioEntregado() {
+        UserId actor = trainee();
+        programaEnElDia(actor, 60);
+        RegistroEspiritu entregado = RegistroEspiritu.rehydrate(RegistroEspirituId.of(UUID.randomUUID()), actor, 45,
+                CLOCK.now().minusSeconds(3600), CLOCK.now().plusSeconds(3600), CLOCK.now(), "resumen",
+                com.renaser.os.habits.domain.model.espiritu.EstadoRegistroEspiritu.ENTREGADO, CLOCK.now(), CLOCK.now());
+        when(loadPort.ultimoDe(actor)).thenReturn(Optional.of(entregado));
+        when(loadPort.todosDe(actor)).thenReturn(List.of(entregado));
+        when(audioCatalogPort.todos()).thenReturn(
+                List.of(new AudioEspiritu(45, "Dia 45", "drive-45", "audio/mpeg", 1000, RUTA_AUDIO)));
+
+        EstadoEspiritu estado = service.consultar(actor);
+
+        assertThat(estado.dias().getFirst().audioUrl()).isNull();
+    }
+
+    @Test
+    @DisplayName("La lista de correos vacia (o solo comas y espacios) no marca a nadie y ni siquiera consulta a usuarios")
+    void conLaListaVaciaNadieEsDeRevision() {
+        UserId cualquiera = trainee();
+
+        assertThat(new CuentasDeRevisionDeTiendas("", usuarios, CLOCK).esDeRevision(cualquiera)).isFalse();
+        assertThat(new CuentasDeRevisionDeTiendas(" , ,", usuarios, CLOCK).esDeRevision(cualquiera)).isFalse();
+        verifyNoInteractions(usuarios);
+    }
+
+    @Test
+    @DisplayName("El correo se compara sin importar mayusculas ni espacios, y se resuelve una vez por vigencia")
+    void laCuentaDeRevisionSeResuelveUnaVezPorVigencia() {
+        UserId cuenta = trainee();
+        UserSummary resumen = org.mockito.Mockito.mock(UserSummary.class);
+        when(resumen.id()).thenReturn(cuenta);
+        when(usuarios.findByEmail(CORREO_DE_REVISION)).thenReturn(Optional.of(resumen));
+        var cuentas = new CuentasDeRevisionDeTiendas("  REVISION@Ejemplo.test ", usuarios, CLOCK);
+
+        assertThat(cuentas.esDeRevision(cuenta)).isTrue();
+        assertThat(cuentas.esDeRevision(cuenta)).isTrue();
+        assertThat(cuentas.esDeRevision(trainee())).isFalse();
+        verify(usuarios, org.mockito.Mockito.times(1)).findByEmail(CORREO_DE_REVISION);
     }
 }
