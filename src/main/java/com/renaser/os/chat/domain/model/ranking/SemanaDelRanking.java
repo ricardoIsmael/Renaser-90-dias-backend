@@ -83,6 +83,27 @@ public record SemanaDelRanking(LocalDate lunes) {
         return idDe("texto", formacion);
     }
 
+    /**
+     * D-367: cada ranking tiene SU imagen y SU texto. El del General conserva el id de siempre (la semana que ya salió no se repite al
+     * desplegar); los otros llevan el ranking, así que ninguno choca con otro ni con el General.
+     */
+    public MensajeId idDeLaImagen(Formacion formacion, TipoDeRankingSemanal tipo) {
+        return tipo == TipoDeRankingSemanal.GENERAL ? idDeLaImagen(formacion) : idDe("imagen|" + tipo.codigo(), formacion);
+    }
+
+    public MensajeId idDelTexto(Formacion formacion, TipoDeRankingSemanal tipo) {
+        return tipo == TipoDeRankingSemanal.GENERAL ? idDelTexto(formacion) : idDe("texto|" + tipo.codigo(), formacion);
+    }
+
+    /** La ruta del General no cambia; la de los otros lleva el ranking: {@code ranking-semanal/2026-09-28-kilometros-v1.jpg}. */
+    public String rutaDeLaImagen(Formacion formacion, TipoDeRankingSemanal tipo) {
+        if (tipo == TipoDeRankingSemanal.GENERAL) {
+            return rutaDeLaImagen(formacion);
+        }
+        String carpeta = formacion == Formacion.POR_DEFECTO ? "" : formacion.codigo().toLowerCase(Locale.ROOT) + "/";
+        return "ranking-semanal/" + carpeta + lunes + "-" + tipo.codigo() + "-" + VERSION_DE_LA_IMAGEN + ".jpg";
+    }
+
     /** Fuera de {@code chat/<conversación>/}, como las tarjetas del semáforo: la imagen no es de ningún chat. */
     public String rutaDeLaImagen() {
         return rutaDeLaImagen(Formacion.POR_DEFECTO);

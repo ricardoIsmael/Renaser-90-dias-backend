@@ -12,7 +12,8 @@ import java.util.List;
  * navegador; {@code null} con el texto si nadie tiene puntaje (no se publicaría).
  */
 public record VistaPreviaDelPodioResponse(LocalDate weekStart, LocalDate weekEnd, String template,
-                                          boolean alreadyPublished, List<Entry> entries, String text, String image) {
+                                          boolean alreadyPublished, List<Entry> entries, String text, String image,
+                                          String ranking) {
 
     public record Entry(int place, String name, BigDecimal score) {
     }
@@ -20,7 +21,7 @@ public record VistaPreviaDelPodioResponse(LocalDate weekStart, LocalDate weekEnd
     static VistaPreviaDelPodioResponse from(VistaPreviaDelPodio vista) {
         return new VistaPreviaDelPodioResponse(vista.lunes(), vista.domingo(), vista.plantilla(), vista.yaPublicado(),
                 vista.puestos().stream().map(p -> new Entry(p.lugar(), p.nombre(), p.puntaje())).toList(),
-                vista.texto(), comoDataUrl(vista.imagen(), vista.tipoDeImagen()));
+                vista.texto(), comoDataUrl(vista.imagen(), vista.tipoDeImagen()), vista.ranking().codigo());
     }
 
     private static String comoDataUrl(byte[] imagen, String tipo) {

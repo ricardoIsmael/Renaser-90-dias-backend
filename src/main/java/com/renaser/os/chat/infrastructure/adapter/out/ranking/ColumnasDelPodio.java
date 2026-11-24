@@ -1,6 +1,7 @@
 package com.renaser.os.chat.infrastructure.adapter.out.ranking;
 
 import com.renaser.os.chat.domain.model.ranking.PodioDeLaSemana.Puesto;
+import com.renaser.os.chat.domain.model.ranking.TipoDeRankingSemanal;
 
 import java.awt.Color;
 import java.awt.Font;
@@ -11,7 +12,6 @@ import java.awt.font.GlyphVector;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Rectangle2D;
 import java.awt.geom.RoundRectangle2D;
-import java.math.RoundingMode;
 import java.util.List;
 
 /**
@@ -45,23 +45,18 @@ final class ColumnasDelPodio {
         this.tipos = tipos;
     }
 
-    void dibujar(Graphics2D g, List<Puesto> podio) {
+    void dibujar(Graphics2D g, TipoDeRankingSemanal tipo, List<Puesto> podio) {
         for (int i = 0; i < podio.size(); i++) {
-            columna(g, podio.get(i), IZQUIERDA + COLUMNA_DE[i] * (ANCHO_COLUMNA + SEPARACION));
+            columna(g, tipo, podio.get(i), IZQUIERDA + COLUMNA_DE[i] * (ANCHO_COLUMNA + SEPARACION));
         }
     }
 
-    /** «96,4»: siempre un decimal, con coma. */
-    static String puntaje(Puesto puesto) {
-        return puesto.puntaje().setScale(1, RoundingMode.HALF_UP).toPlainString().replace('.', ',');
-    }
-
-    private void columna(Graphics2D g, Puesto puesto, float x) {
+    private void columna(Graphics2D g, TipoDeRankingSemanal tipo, Puesto puesto, float x) {
         Estilo estilo = estiloDe(puesto.lugar());
         float techo = PISO - estilo.alturaBloque();
         float centro = x + ANCHO_COLUMNA / 2f;
         bloque(g, estilo, x, techo);
-        puntos(g, puesto, centro, techo - 33f);
+        puntos(g, tipo, puesto, centro, techo - 33f);
         nombre(g, puesto.nombre(), centro, techo - 76f);
         medalla(g, estilo, puesto.lugar(), centro, techo - 76f - 58f - estilo.medalla() / 2f);
     }
@@ -83,15 +78,16 @@ final class ColumnasDelPodio {
         g.setClip(recorteAnterior);
     }
 
-    private void puntos(Graphics2D g, Puesto puesto, float centro, float lineaBase) {
+    private void puntos(Graphics2D g, TipoDeRankingSemanal tipo, Puesto puesto, float centro, float lineaBase) {
         Font negrita = tipos.jostSemibold.deriveFont(28f);
         Font regular = tipos.jostRegular.deriveFont(28f);
-        String numero = puntaje(puesto);
-        float x = centro - (TiposDelPodio.ancho(g, numero, negrita, 0f) + TiposDelPodio.ancho(g, " pts", regular, 0f)) / 2f;
+        String numero = tipo.numero(puesto.puntaje());
+        String unidad = " " + tipo.unidad(puesto.puntaje());
+        float x = centro - (TiposDelPodio.ancho(g, numero, negrita, 0f) + TiposDelPodio.ancho(g, unidad, regular, 0f)) / 2f;
         g.setColor(PodioJava2dAdapter.TINTA);
         x = TiposDelPodio.escribir(g, numero, negrita, x, lineaBase, 0f);
         g.setColor(PodioJava2dAdapter.SUAVE);
-        TiposDelPodio.escribir(g, " pts", regular, x, lineaBase, 0f);
+        TiposDelPodio.escribir(g, unidad, regular, x, lineaBase, 0f);
     }
 
     /** Un nombre que no entra en la columna achica la letra, manteniendo la línea base. */

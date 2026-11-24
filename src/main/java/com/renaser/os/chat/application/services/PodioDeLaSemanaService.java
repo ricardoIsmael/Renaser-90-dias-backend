@@ -14,12 +14,15 @@ import com.renaser.os.chat.domain.model.mensaje.ContenidoDelPrograma;
 import com.renaser.os.chat.domain.model.ranking.PodioDeLaSemana;
 import com.renaser.os.chat.domain.model.ranking.SemanaDelRanking;
 import com.renaser.os.chat.domain.model.ranking.TextoDelPodio;
+import com.renaser.os.chat.domain.model.ranking.TipoDeRankingSemanal;
 import com.renaser.os.points.api.RankingGeneralFinder;
+import com.renaser.os.points.api.RankingSemanalFinder;
 import com.renaser.os.shared.application.ports.out.AlmacenamientoPort;
 import com.renaser.os.shared.domain.Clock;
 import com.renaser.os.shared.domain.Formacion;
 import com.renaser.os.shared.domain.NotAuthorizedException;
 import com.renaser.os.shared.domain.UserId;
+import com.renaser.os.users.api.FormacionesFinder;
 import com.renaser.os.users.api.UserStatus;
 import com.renaser.os.users.api.UserSummary;
 import com.renaser.os.users.api.UserSummaryFinder;
@@ -28,7 +31,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
@@ -57,6 +60,8 @@ public class PodioDeLaSemanaService implements PublicarPodioDeLaSemanaUseCase, V
     private static final Logger log = LoggerFactory.getLogger(PodioDeLaSemanaService.class);
 
     private final RankingGeneralFinder ranking;
+    private final RankingSemanalFinder semanal;
+    private final FormacionesFinder catalogo;
     private final DibujarPodioPort dibujo;
     private final AlmacenamientoPort almacenamiento;
     private final LoadConversacionPort conversaciones;
@@ -66,11 +71,13 @@ public class PodioDeLaSemanaService implements PublicarPodioDeLaSemanaUseCase, V
     private final Clock clock;
     private final boolean activo;
 
-    PodioDeLaSemanaService(RankingGeneralFinder ranking, DibujarPodioPort dibujo, AlmacenamientoPort almacenamiento,
+    PodioDeLaSemanaService(RankingGeneralFinder ranking, RankingSemanalFinder semanal, FormacionesFinder catalogo, DibujarPodioPort dibujo, AlmacenamientoPort almacenamiento,
                            LoadConversacionPort conversaciones, LoadMensajePort mensajes,
                            EnviarMensajeDelProgramaUseCase delPrograma, UserSummaryFinder usuarios, Clock clock,
                            @Value("${renaser.chat.ranking-semanal.activo:false}") boolean activo) {
         this.ranking = ranking;
+        this.semanal = semanal;
+        this.catalogo = catalogo;
         this.dibujo = dibujo;
         this.almacenamiento = almacenamiento;
         this.conversaciones = conversaciones;
@@ -121,60 +128,121 @@ public class PodioDeLaSemanaService implements PublicarPodioDeLaSemanaUseCase, V
     }
 
     @Override
-    public VistaPreviaDelPodio vistaPrevia(UserId actorId, Formacion formacion) {
+    public VistaPreviaDelPodio vistaPrevia(UserId actorId, Formacion formacion, TipoDeRankingSemanal tipo) {
         exigirAdministracion(actorId);
-        SemanaDelRanking semana = SemanaDelRanking.ultimaCerradaAl(clock.now());
-        PodioDeLaSemana podio = podioDe(semana, formacion);
-        boolean vacio = podio.estaVacio();
-        return new VistaPreviaDelPodio(semana.lunes(), semana.domingo(), podio.todos(),
-                vacio ? null : TextoDelPodio.para(podio, semana), vacio ? null : dibujo.dibujar(podio, semana),
-                DibujarPodioPort.TIPO_CONTENIDO, TextoDelPodio.plantillaDe(semana).name(),
-                mensajes.porId(semana.idDelTexto(formacion)).isPresent());
+        return vistaDe(SemanaDelRanking.ultimaCerradaAl(clock.now()), formacion, tipo);
     }
 
+    @Override
+    public List<VistaPreviaDelPodio> vistasPrevias(UserId actorId, Formacion formacion) {
+        exigirAdministracion(actorId);
+        SemanaDelRanking semana = SemanaDelRanking.ultimaCerradaAl(clock.now());
+        return Arrays.stream(TipoDeRankingSemanal.values()).map(tipo -> vistaDe(semana, formacion, tipo)).toList();
+    }
+
+    private VistaPreviaDelPodio vistaDe(SemanaDelRanking semana, Formacion formacion, TipoDeRankingSemanal tipo) {
+        PodioDeLaSemana podio = podioDe(semana, formacion, tipo);
+        boolean vacio = podio.estaVacio();
+        return new VistaPreviaDelPodio(semana.lunes(), semana.domingo(), podio.todos(),
+                vacio ? null : TextoDelPodio.para(podio, semana), vacio ? null : dibujo.dibujar(podio, semana, nombreDe(formacion)),
+                DibujarPodioPort.TIPO_CONTENIDO, TextoDelPodio.plantillaDe(semana, tipo).name(),
+                mensajes.porId(semana.idDelTexto(formacion, tipo)).isPresent(), tipo);
+    }
+
+    /**
+     * D-367: los cuatro rankings, seguidos y en orden (General, Coherencia, Kilómetros y Gimnasio), cada uno con su imagen y su texto.
+     * Cada uno es idempotente por sí solo y uno que falla no frena a los otros: se anota el primer fallo, se sigue con el siguiente y se
+     * vuelve a lanzar al final; el reintento de la hora siguiente completa solo lo que falte.
+     */
     private ResultadoDelPodio publicar(SemanaDelRanking semana, Formacion formacion) {
         Optional<Conversacion> grupoGeneral = conversaciones.global(formacion);
         if (grupoGeneral.isEmpty()) {
             log.warn("[chat.podio] no existe la comunidad general de {}: su podio del {} no se publica", formacion, semana.lunes());
             return resultado(semana, Estado.SIN_GRUPO_GENERAL, 0);
         }
-        if (mensajes.porId(semana.idDelTexto(formacion)).isPresent()) {
+        Estado mejor = Estado.APAGADO;
+        int piezas = 0;
+        RuntimeException primerFallo = null;
+        for (TipoDeRankingSemanal tipo : TipoDeRankingSemanal.values()) {
+            try {
+                ResultadoDelPodio uno = publicar(semana, formacion, tipo, grupoGeneral.get());
+                piezas += uno.piezas();
+                mejor = mejor.ordinal() <= uno.estado().ordinal() ? mejor : uno.estado();
+            } catch (RuntimeException e) {
+                log.error("[chat.podio] el podio de {} ({}) del {} no se pudo publicar: {}", formacion, tipo, semana.lunes(), e.getMessage(), e);
+                if (primerFallo == null) {
+                    primerFallo = e;
+                }
+            }
+        }
+        if (primerFallo != null) {
+            throw primerFallo;
+        }
+        return resultado(semana, mejor, piezas);
+    }
+
+    private ResultadoDelPodio publicar(SemanaDelRanking semana, Formacion formacion, TipoDeRankingSemanal tipo, Conversacion grupoGeneral) {
+        if (mensajes.porId(semana.idDelTexto(formacion, tipo)).isPresent()) {
             return resultado(semana, Estado.YA_ESTABA, 0);
         }
-        PodioDeLaSemana podio = podioDe(semana, formacion);
+        PodioDeLaSemana podio = podioDe(semana, formacion, tipo);
         if (podio.estaVacio()) {
-            log.info("[chat.podio] nadie de {} cerró la semana del {} con puntaje: no se publica", formacion, semana.lunes());
+            log.info("[chat.podio] nadie de {} cerró la semana del {} con {}: no se publica", formacion, semana.lunes(), tipo);
             return resultado(semana, Estado.SIN_PUNTAJES, 0);
         }
-        int piezas = delPrograma.enviarUnaVez(EntregaDelPrograma.sinPersona(grupoGeneral.get().id(),
+        int piezas = delPrograma.enviarUnaVez(EntregaDelPrograma.sinPersona(grupoGeneral.id(),
                 piezas(podio, semana, formacion)));
-        log.info("[chat.podio] podio de {} del {} al {} publicado ({} piezas, {} en el podio)", formacion, semana.lunes(),
+        log.info("[chat.podio] podio {} de {} del {} al {} publicado ({} piezas, {} en el podio)", tipo, formacion, semana.lunes(),
                 semana.domingo(), piezas, podio.todos().size());
         return resultado(semana, piezas > 0 ? Estado.PUBLICADO : Estado.YA_ESTABA, piezas);
     }
 
-    /** El ranking cerrado el domingo de los aprendices de {@code formacion}: sus 7 días de hábitos son justo esa semana. */
-    private PodioDeLaSemana podioDe(SemanaDelRanking semana, Formacion formacion) {
-        return PodioDeLaSemana.de(ranking.alCorte(semana.domingo(), formacion).stream()
-                .map(p -> new PodioDeLaSemana.Aprendiz(p.nombreCompleto(), p.puntaje()))
-                .toList());
+    /**
+     * El ranking cerrado el domingo de los aprendices de {@code formacion}: sus 7 días de hábitos son justo esa semana. Kilómetros y
+     * Gimnasio son lo de la semana (acumulado al domingo menos el del domingo anterior), no el acumulado del programa.
+     */
+    private PodioDeLaSemana podioDe(SemanaDelRanking semana, Formacion formacion, TipoDeRankingSemanal tipo) {
+        List<PodioDeLaSemana.Aprendiz> filas = switch (tipo) {
+            case GENERAL -> ranking.alCorte(semana.domingo(), formacion).stream()
+                    .map(p -> new PodioDeLaSemana.Aprendiz(p.nombreCompleto(), p.puntaje())).toList();
+            case COHERENCIA -> deLaSemana(semanal.coherencia(semana.domingo(), formacion));
+            case KILOMETROS -> deLaSemana(semanal.kilometros(semana.domingo(), formacion));
+            case GIMNASIO -> deLaSemana(semanal.gimnasio(semana.domingo(), formacion));
+        };
+        return PodioDeLaSemana.de(tipo, filas);
     }
 
+    private static List<PodioDeLaSemana.Aprendiz> deLaSemana(List<RankingSemanalFinder.PuestoDeLaSemana> puestos) {
+        return puestos.stream().map(p -> new PodioDeLaSemana.Aprendiz(p.nombreCompleto(), p.valor())).toList();
+    }
+
+    /**
+     * UN solo mensaje por ranking (decisión del dueño, 24/11/2026): la imagen del podio con su texto de pie en la misma burbuja,
+     * con aviso a todos. Lleva el id del texto de siempre: el General de la semana que ya salió en dos piezas (D-262) no se repite.
+     * Sin almacenamiento de verdad sale solo el texto (G-5).
+     */
     private List<PiezaDelPrograma> piezas(PodioDeLaSemana podio, SemanaDelRanking semana, Formacion formacion) {
-        List<PiezaDelPrograma> piezas = new ArrayList<>(2);
-        if (almacenamiento.guardaObjetos()) {
-            piezas.add(new PiezaDelPrograma(semana.idDeLaImagen(formacion), imagenSubida(podio, semana, formacion),
-                    AvisoDeLaPieza.SIN_AVISO));
+        TipoDeRankingSemanal tipo = podio.tipo();
+        String texto = TextoDelPodio.para(podio, semana);
+        ContenidoDelPrograma contenido = almacenamiento.guardaObjetos()
+                ? imagenSubida(podio, semana, formacion, texto) : ContenidoDelPrograma.texto(texto);
+        return List.of(new PiezaDelPrograma(semana.idDelTexto(formacion, tipo), contenido, AvisoDeLaPieza.A_TODOS));
+    }
+    /** El nombre de la formación de esa comunidad, el de la tabla {@code formaciones}; sin él la imagen cae a «RENASER». */
+    private String nombreDe(Formacion formacion) {
+        try {
+            return catalogo.de(formacion).nombre();
+        } catch (RuntimeException e) {
+            log.warn("[chat.podio] sin nombre para la formación {}: la imagen lleva «RENASER»: {}", formacion, e.getMessage());
+            return null;
         }
-        piezas.add(new PiezaDelPrograma(semana.idDelTexto(formacion), ContenidoDelPrograma.texto(TextoDelPodio.para(podio, semana)),
-                AvisoDeLaPieza.A_TODOS));
-        return piezas;
     }
 
-    private ContenidoDelPrograma imagenSubida(PodioDeLaSemana podio, SemanaDelRanking semana, Formacion formacion) {
-        byte[] imagen = dibujo.dibujar(podio, semana);
-        almacenamiento.subir(semana.rutaDeLaImagen(formacion), imagen, DibujarPodioPort.TIPO_CONTENIDO);
-        return ContenidoDelPrograma.imagen(semana.rutaDeLaImagen(formacion), DibujarPodioPort.TIPO_CONTENIDO, imagen.length);
+    private ContenidoDelPrograma imagenSubida(PodioDeLaSemana podio, SemanaDelRanking semana, Formacion formacion, String texto) {
+        byte[] imagen = dibujo.dibujar(podio, semana, nombreDe(formacion));
+        String ruta = semana.rutaDeLaImagen(formacion, podio.tipo());
+        almacenamiento.subir(ruta, imagen, DibujarPodioPort.TIPO_CONTENIDO);
+        return ContenidoDelPrograma.imagenConTexto(texto, ruta, DibujarPodioPort.TIPO_CONTENIDO, imagen.length);
     }
 
     /** ADMIN y ALCHEMIST con la cuenta activa (el criterio de D-210): primero la cuenta, después el rol. */

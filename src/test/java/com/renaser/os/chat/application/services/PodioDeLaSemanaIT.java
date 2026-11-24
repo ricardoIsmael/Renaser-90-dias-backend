@@ -177,7 +177,7 @@ class PodioDeLaSemanaIT {
     // ── Apoyo ───────────────────────────────────────────────────────────────
 
     private PodioDeLaSemanaService servicio(RankingGeneralFinder finder, boolean activo) {
-        return new PodioDeLaSemanaService(finder, dibujo, almacenamiento, conversaciones, mensajes, delPrograma, usuarios,
+        return new PodioDeLaSemanaService(finder, org.mockito.Mockito.mock(com.renaser.os.points.api.RankingSemanalFinder.class), org.mockito.Mockito.mock(com.renaser.os.users.api.FormacionesFinder.class), dibujo, almacenamiento, conversaciones, mensajes, delPrograma, usuarios,
                 clock, activo);
     }
 
