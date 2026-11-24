@@ -44,7 +44,7 @@ class VistaPreviaDeLosCuatroPodiosManualTest {
         StringBuilder textos = new StringBuilder();
         for (TipoDeRankingSemanal tipo : TipoDeRankingSemanal.values()) {
             PodioDeLaSemana podio = PodioDeLaSemana.de(tipo, filasDe(tipo));
-            BufferedImage imagen = ImageIO.read(new ByteArrayInputStream(adaptador.dibujar(podio, SEMANA)));
+            BufferedImage imagen = ImageIO.read(new ByteArrayInputStream(adaptador.dibujar(podio, SEMANA, "Escuela Renaser")));
             ImageIO.write(imagen, "png", carpeta.resolve(tipo.codigo() + ".png").toFile());
             textos.append("==== ").append(tipo.rotulo()).append(" ====\n\n");
             for (Plantilla plantilla : Plantilla.values()) {

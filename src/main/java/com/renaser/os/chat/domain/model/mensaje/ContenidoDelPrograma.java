@@ -11,6 +11,11 @@ public record ContenidoDelPrograma(String texto, String mediaBucket, String medi
         return new ContenidoDelPrograma(texto, null, null, null, null);
     }
 
+    /** Una imagen con su texto de pie en el mismo mensaje (el podio semanal): la app la pinta como foto con pie. */
+    public static ContenidoDelPrograma imagenConTexto(String texto, String ruta, String mime, int bytes) {
+        return new ContenidoDelPrograma(texto, Mensaje.BUCKET_DEFAULT, ruta, mime, bytes);
+    }
+
     /** Una imagen del depósito del chat, ya subida bajo el prefijo de la conversación. */
     public static ContenidoDelPrograma imagen(String ruta, String mime, int bytes) {
         return new ContenidoDelPrograma(null, Mensaje.BUCKET_DEFAULT, ruta, mime, bytes);

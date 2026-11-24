@@ -8,6 +8,7 @@ public interface DibujarPodioPort {
 
     String TIPO_CONTENIDO = "image/jpeg";
 
-    /** @param podio no vacío */
-    byte[] dibujar(PodioDeLaSemana podio, SemanaDelRanking semana);
+    /** @param podio no vacío
+     *  @param nombreDeLaFormacion el nombre de la formación de esa comunidad (arriba y al pie de la imagen); vacío = «RENASER» sin plazo */
+    byte[] dibujar(PodioDeLaSemana podio, SemanaDelRanking semana, String nombreDeLaFormacion);
 }

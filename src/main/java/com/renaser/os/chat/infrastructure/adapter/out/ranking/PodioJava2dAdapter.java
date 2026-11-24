@@ -65,19 +65,20 @@ class PodioJava2dAdapter implements DibujarPodioPort {
     private final ColumnasDelPodio columnas = new ColumnasDelPodio(tipos);
 
     @Override
-    public byte[] dibujar(PodioDeLaSemana podio, SemanaDelRanking semana) {
+    public byte[] dibujar(PodioDeLaSemana podio, SemanaDelRanking semana, String nombreDeLaFormacion) {
+        String marca = marcaDe(nombreDeLaFormacion);
         BufferedImage lienzo = new BufferedImage(ANCHO, ALTO, BufferedImage.TYPE_INT_RGB);
         Graphics2D g = lienzo.createGraphics();
         try {
             suavizar(g);
             fondo(g);
-            encabezado(g, podio.tipo(), semana);
+            encabezado(g, marca, podio.tipo(), semana);
             g.drawImage(tipos.fenix, 440, 300, 200, 200, null);
             columnas.dibujar(g, podio.tipo(), podio.podio());
             g.setColor(LINEA);
             g.fill(new RoundRectangle2D.Float(60, 1060, ANCHO - 120, 4, 4, 4));
             capsulas(g, podio.tipo(), podio.debajo());
-            pie(g);
+            pie(g, marca);
         } finally {
             g.dispose();
         }
@@ -108,9 +109,9 @@ class PodioJava2dAdapter implements DibujarPodioPort {
         g.fill(new Rectangle2D.Float(0, 150, ANCHO, 900));
     }
 
-    private void encabezado(Graphics2D g, TipoDeRankingSemanal tipo, SemanaDelRanking semana) {
+    private void encabezado(Graphics2D g, String marca, TipoDeRankingSemanal tipo, SemanaDelRanking semana) {
         g.setColor(TINTA);
-        centrado(g, "FORMACIÓN RENASER · " + tipo.rotulo(), tipos.jostSemibold.deriveFont(24f), 95, 24f * 0.32f);
+        centrado(g, marca + " · " + tipo.rotulo(), tipos.jostSemibold.deriveFont(24f), 95, 24f * 0.32f);
         Font recta = tipos.frauncesSemibold.deriveFont(92f);
         Font italica = tipos.frauncesItalica.deriveFont(92f);
         String antes = tipo.tituloRecto();
@@ -173,11 +174,16 @@ class PodioJava2dAdapter implements DibujarPodioPort {
         return puesto.lugar() + ".º ";
     }
 
-    private void pie(Graphics2D g) {
+    private void pie(Graphics2D g, String marca) {
         g.setColor(VERDE);
         centrado(g, "El próximo lugar en el podio puede ser el tuyo.", tipos.frauncesItalica.deriveFont(38f), 1234, 0f);
         g.setColor(TINTA);
-        centrado(g, "RENASER · 90 DÍAS", tipos.jostSemibold.deriveFont(22f), 1283, 22f * 0.28f);
+        centrado(g, marca, tipos.jostSemibold.deriveFont(22f), 1283, 22f * 0.28f);
+    }
+
+    /** La identidad de la imagen es la de la formación de la comunidad (nunca un nombre ni un plazo fijos); sin nombre, «RENASER». */
+    static String marcaDe(String nombreDeLaFormacion) {
+        return nombreDeLaFormacion == null || nombreDeLaFormacion.isBlank() ? "RENASER" : nombreDeLaFormacion.strip().toUpperCase(java.util.Locale.forLanguageTag("es"));
     }
 
     static void centrado(Graphics2D g, String texto, Font fuente, float lineaBase, float separacion) {

@@ -1314,7 +1314,9 @@ una cuenta suspendida, 403.
 > - **Idempotencia por ranking:** ids y ruta por (semana, formación, ranking). El General conserva su id y su ruta
 >   (`ranking-semanal/<lunes>-v1.jpg`); los otros llevan el ranking (`ranking-semanal/<lunes>-kilometros-v1.jpg`). Uno que
 >   falla no frena a los otros y el reintento de la hora siguiente completa lo que falte.
-> - **Aviso:** solo el texto del General avisa a todos; los otros tres salen sin aviso (supuesto a confirmar con el dueño).
+> - **Un solo mensaje por ranking, con aviso (decisión del dueño, 24/11):** la imagen con su texto de pie en la misma burbuja (la app lo pinta como foto con pie: `BurbujaDeMensaje.tsx`), con aviso a todos; suenan los cuatro. Lleva el id del texto de siempre, así el General ya publicado en dos piezas no se repite.
+> - **Identidad:** el rótulo y el pie de la imagen llevan el nombre de la formación de la comunidad (`FormacionesFinder`;
+>   sin nombre, «RENASER»), no «FORMACIÓN RENASER» ni «90 DÍAS» fijos (`ImagenDelPodioSinIdentidadFijaTest`).
 > - **Administración:** `GET …/vista-previa` (General, igual que antes, con el campo `ranking`), `?ranking=` para elegir
 >   uno, `GET …/vista-previa/todos` para los cuatro; `POST …/publicar` publica los cuatro. Para revisar a ojo:
 >   `VistaPreviaDeLosCuatroPodiosManualTest` con `-Dpodio.vista=<carpeta>`.

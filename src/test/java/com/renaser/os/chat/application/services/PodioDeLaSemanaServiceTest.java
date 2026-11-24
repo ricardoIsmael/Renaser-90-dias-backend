@@ -76,6 +76,8 @@ class PodioDeLaSemanaServiceTest {
     @Mock
     private RankingSemanalFinder semanal;
     @Mock
+    private com.renaser.os.users.api.FormacionesFinder catalogo;
+    @Mock
     private DibujarPodioPort dibujo;
     @Mock
     private AlmacenamientoPort almacenamiento;
@@ -93,8 +95,8 @@ class PodioDeLaSemanaServiceTest {
         when(conversaciones.global(Formacion.ESCUELA)).thenReturn(Optional.of(Conversacion.crearGlobal(GLOBAL, AHORA)));
         when(mensajes.porId(any())).thenReturn(Optional.empty());
         when(almacenamiento.guardaObjetos()).thenReturn(true);
-        when(dibujo.dibujar(any(), any())).thenReturn(PNG);
-        when(delPrograma.enviarUnaVez(any())).thenReturn(2);
+        when(dibujo.dibujar(any(), any(), any())).thenReturn(PNG);
+        when(delPrograma.enviarUnaVez(any())).thenReturn(1);
         when(ranking.alCorte(DOMINGO, Formacion.ESCUELA)).thenReturn(List.of(puesto("Liz Mendoza", "96.4"), puesto("Jorge Pérez", "92.1")));
     }
 
@@ -103,47 +105,48 @@ class PodioDeLaSemanaServiceTest {
     void publica() {
         ResultadoDelPodio resultado = servicio(true).publicarLaSemanaCerrada();
 
-        assertThat(resultado).isEqualTo(new ResultadoDelPodio(SEMANA.lunes(), DOMINGO, Estado.PUBLICADO, 2));
+        assertThat(resultado).isEqualTo(new ResultadoDelPodio(SEMANA.lunes(), DOMINGO, Estado.PUBLICADO, 1));
         verify(ranking).alCorte(DOMINGO, Formacion.ESCUELA);
         verify(almacenamiento).subir("ranking-semanal/2026-09-28-v1.jpg", PNG, "image/jpeg");
         EntregaDelPrograma entrega = entregada();
         assertThat(entrega.conversacionId()).isEqualTo(GLOBAL);
         assertThat(entrega.sobreQuien()).as("sin persona: no cae con la cuenta de nadie").isNull();
-        assertThat(entrega.piezas()).hasSize(2);
-        assertThat(entrega.piezas().get(0).id()).isEqualTo(SEMANA.idDeLaImagen());
-        assertThat(entrega.piezas().get(0).aviso()).isEqualTo(AvisoDeLaPieza.SIN_AVISO);
+        assertThat(entrega.piezas()).as("UN solo mensaje: la imagen con su texto de pie").hasSize(1);
+        assertThat(entrega.piezas().get(0).id()).as("el id del texto de siempre: la semana ya publicada no se repite").isEqualTo(SEMANA.idDelTexto());
+        assertThat(entrega.piezas().get(0).aviso()).isEqualTo(AvisoDeLaPieza.A_TODOS);
         assertThat(entrega.piezas().get(0).contenido().mediaRuta()).isEqualTo("ranking-semanal/2026-09-28-v1.jpg");
-        assertThat(entrega.piezas().get(1).id()).isEqualTo(SEMANA.idDelTexto());
-        assertThat(entrega.piezas().get(1).aviso()).isEqualTo(AvisoDeLaPieza.A_TODOS);
-        assertThat(entrega.piezas().get(1).contenido().texto()).contains("Liz M.").contains("Jorge P.");
+        assertThat(entrega.piezas().get(0).contenido().texto()).contains("Liz M.").contains("Jorge P.");
     }
 
     @Test
-    @DisplayName("D-367: salen cuatro mensajes seguidos (General, Coherencia, Kilómetros, Gimnasio), cada uno con su imagen, su texto y sus ids; solo el General avisa")
+    @DisplayName("D-367: salen cuatro mensajes seguidos (General, Coherencia, Kilómetros, Gimnasio), cada uno con su imagen, su texto y sus ids; los cuatro textos avisan a todos")
     void cuatroRankingsSeguidos() {
         conLosTresRankingsSemanales();
+        when(catalogo.de(Formacion.ESCUELA)).thenReturn(new com.renaser.os.users.api.FormacionConfigurada(Formacion.ESCUELA, "Escuela Renaser", "", true, List.of(90), 1));
 
         ResultadoDelPodio resultado = servicio(true).publicarLaSemanaCerrada();
 
         assertThat(resultado.estado()).isEqualTo(Estado.PUBLICADO);
-        assertThat(resultado.piezas()).isEqualTo(8);
+        assertThat(resultado.piezas()).isEqualTo(4);
         ArgumentCaptor<EntregaDelPrograma> entregas = ArgumentCaptor.forClass(EntregaDelPrograma.class);
         verify(delPrograma, org.mockito.Mockito.times(4)).enviarUnaVez(entregas.capture());
         List<EntregaDelPrograma> enOrden = entregas.getAllValues();
         TipoDeRankingSemanal[] orden = TipoDeRankingSemanal.values();
         for (int i = 0; i < 4; i++) {
             EntregaDelPrograma entrega = enOrden.get(i);
-            assertThat(entrega.conversacionId()).isEqualTo(GLOBAL);
-            assertThat(entrega.piezas().get(0).id()).isEqualTo(SEMANA.idDeLaImagen(Formacion.ESCUELA, orden[i]));
-            assertThat(entrega.piezas().get(1).id()).isEqualTo(SEMANA.idDelTexto(Formacion.ESCUELA, orden[i]));
-            assertThat(entrega.piezas().get(0).aviso()).isEqualTo(AvisoDeLaPieza.SIN_AVISO);
-            assertThat(entrega.piezas().get(1).aviso()).isEqualTo(i == 0 ? AvisoDeLaPieza.A_TODOS : AvisoDeLaPieza.SIN_AVISO);
+            assertThat(entrega.piezas()).as("un solo mensaje por ranking").hasSize(1);
+            assertThat(entrega.piezas().get(0).id()).isEqualTo(SEMANA.idDelTexto(Formacion.ESCUELA, orden[i]));
+            assertThat(entrega.piezas().get(0).aviso()).as("suenan los cuatro").isEqualTo(AvisoDeLaPieza.A_TODOS);
+            assertThat(entrega.piezas().get(0).contenido().mediaRuta()).as("la imagen y su texto van en el mismo mensaje")
+                    .isEqualTo(SEMANA.rutaDeLaImagen(Formacion.ESCUELA, orden[i]));
+            assertThat(entrega.piezas().get(0).contenido().texto()).isNotBlank();
             verify(almacenamiento).subir(SEMANA.rutaDeLaImagen(Formacion.ESCUELA, orden[i]), PNG, "image/jpeg");
         }
-        assertThat(enOrden.get(0).piezas().get(1).id()).as("el General conserva su id: no duplica la semana ya publicada").isEqualTo(SEMANA.idDelTexto());
-        assertThat(enOrden.get(1).piezas().get(1).contenido().texto()).contains("Ana C.").containsIgnoringCase("coherencia");
-        assertThat(enOrden.get(2).piezas().get(1).contenido().texto()).contains("Beto K.").containsIgnoringCase("kil");
-        assertThat(enOrden.get(3).piezas().get(1).contenido().texto()).contains("Carla G.").containsIgnoringCase("entren");
+        assertThat(enOrden.get(0).piezas().get(0).id()).as("el General conserva su id: no duplica la semana ya publicada").isEqualTo(SEMANA.idDelTexto());
+        assertThat(enOrden.get(1).piezas().get(0).contenido().texto()).contains("Ana C.").containsIgnoringCase("coherencia");
+        assertThat(enOrden.get(2).piezas().get(0).contenido().texto()).contains("Beto K.").containsIgnoringCase("kil");
+        assertThat(enOrden.get(3).piezas().get(0).contenido().texto()).contains("Carla G.").containsIgnoringCase("entren");
+        verify(dibujo, org.mockito.Mockito.times(4)).dibujar(any(), any(), eq("Escuela Renaser"));
         verify(semanal).coherencia(DOMINGO, Formacion.ESCUELA);
         verify(semanal).kilometros(DOMINGO, Formacion.ESCUELA);
         verify(semanal).gimnasio(DOMINGO, Formacion.ESCUELA);
@@ -173,14 +176,14 @@ class PodioDeLaSemanaServiceTest {
 
         ArgumentCaptor<EntregaDelPrograma> entregas = ArgumentCaptor.forClass(EntregaDelPrograma.class);
         verify(delPrograma, org.mockito.Mockito.times(3)).enviarUnaVez(entregas.capture());
-        assertThat(entregas.getAllValues()).extracting(e -> e.piezas().get(1).id()).containsExactly(
+        assertThat(entregas.getAllValues()).extracting(e -> e.piezas().get(0).id()).containsExactly(
                 SEMANA.idDelTexto(), SEMANA.idDelTexto(Formacion.ESCUELA, TipoDeRankingSemanal.KILOMETROS),
                 SEMANA.idDelTexto(Formacion.ESCUELA, TipoDeRankingSemanal.GIMNASIO));
 
         // Reintento: ya están General, Kilómetros y Gimnasio; solo queda Coherencia.
         org.mockito.Mockito.reset(delPrograma, almacenamiento);
         when(almacenamiento.guardaObjetos()).thenReturn(true);
-        when(delPrograma.enviarUnaVez(any())).thenReturn(2);
+        when(delPrograma.enviarUnaVez(any())).thenReturn(1);
         for (TipoDeRankingSemanal tipo : List.of(TipoDeRankingSemanal.GENERAL, TipoDeRankingSemanal.KILOMETROS, TipoDeRankingSemanal.GIMNASIO)) {
             when(mensajes.porId(SEMANA.idDelTexto(Formacion.ESCUELA, tipo))).thenReturn(Optional.of(mock(Mensaje.class)));
         }
@@ -189,7 +192,7 @@ class PodioDeLaSemanaServiceTest {
 
         assertThat(reintento.estado()).isEqualTo(Estado.PUBLICADO);
         verify(delPrograma, org.mockito.Mockito.times(1)).enviarUnaVez(entregas.capture());
-        assertThat(entregas.getValue().piezas().get(1).id()).isEqualTo(SEMANA.idDelTexto(Formacion.ESCUELA, TipoDeRankingSemanal.COHERENCIA));
+        assertThat(entregas.getValue().piezas().get(0).id()).isEqualTo(SEMANA.idDelTexto(Formacion.ESCUELA, TipoDeRankingSemanal.COHERENCIA));
     }
 
     @Test
@@ -245,10 +248,10 @@ class PodioDeLaSemanaServiceTest {
         verify(delPrograma, org.mockito.Mockito.times(2)).enviarUnaVez(entregas.capture());
         EntregaDelPrograma escuela = entregas.getAllValues().stream().filter(e -> e.conversacionId().equals(GLOBAL)).findFirst().orElseThrow();
         EntregaDelPrograma diplomado = entregas.getAllValues().stream().filter(e -> e.conversacionId().equals(deLaFormacion)).findFirst().orElseThrow();
-        assertThat(escuela.piezas().get(1).id()).as("la semana ya publicada de la Escuela no se repite al desplegar").isEqualTo(SEMANA.idDelTexto());
-        assertThat(escuela.piezas().get(1).contenido().texto()).contains("Liz M.").doesNotContain("Rosa");
-        assertThat(diplomado.piezas().get(1).id()).isEqualTo(SEMANA.idDelTexto(Formacion.DIPLOMADO)).isNotEqualTo(SEMANA.idDelTexto());
-        assertThat(diplomado.piezas().get(1).contenido().texto()).contains("Rosa Q.").doesNotContain("Liz");
+        assertThat(escuela.piezas().get(0).id()).as("la semana ya publicada de la Escuela no se repite al desplegar").isEqualTo(SEMANA.idDelTexto());
+        assertThat(escuela.piezas().get(0).contenido().texto()).contains("Liz M.").doesNotContain("Rosa");
+        assertThat(diplomado.piezas().get(0).id()).isEqualTo(SEMANA.idDelTexto(Formacion.DIPLOMADO)).isNotEqualTo(SEMANA.idDelTexto());
+        assertThat(diplomado.piezas().get(0).contenido().texto()).contains("Rosa Q.").doesNotContain("Liz");
         verify(almacenamiento).subir("ranking-semanal/2026-09-28-v1.jpg", PNG, "image/jpeg");
         verify(almacenamiento).subir(SEMANA.rutaDeLaImagen(Formacion.DIPLOMADO), PNG, "image/jpeg");
     }
@@ -337,7 +340,7 @@ class PodioDeLaSemanaServiceTest {
     }
 
     private PodioDeLaSemanaService servicio(boolean activo) {
-        return new PodioDeLaSemanaService(ranking, semanal, dibujo, almacenamiento, conversaciones, mensajes, delPrograma,
+        return new PodioDeLaSemanaService(ranking, semanal, catalogo, dibujo, almacenamiento, conversaciones, mensajes, delPrograma,
                 usuarios, FixedClock.at(AHORA), activo);
     }
 

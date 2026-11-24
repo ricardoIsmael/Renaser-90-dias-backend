@@ -35,7 +35,7 @@ class PodioJava2dAdapterTest {
     @Test
     @DisplayName("el caso de la maqueta: 1080×1350 en JPEG, crema de fondo, oro al centro, plata y bronce a los lados")
     void elCasoDeLaMaqueta() throws IOException {
-        byte[] png = adapter.dibujar(podio(
+        byte[] png = dibujar(podio(
                 aprendiz("Liz Mendoza Ruiz", "96.4"), aprendiz("Jorge Pérez", "92.1"), aprendiz("Carmen Rojas", "88.7"),
                 aprendiz("Rosa Torres", "85.0"), aprendiz("Miguel Ángel Alva Soto", "83.2")), SEMANA);
 
@@ -59,7 +59,7 @@ class PodioJava2dAdapterTest {
     void losCuatroRankings() throws IOException {
         java.util.Set<String> huellas = new java.util.HashSet<>();
         for (com.renaser.os.chat.domain.model.ranking.TipoDeRankingSemanal tipo : com.renaser.os.chat.domain.model.ranking.TipoDeRankingSemanal.values()) {
-            byte[] jpeg = adapter.dibujar(PodioDeLaSemana.de(tipo, List.of(aprendiz("Liz Mendoza", "42.5"), aprendiz("Jorge Pérez", "30"),
+            byte[] jpeg = dibujar(PodioDeLaSemana.de(tipo, List.of(aprendiz("Liz Mendoza", "42.5"), aprendiz("Jorge Pérez", "30"),
                     aprendiz("Rosa Torres", "20"), aprendiz("Carlos Díaz", "10"))), SEMANA);
 
             BufferedImage imagen = guardar(tipo.codigo() + ".jpg", jpeg);
@@ -74,7 +74,7 @@ class PodioJava2dAdapterTest {
     @Test
     @DisplayName("empate en el primero: dos bloques de oro; sin 4.º ni 5.º no hay cápsulas")
     void empateEnElPrimero() throws IOException {
-        BufferedImage imagen = guardar("empate.jpg", adapter.dibujar(podio(
+        BufferedImage imagen = guardar("empate.jpg", dibujar(podio(
                 aprendiz("Ana Quispe", "90.0"), aprendiz("Beto Ruiz", "90.0"), aprendiz("Carla Díaz", "70.5")), SEMANA));
 
         assertThat(cerca(color(imagen, 230, 840), new Color(0xB8, 0x99, 0x55), 35)).as("el 2.º de la lista es oro").isTrue();
@@ -84,7 +84,7 @@ class PodioJava2dAdapterTest {
     @Test
     @DisplayName("con una sola persona: solo la columna del centro")
     void unaSolaPersona() throws IOException {
-        BufferedImage imagen = guardar("una.jpg", adapter.dibujar(podio(aprendiz("Liz Mendoza", "41.3")), SEMANA));
+        BufferedImage imagen = guardar("una.jpg", dibujar(podio(aprendiz("Liz Mendoza", "41.3")), SEMANA));
 
         assertThat(cerca(color(imagen, 540, 1000), new Color(0xA8, 0x8A, 0x4A), 30)).isTrue();
         assertThat(cerca(color(imagen, 230, 1000), new Color(0xFC, 0xFB, 0xF9), 12)).as("sin plata").isTrue();
@@ -94,10 +94,14 @@ class PodioJava2dAdapterTest {
     @Test
     @DisplayName("un nombre larguísimo achica la letra y no se sale de su columna")
     void nombreLargo() throws IOException {
-        BufferedImage imagen = guardar("nombre-largo.jpg", adapter.dibujar(podio(
+        BufferedImage imagen = guardar("nombre-largo.jpg", dibujar(podio(
                 aprendiz("Maximiliano Wenceslao", "80"), aprendiz("Bartolomeo Xiomara", "70"), aprendiz("Ñ", "60")), SEMANA));
 
         assertThat(imagen.getWidth()).isEqualTo(1080);
+    }
+
+    private byte[] dibujar(PodioDeLaSemana podio, SemanaDelRanking semana) {
+        return adapter.dibujar(podio, semana, "Escuela Renaser");
     }
 
     private static PodioDeLaSemana podio(Aprendiz... aprendices) {
