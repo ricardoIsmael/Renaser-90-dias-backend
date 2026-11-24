@@ -1215,6 +1215,12 @@ arrancado **después** de cargarlo (E-244).
 |---|---|---|---|
 | `ROCKS_EXIGIR_MAPA_ACTIVO` | `false` | Bloquea el objetivo de 90 días (Roca Maestra) hasta que el Mapa de Renacimiento esté activo (D-284, issue #20): con `true`, un `PUT /rocks/master/{eje}` que no trae `"origen": "MAPA"` y cambia algo responde 409 `MAPA_PENDIENTE`. Con `false` (el arreglo del issue #20 rige igual) el Mapa sin activar reemplaza al objetivo definido en Plan | **No prenderlo hasta que el APK que manda `origen` esté en los teléfonos**: con el APK anterior, activar el Mapa daría `MAPA_PENDIENTE`. Se lee al arrancar: cambiar el parámetro y `docker restart backend` |
 
+**Para la cuenta de revisión de las tiendas** (se lee al arrancar: se cambia el parámetro y `docker restart backend`):
+
+| Parámetro | Valor por defecto | Qué decide | Ojo |
+|---|---|---|---|
+| `CUENTAS_DE_REVISION_DE_TIENDAS` | vacío | Correos (separados por comas) de las cuentas de demostración de App Review y Play: siempre tienen un audio de la Pastilla Renacer listo, sin esperar al día 8 del programa ni a las 7:00 y sin día de bloqueo tras un audio perdido (D-368, issue #184) | Vacío = nadie cambia. Se compara sin importar mayúsculas. La cuenta tiene que existir (se busca por correo cada 10 minutos). Tipo `String` en Parameter Store |
+
 #### Checklist para encender el semáforo (S-7, 2026-09-26)
 
 Se enciende **de lunes a jueves**, nunca viernes, sábado ni domingo. El barrido de las :25 cierra la
