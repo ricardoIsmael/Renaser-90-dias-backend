@@ -17,7 +17,7 @@ class CatalogoDeFuncionalidadesTest {
 
     /** Las 52 claves de la tabla de la spec 002 y las que se sumaron después (radar.fichas, ia.analisis…), en su orden. Una clave nueva se suma acá y en el catálogo. */
     private static final List<String> CLAVES_DE_LA_SPEC = List.of("registro", "auth.codigo_whatsapp", "onboarding", "dia_uno", "radar",
-            "mapa", "plan", "habitos", "habitos.foto", "habitos.km", "habitos.km.carreras", "habitos.gimnasio", "habitos.espiritu",
+            "mapa", "plan", "plan.ruta", "habitos", "habitos.foto", "habitos.km", "habitos.km.carreras", "habitos.gimnasio", "habitos.espiritu",
             "habitos.ajustes", "clase_diaria", "muro", "muro.publicar", "muro.comentarios", "muro.reacciones", "chat",
             "chat.grupos", "chat.global", "chat.soporte", "chat.directos", "chat.audio", "chat.fotos", "eventos",
             "eventos.gestion", "eventos.asistencia", "eventos.convocar", "eventos.meet", "eventos.meet.transcripcion", "eventos.whatsapp", "cursos", "ranking", "ranking.podio_semanal", "semaforo", "ia",
@@ -56,7 +56,21 @@ class CatalogoDeFuncionalidadesTest {
     @DisplayName("todas nacen prendidas, salvo el enlace de Meet automático (spec 040) y los recordatorios por WhatsApp (spec 041), que nacen apagadas hasta que Soporte TI las prenda")
     void todasNacenPrendidasSalvoElEnlaceDeMeet() {
         assertThat(catalogo.todas()).filteredOn(f -> f.porDefecto() == ValorPorDefecto.APAGADA)
-                .extracting(DefinicionDeFuncionalidad::clave).containsExactlyInAnyOrder("eventos.meet", "eventos.meet.transcripcion", "eventos.whatsapp", "auth.codigo_whatsapp");
+                .extracting(DefinicionDeFuncionalidad::clave).containsExactlyInAnyOrder("eventos.meet", "eventos.meet.transcripcion", "eventos.whatsapp", "auth.codigo_whatsapp", "plan.ruta");
+    }
+
+    // spec 058 FR-001
+    @Test
+    @DisplayName("spec 058: plan.ruta es hija de plan, nace apagada para todos y apagada se esconde: Plan se ve como siempre")
+    void planComoRutaNaceApagadaYSeEsconde() {
+        DefinicionDeFuncionalidad ruta = catalogo.definicion("plan.ruta").orElseThrow();
+
+        assertThat(ruta.madre()).isEqualTo("plan");
+        assertThat(ruta.porDefecto()).isEqualTo(ValorPorDefecto.APAGADA);
+        assertThat(ruta.seEsconde()).isTrue();
+        assertThat(ruta.critica()).isFalse();
+        assertThat(ruta.rolesQueLaUsan()).containsExactlyInAnyOrder(UserRole.values());
+        assertThat(ruta.procesos()).isEqualTo(PoliticaDeProcesos.NO_APLICA);
     }
 
     // spec 040 FR-014, SC-009
@@ -164,7 +178,7 @@ class CatalogoDeFuncionalidadesTest {
         assertThat(fichas.porDefecto()).isEqualTo(ValorPorDefecto.PRENDIDA);
         assertThat(fichas.critica()).isFalse();
         assertThat(catalogo.todas()).filteredOn(DefinicionDeFuncionalidad::seEsconde)
-                .extracting(DefinicionDeFuncionalidad::clave).containsExactlyInAnyOrder("radar.fichas", "eventos.meet", "eventos.meet.transcripcion", "eventos.whatsapp", "auth.codigo_whatsapp");
+                .extracting(DefinicionDeFuncionalidad::clave).containsExactlyInAnyOrder("radar.fichas", "eventos.meet", "eventos.meet.transcripcion", "eventos.whatsapp", "auth.codigo_whatsapp", "plan.ruta");
         assertThat(fichas.clave()).isEqualTo(com.renaser.os.shared.domain.ClavesDeFuncionalidad.RADAR_EN_FICHAS);
     }
 

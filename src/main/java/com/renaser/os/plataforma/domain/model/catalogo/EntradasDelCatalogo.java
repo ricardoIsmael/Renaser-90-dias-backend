@@ -62,6 +62,9 @@ final class EntradasDelCatalogo {
                 oculta(ClavesDeFuncionalidad.RADAR_EN_FICHAS, "Programa", "Código Renaser en las fichas", "Que el mentor, la guía y el líder vean el Código Renaser de los aprendices en sus fichas.", ACOMPANAMIENTO),
                 normal("mapa", "Programa", "Mapa de Renacimiento", "El Mapa de Renacimiento.", TODOS, NO_APLICA),
                 normal("plan", "Programa", "Plan", "Rocas y objetivos: maestra, del mes, de la semana y del día; Verdugo.", TODOS, SALTA),
+                // Spec 058: Plan como ruta de niveles (R1). Nace APAGADA: el dueño la prueba primero en su teléfono con un despliegue «Solo probadores»;
+                // apagada se esconde y Plan se ve como siempre. Solo cambia cómo se ve Plan en la app: el servidor no hace nada distinto.
+                apagadaDeFabrica("plan.ruta", "Programa", "Plan como ruta", "Ver Plan como una ruta de niveles: la semana por eje, con cada acción en su día y su hora.", TODOS, NO_APLICA),
                 normal("clase_diaria", "Programa", "Clase diaria", "La clase diaria.", TODOS, NO_APLICA),
                 critica("habitos", "Hábitos", "Hábitos", "Los hábitos de hoy y completarlos.", TODOS, SALTA),
                 normal("habitos.foto", "Hábitos", "Evidencia con foto", "Subir la foto de un hábito.", TODOS, NO_APLICA),
