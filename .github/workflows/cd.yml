@@ -243,11 +243,12 @@ jobs:
           # fria no se confunda con un despliegue roto. Se puede subir con una variable de
           # repositorio sin tocar este archivo.
           ESPERA: ${{ vars.DESPLIEGUE_ESPERA_SEGUNDOS || '240' }}
-          # `auto` (default): sin corte si la memoria alcanza para dos JVM. `reemplazo` fuerza el
-          # modo con corte: hace falta cuando una migracion rompe al codigo que esta corriendo
+          # `reemplazo` (default desde D-367, #186): una sola JVM, ~50 s de corte, y el backend con
+          # todo el margen de memoria. `auto`: sin corte si la memoria alcanza para dos JVM. El modo
+          # con corte, ademas, hace falta cuando una migracion rompe al codigo que esta corriendo
           # (borrar o renombrar una columna que la version vieja usa), porque en el modo sin corte
           # la version vieja sigue atendiendo ~50 s contra el esquema ya migrado. Ver E-465.
-          MODO: ${{ vars.DESPLIEGUE_MODO || 'auto' }}
+          MODO: ${{ vars.DESPLIEGUE_MODO || 'reemplazo' }}
         run: |
           set -euo pipefail
 
