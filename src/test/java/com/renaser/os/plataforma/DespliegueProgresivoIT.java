@@ -132,8 +132,8 @@ class DespliegueProgresivoIT {
         assertThat(paraTodos.get("enDespliegue").asBoolean()).isFalse();
         assertThat(paraTodos.get("porcentaje").asInt()).isEqualTo(100);
         assertThat(pedidos.enviar("GET", "/api/v1/me/cells", otra, null).statusCode()).isEqualTo(200);
-        assertThat(textos(mias(otra).get("noDisponibles"))).as("solo lo que nace apagado para todos (specs 040, 041 y 047)")
-                .containsExactlyInAnyOrder("eventos.meet", "eventos.meet.transcripcion", "eventos.whatsapp", "auth.codigo_whatsapp");
+        assertThat(textos(mias(otra).get("noDisponibles"))).as("solo lo que nace apagado para todos (specs 040, 041, 047 y 058)")
+                .containsExactlyInAnyOrder("eventos.meet", "eventos.meet.transcripcion", "eventos.whatsapp", "auth.codigo_whatsapp", "plan.ruta");
 
         List<String> antes = jdbc.queryForList("SELECT antes::text FROM renaser.cambios_auditados WHERE actor_id = ? "
                 + "AND tipo = 'MANUAL' AND clave = 'chat.grupos' ORDER BY creado_en", String.class, soporteId);
