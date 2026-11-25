@@ -529,7 +529,7 @@ Además es el mismo mecanismo que ya se venía usando a mano — por ejemplo
 3. Dentro de la instancia corre `scripts/despliegue/desplegar-backend.sh` (desde E-465; antes era un
    heredoc dentro de `cd.yml`): `docker login` contra ECR → `docker pull` de **la etiqueta del commit**
    → elige el modo mirando la memoria (ver «Las tres cosas», punto 1) → levanta el backend con la red
-   `renaser`, `--memory 1400m`, `JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=60.0`,
+   `renaser`, `--memory 1900m` (1400m hasta D-367), `JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=60.0`,
    `SPRING_PROFILES_ACTIVE=prod` y `AWS_REGION=us-east-1` (los dos de memoria desde V-8, ver §7).
 4. Consulta `/actuator/health` del contenedor nuevo (por su IP en la red `renaser`) cada 3 s hasta que
    diga `"status":"UP"`, con un tope de 240 s (`DESPLIEGUE_ESPERA_SEGUNDOS`). **Medido el 2026-09-30:
@@ -554,6 +554,12 @@ El script tiene dos modos y elige solo:
 - **Reemplazo**, lo de antes: `docker rm -f backend` + `docker run`, **~52 s sin servicio** (medido el
   2026-09-30, E-465), durante los que CloudFront devuelve `504 Gateway Timeout`. Se usa si la memoria no
   alcanza, o si la variable de repositorio `DESPLIEGUE_MODO` vale `reemplazo`.
+
+> **Desde el 2026-11-25 (D-367, #186, E-694) el modo por defecto es el reemplazo** y el tope del contenedor
+> es de **1.900 MB**. Con 1.400 MB el backend llegó al 94 % de su tope y el kernel lo mató el 22/11 con
+> ~1,9 GB libres en la t3.medium. El dueño prefirió una sola JVM con más margen a desplegar sin corte. El modo
+> sin corte sigue en el script: vuelve con `DESPLIEGUE_MODO=auto`, pero con 1.900 + 512 MB tampoco entra en
+> la t3.medium y el script elige el reemplazo igual.
 
 **En la t3.small actual (1.909 MB, 531 MB disponibles con el backend andando) el script siempre elige
 reemplazo**: dos JVM no entran, y forzarlo es repetir E-155 (siete horas caído). El corte desaparece al
