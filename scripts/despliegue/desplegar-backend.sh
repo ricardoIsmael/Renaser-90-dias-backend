@@ -11,11 +11,11 @@
 #    nombres (el nuevo pasa a llamarse `backend`), nginx lo encuentra por el DNS de Docker en
 #    <=5 s, y recien despues se apaga el viejo, ordenado (SIGTERM, apagado gradual de Spring).
 #
-#  - REEMPLAZO (~50 s de corte). ES EL MODO POR DEFECTO desde el 2026-11-25 (D-367, #186): el
+#  - REEMPLAZO (~50 s de corte). ES EL MODO POR DEFECTO desde el 2026-11-25 (D-369, #186): el
 #    dueno prefiere que corra una sola JVM con todo el margen de memoria a no tener corte al
 #    desplegar. Tambien es el que se elige solo cuando no hay memoria para dos JVM a la vez.
 #
-# Desde D-367 el modo sin corte solo corre si se pide con MODO=auto (variable DESPLIEGUE_MODO del
+# Desde D-369 el modo sin corte solo corre si se pide con MODO=auto (variable DESPLIEGUE_MODO del
 # repositorio); con MEMORIA=1900m en la t3.medium la condicion de abajo igual lo descarta.
 #
 # LA CONDICION DE MEMORIA NO SE NEGOCIA. En la t3.small (1.909 MB) dos JVM no entran: se probo el
@@ -54,7 +54,7 @@ if [ "$SOLO_PROXY" = si ]; then IMAGEN=${IMAGEN:-solo-proxy}; else : "${IMAGEN:?
 REGISTRO=${REGISTRO:-}
 REGION=${REGION:-us-east-1}
 ESPERA=${ESPERA:-240}
-MODO=${MODO:-reemplazo}   # D-367: una sola JVM; `auto` vuelve al modo sin corte si la memoria alcanza
+MODO=${MODO:-reemplazo}   # D-369: una sola JVM; `auto` vuelve al modo sin corte si la memoria alcanza
 CONFIG_ALLOY_B64=${CONFIG_ALLOY_B64:-}
 
 CONTENEDOR=${CONTENEDOR:-backend}
@@ -70,7 +70,7 @@ IMAGEN_PROXY=${IMAGEN_PROXY:-public.ecr.aws/nginx/nginx:1.28-alpine}
 
 # V-8 (D-180): tope de memoria y porcentaje de heap. Van tambien en la vuelta atras porque las
 # imagenes viejas traen horneado MaxRAMPercentage=75.
-# D-367 (#186, E-694): 1900m y no 1400m. Con 1400m el backend llego al 94 % de su tope y el kernel
+# D-369 (#186, E-694): 1900m y no 1400m. Con 1400m el backend llego al 94 % de su tope y el kernel
 # lo mato el 22/11 (OOM del cgroup) con ~1,9 GB libres en la t3.medium. 1900m deja ~1,4 GB para el
 # sistema, Redis, nginx, Alloy y el agente de SSM, que juntos usan ~500 MB.
 MEMORIA=${MEMORIA:-1900m}
