@@ -79,7 +79,9 @@ y el preflight CORS desde `https://renaser-90-dias-frontend-livid.vercel.app` **
 
 No se hizo hoy porque la mitad del backend viviría en esta rama sin desplegar mientras CloudFront ya mandara la cabecera (inofensivo) — un control a medias confunde más de lo que protege.
 
-### 2.4 RDS `PubliclyAccessible: true` — **Media — DECISIÓN DEL DUEÑO**
+### 2.4 RDS `PubliclyAccessible: true` — **Media — RESUELTO el 2026-11-25 (D-370)**
+
+> **Resuelto 2026-11-25 (D-370).** La RDS ya no tiene IP pública. El acceso local va por `scripts/base-prod-tunel.sh` (túnel de SSM por la EC2 del backend).
 
 **Evidencia.** `describe-db-instances`: `PubliclyAccessible: true`. **Mitigado**: el SG de la RDS solo acepta el 5432 desde `38.250.157.113/32` (una IP residencial) y desde el SG del backend. No está abierta a internet. Pero: (a) esa IP es **dinámica** — la regla va a caducar sola y además mañana desde el trabajo no entra; (b) el flag es una capa menos: si alguien amplía el SG, queda expuesta al instante.
 

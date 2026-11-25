@@ -16309,6 +16309,6 @@ mejor aún, con un `codigo`.
 - **Dónde:** `scripts/despliegue/desplegar-backend.sh` (`MEMORIA`, `MODO`), `.github/workflows/cd.yml` (`DESPLIEGUE_MODO`)
 - **Síntoma:** el kernel mató el proceso `java` del contenedor `backend` («Memory cgroup out of memory», `CONSTRAINT_MEMCG`, RSS 1,43 GB) y NaSer quedó caído mientras Docker lo relanzaba. El 25/11 el contenedor seguía en 1,28 de 1,37 GiB (94 %).
 - **Causa real:** el tope de 1.400 MB (D-180) se fijó cuando el servidor era una t3.small y para que dos JVM convivieran en el despliegue sin corte (E-465). En la t3.medium (3,8 GB) el servidor tenía memoria de sobra, pero el contenedor no: heap al 60 % (~820 MB) más ~550 MB de memoria nativa llenaban el tope. Los demás contenedores (Alloy, Redis, nginx) suman ~75 MB, y las imágenes guardadas en disco no usan RAM.
-- **Solución:** tope de 1.900 MB y modo reemplazo por defecto (una sola JVM, D-367). En producción se aplicó en caliente el 25/11 con `docker update --memory 1900m --memory-swap 1900m backend`, sin reinicio (health 200, 69 % del tope nuevo).
+- **Solución:** tope de 1.900 MB y modo reemplazo por defecto (una sola JVM, D-369). En producción se aplicó en caliente el 25/11 con `docker update --memory 1900m --memory-swap 1900m backend`, sin reinicio (health 200, 69 % del tope nuevo).
 - **Cómo evitarlo:** antes de tocar `MEMORIA` hay que medir el uso del contenedor (`docker stats`) y no solo el del servidor, y revisar `journalctl -k | grep "Killed process"`. Un tope por encima del 85 % de uso sostenido es aviso de OOM.
 
