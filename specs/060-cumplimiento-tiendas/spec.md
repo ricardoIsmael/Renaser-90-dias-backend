@@ -68,13 +68,13 @@ Los permisos de Android que la app no usa se bloquean y los manifiestos de priva
 
 **Transversal**
 
-- **FR-030**: Textos en español de Perú, con tuteo y tipo oración, sin emojis; toques de 48 de alto.
+- **FR-030**: Textos en español de Perú, con tuteo y tipo oración, sin emojis; toques de 48 de alto. [sin prueba automática: lo cubren las guardas globales de texto de la app (tuteo, tipo oración, emojis)]
 - **FR-031**: Quien marca la casilla de datos del onboarding (que ya trae el aviso de IA) queda con el aviso aceptado, con la misma versión del texto y por cuenta, sin servidor nuevo: no ve el consentimiento dos veces.
 
 ## Criterios de éxito
 
 - **SC-001**: Ningún dato sale hacia Gemini desde la app sin que la persona haya aceptado el aviso en ese teléfono.
-- **SC-002**: El documento de las consolas coincide con el código y la política de privacidad en la fecha de cada subida.
+- **SC-002**: El documento de las consolas coincide con el código y la política de privacidad en la fecha de cada subida. [sin prueba automática: se contrasta con el código y la política en cada subida]
 - **SC-003**: El E2E de Maestro `.maestro/consentimiento-de-ia/01-aviso-antes-del-primer-chat.yaml` corre en verde en el emulador.
 
 ## Lo que no cubre
