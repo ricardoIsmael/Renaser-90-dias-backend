@@ -69,6 +69,7 @@ Los permisos de Android que la app no usa se bloquean y los manifiestos de priva
 **Transversal**
 
 - **FR-030**: Textos en español de Perú, con tuteo y tipo oración, sin emojis; toques de 48 de alto.
+- **FR-031**: Quien marca la casilla de datos del onboarding (que ya trae el aviso de IA) queda con el aviso aceptado, con la misma versión del texto y por cuenta, sin servidor nuevo: no ve el consentimiento dos veces.
 
 ## Criterios de éxito
 
