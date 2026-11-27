@@ -67,7 +67,7 @@ En el podio de la semana casi nadie suma puntos por objetivos. El E2E del 25/11 
 - **FR-008**: el cofre abre la revisión semanal; se ve abierto cuando la semana del eje está revisada.
 - **FR-009**: «Cierra tu día», «Tu 80/20» y «Organizar mi semana» se ven debajo de la ruta, con su comportamiento de hoy.
 - **FR-010**: el engranaje abre «Planifica tus objetivos» (Historia 4). La fila «Recordatorios de tus acciones» sale del fondo de Plan y vive aquí (Yo → Alarmas sigue igual).
-- **FR-011**: todo en el dorado de la app; los ejes se distinguen por su ícono de siempre, no por color.
+- **FR-011**: todo en el dorado de la app; los ejes se distinguen por su ícono de siempre, no por color. [sin prueba automática: es visual, se revisa en el E2E de plan-ruta]
 - **FR-012**: textos en español de Perú con tuteo, tipo oración; el plazo es el de la formación de la persona (nunca «90» escrito a mano); toques de 48–52 px; un solo scroll; `useSystemBackHandler` en la hoja nueva.
 - **FR-013**: sin señal se comporta como Plan hoy (`planSinRed`): la ruta se dibuja con lo que hay guardado.
 - **FR-014** (pedido del dueño el 25/11: «la ruta ponlo con efectos… para que las personas vean que lo hacen»): al cumplir una acción el nivel hace un «pop» con su check y un toque háptico; el fénix salta al siguiente; la franja de la semana sube su cifra y su barra; el cofre se abre con un rebote cuando la semana queda revisada; los niveles entran en cascada (menos de 300 ms) la primera vez de la sesión; el siguiente por hacer «respira» suave. Con «Reducir movimiento» activado no se anima nada (el háptico sí). Cada efecto se dispara una vez por cambio real.
